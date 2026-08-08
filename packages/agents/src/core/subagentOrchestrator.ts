@@ -5,6 +5,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   EphemeralSettings,
   SessionIdentity,
@@ -58,7 +59,6 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import type { ReadonlySettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
@@ -186,7 +186,7 @@ export class SubagentOrchestrator {
   ): Promise<SubAgentScope> {
     return this.scopeFactory(
       subagent.name,
-      this.options.foregroundConfig,
+      this.options.foregroundConfig as Config,
       promptConfig,
       modelConfig,
       runConfig,
@@ -195,7 +195,7 @@ export class SubagentOrchestrator {
       {
         runtimeBundle: runtimeResult,
         environmentContextLoader: async (_runtime) =>
-          getEnvironmentContext(this.options.foregroundConfig),
+          getEnvironmentContext(this.options.foregroundConfig as Config),
         messageBus: this.options.messageBus,
       },
       signal,

@@ -12,6 +12,7 @@
  */
 
 import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ImageBudgetSource } from '../config/capabilities.js';
 import type {
   ContentBlock,
@@ -594,7 +595,7 @@ async function executeNonInteractiveTool(
 
   const schedulerConfig = createSchedulerConfig(
     ctx.toolExecutorContext,
-    ctx.config,
+    ctx.config as Config,
     { interactive: false },
   );
   const completed = await executeToolCall(

@@ -5,6 +5,7 @@
  */
 
 import fs from 'node:fs/promises';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -330,7 +331,7 @@ export async function resolveStandardCompressionProvider(
   profileName: string,
   profile: StandardProfile,
   profileManager: ProfileManager,
-  config: ProfileManagerProvider | undefined,
+  config: Config | undefined,
   parentEphemerals: Record<string, unknown> = {},
 ): Promise<CompressionProviderResult> {
   const provider = ctx.resolveExplicitCompressionProvider(
@@ -400,7 +401,7 @@ export async function buildCompressionLoadBalancerCandidates(
   ctx: CompressionProfileResolverContext,
   profileName: string,
   profile: LoadBalancerProfile,
-  config: ProfileManagerProvider | undefined,
+  config: Config | undefined,
   profileManager: ProfileManager,
 ): Promise<CompressionLoadBalancerCandidate[]> {
   const candidates: CompressionLoadBalancerCandidate[] = [];
@@ -446,7 +447,7 @@ export async function resolveLoadBalancedCompressionProvider(
   ctx: CompressionProfileResolverContext,
   profileName: string,
   profile: LoadBalancerProfile,
-  config: ProfileManagerProvider | undefined,
+  config: Config | undefined,
   profileManager: ProfileManager,
 ): Promise<CompressionProviderResult> {
   const candidates = await buildCompressionLoadBalancerCandidates(
@@ -534,8 +535,7 @@ export async function resolveCompressionProvider(
     };
   }
 
-  const config = (ctx.providerRuntime.config as ProfileManagerProvider) | undefined;
-  const profileManager = config?.getProfileManager();
+  const profileManager = (ctx.providerRuntime.config as ProfileManagerProvider | undefined)?.getProfileManager();
   if (!profileManager) {
     throw new CompressionProfileNotFoundError(
       profileName,
@@ -558,7 +558,7 @@ export async function resolveCompressionProvider(
       ctx,
       profileName,
       profile,
-      config,
+      ctx.providerRuntime.config,
       profileManager,
     );
   }
@@ -568,6 +568,6 @@ export async function resolveCompressionProvider(
     profileName,
     profile,
     profileManager,
-    config,
+    ctx.providerRuntime.config,
   );
 }

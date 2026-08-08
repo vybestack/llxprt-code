@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   type ToolCallRequestInfo,
   DEFAULT_AGENT_ID,
@@ -15,8 +16,8 @@ import type { ApprovalMode } from '@vybestack/llxprt-code-core/config/configType
 import { toolFailureMarker } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import {
   type CompletedToolCall,
-  type CoreToolScheduler,
 } from './coreToolScheduler.js';
+import type { ToolSchedulerContract } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 
 /**
@@ -30,18 +31,7 @@ export type ToolExecutionConfig = {
   getExcludeTools(): string[] | undefined;
   getSessionId(): string;
   getTelemetryLogPromptsEnabled(): boolean;
-  getOrCreateScheduler(
-    sessionId: string,
-    callbacks: {
-      getPreferredEditor: () => undefined;
-      onEditorClose: () => void;
-      onAllToolCallsComplete: (
-        completedToolCalls: CompletedToolCall[],
-      ) => Promise<void>;
-    },
-    options?: { interactiveMode?: boolean },
-    extraDependencies?: { messageBus?: MessageBus },
-  ): Promise<ToolSchedulerContract>;
+  getOrCreateScheduler: Config['getOrCreateScheduler'];
   disposeScheduler(sessionId: string): void;
 } & Partial<{
   getAllowedTools(): string[] | undefined;
@@ -69,18 +59,7 @@ export type ToolExecutionConfig = {
  * so it is not duplicated here.
  */
 type SchedulerConfig = ToolExecutionConfig & {
-  getOrCreateScheduler(
-    sessionId: string,
-    callbacks: {
-      getPreferredEditor: () => undefined;
-      onEditorClose: () => void;
-      onAllToolCallsComplete: (
-        completedToolCalls: CompletedToolCall[],
-      ) => Promise<void>;
-    },
-    options?: { interactiveMode?: boolean },
-    extraDependencies?: { messageBus?: MessageBus },
-  ): Promise<ToolSchedulerContract>;
+  getOrCreateScheduler: Config['getOrCreateScheduler'];
 };
 
 async function createScheduler(
@@ -88,7 +67,7 @@ async function createScheduler(
   sessionId: string,
   completionResolver: ((calls: CompletedToolCall[]) => void) | null,
   dependencies?: { messageBus?: MessageBus },
-): Promise<CoreToolScheduler> {
+): Promise<ToolSchedulerContract> {
   return (config as SchedulerConfig).getOrCreateScheduler(
     sessionId,
     {

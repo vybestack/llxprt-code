@@ -277,7 +277,7 @@ export function createToolExecutionConfig(
     getSessionId: () => runtimeBundle.runtimeContext.state.sessionId,
     getTelemetryLogPromptsEnabled: () =>
       Boolean(settingsSnapshot?.telemetry?.enabled),
-    getOrCreateScheduler: (sessionId, callbacks, options, dependencies) =>
+    getOrCreateScheduler: (sessionId: string, callbacks: Parameters<Config['getOrCreateScheduler']>[1], options: Parameters<Config['getOrCreateScheduler']>[2], dependencies: Parameters<Config['getOrCreateScheduler']>[3]) =>
       foregroundConfig.getOrCreateScheduler(sessionId, callbacks, options, {
         messageBus: dependencies?.messageBus ?? messageBus,
         toolRegistry: dependencies?.toolRegistry ?? toolRegistry,

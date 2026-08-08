@@ -15,6 +15,7 @@
  * @see project-plans/issue1581/README.md
  */
 
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import type { ToolExecutionConfig, } from './nonInteractiveToolExecutor.js';
 import type { CoreToolScheduler } from './coreToolScheduler.js';
@@ -490,7 +491,7 @@ export async function initInteractiveScheduler(
   const schedulerPromise = options?.schedulerFactory
     ? Promise.resolve(
         options.schedulerFactory({
-          schedulerConfig: ctx.schedulerConfig,
+          schedulerConfig: ctx.schedulerConfig as Config,
           onAllToolCallsComplete: channel.handleCompletion,
           outputUpdateHandler: channel.outputUpdateHandler,
           onToolCallsUpdate: undefined,

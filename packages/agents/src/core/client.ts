@@ -76,10 +76,10 @@ import {
   type RoutedModelProvider,
 } from './modelInfoHelpers.js';
 
-/** Narrow config surface for the agent client. */
+/** Narrow config surface for agent client member reads. */
 type ClientConfigSurface = ModelSelection &
   SessionIdentity & {
-    getToolRegistry(): import('@vybestack/llxprt-code-tools').ToolRegistry;
+    getToolRegistry: Config['getToolRegistry'];
   };
 
 
@@ -138,7 +138,7 @@ export class AgentClient implements AgentClientContract {
    * Otherwise falls back to Config-based operation (backward compatibility)
    */
   constructor(
-    private readonly config: ClientConfigSurface,
+    private readonly config: Config,
     runtimeState: AgentRuntimeState,
     historyService?: HistoryService,
     createTurn?: MessageStreamDeps['createTurn'],
@@ -315,7 +315,7 @@ export class AgentClient implements AgentClientContract {
     }
     // Use pending config if available (from initialize() call), otherwise fall back to current config
     const contentGenConfig =
-      this._pendingConfig ?? this.config.getContentGeneratorConfig();
+      this._pendingConfig ?? (this.config as ClientConfigSurface).getContentGeneratorConfig();
     if (!contentGenConfig) {
       throw new Error(
         'Content generator config not initialized. Call config.refreshAuth() first.',
@@ -324,7 +324,7 @@ export class AgentClient implements AgentClientContract {
     this.contentGenerator = await createContentGenerator(
       contentGenConfig,
       this.config,
-      this.config.getSessionId(),
+      (this.config as ClientConfigSurface).getSessionId(),
     );
 
     // Don't create chat here - that causes infinite recursion with startChat()
@@ -504,7 +504,7 @@ export class AgentClient implements AgentClientContract {
   }
 
   async setTools(): Promise<void> {
-    const toolRegistry = this.config.getToolRegistry() as unknown as
+    const toolRegistry = (this.config as ClientConfigSurface).getToolRegistry() as unknown as
       | ReturnType<Config['getToolRegistry']>
       | null
       | undefined;
@@ -726,7 +726,7 @@ export class AgentClient implements AgentClientContract {
       extraHistory,
       generateContentConfig: this.generateContentConfig,
       todoContinuationService: this.todoContinuationService,
-      toolRegistry: this.config.getToolRegistry(),
+      toolRegistry: (this.config as ClientConfigSurface).getToolRegistry(),
       createHistoryService: () => new HistoryService(),
       createChatSessionInstance: (...args) => new ChatSession(...args),
     });
@@ -735,7 +735,7 @@ export class AgentClient implements AgentClientContract {
   }
 
   private _getEffectiveModelIdentity(): EffectiveModelIdentity {
-    const configFallback = this.config.getModel();
+    const configFallback = (this.config as ClientConfigSurface).getModel();
     const runtimeProviderName = this.runtimeState.provider;
     let routedProviderName = runtimeProviderName;
     let routedProvider: RoutedModelProvider | undefined = undefined;
@@ -808,7 +808,7 @@ export class AgentClient implements AgentClientContract {
       abortSignal,
       model,
       { ...this.generateContentConfig, ...config },
-      this.lastPromptId ?? this.config.getSessionId(),
+      this.lastPromptId ?? (this.config as ClientConfigSurface).getSessionId(),
     );
   }
 
@@ -826,7 +826,7 @@ export class AgentClient implements AgentClientContract {
       generationConfig,
       abortSignal,
       model,
-      this.lastPromptId ?? this.config.getSessionId(),
+      this.lastPromptId ?? (this.config as ClientConfigSurface).getSessionId(),
       this.generateContentConfig,
     );
     return output;

@@ -37,14 +37,8 @@
 
 import * as fs from 'node:fs/promises';
 import os from 'node:os';
-import type {
-  EphemeralSettingsAccess,
-  ProviderManagerSource,
-  AuthRefresher,
-  ModelInfoConfig,
-} from '../config/capabilities.js';
-import type { ModelSelection } from '@vybestack/llxprt-code-core/config/roles.js';
-import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core/runtime/contracts/index.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { EphemeralSettings, ModelSelection } from '@vybestack/llxprt-code-core/config/roles.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import {
   switchActiveProvider,
@@ -70,6 +64,14 @@ import { PLACEHOLDER_MODEL } from './constants.js';
  * the CLI's `activateConfiguredProvider` returns (`authFailed`) plus the
  * resolved active provider and any info messages from the underlying switch.
  */
+/** Narrow config surface for provider activation. */
+export type ProviderActivationConfig = EphemeralSettings &
+  ModelSelection & {
+    getProviderManager: Config['getProviderManager'];
+    getSettingsService: Config['getSettingsService'];
+  };
+
+
 export interface ProviderActivationResult {
   /** True when the provider-case auth sequence threw (CLI maps this to fatal). */
   readonly authFailed: boolean;
@@ -272,7 +274,7 @@ async function ensureProviderManagerOnConfig(
   config: ProviderActivationConfig,
   manager: RuntimeProviderManager,
 ): Promise<void> {
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderRuntimeFactories(config as Config, manager);
   const serverToolsProvider = manager.getServerToolsProvider();
   if (
     serverToolsProvider &&

@@ -13,6 +13,7 @@
  */
 
 import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
+import type { MemoryAccess } from '@vybestack/llxprt-code-core/config/roles.js';
 import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';

@@ -35,23 +35,26 @@ import type { TodoContinuationService } from './TodoContinuationService.js';
  * Assembles ephemeral settings into an immutable snapshot for the runtime.
  * Pure function — reads config, no side effects.
  */
-/** Narrow config surface for ChatSessionFactory. */
-type ChatSessionConfigSurface = ModelSelection &
+
+/** Narrow config view for ChatSessionFactory member reads. */
+function asConfigView(config: Config): ModelSelection &
   MemoryAccess &
   EphemeralSettings &
   McpAccess &
   WorkspacePaths &
   SessionIdentity & {
-    getProviderManager(): import('@vybestack/llxprt-code-core/runtime/providerManager.js').RuntimeProviderManager | undefined;
-    getSettingsService(): import('@vybestack/llxprt-code-core').SettingsService;
-  };
+    getProviderManager: Config['getProviderManager'];
+    getSettingsService: Config['getSettingsService'];
+  } {
+  return config;
+}
 
 
 export function buildSettingsSnapshot(
-  config: ChatSessionConfigSurface,
+  config: Config,
   getToolGovernance: typeof getToolGovernanceEphemerals = getToolGovernanceEphemerals,
 ): ReadonlySettingsSnapshot {
-  const rawCompressionThreshold = config.getEphemeralSetting(
+  const rawCompressionThreshold = asConfigView(config).getEphemeralSetting(
     'compression-threshold',
   );
   const compressionThreshold =
@@ -60,7 +63,7 @@ export function buildSettingsSnapshot(
       ? rawCompressionThreshold
       : undefined;
 
-  const rawContextLimit = config.getEphemeralSetting('context-limit');
+  const rawContextLimit = asConfigView(config).getEphemeralSetting('context-limit');
   const contextLimit =
     typeof rawContextLimit === 'number' &&
     Number.isFinite(rawContextLimit) &&
@@ -68,7 +71,7 @@ export function buildSettingsSnapshot(
       ? rawContextLimit
       : undefined;
 
-  const rawPreserveThreshold = config.getEphemeralSetting(
+  const rawPreserveThreshold = asConfigView(config).getEphemeralSetting(
     'compression-preserve-threshold',
   );
   const preserveThreshold =
@@ -83,26 +86,26 @@ export function buildSettingsSnapshot(
     preserveThreshold: preserveThreshold ?? 0.2,
     telemetry: { enabled: true, target: null },
     tools: getToolGovernance(config),
-    'reasoning.enabled': config.getEphemeralSetting('reasoning.enabled') as
+    'reasoning.enabled': asConfigView(config).getEphemeralSetting('reasoning.enabled') as
       | boolean
       | undefined,
-    'reasoning.includeInContext': config.getEphemeralSetting(
+    'reasoning.includeInContext': asConfigView(config).getEphemeralSetting(
       'reasoning.includeInContext',
     ) as boolean | undefined,
-    'reasoning.includeInResponse': config.getEphemeralSetting(
+    'reasoning.includeInResponse': asConfigView(config).getEphemeralSetting(
       'reasoning.includeInResponse',
     ) as boolean | undefined,
-    'reasoning.format': config.getEphemeralSetting('reasoning.format') as
+    'reasoning.format': asConfigView(config).getEphemeralSetting('reasoning.format') as
       | 'native'
       | 'field'
       | undefined,
-    'reasoning.stripFromContext': config.getEphemeralSetting(
+    'reasoning.stripFromContext': asConfigView(config).getEphemeralSetting(
       'reasoning.stripFromContext',
     ) as 'all' | 'allButLast' | 'none' | undefined,
-    'reasoning.fieldName': config.getEphemeralSetting('reasoning.fieldName') as
+    'reasoning.fieldName': asConfigView(config).getEphemeralSetting('reasoning.fieldName') as
       | string
       | undefined,
-    'reasoning.effort': config.getEphemeralSetting('reasoning.effort') as
+    'reasoning.effort': asConfigView(config).getEphemeralSetting('reasoning.effort') as
       | 'minimal'
       | 'low'
       | 'medium'
@@ -110,7 +113,7 @@ export function buildSettingsSnapshot(
       | 'xhigh'
       | 'max'
       | undefined,
-    'reasoning.maxTokens': config.getEphemeralSetting('reasoning.maxTokens') as
+    'reasoning.maxTokens': asConfigView(config).getEphemeralSetting('reasoning.maxTokens') as
       | number
       | undefined,
   };
@@ -124,25 +127,25 @@ export function buildSettingsSnapshot(
  * in clientLlmUtilities which skips env context, core memory, and JIT memory.
  */
 export async function buildSystemInstruction(
-  config: ChatSessionConfigSurface,
+  config: Config,
   enabledToolNames: string[],
   envParts: Array<{ text?: string }>,
   model: string,
 ): Promise<string> {
-  let userMemory = config.isJitContextEnabled()
-    ? config.getGlobalMemory()
-    : config.getUserMemory();
-  const coreMemory = config.getCoreMemory();
+  let userMemory = asConfigView(config).isJitContextEnabled()
+    ? asConfigView(config).getGlobalMemory()
+    : asConfigView(config).getUserMemory();
+  const coreMemory = asConfigView(config).getCoreMemory();
 
-  const jitMemory = await config.getJitMemoryForPath(config.getWorkingDir());
+  const jitMemory = await asConfigView(config).getJitMemoryForPath(asConfigView(config).getWorkingDir());
   if (jitMemory) {
     userMemory = userMemory ? `${userMemory}\n\n${jitMemory}` : jitMemory;
   }
 
-  const mcpInstructions = config.getMcpInstructions();
+  const mcpInstructions = asConfigView(config).getMcpInstructions();
   const includeSubagentDelegation =
     await shouldIncludeSubagentDelegationForConfig(config, enabledToolNames);
-  const interactionMode = config.isInteractive()
+  const interactionMode = asConfigView(config).isInteractive()
     ? 'interactive'
     : 'non-interactive';
 
@@ -167,7 +170,7 @@ export async function buildSystemInstruction(
 }
 
 export interface CreateChatSessionDeps {
-  config: ChatSessionConfigSurface;
+  config: Config;
   runtimeState: AgentRuntimeState;
   contentGenerator: ContentGenerator;
   storedHistoryService: HistoryService | undefined;
@@ -273,7 +276,7 @@ function buildGenerateContentConfig(
  * Builds the runtime bundle, tool declarations, and ChatSession instance.
  */
 async function buildChatFromRuntime(
-  config: ChatSessionConfigSurface,
+  config: Config,
   runtimeState: AgentRuntimeState,
   contentGenerator: ContentGenerator,
   historyService: HistoryService,
@@ -294,7 +297,7 @@ async function buildChatFromRuntime(
 
   const settings = buildSettingsSnapshot(config);
   const providerRuntime = createSettingsProviderRuntimeContext({
-    settingsService: config.getSettingsService(),
+    settingsService: asConfigView(config).getSettingsService(),
     config,
     runtimeId: runtimeState.runtimeId,
     metadata: { source: 'AgentClient.startChat' },
@@ -306,9 +309,9 @@ async function buildChatFromRuntime(
       state: runtimeState,
       settings,
       providerRuntime,
-      contentGeneratorConfig: config.getContentGeneratorConfig(),
+      contentGeneratorConfig: asConfigView(config).getContentGeneratorConfig(),
       toolRegistry,
-      providerManager: config.getProviderManager(),
+      providerManager: asConfigView(config).getProviderManager(),
     },
     overrides: { historyService, contentGenerator },
   });
@@ -371,7 +374,7 @@ export async function createChatSession(
     createHistoryService,
   );
 
-  const getTokenizerFactory = (config as unknown as Record<string, (...args: unknown[]) => unknown>)[
+  const getTokenizerFactory = (config as Config & Record<string, unknown>)[
     'getTokenizerFactory'
   ];
   if (typeof getTokenizerFactory === 'function') {

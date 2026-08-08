@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { SendMessageParams } from './chatSession.js';
 import type {
@@ -110,6 +111,14 @@ interface BeforeModelHookFireResult {
   hookOutput: BeforeModelHookOutput | undefined;
   snapshot: ProjectionSnapshot | undefined;
 }
+
+/** Narrow config surface for StreamProcessor hook/bucket members. */
+type HookRuntimeConfig = {
+  getEnableHooks: Config['getEnableHooks'];
+  getHookSystem: Config['getHookSystem'];
+  getBucketFailoverHandler: Config['getBucketFailoverHandler'];
+};
+
 
 export class StreamProcessor {
   private logger = new DebugLogger('llxprt:gemini:stream-processor');
@@ -269,7 +278,7 @@ export class StreamProcessor {
     const { contents: requestContents, pending: pendingUserIContents } =
       this._buildRequestContents(userContent);
 
-    const configForHooks = (this.runtimeContext.providerRuntime.config as HookRuntimeConfig) | undefined;
+    const configForHooks = (this.runtimeContext.providerRuntime.config as HookRuntimeConfig | undefined);
     const toolSelection = await this._applyToolSelectionHook(
       configForHooks,
       this._selectRequestTools(params),
@@ -725,7 +734,7 @@ export class StreamProcessor {
     chunk: ModelStreamChunk,
     hookRestrictedAllowedTools: string[] | undefined,
   ): Promise<ModelStreamChunk | undefined> {
-    const hookConfig = (this.runtimeContext.providerRuntime.config as HookRuntimeConfig) | undefined;
+    const hookConfig = (this.runtimeContext.providerRuntime.config as HookRuntimeConfig | undefined);
     if (
       hookConfig === undefined ||
       typeof hookConfig.getEnableHooks !== 'function' ||

@@ -725,7 +725,7 @@ export class TurnProcessor {
       };
     }
 
-    const hookSystem = configForHooks.getHookSystem();
+    const hookSystem = configForHooks.getHookSystem?.();
     if (hookSystem === undefined) {
       return { tools: toolsFromConfig, allowedFunctionNames: undefined };
     }

@@ -204,7 +204,7 @@ export class HookControl implements AgentHookControl {
    * @plan:PLAN-20260622-COREAPIGAP.P10 @requirement:REQ-004 @pseudocode lines 1-19
    */
   listHooks(): readonly HookInfo[] {
-    const system = this.deps.config.getHookSystem();
+    const system = this.deps.config.getHookSystem?.();
     if (!system) return [];
     if (!system.isInitialized()) return [];
     const registry = system.getRegistry();
