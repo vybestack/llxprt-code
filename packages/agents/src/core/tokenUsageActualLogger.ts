@@ -78,6 +78,48 @@ export function usageStatsToActualInput(
   };
 }
 
+/** The history-service surface needed to reconcile a turn's token counts. */
+interface TokenSyncHistory {
+  waitForTokenUpdates(): Promise<void>;
+  syncTotalTokens(total: number): void;
+}
+
+/**
+ * Reconcile history's running token total with what the provider reported for
+ * a completed turn, then record the turn's actual usage.
+ *
+ * Prefers the provider's prompt-token count and falls back to the last count
+ * observed mid-stream. Extracted from TurnProcessor to keep that file within
+ * its `max-lines` budget; behaviour is unchanged.
+ */
+export async function syncAndRecordTurnUsage(input: {
+  history: TokenSyncHistory;
+  usageLogger: ActualTokenUsageRecorder | TokenUsageLogger | null | undefined;
+  usage: UsageStats | undefined;
+  lastPromptTokenCount: number | null;
+  attemptIndex: number;
+  promptId?: string;
+}): Promise<void> {
+  const { history, usage, lastPromptTokenCount } = input;
+  await history.waitForTokenUpdates();
+
+  const fallback = lastPromptTokenCount;
+  const usableFallback =
+    fallback !== null && !Number.isNaN(fallback) ? fallback : 0;
+  const total = usage?.promptTokens ?? usableFallback;
+  if (total > 0) {
+    history.syncTotalTokens(total);
+    await history.waitForTokenUpdates();
+  }
+
+  if (input.promptId === undefined) return;
+  await recordActualTokenUsage(
+    input.usageLogger,
+    input.promptId,
+    buildSuccessfulTurnUsage(usage, fallback, input.attemptIndex),
+  );
+}
+
 /**
  * Build the actual-usage input for a turn that completed successfully.
  *

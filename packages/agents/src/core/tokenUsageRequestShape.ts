@@ -72,7 +72,7 @@ export interface RequestShapeInput {
   readonly instructionsText: string | undefined;
   readonly countTokens: TokenCountFn;
   readonly previouslySentCallIds: ReadonlySet<string>;
-  readonly previousFingerprint: string | undefined;
+  readonly previousFingerprint?: string | undefined;
 }
 
 /** A single tool-call attribution entry (AC-5). */
@@ -224,18 +224,23 @@ function stableStringify(value: unknown, seen?: WeakSet<object>): string {
   if (value === null || typeof value !== 'object') {
     return JSON.stringify(value);
   }
+  // Ancestors only. A shared sub-schema referenced by several tool
+  // declarations is repetition, not a cycle: leaving it in the set would
+  // collapse it to the marker and understate tools_schema_tokens.
   const visited = seen ?? new WeakSet<object>();
   if (visited.has(value)) return '"[circular]"';
   visited.add(value);
-  if (Array.isArray(value)) {
-    return `[${value.map((entry) => stableStringify(entry, visited)).join(',')}]`;
-  }
-  const entries = Object.entries(value)
-    .sort(([a], [b]) => compareKeys(a, b))
-    .map(
-      ([key, val]) => `${JSON.stringify(key)}:${stableStringify(val, visited)}`,
-    );
-  return `{${entries.join(',')}}`;
+  const serialized = Array.isArray(value)
+    ? `[${value.map((entry) => stableStringify(entry, visited)).join(',')}]`
+    : `{${Object.entries(value)
+        .sort(([a], [b]) => compareKeys(a, b))
+        .map(
+          ([key, val]) =>
+            `${JSON.stringify(key)}:${stableStringify(val, visited)}`,
+        )
+        .join(',')}}`;
+  visited.delete(value);
+  return serialized;
 }
 
 function computeFingerprint(prefix: string): string {

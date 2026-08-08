@@ -17,10 +17,12 @@ function makeTempLogPath(): string {
   );
 }
 
-function readJsonl(filePath: string): unknown[] {
+function readJsonl(filePath: string): Array<Record<string, unknown>> {
   const raw = fs.readFileSync(filePath, 'utf-8').trim();
   if (raw.length === 0) return [];
-  return raw.split('\n').map((line) => JSON.parse(line));
+  return raw
+    .split('\n')
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
 }
 
 describe('TokenUsageLogger', () => {
@@ -73,7 +75,7 @@ describe('TokenUsageLogger', () => {
       cachedTokens: 50,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records).toHaveLength(1);
     const record = records[0];
     expect(record).toHaveProperty('ts');
@@ -103,7 +105,7 @@ describe('TokenUsageLogger', () => {
       cachedTokens: 200,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records[0].effective_actual_tokens).toBe(300);
   });
 
@@ -121,7 +123,7 @@ describe('TokenUsageLogger', () => {
       cachedTokens: 300,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records[0].effective_actual_tokens).toBe(0);
   });
 
@@ -393,9 +395,7 @@ describe('TokenUsageLogger', () => {
       cachedTokens: 0,
     });
 
-    const overflowRecords = readJsonl(logFile) as Array<
-      Record<string, unknown>
-    >;
+    const overflowRecords = readJsonl(logFile);
     expect(overflowRecords).toHaveLength(2);
     expect(overflowRecords.map((record) => record.prompt_id)).toStrictEqual([
       'prompt-overflow',
@@ -447,7 +447,7 @@ describe('TokenUsageLogger', () => {
       cachedTokens: 0,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     const ts = records[0].ts as string;
     expect(() => new Date(ts).toISOString()).not.toThrow();
     expect(new Date(ts).toString()).not.toBe('Invalid Date');
@@ -486,7 +486,7 @@ describe('TokenUsageLogger', () => {
       cachedTokens: 0,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records).toHaveLength(2);
     expect(records[0].estimated_tokens).toBe(200);
     expect(records[0].model).toBe('claude-3');
@@ -548,7 +548,7 @@ describe('refineEstimate (finding #8)', () => {
       cachedTokens: 0,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records).toHaveLength(1);
     expect(records[0].estimated_tokens).toBe(150);
     expect(records[0].tiktoken_tokens).toBe(95);
@@ -572,7 +572,7 @@ describe('refineEstimate (finding #8)', () => {
       cachedTokens: 0,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records).toHaveLength(1);
     expect(records[0].estimated_tokens).toBe(150);
     expect(records[0].tiktoken_tokens).toBeNull();

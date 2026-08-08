@@ -56,14 +56,14 @@ function readTurnRecords(filePath: string): TurnRecordFields[] {
   return raw.split('\n').map((line) => JSON.parse(line) as TurnRecordFields);
 }
 
-function driveTurn(
+async function driveTurn(
   logger: TokenUsageLogger,
   logFile: string,
   runtimeState: AgentRuntimeState,
   historyService: HistoryService,
   promptId: string,
   turnId: string | null = 'turn-under-test',
-): void {
+): Promise<void> {
   logger.recordEstimate(promptId, {
     provider: 'anthropic',
     model: 'claude-3-5-sonnet-20241022',
@@ -72,8 +72,7 @@ function driveTurn(
     tiktokenTokens: 90,
   });
   recordTurnJoinContext(logger, promptId, runtimeState, historyService, turnId);
-  // recordActual is async — flush synchronously via the internal write chain
-  void logger.recordActual(promptId, {
+  return logger.recordActual(promptId, {
     actualPromptTokens: 500,
     cachedTokens: 0,
   });
@@ -122,10 +121,9 @@ describe('Token usage subagent identity and boundary (issue #3130)', () => {
     );
 
     const promptId = 'subagent-prompt-1';
-    driveTurn(logger, logFile, subagentState, historyService, promptId);
+    await driveTurn(logger, logFile, subagentState, historyService, promptId);
 
     // Wait for the async write to settle
-    await new Promise((resolve) => setTimeout(resolve, 50));
 
     const records = readTurnRecords(logFile);
     expect(records).toHaveLength(1);
@@ -158,9 +156,7 @@ describe('Token usage subagent identity and boundary (issue #3130)', () => {
     );
 
     const promptId = 'main-prompt-1';
-    driveTurn(logger, logFile, mainState, historyService, promptId);
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await driveTurn(logger, logFile, mainState, historyService, promptId);
 
     const records = readTurnRecords(logFile);
     expect(records).toHaveLength(1);
@@ -187,9 +183,14 @@ describe('Token usage subagent identity and boundary (issue #3130)', () => {
     expect(findCurrentTurnMarker(historyService.getRawHistory())).toBeNull();
 
     const promptId = 'empty-history-prompt';
-    driveTurn(logger, logFile, state, historyService, promptId, 'minted-turn');
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await driveTurn(
+      logger,
+      logFile,
+      state,
+      historyService,
+      promptId,
+      'minted-turn',
+    );
 
     const records = readTurnRecords(logFile);
     expect(records).toHaveLength(1);
@@ -228,8 +229,6 @@ describe('Token usage subagent identity and boundary (issue #3130)', () => {
       state,
       historyService,
     );
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
 
     // When the logger is disabled, nothing is written — the file does not
     // even exist (AC-1 boundary: logger disabled → nothing written).

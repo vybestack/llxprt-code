@@ -64,7 +64,10 @@ export function prepareUserTurnContents(
 ): { userContents: IContent[]; userIContents: IContent[]; turnId: string } {
   const turnId = history.generateTurnKey();
   const userContents = stampTurnIdentity(contents, { promptId, turnId });
-  const idGen = history.getIdGeneratorCallback();
+  // Bind generated history ids to the same turn key that was stamped; calling
+  // this without an argument mints a second key, so the ids would belong to a
+  // turn that nothing else references.
+  const idGen = history.getIdGeneratorCallback(turnId);
   const userIContents = userContents.map((content) => ({
     ...content,
     metadata: { ...content.metadata, id: idGen() },

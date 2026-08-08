@@ -13,8 +13,11 @@ import { findCurrentTurnMarker } from '@vybestack/llxprt-code-core/services/hist
 
 /**
  * Resolves the compression model and provider from the provider-resolver
- * result. Returns null model/provider when the provider cannot be resolved
- * (fail-open for telemetry — the compression itself has already succeeded).
+ * result. `model` is null when the resolver reports no concrete model.
+ *
+ * This deliberately does NOT catch: the caller owns the single fail-open
+ * boundary for compression telemetry, so a resolver failure is reported there
+ * once rather than being silently turned into null provenance here.
  */
 interface ResolvedCompressionModel {
   readonly model: string | null;
@@ -60,9 +63,9 @@ function extractCompressionUsage(
  * `runCompressionWithRetryAndFallback`; the caller invokes
  * `performCompression` at most once per external trigger.
  *
- * Fail-open: if the provider cannot be resolved or the logger is disabled,
- * the event is silently skipped — the compression itself has already
- * succeeded and telemetry must never block it.
+ * Emits nothing when the logger is disabled. Any failure propagates to the
+ * caller, which owns the single fail-open boundary — the compression itself
+ * has already succeeded and observing it must never undo that.
  *
  * @param logger      The per-session token-usage logger (null when disabled)
  * @param runtimeCtx  The agent runtime context (for session ID and ephemerals)

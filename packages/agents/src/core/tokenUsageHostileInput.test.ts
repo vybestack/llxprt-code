@@ -97,6 +97,35 @@ describe('request-shape measurement over hostile input (issue #3130)', () => {
     expect(result.prefixFingerprint).toMatch(/^[0-9a-f]+$/);
   });
 
+  it('counts a shared sub-schema fully rather than treating repetition as a cycle', () => {
+    // One sub-schema object reused by several tool declarations is repetition,
+    // not recursion. Collapsing the repeats would understate the tool-schema
+    // cost — the opposite of what this log is for.
+    const shared = { type: 'string', description: 'a-distinctive-description' };
+    const sharedTools = { a: shared, b: shared };
+    const distinctTools = {
+      a: { ...shared },
+      b: { ...shared },
+    };
+
+    const withShared = computeRequestShape({
+      requestContents: [],
+      tools: sharedTools,
+      instructionsText: undefined,
+      countTokens,
+      previouslySentCallIds: new Set<string>(),
+    });
+    const withDistinct = computeRequestShape({
+      requestContents: [],
+      tools: distinctTools,
+      instructionsText: undefined,
+      countTokens,
+      previouslySentCallIds: new Set<string>(),
+    });
+
+    expect(withShared.toolsSchemaTokens).toBe(withDistinct.toolsSchemaTokens);
+  });
+
   it('never writes the cyclic body into the measured output', () => {
     const contents: IContent[] = [
       {

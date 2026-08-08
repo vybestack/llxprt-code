@@ -32,10 +32,12 @@ function makeTempLogPath(): string {
   );
 }
 
-function readJsonl(filePath: string): unknown[] {
+function readJsonl(filePath: string): Array<Record<string, unknown>> {
   const raw = fs.readFileSync(filePath, 'utf-8').trim();
   if (raw.length === 0) return [];
-  return raw.split('\n').map((line) => JSON.parse(line));
+  return raw
+    .split('\n')
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
 }
 
 describe('TokenUsageLogger — schema versioning (issue #3130 slice 1)', () => {
@@ -68,7 +70,7 @@ describe('TokenUsageLogger — schema versioning (issue #3130 slice 1)', () => {
       cachedTokens: 0,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records).toHaveLength(1);
     expect(records[0].record_type).toBe('turn');
     expect(records[0].schema_version).toBe(TOKEN_USAGE_SCHEMA_VERSION);
@@ -95,7 +97,7 @@ describe('TokenUsageLogger — schema versioning (issue #3130 slice 1)', () => {
       cachedTokens: 10,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     const record = records[0];
     const expectedKeys = [
       'ts',
@@ -142,7 +144,7 @@ describe('TokenUsageLogger — schema versioning (issue #3130 slice 1)', () => {
       cachedTokens: 0,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records[0]).not.toHaveProperty('estimator_method');
     expect(records[0]).not.toHaveProperty('estimator_family');
     expect(records[0]).not.toHaveProperty('protocol');
@@ -256,7 +258,7 @@ describe('TokenUsageLogger — attachTurnContext', () => {
       cachedTokens: 0,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records).toHaveLength(1);
     expect(records[0].session_id).toBe('sess-1');
     expect(records[0].turn_id).toBe('turn-1');
@@ -285,7 +287,7 @@ describe('TokenUsageLogger — attachTurnContext', () => {
       cachedTokens: 0,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records).toHaveLength(1);
     expect(records[0].session_id).toBe('sess-early');
     expect(records[0].turn_id).toBe('turn-early');
@@ -323,7 +325,7 @@ describe('TokenUsageLogger — attachTurnContext', () => {
       cachedTokens: 0,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     const toolCalls = records[0].tool_calls as Array<Record<string, unknown>>;
     expect(toolCalls).toHaveLength(2);
     expect(toolCalls[0]).toStrictEqual({
@@ -377,14 +379,14 @@ describe('TokenUsageLogger — attachTurnContext', () => {
       cachedTokens: 0,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records).toHaveLength(2);
     const evictedRecord = records.find((r) => r.prompt_id === 'ctx-prompt-0');
     expect(evictedRecord).toBeDefined();
     expect(evictedRecord).not.toHaveProperty('session_id');
     const overflowRecord = records.find((r) => r.prompt_id === 'ctx-overflow');
     expect(overflowRecord).toBeDefined();
-    expect(overflowRecord.session_id).toBe('sess-overflow');
+    expect(overflowRecord?.session_id).toBe('sess-overflow');
   });
 });
 
@@ -424,7 +426,7 @@ describe('TokenUsageLogger — widened recordActual (cost + attempt fields)', ()
       totalTokens: 198,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records[0].output_tokens).toBe(50);
     expect(records[0].reasoning_tokens).toBe(5);
     expect(records[0].cache_write_tokens).toBe(20);
@@ -452,7 +454,7 @@ describe('TokenUsageLogger — widened recordActual (cost + attempt fields)', ()
       backendProfile: 'gpt-4o-mini',
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records[0].attempt_index).toBe(1);
     expect(records[0].attempt_outcome).toBe('error');
     expect(records[0].retry_reason).toBe('rate_limit');
@@ -474,7 +476,7 @@ describe('TokenUsageLogger — widened recordActual (cost + attempt fields)', ()
       cachedTokens: 0,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records[0]).not.toHaveProperty('output_tokens');
     expect(records[0]).not.toHaveProperty('total_tokens');
     expect(records[0]).not.toHaveProperty('attempt_index');
@@ -496,7 +498,7 @@ describe('TokenUsageLogger — widened recordActual (cost + attempt fields)', ()
       cacheReadTokens: 200,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records[0].cached_tokens).toBe(200);
     expect(records[0].cache_read_tokens).toBe(200);
   });
@@ -532,7 +534,7 @@ describe('TokenUsageLogger — recordLifecycleEvent', () => {
       compressionOutputTokens: 500,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records).toHaveLength(1);
     const record = records[0];
     expect(record.record_type).toBe('compression');
@@ -559,7 +561,7 @@ describe('TokenUsageLogger — recordLifecycleEvent', () => {
       toModel: 'claude-3',
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records[0].record_type).toBe('provider_switch');
     expect(records[0].from_provider).toBe('openai');
     expect(records[0].to_provider).toBe('anthropic');
@@ -576,7 +578,7 @@ describe('TokenUsageLogger — recordLifecycleEvent', () => {
       provider: 'openai',
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records[0].record_type).toBe('model_switch');
     expect(records[0].from_model).toBe('gpt-4');
     expect(records[0].to_model).toBe('gpt-4o');
@@ -593,7 +595,7 @@ describe('TokenUsageLogger — recordLifecycleEvent', () => {
       restoredTokens: 5000,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records[0].record_type).toBe('session_resume');
     expect(records[0].resumed_session_id).toBe('sess-1');
     expect(records[0].restored_history_items).toBe(10);
@@ -612,7 +614,7 @@ describe('TokenUsageLogger — recordLifecycleEvent', () => {
       reason: 'manual_clear',
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records[0].record_type).toBe('context_truncation');
     expect(records[0].dropped_items).toBe(15);
     expect(records[0].reason).toBe('manual_clear');
@@ -642,7 +644,7 @@ describe('TokenUsageLogger — recordLifecycleEvent', () => {
       cachedTokens: 0,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     expect(records).toHaveLength(2);
     expect(records[0].record_type).toBe('compression');
     expect(records[1].record_type).toBe('turn');
@@ -671,7 +673,7 @@ describe('TokenUsageLogger — recordLifecycleEvent', () => {
       compressionProvider: null,
     });
 
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    const records = readJsonl(logFile);
     const ts = records[0].ts as string;
     expect(() => new Date(ts).toISOString()).not.toThrow();
   });

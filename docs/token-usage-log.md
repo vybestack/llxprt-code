@@ -7,7 +7,7 @@ turns.
 
 ## Where the file lives
 
-```
+```text
 <projectTempDir>/token-usage/<sessionId>.jsonl
 ```
 
@@ -82,8 +82,9 @@ the conversation log.
 
 ### Estimator and calibration
 
-These 17 fields are the original token-estimation columns. Their names and
-meanings are stable and will not change.
+The 13 fields below, together with `ts`, `prompt_id`, `provider` and `model`
+from the identity section above, are the original 17 token-estimation columns.
+Their names and meanings are stable and will not change.
 
 | Field                        | Type           | Description                                                                                   |
 | ---------------------------- | -------------- | --------------------------------------------------------------------------------------------- |
@@ -144,15 +145,15 @@ These fields attribute token cost to tool results present in the request.
 These fields describe the composition of the request prefix, measured at the
 agents-layer send seam.
 
-| Field                        | Type            | Description                                                                                                                             |
-| ---------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `instructions_tokens`        | number          | Token count of the system instruction.                                                                                                  |
-| `tools_schema_tokens`        | number          | Token count of the tool schemas.                                                                                                        |
-| `history_tokens`             | number          | Token count of the conversation history (excluding media and injected content).                                                         |
-| `media_tokens`               | number          | Token count of media blocks (images, audio).                                                                                            |
-| `injected_tokens`            | number          | Token count of synthetic/injected content (`metadata.synthetic === true`).                                                              |
-| `prefix_fingerprint`         | string          | A hash of a stable serialization of the request prefix. Because it is a one-way hash, the original content cannot be recovered from it. |
-| `prefix_fingerprint_changed` | boolean \| null | Whether the fingerprint differs from the previous send in the same session. `null` on the first send.                                   |
+| Field                        | Type            | Description                                                                                                                                                |
+| ---------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `instructions_tokens`        | number          | Token count of the system instruction.                                                                                                                     |
+| `tools_schema_tokens`        | number          | Token count of the tool schemas.                                                                                                                           |
+| `history_tokens`             | number          | Token count of the conversation history (excluding media and injected content).                                                                            |
+| `media_tokens`               | number          | Token count of media blocks (images, audio).                                                                                                               |
+| `injected_tokens`            | number          | Token count of synthetic/injected content (`metadata.synthetic === true`).                                                                                 |
+| `prefix_fingerprint`         | string          | First 16 hex characters of the SHA-256 of a stable serialization of the request prefix. See the privacy section for what this does and does not guarantee. |
+| `prefix_fingerprint_changed` | boolean \| null | Whether the fingerprint differs from the previous send in the same session. `null` on the first send.                                                      |
 
 ## Lifecycle records
 
@@ -221,18 +222,23 @@ When these records are wired in the future, their schemas will not change.
 The token-usage log and the conversation log live in the same project temp
 directory but in different subdirectories:
 
-```
+```text
 <projectTempDir>/token-usage/<sessionId>.jsonl   ← token usage
 <projectTempDir>/chats/session-<timestamp>-<prefix>.jsonl  ← conversation
 ```
 
+The conversation filename embeds only the first 12 characters of the session id,
+so to go from a token-usage record to its recording: match that prefix against
+`session_id`, then confirm the file's `session_start` record has
+`payload.sessionId` equal to the full `session_id`.
+
 ### Join keys
 
-| Token-usage field | Conversation content field | Meaning                                      |
-| ----------------- | -------------------------- | -------------------------------------------- |
-| `prompt_id`       | `metadata.promptId`        | Links a billed request to the turn it served |
-| `turn_id`         | `metadata.turnId`          | Links to the stable turn identifier          |
-| `session_id`      | the recording filename     | Scopes both streams to one session           |
+| Token-usage field | Conversation content field                                           | Meaning                                      |
+| ----------------- | -------------------------------------------------------------------- | -------------------------------------------- |
+| `prompt_id`       | `metadata.promptId`                                                  | Links a billed request to the turn it served |
+| `turn_id`         | `metadata.turnId`                                                    | Links to the stable turn identifier          |
+| `session_id`      | filename prefix, confirmed against `session_start.payload.sessionId` | Scopes both streams to one session           |
 
 > **Caution:** join on `prompt_id` or `turn_id`. Do **not** join on
 > `user_turn`/`step`. The token-usage record is written before the turn it
@@ -284,17 +290,23 @@ explicitly does **not** contain:
 - Tool arguments or parameters
 - Tool result bodies
 
-The `prefix_fingerprint` field is a one-way hash of the request prefix. The
-hash is computed from a stable serialization of the system instruction, tool
-schemas, and conversation history structure. Because it is a cryptographic hash,
-the original content cannot be recovered from the fingerprint. It exists solely
-to detect when the request prefix changes between sends.
+The `prefix_fingerprint` field is the first 16 hex characters of the SHA-256 of
+a stable serialization of the system instruction, tool schemas and conversation
+history. It exists solely to detect when the request prefix changes between
+sends.
+
+It stores no prompt content, and SHA-256 is not invertible. It is **not** a
+confidentiality guarantee: anyone who can guess a candidate prefix can hash it
+and compare, so a low-entropy or already-known prefix can be confirmed. Treat a
+fingerprint as an equality token for prefixes you already hold, not as a secret
+about prefixes you do not. Truncation to 64 bits also makes collisions possible
+in a large enough corpus.
 
 ### Fields deliberately not populated
 
-| Field              | Reason                                                                                                                                                           |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `prompt_cache_key` | Only populated where the provider actually sends one (OpenAI family). For providers that do not expose a cache key, the field is omitted rather than fabricated. |
+| Field              | Reason                                                                                                                                                                                                                                                                                         |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `prompt_cache_key` | Declared in the schema but **never written** today. The key is derived and sanitized inside the provider executors, below the seam that writes this log, so a value produced here could differ from the one actually sent. Recording the real key means surfacing it from the transport layer. |
 
 ## Future work
 

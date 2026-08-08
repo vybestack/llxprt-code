@@ -75,9 +75,8 @@ import {
 import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
-  recordActualTokenUsage,
   recordAbandonedStreamAttempt,
-  buildSuccessfulTurnUsage,
+  syncAndRecordTurnUsage,
 } from './tokenUsageActualLogger.js';
 import { shouldRetryDirectProviderError } from './turnRetryPolicy.js';
 type ToolGroupArray = Array<{
@@ -154,11 +153,7 @@ export class TurnProcessor {
   ): Promise<ModelOutput> {
     await this.sendPromise;
 
-    this.lastPromptTokenCount = null;
-    this.currentPromptEnvelopeEstimate = null;
-    // Reset per turn: a stale index would attribute this turn's cost to a
-    // retry of the previous one (#3130 AC-4).
-    this.lastSendAttemptIndex = 0;
+    this._resetPerTurnState();
 
     const prepared = this._prepareSendMessage(params, prompt_id);
 
@@ -201,8 +196,7 @@ export class TurnProcessor {
     prompt_id: string,
   ): Promise<AsyncGenerator<StreamEvent>> {
     await this.sendPromise;
-    this.lastPromptTokenCount = null;
-    this.currentPromptEnvelopeEstimate = null;
+    this._resetPerTurnState();
 
     const userContents = this._normalizeUserContent(params);
 
@@ -341,6 +335,20 @@ export class TurnProcessor {
       }
       return { error, action: 'stop' };
     }
+  }
+
+  /**
+   * Clear state that belongs to a single logical turn. Called once when a turn
+   * starts, never between retries of that turn: the abandoned-attempt record
+   * falls back to the last observed prompt-token count, and a stale value —
+   * or a stale attempt index — would bill the previous turn to this one
+   * (#3130 AC-4).
+   */
+  private _resetPerTurnState(): void {
+    this.lastPromptTokenCount = null;
+    this.currentPromptEnvelopeEstimate = null;
+    this.lastSendAttemptIndex = 0;
+    this.compressionHandler.lastPromptTokenCount = null;
   }
 
   private _normalizeUserContent(params: SendMessageParams): IContent[] {
@@ -921,33 +929,13 @@ export class TurnProcessor {
     response: ModelOutput,
     promptId?: string,
   ): Promise<void> {
-    await this.historyService.waitForTokenUpdates();
-    const usage = response.usage;
-    if (usage?.promptTokens !== undefined) {
-      const combined = usage.promptTokens;
-      if (combined > 0) {
-        this.historyService.syncTotalTokens(combined);
-        await this.historyService.waitForTokenUpdates();
-      }
-    } else if (
-      this.lastPromptTokenCount != null &&
-      this.lastPromptTokenCount > 0 &&
-      !Number.isNaN(this.lastPromptTokenCount)
-    ) {
-      this.historyService.syncTotalTokens(this.lastPromptTokenCount);
-      await this.historyService.waitForTokenUpdates();
-    }
-
-    if (promptId !== undefined) {
-      await recordActualTokenUsage(
-        this.compressionHandler.tokenUsageLogger,
-        promptId,
-        buildSuccessfulTurnUsage(
-          usage,
-          this.lastPromptTokenCount,
-          this.lastSendAttemptIndex,
-        ),
-      );
-    }
+    await syncAndRecordTurnUsage({
+      history: this.historyService,
+      usageLogger: this.compressionHandler.tokenUsageLogger,
+      usage: response.usage,
+      lastPromptTokenCount: this.lastPromptTokenCount,
+      attemptIndex: this.lastSendAttemptIndex,
+      promptId,
+    });
   }
 }
