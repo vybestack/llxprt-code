@@ -1,0 +1,1760 @@
+{
+  "generatedAt": "2026-08-08T01:57:34.801Z",
+  "commit": "fedd4f9e932834ffd7f3d9affa750db3d4829f1b",
+  "method": "TypeScript compiler API with type checker (ts.createProgram + program.getTypeChecker()). Receivers resolved by type; a property access is counted only when the checker resolves the member symbol to a declaration on the ConfigBaseCore -> ConfigBase -> Config hierarchy. This catches receivers reached through deps properties (this.deps.config.x), forwarding (unannotated locals holding Config), aliased imports, Pick<Config,...> narrowings, and union types (Config | undefined) via optional chaining.",
+  "summary": {
+    "configDeclaredMembers": 369,
+    "reachedInProduction": 116,
+    "productionFilesReadingConfig": 85,
+    "roles": {
+      "SessionIdentity": 6,
+      "ModelSelection": 10,
+      "EphemeralSettings": 6,
+      "WorkspacePaths": 8,
+      "MemoryAccess": 11,
+      "ToolAccess": 5,
+      "PolicyAccess": 3,
+      "McpAccess": 10,
+      "TelemetryAccess": 1,
+      "Diagnostics": 2
+    },
+    "serviceLocatorCount": 41,
+    "unassignedCount": 13,
+    "compositionRootCount": 21,
+    "configConstructorFileCount": 49
+  },
+  "roles": {
+    "SessionIdentity": {
+      "members": [
+        {
+          "name": "getSessionId",
+          "signature": "(): string",
+          "callSites": [
+            "packages/agents/src/tools/task.ts:694",
+            "packages/agents/src/core/subagentOrchestrator.ts:482",
+            "packages/agents/src/core/subagentOrchestrator.ts:483",
+            "packages/agents/src/core/nonInteractiveToolExecutor.ts:138",
+            "packages/agents/src/core/coreToolScheduler.ts:255",
+            "packages/agents/src/core/subagentRuntimeSetup.ts:685",
+            "packages/agents/src/core/subagentExecution.ts:499",
+            "packages/agents/src/core/subagentExecution.ts:545",
+            "packages/agents/src/core/client.ts:319",
+            "packages/agents/src/core/client.ts:803",
+            "packages/agents/src/core/client.ts:821",
+            "packages/agents/src/agents/executor.ts:383",
+            "packages/agents/src/api/agentBootstrap.ts:158",
+            "packages/cli/src/nonInteractiveCliCommands.ts:55",
+            "packages/cli/src/nonInteractiveCliCommands.ts:64",
+            "packages/cli/src/cliSessionBootstrap.ts:352",
+            "packages/cli/src/providers/logging/git-stats.ts:193",
+            "packages/cli/src/runtime/interactiveToolScheduler.ts:365",
+            "packages/cli/src/nonInteractiveCli.ts:201",
+            "packages/cli/src/nonInteractiveCli.ts:468",
+            "packages/cli/src/nonInteractiveCliSupport.ts:308",
+            "packages/a2a-server/src/agent/task.ts:149",
+            "packages/a2a-server/src/agent/task.ts:489",
+            "packages/a2a-server/src/agent/task.ts:745"
+          ],
+          "prodCount": 24
+        },
+        {
+          "name": "isInteractive",
+          "signature": "(): boolean",
+          "callSites": [
+            "packages/providers/src/gemini/geminiRequestBuilding.ts:260",
+            "packages/providers/src/gemini/geminiRequestBuilding.ts:261",
+            "packages/providers/src/runtime/providerSwitch.ts:524",
+            "packages/providers/src/runtime/providerSwitch.ts:525",
+            "packages/providers/src/openai-vercel/vercelSystemPrompt.ts:59",
+            "packages/providers/src/anthropic/AnthropicRequestPreparation.ts:658",
+            "packages/providers/src/anthropic/AnthropicRequestPreparation.ts:659",
+            "packages/providers/src/openai/OpenAIRequestPreparation.ts:133",
+            "packages/providers/src/openai/OpenAIRequestPreparation.ts:134",
+            "packages/providers/src/openai-responses/openAIResponsesExecutor.ts:370",
+            "packages/agents/src/tools/task.ts:801",
+            "packages/agents/src/core/ChatSessionFactory.ts:132",
+            "packages/agents/src/core/clientLlmUtilities.ts:40",
+            "packages/agents/src/api/loop/rebuildLoop.ts:105",
+            "packages/cli/src/unconfiguredProviderGuard.ts:95",
+            "packages/cli/src/cliTerminalSession.ts:123",
+            "packages/cli/src/cliTerminalSession.ts:124",
+            "packages/cli/src/cliTerminalSession.ts:165",
+            "packages/cli/src/cliTerminalSession.ts:201",
+            "packages/cli/src/session/nonInteractiveSession.ts:91"
+          ],
+          "prodCount": 22
+        },
+        {
+          "name": "getIdeMode",
+          "signature": "(): boolean",
+          "callSites": [
+            "packages/agents/src/api/agentImpl.ts:516",
+            "packages/cli/src/cliProviderInit.ts:267"
+          ],
+          "prodCount": 2
+        },
+        {
+          "name": "adoptSessionId",
+          "signature": "(sessionId: string): void",
+          "callSites": [
+            "packages/cli/src/cliSessionBootstrap.ts:274",
+            "packages/cli/src/cliSessionBootstrap.ts:322"
+          ],
+          "prodCount": 2
+        },
+        {
+          "name": "getMaxSessionTurns",
+          "signature": "(): number",
+          "callSites": [
+            "packages/cli/src/zed-integration/zedIntegration.ts:627",
+            "packages/cli/src/nonInteractiveCli.ts:363"
+          ],
+          "prodCount": 2
+        },
+        {
+          "name": "getContinueSessionRef",
+          "signature": "(): string | null",
+          "callSites": [
+            "packages/cli/src/cliSessionBootstrap.ts:414"
+          ],
+          "prodCount": 1
+        }
+      ]
+    },
+    "ModelSelection": {
+      "members": [
+        {
+          "name": "getModel",
+          "signature": "(): string",
+          "callSites": [
+            "packages/providers/src/runtime/providerMutations.ts:424",
+            "packages/providers/src/runtime/runtimeAccessors.ts:474",
+            "packages/providers/src/runtime/providerSwitch.ts:367",
+            "packages/providers/src/runtime/providerSwitch.ts:905",
+            "packages/providers/src/composition/providerManagerInstance.ts:200",
+            "packages/providers/src/runtimeNormalizer.ts:269",
+            "packages/agents/src/core/client.ts:730",
+            "packages/agents/src/api/providerActivationExecutor.ts:517",
+            "packages/agents/src/api/createAgent.ts:555",
+            "packages/agents/src/api/fromConfig.ts:94",
+            "packages/agents/src/api/fromConfig.ts:212",
+            "packages/agents/src/api/control/toolControl.ts:293",
+            "packages/cli/src/cliSessionBootstrap.ts:357",
+            "packages/cli/src/cliSessionBootstrap.ts:391",
+            "packages/cli/src/cliSessionBootstrap.ts:447",
+            "packages/cli/src/cliAgentBootstrap.ts:54",
+            "packages/cli/src/nonInteractiveCli.ts:202",
+            "packages/cli/src/nonInteractiveCli.ts:393",
+            "packages/a2a-server/src/agent/task.ts:144",
+            "packages/a2a-server/src/agent/task.ts:278",
+            "packages/a2a-server/src/agent/task.ts:635",
+            "packages/a2a-server/src/commands/init.ts:129"
+          ],
+          "prodCount": 22
+        },
+        {
+          "name": "getProvider",
+          "signature": "(): string | undefined",
+          "callSites": [
+            "packages/providers/src/runtime/runtimeAccessors.ts:393",
+            "packages/providers/src/runtime/runtimeAccessors.ts:394",
+            "packages/providers/src/runtime/runtimeLifecycle.ts:230",
+            "packages/providers/src/runtime/runtimeLifecycle.ts:231",
+            "packages/providers/src/composition/providerManagerInstance.ts:272",
+            "packages/providers/src/composition/providerManagerInstance.ts:273",
+            "packages/agents/src/api/providerActivationExecutor.ts:308",
+            "packages/agents/src/api/fromConfig.ts:208",
+            "packages/agents/src/api/fromConfig.ts:209",
+            "packages/cli/src/cliSessionBootstrap.ts:356",
+            "packages/cli/src/cliSessionBootstrap.ts:390",
+            "packages/cli/src/cliSessionBootstrap.ts:446",
+            "packages/cli/src/cliProviderInit.ts:142",
+            "packages/cli/src/cliProviderInit.ts:284",
+            "packages/cli/src/cliAgentBootstrap.ts:53",
+            "packages/cli/src/nonInteractiveCli.ts:398",
+            "packages/a2a-server/src/agent/task.ts:135",
+            "packages/a2a-server/src/agent/task.ts:632"
+          ],
+          "prodCount": 18
+        },
+        {
+          "name": "refreshAuth",
+          "signature": "(authMethod?: string): Promise<void>",
+          "callSites": [
+            "packages/agents/src/core/subagent-test-helpers.ts:97",
+            "packages/agents/src/api/providerActivationExecutor.ts:203",
+            "packages/agents/src/api/providerActivationExecutor.ts:206",
+            "packages/agents/src/api/providerActivationExecutor.ts:340",
+            "packages/agents/src/api/providerActivationExecutor.ts:373",
+            "packages/agents/src/api/providerActivationExecutor.ts:413",
+            "packages/agents/src/api/createAgent.ts:569",
+            "packages/agents/src/api/fromConfig.ts:192",
+            "packages/a2a-server/src/config/config.ts:187",
+            "packages/a2a-server/src/config/config.ts:192",
+            "packages/a2a-server/src/config/config.ts:200",
+            "packages/a2a-server/src/config/config.ts:245"
+          ],
+          "prodCount": 12
+        },
+        {
+          "name": "setModel",
+          "signature": "(newModel: string): void",
+          "callSites": [
+            "packages/providers/src/runtime/providerMutations.ts:439",
+            "packages/providers/src/runtime/providerSwitch.ts:454",
+            "packages/cli/src/config/postConfigRuntime.ts:486"
+          ],
+          "prodCount": 3
+        },
+        {
+          "name": "getContentGeneratorConfig",
+          "signature": "(): ContentGeneratorConfig | undefined",
+          "callSites": [
+            "packages/agents/src/core/ChatSessionFactory.ts:296",
+            "packages/agents/src/core/client.ts:310",
+            "packages/agents/src/agents/executor.ts:802",
+            "packages/agents/src/api/providerActivationExecutor.ts:289",
+            "packages/a2a-server/src/agent/executor.ts:159",
+            "packages/a2a-server/src/agent/executor.ts:186",
+            "packages/a2a-server/src/agent/task.ts:134",
+            "packages/a2a-server/src/agent/task.ts:197"
+          ],
+          "prodCount": 8
+        },
+        {
+          "name": "initializeContentGeneratorConfig",
+          "signature": "initializeContentGeneratorConfig: () => Promise<void>",
+          "callSites": [
+            "packages/providers/src/runtime/providerSwitch.ts:761",
+            "packages/providers/src/runtime/providerSwitch.ts:766",
+            "packages/agents/src/api/createAgent.ts:605",
+            "packages/agents/src/api/agentImpl.ts:758",
+            "packages/agents/src/api/agentImpl.ts:1188"
+          ],
+          "prodCount": 5
+        },
+        {
+          "name": "getProxy",
+          "signature": "(): string | undefined",
+          "callSites": [
+            "packages/providers/src/composition/providerManagerInstance.ts:202",
+            "packages/a2a-server/src/agent/task.ts:148"
+          ],
+          "prodCount": 2
+        },
+        {
+          "name": "setProvider",
+          "signature": "(provider: string): void",
+          "callSites": [
+            "packages/providers/src/runtime/providerSwitch.ts:313"
+          ],
+          "prodCount": 1
+        },
+        {
+          "name": "getEmbeddingModel",
+          "signature": "(): string | undefined",
+          "callSites": [
+            "packages/agents/src/core/client.ts:164"
+          ],
+          "prodCount": 1
+        },
+        {
+          "name": "getComplexityAnalyzerSettings",
+          "signature": "(): ComplexityAnalyzerSettings",
+          "callSites": [
+            "packages/agents/src/core/client.ts:170"
+          ],
+          "prodCount": 1
+        }
+      ]
+    },
+    "EphemeralSettings": {
+      "members": [
+        {
+          "name": "getEphemeralSetting",
+          "signature": "(key: string): unknown",
+          "callSites": [
+            "packages/providers/src/runtime/profileApplication.ts:918",
+            "packages/providers/src/runtime/providerMutations.ts:238",
+            "packages/providers/src/runtime/providerMutations.ts:247",
+            "packages/providers/src/runtime/runtimeAccessors.ts:615",
+            "packages/providers/src/runtime/providerSwitch.ts:190",
+            "packages/providers/src/runtime/providerSwitch.ts:318",
+            "packages/providers/src/runtime/providerSwitch.ts:373",
+            "packages/providers/src/runtimeNormalizer.ts:339",
+            "packages/providers/src/runtimeNormalizer.ts:342",
+            "packages/providers/src/runtimeNormalizer.ts:373",
+            "packages/providers/src/runtimeNormalizer.ts:374",
+            "packages/agents/src/core/subagentOrchestrator.ts:466",
+            "packages/agents/src/core/subagentOrchestrator.ts:469",
+            "packages/agents/src/core/ChatSessionFactory.ts:41",
+            "packages/agents/src/core/ChatSessionFactory.ts:50",
+            "packages/agents/src/core/ChatSessionFactory.ts:58",
+            "packages/agents/src/core/ChatSessionFactory.ts:73",
+            "packages/agents/src/core/ChatSessionFactory.ts:76",
+            "packages/agents/src/core/ChatSessionFactory.ts:79",
+            "packages/agents/src/core/ChatSessionFactory.ts:82",
+            "packages/agents/src/core/ChatSessionFactory.ts:86",
+            "packages/agents/src/core/ChatSessionFactory.ts:89",
+            "packages/agents/src/core/ChatSessionFactory.ts:92",
+            "packages/agents/src/core/ChatSessionFactory.ts:100",
+            "packages/agents/src/agents/executor.ts:814",
+            "packages/agents/src/agents/executor.ts:823",
+            "packages/agents/src/agents/executor.ts:831",
+            "packages/agents/src/api/providerActivationExecutor.ts:225",
+            "packages/agents/src/api/providerActivationExecutor.ts:226",
+            "packages/agents/src/api/providerActivationExecutor.ts:229",
+            "packages/agents/src/api/providerActivationExecutor.ts:493",
+            "packages/agents/src/api/agentImpl.ts:807",
+            "packages/cli/src/config/postConfigRuntime.ts:656",
+            "packages/cli/src/config/postConfigRuntime.ts:658",
+            "packages/cli/src/config/postConfigRuntime.ts:661",
+            "packages/cli/src/zed-integration/zed-terminal-setup.ts:33",
+            "packages/cli/src/zed-integration/zed-config-options.ts:35",
+            "packages/cli/src/zed-integration/zedIntegration.ts:600",
+            "packages/cli/src/nonInteractiveCli.ts:207",
+            "packages/cli/src/nonInteractiveCliSupport.ts:612"
+          ],
+          "prodCount": 40
+        },
+        {
+          "name": "setEphemeralSetting",
+          "signature": "(key: string, value: unknown): void",
+          "callSites": [
+            "packages/providers/src/runtime/providerMutations.ts:240",
+            "packages/providers/src/runtime/providerMutations.ts:252",
+            "packages/providers/src/runtime/providerMutations.ts:273",
+            "packages/providers/src/runtime/providerMutations.ts:274",
+            "packages/providers/src/runtime/providerMutations.ts:275",
+            "packages/providers/src/runtime/providerMutations.ts:296",
+            "packages/providers/src/runtime/providerMutations.ts:297",
+            "packages/providers/src/runtime/providerMutations.ts:298",
+            "packages/providers/src/runtime/providerMutations.ts:330",
+            "packages/providers/src/runtime/providerMutations.ts:343",
+            "packages/providers/src/runtime/providerMutations.ts:387",
+            "packages/providers/src/runtime/providerMutations.ts:394",
+            "packages/providers/src/runtime/runtimeAccessors.ts:620",
+            "packages/providers/src/runtime/runtimeAccessors.ts:625",
+            "packages/providers/src/runtime/providerSwitch.ts:210",
+            "packages/providers/src/runtime/providerSwitch.ts:294",
+            "packages/providers/src/runtime/providerSwitch.ts:315",
+            "packages/providers/src/runtime/providerSwitch.ts:401",
+            "packages/providers/src/runtime/providerSwitch.ts:613",
+            "packages/providers/src/runtime/providerSwitch.ts:624",
+            "packages/providers/src/runtime/providerSwitch.ts:637",
+            "packages/providers/src/runtime/providerSwitch.ts:649",
+            "packages/providers/src/runtime/providerSwitch.ts:710",
+            "packages/agents/src/api/providerActivationExecutor.ts:240",
+            "packages/agents/src/api/agentImpl.ts:812",
+            "packages/cli/src/config/postConfigRuntime.ts:125",
+            "packages/cli/src/config/postConfigRuntime.ts:129",
+            "packages/cli/src/config/postConfigRuntime.ts:214",
+            "packages/cli/src/config/postConfigRuntime.ts:530",
+            "packages/cli/src/config/postConfigRuntime.ts:532",
+            "packages/cli/src/config/postConfigRuntime.ts:669",
+            "packages/cli/src/validateNonInteractiveAuth.ts:61",
+            "packages/cli/src/validateNonInteractiveAuth.ts:67",
+            "packages/cli/src/zed-integration/zed-config-options.ts:144"
+          ],
+          "prodCount": 34
+        },
+        {
+          "name": "getEphemeralSettings",
+          "signature": "(): Record<string, unknown>",
+          "callSites": [
+            "packages/providers/src/runtime/runtimeAccessors.ts:610",
+            "packages/providers/src/runtime/profileSnapshot.ts:281",
+            "packages/providers/src/runtime/profileSnapshot.ts:813",
+            "packages/providers/src/runtime/providerSwitch.ts:274",
+            "packages/providers/src/runtime/providerSwitch.ts:275",
+            "packages/providers/src/runtime/providerSwitch.ts:304",
+            "packages/providers/src/composition/providerManagerInstance.ts:439",
+            "packages/providers/src/composition/providerManagerInstance.ts:440",
+            "packages/providers/src/composition/providerManagerInstance.ts:493",
+            "packages/providers/src/composition/providerManagerInstance.ts:540",
+            "packages/agents/src/core/subagentRuntimeSetup.ts:600",
+            "packages/agents/src/core/subagentRuntimeSetup.ts:601",
+            "packages/agents/src/api/agentImpl.ts:817"
+          ],
+          "prodCount": 13
+        },
+        {
+          "name": "getOutputFormat",
+          "signature": "(): OutputFormat",
+          "callSites": [
+            "packages/cli/src/unconfiguredProviderGuard.ts:48",
+            "packages/cli/src/unconfiguredProviderGuard.ts:49",
+            "packages/cli/src/cliTerminalSession.ts:165",
+            "packages/cli/src/nonInteractiveCli.ts:512",
+            "packages/cli/src/session/errorReporting.ts:72"
+          ],
+          "prodCount": 5
+        },
+        {
+          "name": "getQuiet",
+          "signature": "(): boolean",
+          "callSites": [
+            "packages/cli/src/nonInteractiveCli.ts:371"
+          ],
+          "prodCount": 1
+        },
+        {
+          "name": "getQuestion",
+          "signature": "(): string | undefined",
+          "callSites": [
+            "packages/cli/src/session/nonInteractiveSession.ts:84"
+          ],
+          "prodCount": 1
+        }
+      ]
+    },
+    "WorkspacePaths": {
+      "members": [
+        {
+          "name": "getTargetDir",
+          "signature": "(): string",
+          "callSites": [
+            "packages/agents/src/api/agentImpl.ts:338",
+            "packages/agents/src/api/agentImpl.ts:408",
+            "packages/agents/src/api/control/workspaceControl.ts:39",
+            "packages/cli/src/config/postConfigRuntime.ts:331",
+            "packages/cli/src/zed-integration/zed-terminal-setup.ts:37",
+            "packages/cli/src/zed-integration/zed-session-config.ts:43",
+            "packages/cli/src/zed-integration/zed-session-config.ts:47",
+            "packages/cli/src/zed-integration/zed-session-config.ts:48",
+            "packages/cli/src/zed-integration/zed-session-config.ts:50",
+            "packages/cli/src/zed-integration/zed-session-config.ts:64",
+            "packages/cli/src/zed-integration/zed-path-resolver.ts:273",
+            "packages/cli/src/zed-integration/zed-path-resolver.ts:383",
+            "packages/cli/src/zed-integration/zed-path-resolver.ts:483"
+          ],
+          "prodCount": 13
+        },
+        {
+          "name": "getWorkspaceContext",
+          "signature": "(): WorkspaceContext",
+          "callSites": [
+            "packages/agents/src/api/createAgent.ts:447",
+            "packages/agents/src/api/control/workspaceControl.ts:31",
+            "packages/agents/src/api/control/workspaceControl.ts:35",
+            "packages/agents/src/api/control/sessionControl.ts:1123",
+            "packages/mcp/src/client/mcp-client-manager.ts:302",
+            "packages/cli/src/ui/hooks/useResolvedWorkspaceDirectories.ts:32",
+            "packages/cli/src/cliSessionBootstrap.ts:355",
+            "packages/cli/src/cliSessionBootstrap.ts:392",
+            "packages/cli/src/cliSessionBootstrap.ts:448"
+          ],
+          "prodCount": 9
+        },
+        {
+          "name": "getProjectRoot",
+          "signature": "(): string",
+          "callSites": [
+            "packages/agents/src/api/control/workspaceControl.ts:43",
+            "packages/agents/src/api/control/sessionControl.ts:886",
+            "packages/cli/src/cliSessionBootstrap.ts:208",
+            "packages/cli/src/cliSessionBootstrap.ts:248",
+            "packages/cli/src/zed-integration/zedIntegration.ts:510",
+            "packages/cli/src/session/interactiveUI.tsx:246"
+          ],
+          "prodCount": 6
+        },
+        {
+          "name": "getProjectTempDir",
+          "signature": "(): string",
+          "callSites": [
+            "packages/agents/src/core/chatSession.ts:628",
+            "packages/cli/src/cliSessionBootstrap.ts:249"
+          ],
+          "prodCount": 2
+        },
+        {
+          "name": "getWorkingDir",
+          "signature": "(): string",
+          "callSites": [
+            "packages/agents/src/core/ChatSessionFactory.ts:124"
+          ],
+          "prodCount": 1
+        },
+        {
+          "name": "getFileFilteringOptions",
+          "signature": "(): FileFilteringOptions",
+          "callSites": [
+            "packages/cli/src/zed-integration/zed-path-resolver.ts:110",
+            "packages/cli/src/zed-integration/zed-path-resolver.ts:606"
+          ],
+          "prodCount": 2
+        },
+        {
+          "name": "getEnableRecursiveFileSearch",
+          "signature": "(): boolean",
+          "callSites": [
+            "packages/cli/src/zed-integration/zed-path-resolver.ts:349"
+          ],
+          "prodCount": 1
+        },
+        {
+          "name": "getFileExclusions",
+          "signature": "(): FileExclusions",
+          "callSites": [
+            "packages/cli/src/zed-integration/zed-path-resolver.ts:396"
+          ],
+          "prodCount": 1
+        }
+      ]
+    },
+    "MemoryAccess": {
+      "members": [
+        {
+          "name": "getUserMemory",
+          "signature": "(): string",
+          "callSites": [
+            "packages/agents/src/core/streamRequestHelpers.ts:239",
+            "packages/agents/src/core/streamRequestHelpers.ts:240",
+            "packages/agents/src/core/ChatSessionFactory.ts:121",
+            "packages/agents/src/core/clientLlmUtilities.ts:29",
+            "packages/agents/src/api/control/memoryControl.ts:45"
+          ],
+          "prodCount": 5
+        },
+        {
+          "name": "getCoreMemory",
+          "signature": "(): string | undefined",
+          "callSites": [
+            "packages/agents/src/core/ChatSessionFactory.ts:122",
+            "packages/agents/src/api/control/memoryControl.ts:66"
+          ],
+          "prodCount": 2
+        },
+        {
+          "name": "getLlxprtMdFileCount",
+          "signature": "(): number",
+          "callSites": [
+            "packages/agents/src/api/control/memoryControl.ts:58",
+            "packages/agents/src/api/control/memoryControl.ts:122"
+          ],
+          "prodCount": 2
+        },
+        {
+          "name": "getCoreMemoryFileCount",
+          "signature": "(): number",
+          "callSites": [
+            "packages/agents/src/api/control/memoryControl.ts:70",
+            "packages/agents/src/api/control/memoryControl.ts:130"
+          ],
+          "prodCount": 2
+        },
+        {
+          "name": "getGlobalMemory",
+          "signature": "(): string",
+          "callSites": [
+            "packages/agents/src/core/ChatSessionFactory.ts:120"
+          ],
+          "prodCount": 1
+        },
+        {
+          "name": "getJitMemoryForPath",
+          "signature": "(targetPath: string): Promise<string>",
+          "callSites": [
+            "packages/agents/src/core/ChatSessionFactory.ts:124"
+          ],
+          "prodCount": 1
+        },
+        {
+          "name": "isJitContextEnabled",
+          "signature": "(): boolean",
+          "callSites": [
+            "packages/agents/src/core/ChatSessionFactory.ts:119"
+          ],
+          "prodCount": 1
+        },
+        {
+          "name": "setUserMemory",
+          "signature": "(newUserMemory: string): void",
+          "callSites": [
+            "packages/agents/src/api/control/memoryControl.ts:50"
+          ],
+          "prodCount": 1
+        },
+        {
+          "name": "getLlxprtMdFilePaths",
+          "signature": "(): string[]",
+          "callSites": [
+            "packages/agents/src/api/control/memoryControl.ts:62"
+          ],
+          "prodCount": 1
+        },
+        {
+          "name": "setCoreMemory",
+          "signature": "(_content: string): void",
+          "callSites": [
+            "packages/agents/src/api/control/memoryControl.ts:75"
+          ],
+          "prodCount": 1
+        },
+        {
+          "name": "refreshMemory",
+          "signature": "(): Promise<{ memoryContent: string; fileCount: number; filePaths: string[]; }>",
+          "callSites": [
+            "packages/agents/src/api/control/memoryControl.ts:85"
+          ],
+          "prodCount": 1
+        }
+      ]
+    },
+    "ToolAccess": {
+      "members": [
+        {
+          "name": "getExcludeTools",
+          "signature": "(): string[] | undefined",
+          "callSites": [
+            "packages/agents/src/core/subagentRuntimeSetup.ts:608",
+            "packages/agents/src/core/subagentRuntimeSetup.ts:609"
+          ],
+          "prodCount": 2
+        },
+        {
+          "name": "getAllowedTools",
+          "signature": "(): string[] | undefined",
+          "callSites": [
+            "packages/agents/src/core/subagentRuntimeSetup.ts:625",
+            "packages/agents/src/core/subagentRuntimeSetup.ts:626"
+          ],
+          "prodCount": 2
+        },
+        {
+          "name": "getTaskToolRegistration",
+          "signature": "(): TaskToolRegistration | undefined",
+          "callSites": [
+            "packages/providers/src/runtime/runtimeContextFactory.ts:100"
+          ],
+          "prodCount": 1
+        },
+        {
+          "name": "setTaskToolRegistration",
+          "signature": "(registration: TaskToolRegistration | undefined): void",
+          "callSites": [
+            "packages/providers/src/runtime/runtimeContextFactory.ts:101"
+          ],
+          "prodCount": 1
+        },
+        {
+          "name": "getImagePayloadBudgetBytes",
+          "signature": "(): number",
+          "callSites": [
+            "packages/agents/src/core/subagentToolProcessing.ts:532"
+          ],
+          "prodCount": 1
+        }
+      ]
+    },
+    "PolicyAccess": {
+      "members": [
+        {
+          "name": "getApprovalMode",
+          "signature": "(): ApprovalMode",
+          "callSites": [
+            "packages/agents/src/core/subagentRuntimeSetup.ts:688",
+            "packages/agents/src/core/subagentRuntimeSetup.ts:689",
+            "packages/agents/src/api/agentImpl.ts:826",
+            "packages/a2a-server/src/utils/testing_utils.ts:143",
+            "packages/a2a-server/src/agent/task.ts:441"
+          ],
+          "prodCount": 5
+        },
+        {
+          "name": "isTrustedFolder",
+          "signature": "(): boolean",
+          "callSites": [
+            "packages/mcp/src/client/mcp-client-manager.ts:192",
+            "packages/mcp/src/client/mcp-client-manager.ts:248",
+            "packages/mcp/src/client/mcp-client-manager.ts:317",
+            "packages/mcp/src/client/mcp-client-manager.ts:582",
+            "packages/mcp/src/client/mcp-client-manager.ts:755"
+          ],
+          "prodCount": 5
+        },
+        {
+          "name": "setApprovalMode",
+          "signature": "(mode: ApprovalMode): void",
+          "callSites": [
+            "packages/agents/src/api/agentImpl.ts:835"
+          ],
+          "prodCount": 1
+        }
+      ]
+    },
+    "McpAccess": {
+      "members": [
+        {
+          "name": "refreshMcpContext",
+          "signature": "(): Promise<void>",
+          "callSites": [
+            "packages/mcp/src/client/mcp-client-manager.ts:121",
+            "packages/mcp/src/client/mcp-client-manager.ts:147",
+            "packages/mcp/src/client/mcp-client-manager.ts:167",
+            "packages/mcp/src/client/mcp-client-manager.ts:593",
+            "packages/mcp/src/client/mcp-client-manager.ts:657",
+            "packages/mcp/src/client/mcp-client-manager.ts:662",
+            "packages/mcp/src/client/mcp-client-manager.ts:744",
+            "packages/mcp/src/client/mcp-client-manager.ts:770",
+            "packages/mcp/src/client/mcp-client-manager.ts:781",
+            "packages/mcp/src/client/mcp-client-manager.ts:799",
+            "packages/mcp/src/client/mcp-client-manager.ts:943"
+          ],
+          "prodCount": 11
+        },
+        {
+          "name": "getMcpServers",
+          "signature": "(): Record<string, MCPServerConfig> | undefined",
+          "callSites": [
+            "packages/agents/src/api/control/mcpControlWiring.ts:54",
+            "packages/agents/src/api/control/mcpControlWiring.ts:84",
+            "packages/mcp/src/client/mcp-client-manager.ts:201",
+            "packages/mcp/src/client/mcp-client-manager.ts:585",
+            "packages/mcp/src/client/mcp-client-manager.ts:607",
+            "packages/mcp/src/client/mcp-client-manager.ts:760",
+            "packages/cli/src/cliTerminalSession.ts:119",
+            "packages/a2a-server/src/agent/task-runtime-helpers.ts:215"
+          ],
+          "prodCount": 8
+        },
+        {
+          "name": "getMcpInstructions",
+          "signature": "(): string | undefined",
+          "callSites": [
+            "packages/agents/src/core/subagentRuntimeSetup.ts:807",
+            "packages/agents/src/core/ChatSessionFactory.ts:129",
+            "packages/agents/src/core/clientLlmUtilities.ts:30"
+          ],
+          "prodCount": 3
+        },
+        {
+          "name": "getMcpServerCommand",
+          "signature": "(): string | undefined",
+          "callSites": [
+            "packages/mcp/src/client/mcp-client-manager.ts:586",
+            "packages/mcp/src/client/mcp-client-manager.ts:608",
+            "packages/mcp/src/client/mcp-client-manager.ts:761"
+          ],
+          "prodCount": 3
+        },
+        {
+          "name": "getBlockedMcpServers",
+          "signature": "(): Array<{ name: string; extensionName: string; }> | undefined",
+          "callSites": [
+            "packages/agents/src/api/control/mcpControlWiring.ts:85",
+            "packages/mcp/src/client/mcp-client-manager.ts:181"
+          ],
+          "prodCount": 2
+        },
+        {
+          "name": "awaitMcpDiscoveryGate",
+          "signature": "(): Promise<ReadonlyMap<string, string>>",
+          "callSites": [
+            "packages/agents/src/api/agentImpl.ts:564"
+          ],
+          "prodCount": 1
+        },
+        {
+          "name": "getMcpRuntimeStatus",
+          "signature": "(): { readonly servers: Record<string, MCPServerConfig>; readonly discoveryFailures: ReadonlyMap<string, string>; readonly discoveryState: ReturnType<McpClientManager[\"getDiscoveryState\"]>; } | undefined",
+          "callSites": [
+            "packages/agents/src/api/control/mcpControlWiring.ts:59"
+          ],
+          "prodCount": 1
+        },
+        {
+          "name": "refreshMcpServers",
+          "signature": "(server?: string): Promise<void>",
+          "callSites": [
+            "packages/agents/src/api/control/mcpControlWiring.ts:60"
+          ],
+          "prodCount": 1
+        },
+        {
+          "name": "reloadMcpServers",
+          "signature": "(): Promise<void>",
+          "callSites": [
+            "packages/agents/src/api/control/mcpControlWiring.ts:94"
+          ],
+          "prodCount": 1
+        },
+        {
+          "name": "getAllowedMcpServers",
+          "signature": "(): string[] | undefined",
+          "callSites": [
+            "packages/mcp/src/client/mcp-client-manager.ts:180"
+          ],
+          "prodCount": 1
+        }
+      ]
+    },
+    "TelemetryAccess": {
+      "members": [
+        {
+          "name": "getTelemetryLogPromptsEnabled",
+          "signature": "(): boolean",
+          "callSites": [
+            "packages/agents/src/core/subagentRuntimeSetup.ts:613",
+            "packages/agents/src/core/subagentRuntimeSetup.ts:614",
+            "packages/agents/src/core/subagentRuntimeSetup.ts:615"
+          ],
+          "prodCount": 3
+        }
+      ]
+    },
+    "Diagnostics": {
+      "members": [
+        {
+          "name": "getDebugMode",
+          "signature": "(): boolean",
+          "callSites": [
+            "packages/providers/src/runtime/assembleCliProviderRuntime.ts:128",
+            "packages/providers/src/runtime/runtimeContextFactory.ts:540",
+            "packages/agents/src/api/createAgent.ts:459",
+            "packages/agents/src/api/fromConfig.ts:255",
+            "packages/mcp/src/client/mcp-client-manager.ts:304",
+            "packages/cli/src/utils/sandbox.ts:47",
+            "packages/cli/src/zed-integration/zedIntegration.ts:770",
+            "packages/cli/src/cliTerminalSession.ts:168",
+            "packages/cli/src/cliTerminalSession.ts:186",
+            "packages/cli/src/nonInteractiveCli.ts:130",
+            "packages/cli/src/nonInteractiveCli.ts:519",
+            "packages/cli/src/session/interactiveUI.tsx:247",
+            "packages/a2a-server/src/config/config.ts:165",
+            "packages/a2a-server/src/agent/task.ts:132"
+          ],
+          "prodCount": 14
+        },
+        {
+          "name": "getConversationLoggingEnabled",
+          "signature": "(): boolean",
+          "callSites": [
+            "packages/providers/src/ProviderManager.ts:169",
+            "packages/providers/src/ProviderManager.ts:170",
+            "packages/providers/src/ProviderManager.ts:437",
+            "packages/providers/src/ProviderManager.ts:481",
+            "packages/providers/src/runtime/runtimeLifecycle.ts:155",
+            "packages/providers/src/logging/configValidator.ts:25",
+            "packages/providers/src/logging/configValidator.ts:45",
+            "packages/providers/src/logging/configValidator.ts:83",
+            "packages/cli/src/providers/logging/git-stats.ts:152",
+            "packages/cli/src/cliProviderInit.ts:251"
+          ],
+          "prodCount": 10
+        }
+      ]
+    }
+  },
+  "serviceLocators": [
+    {
+      "name": "getToolRegistry",
+      "returns": "ToolRegistry",
+      "callSites": [
+        "packages/agents/src/tools/task.ts:795",
+        "packages/agents/src/tools/task.ts:796",
+        "packages/agents/src/core/subagentOrchestrator.ts:665",
+        "packages/agents/src/core/subagentOrchestrator.ts:666",
+        "packages/agents/src/core/subagentRuntimeSetup.ts:684",
+        "packages/agents/src/core/client.ts:499",
+        "packages/agents/src/core/client.ts:721",
+        "packages/agents/src/agents/executor.ts:170",
+        "packages/agents/src/api/agentImpl.ts:1106",
+        "packages/agents/src/api/control/mcpControlWiring.ts:67",
+        "packages/agents/src/api/control/toolControl.ts:144",
+        "packages/agents/src/api/control/toolControl.ts:171",
+        "packages/cli/src/zed-integration/zed-session-config.ts:74",
+        "packages/cli/src/zed-integration/zedIntegration.ts:378",
+        "packages/a2a-server/src/utils/testing_utils.ts:112",
+        "packages/a2a-server/src/utils/testing_utils.ts:226",
+        "packages/a2a-server/src/agent/task-runtime-helpers.ts:214"
+      ],
+      "prodCount": 17,
+      "compositionRootsNeedingIt": [
+        "packages/agents/src/tools/task.ts",
+        "packages/agents/src/core/subagentRuntimeSetup.ts",
+        "packages/agents/src/core/client.ts",
+        "packages/agents/src/agents/executor.ts",
+        "packages/agents/src/api/agentImpl.ts",
+        "packages/cli/src/zed-integration/zedIntegration.ts"
+      ]
+    },
+    {
+      "name": "toolRegistry",
+      "returns": "ToolRegistry",
+      "callSites": [
+        "packages/agents/src/core/subagentRuntimeSetup.ts:273"
+      ],
+      "prodCount": 1,
+      "compositionRootsNeedingIt": [
+        "packages/agents/src/core/subagentRuntimeSetup.ts"
+      ]
+    },
+    {
+      "name": "getProviderManager",
+      "returns": "RuntimeProviderManager | undefined",
+      "callSites": [
+        "packages/agents/src/core/ChatSessionFactory.ts:298",
+        "packages/agents/src/agents/executor.ts:804",
+        "packages/agents/src/api/providerActivationExecutor.ts:195",
+        "packages/agents/src/api/providerActivationExecutor.ts:327",
+        "packages/agents/src/api/providerActivationExecutor.ts:370",
+        "packages/agents/src/api/providerActivationExecutor.ts:450",
+        "packages/agents/src/api/providerActivationExecutor.ts:601",
+        "packages/agents/src/api/createAgent.ts:548",
+        "packages/agents/src/api/fromConfig.ts:85",
+        "packages/agents/src/api/fromConfig.ts:207",
+        "packages/cli/src/cliProviderInit.ts:242",
+        "packages/cli/src/cliProviderInit.ts:283",
+        "packages/cli/src/unconfiguredProviderGuard.ts:30",
+        "packages/cli/src/validateNonInteractiveAuth.ts:50",
+        "packages/cli/src/zed-integration/zed-config-options.ts:69",
+        "packages/cli/src/zed-integration/zed-session-config.ts:69",
+        "packages/cli/src/nonInteractiveCli.ts:401"
+      ],
+      "prodCount": 17,
+      "compositionRootsNeedingIt": [
+        "packages/agents/src/core/ChatSessionFactory.ts",
+        "packages/agents/src/agents/executor.ts",
+        "packages/agents/src/api/createAgent.ts",
+        "packages/agents/src/api/fromConfig.ts",
+        "packages/cli/src/nonInteractiveCli.ts"
+      ]
+    },
+    {
+      "name": "setProviderManager",
+      "returns": "void",
+      "callSites": [
+        "packages/providers/src/composition/providerManagerInstance.ts:216",
+        "packages/cli/src/config/postConfigRuntime.ts:297"
+      ],
+      "prodCount": 2,
+      "compositionRootsNeedingIt": [
+        "packages/cli/src/config/postConfigRuntime.ts"
+      ]
+    },
+    {
+      "name": "getSettingsService",
+      "returns": "SettingsService",
+      "callSites": [
+        "packages/providers/src/runtime/runtimeAccessors.ts:120",
+        "packages/providers/src/runtime/runtimeContextFactory.ts:529",
+        "packages/providers/src/runtime/runtimeContextFactory.ts:533",
+        "packages/providers/src/runtimeNormalizer.ts:305",
+        "packages/agents/src/tools/taskAsyncExecution.ts:93",
+        "packages/agents/src/tools/taskAsyncExecution.ts:94",
+        "packages/agents/src/core/ChatSessionFactory.ts:284",
+        "packages/agents/src/agents/executor.ts:790",
+        "packages/agents/src/api/createAgent.ts:128",
+        "packages/agents/src/api/fromConfig.ts:74",
+        "packages/agents/src/api/control/toolControl.ts:188",
+        "packages/cli/src/zed-integration/runZedIntegration.ts:118",
+        "packages/cli/src/nonInteractiveCli.ts:101"
+      ],
+      "prodCount": 13,
+      "compositionRootsNeedingIt": [
+        "packages/providers/src/runtime/runtimeContextFactory.ts",
+        "packages/agents/src/core/ChatSessionFactory.ts",
+        "packages/agents/src/agents/executor.ts",
+        "packages/agents/src/api/createAgent.ts",
+        "packages/agents/src/api/fromConfig.ts",
+        "packages/cli/src/nonInteractiveCli.ts"
+      ]
+    },
+    {
+      "name": "getPolicyEngine",
+      "returns": "PolicyEngine",
+      "callSites": [
+        "packages/providers/src/runtime/assembleCliProviderRuntime.ts:128",
+        "packages/providers/src/runtime/runtimeContextFactory.ts:540",
+        "packages/agents/src/core/subagentRuntimeSetup.ts:691",
+        "packages/agents/src/api/createAgent.ts:455",
+        "packages/agents/src/api/createAgent.ts:458",
+        "packages/agents/src/api/fromConfig.ts:255",
+        "packages/agents/src/api/agentImpl.ts:528",
+        "packages/a2a-server/src/config/config.ts:164",
+        "packages/a2a-server/src/agent/task.ts:131"
+      ],
+      "prodCount": 9,
+      "compositionRootsNeedingIt": [
+        "packages/providers/src/runtime/runtimeContextFactory.ts",
+        "packages/agents/src/core/subagentRuntimeSetup.ts",
+        "packages/agents/src/api/createAgent.ts",
+        "packages/agents/src/api/fromConfig.ts",
+        "packages/agents/src/api/agentImpl.ts",
+        "packages/a2a-server/src/agent/task.ts"
+      ]
+    },
+    {
+      "name": "getHookSystem",
+      "returns": "HookSystem | undefined",
+      "callSites": [
+        "packages/agents/src/core/TurnProcessor.ts:728",
+        "packages/agents/src/core/DirectMessageProcessor.ts:118",
+        "packages/agents/src/core/DirectMessageProcessor.ts:119",
+        "packages/agents/src/core/StreamProcessor.ts:373",
+        "packages/agents/src/core/StreamProcessor.ts:374",
+        "packages/agents/src/core/StreamProcessor.ts:584",
+        "packages/agents/src/core/StreamProcessor.ts:738",
+        "packages/agents/src/core/StreamProcessor.ts:739",
+        "packages/agents/src/api/control/hooks.ts:198"
+      ],
+      "prodCount": 9,
+      "compositionRootsNeedingIt": []
+    },
+    {
+      "name": "getMcpClientManager",
+      "returns": "McpClientManager | undefined",
+      "callSites": [
+        "packages/providers/src/gemini/geminiRequestBuilding.ts:243",
+        "packages/providers/src/gemini/geminiRequestBuilding.ts:244",
+        "packages/providers/src/openai-vercel/vercelSystemPrompt.ts:49",
+        "packages/providers/src/openai-vercel/vercelSystemPrompt.ts:50",
+        "packages/providers/src/anthropic/AnthropicRequestPreparation.ts:646",
+        "packages/providers/src/anthropic/AnthropicRequestPreparation.ts:647",
+        "packages/providers/src/openai/OpenAIRequestPreparation.ts:112",
+        "packages/providers/src/openai/OpenAIRequestPreparation.ts:113"
+      ],
+      "prodCount": 8,
+      "compositionRootsNeedingIt": []
+    },
+    {
+      "name": "getPromptRegistry",
+      "returns": "PromptRegistry",
+      "callSites": [
+        "packages/agents/src/api/control/mcpControlWiring.ts:88",
+        "packages/mcp/src/client/mcp-client-manager.ts:290",
+        "packages/mcp/src/client/mcp-client-manager.ts:300"
+      ],
+      "prodCount": 3,
+      "compositionRootsNeedingIt": [
+        "packages/mcp/src/client/mcp-client-manager.ts"
+      ]
+    },
+    {
+      "name": "getResourceRegistry",
+      "returns": "ResourceRegistry",
+      "callSites": [
+        "packages/agents/src/api/control/mcpControlWiring.ts:91",
+        "packages/mcp/src/client/mcp-client-manager.ts:291",
+        "packages/mcp/src/client/mcp-client-manager.ts:301"
+      ],
+      "prodCount": 3,
+      "compositionRootsNeedingIt": [
+        "packages/mcp/src/client/mcp-client-manager.ts"
+      ]
+    },
+    {
+      "name": "getSkillManager",
+      "returns": "SkillManager",
+      "callSites": [
+        "packages/agents/src/api/control/skillsControl.ts:43",
+        "packages/agents/src/api/control/skillsControl.ts:50",
+        "packages/agents/src/api/control/skillsControl.ts:67"
+      ],
+      "prodCount": 3,
+      "compositionRootsNeedingIt": []
+    },
+    {
+      "name": "getProfileManager",
+      "returns": "ProfileManager | undefined",
+      "callSites": [
+        "packages/providers/src/runtime/runtimeContextFactory.ts:312",
+        "packages/providers/src/runtime/runtimeContextFactory.ts:407",
+        "packages/agents/src/core/CompressionProfileResolver.ts:533"
+      ],
+      "prodCount": 3,
+      "compositionRootsNeedingIt": [
+        "packages/providers/src/runtime/runtimeContextFactory.ts"
+      ]
+    },
+    {
+      "name": "setProfileManager",
+      "returns": "void",
+      "callSites": [
+        "packages/providers/src/runtime/runtimeContextFactory.ts:321"
+      ],
+      "prodCount": 1,
+      "compositionRootsNeedingIt": [
+        "packages/providers/src/runtime/runtimeContextFactory.ts"
+      ]
+    },
+    {
+      "name": "getExtensionLoader",
+      "returns": "ExtensionLoader",
+      "callSites": [
+        "packages/agents/src/api/agentImpl.ts:1404",
+        "packages/agents/src/api/agentImpl.ts:1408"
+      ],
+      "prodCount": 2,
+      "compositionRootsNeedingIt": [
+        "packages/agents/src/api/agentImpl.ts"
+      ]
+    },
+    {
+      "name": "getAgentClient",
+      "returns": "AgentClientContract",
+      "callSites": [
+        "packages/agents/src/agents/executor.ts:851",
+        "packages/agents/src/api/createAgent.ts:275",
+        "packages/agents/src/api/createAgent.ts:288",
+        "packages/agents/src/api/fromConfig.ts:297",
+        "packages/agents/src/api/agentImpl.ts:302",
+        "packages/cli/src/cliSessionBootstrap.ts:267"
+      ],
+      "prodCount": 6,
+      "compositionRootsNeedingIt": [
+        "packages/agents/src/agents/executor.ts",
+        "packages/agents/src/api/createAgent.ts",
+        "packages/agents/src/api/fromConfig.ts",
+        "packages/agents/src/api/agentImpl.ts",
+        "packages/cli/src/cliSessionBootstrap.ts"
+      ]
+    },
+    {
+      "name": "getSubagentManager",
+      "returns": "SubagentManager | undefined",
+      "callSites": [
+        "packages/providers/src/gemini/geminiRequestBuilding.ts:249",
+        "packages/providers/src/gemini/geminiRequestBuilding.ts:250",
+        "packages/providers/src/runtime/runtimeContextFactory.ts:315",
+        "packages/providers/src/openai-vercel/vercelSystemPrompt.ts:55",
+        "packages/providers/src/openai-vercel/vercelSystemPrompt.ts:56",
+        "packages/providers/src/anthropic/AnthropicRequestPreparation.ts:652",
+        "packages/providers/src/anthropic/AnthropicRequestPreparation.ts:653",
+        "packages/providers/src/openai/OpenAIRequestPreparation.ts:121",
+        "packages/providers/src/openai/OpenAIRequestPreparation.ts:122"
+      ],
+      "prodCount": 9,
+      "compositionRootsNeedingIt": [
+        "packages/providers/src/runtime/runtimeContextFactory.ts"
+      ]
+    },
+    {
+      "name": "setSubagentManager",
+      "returns": "void",
+      "callSites": [
+        "packages/providers/src/runtime/runtimeContextFactory.ts:322"
+      ],
+      "prodCount": 1,
+      "compositionRootsNeedingIt": [
+        "packages/providers/src/runtime/runtimeContextFactory.ts"
+      ]
+    },
+    {
+      "name": "getAsyncTaskManager",
+      "returns": "AsyncTaskManager | undefined",
+      "callSites": [
+        "packages/agents/src/api/agentImpl.ts:539"
+      ],
+      "prodCount": 1,
+      "compositionRootsNeedingIt": [
+        "packages/agents/src/api/agentImpl.ts"
+      ]
+    },
+    {
+      "name": "getShellJobManager",
+      "returns": "ShellJobManager | undefined",
+      "callSites": [
+        "packages/agents/src/api/agentImpl.ts:540"
+      ],
+      "prodCount": 1,
+      "compositionRootsNeedingIt": [
+        "packages/agents/src/api/agentImpl.ts"
+      ]
+    },
+    {
+      "name": "getRunImageOperation",
+      "returns": "ImageOperationRunner | undefined",
+      "callSites": [
+        "packages/cli/src/config/imageModeDispatch.ts:198",
+        "packages/cli/src/config/imageModeDispatch.ts:201"
+      ],
+      "prodCount": 2,
+      "compositionRootsNeedingIt": []
+    },
+    {
+      "name": "setRunImageOperation",
+      "returns": "void",
+      "callSites": [
+        "packages/cli/src/config/postConfigRuntime.ts:320"
+      ],
+      "prodCount": 1,
+      "compositionRootsNeedingIt": [
+        "packages/cli/src/config/postConfigRuntime.ts"
+      ]
+    },
+    {
+      "name": "getFileSystemService",
+      "returns": "FileSystemService",
+      "callSites": [
+        "packages/cli/src/zed-integration/zedIntegration.ts:352",
+        "packages/cli/src/zed-integration/zed-path-resolver.ts:484"
+      ],
+      "prodCount": 2,
+      "compositionRootsNeedingIt": [
+        "packages/cli/src/zed-integration/zedIntegration.ts"
+      ]
+    },
+    {
+      "name": "getSessionRecordingService",
+      "returns": "SessionRecordingService | undefined",
+      "callSites": [
+        "packages/cli/src/zed-integration/zedIntegration.ts:467",
+        "packages/cli/src/zed-integration/zedIntegration.ts:670"
+      ],
+      "prodCount": 2,
+      "compositionRootsNeedingIt": [
+        "packages/cli/src/zed-integration/zedIntegration.ts"
+      ]
+    },
+    {
+      "name": "setSessionRecordingService",
+      "returns": "void",
+      "callSites": [
+        "packages/agents/src/api/control/sessionControl.ts:294",
+        "packages/agents/src/api/control/sessionControl.ts:307",
+        "packages/agents/src/api/control/sessionControl.ts:392",
+        "packages/agents/src/api/control/sessionControl.ts:911",
+        "packages/agents/src/api/control/sessionControl.ts:1003"
+      ],
+      "prodCount": 5,
+      "compositionRootsNeedingIt": []
+    },
+    {
+      "name": "getFileService",
+      "returns": "FileDiscoveryService",
+      "callSites": [
+        "packages/cli/src/zed-integration/zed-path-resolver.ts:108",
+        "packages/cli/src/zed-integration/zed-path-resolver.ts:605"
+      ],
+      "prodCount": 2,
+      "compositionRootsNeedingIt": []
+    },
+    {
+      "name": "getGitService",
+      "returns": "Promise<GitService>",
+      "callSites": [
+        "packages/a2a-server/src/agent/task-runtime-helpers.ts:177",
+        "packages/a2a-server/src/http/app.ts:208"
+      ],
+      "prodCount": 2,
+      "compositionRootsNeedingIt": []
+    },
+    {
+      "name": "getBucketFailoverHandler",
+      "returns": "BucketFailoverHandler | undefined",
+      "callSites": [
+        "packages/providers/src/auth/token-bucket-failover-helper.ts:67",
+        "packages/agents/src/core/StreamProcessor.ts:637"
+      ],
+      "prodCount": 2,
+      "compositionRootsNeedingIt": []
+    },
+    {
+      "name": "setBucketFailoverHandler",
+      "returns": "void",
+      "callSites": [
+        "packages/providers/src/auth/token-bucket-failover-helper.ts:98",
+        "packages/providers/src/runtime/providerSwitch.ts:218",
+        "packages/providers/src/runtime/providerSwitch.ts:222"
+      ],
+      "prodCount": 3,
+      "compositionRootsNeedingIt": [
+        "packages/providers/src/runtime/providerSwitch.ts"
+      ]
+    },
+    {
+      "name": "getToolSchedulerFactory",
+      "returns": "ToolSchedulerFactory | undefined",
+      "callSites": [
+        "packages/providers/src/runtime/runtimeContextFactory.ts:90"
+      ],
+      "prodCount": 1,
+      "compositionRootsNeedingIt": [
+        "packages/providers/src/runtime/runtimeContextFactory.ts"
+      ]
+    },
+    {
+      "name": "setToolSchedulerFactory",
+      "returns": "void",
+      "callSites": [
+        "packages/providers/src/runtime/runtimeContextFactory.ts:91"
+      ],
+      "prodCount": 1,
+      "compositionRootsNeedingIt": [
+        "packages/providers/src/runtime/runtimeContextFactory.ts"
+      ]
+    },
+    {
+      "name": "getAgentClientFactory",
+      "returns": "AgentClientFactory | undefined",
+      "callSites": [
+        "packages/providers/src/runtime/runtimeContextFactory.ts:95"
+      ],
+      "prodCount": 1,
+      "compositionRootsNeedingIt": [
+        "packages/providers/src/runtime/runtimeContextFactory.ts"
+      ]
+    },
+    {
+      "name": "setAgentClientFactory",
+      "returns": "void",
+      "callSites": [
+        "packages/providers/src/runtime/runtimeContextFactory.ts:96"
+      ],
+      "prodCount": 1,
+      "compositionRootsNeedingIt": [
+        "packages/providers/src/runtime/runtimeContextFactory.ts"
+      ]
+    },
+    {
+      "name": "getRuntimeMessageBus",
+      "returns": "MessageBus | undefined",
+      "callSites": [
+        "packages/agents/src/api/fromConfig.ts:79"
+      ],
+      "prodCount": 1,
+      "compositionRootsNeedingIt": [
+        "packages/agents/src/api/fromConfig.ts"
+      ]
+    },
+    {
+      "name": "setRuntimeMessageBus",
+      "returns": "void",
+      "callSites": [
+        "packages/cli/src/config/postConfigRuntime.ts:298"
+      ],
+      "prodCount": 1,
+      "compositionRootsNeedingIt": [
+        "packages/cli/src/config/postConfigRuntime.ts"
+      ]
+    },
+    {
+      "name": "getRuntimeOAuthManager",
+      "returns": "OAuthManager | undefined",
+      "callSites": [
+        "packages/agents/src/api/fromConfig.ts:155"
+      ],
+      "prodCount": 1,
+      "compositionRootsNeedingIt": [
+        "packages/agents/src/api/fromConfig.ts"
+      ]
+    },
+    {
+      "name": "setRuntimeOAuthManager",
+      "returns": "void",
+      "callSites": [
+        "packages/cli/src/config/postConfigRuntime.ts:303"
+      ],
+      "prodCount": 1,
+      "compositionRootsNeedingIt": [
+        "packages/cli/src/config/postConfigRuntime.ts"
+      ]
+    },
+    {
+      "name": "setImageBackendResolver",
+      "returns": "void",
+      "callSites": [
+        "packages/cli/src/config/postConfigRuntime.ts:313"
+      ],
+      "prodCount": 1,
+      "compositionRootsNeedingIt": [
+        "packages/cli/src/config/postConfigRuntime.ts"
+      ]
+    },
+    {
+      "name": "getIdeClient",
+      "returns": "IdeClient | undefined",
+      "callSites": [
+        "packages/cli/src/cliProviderInit.ts:270"
+      ],
+      "prodCount": 1,
+      "compositionRootsNeedingIt": []
+    },
+    {
+      "name": "storage",
+      "returns": "Storage",
+      "callSites": [
+        "packages/agents/src/api/control/sessionControl.ts:1100",
+        "packages/agents/src/api/control/sessionControl.ts:1114",
+        "packages/cli/src/nonInteractiveCliCommands.ts:63",
+        "packages/a2a-server/src/agent/task-runtime-helpers.ts:192",
+        "packages/a2a-server/src/commands/restore.ts:46",
+        "packages/a2a-server/src/commands/restore.ts:112"
+      ],
+      "prodCount": 6,
+      "compositionRootsNeedingIt": []
+    },
+    {
+      "name": "getOrCreateScheduler",
+      "returns": "Promise<ToolSchedulerContract>",
+      "callSites": [
+        "packages/agents/src/core/nonInteractiveToolExecutor.ts:79",
+        "packages/agents/src/core/subagentRuntimeSetup.ts:271",
+        "packages/agents/src/core/subagentRuntimeSetup.ts:701",
+        "packages/agents/src/core/subagentExecution.ts:509",
+        "packages/cli/src/runtime/interactiveToolScheduler.ts:372",
+        "packages/a2a-server/src/utils/testing_utils.ts:287",
+        "packages/a2a-server/src/agent/task.ts:493"
+      ],
+      "prodCount": 7,
+      "compositionRootsNeedingIt": [
+        "packages/agents/src/core/subagentRuntimeSetup.ts",
+        "packages/a2a-server/src/agent/task.ts"
+      ]
+    },
+    {
+      "name": "getTokenizerFactory",
+      "returns": "RuntimeTokenizerFactory | undefined",
+      "callSites": [
+        "packages/providers/src/ProviderManager.ts:571",
+        "packages/agents/src/core/promptEnvelopeSendSeam.ts:220"
+      ],
+      "prodCount": 2,
+      "compositionRootsNeedingIt": []
+    }
+  ],
+  "unassigned": {
+    "members": [
+      {
+        "name": "getEnableHooks",
+        "signature": "(): boolean",
+        "callSites": [
+          "packages/agents/src/core/TurnProcessor.ts:719",
+          "packages/agents/src/core/TurnProcessor.ts:720",
+          "packages/agents/src/core/DirectMessageProcessor.ts:105",
+          "packages/agents/src/core/DirectMessageProcessor.ts:106",
+          "packages/agents/src/core/StreamProcessor.ts:367",
+          "packages/agents/src/core/StreamProcessor.ts:368",
+          "packages/agents/src/core/StreamProcessor.ts:576",
+          "packages/agents/src/core/StreamProcessor.ts:731",
+          "packages/agents/src/core/StreamProcessor.ts:732"
+        ],
+        "prodCount": 9,
+        "note": "hook feature flag; no Hook role defined (P02: fold into ToolAccess or a new HookAccess)"
+      },
+      {
+        "name": "getDisabledHooks",
+        "signature": "(): string[]",
+        "callSites": [
+          "packages/agents/src/api/control/hooks.ts:214",
+          "packages/agents/src/api/control/hooks.ts:228",
+          "packages/agents/src/api/control/hooks.ts:237"
+        ],
+        "prodCount": 3,
+        "note": "hook configuration list; no Hook role defined"
+      },
+      {
+        "name": "setDisabledHooks",
+        "signature": "(hooks: string[]): void",
+        "callSites": [
+          "packages/agents/src/api/control/hooks.ts:221",
+          "packages/agents/src/api/control/hooks.ts:230",
+          "packages/agents/src/api/control/hooks.ts:238",
+          "packages/cli/src/config/postConfigRuntime.ts:271"
+        ],
+        "prodCount": 4,
+        "note": "hook configuration setter; no Hook role defined"
+      },
+      {
+        "name": "disposeScheduler",
+        "signature": "(sessionId: string): void",
+        "callSites": [
+          "packages/agents/src/core/nonInteractiveToolExecutor.ts:180",
+          "packages/agents/src/core/subagentRuntimeSetup.ts:276",
+          "packages/agents/src/core/subagentRuntimeSetup.ts:708",
+          "packages/agents/src/core/subagentExecution.ts:545",
+          "packages/cli/src/runtime/interactiveToolScheduler.ts:384"
+        ],
+        "prodCount": 5,
+        "note": "scheduler lifecycle/teardown, not a data or service read"
+      },
+      {
+        "name": "initialize",
+        "signature": "(dependencies?: { messageBus?: MessageBus; }): Promise<void>",
+        "callSites": [
+          "packages/agents/src/api/createAgent.ts:527",
+          "packages/agents/src/api/createAgent.ts:567",
+          "packages/a2a-server/src/config/config.ts:171"
+        ],
+        "prodCount": 3,
+        "note": "Config lifecycle bootstrap, not a role member"
+      },
+      {
+        "name": "ensureInitialized",
+        "signature": "(dependencies?: { messageBus?: MessageBus; } | (() => { messageBus: MessageBus; })): Promise<void>",
+        "callSites": [
+          "packages/agents/src/api/fromConfig.ts:116"
+        ],
+        "prodCount": 1,
+        "note": "Config lifecycle bootstrap, not a role member"
+      },
+      {
+        "name": "dispose",
+        "signature": "(): Promise<void>",
+        "callSites": [
+          "packages/agents/src/api/agentImpl.ts:1379"
+        ],
+        "prodCount": 1,
+        "note": "Config teardown, not a role member"
+      },
+      {
+        "name": "shutdownLspService",
+        "signature": "(): Promise<void>",
+        "callSites": [
+          "packages/agents/src/api/agentImpl.ts:1389"
+        ],
+        "prodCount": 1,
+        "note": "LSP service teardown, not a role member"
+      },
+      {
+        "name": "getCheckpointingEnabled",
+        "signature": "(): boolean",
+        "callSites": [
+          "packages/a2a-server/src/agent/task-runtime-helpers.ts:160",
+          "packages/a2a-server/src/commands/restore.ts:38"
+        ],
+        "prodCount": 2,
+        "note": "checkpointing feature flag; separate concern (P02: consider Diagnostics)"
+      },
+      {
+        "name": "reloadSkills",
+        "signature": "(): Promise<void>",
+        "callSites": [
+          "packages/agents/src/api/control/skillsControl.ts:60"
+        ],
+        "prodCount": 1,
+        "note": "skill lifecycle reload; skill access is via getSkillManager (locator)"
+      },
+      {
+        "name": "getExtensions",
+        "signature": "(): LlxprtExtension[]",
+        "callSites": [
+          "packages/mcp/src/client/mcp-client-manager.ts:630"
+        ],
+        "prodCount": 1,
+        "note": "extension list; separate subsystem (P02: new ExtensionAccess or ToolAccess)"
+      },
+      {
+        "name": "getExperimentalZedIntegration",
+        "signature": "(): boolean",
+        "callSites": [
+          "packages/cli/src/cli.tsx:174"
+        ],
+        "prodCount": 1,
+        "note": "launch-mode feature flag; separate concern"
+      },
+      {
+        "name": "getListExtensions",
+        "signature": "(): boolean",
+        "callSites": [
+          "packages/cli/src/cli.tsx:335"
+        ],
+        "prodCount": 1,
+        "note": "launch-mode feature flag; separate concern"
+      }
+    ]
+  },
+  "compositionRoots": [
+    {
+      "file": "packages/agents/src/api/agentImpl.ts",
+      "membersRead": 17,
+      "constructsConfig": false,
+      "feedsFromConfig": false,
+      "constructsSession": false
+    },
+    {
+      "file": "packages/providers/src/runtime/runtimeContextFactory.ts",
+      "membersRead": 13,
+      "constructsConfig": true,
+      "feedsFromConfig": false,
+      "constructsSession": false
+    },
+    {
+      "file": "packages/agents/src/core/subagentRuntimeSetup.ts",
+      "membersRead": 12,
+      "constructsConfig": false,
+      "feedsFromConfig": false,
+      "constructsSession": true
+    },
+    {
+      "file": "packages/agents/src/core/ChatSessionFactory.ts",
+      "membersRead": 12,
+      "constructsConfig": false,
+      "feedsFromConfig": false,
+      "constructsSession": true
+    },
+    {
+      "file": "packages/agents/src/api/fromConfig.ts",
+      "membersRead": 11,
+      "constructsConfig": false,
+      "feedsFromConfig": false,
+      "constructsSession": false
+    },
+    {
+      "file": "packages/mcp/src/client/mcp-client-manager.ts",
+      "membersRead": 11,
+      "constructsConfig": false,
+      "feedsFromConfig": false,
+      "constructsSession": false
+    },
+    {
+      "file": "packages/agents/src/api/createAgent.ts",
+      "membersRead": 10,
+      "constructsConfig": true,
+      "feedsFromConfig": false,
+      "constructsSession": false
+    },
+    {
+      "file": "packages/cli/src/config/postConfigRuntime.ts",
+      "membersRead": 10,
+      "constructsConfig": false,
+      "feedsFromConfig": false,
+      "constructsSession": false
+    },
+    {
+      "file": "packages/cli/src/nonInteractiveCli.ts",
+      "membersRead": 10,
+      "constructsConfig": false,
+      "feedsFromConfig": true,
+      "constructsSession": true
+    },
+    {
+      "file": "packages/providers/src/runtime/providerSwitch.ts",
+      "membersRead": 9,
+      "constructsConfig": false,
+      "feedsFromConfig": false,
+      "constructsSession": false
+    },
+    {
+      "file": "packages/cli/src/cliSessionBootstrap.ts",
+      "membersRead": 9,
+      "constructsConfig": false,
+      "feedsFromConfig": false,
+      "constructsSession": false
+    },
+    {
+      "file": "packages/a2a-server/src/agent/task.ts",
+      "membersRead": 9,
+      "constructsConfig": false,
+      "feedsFromConfig": false,
+      "constructsSession": false
+    },
+    {
+      "file": "packages/agents/src/agents/executor.ts",
+      "membersRead": 7,
+      "constructsConfig": false,
+      "feedsFromConfig": true,
+      "constructsSession": true
+    },
+    {
+      "file": "packages/cli/src/zed-integration/zedIntegration.ts",
+      "membersRead": 7,
+      "constructsConfig": false,
+      "feedsFromConfig": true,
+      "constructsSession": true
+    },
+    {
+      "file": "packages/agents/src/core/client.ts",
+      "membersRead": 6,
+      "constructsConfig": false,
+      "feedsFromConfig": false,
+      "constructsSession": true
+    },
+    {
+      "file": "packages/agents/src/tools/task.ts",
+      "membersRead": 3,
+      "constructsConfig": false,
+      "feedsFromConfig": false,
+      "constructsSession": true
+    },
+    {
+      "file": "packages/cli/src/cliAgentBootstrap.ts",
+      "membersRead": 2,
+      "constructsConfig": false,
+      "feedsFromConfig": true,
+      "constructsSession": true
+    },
+    {
+      "file": "packages/agents/src/api/agentBootstrap.ts",
+      "membersRead": 1,
+      "constructsConfig": false,
+      "feedsFromConfig": false,
+      "constructsSession": true
+    },
+    {
+      "file": "packages/providers/src/gemini/geminiGenerationExecution.ts",
+      "membersRead": 0,
+      "constructsConfig": false,
+      "feedsFromConfig": false,
+      "constructsSession": true
+    },
+    {
+      "file": "packages/agents/src/core/client-test-helpers.ts",
+      "membersRead": 0,
+      "constructsConfig": true,
+      "feedsFromConfig": false,
+      "constructsSession": true
+    },
+    {
+      "file": "packages/agents/src/api/runtimeFactories.ts",
+      "membersRead": 0,
+      "constructsConfig": false,
+      "feedsFromConfig": false,
+      "constructsSession": true
+    }
+  ],
+  "configConstructors": [
+    "packages/a2a-server/src/agent/task.factory-migration.integration.test.ts",
+    "packages/a2a-server/src/config/config.factory-migration.test.ts",
+    "packages/a2a-server/src/config/config.ts",
+    "packages/agents/src/api/__tests__/helpers/buildCliStyleConfig.ts",
+    "packages/agents/src/api/__tests__/hookAdmin.behavior.test.ts",
+    "packages/agents/src/api/createAgent.ts",
+    "packages/agents/src/core/ConversationManager.modelStamp.test.ts",
+    "packages/agents/src/core/ConversationManager.responseId.test.ts",
+    "packages/agents/src/core/__tests__/agentClient.runtimeState.test.ts",
+    "packages/agents/src/core/__tests__/chatSession.runtimeState.test.ts",
+    "packages/agents/src/core/__tests__/directMessage.characterization.test.ts",
+    "packages/agents/src/core/__tests__/directMessageAfcSanitization.test.ts",
+    "packages/agents/src/core/__tests__/streamPipeline-characterization-helpers.ts",
+    "packages/agents/src/core/__tests__/subagent.stateless.test.ts",
+    "packages/agents/src/core/chatSession.directRefusal.issue2329.test.ts",
+    "packages/agents/src/core/chatSession.issue1729.test.ts",
+    "packages/agents/src/core/chatSession.issue1749.test.ts",
+    "packages/agents/src/core/chatSession.issue2150.test.ts",
+    "packages/agents/src/core/chatSession.runtime.history.test.ts",
+    "packages/agents/src/core/chatSession.runtime.streaming.test.ts",
+    "packages/agents/src/core/chatSession.runtime.test.ts",
+    "packages/agents/src/core/chatSession.runtime.timeout.test.ts",
+    "packages/agents/src/core/chatSession.thinking-toolcalls.repro.test.ts",
+    "packages/agents/src/core/chatSession.thinking-toolcalls.test.ts",
+    "packages/agents/src/core/client-test-helpers.ts",
+    "packages/agents/src/core/messageBus.core-integration.tdd.test.ts",
+    "packages/agents/src/core/subagent-test-helpers.ts",
+    "packages/agents/src/core/subagent.stream-idle.test.ts",
+    "packages/agents/test-bun/generatingModelStamp.issue2511.bun.ts",
+    "packages/cli/src/cli.renderOptions.test.tsx",
+    "packages/cli/src/cliSessionBootstrap.recording.test.ts",
+    "packages/cli/src/config/config.integration.test.ts",
+    "packages/cli/src/config/configBuilder.ts",
+    "packages/cli/src/integration-tests/base-url-behavior.integration.test.ts",
+    "packages/cli/src/integration-tests/compression-settings-apply.integration.test.ts",
+    "packages/cli/src/integration-tests/consumer-migration-p13.integration.test.ts",
+    "packages/cli/src/integration-tests/ephemeral-settings.integration.test.ts",
+    "packages/cli/src/integration-tests/model-params-isolation.integration.test.ts",
+    "packages/cli/src/integration-tests/modelParams.integration.test.ts",
+    "packages/cli/src/integration-tests/provider-switching.integration.test.ts",
+    "packages/cli/src/integration-tests/security.integration.test.ts",
+    "packages/cli/src/integration-tests/todo-continuation.integration.test.ts",
+    "packages/cli/src/providers/logging/git-stats.integration.test.ts",
+    "packages/cli/src/providers/logging/git-stats.test.ts",
+    "packages/cli/src/ui/layouts/InlineContent.test.tsx",
+    "packages/cli/src/utils/terminalTheme.test.ts",
+    "packages/providers/src/__tests__/ProviderManager.settingsSeparation.test.ts",
+    "packages/providers/src/runtime/assembleCliProviderRuntime.test.ts",
+    "packages/providers/src/runtime/runtimeContextFactory.ts"
+  ]
+}
