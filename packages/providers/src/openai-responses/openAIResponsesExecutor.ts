@@ -68,6 +68,7 @@ import {
 import {
   shouldDumpSDKContext,
   dumpSDKRequestContext,
+  bestEffortDump,
 } from '../utils/dumpSDKContext.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 
@@ -203,7 +204,11 @@ export async function* executeOpenAIResponsesRequest(
     deps,
   );
 
-  await dumpFinalizedRequest(requestContext, invocationEphemerals, deps);
+  const dumpResult = await dumpFinalizedRequest(
+    requestContext,
+    invocationEphemerals,
+    deps,
+  );
 
   yield* streamResponses(
     {
@@ -214,6 +219,8 @@ export async function* executeOpenAIResponsesRequest(
       streamRetryInitialDelayMs:
         (invocationEphemerals['retrywait'] as number | undefined) ?? 4000,
       normalizedOptions: options,
+      dumpBaseId: dumpResult.baseId,
+      dumpMode: dumpResult.dumpMode,
     },
     deps,
   );
@@ -745,30 +752,40 @@ function applyPromptCaching(
   if (!isCodex) request.prompt_cache_retention = '24h';
 }
 
+interface DumpFinalizedResult {
+  baseId?: string;
+  dumpMode?: DumpMode;
+}
+
 /**
  * Dumps the finalized Responses request at the common pre-transport seam when
  * context dumping is enabled, matching OpenAI Chat and Anthropic parity.
  * Best-effort: failures are logged and never block the request.
+ * Returns the dump base id and resolved mode so the transport can write a
+ * linked error-response dump on failure (issue #3140).
  */
 async function dumpFinalizedRequest(
   requestContext: RequestContext,
   invocationEphemerals: Record<string, unknown>,
   deps: ResponsesExecutorDeps,
-): Promise<void> {
+): Promise<DumpFinalizedResult> {
   const dumpMode = invocationEphemerals['dumpcontext'] as DumpMode | undefined;
-  if (!shouldDumpSDKContext(dumpMode, false)) return;
-  try {
-    await dumpSDKRequestContext(
-      deps.providerName,
-      '/responses',
-      requestContext.request,
-      requestContext.baseURL,
-    );
-  } catch (error) {
-    deps.logger.debug(
-      () => `Best-effort Responses request dump failed: ${String(error)}`,
-    );
+  if (!shouldDumpSDKContext(dumpMode, false)) {
+    return { dumpMode };
   }
+  const result = await bestEffortDump(
+    'request',
+    deps.providerName,
+    () =>
+      dumpSDKRequestContext(
+        deps.providerName,
+        '/responses',
+        requestContext.request,
+        requestContext.baseURL,
+      ),
+    deps.logger,
+  );
+  return { baseId: result?.baseId, dumpMode };
 }
 
 async function* streamResponses(

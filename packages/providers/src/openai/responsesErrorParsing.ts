@@ -10,6 +10,59 @@
  * within the max-lines budget.
  */
 
+import { findTerminalQuotaCode } from '../utils/quotaExhaustion.js';
+
+interface ErrorWithResponse extends Error {
+  status?: number;
+  code?: string;
+  /**
+   * The provider's body-level error `type`. Deliberately NOT written to a bare
+   * `type` key: `isOverloadError` in core reads `type` and treats `api_error`,
+   * `rate_limit_error`, and `overloaded_error` as retryable, so a plain `type`
+   * would silently make a Responses 403 or 404 retryable and reverse the
+   * "403 is never retried" invariant from issue #2917 (issue #3140).
+   */
+  providerErrorType?: string;
+  response?: { status: number; headers?: Record<string, string>; body: string };
+}
+
+interface OpenAIErrorBody {
+  code?: unknown;
+  type?: unknown;
+  error?: { code?: unknown; type?: unknown };
+  detail?: { code?: unknown; type?: unknown };
+}
+
+function readStringField(value: unknown): string | undefined {
+  return typeof value === 'string' && value !== '' ? value : undefined;
+}
+
+/**
+ * OpenAI reports the same condition under `code` on some payloads and `type`
+ * on others, at the top level, under the standard `error` envelope, or under
+ * the Codex/ChatGPT-backend `detail` envelope. Both fields are lifted onto the
+ * thrown error so downstream classification sees whichever the provider sent.
+ */
+function resolveErrorCodeAndType(errorData: unknown): {
+  code: string | undefined;
+  type: string | undefined;
+} {
+  if (typeof errorData !== 'object' || errorData === null) {
+    return { code: undefined, type: undefined };
+  }
+  const body = errorData as OpenAIErrorBody;
+  return {
+    code:
+      readStringField(body.error?.code) ??
+      readStringField(body.detail?.code) ??
+      readStringField(body.code),
+    type:
+      readStringField(body.error?.type) ??
+      readStringField(body.detail?.type) ??
+      readStringField(body.type),
+  };
+}
+
 function resolveErrorMessage(errorData: unknown): string {
   if (typeof errorData === 'string' && errorData !== '') {
     return errorData;
@@ -40,7 +93,15 @@ function resolveErrorMessage(errorData: unknown): string {
   return 'Unknown error';
 }
 
-function resolveErrorPrefix(status: number): string {
+const QUOTA_PREFIX = 'Quota or billing limit exhausted';
+
+/**
+ * The quota prefix is chosen by error code rather than status because OpenAI
+ * returns `billing_hard_limit_reached` as a 400 and `insufficient_quota` as a
+ * 429; both require the same user action (issue #3140).
+ */
+function resolveErrorPrefix(status: number, isQuotaExhausted = false): string {
+  if (isQuotaExhausted) return QUOTA_PREFIX;
   switch (status) {
     case 409:
       return 'Conflict';
@@ -57,6 +118,34 @@ function resolveErrorPrefix(status: number): string {
       }
       return 'API Error';
   }
+}
+
+/**
+ * Suffix appended to quota-exhaustion 429 messages so the user knows retrying
+ * cannot help and that billing/quota must be resolved (issue #3140).
+ */
+const QUOTA_RETRY_SUFFIX =
+  '. Retrying will not help — resolve your quota or billing limits';
+
+/**
+ * Attaches status, code, and the raw response envelope to an error. The
+ * `response` object is the single seam that exposes Retry-After headers and
+ * the raw body to the retry layers and the error-response dump (issue #3140).
+ */
+function attachErrorMetadata(
+  error: Error,
+  status: number,
+  errorData: unknown,
+  headers: Record<string, string> | undefined,
+  body: string,
+): ErrorWithResponse {
+  const { code, type } = resolveErrorCodeAndType(errorData);
+  const enriched = error as ErrorWithResponse;
+  enriched.status = status;
+  if (code !== undefined) enriched.code = code;
+  if (type !== undefined) enriched.providerErrorType = type;
+  enriched.response = { status, headers, body };
+  return enriched;
 }
 
 /**
@@ -85,6 +174,7 @@ export function parseErrorResponse(
   status: number,
   body: string,
   providerName: string,
+  headers?: Record<string, string>,
 ): Error {
   // Try to parse JSON error response first
   try {
@@ -101,24 +191,25 @@ export function parseErrorResponse(
 
     // 418 I'm a teapot: return message without prefix
     if (status === 418) {
-      const teapotError = new Error(message);
-      (teapotError as { status?: number }).status = status;
-      (teapotError as { code?: string }).code =
-        errorData.error?.code ?? errorData.code;
-      return teapotError;
+      return attachErrorMetadata(
+        new Error(message),
+        status,
+        errorData,
+        headers,
+        body,
+      );
     }
 
-    const errorPrefix = resolveErrorPrefix(status);
-    const error = new Error(`${errorPrefix}: ${message}`);
-    (error as { status?: number }).status = status;
-    (error as { code?: string }).code = errorData.error?.code ?? errorData.code;
-    return error;
+    const isQuotaExhausted = findTerminalQuotaCode(errorData) !== undefined;
+    const errorPrefix = resolveErrorPrefix(status, isQuotaExhausted);
+    const quotaSuffix = isQuotaExhausted ? QUOTA_RETRY_SUFFIX : '';
+    const error = new Error(`${errorPrefix}: ${message}${quotaSuffix}`);
+    return attachErrorMetadata(error, status, errorData, headers, body);
   } catch {
     // For invalid JSON / empty body, include diagnostic body snippet.
     const errorPrefix = resolveErrorPrefix(status);
     const detail = buildDiagnosticMessage(status, body);
     const error = new Error(`${errorPrefix}: ${providerName} - ${detail}`);
-    (error as { status?: number }).status = status;
-    return error;
+    return attachErrorMetadata(error, status, undefined, headers, body);
   }
 }
