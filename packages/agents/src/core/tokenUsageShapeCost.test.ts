@@ -221,3 +221,75 @@ describe('request-shape measurement cost guards (issue #3130)', () => {
     expect(second.historyTokens).toBe(first.historyTokens);
   });
 });
+
+describe('bucket attribution against the real history pipeline (issue #3130)', () => {
+  it('counts a tool result as history, not as an injection', async () => {
+    // The provider pipeline rebuilds every tool turn through
+    // ensureToolResponseAdjacency and stamps synthetic:true with
+    // reason:'reordered_tool_responses' even when nothing was reordered. Reading
+    // that flag put all tool results in injected_tokens and left history_tokens
+    // excluding them. Driven through the real HistoryService so the quirk is
+    // present rather than assumed.
+    const { HistoryService } = await import(
+      '@vybestack/llxprt-code-core/services/history/HistoryService.js'
+    );
+    const history = new HistoryService();
+    const turnKey = history.generateTurnKey();
+    const nextId = history.getIdGeneratorCallback(turnKey);
+    history.add(
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'read the files' }],
+        metadata: { id: nextId(), turnId: turnKey },
+      },
+      'test-model',
+    );
+    history.add(
+      {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'call-1',
+            name: 'read_many_files',
+            parameters: { paths: ['src'] },
+          },
+        ],
+        metadata: { id: nextId(), turnId: turnKey },
+      },
+      'test-model',
+    );
+    history.add(
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'call-1',
+            toolName: 'read_many_files',
+            result: 'FILE BODY',
+          },
+        ],
+        metadata: { id: nextId(), turnId: turnKey },
+      },
+      'test-model',
+    );
+
+    const requestContents = history.getCuratedForProvider([]);
+    // Guard the premise: the pipeline really does mark the tool turn synthetic.
+    const toolTurnIsFlagged = requestContents.some(
+      (c) => c.speaker === 'tool' && c.metadata?.synthetic === true,
+    );
+    expect(toolTurnIsFlagged).toBe(true);
+
+    const shape = computeRequestShape({
+      requestContents,
+      tools: undefined,
+      instructionsText: undefined,
+      countTokens: (t: string) => t.length,
+      previouslySentCallIds: new Set<string>(),
+    });
+
+    expect(shape.injectedTokens).toBe(0);
+  });
+});

@@ -246,18 +246,36 @@ function hasMediaBlock(content: IContent): boolean {
   return content.blocks.some((b) => b.type === 'media');
 }
 
+/** True when a content carries a tool call or tool result. */
+function hasToolBlock(content: IContent): boolean {
+  return content.blocks.some(
+    (b) => b.type === 'tool_call' || b.type === 'tool_response',
+  );
+}
+
 /**
- * Determine the bucket assignment for a single content.  The precedence
- * ensures every content lands in EXACTLY one bucket:
- *   1. injected  — metadata.synthetic === true
- *   2. media     — contains a media block (and is not synthetic)
- *   3. history   — everything else
+ * Determine the bucket assignment for a single content. The precedence ensures
+ * every content lands in EXACTLY one bucket:
+ *   1. media     — contains a media block
+ *   2. history   — carries a tool call or tool result
+ *   3. injected  — metadata.synthetic === true
+ *   4. history   — everything else
+ *
+ * Tool content is classified structurally, ahead of the `synthetic` flag,
+ * because the provider pipeline rebuilds tool turns through
+ * `ensureToolResponseAdjacency` and stamps `synthetic: true` with
+ * `reason: 'reordered_tool_responses'` on every one of them — even when nothing
+ * was actually reordered. Trusting the flag put all tool results into
+ * `injected_tokens` and left `history_tokens` excluding them, which inverted
+ * what both fields mean. A tool round-trip is conversation history; genuine
+ * injections (IDE context, system reminders) carry no tool blocks.
  */
 type ContentBucket = 'injected' | 'media' | 'history';
 
 function classifyContent(content: IContent): ContentBucket {
-  if (content.metadata?.synthetic === true) return 'injected';
   if (hasMediaBlock(content)) return 'media';
+  if (hasToolBlock(content)) return 'history';
+  if (content.metadata?.synthetic === true) return 'injected';
   return 'history';
 }
 

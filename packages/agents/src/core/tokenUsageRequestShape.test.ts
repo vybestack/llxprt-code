@@ -118,7 +118,7 @@ describe('tokenUsageRequestShape — buckets partition (AC-6)', () => {
     expect(result.historyTokens).toBe(12);
   });
 
-  it('counts a content as injected when metadata.synthetic is true even if it has media blocks', () => {
+  it('counts a synthetic content carrying media as media, not as an injection', () => {
     const contents: IContent[] = [
       {
         speaker: 'ai',
@@ -143,9 +143,12 @@ describe('tokenUsageRequestShape — buckets partition (AC-6)', () => {
       previousFingerprint: undefined,
     });
 
-    // Synthetic takes precedence over media → injected bucket.
-    expect(result.injectedTokens).toBeGreaterThan(0);
-    expect(result.mediaTokens).toBe(0);
+    // Structure beats metadata. The provider pipeline stamps synthetic:true on
+    // content it merely re-ordered, so the flag cannot be trusted to mean
+    // "injected"; a media block is an unambiguous fact about the payload, and
+    // media is the more useful attribution because it is the expensive part.
+    expect(result.mediaTokens).toBeGreaterThan(0);
+    expect(result.injectedTokens).toBe(0);
   });
 });
 
