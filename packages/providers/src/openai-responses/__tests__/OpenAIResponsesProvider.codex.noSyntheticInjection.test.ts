@@ -151,6 +151,14 @@ async function captureRequestBody(
     contents,
     ephemeralSettings: ephemerals,
     userMemory,
+    // Issue #3136: the agent layer owns system-prompt assembly and bakes user
+    // memory into the assembled instruction; the provider transports it
+    // verbatim and no longer reads options.userMemory. Model that here so
+    // AC3a still exercises its real invariant — memory reaches the wire
+    // exactly once, via instructions, never as an input item.
+    ...(userMemory === undefined
+      ? {}
+      : { systemInstruction: `assembled system prompt\n\n${userMemory}` }),
   });
 
   for await (const _content of provider.generateChatCompletion(options)) {
