@@ -12,7 +12,7 @@
  */
 
 import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ImageBudgetSource } from '../config/capabilities.js';
 import type {
   ContentBlock,
   IContent,
@@ -438,7 +438,7 @@ export interface ProcessFunctionCallsContext {
   subagentId: string;
   logger: DebugLogger;
   toolExecutorContext: ToolExecutionConfig;
-  config: Config;
+  config: ImageBudgetSource;
   messageBus?: MessageBus;
 }
 

@@ -37,7 +37,14 @@
 
 import * as fs from 'node:fs/promises';
 import os from 'node:os';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type {
+  EphemeralSettingsAccess,
+  ProviderManagerSource,
+  AuthRefresher,
+  ModelInfoConfig,
+} from '../config/capabilities.js';
+import type { ModelSelection } from '@vybestack/llxprt-code-core/config/roles.js';
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core/runtime/contracts/index.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import {
   switchActiveProvider,
@@ -102,7 +109,7 @@ export interface ProviderActivationResult {
  *   + model params.
  */
 export async function executeProviderActivation(
-  config: Config,
+  config: ProviderActivationConfig,
   intent: ProviderActivationIntent,
 ): Promise<ProviderActivationResult> {
   const authMode = intent.authMode ?? 'auto';
@@ -124,7 +131,7 @@ export async function executeProviderActivation(
  * external. Provider activation (when intent.provider is set) is best-effort.
  */
 async function executeNoAuth(
-  config: Config,
+  config: ProviderActivationConfig,
   intent: ProviderActivationIntent,
 ): Promise<ProviderActivationResult> {
   let switchError: string | undefined;
@@ -161,7 +168,7 @@ async function executeNoAuth(
  * content generator config. Else refreshAuth('oauth').
  */
 async function executeProviderOrOauth(
-  config: Config,
+  config: ProviderActivationConfig,
   intent: ProviderActivationIntent,
 ): Promise<ProviderActivationResult> {
   let switchError: string | undefined;
@@ -220,7 +227,7 @@ async function executeProviderOrOauth(
  * the ephemeral to the resolved path; base-url → setProviderBaseUrl.
  */
 async function applyRuntimeProviderOverrides(
-  config: Config,
+  config: ProviderActivationConfig,
 ): Promise<string | undefined> {
   const authKey = config.getEphemeralSetting('auth-key') as string | undefined;
   const authKeyfile = config.getEphemeralSetting('auth-keyfile') as
@@ -262,7 +269,7 @@ async function applyRuntimeProviderOverrides(
  * present.
  */
 async function ensureProviderManagerOnConfig(
-  config: Config,
+  config: ProviderActivationConfig,
   manager: RuntimeProviderManager,
 ): Promise<void> {
   configureProviderRuntimeFactories(config, manager);
@@ -283,7 +290,7 @@ async function ensureProviderManagerOnConfig(
  * active manager so provider-routed generation resolves.
  */
 function attachProviderManagerToContentConfig(
-  config: Config,
+  config: ProviderActivationConfig,
   manager: RuntimeProviderManager,
 ): void {
   const contentGenConfig = config.getContentGeneratorConfig();
@@ -302,7 +309,7 @@ function attachProviderManagerToContentConfig(
  * fatal (authFailed true).
  */
 async function executeAuto(
-  config: Config,
+  config: ProviderActivationConfig,
   intent: ProviderActivationIntent,
 ): Promise<ProviderActivationResult> {
   const configProvider = intent.provider ?? config.getProvider();
@@ -321,7 +328,7 @@ async function executeAuto(
  * reflects absence rather than an implicit fallback to a hosted provider.
  */
 async function executeAutoNoProvider(
-  config: Config,
+  config: ProviderActivationConfig,
   intent: ProviderActivationIntent,
 ): Promise<ProviderActivationResult> {
   const manager = config.getProviderManager();
@@ -362,7 +369,7 @@ async function executeAutoNoProvider(
  * then resolve model + params. Any thrown error is fatal (authFailed true).
  */
 async function executeAutoProvider(
-  config: Config,
+  config: ProviderActivationConfig,
   intent: ProviderActivationIntent,
   provider: string,
 ): Promise<ProviderActivationResult> {
@@ -434,7 +441,7 @@ async function executeAutoProvider(
  * of intent.modelParams, then clear pre-existing active params not present.
  */
 async function applyModelAndParams(
-  config: Config,
+  config: ProviderActivationConfig,
   intent: ProviderActivationIntent,
 ): Promise<void> {
   // When the intent declares no model and no model params, leave the active
@@ -484,7 +491,7 @@ async function applyModelAndParams(
  * not regress Zed's provider-side base URL.
  */
 function applyEphemeralBaseUrlToProvider(
-  config: Config,
+  config: ProviderActivationConfig,
   activeProvider: ReturnType<RuntimeProviderManager['getActiveProvider']>,
 ): void {
   if (activeProvider === undefined) {
@@ -511,7 +518,7 @@ function applyEphemeralBaseUrlToProvider(
  * placeholder, then the provider default, then undefined.
  */
 function resolveFallbackModel(
-  config: Config,
+  config: ProviderActivationConfig,
   providerDefault: string | undefined,
 ): string | undefined {
   const configModel = config.getModel();
@@ -597,7 +604,7 @@ function isPureAlreadyActiveRefresh(
   );
 }
 
-function resolveActiveProviderName(config: Config): string | undefined {
+function resolveActiveProviderName(config: ProviderActivationConfig): string | undefined {
   return config.getProviderManager()?.getActiveProviderName();
 }
 
@@ -633,8 +640,8 @@ async function safeActivateProvider(
  * reads cleanly and satisfies the optional-chain lint rule.
  */
 function resolveActiveManager(
-  manager: ReturnType<Config['getProviderManager']>,
-): NonNullable<ReturnType<Config['getProviderManager']>> | undefined {
+  manager: RuntimeProviderManager | undefined,
+): NonNullable<RuntimeProviderManager | undefined> | undefined {
   if (manager === undefined) {
     return undefined;
   }
