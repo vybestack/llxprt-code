@@ -146,13 +146,37 @@ export function extractSetupNames(source: string): readonly string[] {
   return names;
 }
 
-function collectSetupNames(directory: string): ReadonlySet<string> {
+/**
+ * A failure to scan the test tree is an environment fault, not a budget
+ * violation, so it is not folded into the violation list — that would report a
+ * broken checkout as a budget problem. It is rethrown with the offending path so
+ * the message is actionable instead of a bare filesystem stack trace.
+ */
+export function collectSetupNames(directory: string): ReadonlySet<string> {
+  let fileNames: readonly string[];
+  try {
+    fileNames = readdirSync(directory);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Cannot scan integration tests at ${directory}: ${message}. ` +
+        `The budget guard must run from a complete checkout.`,
+    );
+  }
+
   const names = new Set<string>();
-  for (const fileName of readdirSync(directory)) {
+  for (const fileName of fileNames) {
     if (!fileName.endsWith('.test.ts')) {
       continue;
     }
-    const source = readFileSync(join(directory, fileName), 'utf-8');
+    const filePath = join(directory, fileName);
+    let source: string;
+    try {
+      source = readFileSync(filePath, 'utf-8');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Cannot read ${filePath}: ${message}`);
+    }
     for (const name of extractSetupNames(source)) {
       names.add(name);
     }
@@ -302,16 +326,21 @@ function main(): void {
     process.exit(1);
   }
 
+  let setupNames: ReadonlySet<string>;
+  try {
+    setupNames = collectSetupNames(INTEGRATION_TESTS_DIR);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+
   const violations: string[] = [
     ...validateBudget(REAL_MODEL_RUN_BUDGET),
     ...validateBudgetPolicy(
       MAX_REAL_MODEL_API_REQUESTS,
       BASELINE_REAL_MODEL_API_REQUESTS,
     ),
-    ...validateBudgetNamesAreUsed(
-      REAL_MODEL_RUN_BUDGET,
-      collectSetupNames(INTEGRATION_TESTS_DIR),
-    ),
+    ...validateBudgetNamesAreUsed(REAL_MODEL_RUN_BUDGET, setupNames),
   ];
 
   if (ledgerPath === undefined) {

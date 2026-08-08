@@ -76,6 +76,20 @@ describe('recordRealProviderRun', () => {
     expect(existsSync(join(dir, 'ledger.jsonl'))).toBe(false);
   });
 
+  it('appends to an existing ledger whose parent directory already exists', () => {
+    const dir = makeTempDir();
+    const ledgerPath = join(dir, 'ledger.jsonl');
+    setEnv('LLXPRT_E2E_MODEL_LEDGER', ledgerPath);
+
+    recordRealProviderRun({ testName: 'first', testDir: '/tmp/a' });
+    recordRealProviderRun({ testName: 'second', testDir: '/tmp/b' });
+
+    expect(readLedger(ledgerPath).map((r) => r.testName)).toEqual([
+      'first',
+      'second',
+    ]);
+  });
+
   it('creates the parent directory when it does not yet exist', () => {
     const dir = makeTempDir();
     const nestedDir = join(dir, 'nested', 'deep', 'path');

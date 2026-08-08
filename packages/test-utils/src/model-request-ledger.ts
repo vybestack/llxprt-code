@@ -39,11 +39,7 @@ export function recordRealProviderRun(record: RealProviderRunRecord): void {
     return;
   }
 
-  const parentDir = dirname(ledgerPath);
-  if (!existsSync(parentDir)) {
-    mkdirSync(parentDir, { recursive: true });
-  }
-
+  mkdirSync(dirname(ledgerPath), { recursive: true });
   appendFileSync(ledgerPath, `${JSON.stringify(record)}\n`, 'utf-8');
 }
 

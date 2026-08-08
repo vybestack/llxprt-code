@@ -5,7 +5,12 @@
  */
 
 import { describe, it, expect } from 'bun:test';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
+  collectSetupNames,
   validateBudget,
   validateBudgetPolicy,
   validateBudgetNamesAreUsed,
@@ -21,6 +26,17 @@ import {
   type RealModelBudgetEntry,
 } from '../../integration-tests/real-model-budget.ts';
 import type { RealProviderRunRecord } from '../../packages/test-utils/src/model-request-ledger.ts';
+
+const INTEGRATION_TESTS_DIR = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  'integration-tests',
+);
+
+function makeTempDir(): string {
+  return mkdtempSync(join(tmpdir(), 'e2e-budget-guard-test-'));
+}
 
 function validEntry(
   testName: string,
@@ -137,6 +153,24 @@ describe('extractSetupNames', () => {
 
   it('returns nothing for a source with no setup call', () => {
     expect(extractSetupNames('const x = 1;')).toEqual([]);
+  });
+});
+
+describe('collectSetupNames', () => {
+  it('collects every rig.setup name across the integration tests on disk', () => {
+    const names = collectSetupNames(INTEGRATION_TESTS_DIR);
+    expect(names.has('should be able to run a shell command')).toBe(true);
+    expect(names.has('should be able to replace content in a file')).toBe(true);
+    expect(names.has('extension install test')).toBe(true);
+  });
+
+  // A missing or unreadable test tree is an environment fault, not a budget
+  // violation, so it must surface as an actionable error naming the path rather
+  // than a bare filesystem stack trace or a bogus "violation".
+  it('throws an actionable error naming the directory it could not scan', () => {
+    const missing = join(makeTempDir(), 'no-such-integration-tests');
+    expect(() => collectSetupNames(missing)).toThrow(missing);
+    expect(() => collectSetupNames(missing)).toThrow(/complete checkout/);
   });
 });
 
