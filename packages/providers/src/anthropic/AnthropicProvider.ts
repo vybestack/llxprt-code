@@ -384,7 +384,16 @@ export class AnthropicProvider extends BaseProvider {
     options: GenerateChatOptions,
   ): SystemPromptPlacement {
     const authToken = options.resolved?.authToken;
-    return typeof authToken === 'string' && this.classifyOAuthToken(authToken)
+    if (typeof authToken === 'string') {
+      return this.classifyOAuthToken(authToken)
+        ? 'context-prefix'
+        : 'system-field';
+    }
+    // A RuntimeAuthTokenProvider is this provider's OAuth refresh mechanism
+    // (see resolveClientAuthToken), so it resolves to an sk-ant-oat token at
+    // request time. Treating it as system-field would put our prompt in the
+    // reserved OAuth `system` field and Anthropic would reject the request.
+    return isRuntimeAuthTokenProvider(authToken)
       ? 'context-prefix'
       : 'system-field';
   }

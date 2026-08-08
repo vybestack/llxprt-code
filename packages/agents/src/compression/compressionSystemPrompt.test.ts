@@ -243,9 +243,7 @@ describe('Compression system instruction (issue #3136, Step 3)', () => {
     // First call = initial compression, second = verification pass
     expect(captured.length).toBe(2);
     for (const opts of captured) {
-      const sysInstr = opts.systemInstruction;
-      expect(typeof sysInstr).toBe('string');
-      expect((sysInstr as string).length).toBeGreaterThan(0);
+      expect(opts.systemInstruction).toBe(COMPRESSION_SYSTEM_PROMPT);
     }
   });
 });

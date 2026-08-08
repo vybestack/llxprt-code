@@ -559,28 +559,43 @@ export class ChatSession {
     this.historyService.setBaseTokenOffset(tokens);
   }
 
+  /**
+   * Wraps a send entry point so the system prompt is always resolved first.
+   * Every public send path must go through this: a path that forgets would
+   * silently transmit a stale prompt, which is the class of bug #3136 fixed.
+   */
+  private async _withResolvedSystemPrompt<T>(
+    send: () => Promise<T>,
+  ): Promise<T> {
+    await this._resolveSystemPromptForTurn();
+    return send();
+  }
+
   async sendMessage(
     params: SendMessageParams,
     prompt_id: string,
   ): Promise<ModelOutput> {
-    await this._resolveSystemPromptForTurn();
-    return this.turnProcessor.sendMessage(params, prompt_id);
+    return this._withResolvedSystemPrompt(() =>
+      this.turnProcessor.sendMessage(params, prompt_id),
+    );
   }
 
   async sendMessageStream(
     params: SendMessageParams,
     prompt_id: string,
   ): Promise<AsyncGenerator<StreamEvent>> {
-    await this._resolveSystemPromptForTurn();
-    return this.turnProcessor.sendMessageStream(params, prompt_id);
+    return this._withResolvedSystemPrompt(() =>
+      this.turnProcessor.sendMessageStream(params, prompt_id),
+    );
   }
 
   async generateDirectMessage(
     params: SendMessageParams,
     prompt_id: string,
   ): Promise<ModelOutput> {
-    await this._resolveSystemPromptForTurn();
-    return this.directMessageProcessor.generateDirectMessage(params, prompt_id);
+    return this._withResolvedSystemPrompt(() =>
+      this.directMessageProcessor.generateDirectMessage(params, prompt_id),
+    );
   }
 
   async waitForIdle(): Promise<void> {

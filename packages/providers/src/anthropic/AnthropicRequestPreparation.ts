@@ -124,7 +124,6 @@ interface ReasoningSettings {
 interface RequestSettings {
   streamingEnabled: boolean;
   currentModel: string;
-  userMemory: string | undefined;
   requestOverrides: Record<string, unknown>;
   configEphemerals: Record<string, unknown>;
   wantCaching: boolean;
@@ -264,7 +263,6 @@ function resolveRequestSettings(
   return {
     streamingEnabled,
     currentModel,
-    userMemory: undefined, // Will be resolved separately
     requestOverrides,
     configEphemerals,
     wantCaching,

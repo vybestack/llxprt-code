@@ -370,10 +370,9 @@ describe('AnthropicProvider — system prompt characterization (tripwire)', () =
     });
 
     it('fails fast instead of sending a prompt-less request when no systemInstruction is supplied', async () => {
-      mockMessagesCreate.mockResolvedValueOnce({
-        content: [{ type: 'text', text: 'response' }],
-        usage: { input_tokens: 10, output_tokens: 5 },
-      });
+      // Deliberately no mockMessagesCreate setup: the guard throws before the
+      // API is reached, and a queued response would make a removed throw look
+      // like a pass.
       const provider = makeProvider('5m');
       const options = buildOptions(
         'anthropic',

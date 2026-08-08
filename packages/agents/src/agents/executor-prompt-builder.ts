@@ -10,7 +10,7 @@ import type {
   IContent,
   TextBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { AgentInputs, ToolConfig } from './types.js';
+import type { AgentInputs, FunctionDeclaration, ToolConfig } from './types.js';
 import { templateString } from './utils.js';
 
 const TASK_COMPLETE_TOOL_NAME = 'complete_task';
@@ -27,7 +27,7 @@ const TASK_COMPLETE_TOOL_NAME = 'complete_task';
  * so the assembled prompt matches the agent's real capabilities (issue #3136).
  */
 export function extractDeclaredToolNames(
-  tools: ToolConfig['tools'] | undefined,
+  tools: ToolConfig['tools'] | FunctionDeclaration[] | undefined,
 ): string[] {
   if (!tools) {
     return [];

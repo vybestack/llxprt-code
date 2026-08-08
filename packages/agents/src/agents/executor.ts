@@ -912,7 +912,11 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       coreMemory: this.runtimeContext.getCoreMemory(),
       mcpInstructions: this.runtimeContext.getMcpInstructions(),
       model: this.definition.modelConfig.model,
-      tools: extractDeclaredToolNames(this.definition.toolConfig?.tools),
+      // Derive from the FINAL declaration list, not toolConfig.tools, so the
+      // auto-injected complete_task tool is described in the prompt. Otherwise
+      // the prompt's tool list disagrees with what the model can actually call
+      // (subagentRuntimeSetup does the same via combinedDeclarations).
+      tools: extractDeclaredToolNames(this.prepareToolsList()),
       includeSubagentDelegation: false,
       interactionMode: 'subagent',
     });

@@ -101,10 +101,15 @@ async function readRequestBodyText(body: BodyInit): Promise<string> {
 async function captureRequestModel(): Promise<
   Record<string, unknown> | undefined
 > {
-  const fetchCall = (
+  const calls = (
     globalThis as unknown as { fetch: { mock: { calls: unknown[][] } } }
-  ).fetch.mock.calls[0];
-  const init = fetchCall[1] as { body?: BodyInit } | undefined;
+  ).fetch.mock.calls;
+  if (calls.length === 0) {
+    throw new Error(
+      'Expected fetch to have been called, but it never was — the executor threw before reaching the network boundary.',
+    );
+  }
+  const init = calls[0][1] as { body?: BodyInit } | undefined;
   if (init?.body == null) return undefined;
   const bodyText = await readRequestBodyText(init.body);
   return bodyText ? JSON.parse(bodyText) : undefined;

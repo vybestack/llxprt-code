@@ -49,7 +49,6 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetCorePrompt.mockClear();
     settingsService = new SettingsService();
     config = new Config(createConfigParams(settingsService));
     settingsService.set('providers.stub.base-url', 'https://stub.example.com');

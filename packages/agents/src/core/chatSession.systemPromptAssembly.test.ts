@@ -10,8 +10,11 @@
  * instruction handed to the provider on the NEXT turn names the NEW model
  * — the same model the provider resolves as body.model — on ALL THREE send
  * paths (sendMessage, sendMessageStream, generateDirectMessage). Also
- * verifies base token-offset recomputation and subagent persona/interaction
- * mode preservation.
+ * verifies base token-offset recomputation, and that sessions constructed
+ * without an assembler keep their seeded instruction untouched.
+ *
+ * Subagent persona and interactionMode are covered in
+ * subagentRuntimeSetup.assembler.test.ts.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';

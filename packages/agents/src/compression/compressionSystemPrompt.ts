@@ -44,7 +44,7 @@ import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/run
 export async function buildCompressionSystemInstruction(
   config: Config | undefined,
   model: string,
-): Promise<string | undefined> {
+): Promise<string> {
   const mcpClientManager =
     config != null && typeof config.getMcpClientManager === 'function'
       ? config.getMcpClientManager()
@@ -68,7 +68,11 @@ export async function buildCompressionSystemInstruction(
     interactionMode,
   });
 
-  return corePrompt || undefined;
+  // Returned as-is rather than coerced to undefined on empty. Providers now
+  // require a non-empty instruction, so silently turning '' into undefined
+  // would just relabel the same failure while hiding that the prompt service
+  // produced nothing.
+  return corePrompt;
 }
 
 /**
