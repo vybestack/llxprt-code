@@ -6,6 +6,7 @@ import type { ITool } from '../ITool.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 import { resetSettingsService } from '@vybestack/llxprt-code-settings';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IContent } from '../IMessage.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
@@ -206,9 +207,14 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
 
     settingsService.set('reasoning.includeInContext', true);
 
-    const generator = provider.generateChatCompletion(messages, tools, {
-      stream: true,
-    });
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: provider.name,
+        settings: settingsService,
+        contents: messages,
+        tools,
+      }),
+    );
 
     const contents: IContent[] = [];
     for await (const content of generator) {
@@ -455,9 +461,14 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
       },
     ];
 
-    const generator = provider.generateChatCompletion(messages, tools, {
-      stream: true,
-    });
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: provider.name,
+        settings: settingsService,
+        contents: messages,
+        tools,
+      }),
+    );
 
     for await (const _content of generator) {
       // Drain stream so continuation request is fully executed.
@@ -617,9 +628,14 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
       },
     ];
 
-    const generator = provider.generateChatCompletion(messages, tools, {
-      stream: true,
-    });
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: provider.name,
+        settings: settingsService,
+        contents: messages,
+        tools,
+      }),
+    );
 
     for await (const _content of generator) {
       // Drain stream

@@ -95,6 +95,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
         authToken: 'test-token',
         streaming,
       },
+      systemInstruction: 'test system prompt',
       metadata: {},
     };
   };

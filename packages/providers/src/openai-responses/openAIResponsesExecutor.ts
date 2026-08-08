@@ -34,10 +34,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { convertToolsToOpenAIResponses } from './schemaConverter.js';
-import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js';
-import { resolveUserMemory } from '../utils/userMemory.js';
-import { mergeSystemInstruction } from '../utils/systemInstructionMerge.js';
+import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -189,6 +186,10 @@ export async function* executeOpenAIResponsesRequest(
   deps: ResponsesExecutorDeps,
   preparedRequestContext?: PreparedResponsesRequestContext,
 ): AsyncIterableIterator<IContent> {
+  // Issue #3136: fail fast before any request preparation. Projection paths
+  // call buildResponsesRequestContextForProjection directly and are exempt.
+  requireAssembledSystemInstruction(options.systemInstruction);
+
   const abortSignal = getRequestSignal(options);
   const invocationEphemerals = resolveInvocationEphemerals(options);
   const prepared =
@@ -234,11 +235,11 @@ export async function buildRequestContext(
 ): Promise<PreparedResponsesRequestContext> {
   const rawBaseURL = resolveResponsesBaseURL(options, deps);
   const isCodex = deps.isCodexBaseURL(rawBaseURL);
-  const userMemory = await resolveUserMemory(
-    options.userMemory,
-    () => options.invocation.userMemory,
-  );
-  const systemPrompt = await buildSystemPrompt(options, userMemory, deps);
+  // Issue #3136: the agent layer owns system-prompt assembly. The provider
+  // transports options.systemInstruction verbatim (empty for projection).
+  // options.userMemory is deliberately NOT read here: user memory is baked
+  // into the assembled instruction upstream.
+  const systemPrompt = options.systemInstruction ?? '';
   const requestOverrides = buildRequestOverrides(options, deps);
   const explicitUserStore =
     typeof requestOverrides['store'] === 'boolean'
@@ -330,61 +331,6 @@ async function resolveApiKey(
     isCodex
       ? 'Codex authentication required. Run /auth codex enable to authenticate.'
       : 'OpenAI API key is required',
-  );
-}
-
-async function buildSystemPrompt(
-  options: NormalizedGenerateChatOptions,
-  userMemory: string | undefined,
-  deps: ResponsesExecutorDeps,
-): Promise<string> {
-  const toolNames = getToolNamesForPrompt(options);
-  const configWithManagers = options.config as
-    | {
-        getMcpClientManager?: () =>
-          | { getMcpInstructions?: () => string | undefined }
-          | undefined;
-        getSubagentManager?: () => ReturnType<
-          NonNullable<typeof options.config>['getSubagentManager']
-        >;
-      }
-    | undefined;
-  const mcpClientManager = configWithManagers?.getMcpClientManager?.();
-  const mcpInstructions = mcpClientManager?.getMcpInstructions?.();
-  const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
-    toolNames ?? [],
-    () => configWithManagers?.getSubagentManager?.(),
-  );
-  const corePrompt = await getCoreSystemPromptAsync({
-    userMemory,
-    mcpInstructions,
-    model:
-      options.resolved.model !== ''
-        ? options.resolved.model
-        : deps.getDefaultModel(),
-    tools: toolNames,
-    includeSubagentDelegation,
-    interactionMode:
-      options.config?.isInteractive() === true
-        ? 'interactive'
-        : 'non-interactive',
-  });
-  return mergeSystemInstruction(corePrompt, options.systemInstruction);
-}
-
-function getToolNamesForPrompt(
-  options: NormalizedGenerateChatOptions,
-): string[] | undefined {
-  if (options.tools === undefined) return undefined;
-
-  return Array.from(
-    new Set(
-      options.tools.flatMap((group) =>
-        group.functionDeclarations
-          .map((declaration) => declaration.name)
-          .filter((name): name is string => Boolean(name)),
-      ),
-    ),
   );
 }
 

@@ -34,10 +34,7 @@ import {
   isAnthropicOAuthBaseURL,
   ANTHROPIC_DEFAULT_BASE_URL,
 } from './AnthropicEndpointUtils.js';
-import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js';
-import { resolveUserMemory } from '../utils/userMemory.js';
-import { mergeSystemInstruction as mergeSystemInstructionShared } from '../utils/systemInstructionMerge.js';
+import { formatContextPrefix } from '../utils/systemPromptPlacement.js';
 
 /**
  * Request preparation context returned to caller
@@ -127,7 +124,6 @@ interface ReasoningSettings {
 interface RequestSettings {
   streamingEnabled: boolean;
   currentModel: string;
-  userMemory: string | undefined;
   requestOverrides: Record<string, unknown>;
   configEphemerals: Record<string, unknown>;
   wantCaching: boolean;
@@ -267,7 +263,6 @@ function resolveRequestSettings(
   return {
     streamingEnabled,
     currentModel,
-    userMemory: undefined, // Will be resolved separately
     requestOverrides,
     configEphemerals,
     wantCaching,
@@ -276,12 +271,6 @@ function resolveRequestSettings(
 }
 
 async function buildOAuthSystemContext(params: {
-  currentModel: string;
-  userMemory: string | undefined;
-  mcpInstructions: string | undefined;
-  toolNamesForPrompt: string[] | undefined;
-  includeSubagentDelegation: boolean;
-  interactionMode: 'interactive' | 'non-interactive';
   anthropicMessages: readonly AnthropicMessage[];
   wantCaching: boolean;
   ttl: '5m' | '1h';
@@ -289,12 +278,6 @@ async function buildOAuthSystemContext(params: {
   systemInstruction: string | undefined;
 }): Promise<SystemContextResult> {
   const {
-    currentModel,
-    userMemory,
-    mcpInstructions,
-    toolNamesForPrompt,
-    includeSubagentDelegation,
-    interactionMode,
     anthropicMessages,
     wantCaching,
     ttl,
@@ -303,35 +286,27 @@ async function buildOAuthSystemContext(params: {
   } = params;
 
   const messages = [...anthropicMessages];
-  const corePrompt = await getCoreSystemPromptAsync({
-    userMemory,
-    mcpInstructions,
-    model: currentModel,
-    tools: toolNamesForPrompt,
-    includeSubagentDelegation,
-    interactionMode,
-  });
 
-  // Issue #2410: Merge the caller-supplied system instruction (e.g. a
-  // subagent persona/task prompt) with the core prompt before wrapping it in
-  // the <system> tag so task directives reach the OAuth endpoint.
-  const systemMessage = mergeSystemInstructionShared(
-    corePrompt,
-    systemInstruction,
-  );
+  // Issue #3136: the agent layer owns system-prompt assembly. The provider
+  // transports options.systemInstruction verbatim — it never rebuilds a core
+  // prompt or merges two prompts.
+  const systemMessage = systemInstruction ?? '';
 
   if (systemMessage) {
+    // Issue #3136: Anthropic under OAuth declares `context-prefix` placement —
+    // its `system` field may carry ONLY the Claude Code string, so the real
+    // prompt is unshifted to the TOP OF THE CONTEXT (never inside history).
+    // The wrapper format is owned by the shared placement policy so this
+    // provider does not re-derive it.
+    const contextPrefixText = formatContextPrefix(systemMessage);
+
     if (wantCaching) {
       messages.unshift({
         role: 'user',
         content: [
           {
             type: 'text',
-            text: `<system>
-${systemMessage}
-</system>
-
-User provided conversation begins here:`,
+            text: contextPrefixText,
             cache_control: { type: 'ephemeral', ttl },
           } as {
             type: 'text';
@@ -344,11 +319,7 @@ User provided conversation begins here:`,
     } else {
       messages.unshift({
         role: 'user',
-        content: `<system>
-${systemMessage}
-</system>
-
-User provided conversation begins here:`,
+        content: contextPrefixText,
       });
     }
   }
@@ -363,50 +334,17 @@ User provided conversation begins here:`,
 }
 
 async function buildNonOAuthSystemContext(params: {
-  currentModel: string;
-  userMemory: string | undefined;
-  mcpInstructions: string | undefined;
-  toolNamesForPrompt: string[] | undefined;
-  includeSubagentDelegation: boolean;
-  interactionMode: 'interactive' | 'non-interactive';
   anthropicMessages: readonly AnthropicMessage[];
   wantCaching: boolean;
   ttl: '5m' | '1h';
   systemInstruction: string | undefined;
 }): Promise<SystemContextResult> {
-  const {
-    currentModel,
-    userMemory,
-    mcpInstructions,
-    toolNamesForPrompt,
-    includeSubagentDelegation,
-    interactionMode,
-    anthropicMessages,
-    wantCaching,
-    ttl,
-    systemInstruction,
-  } = params;
+  const { anthropicMessages, wantCaching, ttl, systemInstruction } = params;
 
-  const systemPrompt = await getCoreSystemPromptAsync({
-    userMemory,
-    mcpInstructions,
-    model: currentModel,
-    tools: toolNamesForPrompt,
-    includeSubagentDelegation,
-    interactionMode,
-  });
-
-  // Issue #2410: Merge the caller-supplied system instruction (e.g. a
-  // subagent persona/task prompt) with the core system prompt. The
-  // caller instruction is appended after the core prompt so the model
-  // sees both the base behavior directives and the agent-specific task.
-  const mergedPrompt = mergeSystemInstructionShared(
-    systemPrompt,
-    systemInstruction,
-  );
-
+  // Issue #3136: the agent layer owns system-prompt assembly. The provider
+  // transports options.systemInstruction verbatim into the `system` field.
   const systemFieldValue = buildAnthropicSystemPrompt({
-    corePromptText: mergedPrompt,
+    corePromptText: systemInstruction ?? '',
     isOAuth: false,
     wantCaching,
     ttl,
@@ -420,12 +358,6 @@ async function buildNonOAuthSystemContext(params: {
  */
 async function buildSystemContext(params: {
   isOAuth: boolean;
-  currentModel: string;
-  userMemory: string | undefined;
-  mcpInstructions: string | undefined;
-  toolNamesForPrompt: string[] | undefined;
-  includeSubagentDelegation: boolean;
-  interactionMode: 'interactive' | 'non-interactive';
   anthropicMessages: readonly AnthropicMessage[];
   wantCaching: boolean;
   ttl: '5m' | '1h';
@@ -563,7 +495,6 @@ function convertMessagesAndTools(params: {
   anthropicTools:
     | Array<{ name: string; input_schema: { properties?: unknown } }>
     | undefined;
-  toolNamesForPrompt: string[] | undefined;
 } {
   const {
     content,
@@ -611,56 +542,7 @@ function convertMessagesAndTools(params: {
       });
   }
 
-  // Extract tool names for system prompt
-  const toolNamesForPrompt =
-    tools === undefined
-      ? undefined
-      : Array.from(
-          new Set(
-            tools.flatMap(
-              (group: { functionDeclarations: Array<{ name?: string }> }) =>
-                group.functionDeclarations
-                  .map((decl: { name?: string }) => decl.name)
-                  .filter((name): name is string => Boolean(name)),
-            ),
-          ),
-        );
-
-  return { anthropicMessages, anthropicTools, toolNamesForPrompt };
-}
-
-/**
- * Resolve MCP and subagent configuration
- */
-async function resolveMcpAndSubagentConfig(params: {
-  config: Config | undefined;
-  toolNamesForPrompt: string[] | undefined;
-}): Promise<{
-  mcpInstructions: string | undefined;
-  includeSubagentDelegation: boolean;
-  interactionMode: 'interactive' | 'non-interactive';
-}> {
-  const { config, toolNamesForPrompt } = params;
-
-  const mcpInstructions =
-    typeof config?.getMcpClientManager === 'function'
-      ? config.getMcpClientManager()?.getMcpInstructions()
-      : undefined;
-  const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
-    toolNamesForPrompt ?? [],
-    () =>
-      typeof config?.getSubagentManager === 'function'
-        ? config.getSubagentManager()
-        : undefined,
-  );
-
-  const isInteractive =
-    config !== undefined && typeof config.isInteractive === 'function'
-      ? config.isInteractive()
-      : false;
-  const interactionMode = isInteractive ? 'interactive' : 'non-interactive';
-
-  return { mcpInstructions, includeSubagentDelegation, interactionMode };
+  return { anthropicMessages, anthropicTools };
 }
 
 /**
@@ -811,19 +693,18 @@ export async function prepareAnthropicRequest(
   );
 
   const configForMessages = params.config ?? params.options.runtime?.config;
-  const { anthropicMessages, anthropicTools, toolNamesForPrompt } =
-    convertMessagesAndTools({
-      content: params.content,
-      tools: params.tools,
-      isOAuth: params.isOAuth,
-      reasoningSettings,
-      config: configForMessages,
-      currentModel: params.options.resolved.model,
-      currentBaseURL:
-        params.options.resolved.baseURL ?? ANTHROPIC_DEFAULT_BASE_URL,
-      unprefixToolName: params.unprefixToolName,
-      logger: params.logger,
-    });
+  const { anthropicMessages, anthropicTools } = convertMessagesAndTools({
+    content: params.content,
+    tools: params.tools,
+    isOAuth: params.isOAuth,
+    reasoningSettings,
+    config: configForMessages,
+    currentModel: params.options.resolved.model,
+    currentBaseURL:
+      params.options.resolved.baseURL ?? ANTHROPIC_DEFAULT_BASE_URL,
+    unprefixToolName: params.unprefixToolName,
+    logger: params.logger,
+  });
 
   const requestSettings = resolveRequestSettings(
     params.options,
@@ -853,25 +734,8 @@ export async function prepareAnthropicRequest(
     );
   }
 
-  const userMemory = await resolveUserMemory(
-    params.options.userMemory,
-    () => params.options.invocation.userMemory,
-  );
-
-  const { mcpInstructions, includeSubagentDelegation, interactionMode } =
-    await resolveMcpAndSubagentConfig({
-      config: params.config,
-      toolNamesForPrompt,
-    });
-
   const systemContext = await buildSystemContext({
     isOAuth: params.isOAuth,
-    currentModel: requestSettings.currentModel,
-    userMemory,
-    mcpInstructions,
-    toolNamesForPrompt,
-    includeSubagentDelegation,
-    interactionMode,
     anthropicMessages,
     wantCaching: effectiveWantCaching,
     ttl: requestSettings.ttl,

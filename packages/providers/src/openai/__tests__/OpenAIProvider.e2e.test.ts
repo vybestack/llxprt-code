@@ -15,6 +15,7 @@ import type {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { resetSettingsService } from '@vybestack/llxprt-code-settings';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type OpenAI from 'openai';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
@@ -137,7 +138,13 @@ describe('OpenAIProvider E2E Tests @plan:PLAN-20251202-THINKING.P16', () => {
       ];
 
       const results: IContent[] = [];
-      for await (const content of provider.generateChatCompletion(messages)) {
+      for await (const content of provider.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          settings: settingsService,
+          contents: messages,
+        }),
+      )) {
         results.push(content);
       }
 
@@ -245,7 +252,13 @@ describe('OpenAIProvider E2E Tests @plan:PLAN-20251202-THINKING.P16', () => {
       ];
 
       const results: IContent[] = [];
-      for await (const content of provider.generateChatCompletion(messages)) {
+      for await (const content of provider.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          settings: settingsService,
+          contents: messages,
+        }),
+      )) {
         results.push(content);
       }
 

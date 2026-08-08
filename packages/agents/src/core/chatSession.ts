@@ -108,6 +108,21 @@ import type {
 import { CompressionProfileNotFoundError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { PerformCompressionResult } from './turn.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { resolveModelForSystemPrompt } from './systemPromptModel.js';
+
+/**
+ * Assembles the complete system prompt for a turn, given the freshly-resolved
+ * model name. Injected optionally into {@link ChatSession} so the session can
+ * rebuild the prompt once per turn — before delegating to any processor —
+ * ensuring the rendered model always matches `body.model` on the wire even
+ * after a mid-session `/model` change (issue #3136).
+ *
+ * When absent, ChatSession leaves `generationConfig.systemInstruction` exactly
+ * as seeded at construction time.
+ */
+export interface SystemPromptAssembler {
+  assemble(model: string): Promise<string>;
+}
 
 /**
  * Error thrown when agent execution is stopped by a hook.
@@ -190,6 +205,9 @@ export class ChatSession {
     string,
     number
   >();
+  private readonly systemPromptAssembler?: SystemPromptAssembler;
+  /** Serializes per-turn system-prompt resolution against send hand-off. */
+  private systemPromptTurnChain: Promise<void> = Promise.resolve();
 
   constructor(
     view: AgentRuntimeContext,
@@ -197,11 +215,13 @@ export class ChatSession {
     generationConfig: ChatSessionConfig = {},
     initialHistory: readonly IContent[] = [],
     triggerCompressionHook: typeof triggerPreCompressHook = triggerPreCompressHook,
+    systemPromptAssembler?: SystemPromptAssembler,
   ) {
     this.runtimeContext = view;
     this.runtimeState = view.state;
     this.historyService = view.history;
     this.generationConfig = generationConfig;
+    this.systemPromptAssembler = systemPromptAssembler;
     void contentGenerator;
 
     // Wire density-dirty tracking on historyService.add
@@ -517,25 +537,97 @@ export class ChatSession {
 
   // ── Public API — thin delegation ─────────────────────────────────
 
+  /**
+   * Resolves the complete system prompt once per turn using the
+   * provider's current model, then writes it onto
+   * {@link ChatSession.generationConfig.systemInstruction} and recomputes the
+   * base token offset. This guarantees the rendered model name matches
+   * `body.model` on the wire even after a mid-session `/model` change
+   * (issue #3136). No-op when no assembler was injected.
+   */
+  private async _resolveSystemPromptForTurn(): Promise<void> {
+    if (!this.systemPromptAssembler) {
+      return;
+    }
+    // Use the SAME resolver ChatSessionFactory uses at session start
+    // (issue #3138). Introducing a second mechanism here — e.g. asking the
+    // provider directly — would recreate the two-sources-disagree defect this
+    // issue exists to remove.
+    const config = this.runtimeContext.providerRuntime.config;
+    const model = config
+      ? resolveModelForSystemPrompt(config)
+      : this.runtimeState.model;
+    const systemInstruction = await this.systemPromptAssembler.assemble(model);
+    this.generationConfig.systemInstruction = systemInstruction;
+    const tokens = await this.historyService.estimateTokensForText(
+      systemInstruction,
+      model,
+    );
+    this.historyService.setBaseTokenOffset(tokens);
+  }
+
+  /**
+   * Wraps a send entry point so the system prompt is always resolved first.
+   * Every public send path must go through this: a path that forgets would
+   * silently transmit a stale prompt, which is the class of bug #3136 fixed.
+   *
+   * Resolution and hand-off are serialized against each other. Resolution
+   * mutates shared state (`generationConfig.systemInstruction` and the history
+   * base token offset), and it runs BEFORE `TurnProcessor`'s own `sendPromise`
+   * barrier. Without this chain two concurrent sends could both resolve, the
+   * second overwriting the first, and the first turn would then transmit the
+   * second turn's prompt — defeating the per-turn model guarantee this exists
+   * to provide.
+   */
+  private async _withResolvedSystemPrompt<T>(
+    send: () => Promise<T>,
+  ): Promise<T> {
+    // Only the RESOLUTION is serialized, never the send. Concurrent sends are
+    // intended behavior (see chatSession.runtime.timeout.test.ts: "two
+    // simultaneous sends timeout independently without signal leakage"), so
+    // chaining the send itself would break a documented invariant.
+    //
+    // Serializing resolution alone keeps the shared-state mutation
+    // (generationConfig.systemInstruction + base token offset) atomic, so two
+    // turns cannot resolve interleaved and produce a torn prompt.
+    const resolved = this.systemPromptTurnChain.then(() =>
+      this._resolveSystemPromptForTurn(),
+    );
+    // Keep the chain alive after a failed resolution; a rejection must not
+    // permanently wedge every later send.
+    this.systemPromptTurnChain = resolved.then(
+      () => undefined,
+      () => undefined,
+    );
+    await resolved;
+    return send();
+  }
+
   async sendMessage(
     params: SendMessageParams,
     prompt_id: string,
   ): Promise<ModelOutput> {
-    return this.turnProcessor.sendMessage(params, prompt_id);
+    return this._withResolvedSystemPrompt(() =>
+      this.turnProcessor.sendMessage(params, prompt_id),
+    );
   }
 
   async sendMessageStream(
     params: SendMessageParams,
     prompt_id: string,
   ): Promise<AsyncGenerator<StreamEvent>> {
-    return this.turnProcessor.sendMessageStream(params, prompt_id);
+    return this._withResolvedSystemPrompt(() =>
+      this.turnProcessor.sendMessageStream(params, prompt_id),
+    );
   }
 
   async generateDirectMessage(
     params: SendMessageParams,
     prompt_id: string,
   ): Promise<ModelOutput> {
-    return this.directMessageProcessor.generateDirectMessage(params, prompt_id);
+    return this._withResolvedSystemPrompt(() =>
+      this.directMessageProcessor.generateDirectMessage(params, prompt_id),
+    );
   }
 
   async waitForIdle(): Promise<void> {

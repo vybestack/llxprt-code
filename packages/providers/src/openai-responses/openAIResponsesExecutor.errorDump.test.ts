@@ -120,6 +120,10 @@ function buildNormalizedOptions(
     userMemory: undefined,
     tools: undefined,
     metadata: {},
+    // Issue #3136: the agent layer owns system-prompt assembly and providers
+    // transport it verbatim, so a real chat completion requires this. These
+    // cases exercise error dumping, not prompt content.
+    systemInstruction: 'test system prompt',
     resolved: {
       model: 'gpt-5',
       baseURL: 'https://api.openai.com/v1',

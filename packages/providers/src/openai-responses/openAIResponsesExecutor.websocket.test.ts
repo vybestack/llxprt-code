@@ -57,6 +57,7 @@ function buildNormalizedOptions(
     userMemory: undefined,
     tools: undefined,
     metadata: {},
+    systemInstruction: 'test system prompt',
     resolved: {
       model: 'gpt-5.6-sol',
       baseURL: CODEX_BASE_URL,
