@@ -203,8 +203,21 @@ therefore "no further growth", not "the cap is enforced".
 - AND a command can show where the data lives, what fields it contains, and delete it
 
 `docs/telemetry-privacy.md` makes persistent telemetry opt-in and disabled by default; records carry session,
-project, provider and model identity, so this is not optional. Also decide the fate of the three retention
-getters in `packages/core/src/config/configBaseCore.ts:655-662`, which have no consumers today: wire or remove.
+project, provider and model identity, so this is not optional.
+
+**Correction:** an earlier revision of this plan claimed three retention getters in
+`packages/core/src/config/configBaseCore.ts:655-662` have no consumers. That was wrong — verified by grep across
+`packages/*/src` excluding tests:
+
+| Getter                         | Consumers                                              |
+| ------------------------------ | ------------------------------------------------------ |
+| `getConversationRetentionDays` | **has one** — `PrivacyManager.ts:122`, interface at :16 |
+| `getMaxLogFiles`               | none — dead                                            |
+| `getMaxLogSizeMB`              | none — dead                                            |
+
+So it is two dead getters, not three. Their fate belongs to **#3164**, which already owns the retention story
+and already lists them as a proposed-direction item citing the same lines. Removed from this issue's scope —
+two in-flight issues editing the same lines invites a conflict for no benefit.
 
 ### REQ-3167-9: A supported consumer answers the question
 
@@ -291,8 +304,17 @@ Following `dev-docs/PLAN.md`: preflight first, integration contracts before unit
 
 No implementation until each of these is confirmed in the tree and written up in this directory:
 
-1. Ink's installed version exposes `RenderOptions.onRender` with the expected signature, and
-   `inkRenderOptions.ts` can pass it.
+1. ~~Ink's installed version exposes `RenderOptions.onRender`.~~ **CLOSED — verified.**
+   `node_modules/ink/build/render.d.ts:44` declares `onRender?: (metrics: RenderMetrics) => void`, the type is
+   exported from `ink.d.ts:9`, and `ink.js:74-76` throttles it so it fires per actual render pass. Ink computes
+   the duration itself, so `ink_render_ms` is a pure accumulate with no added clock reads — cheaper than this
+   plan assumed.
+   **Still open, and it is the real blocker here:** `inkRenderOptions.ts:24` constructs
+   `const sharedStdio = createInkStdio();` at *module scope*, at import time, before any config or settings
+   object exists. There is therefore no seam to inject an observer into — the streams are already built by the
+   time `inkRenderOptions(config, settings)` runs. Decide the injection mechanism (an optional observer
+   parameter on `createInkStdio()` with the call moved inside the factory, or a settable module slot) here in
+   Phase 0.5, not in an implementation phase.
 2. `useSubmitQuery`'s ownership acquire/release points are stable seams for an operation lifecycle, including
    cancel, pre-send failure, slash commands, direct shell, and queued drain.
 3. `operation_id` can be propagated from the UI submission through `AgenticLoop` to every child send.
