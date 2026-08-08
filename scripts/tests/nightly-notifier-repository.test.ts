@@ -365,6 +365,9 @@ describe('nightly failure notifier repository targeting', () => {
       ),
     ).toBe(false);
 
-    expect(notifyFailureJob?.permissions).toEqual({ issues: 'write' });
+    expect(notifyFailureJob?.permissions).toEqual({
+      issues: 'write',
+      contents: 'read',
+    });
   });
 });

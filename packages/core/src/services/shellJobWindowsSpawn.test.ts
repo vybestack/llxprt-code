@@ -23,6 +23,7 @@ import {
   escapePowerShellSingleQuoted,
   spawnWindowsBackground,
 } from './shellJobSpawn.js';
+import { taskkillTree } from './shellProcessKill.js';
 
 /**
  * Timeout for probing whether a PowerShell executable (pwsh / powershell.exe)
@@ -44,6 +45,15 @@ const UNREF_SLEEP_SECONDS = 30;
  * (status 0) from a hang.
  */
 const UNREF_SPAWN_TIMEOUT_MS = 25000;
+
+/**
+ * Maximum time to wait for a background process to exit in runAndWait. The
+ * test commands are simple PowerShell one-liners that finish in a few seconds
+ * even on a cold Windows runner; 15s is generous for slow cold-starts while
+ * preventing a single hung process from consuming the entire per-file budget.
+ * (issue #3149)
+ */
+const RUN_AND_WAIT_TIMEOUT_MS = 15_000;
 
 /**
  * Check whether a PID is alive using signal 0 (works on both Windows and
@@ -229,6 +239,49 @@ describe.skipIf(!isWindows || availablePowerShellExes.length === 0)(
       return 'powershell.exe';
     }
 
+    /**
+     * Await a SpawnedProcess's exit, bounded by a timeout that kills the
+     * child on expiry so a hung process cannot consume the entire per-file
+     * budget. The test commands are simple one-liners; a real exit in under
+     * 15s is the norm, and a timeout indicates a genuine process hang (e.g.
+     * ConPTY stall or interactive prompt) rather than slow cold-start.
+     */
+    function awaitBoundedExit(
+      spawned: ReturnType<typeof spawnWindowsBackground>,
+      timeoutMs = RUN_AND_WAIT_TIMEOUT_MS,
+    ): Promise<{ exitCode: number | null; signal: NodeJS.Signals | null }> {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      return Promise.race([
+        spawned.exited,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            // child.kill() only terminates the outer PowerShell; the inner
+            // process started via Start-Process survives and holds redirected
+            // log handles. Use taskkill /T /F to reap the entire tree.
+            try {
+              if (spawned.pid > 0) {
+                taskkillTree(spawned.pid);
+              }
+            } catch {
+              // Process may already be gone.
+            }
+            try {
+              spawned.child.kill();
+            } catch {
+              // Process may already be gone.
+            }
+            reject(
+              new Error(
+                `Background process (pid ${spawned.pid}) did not exit within ${timeoutMs}ms`,
+              ),
+            );
+          }, timeoutMs);
+        }),
+      ]).finally(() => {
+        if (timer !== undefined) clearTimeout(timer);
+      });
+    }
+
     async function runAndWait(
       command: string,
       executable?: string,
@@ -247,7 +300,7 @@ describe.skipIf(!isWindows || availablePowerShellExes.length === 0)(
         logPath,
         errLogPath,
       );
-      const exitInfo = await spawned.exited;
+      const exitInfo = await awaitBoundedExit(spawned);
       const stdout = fs.existsSync(logPath)
         ? fs.readFileSync(logPath, 'utf8')
         : '';
@@ -361,7 +414,7 @@ describe.skipIf(!isWindows || availablePowerShellExes.length === 0)(
         errLogPath,
       );
       expect(spawned.pid).toBeGreaterThan(0);
-      await spawned.exited;
+      await awaitBoundedExit(spawned);
     });
 
     it('does not keep the spawner alive (production unref)', async () => {

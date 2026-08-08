@@ -334,6 +334,102 @@ export function parseCaseCounts(output: string): {
   };
 }
 
+/**
+ * React's "not wrapped in act(...)" warning is a fixed ~10-line block that can
+ * repeat dozens of times in a single React/Ink test file. A naive tail of the
+ * output is then entirely warning text, and the assertion failures that
+ * actually failed the file are unrecoverable from the log. This collapses each
+ * warning block to a one-line count before taking the excerpt, so the failures
+ * stay visible within the budget. (issue #3149)
+ */
+const ACT_WARNING_START =
+  /^An update to .* inside a test was not wrapped in act\(\.\.\.\)/;
+const ACT_WARNING_END =
+  /Learn more at https:\/\/react\.dev\/link\/wrap-tests-with-act/;
+const NEWLINE = String.fromCharCode(10);
+
+function collapseActWarnings(output: string): {
+  body: string;
+  elidedWarnings: number;
+} {
+  const kept: string[] = [];
+  let elided = 0;
+  let skipping = false;
+  // Cap lines consumed after a warning start whose end marker never arrives
+  // (truncated at the source). The standard block is ~10 lines.
+  let skipLineCount = 0;
+  const MAX_WARNING_BODY_LINES = 15;
+  for (const line of output.split(NEWLINE)) {
+    if (skipping) {
+      skipLineCount++;
+      if (ACT_WARNING_END.test(line)) {
+        skipping = false;
+        continue;
+      }
+      // A truncated warning's body never reaches the end marker; recover at
+      // the next warning start so subsequent assertions are not swallowed.
+      if (ACT_WARNING_START.test(line)) {
+        elided += 1;
+        skipLineCount = 1;
+        skipping = !ACT_WARNING_END.test(line);
+        continue;
+      }
+      // Bail out if we have skipped well past the standard block — the
+      // warning was truncated and the remaining lines may contain assertions.
+      if (skipLineCount > MAX_WARNING_BODY_LINES) {
+        skipping = false;
+        kept.push(line);
+      }
+      continue;
+    }
+    if (ACT_WARNING_START.test(line)) {
+      elided += 1;
+      skipLineCount = 1;
+      skipping = !ACT_WARNING_END.test(line);
+      continue;
+    }
+    kept.push(line);
+  }
+  return { body: kept.join(NEWLINE), elidedWarnings: elided };
+}
+
+/**
+ * Keeps an initial run and a final run of `text` so both the first failures
+ * and the trailing summary stay visible when the content exceeds the budget.
+ */
+function headTail(text: string, maxChars: number): string {
+  if (maxChars <= 0) return '';
+  if (text.length <= maxChars) return text;
+  const marker = `
+[... output elided ...]
+`;
+  const budget = Math.max(0, maxChars - marker.length);
+  const head = Math.ceil(budget / 2);
+  const tail = budget - head;
+  // Guard tail === 0: String.prototype.slice(-0) returns the whole string.
+  const tailSlice = tail > 0 ? text.slice(-tail) : '';
+  return `${text.slice(0, head)}${marker}${tailSlice}`;
+}
+
+/**
+ * Returns a bounded excerpt of a failing file's output that keeps assertion
+ * failures visible even when repetitive diagnostic noise would otherwise crowd
+ * them out of a fixed-size slice.
+ */
+export function failureExcerpt(output: string, maxChars: number): string {
+  if (output.length <= maxChars) {
+    return output;
+  }
+  const { body, elidedWarnings } = collapseActWarnings(output);
+  const banner =
+    elidedWarnings > 0
+      ? `[${elidedWarnings} React "not wrapped in act(...)" warning block(s) elided]
+`
+      : '';
+  const excerpt = headTail(body, maxChars - banner.length);
+  return (banner + excerpt).slice(0, maxChars);
+}
+
 export function generateJUnit(results: readonly TestResult[]): string {
   const failedCount = results.filter((result) => !result.passed).length;
   const testCases = results
@@ -349,7 +445,7 @@ export function generateJUnit(results: readonly TestResult[]): string {
             }s">TIMEOUT</failure>`
           : `<failure message="Exit code ${
               result.exitCode ?? -1
-            }">${escapeXml(result.output.slice(-4000))}</failure>`;
+            }">${escapeXml(failureExcerpt(stripAnsi(result.output), 4000))}</failure>`;
       return `    <testcase classname="${className}" name="${className}">${failure}</testcase>`;
     })
     .join('\n');
@@ -414,7 +510,7 @@ async function main(): Promise<void> {
 
   for (const result of failed) {
     console.error(`\n----- ${result.file} -----`);
-    console.error(result.output.slice(-6000));
+    console.error(failureExcerpt(stripAnsi(result.output), 6000));
   }
 
   const cases = results.reduce(
