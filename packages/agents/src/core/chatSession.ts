@@ -110,6 +110,20 @@ import type { PerformCompressionResult } from './turn.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 
 /**
+ * Assembles the complete system prompt for a turn, given the freshly-resolved
+ * model name. Injected optionally into {@link ChatSession} so the session can
+ * rebuild the prompt once per turn — before delegating to any processor —
+ * ensuring the rendered model always matches `body.model` on the wire even
+ * after a mid-session `/model` change (issue #3136).
+ *
+ * When absent, ChatSession leaves `generationConfig.systemInstruction` exactly
+ * as seeded at construction time.
+ */
+export interface SystemPromptAssembler {
+  assemble(model: string): Promise<string>;
+}
+
+/**
  * Error thrown when agent execution is stopped by a hook.
  */
 export class AgentExecutionStoppedError extends Error {
@@ -190,6 +204,7 @@ export class ChatSession {
     string,
     number
   >();
+  private readonly systemPromptAssembler?: SystemPromptAssembler;
 
   constructor(
     view: AgentRuntimeContext,
@@ -197,11 +212,13 @@ export class ChatSession {
     generationConfig: ChatSessionConfig = {},
     initialHistory: readonly IContent[] = [],
     triggerCompressionHook: typeof triggerPreCompressHook = triggerPreCompressHook,
+    systemPromptAssembler?: SystemPromptAssembler,
   ) {
     this.runtimeContext = view;
     this.runtimeState = view.state;
     this.historyService = view.history;
     this.generationConfig = generationConfig;
+    this.systemPromptAssembler = systemPromptAssembler;
     void contentGenerator;
 
     // Wire density-dirty tracking on historyService.add
@@ -517,10 +534,36 @@ export class ChatSession {
 
   // ── Public API — thin delegation ─────────────────────────────────
 
+  /**
+   * Resolves the complete system prompt once per turn using the
+   * provider's current model, then writes it onto
+   * {@link ChatSession.generationConfig.systemInstruction} and recomputes the
+   * base token offset. This guarantees the rendered model name matches
+   * `body.model` on the wire even after a mid-session `/model` change
+   * (issue #3136). No-op when no assembler was injected.
+   */
+  private async _resolveSystemPromptForTurn(): Promise<void> {
+    if (!this.systemPromptAssembler) {
+      return;
+    }
+    const provider = this.resolveProviderForRuntime(
+      'ChatSession.resolveSystemPromptForTurn',
+    );
+    const model = provider.getCurrentModel?.() ?? this.runtimeState.model;
+    const systemInstruction = await this.systemPromptAssembler.assemble(model);
+    this.generationConfig.systemInstruction = systemInstruction;
+    const tokens = await this.historyService.estimateTokensForText(
+      systemInstruction,
+      model,
+    );
+    this.historyService.setBaseTokenOffset(tokens);
+  }
+
   async sendMessage(
     params: SendMessageParams,
     prompt_id: string,
   ): Promise<ModelOutput> {
+    await this._resolveSystemPromptForTurn();
     return this.turnProcessor.sendMessage(params, prompt_id);
   }
 
@@ -528,6 +571,7 @@ export class ChatSession {
     params: SendMessageParams,
     prompt_id: string,
   ): Promise<AsyncGenerator<StreamEvent>> {
+    await this._resolveSystemPromptForTurn();
     return this.turnProcessor.sendMessageStream(params, prompt_id);
   }
 
@@ -535,6 +579,7 @@ export class ChatSession {
     params: SendMessageParams,
     prompt_id: string,
   ): Promise<ModelOutput> {
+    await this._resolveSystemPromptForTurn();
     return this.directMessageProcessor.generateDirectMessage(params, prompt_id);
   }
 

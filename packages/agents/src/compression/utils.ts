@@ -44,6 +44,7 @@ import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compre
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { buildCompressionChatOptions } from './compressionSystemPrompt.js';
 
 /**
  * Aggregate text from content blocks, handling spacing between text and
@@ -286,21 +287,18 @@ export async function runVerificationPass(
   try {
     const providerRuntime =
       resolvedRuntime ?? context.runtimeContext.providerRuntime;
-    const stream = provider.generateChatCompletion({
-      contents: verificationRequest,
-      tools: undefined,
-      config: resolvedConfig ?? context.config ?? providerRuntime.config,
-      runtime: providerRuntime,
-      invocation,
-
-      settings:
-        providerRuntime.settingsService as RuntimeGenerateChatOptions['settings'],
-      resolved: resolvedOptions,
-      metadata: {
-        ...(providerRuntime.metadata ?? {}),
+    const stream = provider.generateChatCompletion(
+      await buildCompressionChatOptions({
+        contents: verificationRequest,
+        providerRuntime,
+        resolvedConfig,
+        fallbackConfig: context.config,
+        resolvedOptions,
+        invocation,
+        fallbackModel: context.runtimeState.model,
         source: 'runVerificationPass',
-      },
-    });
+      }),
+    );
 
     let verifiedText = '';
     let lastBlockWasNonText = false;
