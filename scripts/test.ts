@@ -17,10 +17,10 @@
  *   API-surface guard would be silently skipped. This script runs pretest
  *   hooks explicitly before each workspace's test phase.
  *
- *   Each workspace's `test` script decides its own runner. Migrated
- *   workspaces invoke `scripts/run_bun_tests.ts`, which executes Bun's native
- *   test runner with one isolated process per file; the remaining workspaces
- *   still run under Vitest while their migration completes (issue #2578).
+ *   Each workspace's `test` script invokes `scripts/run_bun_tests.ts` (or a
+ *   workspace-local bespoke variant), which executes Bun's native test runner
+ *   with one isolated process per file. Every workspace runs under Bun; no
+ *   workspace runs under Vitest (issue #2970).
  *
  * Usage:
  *   bun scripts/test.ts                    # run all workspace + script tests

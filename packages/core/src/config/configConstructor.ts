@@ -501,8 +501,7 @@ function applyPolicyAndLifecycle(
   }
 
   // Telemetry initialization (intentional cast — avoids circular dep with Config)
-  const isTestEnvironment =
-    process.env.NODE_ENV === 'test' || process.env.VITEST !== undefined;
+  const isTestEnvironment = process.env.NODE_ENV === 'test';
   if (process.env.VERBOSE === 'true' && isTestEnvironment === false) {
     debugLogger.log(
       `[CONFIG] Telemetry settings:`,
