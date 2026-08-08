@@ -9,10 +9,8 @@ import {
   expect,
   it,
   vi,
-  type Mock,
 } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { isUserMemoryProfileProvider } from '../../utils/userMemory.js';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
 import {
   clearActiveProviderRuntimeContext,
@@ -21,7 +19,6 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import OpenAI from 'openai';
 import {
   createProviderCallOptions,
@@ -57,29 +54,6 @@ void vi.mock('openai', () => ({
   },
 }));
 
-void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
-  getCoreSystemPromptAsync: vi.fn(
-    async (options) =>
-      `mock system prompt with memory: ${options.userMemory ?? 'none'}`,
-  ),
-}));
-
-/**
- * Helper function to resolve user memory from various input types.
- * Extracts the memory string or returns undefined.
- */
-async function resolveUserMemory(
-  userMemoryInput: unknown,
-): Promise<string | undefined> {
-  if (typeof userMemoryInput === 'string') {
-    return userMemoryInput;
-  }
-  if (isUserMemoryProfileProvider(userMemoryInput)) {
-    return userMemoryInput.getProfile();
-  }
-  return undefined;
-}
-
 class TestResponsesProvider extends OpenAIResponsesProvider {
   private readonly cacheSizes: number[] = [];
 
@@ -100,29 +74,14 @@ class TestResponsesProvider extends OpenAIResponsesProvider {
     >[0],
   ): AsyncGenerator<unknown> {
     // Extract memory and parameters from options for testing purposes
-    const userMemory = await resolveUserMemory(options.userMemory);
-
     const runtimeConfigEphemeralSettings = options.invocation.ephemerals;
-
-    // Simulate the system prompt generation (don't actually call OpenAI)
-    const promptSpy = getCoreSystemPromptAsync as Mock<
-      typeof getCoreSystemPromptAsync
-    >;
-    promptSpy.mockClear();
-
-    // Generate the system prompt as the real implementation would
-    await getCoreSystemPromptAsync({
-      userMemory,
-      model: 'codex-mini-latest',
-      tools: ['todo_write'],
-      includeSubagentDelegation: false,
-    });
 
     // Create a mock OpenAI request with the parameters to test they're passed correctly
     const request: Record<string, unknown> = {
       model: options.resolved.model || this.getDefaultModel(),
       input: [],
       stream: true,
+      instructions: options.systemInstruction ?? '',
     };
 
     // Include ephemeral settings
@@ -223,15 +182,11 @@ describe('OpenAI Responses provider stateless contract tests', () => {
     expect(sizes).toStrictEqual([0, 0]);
   });
 
-  it('injects runtime-specific user memory into responses system prompt @plan:PLAN-20251023-STATELESS-HARDENING.P07 @requirement:REQ-SP4-003 @pseudocode provider-runtime-handling.md line 13', async () => {
+  it('transports per-call systemInstruction on the request payload @plan:PLAN-20251023-STATELESS-HARDENING.P07 @requirement:REQ-SP4-003', async () => {
     const provider = new TestResponsesProvider(
       'token-per-call',
       'https://api.openai.com/v1',
     );
-    const promptSpy = getCoreSystemPromptAsync as Mock<
-      typeof getCoreSystemPromptAsync
-    >;
-    promptSpy.mockClear();
 
     const settingsA = createSettings('conversation-A', 'parent-A');
     const configA = createRuntimeConfigStub(settingsA, {
@@ -250,14 +205,17 @@ describe('OpenAI Responses provider stateless contract tests', () => {
           config: configA,
           runtime: runtimeA,
           userMemory: 'openai-responses-memory-A',
+          systemInstruction: 'INSTRUCTION-A',
         }),
       )
       .next();
 
-    const firstCallArgs = promptSpy.mock.calls.at(-1)?.[0] as
-      | { userMemory?: string }
-      | undefined;
-    expect(firstCallArgs?.userMemory).toBe('openai-responses-memory-A');
+    const Fake = OpenAI as unknown as typeof import('openai').default & {
+      requests: Array<{ request: Record<string, unknown> }>;
+    };
+    expect(Fake.requests.at(-1)?.request['instructions']).toBe(
+      'INSTRUCTION-A',
+    );
 
     const settingsB = createSettings('conversation-B', 'parent-B');
     const configB = createRuntimeConfigStub(settingsB, {
@@ -276,14 +234,14 @@ describe('OpenAI Responses provider stateless contract tests', () => {
           config: configB,
           runtime: runtimeB,
           userMemory: 'openai-responses-memory-B',
+          systemInstruction: 'INSTRUCTION-B',
         }),
       )
       .next();
 
-    const secondCallArgs = promptSpy.mock.calls.at(-1)?.[0] as
-      | { userMemory?: string }
-      | undefined;
-    expect(secondCallArgs?.userMemory).toBe('openai-responses-memory-B');
+    expect(Fake.requests.at(-1)?.request['instructions']).toBe(
+      'INSTRUCTION-B',
+    );
   });
 
   it('applies call-scoped config parameters to responses request payloads @plan:PLAN-20251023-STATELESS-HARDENING.P07 @requirement:REQ-SP4-002 @requirement:REQ-SP4-003 @pseudocode provider-cache-elimination.md lines 10-12', async () => {

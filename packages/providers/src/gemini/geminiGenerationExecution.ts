@@ -21,8 +21,6 @@ import {
   wrapStreamWithSDKErrorDump,
 } from '../utils/dumpSDKContext.js';
 import { type ResponseToChunksMapper } from './geminiResponseMapper.js';
-import { buildSystemInstruction } from './geminiRequestBuilding.js';
-import { mergeSystemInstruction } from '../utils/systemInstructionMerge.js';
 
 /** Result of a generation execution path. */
 export interface GeminiGenerationResult {
@@ -112,11 +110,11 @@ export interface NonOAuthContentGenerator {
  */
 export async function executeNonOAuthGeneration(
   options: NormalizedGenerateChatOptions,
-  globalConfig: Config | undefined,
+  _globalConfig: Config | undefined,
   contentsWithSignatures: Array<{ role: string; parts: Part[] }>,
   requestConfig: Record<string, unknown>,
   currentModel: string,
-  toolNamesForPrompt: string[] | undefined,
+  _toolNamesForPrompt: string[] | undefined,
   streamingEnabled: boolean,
   shouldDumpSuccess: boolean,
   shouldDumpError: boolean,
@@ -126,18 +124,10 @@ export async function executeNonOAuthGeneration(
   baseURL: string | undefined,
 ): Promise<GeminiGenerationResult> {
   const contentGenerator = await createContentGenerator();
-  const coreSystemInstruction = await buildSystemInstruction(
-    options,
-    globalConfig,
-    toolNamesForPrompt,
-    currentModel,
-  );
-  // Issue #2410: Merge caller-supplied system instruction (e.g. subagent
-  // persona) with the core system prompt so task directives reach the model.
-  const systemInstruction = mergeSystemInstruction(
-    coreSystemInstruction,
-    options.systemInstruction,
-  );
+  // Issue #3136: the agent layer owns system-prompt assembly. The provider
+  // transports options.systemInstruction verbatim into the
+  // systemInstruction request field — it never rebuilds a core prompt.
+  const systemInstruction = options.systemInstruction ?? '';
   const apiRequest: GenerateContentParameters & { systemInstruction: string } =
     {
       model: currentModel,

@@ -18,7 +18,10 @@ import {
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
 import type { GenerateChatOptions } from '../IProvider.js';
-import type { SystemPromptPlacement } from '../utils/systemPromptPlacement.js';
+import {
+  type SystemPromptPlacement,
+  requireAssembledSystemInstruction,
+} from '../utils/systemPromptPlacement.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import { type OAuthManager } from '@vybestack/llxprt-code-auth';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -599,6 +602,11 @@ export class AnthropicProvider extends BaseProvider {
   protected override async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
+    // Issue #3136: the agent layer owns system-prompt assembly. Fail fast
+    // before any request preparation so a missing instruction is never
+    // silently transported as an empty prompt.
+    requireAssembledSystemInstruction(options.systemInstruction);
+
     const prepared =
       options.promptEnvelopeTransportToken === undefined
         ? undefined

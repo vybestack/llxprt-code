@@ -57,7 +57,8 @@ import {
   resolveStreamingEnabled,
   resolveModelCallParams,
 } from './vercelRequestParams.js';
-import { buildSystemPrompt } from './vercelSystemPrompt.js';
+import { resolveSystemPrompt } from './vercelSystemPrompt.js';
+import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
 import {
   createCaptureBuffer,
   type CaptureBuffer,
@@ -170,11 +171,16 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     const modelId = options.resolved.model || this.getDefaultModel();
     const abortSignal = metadata['abortSignal'] as AbortSignal | undefined;
 
+    // Issue #3136: the agent layer owns system-prompt assembly. Fail fast
+    // before any request preparation so a missing instruction is never
+    // silently transported as an empty prompt.
+    requireAssembledSystemInstruction(options.systemInstruction);
+
     logRequestContext(logger, this.name, options, modelId, metadata);
 
     const rs = resolveReasoningSettings(options);
     const streamingEnabled = resolveStreamingEnabled(options);
-    const systemPrompt = await buildSystemPrompt(options, tools, modelId);
+    const systemPrompt = resolveSystemPrompt(options);
     const stripPolicy = rs.enabled ? rs.stripFromContext : 'all';
     const filteredContents = filterThinkingForContext(contents, stripPolicy);
     const messages: ModelMessage[] = this.convertToModelMessages(

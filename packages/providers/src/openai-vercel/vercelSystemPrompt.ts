@@ -15,59 +15,17 @@
  */
 
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js';
-import { resolveUserMemory } from '../utils/userMemory.js';
 
 /**
- * Builds the system prompt from options, tools, and model ID, including
- * user memory, MCP instructions, and subagent delegation.
+ * Transport the agent-assembled system instruction verbatim (issue #3136).
+ *
+ * Before this change the Vercel provider built its own core prompt via
+ * getCoreSystemPromptAsync and silently discarded the agent-assembled
+ * options.systemInstruction — a #2410 gap on this path. The provider now
+ * transports the instruction as-is.
  */
-export async function buildSystemPrompt(
+export function resolveSystemPrompt(
   options: NormalizedGenerateChatOptions,
-  tools: NormalizedGenerateChatOptions['tools'],
-  modelId: string,
-): Promise<string> {
-  const flattenedToolNames =
-    tools?.flatMap((group) => {
-      const declarations = (
-        group as { functionDeclarations?: Array<{ name?: string }> }
-      ).functionDeclarations;
-      return (declarations ?? [])
-        .map((decl) => decl.name)
-        .filter((name): name is string => !!name);
-    }) ?? [];
-  const toolNamesArg =
-    tools === undefined ? undefined : Array.from(new Set(flattenedToolNames));
-
-  const userMemory = await resolveUserMemory(
-    options.userMemory,
-    () => options.invocation.userMemory,
-  );
-  const config = options.config;
-  const mcpInstructions =
-    typeof config?.getMcpClientManager === 'function'
-      ? config.getMcpClientManager()?.getMcpInstructions()
-      : undefined;
-  const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
-    toolNamesArg ?? [],
-    () =>
-      typeof config?.getSubagentManager === 'function'
-        ? config.getSubagentManager()
-        : undefined,
-  );
-  const isInteractive = config?.isInteractive;
-  return getCoreSystemPromptAsync({
-    userMemory,
-    mcpInstructions,
-    model: modelId,
-    tools: toolNamesArg,
-    includeSubagentDelegation,
-    interactionMode:
-      config &&
-      typeof isInteractive === 'function' &&
-      isInteractive.call(config) === true
-        ? 'interactive'
-        : 'non-interactive',
-  });
+): string {
+  return options.systemInstruction ?? '';
 }

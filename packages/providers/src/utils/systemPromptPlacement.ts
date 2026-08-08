@@ -63,3 +63,36 @@ export function resolveSystemPromptPlacement(
 ): SystemPromptPlacement {
   return declaredPlacement ?? 'system-field';
 }
+
+/**
+ * The exact error thrown when a real chat completion is attempted without
+ * the agent-assembled system instruction. Kept as a constant so every
+ * provider emits the identical message and tests can match on a substring.
+ *
+ * Issue #3136 step 6: providers TRANSPORT `options.systemInstruction`; they
+ * never rebuild a core prompt. Throwing (rather than silently sending or
+ * rebuilding) makes a missing instruction a loud, immediate failure.
+ */
+export const MISSING_SYSTEM_INSTRUCTION_ERROR =
+  'System instruction is required: the agent layer owns assembly and must supply options.systemInstruction (issue #3136). ' +
+  'Providers transport it verbatim and must not rebuild a core prompt.';
+
+/**
+ * Fail-fast guard for the #3136 single-owner contract.
+ *
+ * Call this at the entry of every real `generateChatCompletion` path —
+ * NOT inside projection / request-formatting helpers (projection is a pure
+ * read and may legitimately run without a system instruction to estimate
+ * token usage). When the instruction is absent or empty the provider throws
+ * rather than silently sending a prompt-less request.
+ */
+export function requireAssembledSystemInstruction(
+  systemInstruction: string | undefined,
+): void {
+  if (
+    typeof systemInstruction !== 'string' ||
+    systemInstruction.trim() === ''
+  ) {
+    throw new Error(MISSING_SYSTEM_INSTRUCTION_ERROR);
+  }
+}

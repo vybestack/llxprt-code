@@ -205,7 +205,7 @@ describe('AnthropicProvider — system prompt characterization (tripwire)', () =
       const block = (first.content as AnthropicContentBlock[])[0];
       expect(block.type).toBe('text');
       expect(block.text).toBe(
-        `<system>\n${MOCK_CORE_PROMPT}\n\nCALLER_INSTRUCTION\n</system>\n\nUser provided conversation begins here:`,
+        `<system>\nCALLER_INSTRUCTION\n</system>\n\nUser provided conversation begins here:`,
       );
     });
 
@@ -218,6 +218,7 @@ describe('AnthropicProvider — system prompt characterization (tripwire)', () =
         settingsService,
         setup,
         { streaming: 'disabled' } as unknown as ProviderCallOptionsInit,
+        'ASSEMBLED_PROMPT',
       );
       const gen = provider.generateChatCompletion(options);
       await gen.next();
@@ -239,6 +240,7 @@ describe('AnthropicProvider — system prompt characterization (tripwire)', () =
         settingsService,
         setup,
         { streaming: 'disabled' } as unknown as ProviderCallOptionsInit,
+        'ASSEMBLED_PROMPT',
       );
       const gen = provider.generateChatCompletion(options);
       await gen.next();
@@ -260,6 +262,7 @@ describe('AnthropicProvider — system prompt characterization (tripwire)', () =
         settingsService,
         setup,
         { streaming: 'disabled' } as unknown as ProviderCallOptionsInit,
+        'ASSEMBLED_PROMPT',
       );
       const gen = provider.generateChatCompletion(options);
       await gen.next();
@@ -269,11 +272,11 @@ describe('AnthropicProvider — system prompt characterization (tripwire)', () =
       expect(first.role).toBe('user');
       expect(typeof first.content).toBe('string');
       expect(first.content).toBe(
-        `<system>\n${MOCK_CORE_PROMPT}\n</system>\n\nUser provided conversation begins here:`,
+        `<system>\nASSEMBLED_PROMPT\n</system>\n\nUser provided conversation begins here:`,
       );
     });
 
-    it('merges caller systemInstruction into the <system> block when provided', async () => {
+    it('delivers the caller systemInstruction verbatim so subagent personas reach the OAuth path (#2410)', async () => {
       mockResponse();
       const provider = makeOAuthProvider('off');
       const options = buildOptions(
@@ -290,7 +293,7 @@ describe('AnthropicProvider — system prompt characterization (tripwire)', () =
       const req = captureRequest();
       const first = req.messages[0];
       expect(first.content).toBe(
-        `<system>\n${MOCK_CORE_PROMPT}\n\nSUBAGENT_PERSONA\n</system>\n\nUser provided conversation begins here:`,
+        `<system>\nSUBAGENT_PERSONA\n</system>\n\nUser provided conversation begins here:`,
       );
     });
   });
@@ -327,6 +330,7 @@ describe('AnthropicProvider — system prompt characterization (tripwire)', () =
         settingsService,
         setup,
         { streaming: 'disabled' } as unknown as ProviderCallOptionsInit,
+        'ASSEMBLED_PROMPT',
       );
       const gen = provider.generateChatCompletion(options);
       await gen.next();
@@ -336,7 +340,7 @@ describe('AnthropicProvider — system prompt characterization (tripwire)', () =
       const blocks = req.system as AnthropicContentBlock[];
       expect(blocks).toHaveLength(1);
       expect(blocks[0].type).toBe('text');
-      expect(blocks[0].text).toBe(MOCK_CORE_PROMPT);
+      expect(blocks[0].text).toBe('ASSEMBLED_PROMPT');
       expect(blocks[0].cache_control).toStrictEqual({
         type: 'ephemeral',
         ttl: '5m',
@@ -355,25 +359,17 @@ describe('AnthropicProvider — system prompt characterization (tripwire)', () =
         settingsService,
         setup,
         { streaming: 'disabled' } as unknown as ProviderCallOptionsInit,
+        'ASSEMBLED_PROMPT',
       );
       const gen = provider.generateChatCompletion(options);
       await gen.next();
 
       const req = captureRequest();
       expect(typeof req.system).toBe('string');
-      expect(req.system).toBe(MOCK_CORE_PROMPT);
+      expect(req.system).toBe('ASSEMBLED_PROMPT');
     });
 
-    it('system is undefined when the merged prompt is empty', async () => {
-      // Override the mock to return empty for this one case
-      const prompts = await import(
-        '@vybestack/llxprt-code-core/core/prompts.js'
-      );
-      const mockFn = prompts.getCoreSystemPromptAsync as ReturnType<
-        typeof vi.fn
-      >;
-      mockFn.mockResolvedValueOnce('');
-
+    it('fails fast instead of sending a prompt-less request when no systemInstruction is supplied', async () => {
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'response' }],
         usage: { input_tokens: 10, output_tokens: 5 },
@@ -384,16 +380,18 @@ describe('AnthropicProvider — system prompt characterization (tripwire)', () =
         SINGLE_MESSAGE,
         settingsService,
         setup,
-        { streaming: 'disabled' } as unknown as ProviderCallOptionsInit,
+        {
+          streaming: 'disabled',
+          systemInstruction: undefined,
+        } as unknown as ProviderCallOptionsInit,
       );
       const gen = provider.generateChatCompletion(options);
-      await gen.next();
 
-      const req = captureRequest();
-      expect(req.system).toBeUndefined();
+      await expect(gen.next()).rejects.toThrow(/agent layer owns assembly/i);
+      expect(mockMessagesCreate).not.toHaveBeenCalled();
     });
 
-    it('merges caller systemInstruction after the core prompt (caching OFF)', async () => {
+    it('delivers the caller systemInstruction verbatim (caching OFF)', async () => {
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'response' }],
         usage: { input_tokens: 10, output_tokens: 5 },
@@ -412,7 +410,7 @@ describe('AnthropicProvider — system prompt characterization (tripwire)', () =
 
       const req = captureRequest();
       expect(typeof req.system).toBe('string');
-      expect(req.system).toBe(`${MOCK_CORE_PROMPT}\n\nEXTRA_DIRECTIVE`);
+      expect(req.system).toBe('EXTRA_DIRECTIVE');
     });
   });
 });
