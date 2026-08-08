@@ -12,7 +12,7 @@
  */
 
 import { EventEmitter } from 'node:events';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { MemoryAccess } from '@vybestack/llxprt-code-core/config/roles.js';
 import type {
   AgentMemoryControl,
   MemoryChangedEvent,
@@ -27,7 +27,7 @@ import { createControlError } from './errorUtils.js';
  * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P02
  */
 export interface MemoryControlDeps {
-  readonly config: Config;
+  readonly config: MemoryAccess;
 }
 
 export class MemoryControl implements AgentMemoryControl {
