@@ -104,8 +104,6 @@ export interface ResponsesExecutorDeps {
    * Codex). This is the single auth contract for the executor.
    */
   readonly resolveAuthTokenForPrompt: () => Promise<string>;
-  /** Provide a fresh synthetic call ID generator for tool-call injection. */
-  readonly generateSyntheticCallId: () => string;
   /** Determine whether a streaming error is retryable (status-based). */
   readonly shouldRetryOnError: (error: Error | unknown) => boolean;
   /** Return the provider's default model ID for fallback when resolved model is empty. */
@@ -350,15 +348,7 @@ export async function buildRequestContext(
     deps,
     stateful.parentId !== undefined,
   );
-  const requestInput = buildRequestInput(
-    input,
-    isCodex,
-    options,
-    userMemory,
-    deps,
-    stateful.parentId !== undefined,
-  );
-  const request = createRequest(options, requestInput, requestOverrides, deps);
+  const request = createRequest(options, input, requestOverrides, deps);
   applyInstructionsAndTools(request, systemPrompt, options);
   const reasoning = applyReasoningSettings(
     request,
@@ -633,41 +623,6 @@ function normalizeBaseURL(baseURLCandidate: string): string {
   let baseURL = baseURLCandidate;
   while (baseURL.endsWith('/')) baseURL = baseURL.slice(0, -1);
   return baseURL;
-}
-
-function buildRequestInput(
-  input: ResponsesInputItem[],
-  isCodex: boolean,
-  options: NormalizedGenerateChatOptions,
-  userMemory: string | undefined,
-  deps: ResponsesExecutorDeps,
-  serverSideParentActive: boolean,
-): ResponsesInputItem[] {
-  if (!isCodex) return input;
-
-  const requestInput = input.filter(
-    (message) => !('role' in message) || (message.role as string) !== 'system',
-  );
-  const itemsForInjection = requestInput.filter(
-    (item) => !('type' in item && item.type === 'reasoning'),
-  );
-  // Fix 6: only inject the synthetic AGENTS.md read on turns that start a
-  // fresh chain (no parent). When previous_response_id is set the server
-  // already holds the first copy behind the parent; re-injecting each turn
-  // would accumulate one copy of user memory per turn (#3134).
-  if (!serverSideParentActive) {
-    injectSyntheticConfigFileRead(itemsForInjection, options, userMemory, deps);
-  }
-  const injectedItems = itemsForInjection.filter(
-    (item) => !requestInput.includes(item),
-  );
-  const reasoningItems = requestInput.filter(
-    (item) => 'type' in item && item.type === 'reasoning',
-  );
-  const nonReasoningItems = requestInput.filter(
-    (item) => !('type' in item && item.type === 'reasoning'),
-  );
-  return [...injectedItems, ...reasoningItems, ...nonReasoningItems];
 }
 
 function createRequest(
@@ -960,40 +915,4 @@ async function buildWebSocketHandshakeHeaders(
   }
   headers['OpenAI-Beta'] = CODEX_WEBSOCKET_BETA_HEADER;
   return headers;
-}
-
-function injectSyntheticConfigFileRead(
-  requestInput: ResponsesInputItem[],
-  options: NormalizedGenerateChatOptions,
-  userMemory: string | undefined,
-  deps: ResponsesExecutorDeps,
-): void {
-  const syntheticCallId = deps.generateSyntheticCallId();
-
-  let output: string;
-  const targetFile = 'AGENTS.md';
-
-  if (userMemory && userMemory.trim().length > 0) {
-    output = JSON.stringify({
-      content: userMemory,
-    });
-  } else {
-    output = JSON.stringify({
-      error: 'File not found: AGENTS.md',
-    });
-  }
-
-  requestInput.unshift(
-    {
-      type: 'function_call',
-      call_id: syntheticCallId,
-      name: 'read_file',
-      arguments: JSON.stringify({ absolute_path: targetFile }),
-    },
-    {
-      type: 'function_call_output',
-      call_id: syntheticCallId,
-      output,
-    },
-  );
 }

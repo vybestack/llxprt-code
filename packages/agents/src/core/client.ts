@@ -63,6 +63,7 @@ import { IdeContextTracker } from './IdeContextTracker.js';
 import { AgentHookManager } from './AgentHookManager.js';
 import {
   buildSystemInstruction as factoryBuildSystemInstruction,
+  resolveModelForSystemPrompt,
   createChatSessionSafe,
 } from './ChatSessionFactory.js';
 import {
@@ -364,7 +365,7 @@ export class AgentClient implements AgentClientContract {
 
     const enabledToolNames = getEnabledToolNamesForPrompt(this.config);
     const envParts = await getEnvironmentContext(this.config);
-    const model = this.runtimeState.model;
+    const model = resolveModelForSystemPrompt(this.config);
     const systemInstruction = await factoryBuildSystemInstruction(
       this.config,
       enabledToolNames,

@@ -37,8 +37,6 @@ import {
   getErrorStatus,
   isNetworkTransientError,
 } from '@vybestack/llxprt-code-core/utils/retry.js';
-import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import type { ResponsesInputItem } from './OpenAIResponsesTypes.js';
 
 export abstract class OpenAIResponsesProviderBase extends BaseProvider {
   protected logger: DebugLogger;
@@ -235,73 +233,6 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
 
   override clearState(): void {
     super.clearState?.();
-  }
-
-  /**
-   * Generate a unique synthetic call ID to avoid collisions.
-   * @issue #966
-   */
-  protected generateSyntheticCallId(): string {
-    const randomSuffix = Math.random().toString(36).substring(2, 10);
-    return `call_synthetic_${randomSuffix}`;
-  }
-
-  /**
-   * Inject a synthetic tool call/result pair that makes GPT think it already read AGENTS.md.
-   *
-   * The CODEX_SYSTEM_PROMPT instructs GPT to read AGENTS.md for project instructions.
-   * However, the user may have configured LLXPRT.md instead (or both), and sometimes
-   * AGENTS.md is deliberately reserved for a different agent (like Codex itself).
-   *
-   * This method:
-   * 1. Always claims to have read "AGENTS.md" in the synthetic function call
-   * 2. Returns the actual userMemory content (from LLXPRT.md, AGENTS.md, or both)
-   * 3. Prevents GPT from wasting a tool call trying to read AGENTS.md
-   *
-   * @issue #966
-   */
-  protected injectSyntheticConfigFileRead(
-    requestInput: ResponsesInputItem[],
-    options: NormalizedGenerateChatOptions,
-    userMemory: string | undefined,
-  ): void {
-    const syntheticCallId = this.generateSyntheticCallId();
-
-    // Note: We intentionally don't use configRef/filePaths here anymore.
-    // The goal is to NOT reveal which files were actually loaded.
-    // We just need to know if userMemory has content.
-
-    let output: string;
-
-    // Always pretend we read AGENTS.md - this is what CODEX_SYSTEM_PROMPT tells GPT to do
-    const targetFile = 'AGENTS.md';
-
-    if (userMemory && userMemory.trim().length > 0) {
-      // Return the ACTUAL userMemory content so GPT sees what was loaded,
-      // while making it think this came from reading AGENTS.md.
-      // Do NOT reveal actual source files - the goal is to convince GPT it read AGENTS.md.
-      output = JSON.stringify({
-        content: userMemory,
-      });
-    } else {
-      output = JSON.stringify({
-        error: 'File not found: AGENTS.md',
-      });
-    }
-
-    requestInput.unshift(
-      {
-        type: 'function_call',
-        call_id: syntheticCallId,
-        name: 'read_file',
-        arguments: JSON.stringify({ absolute_path: targetFile }),
-      },
-      {
-        type: 'function_call_output',
-        call_id: syntheticCallId,
-        output,
-      },
-    );
   }
 
   /**

@@ -566,6 +566,86 @@ sub memory
         }),
       );
     });
+
+    it('uses config.getModel() for the system prompt, not the stale runtimeState snapshot (issue #3138)', async () => {
+      const setSystemInstruction = vi.fn();
+      const estimateTokensForText = vi.fn().mockResolvedValue(100);
+      const setBaseTokenOffset = vi.fn();
+      const getHistoryService = vi.fn().mockReturnValue({
+        estimateTokensForText,
+        setBaseTokenOffset,
+      });
+
+      const mockChat = {
+        setSystemInstruction,
+        getHistoryService,
+      };
+
+      client['chat'] = mockChat as unknown as ChatSession;
+      client['contentGenerator'] = {
+        countTokens: vi.fn(),
+      } as unknown as ContentGenerator;
+
+      // runtimeState.model is 'test-model' (from setup), but the live config
+      // returns a different model after a profile or provider switch.
+      const config = client['config'] as unknown as {
+        getModel: () => string;
+        getUserMemory: () => string;
+      };
+      vi.spyOn(config, 'getUserMemory').mockReturnValue('memory');
+      vi.spyOn(config, 'getModel').mockReturnValue('glm-5.2');
+
+      (
+        getEnabledToolNamesForPrompt as Mock<
+          typeof getEnabledToolNamesForPrompt
+        >
+      ).mockReturnValue([]);
+      (
+        shouldIncludeSubagentDelegationForConfig as Mock<
+          typeof shouldIncludeSubagentDelegationForConfig
+        >
+      ).mockResolvedValue(false);
+
+      (
+        getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
+      ).mockResolvedValue('prompt with live model');
+
+      await client.updateSystemInstruction();
+
+      expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'glm-5.2',
+        }),
+      );
+      expect(estimateTokensForText).toHaveBeenCalledWith(
+        expect.any(String),
+        'glm-5.2',
+      );
+    });
+
+    it('throws when config has no model rather than substituting a vendor default (issue #3138)', async () => {
+      const mockChat = {
+        setSystemInstruction: vi.fn(),
+        getHistoryService: vi.fn().mockReturnValue({
+          estimateTokensForText: vi.fn().mockResolvedValue(0),
+          setBaseTokenOffset: vi.fn(),
+        }),
+      };
+
+      client['chat'] = mockChat as unknown as ChatSession;
+      client['contentGenerator'] = {
+        countTokens: vi.fn(),
+      } as unknown as ContentGenerator;
+
+      const config = client['config'] as unknown as {
+        getModel: () => string;
+      };
+      vi.spyOn(config, 'getModel').mockReturnValue('');
+
+      await expect(client.updateSystemInstruction()).rejects.toThrow(
+        /no model identity/i,
+      );
+    });
   });
 
   describe('generateJson', () => {
