@@ -19,7 +19,10 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { TokenUsageLogger } from './TokenUsageLogger.js';
 import { recordProviderOrModelSwitch } from './tokenUsageEstimateLogger.js';
-import { parseTokenUsageLogRecord } from './tokenUsageRecords.js';
+import {
+  expectModelSwitchRecord,
+  expectProviderSwitchRecord,
+} from './tokenUsageTestAssertions.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 
@@ -93,17 +96,14 @@ describe('token-usage provider/model switch records (issue #3130)', () => {
 
     const records = readRecords(logFile);
     expect(records).toHaveLength(1);
-    const parsed = parseTokenUsageLogRecord(records[0]);
-    expect(parsed?.record_type).toBe('model_switch');
-    if (parsed?.record_type === 'model_switch') {
-      expect(parsed.from_model).toBe('claude-opus-5');
-      expect(parsed.to_model).toBe('claude-fable-5');
-      expect(parsed.provider).toBe('anthropic');
-      expect(parsed.session_id).toBe(SESSION_ID);
-      // The switch belongs to the turn being sent, which is the caller's
-      // minted id — not a turn derived from already-persisted history.
-      expect(parsed.turn_id).toBe(TURN_ID);
-    }
+    const parsed = expectModelSwitchRecord(records[0]);
+    expect(parsed.from_model).toBe('claude-opus-5');
+    expect(parsed.to_model).toBe('claude-fable-5');
+    expect(parsed.provider).toBe('anthropic');
+    expect(parsed.session_id).toBe(SESSION_ID);
+    // The switch belongs to the turn being sent, which is the caller's
+    // minted id — not a turn derived from already-persisted history.
+    expect(parsed.turn_id).toBe(TURN_ID);
   });
 
   it('records a provider_switch when the provider changes', async () => {
@@ -121,18 +121,15 @@ describe('token-usage provider/model switch records (issue #3130)', () => {
 
     const records = readRecords(logFile);
     expect(records).toHaveLength(1);
-    const parsed = parseTokenUsageLogRecord(records[0]);
-    expect(parsed?.record_type).toBe('provider_switch');
-    if (parsed?.record_type === 'provider_switch') {
-      expect(parsed.from_provider).toBe('anthropic');
-      expect(parsed.to_provider).toBe('codex');
-      expect(parsed.from_model).toBe('claude-opus-5');
-      expect(parsed.to_model).toBe('gpt-5.6-sol');
-      // The AC-1 join keys matter on this record type too: a provider switch
-      // that cannot be located in a session or a turn is not attributable.
-      expect(parsed.session_id).toBe(SESSION_ID);
-      expect(parsed.turn_id).toBe(TURN_ID);
-    }
+    const parsed = expectProviderSwitchRecord(records[0]);
+    expect(parsed.from_provider).toBe('anthropic');
+    expect(parsed.to_provider).toBe('codex');
+    expect(parsed.from_model).toBe('claude-opus-5');
+    expect(parsed.to_model).toBe('gpt-5.6-sol');
+    // The AC-1 join keys matter on this record type too: a provider switch
+    // that cannot be located in a session or a turn is not attributable.
+    expect(parsed.session_id).toBe(SESSION_ID);
+    expect(parsed.turn_id).toBe(TURN_ID);
   });
 
   it('records each switch once, not once per subsequent send', async () => {

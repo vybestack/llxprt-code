@@ -117,16 +117,17 @@ describe('parseTokenUsageLogRecord — v1 turn records', () => {
       }),
     );
     expect(result).not.toBeNull();
-    expect(result?.record_type).toBe('turn');
-    if (result?.record_type === 'turn') {
-      expect(result.session_id).toBe('sess-1');
-      expect(result.turn_id).toBe('turn-1');
-      expect(result.user_turn).toBe(1);
-      expect(result.step).toBe(3);
-      expect(result.runtime_id).toBe('rt-1');
-      expect(result.parent_runtime_id).toBeNull();
-      expect(result.subagent_name).toBeNull();
-    }
+    if (result === null) throw new Error('expected a parseable record');
+    expect(result.record_type).toBe('turn');
+    if (result.record_type !== 'turn')
+      throw new Error('expected a turn record');
+    expect(result.session_id).toBe('sess-1');
+    expect(result.turn_id).toBe('turn-1');
+    expect(result.user_turn).toBe(1);
+    expect(result.step).toBe(3);
+    expect(result.runtime_id).toBe('rt-1');
+    expect(result.parent_runtime_id).toBeNull();
+    expect(result.subagent_name).toBeNull();
   });
 
   it('round-trips optional cost fields', () => {
@@ -141,14 +142,16 @@ describe('parseTokenUsageLogRecord — v1 turn records', () => {
       }),
     );
     expect(result).not.toBeNull();
-    if (result?.record_type === 'turn') {
-      expect(result.output_tokens).toBe(50);
-      expect(result.reasoning_tokens).toBe(10);
-      expect(result.cache_write_tokens).toBe(5);
-      expect(result.cache_read_tokens).toBe(20);
-      expect(result.tool_tokens).toBe(8);
-      expect(result.total_tokens).toBe(198);
-    }
+    if (result === null) throw new Error('expected a parseable record');
+    expect(result.record_type).toBe('turn');
+    if (result.record_type !== 'turn')
+      throw new Error('expected a turn record');
+    expect(result.output_tokens).toBe(50);
+    expect(result.reasoning_tokens).toBe(10);
+    expect(result.cache_write_tokens).toBe(5);
+    expect(result.cache_read_tokens).toBe(20);
+    expect(result.tool_tokens).toBe(8);
+    expect(result.total_tokens).toBe(198);
   });
 
   it('round-trips attempt fields', () => {
@@ -162,13 +165,15 @@ describe('parseTokenUsageLogRecord — v1 turn records', () => {
       }),
     );
     expect(result).not.toBeNull();
-    if (result?.record_type === 'turn') {
-      expect(result.attempt_index).toBe(1);
-      expect(result.attempt_outcome).toBe('error');
-      expect(result.retry_reason).toBe('rate_limit');
-      expect(result.http_status).toBe(429);
-      expect(result.backend_profile).toBe('gpt-4o-mini');
-    }
+    if (result === null) throw new Error('expected a parseable record');
+    expect(result.record_type).toBe('turn');
+    if (result.record_type !== 'turn')
+      throw new Error('expected a turn record');
+    expect(result.attempt_index).toBe(1);
+    expect(result.attempt_outcome).toBe('error');
+    expect(result.retry_reason).toBe('rate_limit');
+    expect(result.http_status).toBe(429);
+    expect(result.backend_profile).toBe('gpt-4o-mini');
   });
 
   it('round-trips tool-call attribution', () => {
@@ -187,15 +192,17 @@ describe('parseTokenUsageLogRecord — v1 turn records', () => {
       }),
     );
     expect(result).not.toBeNull();
-    if (result?.record_type === 'turn') {
-      expect(result.tool_calls).toHaveLength(1);
-      expect(result.tool_calls?.[0].call_id).toBe('call-1');
-      expect(result.tool_calls?.[0].tool_name).toBe('read_file');
-      expect(result.tool_calls?.[0].result_tokens).toBe(42);
-      expect(result.tool_calls?.[0].was_truncated).toBe(false);
-      expect(result.new_tool_result_tokens).toBe(42);
-      expect(result.carried_tool_result_tokens).toBe(100);
-    }
+    if (result === null) throw new Error('expected a parseable record');
+    expect(result.record_type).toBe('turn');
+    if (result.record_type !== 'turn')
+      throw new Error('expected a turn record');
+    expect(result.tool_calls).toHaveLength(1);
+    expect(result.tool_calls?.[0].call_id).toBe('call-1');
+    expect(result.tool_calls?.[0].tool_name).toBe('read_file');
+    expect(result.tool_calls?.[0].result_tokens).toBe(42);
+    expect(result.tool_calls?.[0].was_truncated).toBe(false);
+    expect(result.new_tool_result_tokens).toBe(42);
+    expect(result.carried_tool_result_tokens).toBe(100);
   });
 
   it('round-trips request-shape provenance fields', () => {
@@ -212,16 +219,18 @@ describe('parseTokenUsageLogRecord — v1 turn records', () => {
       }),
     );
     expect(result).not.toBeNull();
-    if (result?.record_type === 'turn') {
-      expect(result.instructions_tokens).toBe(200);
-      expect(result.tools_schema_tokens).toBe(300);
-      expect(result.history_tokens).toBe(400);
-      expect(result.media_tokens).toBe(10);
-      expect(result.injected_tokens).toBe(5);
-      expect(result.prompt_cache_key).toBe('cache-key-abc');
-      expect(result.prefix_fingerprint).toBe('sha256:deadbeef');
-      expect(result.prefix_fingerprint_changed).toBe(true);
-    }
+    if (result === null) throw new Error('expected a parseable record');
+    expect(result.record_type).toBe('turn');
+    if (result.record_type !== 'turn')
+      throw new Error('expected a turn record');
+    expect(result.instructions_tokens).toBe(200);
+    expect(result.tools_schema_tokens).toBe(300);
+    expect(result.history_tokens).toBe(400);
+    expect(result.media_tokens).toBe(10);
+    expect(result.injected_tokens).toBe(5);
+    expect(result.prompt_cache_key).toBe('cache-key-abc');
+    expect(result.prefix_fingerprint).toBe('sha256:deadbeef');
+    expect(result.prefix_fingerprint_changed).toBe(true);
   });
 
   it('accepts null prefix_fingerprint_changed', () => {
@@ -229,18 +238,22 @@ describe('parseTokenUsageLogRecord — v1 turn records', () => {
       v1Turn({ prefix_fingerprint_changed: null }),
     );
     expect(result).not.toBeNull();
-    if (result?.record_type === 'turn') {
-      expect(result.prefix_fingerprint_changed).toBeNull();
-    }
+    if (result === null) throw new Error('expected a parseable record');
+    expect(result.record_type).toBe('turn');
+    if (result.record_type !== 'turn')
+      throw new Error('expected a turn record');
+    expect(result.prefix_fingerprint_changed).toBeNull();
   });
 
   it('omits cost fields when absent (no zero-fill)', () => {
     const result = parseTokenUsageLogRecord(v1Turn());
     expect(result).not.toBeNull();
-    if (result?.record_type === 'turn') {
-      expect(result.output_tokens).toBeUndefined();
-      expect(result.total_tokens).toBeUndefined();
-    }
+    if (result === null) throw new Error('expected a parseable record');
+    expect(result.record_type).toBe('turn');
+    if (result.record_type !== 'turn')
+      throw new Error('expected a turn record');
+    expect(result.output_tokens).toBeUndefined();
+    expect(result.total_tokens).toBeUndefined();
   });
 });
 
@@ -262,13 +275,14 @@ describe('parseTokenUsageLogRecord — lifecycle records', () => {
       compression_provider: 'openai',
     });
     expect(result).not.toBeNull();
-    expect(result?.record_type).toBe('compression');
-    if (result?.record_type === 'compression') {
-      expect(result.tokens_before).toBe(10000);
-      expect(result.tokens_after).toBe(3000);
-      expect(result.compression_model).toBe('gpt-4o-mini');
-      expect(result.compression_provider).toBe('openai');
-    }
+    if (result === null) throw new Error('expected a parseable record');
+    expect(result.record_type).toBe('compression');
+    if (result.record_type !== 'compression')
+      throw new Error('expected a compression record');
+    expect(result.tokens_before).toBe(10000);
+    expect(result.tokens_after).toBe(3000);
+    expect(result.compression_model).toBe('gpt-4o-mini');
+    expect(result.compression_provider).toBe('openai');
   });
 
   it('round-trips a compression record with cost fields', () => {
@@ -286,12 +300,14 @@ describe('parseTokenUsageLogRecord — lifecycle records', () => {
       compression_output_tokens: 500,
     });
     expect(result).not.toBeNull();
-    if (result?.record_type === 'compression') {
-      expect(result.compression_prompt_tokens).toBe(9000);
-      expect(result.compression_output_tokens).toBe(500);
-      expect(result.turn_id).toBeNull();
-      expect(result.compression_model).toBeNull();
-    }
+    if (result === null) throw new Error('expected a parseable record');
+    expect(result.record_type).toBe('compression');
+    if (result.record_type !== 'compression')
+      throw new Error('expected a compression record');
+    expect(result.compression_prompt_tokens).toBe(9000);
+    expect(result.compression_output_tokens).toBe(500);
+    expect(result.turn_id).toBeNull();
+    expect(result.compression_model).toBeNull();
   });
 
   it('round-trips a provider_switch record', () => {
@@ -307,13 +323,14 @@ describe('parseTokenUsageLogRecord — lifecycle records', () => {
       to_model: 'claude-3',
     });
     expect(result).not.toBeNull();
-    expect(result?.record_type).toBe('provider_switch');
-    if (result?.record_type === 'provider_switch') {
-      expect(result.from_provider).toBe('openai');
-      expect(result.to_provider).toBe('anthropic');
-      expect(result.from_model).toBe('gpt-4');
-      expect(result.to_model).toBe('claude-3');
-    }
+    if (result === null) throw new Error('expected a parseable record');
+    expect(result.record_type).toBe('provider_switch');
+    if (result.record_type !== 'provider_switch')
+      throw new Error('expected a provider_switch record');
+    expect(result.from_provider).toBe('openai');
+    expect(result.to_provider).toBe('anthropic');
+    expect(result.from_model).toBe('gpt-4');
+    expect(result.to_model).toBe('claude-3');
   });
 
   it('round-trips a provider_switch record with null from fields', () => {
@@ -329,11 +346,13 @@ describe('parseTokenUsageLogRecord — lifecycle records', () => {
       to_model: null,
     });
     expect(result).not.toBeNull();
-    if (result?.record_type === 'provider_switch') {
-      expect(result.from_provider).toBeNull();
-      expect(result.from_model).toBeNull();
-      expect(result.to_model).toBeNull();
-    }
+    if (result === null) throw new Error('expected a parseable record');
+    expect(result.record_type).toBe('provider_switch');
+    if (result.record_type !== 'provider_switch')
+      throw new Error('expected a provider_switch record');
+    expect(result.from_provider).toBeNull();
+    expect(result.from_model).toBeNull();
+    expect(result.to_model).toBeNull();
   });
 
   it('round-trips a model_switch record', () => {
@@ -348,12 +367,13 @@ describe('parseTokenUsageLogRecord — lifecycle records', () => {
       provider: 'openai',
     });
     expect(result).not.toBeNull();
-    expect(result?.record_type).toBe('model_switch');
-    if (result?.record_type === 'model_switch') {
-      expect(result.from_model).toBe('gpt-4');
-      expect(result.to_model).toBe('gpt-4o');
-      expect(result.provider).toBe('openai');
-    }
+    if (result === null) throw new Error('expected a parseable record');
+    expect(result.record_type).toBe('model_switch');
+    if (result.record_type !== 'model_switch')
+      throw new Error('expected a model_switch record');
+    expect(result.from_model).toBe('gpt-4');
+    expect(result.to_model).toBe('gpt-4o');
+    expect(result.provider).toBe('openai');
   });
 
   it('round-trips a session_resume record', () => {
@@ -368,12 +388,13 @@ describe('parseTokenUsageLogRecord — lifecycle records', () => {
       restored_tokens: 5000,
     });
     expect(result).not.toBeNull();
-    expect(result?.record_type).toBe('session_resume');
-    if (result?.record_type === 'session_resume') {
-      expect(result.resumed_session_id).toBe('sess-1');
-      expect(result.restored_history_items).toBe(10);
-      expect(result.restored_tokens).toBe(5000);
-    }
+    if (result === null) throw new Error('expected a parseable record');
+    expect(result.record_type).toBe('session_resume');
+    if (result.record_type !== 'session_resume')
+      throw new Error('expected a session_resume record');
+    expect(result.resumed_session_id).toBe('sess-1');
+    expect(result.restored_history_items).toBe(10);
+    expect(result.restored_tokens).toBe(5000);
   });
 
   it('round-trips a session_resume record with null restored_tokens', () => {
@@ -388,10 +409,12 @@ describe('parseTokenUsageLogRecord — lifecycle records', () => {
       restored_tokens: null,
     });
     expect(result).not.toBeNull();
-    if (result?.record_type === 'session_resume') {
-      expect(result.resumed_session_id).toBeNull();
-      expect(result.restored_tokens).toBeNull();
-    }
+    if (result === null) throw new Error('expected a parseable record');
+    expect(result.record_type).toBe('session_resume');
+    if (result.record_type !== 'session_resume')
+      throw new Error('expected a session_resume record');
+    expect(result.resumed_session_id).toBeNull();
+    expect(result.restored_tokens).toBeNull();
   });
 
   it('round-trips a context_truncation record', () => {
@@ -407,13 +430,14 @@ describe('parseTokenUsageLogRecord — lifecycle records', () => {
       reason: 'manual_clear',
     });
     expect(result).not.toBeNull();
-    expect(result?.record_type).toBe('context_truncation');
-    if (result?.record_type === 'context_truncation') {
-      expect(result.tokens_before).toBe(50000);
-      expect(result.tokens_after).toBe(20000);
-      expect(result.dropped_items).toBe(15);
-      expect(result.reason).toBe('manual_clear');
-    }
+    if (result === null) throw new Error('expected a parseable record');
+    expect(result.record_type).toBe('context_truncation');
+    if (result.record_type !== 'context_truncation')
+      throw new Error('expected a context_truncation record');
+    expect(result.tokens_before).toBe(50000);
+    expect(result.tokens_after).toBe(20000);
+    expect(result.dropped_items).toBe(15);
+    expect(result.reason).toBe('manual_clear');
   });
 });
 

@@ -420,14 +420,14 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     const allHistory = historyService.getAll();
     const sentTurn = allHistory.find((c) => c.speaker === 'human');
     expect(sentTurn).toBeDefined();
-    if (sentTurn !== undefined) {
-      // usage record -> conversation turn
-      expect(record.turn_id).not.toBeNull();
-      expect(record.turn_id).toBe(sentTurn.metadata?.turnId);
-      // conversation turn -> usage record
-      expect(sentTurn.metadata?.promptId).toBe(promptId);
-      expect(record.prompt_id).toBe(promptId);
-    }
+    if (sentTurn === undefined)
+      throw new Error('expected a human turn in history');
+    // usage record -> conversation turn
+    expect(record.turn_id).not.toBeNull();
+    expect(record.turn_id).toBe(sentTurn.metadata?.turnId);
+    // conversation turn -> usage record
+    expect(sentTurn.metadata?.promptId).toBe(promptId);
+    expect(record.prompt_id).toBe(promptId);
   });
 
   // AC-12: Cached turn — provider reports Anthropic-style cache read+write.

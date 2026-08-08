@@ -169,10 +169,10 @@ describe('request-shape measurement cost guards (issue #3130)', () => {
     });
 
     expect(Array.isArray(retried)).toBe(false);
-    if (!Array.isArray(retried)) {
-      expect(retried.metadata?.turnId).toBe('turn-1');
-      expect(retried.metadata?.promptId).toBe('p-1');
-    }
+    if (Array.isArray(retried))
+      throw new Error('expected a single content, not an array');
+    expect(retried.metadata?.turnId).toBe('turn-1');
+    expect(retried.metadata?.promptId).toBe('p-1');
   });
 
   it('tokenizes a carried content once, not once per send', () => {

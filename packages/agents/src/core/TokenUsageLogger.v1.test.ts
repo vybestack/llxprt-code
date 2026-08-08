@@ -207,14 +207,14 @@ describe('TokenUsageLogger — schema versioning (issue #3130 slice 1)', () => {
     // And the tool attribution entries carry counts and identifiers only.
     const toolCalls = record.tool_calls;
     expect(Array.isArray(toolCalls)).toBe(true);
-    if (Array.isArray(toolCalls)) {
-      expect(Object.keys(toolCalls[0]).sort()).toEqual([
-        'call_id',
-        'result_tokens',
-        'tool_name',
-        'was_truncated',
-      ]);
-    }
+    if (!Array.isArray(toolCalls))
+      throw new Error('expected tool_calls to be an array');
+    expect(Object.keys(toolCalls[0]).sort()).toEqual([
+      'call_id',
+      'result_tokens',
+      'tool_name',
+      'was_truncated',
+    ]);
   });
 });
 
@@ -694,11 +694,12 @@ describe('TokenUsageLogger — recordLifecycleEvent', () => {
     const raw = fs.readFileSync(logFile, 'utf-8').trim();
     const parsed = parseTokenUsageLogRecord(JSON.parse(raw));
     expect(parsed).not.toBeNull();
-    expect(parsed?.record_type).toBe('provider_switch');
-    if (parsed?.record_type === 'provider_switch') {
-      expect(parsed.from_provider).toBe('openai');
-      expect(parsed.to_provider).toBe('anthropic');
-    }
+    if (parsed === null) throw new Error('expected a parseable record');
+    expect(parsed.record_type).toBe('provider_switch');
+    if (parsed.record_type !== 'provider_switch')
+      throw new Error('expected a provider_switch record');
+    expect(parsed.from_provider).toBe('openai');
+    expect(parsed.to_provider).toBe('anthropic');
   });
 
   it('I/O errors on lifecycle records do not crash (fail-open)', async () => {

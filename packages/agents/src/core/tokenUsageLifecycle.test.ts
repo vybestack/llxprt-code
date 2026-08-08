@@ -399,12 +399,13 @@ describe('TokenUsageLogger — lifecycle event emission (issue #3130 slice 5)', 
     const raw = fs.readFileSync(logFile, 'utf-8').trim();
     const parsed = parseTokenUsageLogRecord(JSON.parse(raw));
     expect(parsed).not.toBeNull();
-    expect(parsed?.record_type).toBe('compression');
-    if (parsed?.record_type === 'compression') {
-      expect(parsed.tokens_before).toBe(TOKENS_BEFORE);
-      expect(parsed.tokens_after).toBe(TOKENS_AFTER);
-      expect(parsed.compression_model).toBe(COMPRESSION_MODEL);
-      expect(parsed.compression_provider).toBe(COMPRESSION_PROVIDER);
-    }
+    if (parsed === null) throw new Error('expected a parseable record');
+    expect(parsed.record_type).toBe('compression');
+    if (parsed.record_type !== 'compression')
+      throw new Error('expected a compression record');
+    expect(parsed.tokens_before).toBe(TOKENS_BEFORE);
+    expect(parsed.tokens_after).toBe(TOKENS_AFTER);
+    expect(parsed.compression_model).toBe(COMPRESSION_MODEL);
+    expect(parsed.compression_provider).toBe(COMPRESSION_PROVIDER);
   });
 });
