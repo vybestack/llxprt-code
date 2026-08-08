@@ -109,12 +109,21 @@ LLxprt Code is powered by the [Bun](https://bun.sh) runtime. When you run `llxpr
 **Bun resolution (production launcher):**
 
 1. Package-local: `<package>/node_modules/bun/bin/bun.exe` (the package's pinned Bun dependency)
+   - **Fallback:** `@oven/bun-<platform>/bin/bun[.exe]` variant (probed only when `bun/bin/bun.exe` is absent — see [npm v12 note](#npm-v12-install-script-default-deny) below)
 2. Hoisted (installed packages only): the enclosing `node_modules/bun/bin/bun.exe` (npm/Bun hoisting), stopping at the enclosing `node_modules` boundary — never climbing into consumer ancestors
+   - **Fallback:** `@oven/bun-<platform>` variant within the enclosing `node_modules`
 3. Workspace root (source workspace only): when the package is not under a `node_modules` and the repository root is a verified llxprt-code workspace (its manifest references this package), that verified root's `node_modules/bun/bin/bun.exe`
+   - **Fallback:** `@oven/bun-<platform>` variant at the workspace root
 
-The launcher never scans `.bin` symlinks and never falls back to a global `bun` on `PATH`. When the package's `package.json` declares an exact Bun pin (e.g. `1.3.14`), a candidate whose `package.json`/version is missing or mismatched is rejected.
+On macOS, a Bun already on `PATH` that meets the pinned version floor is preferred over all of the above (issue #2962), to avoid the credential-access disruption caused by npm re-extracting a running executable.
 
-If no package-local Bun runtime is found, the launcher prints an actionable error (exit code 43):
+The launcher never scans `.bin` symlinks. When the package's `package.json` declares an exact Bun pin (e.g. `1.3.14`), a candidate whose `package.json`/version is missing or mismatched is rejected.
+
+#### npm v12 install-script default-deny
+
+npm v12 (RFC 0054) disables dependency install scripts by default. The `bun` package ships its binary via a `postinstall` that moves it from an `@oven/bun-<platform>` optional dependency into `bun/bin/bun.exe`. When install scripts are blocked, that binary never materializes. LLxprt Code declares all 16 `@oven/bun-<platform>` packages as its own `optionalDependencies`; those tarballs contain only `bin/bun[.exe]` with no install scripts, so they materialize under default-deny. The launcher and TypeScript resolver fall back to them when `bun/bin/bun.exe` is absent. Host detection (CPU features, ABI) runs only on this fallback path — a normal install never forks detection subprocesses.
+
+Only after every candidate above has been probed and rejected — each level and its `@oven` fallback, plus the macOS `PATH` preference — does the launcher print an actionable error (exit code 43):
 
 > LLxprt Code: bundled Bun runtime was not found. Reinstall the package with "npm install @vybestack/llxprt-code" to restore the bundled Bun dependency, or visit https://bun.sh
 
@@ -122,7 +131,7 @@ To resolve this:
 
 - **npm users:** Re-run `npm install @vybestack/llxprt-code` (or `npm install -g @vybestack/llxprt-code`) to restore the bundled Bun dependency.
 - **Homebrew users:** Run `brew upgrade llxprt-code` to get the latest formula, or `brew reinstall llxprt-code` to restore a broken installation.
-- **All users:** If the bundled Bun dependency cannot be restored, reinstalling the package is the supported path. A separately installed global Bun is not used by the launcher.
+- **All users:** If the bundled Bun dependency cannot be restored, reinstalling the package is the supported path. Outside the macOS `PATH` preference described above, a separately installed global Bun is not used by the launcher.
 
 **Windows pty caveat:** On Windows, the `node-pty` module has a known terminal resize race condition (`Cannot resize a pty that has already exited`). The CLI silences this specific error at the process level. On POSIX systems under Bun, a dedicated `bun-pty` adapter (`packages/core/src/utils/bunPtyAdapter.ts`) is used instead of `node-pty` to work around a Bun hang. Windows uses `@lydell/node-pty` (with `node-pty` as fallback), not the Bun adapter. If you encounter terminal sizing issues on Windows, use a compatible terminal emulator; the resize race is in `node-pty` itself, not the Bun runtime.
 

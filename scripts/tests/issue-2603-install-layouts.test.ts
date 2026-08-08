@@ -62,16 +62,16 @@ const PNPM_PACKAGE_DIR = `${CLI_MANIFEST.name.replace(/^@/, '').replace(/\//g, '
 const [CLI_SCOPE, ...CLI_NAME_PARTS] = CLI_MANIFEST.name.split('/');
 const CLI_NAME = CLI_NAME_PARTS.join('/') || CLI_MANIFEST.name;
 // The bin name is derived from the CLI manifest's bin field so assertions
-// adapt automatically if the bin name ever changes from 'llxprt'.
+// adapt automatically if the bin name ever changes from 'llxprt'. It must come
+// from the bin KEY, not the target path: npm names the installed command (and
+// therefore the .cmd/.ps1 shims) after the key, so a target of
+// "bin/llxprt.mjs" still installs as `llxprt`, not `llxprt.mjs`.
 const CLI_BIN_NAME = (() => {
   try {
     const binPkg = JSON.parse(
       readFileSync(join(repoRoot, 'packages', 'cli', 'package.json'), 'utf8'),
     ) as { bin?: Record<string, string> };
-    const binEntries = Object.values(binPkg.bin ?? {});
-    return binEntries.length > 0
-      ? binEntries[0].replace(/^bin\//, '')
-      : 'llxprt';
+    return Object.keys(binPkg.bin ?? {})[0] ?? 'llxprt';
   } catch {
     return 'llxprt';
   }

@@ -34,3 +34,8 @@ packages/ui/bun.lock -diff
 docs/cli/configuration.md -diff
 schemas/settings.schema.json -diff
 packages/providers/src/tokenizers/official/assets/**/*.bpe -diff
+
+# Windows batch launchers MUST stay CRLF. cmd.exe mis-parses LF-only batch
+# files, which silently breaks the published Windows entry point (issue #2978).
+*.cmd eol=crlf
+*.bat eol=crlf

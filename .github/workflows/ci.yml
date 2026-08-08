@@ -765,9 +765,18 @@ jobs:
         with:
           bun-version-file: '.bun-version'
 
+      # `npm install`, not `npm ci`: packages/cli declares the os-gated launcher
+      # packages (issue #2978) as optionalDependencies. They cannot be root
+      # workspaces -- npm enforces a workspace's `os` field and fails
+      # EBADPLATFORM on every platform -- so before their first publish they are
+      # unresolvable and absent from the lockfile. `npm ci` rejects that as a
+      # manifest/lock desync; `npm install` correctly omits an unresolvable
+      # OPTIONAL dependency, exits 0, and leaves the lockfile untouched. This
+      # job only needs node_modules for the harness below, so it does not
+      # depend on `npm ci`'s stricter guarantees.
       - name: 'Install dependencies'
         run: |-
-          npm ci
+          npm install --no-audit --no-fund
 
       - name: 'Run Bun native-module smoke harness'
         run: |-

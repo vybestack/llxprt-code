@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import TOML from '@iarna/toml';
 import { parse as parseJsonc, type ParseError } from 'jsonc-parser';
 import semver from 'semver';
@@ -168,6 +168,18 @@ interface BunLock {
   lockfileVersion?: number;
   workspaces?: Record<string, BunLockWorkspace>;
 }
+/**
+ * Packages that exist on disk under a workspace root but must NOT be declared
+ * as npm workspaces.
+ *
+ * Deliberately empty: every package on disk is a declared workspace. An
+ * os-gated launcher package cannot be a workspace (npm installs every declared
+ * workspace unconditionally and enforces its `os` field, failing EBADPLATFORM
+ * on every platform), so an entry here means someone reintroduced that shape.
+ * Issue #2978 is instead solved at launch time by packages/cli/bin/llxprt.mjs,
+ * which resolves the bundled Bun from the @oven/bun-<platform> packages.
+ */
+const INTENTIONALLY_UNDECLARED_PACKAGES: readonly string[] = [];
 
 const DEPENDENCY_SECTIONS: ReadonlyArray<
   keyof Pick<
@@ -488,9 +500,16 @@ describe('Bun package-manager configuration (S1)', () => {
       }
     }
 
-    for (const dir of onDiskPackages) {
-      expect(declaredSet.has(resolve(dir))).toBe(true);
-    }
+    // Exact match in BOTH directions: an undeclared package that is not on the
+    // exemption list fails (the original guard), and a stale exemption whose
+    // package was deleted or later declared also fails, so the list cannot rot.
+    const undeclared = onDiskPackages
+      .filter((dir) => !declaredSet.has(resolve(dir)))
+      .map((dir) => relative(repoRoot, dir).split(sep).join('/'))
+      .sort();
+    expect(undeclared).toStrictEqual(
+      [...INTENTIONALLY_UNDECLARED_PACKAGES].sort(),
+    );
   });
 
   it('does not declare a self-dependency on the root package name', () => {
