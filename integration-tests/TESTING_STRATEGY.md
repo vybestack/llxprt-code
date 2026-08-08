@@ -25,19 +25,18 @@ These tests validate that the LLM **makes correct decisions**. Mocking these def
 - Tests validating LLM **chooses the correct tool** from ambiguous prompts
 - Multi-turn reasoning tests (LLM must maintain context across turns)
 - Tests for LLM error recovery behavior (LLM must recognize and handle errors)
-- At least one representative test per tool category (canary tests)
 
-**Examples from the codebase:**
+Because every real-model request is capped by the enforced budget (see
+[The Real-Model Budget](#the-real-model-budget-enforced) below), qualifying for
+this category is not sufficient — the behavior must also not already be covered
+by an existing canary.
 
-| Test File                       | What It Validates                                     |
-| ------------------------------- | ----------------------------------------------------- |
-| `run_shell_command.test.ts`     | LLM decides to use shell tool for command execution   |
-| `file-system.test.ts`           | LLM chooses appropriate read/write/edit tools         |
-| `save_memory.test.ts`           | LLM decides to use memory tool when asked to remember |
-| `replace.test.ts`               | LLM performs context-aware text replacement           |
-| `todo-continuation.e2e.test.ts` | Complex multi-turn flows with state persistence       |
-| `list_directory.test.ts`        | LLM navigates filesystem structure                    |
-| `read_many_files.test.ts`       | LLM reads multiple files efficiently                  |
+**Currently in this category:**
+
+| Test File                   | What It Validates                                   |
+| --------------------------- | --------------------------------------------------- |
+| `run_shell_command.test.ts` | LLM decides to use shell tool for command execution |
+| `replace.test.ts`           | LLM performs context-aware text replacement         |
 
 **Example: Real LLM test pattern**
 
@@ -234,38 +233,70 @@ Use this checklist when deciding whether to mock:
 
 ---
 
-## Minimum Real LLM Coverage
+## The Real-Model Budget (enforced)
 
-To catch LLM behavior regressions, maintain **at least one real LLM test per tool category**:
+Real model API requests in this suite are **capped and enforced**, not
+aspirational. The single source of truth is
+[`real-model-budget.ts`](./real-model-budget.ts), which lists every test allowed
+to use a real provider along with its per-run API cost and the reason it needs
+one.
 
-| Tool Category     | Canary Test(s)                  | Purpose                                 |
-| ----------------- | ------------------------------- | --------------------------------------- |
-| Shell execution   | `run_shell_command.test.ts`     | Validates LLM can execute commands      |
-| File operations   | `file-system.test.ts`           | Validates LLM can read/write/edit files |
-| Memory            | `save_memory.test.ts`           | Validates LLM can store/recall memories |
-| Multi-turn        | `todo-continuation.e2e.test.ts` | Validates LLM maintains context         |
-| Text manipulation | `replace.test.ts`               | Validates context-aware edits           |
+How the cap is enforced:
 
-**These canary tests serve as early warning systems.** If an LLM provider change or model update affects tool selection behavior, these tests will catch it before it reaches production.
+- A `TestRig` run reaches a real provider if and only if `rig.setup()` was called
+  **without** `fakeResponsesPath`. With a fixture path, the model turn is
+  replayed through `FakeProvider` and costs nothing.
+- `TestRig` appends every real-provider run to the ledger named by
+  `LLXPRT_E2E_MODEL_LEDGER` (set only by `e2e.yml`; a no-op otherwise).
+- `scripts/check-e2e-model-budget.ts` validates the budget on every CI lint run
+  (`npm run lint:e2e-model-budget`) and checks the ledger after each E2E leg. A
+  real-provider run whose test is not in the budget **fails the build**.
 
-### Adding New Tools
+So a new test that spends model requests will fail CI until you either give it a
+fixture or add a justified budget entry.
 
-When adding a new tool:
+### Current real-model canaries
 
-1. **Create at least one real LLM integration test** that validates the LLM correctly chooses and uses the tool
-2. Document the test in this file under the appropriate category
-3. Additional infrastructure tests can be mocked as appropriate
+Only tests that validate a _model decision_ qualify. A fixture cannot test what
+the model chose, so these two remain real:
+
+| Tool Category     | Canary Test                 | What only a real model can prove                                     |
+| ----------------- | --------------------------- | -------------------------------------------------------------------- |
+| Shell execution   | `run_shell_command.test.ts` | The model selects `run_shell_command` from a natural-language prompt |
+| Text manipulation | `replace.test.ts`           | The model targets the right substring via the `replace` tool         |
+
+Everything else in this suite — including file read/write (`file-system.test.ts`),
+directory listing, session summaries, JSON output, and the hooks suite — runs
+against checked-in `*.responses.jsonl` fixtures. Tool execution, filesystem
+effects and CLI output are still real in those tests; only the model turn is
+replayed.
+
+### Adding a new tool
+
+1. Prefer a **fixture-backed** test: assert the real tool execution and its real
+   effects, with the model turn replayed. This is the default.
+2. Add a **real-model** test only when the behavior under test is the model's own
+   choice, and only when no existing canary already covers that choice. It must
+   be added to `real-model-budget.ts` with a justification, and the declared cost
+   must stay within the ceiling.
+3. Record fixtures by running the test with `REGENERATE_MODEL_GOLDENS=true`
+   against a real provider, then commit the resulting JSONL.
 
 ---
 
 ## Summary
 
-| Question                             | Answer                                 |
-| ------------------------------------ | -------------------------------------- |
-| Testing LLM decision-making?         | Real LLM                               |
-| Testing output format?               | Can mock                               |
-| Testing error handling?              | Can mock                               |
-| Testing tool mechanics in isolation? | Hybrid (mock decision, real execution) |
-| Not sure?                            | Real LLM (safer default)               |
+| Question                             | Answer                                                                        |
+| ------------------------------------ | ----------------------------------------------------------------------------- |
+| Testing LLM decision-making?         | Real LLM — and add a budget entry                                             |
+| Testing output format?               | Fixture                                                                       |
+| Testing error handling?              | Fixture                                                                       |
+| Testing tool mechanics in isolation? | Fixture for the model turn, real tool execution                               |
+| Not sure?                            | Fixture — a real-model test needs a budget entry, so make the case explicitly |
+
+The old "when unsure, default to a real LLM" guidance is superseded by the
+enforced budget: real model requests are a capped, reviewed resource. Default to
+a fixture, and justify a real-model test in
+[`real-model-budget.ts`](./real-model-budget.ts) when you genuinely need one.
 
 **Remember:** The purpose of integration tests is to verify the **integrated system works**. If you're not testing real integration points, reconsider whether it belongs in this test suite.
