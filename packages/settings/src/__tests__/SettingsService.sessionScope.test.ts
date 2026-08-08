@@ -131,15 +131,21 @@ describe('SettingsService — session overlay lifecycle (Issue #3151)', () => {
 
     it('survives importFromProfile on the foreground', async () => {
       const foreground = new SettingsService();
+      foreground.set('dumpcontext', 'off');
       foreground.setSessionScoped('dumpcontext', 'on');
 
       await foreground.importFromProfile({
-        version: 1,
-        provider: 'openai',
-        model: 'gpt-4',
-        ephemeralSettings: { dumpcontext: 'off' },
+        defaultProvider: 'openai',
+        providers: {
+          openai: { model: 'gpt-4' },
+        },
+        tools: { allowed: [], disabled: [] },
       });
 
+      // The real flattened payload mutated providers/activeProvider (proving
+      // the import path ran), but the explicit session override still wins
+      // over the local 'off' value.
+      expect(foreground.get('activeProvider')).toBe('openai');
       expect(foreground.get('dumpcontext')).toBe('on');
     });
   });

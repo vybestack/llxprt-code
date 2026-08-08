@@ -20,7 +20,6 @@ import {
   isSensitiveSettingKey,
   REDACTED_VALUE,
   isSessionScopedSettingKey,
-  resolveAlias,
   assertSessionScopedKey,
 } from './settingsRegistry.js';
 import { SessionSettingsOverlay } from './SessionSettingsOverlay.js';
@@ -117,16 +116,13 @@ export class SettingsService extends EventEmitter {
   }
 
   get(key: string): unknown {
-    // Resolve canonical before dotted dispatch: a session-scoped key must be
-    // checked against the overlay first. Registry validation guarantees
-    // session-scoped specs never use dotted keys, so a genuine dotted path
-    // always falls through to nested/local storage.
-    const canonicalKey = resolveAlias(key);
-    if (
-      isSessionScopedSettingKey(canonicalKey) &&
-      this.sessionOverlay.has(canonicalKey)
-    ) {
-      return this.sessionOverlay.get(canonicalKey);
+    // A session-scoped key must be checked against the overlay first. The
+    // registry module-load invariant guarantees session-scoped specs never
+    // use dotted keys or aliases, so the raw key is the canonical overlay
+    // key and a genuine dotted path always falls through to nested/local
+    // storage.
+    if (isSessionScopedSettingKey(key) && this.sessionOverlay.has(key)) {
+      return this.sessionOverlay.get(key);
     }
     if (key.includes('.')) {
       return this.getNestedValue(key);
@@ -145,12 +141,10 @@ export class SettingsService extends EventEmitter {
 
     // Preserve historical emission for ordinary/local writes. A local write
     // shadowed by an explicit session override cannot change the effective
-    // value, so it must not emit a phantom transition.
-    const canonicalKey = resolveAlias(key);
-    if (
-      isSessionScopedSettingKey(canonicalKey) &&
-      this.sessionOverlay.has(canonicalKey)
-    ) {
+    // value, so it must not emit a phantom transition. The registry
+    // module-load invariant guarantees session-scoped specs never use
+    // aliases, so the raw key is the canonical overlay key.
+    if (isSessionScopedSettingKey(key) && this.sessionOverlay.has(key)) {
       return;
     }
 
