@@ -198,6 +198,23 @@ export const insertPathReference = (
   buffer.replaceRangeByOffset(offset, offset, textToInsert);
 };
 
+/** Expand tracked large-paste placeholder labels back to their original content. */
+export const expandLargePastePlaceholders = (
+  text: string,
+  pendingPastes: ReadonlyMap<string, string>,
+): string => {
+  if (pendingPastes.size === 0) {
+    return text;
+  }
+  let result = text;
+  pendingPastes.forEach((actualContent, placeholderLabel) => {
+    if (result.includes(placeholderLabel)) {
+      result = result.split(placeholderLabel).join(actualContent);
+    }
+  });
+  return result;
+};
+
 /** Handle a large paste by inserting a placeholder into the buffer. */
 export const handleLargePaste = (
   key: Key,
