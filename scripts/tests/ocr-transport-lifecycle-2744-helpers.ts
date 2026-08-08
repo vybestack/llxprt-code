@@ -28,7 +28,7 @@ export interface OcrScenarioScope {
   trackRequest(request: http.ClientRequest): http.ClientRequest;
   proxyRequest(
     proxyUrl: string | URL,
-    options: Omit<ProxyRequestOptions, 'onResponse'>,
+    options: ProxyRequestOptions,
   ): Promise<ProxyResponse>;
   stopMonitor(): Promise<Record<string, unknown>>;
 }
@@ -90,7 +90,6 @@ export async function withOcrScenario<T>(
             throw error;
           }
         },
-        onResponse: trackResponse,
       });
     },
     async stopMonitor() {

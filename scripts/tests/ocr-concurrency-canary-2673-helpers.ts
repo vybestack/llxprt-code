@@ -221,7 +221,6 @@ export interface ProxyRequestOptions {
   pathSuffix?: string;
   headers?: Record<string, string>;
   onRequest?: (request: http.ClientRequest) => void;
-  onResponse?: (response: http.IncomingMessage) => void;
 }
 
 export interface ProxyResponse {
@@ -239,7 +238,6 @@ export function proxyRequest(
     retryCount = '0',
     headers = {},
     onRequest,
-    onResponse,
   }: ProxyRequestOptions,
 ): Promise<ProxyResponse> {
   const url = new URL(proxyUrl);
@@ -261,7 +259,6 @@ export function proxyRequest(
         },
       },
       (response) => {
-        onResponse?.(response);
         const chunks: Buffer[] = [];
         response.on('data', (chunk: Buffer) => chunks.push(chunk));
         response.on('end', () =>
