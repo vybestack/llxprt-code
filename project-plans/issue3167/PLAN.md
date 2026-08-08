@@ -232,12 +232,23 @@ v25.2.1. These are primitive costs, **not** an end-to-end instrumentation budget
 | `performance.now()`                        | 25.1 ns / 26.6 ns                 | `perfprobe.mjs.txt`   |
 | counter increment                          | 1.97 ns / 5.05 ns                 | `perfprobe.mjs.txt`   |
 | `process.memoryUsage()`                    | 0.42 us / 0.66 us (idle heap)     | `perfprobe.mjs.txt`   |
-| one record, 33 fields                      | 688 B                             | `recsize.mjs.txt`     |
+| a 33-field flat numeric record              | 688 B — **rejected schema, see below** | `recsize.mjs.txt`     |
 | gzip -6 on 2.29 MiB                        | 7.9x in 24 ms                     | `gziptest.mjs.txt`    |
 | concurrent `O_APPEND`, 8 writers, APFS     | 12,000/12,000 records, 0 torn     | `appendrace.mjs.txt`  |
 | shared file + private byte counter         | 49% of records destroyed          | `rotaterace.mjs.txt`  |
 | per-file counter, one writer per file      | 9,600/9,600, 0 over cap           | `perproc.mjs.txt`     |
 | archive overwritten by a late record       | 2,000 of 2,001 destroyed          | `boundary2.mjs.txt`   |
+
+**The record-size and retention budgets are withdrawn too.** The 688 B figure prices the **rejected rev.2
+field set**, and it is the sole basis for the 64 MiB ceiling, the "~97,000 turns" figure and the "~5 weeks"
+estimate. Rev.3's record is strictly larger — five client phases instead of two, sum *and* union pairs plus
+`agent_activity_union_ms`, `unclassified_elapsed_ms`, `operation_id`, terminal geometry, render mode, terminal
+status. Worse, REQ-3167-3 requires the record to carry the child `prompt_id` / `turn_id` values it covers
+rather than a scalar, and those ids look like
+`${sessionId}#agentic-loop#${uuid}#continuation#${n}` — roughly 80-110 B each and unbounded in count. A
+tool-heavy operation with 30 continuations would add kilobytes, making the record **variable length**, which
+breaks the fixed-size arithmetic the eviction design rests on. Recompute the size budget from the real schema
+once it exists (Phase 1), and either cap or hash the child-id list.
 
 **The rev.2 "~49 us per turn" budget is withdrawn.** It summed isolated primitive costs and omitted recorder
 dispatch, argument evaluation in the disabled path, byte-length work, record allocation and `JSON.stringify`,
