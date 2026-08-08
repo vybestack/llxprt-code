@@ -34,6 +34,7 @@ import { PendingContextWindowEnforcer } from './pendingContextWindowEnforcement.
 import { applyCompressionWithAnchor } from './cacheAnchor.js';
 import { buildCompressionContext as buildContext } from './compressionContextBuilder.js';
 import type { TokenUsageLogger } from '../core/TokenUsageLogger.js';
+import { emitCompressionLifecycleEvent } from './compressionLifecycleTelemetry.js';
 /**
  * @plan:PLAN-20260603-ISSUE1584.P05
  * @requirement:REQ-DEP-001
@@ -646,6 +647,10 @@ export class CompressionHandler {
 
     this.logger.debug('Starting compression');
 
+    // Capture the pre-compression token count for the lifecycle telemetry
+    // event (#3130 AC-7). Must be read BEFORE startCompression mutates state.
+    const tokensBefore = this.historyService.getTotalTokens();
+
     const preCompressionCount =
       this.historyService.getStatistics().totalMessages;
     this.historyService.startCompression();
@@ -687,6 +692,24 @@ export class CompressionHandler {
 
     await this.historyService.waitForTokenUpdates();
     if (compressionOutcome === 'applied') {
+      // Emit the compression lifecycle event into the token-usage log (#3130
+      // AC-7). Exactly-once: this branch runs only on a genuine 'applied'
+      // outcome; retry logic is internal to runCompressionWithRetryAndFallback.
+      const tokensAfter = this.historyService.getTotalTokens();
+      // The compression itself has already succeeded and history is updated.
+      // Observing it must not undo that, so this is the one fail-open boundary
+      // for the emission; the emitter stays guard-free inside.
+      await emitCompressionLifecycleEvent(
+        this.tokenUsageLogger,
+        this.runtimeContext,
+        this.historyService,
+        (profileName) => this.providerResolver(profileName),
+        tokensBefore,
+        tokensAfter,
+        this.compressionSummary,
+      ).catch((error: unknown) => {
+        this.logger.error('Failed to record compression telemetry', error);
+      });
       return PerformCompressionResult.COMPRESSED;
     }
 

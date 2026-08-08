@@ -150,6 +150,7 @@ export async function enforceAndSendWithPromptEnvelopeRetries<T>(
     send: (
       contents: IContent[],
       prepared: PreparedPromptEnvelopeSend,
+      attemptIndex: number,
     ) => Promise<T>;
     shouldRetryOnError: (error: unknown) => boolean;
     signal?: AbortSignal;
@@ -162,7 +163,8 @@ export async function enforceAndSendWithPromptEnvelopeRetries<T>(
     contents,
     preparer,
     buildOptions: () => input.buildOptions(contents),
-    send: (prepared) => input.send(contents, prepared),
+    send: (prepared, attemptIndex) =>
+      input.send(contents, prepared, attemptIndex),
     shouldRetryOnError: input.shouldRetryOnError,
     signal: input.signal,
   });
@@ -173,19 +175,23 @@ function sendWithFreshPromptEnvelopeRetries<T>(input: {
   contents: IContent[];
   preparer: PromptEnvelopePreparer;
   buildOptions: () => RuntimeGenerateChatOptions;
-  send: (prepared: PreparedPromptEnvelopeSend) => Promise<T>;
+  send: (
+    prepared: PreparedPromptEnvelopeSend,
+    attemptIndex: number,
+  ) => Promise<T>;
   shouldRetryOnError: (error: unknown) => boolean;
   signal?: AbortSignal;
 }): Promise<T> {
   let providerAttempt = 0;
   return retryWithBackoff(
     async () => {
+      const attemptIndex = providerAttempt;
       const prepared =
-        providerAttempt === 0
+        attemptIndex === 0
           ? await input.preparer.prepare(input.contents)
           : await prepareAtSendSeam(input.provider, input.buildOptions());
       providerAttempt += 1;
-      return input.send(prepared);
+      return input.send(prepared, attemptIndex);
     },
     {
       shouldRetryOnError: input.shouldRetryOnError,

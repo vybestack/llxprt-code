@@ -11,12 +11,15 @@ import { resolveStreamIdleTimeoutMs } from '@vybestack/llxprt-code-core/utils/st
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  IContent,
+  UsageStats,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { stampAiTurnModel } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { recordFinalizedPromptEnvelopeEstimate } from './tokenUsageEstimateLogger.js';
+import { recordSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
 import {
   bindPreparedTransportSignal,
   buildProviderChatOptions,
@@ -42,7 +45,10 @@ import { canonicalizeToolName } from './toolGovernance.js';
 import {
   shouldRetryStreamAttempt,
   applyRetryTemperature,
+  chunkHasVisibleOutput,
 } from './turnAbortHelpers.js';
+import { prepareUserTurnContents } from './turnIdentity.js';
+import { withReportedUsage } from './streamRequestHelpers.js';
 
 import {
   AgentExecutionStoppedError,
@@ -69,8 +75,8 @@ import {
 import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
-  recordActualTokenUsage,
-  type ActualTokenUsageInput,
+  recordAbandonedStreamAttempt,
+  syncAndRecordTurnUsage,
 } from './tokenUsageActualLogger.js';
 import { shouldRetryDirectProviderError } from './turnRetryPolicy.js';
 type ToolGroupArray = Array<{
@@ -107,6 +113,16 @@ export class TurnProcessor {
   private stampingBaseUrl: string | undefined = undefined;
   private currentPromptEnvelopeEstimate: PromptEnvelopeEstimate | null = null;
 
+  /**
+   * 0-based index of the send attempt that produced the response being
+   * recorded. One logical turn can bill several requests, so the record must
+   * name its attempt rather than assuming the first (#3130 AC-4).
+   */
+  private lastSendAttemptIndex = 0;
+
+  /** Canonical turn id for the send in flight (#3130). */
+  private currentTurnId: string | null = null;
+
   getPromptEnvelopeEstimate(): PromptEnvelopeEstimate | null {
     return this.currentPromptEnvelopeEstimate;
   }
@@ -137,10 +153,9 @@ export class TurnProcessor {
   ): Promise<ModelOutput> {
     await this.sendPromise;
 
-    this.lastPromptTokenCount = null;
-    this.currentPromptEnvelopeEstimate = null;
+    this._resetPerTurnState();
 
-    const prepared = this._prepareSendMessage(params);
+    const prepared = this._prepareSendMessage(params, prompt_id);
 
     // #2410: when the user message converts to zero IContent turns (e.g.
     // empty array after hook-restriction filtering), skip the provider call
@@ -181,8 +196,7 @@ export class TurnProcessor {
     prompt_id: string,
   ): Promise<AsyncGenerator<StreamEvent>> {
     await this.sendPromise;
-    this.lastPromptTokenCount = null;
-    this.currentPromptEnvelopeEstimate = null;
+    this._resetPerTurnState();
 
     const userContents = this._normalizeUserContent(params);
 
@@ -262,20 +276,18 @@ export class TurnProcessor {
     }
 
     let hasYieldedChunk = false;
+    let attemptUsage: UsageStats | undefined;
     try {
       const currentParams = applyRetryTemperature(params, attempt);
       const stream = await this.streamProcessor.makeApiCallAndProcessStream(
         currentParams,
         prompt_id,
         userContents,
+        attempt,
       );
       for await (const chunk of stream) {
-        hasYieldedChunk ||= chunk.content.blocks.some(
-          (block) =>
-            (block.type === 'text' && block.text.length > 0) ||
-            block.type === 'thinking' ||
-            block.type === 'tool_call',
-        );
+        hasYieldedChunk ||= chunkHasVisibleOutput(chunk);
+        attemptUsage = chunk.usage ?? attemptUsage;
         yield wrapChunk(chunk);
       }
       return { error: null, action: 'stop' };
@@ -311,10 +323,32 @@ export class TurnProcessor {
           hasYieldedOutput: hasYieldedChunk,
         })
       ) {
+        await recordAbandonedStreamAttempt(
+          this.compressionHandler.tokenUsageLogger,
+          prompt_id,
+          attempt,
+          hasYieldedChunk,
+          attemptUsage,
+          this.compressionHandler.lastPromptTokenCount,
+        );
         return { error, action: 'retry' };
       }
       return { error, action: 'stop' };
     }
+  }
+
+  /**
+   * Clear state that belongs to a single logical turn. Called once when a turn
+   * starts, never between retries of that turn: the abandoned-attempt record
+   * falls back to the last observed prompt-token count, and a stale value —
+   * or a stale attempt index — would bill the previous turn to this one
+   * (#3130 AC-4).
+   */
+  private _resetPerTurnState(): void {
+    this.lastPromptTokenCount = null;
+    this.currentPromptEnvelopeEstimate = null;
+    this.lastSendAttemptIndex = 0;
+    this.compressionHandler.lastPromptTokenCount = null;
   }
 
   private _normalizeUserContent(params: SendMessageParams): IContent[] {
@@ -331,17 +365,6 @@ export class TurnProcessor {
         providerRequestContext: params.config?.providerRequestContext ?? {},
       },
     };
-  }
-
-  private _stampTurnMetadata(contents: IContent[]): IContent[] {
-    const idGen = this.historyService.getIdGeneratorCallback();
-    return contents.map((content) => ({
-      ...content,
-      metadata: {
-        ...content.metadata,
-        id: idGen(),
-      },
-    }));
   }
 
   /**
@@ -376,14 +399,20 @@ export class TurnProcessor {
   /**
    * Prepares user message: validates and converts input before provider enforcement.
    */
-  private _prepareSendMessage(params: SendMessageParams): {
+  private _prepareSendMessage(
+    params: SendMessageParams,
+    promptId: string,
+  ): {
     userContents: IContent[];
     userIContents: IContent[];
   } {
-    const userContents = this._normalizeUserContent(params);
-    const userIContents = this._stampTurnMetadata(userContents);
-
-    return { userContents, userIContents };
+    const prepared = prepareUserTurnContents(
+      this._normalizeUserContent(params),
+      this.historyService,
+      promptId,
+    );
+    this.currentTurnId = prepared.turnId;
+    return prepared;
   }
 
   /**
@@ -507,8 +536,12 @@ export class TurnProcessor {
         ),
       fallbackEstimate: (contents) =>
         this.compressionHandler.estimatePendingTokens(contents),
-      send: (contents, prepared) =>
-        timing.measure(() =>
+      send: (contents, prepared, attemptIndex) => {
+        // Recorded on the instance rather than threaded as a tenth parameter;
+        // `_syncTokenCounts` reads it when the turn is recorded. Mirrors how
+        // `currentPromptEnvelopeEstimate` is carried across the same seam.
+        this.lastSendAttemptIndex = attemptIndex;
+        return timing.measure(() =>
           this._executeProviderCall(
             provider,
             requestParams,
@@ -519,7 +552,8 @@ export class TurnProcessor {
             runtimeContext,
             prepared,
           ),
-        ),
+        );
+      },
       shouldRetryOnError: shouldRetryDirectProviderError,
       signal: requestParams.config?.abortSignal,
     });
@@ -563,11 +597,17 @@ export class TurnProcessor {
           ),
         ));
       this.currentPromptEnvelopeEstimate = prepared.estimate;
-      recordFinalizedPromptEnvelopeEstimate(
-        this.compressionHandler.tokenUsageLogger,
+      recordSendSeamTelemetry({
+        usageLogger: this.compressionHandler.tokenUsageLogger,
         promptId,
-        prepared.estimate,
-      );
+        estimate: prepared.estimate,
+        runtimeState: this.runtimeContext.state,
+        historyService: this.historyService,
+        requestContents,
+        tools,
+        systemInstruction: this.generationConfig.systemInstruction,
+        turnId: this.currentTurnId,
+      });
       const transportPrepared = bindPreparedTransportSignal(
         prepared,
         timeoutController.signal,
@@ -644,6 +684,10 @@ export class TurnProcessor {
     upstreamAbortSignal: AbortSignal | undefined,
   ): Promise<IContent> {
     let lastResponse: IContent | undefined;
+    // Providers do not all report usage on the final chunk; some report it
+    // once, mid-stream. Keeping the newest reported usage stops a billed
+    // request from being recorded as having cost nothing (#3130).
+    let lastReportedUsage: UsageStats | undefined;
     const blocks: IContent['blocks'] = [];
     const iterator = streamResponse[Symbol.asyncIterator]();
     const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(
@@ -661,6 +705,7 @@ export class TurnProcessor {
       this._trackProviderPromptTokens(iContent);
       blocks.push(...iContent.blocks);
       lastResponse = iContent;
+      lastReportedUsage = iContent.metadata?.usage ?? lastReportedUsage;
       nextResponse = await readProviderStreamResponse(
         iterator,
         timeoutController,
@@ -670,7 +715,7 @@ export class TurnProcessor {
     }
 
     if (!lastResponse) throw new Error('No response from provider');
-    return { ...lastResponse, blocks };
+    return withReportedUsage({ ...lastResponse, blocks }, lastReportedUsage);
   }
 
   private _trackProviderPromptTokens(iContent: IContent): void {
@@ -884,42 +929,13 @@ export class TurnProcessor {
     response: ModelOutput,
     promptId?: string,
   ): Promise<void> {
-    await this.historyService.waitForTokenUpdates();
-    const usage = response.usage;
-    if (usage?.promptTokens !== undefined) {
-      const combined = usage.promptTokens;
-      if (combined > 0) {
-        this.historyService.syncTotalTokens(combined);
-        await this.historyService.waitForTokenUpdates();
-      }
-    } else if (
-      this.lastPromptTokenCount != null &&
-      this.lastPromptTokenCount > 0 &&
-      !Number.isNaN(this.lastPromptTokenCount)
-    ) {
-      this.historyService.syncTotalTokens(this.lastPromptTokenCount);
-      await this.historyService.waitForTokenUpdates();
-    }
-
-    if (promptId !== undefined) {
-      let usageForLogging: ActualTokenUsageInput | undefined;
-      if (usage) {
-        usageForLogging = {
-          promptTokens: usage.promptTokens,
-          cachedTokens: usage.cachedTokens,
-          cache_read_input_tokens: usage.cache_read_input_tokens,
-        };
-      } else if (
-        this.lastPromptTokenCount !== null &&
-        this.lastPromptTokenCount > 0
-      ) {
-        usageForLogging = { promptTokens: this.lastPromptTokenCount };
-      }
-      await recordActualTokenUsage(
-        this.compressionHandler.tokenUsageLogger,
-        promptId,
-        usageForLogging,
-      );
-    }
+    await syncAndRecordTurnUsage({
+      history: this.historyService,
+      usageLogger: this.compressionHandler.tokenUsageLogger,
+      usage: response.usage,
+      lastPromptTokenCount: this.lastPromptTokenCount,
+      attemptIndex: this.lastSendAttemptIndex,
+      promptId,
+    });
   }
 }

@@ -312,4 +312,242 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     expect(record.cached_tokens).toBe(2000);
     expect(record.effective_actual_tokens).toBe(3000);
   });
+
+  // AC-12: Bidirectional join — the token-usage turn record's join keys
+  // locate the conversation turn, and the persisted content carries the
+  // matching promptId. End-to-end through a real ChatSession, not mocks.
+  it('AC-12 bidirectional join: turn record keys match history content promptId', async () => {
+    const fixture = createTokenSyncTestFixture();
+    const mockConfig = fixture.mockConfig;
+    const providerRuntimeSnapshot = fixture.providerRuntimeSnapshot;
+    const mockContentGenerator = fixture.mockContentGenerator;
+    const historyService = fixture.historyService;
+
+    const runtimeState: AgentRuntimeState = createAgentRuntimeState({
+      runtimeId: fixture.runtimeSetup.runtime.runtimeId,
+      provider: 'anthropic',
+      model: 'claude-3-5-sonnet-20241022',
+      sessionId: 'ac12-join-session',
+    });
+
+    const mockProvider = {
+      name: 'anthropic',
+      generateChatCompletion: vi.fn().mockImplementation(async function* () {
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'Hello!' }],
+        };
+        yield {
+          speaker: 'ai',
+          blocks: [],
+          metadata: {
+            usage: {
+              promptTokens: 4000,
+              completionTokens: 10,
+              totalTokens: 4010,
+            },
+          },
+          usageMetadata: {
+            promptTokenCount: 4000,
+            candidatesTokenCount: 10,
+            totalTokenCount: 4010,
+          },
+        };
+      }),
+    };
+
+    const providerManager = {
+      getActiveProvider: vi.fn(() => mockProvider),
+    };
+    mockConfig.getProviderManager = vi.fn().mockReturnValue(providerManager);
+
+    const view = createAgentRuntimeContext({
+      state: runtimeState,
+      history: historyService,
+      settings: {
+        compressionThreshold: 0.8,
+        contextLimit: 200000,
+        preserveThreshold: 0.2,
+        telemetry: { enabled: true, target: null },
+      },
+      provider: createProviderAdapterFromManager(
+        mockConfig.getProviderManager() as never,
+      ),
+      telemetry: createTelemetryAdapterFromConfig(mockConfig),
+      tools: createToolRegistryViewFromRegistry(),
+      providerRuntime: providerRuntimeSnapshot,
+    });
+
+    const chat = new ChatSession(view, mockContentGenerator, {}, []);
+
+    const realLogger = new TokenUsageLogger(true, logFile);
+    chat.setTokenUsageLoggerForTesting(realLogger);
+
+    const promptId = 'ac12-join-prompt';
+    realLogger.recordEstimate(promptId, {
+      provider: 'anthropic',
+      model: 'claude-3-5-sonnet-20241022',
+      estimatedTokens: 200,
+      estimator: 'anthropic-char',
+      tiktokenTokens: 180,
+    });
+
+    const stream = await chat.sendMessageStream(
+      { message: [{ text: 'Say hello' }] },
+      promptId,
+    );
+    for await (const _event of stream) {
+      // consume
+    }
+
+    await historyService.waitForTokenUpdates();
+
+    // --- Assert token-usage record carries the join keys ---
+    const records = readJsonl(logFile);
+    expect(records).toHaveLength(1);
+    const record = records[0];
+
+    // AC-1 join keys must be present
+    expect(record.session_id).toBe('ac12-join-session');
+    expect(record.runtime_id).toBe(runtimeState.runtimeId);
+    // Main agent: no parent runtime, no subagent name
+    expect(record.parent_runtime_id).toBeNull();
+    expect(record.subagent_name).toBeNull();
+
+    // --- The join must resolve to the turn THIS send created (AC-1/AC-2) ---
+    // This is the first turn of the session: there is no earlier turn the
+    // record could accidentally name, so a stale or null turn_id fails here.
+    const allHistory = historyService.getAll();
+    const sentTurn = allHistory.find((c) => c.speaker === 'human');
+    expect(sentTurn).toBeDefined();
+    if (sentTurn !== undefined) {
+      // usage record -> conversation turn
+      expect(record.turn_id).not.toBeNull();
+      expect(record.turn_id).toBe(sentTurn.metadata?.turnId);
+      // conversation turn -> usage record
+      expect(sentTurn.metadata?.promptId).toBe(promptId);
+      expect(record.prompt_id).toBe(promptId);
+    }
+  });
+
+  // AC-12: Cached turn — provider reports Anthropic-style cache read+write.
+  // The JSONL must carry both cache_read_tokens and cache_write_tokens, and
+  // legacy cached_tokens / effective_actual_tokens must remain unchanged.
+  it('AC-12 cached turn: records cache_read_tokens and cache_write_tokens with legacy fields intact', async () => {
+    const fixture = createTokenSyncTestFixture();
+    const mockConfig = fixture.mockConfig;
+    const providerRuntimeSnapshot = fixture.providerRuntimeSnapshot;
+    const mockContentGenerator = fixture.mockContentGenerator;
+    const historyService = fixture.historyService;
+
+    const runtimeState: AgentRuntimeState = createAgentRuntimeState({
+      runtimeId: fixture.runtimeSetup.runtime.runtimeId,
+      provider: 'anthropic',
+      model: 'claude-3-5-sonnet-20241022',
+      sessionId: 'ac12-cached-session',
+    });
+
+    historyService.add(
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Tell me about caching' }],
+      },
+      'claude-3-5-sonnet-20241022',
+    );
+    await historyService.waitForTokenUpdates();
+
+    const mockProvider = {
+      name: 'anthropic',
+      generateChatCompletion: vi.fn().mockImplementation(async function* () {
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'Caching helps.' }],
+        };
+        yield {
+          speaker: 'ai',
+          blocks: [],
+          metadata: {
+            usage: {
+              promptTokens: 5000,
+              completionTokens: 10,
+              totalTokens: 5010,
+              cache_read_input_tokens: 2000,
+              cache_creation_input_tokens: 500,
+            },
+          },
+          usageMetadata: {
+            promptTokenCount: 5000,
+            candidatesTokenCount: 10,
+            totalTokenCount: 5010,
+            cachedContentTokenCount: 2000,
+          },
+        };
+      }),
+    };
+
+    const providerManager = {
+      getActiveProvider: vi.fn(() => mockProvider),
+    };
+    mockConfig.getProviderManager = vi.fn().mockReturnValue(providerManager);
+
+    const view = createAgentRuntimeContext({
+      state: runtimeState,
+      history: historyService,
+      settings: {
+        compressionThreshold: 0.8,
+        contextLimit: 200000,
+        preserveThreshold: 0.2,
+        telemetry: { enabled: true, target: null },
+      },
+      provider: createProviderAdapterFromManager(
+        mockConfig.getProviderManager() as never,
+      ),
+      telemetry: createTelemetryAdapterFromConfig(mockConfig),
+      tools: createToolRegistryViewFromRegistry(),
+      providerRuntime: providerRuntimeSnapshot,
+    });
+
+    const chat = new ChatSession(view, mockContentGenerator, {}, []);
+
+    const realLogger = new TokenUsageLogger(true, logFile);
+    chat.setTokenUsageLoggerForTesting(realLogger);
+
+    const promptId = 'ac12-cached-prompt';
+    realLogger.recordEstimate(promptId, {
+      provider: 'anthropic',
+      model: 'claude-3-5-sonnet-20241022',
+      estimatedTokens: 300,
+      estimator: 'anthropic-char',
+      tiktokenTokens: 280,
+    });
+
+    const stream = await chat.sendMessageStream(
+      { message: [{ text: 'Tell me about caching' }] },
+      promptId,
+    );
+    for await (const _event of stream) {
+      // consume
+    }
+
+    await historyService.waitForTokenUpdates();
+
+    const records = readJsonl(logFile);
+    expect(records).toHaveLength(1);
+    const record = records[0];
+
+    // AC-3: new cost fields
+    expect(record.cache_read_tokens).toBe(2000);
+    expect(record.cache_write_tokens).toBe(500);
+    expect(record.output_tokens).toBe(10);
+    expect(record.total_tokens).toBe(5010);
+
+    // AC-11: legacy fields unchanged
+    expect(record.actual_prompt_tokens).toBe(5000);
+    expect(record.cached_tokens).toBe(2000);
+    expect(record.effective_actual_tokens).toBe(3000);
+
+    // Unreported fields are omitted
+    expect('reasoning_tokens' in record).toBe(false);
+    expect('tool_tokens' in record).toBe(false);
+  });
 });
