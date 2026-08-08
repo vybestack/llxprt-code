@@ -59,6 +59,38 @@ describe('request-shape measurement over hostile input (issue #3130)', () => {
     expect(result.toolCalls[0].callId).toBe('c1');
   });
 
+  it('survives a symbol in a tool result instead of aborting the send', () => {
+    // JSON.stringify(Symbol()) returns undefined, so a symbol reaching the
+    // serializer would break its string contract and surface as a TypeError on
+    // the request path — telemetry must not be able to fail a real send.
+    const contents: IContent[] = [
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'sym-1',
+            toolName: 't',
+            // Top level, not nested: nested symbols degrade to the string
+            // "undefined", but a symbol AS the result makes the serializer
+            // return undefined, which then reaches `.length` and throws.
+            result: Symbol('secret'),
+          },
+        ],
+      },
+    ];
+
+    const result = computeRequestShape({
+      requestContents: contents,
+      tools: undefined,
+      instructionsText: undefined,
+      countTokens,
+      previouslySentCallIds: new Set<string>(),
+    });
+
+    expect(result.toolCalls[0].callId).toBe('sym-1');
+  });
+
   it('survives cyclic tool-call parameters', () => {
     const contents: IContent[] = [
       {

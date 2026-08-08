@@ -128,6 +128,10 @@ describe('token-usage provider/model switch records (issue #3130)', () => {
       expect(parsed.to_provider).toBe('codex');
       expect(parsed.from_model).toBe('claude-opus-5');
       expect(parsed.to_model).toBe('gpt-5.6-sol');
+      // The AC-1 join keys matter on this record type too: a provider switch
+      // that cannot be located in a session or a turn is not attributable.
+      expect(parsed.session_id).toBe(SESSION_ID);
+      expect(parsed.turn_id).toBe(TURN_ID);
     }
   });
 

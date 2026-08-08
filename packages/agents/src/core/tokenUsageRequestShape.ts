@@ -288,7 +288,16 @@ function compareKeys(a: string, b: string): number {
 }
 
 function stableStringify(value: unknown, seen?: WeakSet<object>): string {
-  if (value === undefined || typeof value === 'function') return '';
+  // Symbols belong here, not below: `JSON.stringify(Symbol())` returns
+  // undefined, which would break this function's string contract and surface as
+  // a TypeError further along the request path.
+  if (
+    value === undefined ||
+    typeof value === 'function' ||
+    typeof value === 'symbol'
+  ) {
+    return '';
+  }
   if (typeof value === 'bigint') return `"${value.toString()}"`;
   if (value === null || typeof value !== 'object') {
     return JSON.stringify(value);
