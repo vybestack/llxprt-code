@@ -9,6 +9,7 @@ import type { ChildProcess } from 'node:child_process';
 import type { ShellJobState, TerminalDetails } from './shellJobTypes.js';
 import type { ShellJobRecord } from './shellJobTypes.js';
 import { toPublicJob } from './shellJobTypes.js';
+import { isKillablePid } from './shellProcessKill.js';
 import { TerminalTransitionGuard } from './shellJobTransition.js';
 
 /**
@@ -108,9 +109,14 @@ export function pidIsAlive(pid: number): boolean {
 }
 
 export function killProcessGroupSafe(
-  pid: number,
+  pid: number | undefined,
   signal: NodeJS.Signals,
 ): void {
+  // pid 0 would collapse to process.kill(0), signalling the caller's own
+  // process group. A non-killable pid is a silent no-op.
+  if (!isKillablePid(pid)) {
+    return;
+  }
   try {
     process.kill(-pid, signal);
   } catch {
