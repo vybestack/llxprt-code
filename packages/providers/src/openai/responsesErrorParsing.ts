@@ -95,10 +95,15 @@ function resolveErrorMessage(errorData: unknown): string {
 
 const QUOTA_PREFIX = 'Quota or billing limit exhausted';
 
+function isClientErrorStatus(status: number): boolean {
+  return status >= 400 && status < 500;
+}
+
 /**
- * The quota prefix is chosen by error code rather than status because OpenAI
- * returns `billing_hard_limit_reached` as a 400 and `insufficient_quota` as a
- * 429; both require the same user action (issue #3140).
+ * Within the 4xx range the quota prefix is chosen by error code rather than by
+ * the specific status, because OpenAI returns `billing_hard_limit_reached` as a
+ * 400 and `insufficient_quota` as a 429 and both require the same user action
+ * (issue #3140).
  */
 function resolveErrorPrefix(status: number, isQuotaExhausted = false): string {
   if (isQuotaExhausted) return QUOTA_PREFIX;
@@ -200,7 +205,12 @@ export function parseErrorResponse(
       );
     }
 
-    const isQuotaExhausted = findTerminalQuotaCode(errorData) !== undefined;
+    // Only a 4xx is genuinely terminal. A 5xx that happens to echo a quota
+    // code is still retried by both layers, so claiming "retrying will not
+    // help" there would contradict what actually happens (issue #3140).
+    const isQuotaExhausted =
+      isClientErrorStatus(status) &&
+      findTerminalQuotaCode(errorData) !== undefined;
     const errorPrefix = resolveErrorPrefix(status, isQuotaExhausted);
     const quotaSuffix = isQuotaExhausted ? QUOTA_RETRY_SUFFIX : '';
     const error = new Error(`${errorPrefix}: ${message}${quotaSuffix}`);

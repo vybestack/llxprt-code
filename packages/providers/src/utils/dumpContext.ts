@@ -52,6 +52,7 @@ const SENSITIVE_HEADER_NAMES = new Set([
   'authorization',
   'proxy-authorization',
   'x-api-key',
+  'x-goog-api-key',
   'api-key',
   'cookie',
   'set-cookie',

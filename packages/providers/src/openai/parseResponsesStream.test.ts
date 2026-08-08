@@ -599,6 +599,20 @@ describe('parseErrorResponse quota-aware 429 and response attachment @issue:3140
     expect(error.message.toLowerCase()).toContain('will not');
   });
 
+  /**
+   * A 5xx is still retried by both retry layers, so it must never claim that
+   * retrying will not help — even if the body echoes a terminal quota code.
+   */
+  it('keeps server-error wording for a 5xx echoing a terminal quota code', () => {
+    const error = parseErrorResponse(
+      503,
+      '{"error":{"code":"insufficient_quota","message":"upstream said quota"}}',
+      'Responses',
+    );
+    expect(error.message).toBe('Server error: upstream said quota');
+    expect(error.message.toLowerCase()).not.toContain('will not help');
+  });
+
   it('keeps the exact Rate limit exceeded wording for a throttling 429', () => {
     const error = parseErrorResponse(
       429,

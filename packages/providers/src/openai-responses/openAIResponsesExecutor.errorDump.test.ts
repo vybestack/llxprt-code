@@ -16,14 +16,7 @@
  * each test.
  */
 
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  afterAll,
-} from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -38,30 +31,29 @@ import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtim
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 
-// Sandbox the config home before Storage.getGlobalCacheDir() is evaluated, so
-// these tests never read, write, or delete inside the real user cache dir.
-const TEST_CONFIG_HOME = path.join(
-  os.tmpdir(),
-  `llxprt-errordump-test-${process.pid}`,
-);
 const originalConfigHome = process.env['LLXPRT_CONFIG_HOME'];
 const originalCacheHome = process.env['LLXPRT_CACHE_HOME'];
-delete process.env['LLXPRT_CACHE_HOME'];
-process.env['LLXPRT_CONFIG_HOME'] = TEST_CONFIG_HOME;
 
-const DUMP_DIR = path.join(Storage.getGlobalCacheDir(), 'dumps');
+/**
+ * Per-test sandbox for the dump directory. Each test gets a fresh empty temp
+ * config home, so these tests never read, write, or delete inside the real user
+ * cache directory, and the env override is scoped to the test rather than to
+ * the whole module import (which would leak into anything else resolving cache
+ * paths in the same process).
+ */
+let tempConfigHome: string;
 
-afterAll(async () => {
-  await fs.rm(TEST_CONFIG_HOME, { recursive: true, force: true });
-  if (originalConfigHome === undefined) {
-    delete process.env['LLXPRT_CONFIG_HOME'];
-  } else {
-    process.env['LLXPRT_CONFIG_HOME'] = originalConfigHome;
+function dumpDir(): string {
+  return path.join(Storage.getGlobalCacheDir(), 'dumps');
+}
+
+async function listDumpFiles(): Promise<string[]> {
+  try {
+    return await fs.readdir(dumpDir());
+  } catch {
+    return [];
   }
-  if (originalCacheHome !== undefined) {
-    process.env['LLXPRT_CACHE_HOME'] = originalCacheHome;
-  }
-});
+}
 
 interface FetchMock {
   readonly calls: { count: number };
@@ -157,21 +149,8 @@ function buildDeps(): ResponsesExecutorDeps {
 async function readJsonDump(
   filename: string,
 ): Promise<Record<string, unknown>> {
-  const content = await fs.readFile(path.join(DUMP_DIR, filename), 'utf-8');
+  const content = await fs.readFile(path.join(dumpDir(), filename), 'utf-8');
   return JSON.parse(content) as Record<string, unknown>;
-}
-
-async function snapshotFiles(): Promise<Set<string>> {
-  try {
-    return new Set(await fs.readdir(DUMP_DIR));
-  } catch {
-    return new Set();
-  }
-}
-
-async function newFilesSince(before: Set<string>): Promise<string[]> {
-  const after = await snapshotFiles();
-  return [...after].filter((f) => !before.has(f));
 }
 
 /**
@@ -200,21 +179,30 @@ async function drainExpectingError(
 
 describe('OpenAI Responses error-response dump @issue:3140', () => {
   let fetchMock: FetchMock | undefined;
-  const createdFiles: string[] = [];
 
-  beforeEach(() => {
+  beforeEach(async () => {
     fetchMock = undefined;
+    tempConfigHome = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'responses-errordump-'),
+    );
+    delete process.env['LLXPRT_CACHE_HOME'];
+    process.env['LLXPRT_CONFIG_HOME'] = tempConfigHome;
   });
 
   afterEach(async () => {
     fetchMock?.restore();
-    for (const file of createdFiles.splice(0)) {
-      await fs.rm(path.join(DUMP_DIR, file), { force: true });
+    if (originalConfigHome === undefined) {
+      delete process.env['LLXPRT_CONFIG_HOME'];
+    } else {
+      process.env['LLXPRT_CONFIG_HOME'] = originalConfigHome;
     }
+    if (originalCacheHome !== undefined) {
+      process.env['LLXPRT_CACHE_HOME'] = originalCacheHome;
+    }
+    await fs.rm(tempConfigHome, { recursive: true, force: true });
   });
 
   it("AC4: dumpcontext 'on' writes a linked error-response dump with status and body", async () => {
-    const before = await snapshotFiles();
     fetchMock = installFetch(() =>
       errorResponse(
         429,
@@ -237,11 +225,9 @@ describe('OpenAI Responses error-response dump @issue:3140', () => {
     expect(caught).toBeInstanceOf(Error);
     expect(fetchMock.calls.count).toBe(1);
 
-    const fresh = await newFilesSince(before);
-    createdFiles.push(...fresh);
-
-    const requestFile = fresh.find((f) => f.endsWith('-request.json'));
-    const responseFile = fresh.find((f) => f.endsWith('-response.json'));
+    const written = await listDumpFiles();
+    const requestFile = written.find((f) => f.endsWith('-request.json'));
+    const responseFile = written.find((f) => f.endsWith('-response.json'));
     expect(requestFile).toBeDefined();
     expect(responseFile).toBeDefined();
 
@@ -270,7 +256,6 @@ describe('OpenAI Responses error-response dump @issue:3140', () => {
   });
 
   it("AC4: dumpcontext 'error' writes both request and linked error-response dump", async () => {
-    const before = await snapshotFiles();
     fetchMock = installFetch(() =>
       errorResponse(500, { error: { message: 'Internal error' } }),
     );
@@ -284,11 +269,9 @@ describe('OpenAI Responses error-response dump @issue:3140', () => {
 
     expect(caught).toBeInstanceOf(Error);
 
-    const fresh = await newFilesSince(before);
-    createdFiles.push(...fresh);
-
-    const requestFile = fresh.find((f) => f.endsWith('-request.json'));
-    const responseFile = fresh.find((f) => f.endsWith('-response.json'));
+    const written = await listDumpFiles();
+    const requestFile = written.find((f) => f.endsWith('-request.json'));
+    const responseFile = written.find((f) => f.endsWith('-response.json'));
     expect(requestFile).toBeDefined();
     expect(responseFile).toBeDefined();
 
@@ -302,7 +285,6 @@ describe('OpenAI Responses error-response dump @issue:3140', () => {
   });
 
   it("AC4: dumpcontext 'off' writes NO dump", async () => {
-    const before = await snapshotFiles();
     fetchMock = installFetch(() =>
       errorResponse(429, { error: { code: 'insufficient_quota' } }),
     );
@@ -314,40 +296,34 @@ describe('OpenAI Responses error-response dump @issue:3140', () => {
 
     await drainExpectingError(options);
 
-    const fresh = await newFilesSince(before);
-    createdFiles.push(...fresh);
-    expect(fresh).toHaveLength(0);
+    expect(await listDumpFiles()).toHaveLength(0);
   });
 
   it('a FAILING dump does not mask or alter the original API error', async () => {
     // Make every dump write fail for real: replacing the dumps directory with
     // a regular file makes fs.mkdir(dumpDir, { recursive: true }) reject.
-    await fs.rm(DUMP_DIR, { recursive: true, force: true });
-    await fs.mkdir(path.dirname(DUMP_DIR), { recursive: true });
-    await fs.writeFile(DUMP_DIR, 'not a directory', 'utf-8');
+    const dumps = dumpDir();
+    await fs.mkdir(path.dirname(dumps), { recursive: true });
+    await fs.writeFile(dumps, 'not a directory', 'utf-8');
 
-    try {
-      fetchMock = installFetch(() =>
-        errorResponse(429, {
-          error: { code: 'insufficient_quota', message: 'exhausted' },
-        }),
-      );
-      const options = buildNormalizedOptions({
-        dumpcontext: 'on',
-        retries: 1,
-        retrywait: 0,
-      });
+    fetchMock = installFetch(() =>
+      errorResponse(429, {
+        error: { code: 'insufficient_quota', message: 'exhausted' },
+      }),
+    );
+    const options = buildNormalizedOptions({
+      dumpcontext: 'on',
+      retries: 1,
+      retrywait: 0,
+    });
 
-      const caught = await drainExpectingError(options);
+    const caught = await drainExpectingError(options);
 
-      // The caller still receives the original API error verbatim.
-      expect(caught).toBeInstanceOf(Error);
-      expect((caught as Error).message).toBe(
-        'Quota or billing limit exhausted: exhausted. Retrying will not help — resolve your quota or billing limits',
-      );
-      expect(await fs.stat(DUMP_DIR).then((s) => s.isFile())).toBe(true);
-    } finally {
-      await fs.rm(DUMP_DIR, { force: true });
-    }
+    // The caller still receives the original API error verbatim.
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'Quota or billing limit exhausted: exhausted. Retrying will not help — resolve your quota or billing limits',
+    );
+    expect(await fs.stat(dumps).then((s) => s.isFile())).toBe(true);
   });
 });
