@@ -92,6 +92,7 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
   }));
   vi.doMock('./zed-integration/zedIntegration.js', () => ({
     runZedIntegration: async () => {},
+    ZedAgent: class {},
   }));
   vi.doMock('./config/pathMigration.js', () => ({
     runStartupMigration: () => ({ migrated: false }),
@@ -239,6 +240,7 @@ describe('main() orchestration: guard stops before activation (#2481)', () => {
     const config = {
       ...makeConfig(false, false),
       getExperimentalZedIntegration: () => true,
+      getSettingsService: () => ({}),
     } as unknown as Config;
     vi.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('unexpected process.exit');
@@ -426,6 +428,7 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
     }));
     vi.doMock('./zed-integration/zedIntegration.js', () => ({
       runZedIntegration: async () => {},
+      ZedAgent: class {},
     }));
     vi.doMock('./config/pathMigration.js', () => ({
       runStartupMigration: () => ({ migrated: false }),

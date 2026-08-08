@@ -4,15 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type Config, createInkStdio } from '@vybestack/llxprt-code-core';
+import { createInkStdio } from '@vybestack/llxprt-code-core';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import * as acp from '@agentclientprotocol/sdk';
 import { Readable, Writable } from 'node:stream';
 import * as process from 'node:process';
-import { setCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
-import type { LoadedSettings } from '../config/settings.js';
 import { runExitCleanup } from '../utils/cleanup.js';
-import { ZedAgent } from './zedIntegration.js';
+import type { ZedAgent } from './zedIntegration.js';
 
 const DISPOSAL_SIGNALS: readonly NodeJS.Signals[] = ['SIGINT', 'SIGTERM'];
 
@@ -103,8 +102,9 @@ async function cleanupAgents(
 }
 
 export async function runZedIntegration(
-  config: Config,
-  settings: LoadedSettings,
+  settingsService: SettingsService,
+  setupRuntime: (settingsService: SettingsService) => void,
+  createAgent: (conn: acp.AgentSideConnection) => ZedAgent,
 ): Promise<void> {
   const logger = new DebugLogger('llxprt:zed-integration');
   logger.debug(() => 'Starting Zed integration');
@@ -115,11 +115,7 @@ export async function runZedIntegration(
   // observe EOF/abort so connection.closed settles.
   const stdinSource = process.stdin;
   const stdin = Readable.toWeb(stdinSource) as ReadableStream<Uint8Array>;
-  setCliRuntimeContext(config.getSettingsService(), config, {
-    runtimeId: 'cli.runtime.zed',
-    metadata: { source: 'zed-integration', stage: 'bootstrap' },
-    allowDefaultHandoff: true,
-  });
+  setupRuntime(settingsService);
   const agents: ZedAgent[] = [];
   const removeSignalHandlers = installDisposalSignalHandlers(
     buildSignalDisposalHandler(stdinSource, logger),
@@ -127,7 +123,7 @@ export async function runZedIntegration(
   try {
     const stream = acp.ndJsonStream(stdout, stdin);
     const connection = new acp.AgentSideConnection((conn) => {
-      const agent = new ZedAgent(config, settings, conn);
+      const agent = createAgent(conn);
       agents.push(agent);
       return agent;
     }, stream);

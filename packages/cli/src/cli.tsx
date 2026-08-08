@@ -49,13 +49,10 @@ if (wantWarningSuppression && !process.env.NODE_NO_WARNINGS) {
 
 import { parseArguments } from './config/cliArgParser.js';
 import { loadSettings, type LoadedSettings } from './config/settings.js';
-import {
-  type Config,
-  patchStdio,
-  ExitCodes,
-} from '@vybestack/llxprt-code-core';
+import { patchStdio, ExitCodes } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { createTokenStore } from '@vybestack/llxprt-code-providers/auth.js';
+import { setCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { applySandboxBashrc } from './utils/sandbox-bashrc.js';
 import {
@@ -67,7 +64,10 @@ import {
   runExitCleanup,
   registerSyncCleanup,
 } from './utils/cleanup.js';
-import { runZedIntegration } from './zed-integration/zedIntegration.js';
+import {
+  runZedIntegration,
+  ZedAgent,
+} from './zed-integration/zedIntegration.js';
 import { cleanupExpiredSessions } from './utils/sessionCleanup.js';
 import { existsSync, mkdirSync } from 'fs';
 import { firstNonEmptyString } from './utils/coalesce.js';
@@ -98,6 +98,7 @@ import { maybeHopIntoSandbox } from './cliSandbox.js';
 import {
   bootstrapRuntimeAndConfig,
   setupSessionRecording,
+  type CliConfig,
 } from './cliSessionBootstrap.js';
 import { dispatchInteractiveOrNonInteractive } from './session/nonInteractiveSession.js';
 import { formatNonInteractiveError } from './session/errorReporting.js';
@@ -167,7 +168,7 @@ function setupProcessLifecycle(): () => void {
  * true when the Zed/ACP path was taken (main should return immediately).
  */
 async function handleZedAcpIntegration(
-  config: Config,
+  config: CliConfig,
   settings: LoadedSettings,
   cleanupStdio: () => void,
 ): Promise<boolean> {
@@ -176,7 +177,25 @@ async function handleZedAcpIntegration(
   }
   cleanupStdio();
   ensureAcpProviderActivated(config);
-  await runZedIntegration(config, settings);
+  await runZedIntegration(
+    config.getSettingsService(),
+    (ss) =>
+      setCliRuntimeContext(
+        ss,
+        config as unknown as Parameters<typeof setCliRuntimeContext>[1],
+        {
+          runtimeId: 'cli.runtime.zed',
+          metadata: { source: 'zed-integration', stage: 'bootstrap' },
+          allowDefaultHandoff: true,
+        },
+      ),
+    (conn) =>
+      new ZedAgent(
+        config as unknown as ConstructorParameters<typeof ZedAgent>[0],
+        settings,
+        conn,
+      ),
+  );
   return true;
 }
 
@@ -188,7 +207,7 @@ async function handleZedAcpIntegration(
  * initialize() the Agent performs.
  */
 async function constructForegroundAgentAndDispatch(
-  config: Config,
+  config: CliConfig,
   settings: LoadedSettings,
   argv: ParsedCliArgs,
   workspaceRoot: string,

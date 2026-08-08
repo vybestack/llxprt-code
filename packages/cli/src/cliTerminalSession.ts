@@ -5,7 +5,13 @@
  */
 
 import { writeFileSync } from 'node:fs';
-import { type Config, OutputFormat } from '@vybestack/llxprt-code-core';
+import { OutputFormat } from '@vybestack/llxprt-code-core';
+import type {
+  SessionIdentity,
+  EphemeralSettings,
+  Diagnostics,
+  McpAccess,
+} from '@vybestack/llxprt-code-core/config/roles.js';
 import {
   uiTelemetryService,
   debugLogger,
@@ -25,6 +31,17 @@ import type { LoadedSettings } from './config/settings.js';
 import type { ParsedCliArgs } from './cliBootstrap.js';
 import { registerDynamicToolSettings } from './cliBootstrap.js';
 import { createForegroundAgent } from './cliAgentBootstrap.js';
+
+type TerminalSessionConfig = SessionIdentity &
+  EphemeralSettings &
+  Diagnostics &
+  McpAccess & {
+    setTerminalBackground(terminalBackground: string | undefined): void;
+    getToolRegistryInfo(): {
+      registered: Array<{ displayName: string }>;
+      unregistered: Array<{ displayName: string; reason?: string }>;
+    };
+  };
 
 /**
  * Initialize Config, showing an MCP initialization spinner when interactive and
@@ -112,7 +129,7 @@ async function renderInitializingSpinner(initialTotal: number): Promise<
  * @requirement:REQ-2378-002
  */
 export async function constructAgentWithSpinner(
-  config: Config,
+  config: TerminalSessionConfig,
   activationPreflightToken?: ActivationPreflightToken,
   activationPreflightIntent?: ProviderActivationIntent,
 ): Promise<Agent> {
@@ -129,7 +146,9 @@ export async function constructAgentWithSpinner(
 
   try {
     const agent = await createForegroundAgent({
-      config,
+      config: config as unknown as Parameters<
+        typeof createForegroundAgent
+      >[0]['config'],
       activationPreflightToken,
       activationPreflightIntent,
     });
@@ -160,7 +179,7 @@ function registerSessionSummaryWriter(argv: ParsedCliArgs): void {
 }
 
 /** Install the console patcher for this run and register its cleanup. */
-function patchConsoleForRun(config: Config): void {
+function patchConsoleForRun(config: TerminalSessionConfig): void {
   const isJsonNonInteractive =
     config.getOutputFormat() === OutputFormat.JSON && !config.isInteractive();
   const consolePatcher = new ConsolePatcher({
@@ -177,7 +196,7 @@ function patchConsoleForRun(config: Config): void {
  * console for the run.
  */
 export async function prepareTerminalSession(
-  config: Config,
+  config: TerminalSessionConfig,
   settings: LoadedSettings,
   argv: ParsedCliArgs,
 ): Promise<void> {
@@ -194,7 +213,7 @@ export async function prepareTerminalSession(
 }
 
 export async function enableInteractiveRawModeIfNeeded(
-  config: Config,
+  config: TerminalSessionConfig,
   stdinManager: StdinRawModeManager,
   wasRaw: boolean,
 ): Promise<void> {

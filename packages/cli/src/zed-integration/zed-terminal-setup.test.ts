@@ -10,6 +10,7 @@ import {
   DebugLogger,
   MessageBus,
   type Config,
+  type CoreToolRegistryHostAdapter,
 } from '@vybestack/llxprt-code-core';
 import {
   ShellTool,
@@ -25,7 +26,19 @@ function configFixture(outputLimit?: number): Config {
     getDebugMode: () => false,
     getTargetDir: () => '/project',
     getEphemeralSetting: () => outputLimit,
+    getEphemeralSettings: () => ({}),
   } as unknown as Config;
+}
+
+function mockToolRegistryHost(): CoreToolRegistryHostAdapter {
+  return {
+    getPolicyEngine: () => undefined,
+    getEphemeralSettings: () => ({}),
+  } as unknown as CoreToolRegistryHostAdapter;
+}
+
+function mockShellToolHost(): IShellToolHost {
+  return {} as unknown as IShellToolHost;
 }
 
 const messageBus = new MessageBus();
@@ -43,6 +56,8 @@ describe('buildZedTerminalSetup', () => {
       new RecordingConnection() as unknown as acp.AgentSideConnection,
       new DebugLogger('llxprt:zed-terminal-setup-test'),
       messageBus,
+      mockToolRegistryHost(),
+      mockShellToolHost(),
     );
 
     expect(setup.registry.getTool(ShellTool.Name)).toBeUndefined();
@@ -61,6 +76,8 @@ describe('buildZedTerminalSetup', () => {
       new RecordingConnection() as unknown as acp.AgentSideConnection,
       new DebugLogger('llxprt:zed-terminal-setup-test'),
       messageBus,
+      mockToolRegistryHost(),
+      mockShellToolHost(),
     );
 
     const tool = setup.registry.getTool(ShellTool.Name);
@@ -82,6 +99,10 @@ describe('buildZedTerminalSetup', () => {
         connection as unknown as acp.AgentSideConnection,
         new DebugLogger('llxprt:zed-terminal-setup-test'),
         messageBus,
+        mockToolRegistryHost(),
+        mockShellToolHost(),
+        mockToolRegistryHost(),
+        mockShellToolHost(),
       );
 
       await setup.terminals.executeShellCommand(

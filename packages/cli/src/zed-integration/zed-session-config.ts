@@ -14,12 +14,20 @@
 
 import * as path from 'node:path';
 import {
-  type Config,
   isWithinRoot,
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
+import type { WorkspacePaths } from '@vybestack/llxprt-code-core/config/roles.js';
 import type { FileSystemService } from '@vybestack/llxprt-code-storage';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+
+type ZedSessionConfigView = WorkspacePaths & {
+  getProviderManager(): RuntimeProviderManager | undefined;
+  getToolRegistry(): ToolRegistry;
+  getFileSystemService(): FileSystemService;
+  setFileSystemService(service: FileSystemService): void;
+  setProviderManager(manager: RuntimeProviderManager): void;
+};
 
 /**
  * Resolves the effective target directory for a session from an optional
@@ -36,7 +44,7 @@ import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
  * plant symlinks already has direct filesystem access.
  */
 export function resolveSessionTargetDir(
-  config: Config,
+  config: WorkspacePaths,
   cwd: string | undefined,
 ): string {
   if (typeof cwd !== 'string' || cwd.trim().length === 0) {
@@ -58,12 +66,12 @@ export function resolveSessionTargetDir(
  * getProjectRoot/getTargetDir return the resolved session target dir; every
  * other access falls through to the base Config.
  */
-export function createSessionScopedConfig(
-  config: Config,
+export function createSessionScopedConfig<C extends ZedSessionConfigView>(
+  config: C,
   initialFileSystemService: FileSystemService,
   targetDir: string = config.getTargetDir(),
   resolveToolRegistry?: () => ToolRegistry | undefined,
-): Config {
+): C {
   let fileSystemService = initialFileSystemService;
   let providerManager: RuntimeProviderManager | undefined =
     config.getProviderManager();

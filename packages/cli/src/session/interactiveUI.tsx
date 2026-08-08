@@ -17,7 +17,6 @@ import { ErrorBoundary } from '../ui/components/ErrorBoundary.js';
 import { basename } from 'node:path';
 import { type LoadedSettings } from '../config/settings.js';
 import {
-  type Config,
   type SessionRecordingService,
   type RecordingIntegration,
   type IContent,
@@ -25,6 +24,10 @@ import {
   type MessageBus,
   writeToStdout,
 } from '@vybestack/llxprt-code-core';
+import type {
+  WorkspacePaths,
+  Diagnostics,
+} from '@vybestack/llxprt-code-core/config/roles.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { getCliVersion } from '../utils/version.js';
 import { enableMouseEvents } from '../ui/utils/mouse.js';
@@ -43,7 +46,13 @@ import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   buildUiRuntimeFromSource,
   buildSlashCommandRuntime,
+  type UiRuntimeBareSource,
 } from '../ui/cliUiRuntime.js';
+
+type InteractiveUIConfig = WorkspacePaths &
+  Diagnostics & {
+    getScreenReader(): boolean;
+  };
 
 /**
  * Module-level reference to the latest rendered Ink instance.
@@ -143,7 +152,7 @@ export function setWindowTitle(title: string, settings: LoadedSettings) {
  * @pseudocode recording-integration.md lines 115-132
  */
 export async function startInteractiveUI(
-  config: Config,
+  config: InteractiveUIConfig,
   agent: Agent,
   settings: LoadedSettings,
   startupWarnings: string[],
@@ -162,8 +171,12 @@ export async function startInteractiveUI(
   setWindowTitle(basename(workspaceRoot), settings);
 
   const renderOptions = inkRenderOptions(config, settings);
-  const uiRuntime = buildUiRuntimeFromSource(config);
-  const slashCommandRuntime = buildSlashCommandRuntime(config);
+  const uiRuntime = buildUiRuntimeFromSource(
+    config as unknown as UiRuntimeBareSource,
+  );
+  const slashCommandRuntime = buildSlashCommandRuntime(
+    config as unknown as UiRuntimeBareSource,
+  );
   appendInteractiveUiDebug(
     `renderOptions alternateBuffer=${String(renderOptions.alternateBuffer)} incrementalRendering=${String(renderOptions.incrementalRendering)} stdoutColumns=${String(renderOptions.stdout?.columns)} stdoutRows=${String(renderOptions.stdout?.rows)}`,
   );

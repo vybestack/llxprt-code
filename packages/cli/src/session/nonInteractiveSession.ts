@@ -1,9 +1,17 @@
 import {
-  type Config,
   writeToStderr,
   triggerSessionEndHook,
   SessionEndReason,
 } from '@vybestack/llxprt-code-core';
+import type {
+  SessionIdentity,
+  EphemeralSettings,
+  ModelSelection,
+  Diagnostics,
+  WorkspacePaths,
+} from '@vybestack/llxprt-code-core/config/roles.js';
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   debugLogger,
   isTelemetrySdkInitialized,
@@ -22,11 +30,26 @@ import { installNonInteractiveSigintHandler } from './signalHandlers.js';
 import { reportNonInteractiveError } from './errorReporting.js';
 import { startInteractiveUI } from './interactiveUI.js';
 
+type NonInteractiveSessionConfig = SessionIdentity &
+  EphemeralSettings &
+  ModelSelection &
+  Diagnostics &
+  WorkspacePaths & {
+    getProviderManager(): RuntimeProviderManager | undefined;
+    getSettingsService(): SettingsService;
+    getScreenReader(): boolean;
+  };
+
+type HookConfigParam = Parameters<typeof triggerSessionEndHook>[0];
+
 /**
  * Report a non-interactive error while swallowing secondary failures so they
  * do not mask the original error or alter the exit code.
  */
-function safeReportNonInteractiveError(config: Config, error: unknown): void {
+function safeReportNonInteractiveError(
+  config: NonInteractiveSessionConfig,
+  error: unknown,
+): void {
   try {
     reportNonInteractiveError(config, error);
   } catch (reportError) {
@@ -35,7 +58,7 @@ function safeReportNonInteractiveError(config: Config, error: unknown): void {
 }
 
 export interface NonInteractiveSessionOptions {
-  config: Config;
+  config: NonInteractiveSessionConfig;
   agent: Agent;
   settings: LoadedSettings;
   input: string;
@@ -43,7 +66,7 @@ export interface NonInteractiveSessionOptions {
 }
 
 export interface PipedOrPromptSessionOptions {
-  config: Config;
+  config: NonInteractiveSessionConfig;
   agent: Agent;
   settings: LoadedSettings;
   initialInput: string | undefined;
@@ -52,7 +75,7 @@ export interface PipedOrPromptSessionOptions {
 }
 
 export interface SessionDispatchOptions {
-  config: Config;
+  config: NonInteractiveSessionConfig;
   /**
    * The single session Agent created at the CLI composition root (#2378). It is
    * threaded into the interactive UI and reused by the non-interactive run; the
@@ -185,7 +208,9 @@ ${existingInput}`
     safeReportNonInteractiveError(config, error);
   } finally {
     if (isTelemetrySdkInitialized()) {
-      await shutdownTelemetry(config);
+      await shutdownTelemetry(
+        config as unknown as Parameters<typeof shutdownTelemetry>[0],
+      );
     }
 
     // Call cleanup before process.exit, which causes cleanup to not run
@@ -210,7 +235,7 @@ async function runNonInteractiveSession({
   // below (where the disposer would run). By validating first, the SIGINT
   // handler is only on the process during the run phase that needs it, so an
   // auth-failure process.exit cannot leak it.
-  let nonInteractiveConfig: Config | undefined;
+  let nonInteractiveConfig: NonInteractiveSessionConfig;
   try {
     nonInteractiveConfig = await validateNonInteractiveAuth(
       settings.merged.useExternalAuth,
@@ -228,7 +253,10 @@ async function runNonInteractiveSession({
     // validateNonInteractiveAuth rejected before returning. This may differ
     // from what the run would have used if validateNonInteractiveAuth applied
     // partial mutations before rejecting.
-    await triggerSessionEndHook(config, SessionEndReason.Other);
+    await triggerSessionEndHook(
+      config as unknown as HookConfigParam,
+      SessionEndReason.Other,
+    );
     // Wrap only the reporting call so a secondary reporting failure does not
     // mask the original error or alter the exit code.
     safeReportNonInteractiveError(config, error);
@@ -254,7 +282,9 @@ ${finalInput}`;
     }
 
     await runNonInteractive({
-      config: nonInteractiveConfig,
+      config: nonInteractiveConfig as unknown as Parameters<
+        typeof runNonInteractive
+      >[0]['config'],
       // Reuse the composition-root Agent (#2378) instead of building a second
       // one; the session bus is the Agent's own bus.
       agent,
@@ -266,7 +296,10 @@ ${finalInput}`;
     });
 
     // Fire SessionEnd hook on successful completion
-    await triggerSessionEndHook(nonInteractiveConfig, SessionEndReason.Exit);
+    await triggerSessionEndHook(
+      nonInteractiveConfig as unknown as HookConfigParam,
+      SessionEndReason.Exit,
+    );
   } catch (error) {
     nonInteractiveExitCode = 1;
     debugLogger.error(
@@ -281,7 +314,10 @@ ${finalInput}`;
     // triggerSessionEndHook catches hook failures internally (documented
     // non-blocking contract in lifecycleHookTriggers.ts), so no wrapper is
     // needed here — it will never reject or mask the original error.
-    await triggerSessionEndHook(nonInteractiveConfig, SessionEndReason.Other);
+    await triggerSessionEndHook(
+      nonInteractiveConfig as unknown as HookConfigParam,
+      SessionEndReason.Other,
+    );
 
     // Wrap only the reporting call so a secondary reporting failure does not
     // mask the original error or alter the exit code.

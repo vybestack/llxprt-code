@@ -11,9 +11,16 @@ import {
   STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY,
   STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
   STREAM_IDLE_TIMEOUT_SETTING_KEY,
-  type Config,
   type ImageOperationBackend,
+  type RuntimeProviderManager,
+  type MessageBus,
 } from '@vybestack/llxprt-code-core';
+import type {
+  EphemeralSettings as CoreEphemeralSettings,
+  ModelSelection,
+  WorkspacePaths,
+  RuntimeMutations,
+} from '@vybestack/llxprt-code-core/config/roles.js';
 import { setOsKeyringDisabledBySetting } from '@vybestack/llxprt-code-storage';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
@@ -23,13 +30,11 @@ import type {
 } from '@vybestack/llxprt-code-settings';
 import {
   getCliRuntimeContext,
-  setCliRuntimeContext,
   applyCliSetArguments,
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { createCodexImageBackendResolver } from '@vybestack/llxprt-code-providers';
 import { preflightAgentActivation } from '@vybestack/llxprt-code-agents';
-import { createOAuthSettingsAdapter } from '../auth/oauth-settings-adapter.js';
 import {
   READ_ONLY_TOOL_NAMES,
   EDIT_TOOL_NAME,
@@ -50,10 +55,29 @@ import type { ProviderModelResult } from './providerModelResolver.js';
 
 const logger = new DebugLogger('llxprt:config:postConfigRuntime');
 
+type PostConfigRuntimeView = CoreEphemeralSettings &
+  ModelSelection &
+  WorkspacePaths &
+  RuntimeMutations & {
+    setDisabledHooks(hooks: string[]): void;
+    getProviderManager(): RuntimeProviderManager | undefined;
+    getSettingsService(): SettingsService;
+  };
+
 // ─── DTOs ───────────────────────────────────────────────────────────────────
 
-export interface PostConfigInput {
-  readonly config: Config;
+export interface AssembledRuntime {
+  readonly providerManager: RuntimeProviderManager;
+  readonly oauthManager: Parameters<
+    RuntimeMutations['setRuntimeOAuthManager']
+  >[0];
+  readonly runtimeMessageBus: MessageBus;
+}
+
+export interface PostConfigInput<
+  C extends PostConfigRuntimeView = PostConfigRuntimeView,
+> {
+  readonly config: C;
   readonly runtimeState: BootstrapRuntimeState;
   readonly bootstrapArgs: BootstrapProfileArgs;
   readonly argv: CliArgs;
@@ -65,6 +89,12 @@ export interface PostConfigInput {
   readonly runtimeOverrides: { settingsService?: SettingsService };
   readonly approvalMode: ApprovalMode;
   readonly interactive: boolean;
+  readonly assembleRuntime: (params: {
+    readonly settingsService: SettingsService;
+    readonly runtimeId: string;
+    readonly metadata: Record<string, unknown>;
+    readonly profileManager: ProfileManager;
+  }) => Promise<AssembledRuntime>;
 }
 
 // ─── Narrowed per-function input types ───────────────────────────────────────
@@ -72,7 +102,11 @@ export interface PostConfigInput {
 /** Fields consumed by setupRuntimeContext (steps 10-11). */
 type SetupRuntimeContextInput = Pick<
   PostConfigInput,
-  'config' | 'runtimeState' | 'profileSettingsWithTools' | 'runtimeOverrides'
+  | 'config'
+  | 'runtimeState'
+  | 'profileSettingsWithTools'
+  | 'runtimeOverrides'
+  | 'assembleRuntime'
 >;
 
 /** Fields consumed by reapplyCliOverrides (step 14). */
@@ -115,7 +149,7 @@ export type StreamTimeoutSettingsInput = Settings & {
  * priority order (canonical before alias).
  */
 function applyStreamTimeoutSettingPair(
-  config: Pick<Config, 'setEphemeralSetting'>,
+  config: Pick<CoreEphemeralSettings, 'setEphemeralSetting'>,
   settings: StreamTimeoutSettingsInput,
   camelKey: keyof Settings,
   canonicalKey: 'stream-idle-timeout-ms' | 'stream-first-response-timeout-ms',
@@ -131,7 +165,7 @@ function applyStreamTimeoutSettingPair(
 }
 
 export function applyStreamIdleTimeoutSettings(
-  config: Pick<Config, 'setEphemeralSetting'>,
+  config: Pick<CoreEphemeralSettings, 'setEphemeralSetting'>,
   settings: StreamTimeoutSettingsInput,
 ): void {
   applyStreamTimeoutSettingPair(
@@ -143,7 +177,7 @@ export function applyStreamIdleTimeoutSettings(
 }
 
 export function applyStreamFirstResponseTimeoutSettings(
-  config: Pick<Config, 'setEphemeralSetting'>,
+  config: Pick<CoreEphemeralSettings, 'setEphemeralSetting'>,
   settings: StreamTimeoutSettingsInput,
 ): void {
   applyStreamTimeoutSettingPair(
@@ -155,7 +189,7 @@ export function applyStreamFirstResponseTimeoutSettings(
 }
 
 interface ProfileEphemeralSettingsInput {
-  readonly config: Pick<Config, 'setEphemeralSetting'>;
+  readonly config: Pick<CoreEphemeralSettings, 'setEphemeralSetting'>;
   readonly bootstrapArgs: Pick<BootstrapProfileArgs, 'profileJson'>;
   readonly argv: Pick<CliArgs, 'provider'>;
   readonly settings: StreamTimeoutSettingsInput;
@@ -272,27 +306,18 @@ async function setupRuntimeContext(
   }
 
   const profileManager = new ProfileManager();
-  setCliRuntimeContext(settingsService, config, {
+
+  const finalRuntime = await input.assembleRuntime({
+    settingsService,
     runtimeId: bootstrapRuntimeId,
     metadata: baseBootstrapMetadata,
     profileManager,
   });
-
-  // The early profile runtime has no Config, so its bus cannot carry the
-  // resolved policy. Recompose once Config exists and adopt that final runtime.
-  const { assembleCliProviderRuntime } = await import(
-    '@vybestack/llxprt-code-providers/runtime.js'
-  );
-  const finalRuntime = assembleCliProviderRuntime({
-    settingsService,
-    config,
-    runtimeId: bootstrapRuntimeId,
-    metadata: baseBootstrapMetadata,
-    oauthSettings: createOAuthSettingsAdapter(),
-  });
   runtimeState.providerManager =
     finalRuntime.providerManager as ProviderManager;
-  runtimeState.oauthManager = finalRuntime.oauthManager;
+  runtimeState.oauthManager = finalRuntime.oauthManager as
+    | typeof runtimeState.oauthManager
+    | undefined;
   runtimeState.runtimeMessageBus = finalRuntime.runtimeMessageBus;
   config.setProviderManager(finalRuntime.providerManager);
   config.setRuntimeMessageBus(finalRuntime.runtimeMessageBus);
@@ -388,7 +413,9 @@ async function activateProviderAndProfile(
 
   // Store bootstrap args on config
   (
-    input.config as Config & { _bootstrapArgs?: BootstrapProfileArgs }
+    input.config as PostConfigRuntimeView & {
+      _bootstrapArgs?: BootstrapProfileArgs;
+    }
   )._bootstrapArgs = bootstrapArgs;
 
   if (bootstrapResult.profile.warnings.length > 0) {
@@ -484,8 +511,9 @@ async function reapplyCliOverrides(
       );
     }
     config.setModel(cliModelOverride);
-    (config as Config & { _cliModelOverride?: string })._cliModelOverride =
-      cliModelOverride;
+    (
+      config as PostConfigRuntimeView & { _cliModelOverride?: string }
+    )._cliModelOverride = cliModelOverride;
     logger.debug(
       () =>
         `[bootstrap] Re-applied CLI model override '${cliModelOverride}' after provider activation`,
@@ -621,7 +649,9 @@ function applyEphemeralSettings(input: PostConfigInput): void {
 
   if (Object.keys(cliSetResult.modelParams).length > 0) {
     (
-      config as Config & { _cliModelParams?: Record<string, unknown> }
+      config as PostConfigRuntimeView & {
+        _cliModelParams?: Record<string, unknown>;
+      }
     )._cliModelParams = cliSetResult.modelParams;
   }
 
@@ -646,7 +676,9 @@ function finalizeMetadata(input: PostConfigInput): void {
   // Store profile model params on config
   if (profileLoadResult.profileModelParams) {
     (
-      config as Config & { _profileModelParams?: Record<string, unknown> }
+      config as PostConfigRuntimeView & {
+        _profileModelParams?: Record<string, unknown>;
+      }
     )._profileModelParams = profileLoadResult.profileModelParams;
   }
 
@@ -684,7 +716,9 @@ function finalizeMetadata(input: PostConfigInput): void {
  * Step 16: applyEphemeralSettings() — emojifilter, profile ephemerals, CLI /set args, disabled hooks
  * Step 17: finalizeMetadata() — seed default disabled tools, store model params, store bootstrap args, log warnings
  */
-export async function finalizeConfig(input: PostConfigInput): Promise<Config> {
+export async function finalizeConfig<C extends PostConfigRuntimeView>(
+  input: PostConfigInput<C>,
+): Promise<C> {
   // Propagate security.disableOsKeyring into the storage package's process-wide
   // opt-out (issue #2928 R3.2) BEFORE any profile/auth application. Profile
   // auth wiring (applyProfileToRuntime → createProviderKeyStorage().getKey())

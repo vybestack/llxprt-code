@@ -11,6 +11,8 @@ import {
   type IContent,
   type TodoUpdateEvent,
   type ApprovalMode,
+  CoreShellToolHostAdapter,
+  CoreToolRegistryHostAdapter,
 } from '@vybestack/llxprt-code-core';
 import { debugLogger, DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type * as acp from '@agentclientprotocol/sdk';
@@ -379,6 +381,8 @@ export class ZedAgent {
           this.connection,
           this.logger,
           agent.getMessageBus(),
+          new CoreToolRegistryHostAdapter(sessionConfig),
+          new CoreShellToolHostAdapter(sessionConfig),
         );
       }
     } catch (error) {

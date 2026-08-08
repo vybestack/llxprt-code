@@ -8,7 +8,6 @@ import { loadCliConfig } from './config/config.js';
 import chalk from 'chalk';
 import type { LoadedSettings } from './config/settings.js';
 import {
-  type Config,
   SessionRecordingService,
   RecordingIntegration,
   SessionDiscovery,
@@ -20,7 +19,17 @@ import {
   type ContinueTarget,
   type IContent,
   type LockHandle,
+  type RuntimeProviderManager,
+  type SandboxConfig,
 } from '@vybestack/llxprt-code-core';
+import type {
+  SessionIdentity,
+  ModelSelection,
+  WorkspacePaths,
+  EphemeralSettings,
+  Diagnostics,
+  McpAccess,
+} from '@vybestack/llxprt-code-core/config/roles.js';
 import { sessionId, debugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
   ProfileManager,
@@ -38,6 +47,47 @@ import {
   initializeObservationProducer,
   stopObservationProducer,
 } from './observation/jspWiring.js';
+import type { DirectImageResult } from './config/imageModeDispatch.js';
+import type { Storage } from '@vybestack/llxprt-code-storage';
+
+type SessionBootstrapConfig = SessionIdentity &
+  ModelSelection &
+  WorkspacePaths & {
+    getAgentClient(): {
+      restoreHistory(history: IContent[]): Promise<void>;
+      resetChat(): Promise<void>;
+    };
+  };
+
+export type CliConfig = SessionBootstrapConfig &
+  EphemeralSettings &
+  Diagnostics &
+  McpAccess & {
+    getExperimentalZedIntegration(): boolean;
+    getListExtensions(): boolean;
+    getSettingsService(): SettingsService;
+    getProviderManager(): RuntimeProviderManager | undefined;
+    getIdeClient(): { connect(): Promise<void> } | undefined;
+    getSandbox(): SandboxConfig | undefined;
+    getScreenReader(): boolean;
+    setTerminalBackground(terminalBackground: string | undefined): void;
+    getToolRegistryInfo(): {
+      registered: Array<{ displayName: string }>;
+      unregistered: Array<{ displayName: string; reason?: string }>;
+    };
+    getContinueSessionRef(): string | undefined;
+    adoptSessionId(sessionId: string): void;
+    getProjectTempDir(): string;
+    getRunImageOperation():
+      | ((input: {
+          readonly prompt: string;
+          readonly outputPath: string;
+          readonly inputPaths?: readonly string[];
+          readonly signal?: AbortSignal;
+        }) => Promise<DirectImageResult>)
+      | undefined;
+    readonly storage: Storage;
+  };
 
 /** Format a single recorded-session summary line for --list-sessions output. */
 export function formatSessionSummaryLine(
@@ -103,7 +153,7 @@ export interface SessionRecordingSetup extends ResolvedRecording {
 }
 
 export interface RuntimeConfigBootstrap {
-  config: Config;
+  config: CliConfig;
   extensions: ReturnType<typeof loadExtensions>;
   runtimeSettingsService: SettingsService;
 }
@@ -153,13 +203,21 @@ export async function bootstrapRuntimeAndConfig(
     { settingsService: runtimeSettingsService },
   );
   const profileManager = new ProfileManager();
-  setCliRuntimeContext(runtimeSettingsService, config, {
-    runtimeId,
-    metadata: { source: 'cli-bootstrap', stage: 'post-config' },
-    profileManager,
-  });
+  setCliRuntimeContext(
+    runtimeSettingsService,
+    config as unknown as Parameters<typeof setCliRuntimeContext>[1],
+    {
+      runtimeId,
+      metadata: { source: 'cli-bootstrap', stage: 'post-config' },
+      profileManager,
+    },
+  );
 
-  return { config, extensions, runtimeSettingsService };
+  return {
+    config: config as unknown as CliConfig,
+    extensions,
+    runtimeSettingsService,
+  };
 }
 
 /**
@@ -204,7 +262,7 @@ async function releaseResumedResources(
  * service (new or resumed), restore history when resuming, and register the
  * recording cleanup hook.
  */
-function setupObservation(config: Config): void {
+function setupObservation(config: SessionBootstrapConfig): void {
   const projectRoot = config.getProjectRoot();
   // loadBootstrapFromEnv disables observation (one stderr warning, startup
   // continues) when the bootstrap file cannot be read, but still fails fast
@@ -242,7 +300,7 @@ function registerRecordingCleanup(
 }
 
 export async function setupSessionRecording(
-  config: Config,
+  config: SessionBootstrapConfig,
   argv: ParsedCliArgs,
 ): Promise<SessionRecordingSetup> {
   const projectHash = getProjectHash(config.getProjectRoot());
@@ -344,7 +402,7 @@ export async function setupSessionRecording(
 
 /** Build and lock a fresh SessionRecordingService for the current run. */
 export function buildNewRecordingService(
-  config: Config,
+  config: SessionBootstrapConfig,
   projectHash: string,
   chatsDir: string,
 ): Promise<SessionRecordingService> {
@@ -379,7 +437,7 @@ function startupCheckpointTarget(
 
 async function forkStartupCheckpoint(
   target: Extract<ContinueTarget, { kind: 'checkpoint' }>,
-  config: Config,
+  config: SessionBootstrapConfig,
   projectHash: string,
   chatsDir: string,
 ): Promise<ResolvedRecording> {
@@ -407,7 +465,7 @@ async function forkStartupCheckpoint(
  * new one. Falls back to a new session when resume fails.
  */
 export async function createOrResumeRecording(
-  config: Config,
+  config: SessionBootstrapConfig,
   projectHash: string,
   chatsDir: string,
 ): Promise<ResolvedRecording> {

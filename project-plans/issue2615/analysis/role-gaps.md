@@ -73,3 +73,50 @@ Consider adding a `ServiceLocatorAccess` role interface to the core roles
 that covers the common service-locator getters. This would eliminate the
 need for `Config['method']` syntax and make the gap explicit in the type
 system rather than relying on the guard's AST-level detection mechanics.
+
+## P09 CLI Migration — Role-Gap Findings
+
+During P09, the following Config members used in `packages/cli` had NO
+role interface equivalent. Each was injected via explicit function
+signatures or local interface members using the narrowest available type.
+Config satisfies these structurally.
+
+| Member | Return Type | CLI Files | Resolution |
+|---|---|---|---|
+| `getProviderManager` | `RuntimeProviderManager \| undefined` | cliProviderInit, cliSessionBootstrap, nonInteractiveCli, validateNonInteractiveAuth, zed-config-options, zed-session-config, runZedIntegration, cliAgentBootstrap, zedIntegration, unconfiguredProviderGuard | Local view types with explicit getter signature |
+| `getSettingsService` | `SettingsService` | cliSessionBootstrap, nonInteractiveCli, runZedIntegration, postConfigRuntime, cliAgentBootstrap | Local view types; `SettingsService` imported from `@vybestack/llxprt-code-settings` |
+| `getProfileManager` | `ProfileManager \| undefined` | zed-initialize | Local interface `{ getProfileManager(): ProfileManager \| undefined }` |
+| `getSandbox` | `SandboxConfig \| undefined` | cliSandbox | Local view type `Diagnostics & { getSandbox(): SandboxConfig \| undefined }` |
+| `storage` | `Storage` (property) | sessionCleanup, zed-session-lifecycle, zed-session-loader | Local interface `{ readonly storage: Storage }` |
+| `getExperimentalZedIntegration` | `boolean` | cli.tsx, cliSessionBootstrap | Added to `CliConfig` local view type |
+| `getListExtensions` | `boolean` | cli.tsx, cliSessionBootstrap | Added to `CliConfig` local view type |
+| `getRunImageOperation` | `(input) => Promise<DirectImageResult>` | imageModeDispatch, cliSessionBootstrap | Local `ImageOperationConfig` interface |
+| `getAgentClient` | `AgentClientContract` | cliSessionBootstrap | Added to `SessionBootstrapConfig` local view type |
+| `setTerminalBackground` | `(bg: string \| undefined) => void` | terminalTheme, cliTerminalSession, cliSessionBootstrap | Local interface member |
+| `setDisabledHooks` | `(hooks: string[]) => void` | postConfigRuntime | Added to `PostConfigRuntimeView` local type |
+| `getIdeClient` | `IdeClient \| undefined` | cliProviderInit | Added to `CliConfig` local view type |
+| `getScreenReader` | `boolean` | cliTerminalSession | Added to `TerminalSessionConfig` local type |
+| `getToolRegistry` | `ToolRegistry` | zed-terminal-setup, zedIntegration | Injected as constructor parameter rather than via Config |
+| `getIdeMode` | `boolean` | cliTerminalSession, cliProviderInit | Already in `SessionIdentity` role — used directly |
+| `getContinueSessionRef` | `string \| undefined` | cliSessionBootstrap | Already in `SessionIdentity` role — used directly |
+| `adoptSessionId` | `(id: string) => void` | cliSessionBootstrap | Already in `SessionIdentity` role — used directly |
+| `getProjectTempDir` | `string` | cliSessionBootstrap | Already in `WorkspacePaths` role — used directly |
+
+### Consumer Capability Module Deletion
+
+`packages/cli/src/config/capabilities.ts` was deleted. All 10 consumer
+interfaces it defined were replaced by core role interfaces or local
+view types in each consumer file. No consumer-owned capability module
+remains in `packages/cli`.
+
+### Sanctioned Config Holders (3 files)
+
+The following files retain the `Config` type for sanctioned
+`fromConfig()` passthrough only (per the fromConfig exception):
+
+1. `nonInteractiveCli.ts` — calls `fromConfig({ config, ... })`
+2. `cliAgentBootstrap.ts` — calls `fromConfig({ config, ... })`
+3. `zed-integration/zedIntegration.ts` — calls `fromConfig({ config: sessionConfig, ... })`
+
+These files carry a `config` field typed as the concrete `Config` class
+purely for passthrough to `fromConfig`, which is sanctioned.

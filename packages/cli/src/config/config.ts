@@ -10,12 +10,13 @@ import process from 'node:process';
 import type {
   ApprovalMode,
   PolicyEngineConfig,
-  Config,
   LlxprtExtension,
   SandboxConfig,
   MCPServerConfig,
 } from '@vybestack/llxprt-code-core';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import { setCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
+import { createOAuthSettingsAdapter } from '../auth/oauth-settings-adapter.js';
 
 import {
   loadSettings,
@@ -299,7 +300,7 @@ function buildLoadedConfig(
   argv: CliArgs,
   pieces: ConfigBuildPieces,
   settingsService: SettingsService,
-): Config {
+) {
   return buildConfig({
     sessionId,
     cwd,
@@ -345,7 +346,7 @@ export async function loadCliConfig(
   argv: CliArgs,
   cwd: string = process.cwd(),
   runtimeOverrides: { settingsService?: SettingsService } = {},
-): Promise<Config> {
+) {
   loadEnvironment();
   const { bootstrapArgs, runtimeState, profileResult } =
     await bootstrapAndLoadProfile(settings, argv, runtimeOverrides);
@@ -384,5 +385,38 @@ export async function loadCliConfig(
     runtimeOverrides,
     approvalMode: pieces.approvalMode,
     interactive: pieces.context.interactive,
+    assembleRuntime: async ({
+      settingsService: ss,
+      runtimeId,
+      metadata,
+      profileManager: pm,
+    }) => {
+      setCliRuntimeContext(
+        ss,
+        config as unknown as Parameters<typeof setCliRuntimeContext>[1],
+        {
+          runtimeId,
+          metadata,
+          profileManager: pm,
+        },
+      );
+      const { assembleCliProviderRuntime } = await import(
+        '@vybestack/llxprt-code-providers/runtime.js'
+      );
+      const result = assembleCliProviderRuntime({
+        settingsService: ss,
+        config: config as unknown as Parameters<
+          typeof assembleCliProviderRuntime
+        >[0]['config'],
+        runtimeId,
+        metadata,
+        oauthSettings: createOAuthSettingsAdapter(),
+      });
+      return {
+        providerManager: result.providerManager,
+        oauthManager: result.oauthManager,
+        runtimeMessageBus: result.runtimeMessageBus,
+      };
+    },
   });
 }

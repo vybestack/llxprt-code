@@ -21,6 +21,7 @@ import {
   type AgentRequestInput,
   PLACEHOLDER_MODEL,
 } from '@vybestack/llxprt-code-core';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   shutdownTelemetry,
   isTelemetrySdkInitialized,
@@ -99,7 +100,7 @@ export function createProfileNameWriter(
             `[nonInteractiveCli] resolveContentPrefixIdentity failed; using bare profile name: ${error}`,
         );
         const settingsService = config.getSettingsService() as Omit<
-          ReturnType<Config['getSettingsService']>,
+          SettingsService,
           'getCurrentProfileName'
         > & {
           getCurrentProfileName?: () => string | null;
@@ -290,6 +291,7 @@ type ConfigWithBootstrapArgs = Config & {
   readonly _bootstrapArgs?: BootstrapProfileArgs;
   readonly _profileModelParams?: Record<string, unknown>;
   readonly _cliModelParams?: Record<string, unknown>;
+  readonly _cliModelOverride?: string;
 };
 
 function readBootstrapArgs(config: Config): BootstrapProfileArgs | undefined {

@@ -100,7 +100,7 @@ export const PUBLIC_SUBPATHS_BY_PACKAGE: {
     'auth.js',
     'composition.js',
   ],
-  '@vybestack/llxprt-code-core': [],
+  '@vybestack/llxprt-code-core': ['config/roles.js'],
   '@vybestack/llxprt-code-agents': [],
   '@vybestack/llxprt-code-settings': [],
   '@vybestack/llxprt-code-mcp': [],
