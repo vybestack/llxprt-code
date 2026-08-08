@@ -6,7 +6,7 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { type Config } from '@vybestack/llxprt-code-core';
+import type { SessionCleanupConfig } from '../config/capabilities.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { Storage } from '@vybestack/llxprt-code-storage';
 import type { Settings, SessionRetentionSettings } from '../config/settings.js';
@@ -91,7 +91,7 @@ async function cleanupDebugLogsForSession(sessionId: string): Promise<number> {
 async function deleteSingleSession(
   sessionToDelete: SessionFileEntry,
   chatsDir: string,
-  config: Config,
+  config: SessionCleanupConfig,
   result: CleanupResult,
 ): Promise<void> {
   try {
@@ -147,7 +147,7 @@ async function deleteSingleSession(
  * Main entry point for session cleanup during CLI startup
  */
 export async function cleanupExpiredSessions(
-  config: Config,
+  config: SessionCleanupConfig,
   settings: Settings,
 ): Promise<CleanupResult> {
   const result: CleanupResult = {
@@ -319,7 +319,7 @@ function parseRetentionPeriod(period: string): number {
  * Validates retention configuration
  */
 function validateRetentionConfig(
-  config: Config,
+  config: SessionCleanupConfig,
   retentionConfig: SessionRetentionSettings,
 ): string | null {
   if (retentionConfig.enabled !== true) {

@@ -12,7 +12,8 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { quote } from 'shell-quote';
 import { exec } from 'node:child_process';
-import type { Config, SandboxConfig } from '@vybestack/llxprt-code-core';
+import type { SandboxConfig } from '@vybestack/llxprt-code-core';
+import type { SeatbeltConfig } from '../config/capabilities.js';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { SETTINGS_DIRECTORY_NAME } from '../config/settings.js';
@@ -52,7 +53,7 @@ export function normalizeExitCode(
 export async function runSeatbeltSandbox(
   config: SandboxConfig,
   nodeArgs: string[],
-  cliConfig?: Config,
+  cliConfig?: SeatbeltConfig,
   cliArgs: string[] = [],
 ): Promise<number> {
   // Seatbelt path does NOT use the container credential proxy lifecycle.
@@ -150,7 +151,7 @@ function resolveProxyUrl(): string {
 export function buildSeatbeltArgs(
   profileFile: string,
   nodeOptions: string,
-  cliConfig?: Config,
+  cliConfig?: SeatbeltConfig,
   cliArgs: string[] = [],
 ): string[] {
   // Resolve canonical config/data/cache/log roots via the shared path
@@ -371,7 +372,7 @@ async function waitForSeatbeltExit(
   sandboxProcess: ChildProcess,
   stdinWasPaused: boolean,
   stdinHadRawMode: boolean,
-  cliConfig?: Config,
+  cliConfig?: SeatbeltConfig,
 ): Promise<number> {
   return new Promise<number>((resolve) => {
     sandboxProcess.on('close', (code, signal) => {

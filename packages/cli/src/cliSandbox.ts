@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type Config, ExitCodes } from '@vybestack/llxprt-code-core';
+import { ExitCodes } from '@vybestack/llxprt-code-core';
+import type { SandboxLaunchConfig } from './config/capabilities.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { loadCliConfig } from './config/config.js';
 import { start_sandbox } from './utils/sandbox.js';
@@ -47,7 +48,7 @@ export function resolveContainerMemoryMB(): number | undefined {
  * unlike the host-relaunch heuristic at the top of main().
  */
 export function computeSandboxMemoryArgsFromEnv(
-  config: Config,
+  config: SandboxLaunchConfig,
   settings: LoadedSettings,
 ): string[] {
   if (settings.merged.ui.autoConfigureMaxOldSpaceSize !== true) {
@@ -123,7 +124,7 @@ ${finalArgs[positionalStartIndex]}`;
 }
 
 export interface SandboxHopOptions {
-  config: Config;
+  config: SandboxLaunchConfig;
   settings: LoadedSettings;
   argv: ParsedCliArgs;
   workspaceRoot: string;

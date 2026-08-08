@@ -20,6 +20,10 @@
  * Part of the #2615 Config decomposition.
  */
 
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderManager.js';
+import type { SandboxConfig } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import type { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
 import type { Storage } from '@vybestack/llxprt-code-storage';
 import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 
@@ -53,4 +57,44 @@ export interface TerminalThemeAccess {
 /** Reads the project root alongside session storage. */
 export interface ProjectStorageSource extends StorageSource {
   getProjectRoot(): string;
+}
+
+/** Startup flags the CLI entry point reads to choose a launch mode. */
+export interface LaunchModeFlags {
+  getExperimentalZedIntegration(): boolean;
+  getListExtensions(): boolean;
+}
+
+/** What sandbox launch reads. */
+export interface SandboxLaunchConfig extends DebugModeSource {
+  getSandbox(): SandboxConfig | undefined;
+}
+
+/** What the seatbelt profile builder reads. */
+export interface SeatbeltConfig extends DebugModeSource {
+  getTargetDir(): string;
+  getWorkspaceContext(): WorkspaceContext;
+}
+
+/** What session cleanup reads. */
+export interface SessionCleanupConfig extends DebugModeSource, StorageSource {
+  getSessionId(): string;
+}
+
+/** What the non-interactive session entry reads. */
+export interface NonInteractiveSessionConfig {
+  getQuestion(): string | undefined;
+  isInteractive(): boolean;
+}
+
+/** What the interactive UI bootstrap reads. */
+export interface InteractiveUIConfig extends DebugModeSource {
+  getProjectRoot(): string;
+}
+
+/** What zed session setup reads. */
+export interface ZedSessionConfig extends EphemeralSettingsAccess {
+  getProviderManager(): RuntimeProviderManager | undefined;
+  getTargetDir(): string;
+  getToolRegistry(): ToolRegistry;
 }
