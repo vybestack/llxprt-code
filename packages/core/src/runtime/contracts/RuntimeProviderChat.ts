@@ -56,6 +56,21 @@ export interface RuntimeUserMemoryProfileProvider {
 
 export type RuntimeUserMemoryInput = string | RuntimeUserMemoryProfileProvider;
 
+/**
+ * Caller-supplied renderer for the assembled system prompt, parameterized by
+ * the model that will appear on the wire.
+ *
+ * Supplied by the agent layer, which owns assembly (issue #3136). A ROUTER
+ * provider — one that selects a different model than the caller resolved —
+ * invokes this after selection so the rendered model matches `resolved.model`
+ * (issue #3157). It is a re-render hook, not an assembly hook: a provider must
+ * not invoke it when the caller supplied no `systemInstruction`, and must not
+ * invoke it when it is not overriding the model.
+ */
+export interface RuntimeSystemPromptAssembler {
+  assemble(model: string): Promise<string>;
+}
+
 export interface RuntimeGenerateChatOptions {
   contents: IContent[];
   tools?: RuntimeProviderToolset;
@@ -93,4 +108,12 @@ export interface RuntimeGenerateChatOptions {
    * the provider rebuilds its own core prompt.
    */
   systemInstruction?: string;
+  /**
+   * Caller-supplied re-renderer for the assembled system prompt (issue #3157).
+   * A router provider (e.g. a load balancer) that overrides the model invokes
+   * this after sub-profile selection so the rendered model matches
+   * `resolved.model`. The agent layer owns assembly; this port only
+   * re-invokes it.
+   */
+  systemPromptAssembler?: RuntimeSystemPromptAssembler;
 }

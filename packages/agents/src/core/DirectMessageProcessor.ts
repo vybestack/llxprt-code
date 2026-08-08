@@ -5,7 +5,7 @@
  */
 
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { SendMessageParams } from './chatSession.js';
+import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import type {
@@ -162,7 +162,7 @@ export class DirectMessageProcessor {
       source: string,
       extras?: Record<string, unknown>,
     ) => ProviderRuntimeContext,
-    private readonly generationConfig: AgentClientGenerateConfig,
+    private readonly generationConfig: ChatSessionConfig,
     private readonly historyService: HistoryService,
     private readonly retry: typeof retryWithBackoff = retryWithBackoff,
   ) {}
@@ -524,6 +524,7 @@ export class DirectMessageProcessor {
       systemInstruction: extractSystemInstructionText(
         this.generationConfig.systemInstruction,
       ),
+      systemPromptAssembler: this.generationConfig.systemPromptAssembler,
     });
   }
 

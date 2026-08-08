@@ -39,6 +39,7 @@ import {
   getRequestSignal,
   rethrowIfAborted,
 } from './loadBalancing/requestAbort.js';
+import { optionsWithSelectedModelPrompt } from './loadBalancing/selectedModelPrompt.js';
 import { hasTransportAttemptRemaining } from './transportAttemptBudget.js';
 import { requireTransportAttempt } from './loadBalancing/delegateAttempt.js';
 import { executeBackendAttempt } from './loadBalancing/backendAttemptExecutor.js';
@@ -305,9 +306,17 @@ export class LoadBalancingProvider implements IProvider {
       this.logger.error(() => errorMsg);
       throw new Error(errorMsg);
     }
+    // Re-render the caller-assembled system prompt for the model this router
+    // selected, so the rendered model matches resolved.model (issue #3157).
+    // Runs before estimation/compression so the LB accounts for the prompt it
+    // actually transmits.
+    const targetOptions = await optionsWithSelectedModelPrompt(
+      options,
+      resolveSubProfileModel(subProfile),
+    );
     const resolvedOptions = this.buildDelegateResolvedOptions(
       subProfile,
-      options,
+      targetOptions,
     );
     const result = await this.estimateForSubProfile(
       subProfile,
@@ -316,12 +325,12 @@ export class LoadBalancingProvider implements IProvider {
     );
     if (contextLimit === undefined || result.tokens <= contextLimit) {
       return {
-        options: optionsWithPromptProjection(options, result),
+        options: optionsWithPromptProjection(targetOptions, result),
         delegateProvider,
       };
     }
     const compressed = await this.compressForContextLimit(
-      options,
+      targetOptions,
       subProfile,
       result,
       contextLimit,
