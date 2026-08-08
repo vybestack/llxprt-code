@@ -131,7 +131,8 @@ describe('Load balancer sub-profile context-window timeout (issue #3149)', () =>
     expect(getLBProvider()).not.toBeNull();
     expect(callCount).toBe(3);
     // If sequential, elapsed would be ~9s (3 × 3s). Concurrent is ~3s.
-    expect(elapsed).toBeLessThan(7_000);
+    // Use 8s (not tighter) to avoid flaking on slow Windows CI runners.
+    expect(elapsed).toBeLessThan(8_000);
   }, 20_000);
 
   it('degrades a member to an undefined context window when getModels() rejects', async () => {

@@ -7,10 +7,10 @@ on:
 
 concurrency:
   group: 'nightly-${{ github.ref }}'
-  # The cron fires once daily; the only runs that cancellation discards are
-  # superseded back-to-back manual dispatches on the same ref. With it off
-  # those serialize in the group and contend for the runner pool, which
-  # produced the multi-hour queue-wait outliers (issue #3149).
+  # cancel-in-progress ensures that a superseded run (manual dispatch on the
+  # same ref, or a new nightly cron trigger) does not hold runner capacity.
+  # With it off those runs serialize in the group and contend for the runner
+  # pool, which produced multi-hour queue-wait outliers (issue #3149).
   cancel-in-progress: true
 
 permissions:
