@@ -32,6 +32,14 @@ function readRootPackageJson(): PackageJson {
   ) as PackageJson;
 }
 
+function commandExecutable(command: string): string | undefined {
+  const tokens = command.trim().split(/\s+/);
+  if (tokens[0] !== 'cross-env') {
+    return tokens[0];
+  }
+  return tokens.slice(1).find((token) => !token.includes('='));
+}
+
 /** The three scripts test:bun:all must chain, in fail-fast order. */
 const EXPECTED_CHAIN: readonly string[] = [
   'test:bun',
@@ -79,7 +87,7 @@ describe('test:bun:all canonical aggregate script', () => {
     for (const name of EXPECTED_CHAIN) {
       const underlying = rootPackage.scripts?.[name];
       expect(underlying).toBeDefined();
-      expect(underlying ?? '').toMatch(/(?:^|\s)bun(?:\s|$)/);
+      expect(commandExecutable(underlying ?? '')).toBe('bun');
     }
   });
 
