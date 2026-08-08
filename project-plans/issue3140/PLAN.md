@@ -260,6 +260,27 @@ the full staged change. Every finding was classified.
 | F9 / OCR-2 | The Retry-After test had no lower bound; the dump test never asserted `retry-after` survived redaction. | Added both assertions. |
 | OCR-1 | `shouldRetryOnError` JSDoc still claimed all 429s are retried. | Updated. |
 
+### Second review round (PR)
+
+| Source | Finding | Resolution |
+| --- | --- | --- |
+| CodeRabbit | Quota wording fired on a 5xx echoing a terminal code, claiming "retrying will not help" while both layers correctly retry it. | Gated on the 4xx range rather than an explicit `400 \|\| 429` list — the invariant that matters is "only say retrying will not help when it genuinely will not be retried". Regression test added and verified load-bearing. |
+| CodeRabbit | `x-goog-api-key` was not redacted. | Added, plus coverage of every name in the set including a mixed-case form and a blanket "no secret substring" assertion. |
+| OCR (×2) | The dump test mutated `process.env` at module scope, so the override was live from import until `afterAll`. | Moved to `beforeEach` with a fresh `mkdtemp` per test, following `liveness.test.ts`. Starting from an empty directory also let the snapshot/diff helpers and the blanket `afterEach` delete go away. |
+
+### CI-unblocking fix (outside issue scope)
+
+`packages/agents` shard failed on `PROP setModel: for any non-empty model
+string`. The property generates with `fc.string({ minLength: 1 })`, which is
+non-empty by *length* and so includes whitespace-only strings, while
+`resolveModelForSystemPrompt` (added by #3141 for issue #3138, merged to main
+immediately before this branch rebased) fails fast when `config.getModel()`
+trims to empty. The two contracts disagree, so the property fails whenever the
+generator emits a blank string — seed-dependent, which is why the same code
+passed on the previous head. Reproduced deterministically by pinning the
+generator to `fc.constant(' ')`, which yields the identical error. Fixed by
+filtering blanks from the generator.
+
 ### Deferred (out of scope for this issue)
 
 - Bucket failover may still fire on a terminal quota 429 when a throttling 429
