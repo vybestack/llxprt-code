@@ -5,10 +5,7 @@
     "composite": false,
     "incremental": false,
     "noEmit": true,
-    "types": [
-      "node",
-      "bun"
-    ]
+    "types": ["node", "bun"]
   },
   "include": [
     ".github/scripts/issue-planner.ts",

@@ -28,8 +28,8 @@ import {
   createAgentClient,
   createToolScheduler,
   createTaskToolRegistration,
-  SessionRuntime,
 } from '@vybestack/llxprt-code-agents';
+import { SessionRuntime } from '@vybestack/llxprt-code-agents/session.js';
 
 import { logger } from '../utils/logger.js';
 import type { Settings } from './settings.js';
