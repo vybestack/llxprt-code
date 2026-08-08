@@ -5,7 +5,11 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type {
+  EphemeralSettings,
+  SessionIdentity,
+} from '@vybestack/llxprt-code-core/config/roles.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import {
   isLoadBalancerProfile,
@@ -109,7 +113,13 @@ export interface SubagentLaunchResult {
 export interface SubagentOrchestratorOptions {
   subagentManager: SubagentManager;
   profileManager: ProfileManager;
-  foregroundConfig: Config;
+/** Narrow config surface for subagent orchestration. */
+type SubagentOrchestratorConfig = SessionIdentity &
+  EphemeralSettings & {
+    getToolRegistry(): ToolRegistry;
+  };
+
+  foregroundConfig: SubagentOrchestratorConfig;
   runtimeLoader?: RuntimeLoader;
   scopeFactory?: ScopeFactory;
   idFactory?: () => string;
@@ -460,7 +470,7 @@ export class SubagentOrchestrator {
   }
 
   private getParentMaxTurns(): number | undefined {
-    const config = this.options.foregroundConfig as Config & {
+    const config = this.options.foregroundConfig as SubagentOrchestratorConfig & {
       getEphemeralSetting?: (key: string) => unknown;
     };
     if (typeof config.getEphemeralSetting !== 'function') {

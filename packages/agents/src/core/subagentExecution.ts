@@ -16,7 +16,8 @@
  */
 
 import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ToolExecutionConfig, } from './nonInteractiveToolExecutor.js';
+import type { CoreToolScheduler } from './coreToolScheduler.js';
 import {
   type SchedulerCallbacks,
   type SchedulerOptions,
@@ -386,7 +387,7 @@ function synthesizeToolCalls(
 
 /** Context needed to initialize an interactive scheduler. */
 export interface InitSchedulerContext {
-  schedulerConfig: Config;
+  schedulerConfig: ToolExecutionConfig;
   onMessage?: (message: string) => void;
   messageBus?: MessageBus;
   subagentId: string;
@@ -498,13 +499,13 @@ export async function initInteractiveScheduler(
     : (async () => {
         const sessionId = ctx.schedulerConfig.getSessionId();
         return (
-          ctx.schedulerConfig as Config & {
+          ctx.schedulerConfig as ToolExecutionConfig & {
             getOrCreateScheduler(
               sessionId: string,
               callbacks: SchedulerCallbacks,
               options?: SchedulerOptions,
               dependencies?: { messageBus?: MessageBus },
-            ): ReturnType<Config['getOrCreateScheduler']>;
+            ): Promise<CoreToolScheduler>;
           }
         ).getOrCreateScheduler(
           sessionId,

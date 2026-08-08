@@ -20,6 +20,11 @@ import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/r
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ProfileManager } from '@vybestack/llxprt-code-settings';
+
+/** Provides access to the profile manager service. */
+type ProfileManagerProvider = {
+  getProfileManager(): ProfileManager | undefined;
+};
 import type { CompressionProviderResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { CompressionProfileNotFoundError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 
@@ -325,7 +330,7 @@ export async function resolveStandardCompressionProvider(
   profileName: string,
   profile: StandardProfile,
   profileManager: ProfileManager,
-  config: ProfileManager | undefined,
+  config: ProfileManagerProvider | undefined,
   parentEphemerals: Record<string, unknown> = {},
 ): Promise<CompressionProviderResult> {
   const provider = ctx.resolveExplicitCompressionProvider(
@@ -395,7 +400,7 @@ export async function buildCompressionLoadBalancerCandidates(
   ctx: CompressionProfileResolverContext,
   profileName: string,
   profile: LoadBalancerProfile,
-  config: ProfileManager | undefined,
+  config: ProfileManagerProvider | undefined,
   profileManager: ProfileManager,
 ): Promise<CompressionLoadBalancerCandidate[]> {
   const candidates: CompressionLoadBalancerCandidate[] = [];
@@ -441,7 +446,7 @@ export async function resolveLoadBalancedCompressionProvider(
   ctx: CompressionProfileResolverContext,
   profileName: string,
   profile: LoadBalancerProfile,
-  config: ProfileManager | undefined,
+  config: ProfileManagerProvider | undefined,
   profileManager: ProfileManager,
 ): Promise<CompressionProviderResult> {
   const candidates = await buildCompressionLoadBalancerCandidates(
