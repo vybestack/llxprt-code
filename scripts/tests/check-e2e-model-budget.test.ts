@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -157,6 +157,41 @@ describe('extractSetupNames', () => {
 });
 
 describe('collectSetupNames', () => {
+  it('aggregates setup names across every .test.ts file in a directory', () => {
+    const dir = makeTempDir();
+    writeFileSync(
+      join(dir, 'alpha.test.ts'),
+      `await rig.setup('alpha one', {});\nrig.setup('alpha two');\n`,
+    );
+    writeFileSync(join(dir, 'beta.test.ts'), `rig.setup('beta one');\n`);
+
+    expect([...collectSetupNames(dir)].sort()).toEqual([
+      'alpha one',
+      'alpha two',
+      'beta one',
+    ]);
+  });
+
+  it('ignores files that are not .test.ts', () => {
+    const dir = makeTempDir();
+    writeFileSync(join(dir, 'real.test.ts'), `rig.setup('counted');\n`);
+    writeFileSync(join(dir, 'helper.ts'), `rig.setup('not counted');\n`);
+    writeFileSync(join(dir, 'notes.md'), `rig.setup('also not counted');\n`);
+
+    expect([...collectSetupNames(dir)]).toEqual(['counted']);
+  });
+
+  it('returns an empty set for a directory with no test files', () => {
+    expect(collectSetupNames(makeTempDir()).size).toBe(0);
+  });
+
+  // Deliberately asserts against the real tree, matching the established
+  // real-repository pattern in scripts/check-test-file-coverage.ts. This is the
+  // drift detection the guard exists for: if a budgeted `rig.setup()` name is
+  // renamed, `validateBudgetNamesAreUsed` must notice, which it can only do if
+  // `collectSetupNames` really reads this repository. `integration-tests/` is a
+  // committed, non-optional directory that `scripts/bun-test-roots.ts` also
+  // hard-codes as a test root.
   it('collects every rig.setup name across the integration tests on disk', () => {
     const names = collectSetupNames(INTEGRATION_TESTS_DIR);
     expect(names.has('should be able to run a shell command')).toBe(true);
