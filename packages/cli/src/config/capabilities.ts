@@ -21,9 +21,10 @@
  */
 
 import type {
+  ContentGeneratorConfig,
+  RuntimeProviderManager,
   SandboxConfig,
   WorkspaceContext,
-  RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { Storage } from '@vybestack/llxprt-code-storage';
@@ -99,4 +100,10 @@ export interface ZedSessionConfig extends EphemeralSettingsAccess {
   getProviderManager(): RuntimeProviderManager | undefined;
   getTargetDir(): string;
   getToolRegistry(): ToolRegistry;
+}
+
+/** What the zed helpers read when projecting model state. */
+export interface ZedHelperConfig extends EphemeralSettingsAccess {
+  getModel(): string;
+  getContentGeneratorConfig(): ContentGeneratorConfig | undefined;
 }

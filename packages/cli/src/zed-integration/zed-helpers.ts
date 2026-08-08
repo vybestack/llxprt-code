@@ -11,8 +11,8 @@ import {
   resolveEffectiveContextLimit,
   resolveProviderReportedLimit,
   resolveUserContextLimit,
-  type Config,
 } from '@vybestack/llxprt-code-core';
+import type { ZedHelperConfig } from '../config/capabilities.js';
 import type {
   AgentEvent,
   DoneReason,
@@ -332,7 +332,7 @@ export function buildUsageUpdate(
  * shared core resolver so there is a single source of truth for the
  * user-override → provider-limit → model-name precedence (issues #2251 / #2815).
  */
-export function resolveZedContextWindowSize(config: Config): number {
+export function resolveZedContextWindowSize(config: ZedHelperConfig): number {
   let providerLimit: number | undefined;
   try {
     providerLimit = resolveProviderReportedLimit(
