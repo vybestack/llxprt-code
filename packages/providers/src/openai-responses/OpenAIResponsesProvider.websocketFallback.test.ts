@@ -268,7 +268,7 @@ describe('OpenAIResponsesProvider WebSocket sticky-fallback threshold (issue #30
     expect(after.text).toContain('ws-ok');
   });
 
-  describe('WebSocket->HTTP demotion keeps the conversation stateful @issue:3134', () => {
+  describe('WebSocket->HTTP demotion drops the parent @issue:3134', () => {
     const originalFetch = globalThis.fetch;
 
     afterEach(() => {
@@ -276,12 +276,16 @@ describe('OpenAIResponsesProvider WebSocket sticky-fallback threshold (issue #30
     });
 
     /**
-     * Demoting to HTTP must NOT resurrect full-history replay. The parent was
-     * stored server-side (store=true), so `previous_response_id` resolves on
-     * the HTTP endpoint exactly as it does over the socket. Sending the whole
-     * conversation here would reintroduce the cost this issue removes.
+     * Codex statefulness is bound to the WebSocket connection. Verified against
+     * the live backend: `store: true` is rejected outright
+     * (400 `{"detail":"Store must be set to false"}`), so nothing is stored
+     * server-side and a parent id cannot be resolved over HTTP — sending one
+     * there is rejected, wasting a round trip and permanently suppressing
+     * statefulness for the session.
+     *
+     * A demoted request must therefore carry NO parent and the FULL history.
      */
-    it('sends previous_response_id and only the post-parent turn after falling back to HTTP', async () => {
+    it('sends full history and no previous_response_id after falling back to HTTP', async () => {
       let capturedBody: string | undefined;
       (globalThis as { fetch: unknown }).fetch = async (
         _input: unknown,
@@ -334,13 +338,12 @@ describe('OpenAIResponsesProvider WebSocket sticky-fallback threshold (issue #30
       expect(provider.wsAttempts.count).toBe(1);
 
       const body = JSON.parse(capturedBody) as Record<string, unknown>;
-      expect(body['previous_response_id']).toBe('resp_parent');
-      expect(body['store']).toBe(true);
+      expect(body['previous_response_id']).toBeUndefined();
+      expect(body['store']).toBe(false);
 
+      // Full history, since the HTTP endpoint cannot resolve the parent.
       const users = userTextsOf(body['input']);
-      // Exact equality: an empty array would satisfy a toContain/not.toContain
-      // pair, hiding a total trimming failure.
-      expect(users).toEqual(['second question']);
+      expect(users).toEqual(['first question', 'second question']);
     });
   });
 });

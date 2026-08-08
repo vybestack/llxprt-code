@@ -1,18 +1,29 @@
 # Issue #3134 — Codex statefulness: stop resending full history
 
-## Direction (from repo owner, overrides the issue's transport-scoped framing)
-
-The issue proposes scoping statefulness *by transport* (HTTP Codex stays stateless,
-WebSocket Codex gets `previous_response_id`). The repo owner has directed otherwise:
+## Direction
 
 1. **The point is to not send all of history.** That is what statefulness is for.
-2. **`previous_response_id` is an API-level parameter and is orthogonal to the
-   transport.** `openai/codex` only wiring it into the WebSocket payload is a Codex
-   CLI policy choice (Zero Data Retention), not an API limitation.
-3. **Statefulness must be available for Codex and ON BY DEFAULT**, on both the HTTP
-   and WebSocket transports.
+2. **Statefulness must be available for Codex and ON BY DEFAULT.**
 
-Where this plan and the issue text disagree, this direction wins.
+The working hypothesis was that `previous_response_id` is an API-level parameter
+and therefore orthogonal to the transport, so it should work on Codex over HTTP as
+well as WebSocket. **Live testing against the real backend disproved that**, and the
+implementation follows the evidence.
+
+### Verified backend contract (chatgpt.com/backend-api/codex, 2026-08-08)
+
+| Request | Result |
+|---|---|
+| `store: true` | **400** `{"detail":"Store must be set to false"}` |
+| `previous_response_id` over HTTP | rejected — nothing is stored server-side |
+| `store: false` + `previous_response_id` over **WebSocket** | **accepted**; turn sends only the new items |
+
+So Codex continuation state is held by the live WebSocket connection, not by durable
+storage. Statefulness on Codex is therefore transport-bound — enforced by the
+backend, not chosen by us. `store` stays `false` for Codex always.
+
+Measured on a real session: turn 1 sent 1 item, turns 2 and 3 sent **1 and 3 items**
+respectively instead of the whole conversation.
 
 ## Accepted behavior
 

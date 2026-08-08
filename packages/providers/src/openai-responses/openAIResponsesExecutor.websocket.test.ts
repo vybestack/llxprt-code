@@ -88,6 +88,8 @@ function buildDeps(
     shouldRetryOnError: () => false,
     getDefaultModel: () => 'gpt-5.6-sol',
     getGlobalConfig: () => undefined,
+    // Codex statefulness is WS-bound; these harnesses exercise the WS path.
+    isWebSocketTransportActive: () => true,
     ...overrides,
   };
 }
@@ -367,16 +369,17 @@ describe('executeOpenAIResponsesRequest WebSocket reconnect keeps the conversati
     const sent = JSON.parse(sentRaw) as Record<string, unknown>;
     expect(sent['type']).toBe('response.create');
     expect(sent['previous_response_id']).toBe('resp_parent');
-    // store:true is the mechanical prerequisite for the backend to resolve the
-    // parent; without it the trimmed input would lose all prior context.
-    expect(sent['store']).toBe(true);
+    // Codex must NEVER send store=true: the backend rejects it outright
+    // (400 "Store must be set to false"). The parent is resolved from the
+    // live socket instead, which is why store stays false here.
+    expect(sent['store']).toBe(false);
 
-    // The first request opens a new chain, so it must also be stored.
+    // The first request opens the chain and likewise never sets store.
     const firstSent = JSON.parse(harness.sockets[0].sent[0]) as Record<
       string,
       unknown
     >;
-    expect(firstSent['store']).toBe(true);
+    expect(firstSent['store']).toBe(false);
     expect(firstSent['previous_response_id']).toBeUndefined();
 
     const userTexts = userTextsOf(sent['input']);

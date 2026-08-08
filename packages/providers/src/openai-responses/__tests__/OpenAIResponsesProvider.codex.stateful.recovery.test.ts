@@ -382,3 +382,101 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
     });
   });
 });
+
+/**
+ * Backend-enforced contract, verified live against
+ * chatgpt.com/backend-api/codex on 2026-08-08:
+ *
+ *   - `store: true`            -> 400 {"detail":"Store must be set to false"}
+ *   - `previous_response_id` over HTTP -> rejected (nothing is stored)
+ *   - `store: false` + `previous_response_id` over WebSocket -> accepted,
+ *      and the turn sends only the new items.
+ *
+ * Codex statefulness is therefore bound to the WebSocket transport. These
+ * tests pin that so it cannot silently regress into the (broken) HTTP form.
+ */
+describe('Codex statefulness is WebSocket-bound @issue:3134', () => {
+  beforeEach(() => {
+    setActiveProviderRuntimeContext(
+      createProviderRuntimeContext({
+        settingsService: new SettingsService(),
+        runtimeId: TEST_RUNTIME_ID,
+      }),
+    );
+  });
+
+  afterEach(() => {
+    clearActiveProviderRuntimeContext();
+  });
+
+  const contentsWithParent: IContent[] = [
+    { speaker: 'human', blocks: [{ type: 'text', text: 'q1' }] },
+    {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'a1' }],
+      metadata: {
+        id: 'resp_parent',
+        responsesStored: true,
+        providerBaseURL: CODEX_BASE_URL,
+      },
+    },
+    { speaker: 'human', blocks: [{ type: 'text', text: 'q2' }] },
+  ];
+
+  it('never sets store=true on Codex, even with statefulness active', async () => {
+    const harness = new SocketHarness([completingScript('ok')]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+    try {
+      await drain(
+        executeOpenAIResponsesRequest(
+          buildOptions(contentsWithParent),
+          buildDeps({ getWebSocketTransport: () => transport }),
+        ),
+      );
+      const sent = JSON.parse(harness.sockets[0].sent[0]) as Record<
+        string,
+        unknown
+      >;
+      expect(sent['store']).toBe(false);
+      expect(sent['previous_response_id']).toBe('resp_parent');
+    } finally {
+      transport.close();
+    }
+  });
+
+  it('sends no parent and full history when the WebSocket transport is inactive', async () => {
+    let capturedBody: string | undefined;
+    const originalFetch = globalThis.fetch;
+    (globalThis as { fetch: unknown }).fetch = async (
+      _input: unknown,
+      init?: RequestInit,
+    ) => {
+      if (typeof init?.body === 'string') capturedBody = init.body;
+      else if (init?.body instanceof Blob)
+        capturedBody = await init.body.text();
+      return sseResponse('resp_http', 'ok');
+    };
+    try {
+      await drain(
+        executeOpenAIResponsesRequest(
+          buildOptions(contentsWithParent),
+          buildDeps({
+            getWebSocketTransport: () => undefined,
+            isWebSocketTransportActive: () => false,
+          }),
+        ),
+      );
+      if (capturedBody === undefined) {
+        throw new Error('HTTP request body was not captured');
+      }
+      const body = JSON.parse(capturedBody) as Record<string, unknown>;
+      expect(body['store']).toBe(false);
+      expect(body['previous_response_id']).toBeUndefined();
+      expect(userTextsOf(body['input'])).toEqual(['q1', 'q2']);
+    } finally {
+      (globalThis as { fetch: unknown }).fetch = originalFetch;
+    }
+  });
+});

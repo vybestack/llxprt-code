@@ -239,7 +239,7 @@ describe('OpenAIResponsesProvider Codex stateful conversations @issue:3134', () 
     const body = await captureRequestBody(provider, contents, settings, {});
 
     expect(body['previous_response_id']).toBe('resp_1');
-    expect(body['store']).toBe(true);
+    expect(body['store']).toBe(false);
 
     const items = inputItems(body);
     const users = userMessages(items);
@@ -277,9 +277,9 @@ describe('OpenAIResponsesProvider Codex stateful conversations @issue:3134', () 
     const body = await captureRequestBody(provider, contents, settings, {});
 
     expect(body['previous_response_id']).toBeUndefined();
-    // Even with no parent, the turn must still be STORED so it can become the
-    // parent of the next turn — this is what bootstraps the whole chain.
-    expect(body['store']).toBe(true);
+    // The Codex backend REJECTS store=true (400 "Store must be set to false"),
+    // so Codex chains via the socket-held parent, never via stored responses.
+    expect(body['store']).toBe(false);
     const items = inputItems(body);
     const users = userMessages(items);
     const assistants = assistantMessages(items);
@@ -319,7 +319,7 @@ describe('OpenAIResponsesProvider Codex stateful conversations @issue:3134', () 
     const body = await captureRequestBody(provider, contents, settings, {});
 
     expect(body['previous_response_id']).toBe('resp_1');
-    expect(body['store']).toBe(true);
+    expect(body['store']).toBe(false);
 
     const items = inputItems(body);
     expect(userMessages(items)).not.toContain('first question');

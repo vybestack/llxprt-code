@@ -40,7 +40,7 @@ import { resolveUserMemory } from '../utils/userMemory.js';
 import { mergeSystemInstruction } from '../utils/systemInstructionMerge.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
-import { getErrorStatus } from '@vybestack/llxprt-code-core/utils/retry.js';
+import { isPreviousResponseNotFoundError } from './openAIResponsesStatefulRecovery.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
   toOpenAIResponsesWireEffort,
@@ -143,6 +143,18 @@ export interface ResponsesExecutorDeps {
    * error is detected before any content has been yielded (#3134 Fix 1).
    */
   readonly markResponsesStatefulFailed?: () => void;
+  /**
+   * Whether this request will go over the Codex Responses WebSocket.
+   *
+   * Codex statefulness is transport-bound and the backend enforces it: the
+   * ChatGPT endpoint rejects `store: true` outright
+   * (400 `{"detail":"Store must be set to false"}`), so a parent can only be
+   * resolved from the live socket that produced it. Sending
+   * `previous_response_id` over HTTP is rejected, costing a wasted round trip
+   * and permanently suppressing statefulness for the session, so the request
+   * builder must know the transport before it trims history (#3134).
+   */
+  readonly isWebSocketTransportActive?: () => boolean;
 }
 
 export interface PreparedResponsesRequestContext {
@@ -185,6 +197,7 @@ export async function buildResponsesRequestContextForProjection(
   options: NormalizedGenerateChatOptions,
   deps: ResponsesExecutorDeps,
   invocationEphemerals = resolveInvocationEphemerals(options),
+  forceStateless = false,
 ): Promise<PreparedResponsesRequestContext> {
   const patchedContent = SyntheticToolResponseHandler.patchMessageHistory(
     options.contents,
@@ -194,27 +207,7 @@ export async function buildResponsesRequestContextForProjection(
     patchedContent,
     invocationEphemerals,
     deps,
-  );
-}
-
-/**
- * Detect an API rejection caused by an unresolvable `previous_response_id`.
- *
- * The OpenAI Responses API returns HTTP 400 (or 404) with a body that mentions
- * `previous_response_id` or the phrase `Previous response with id` when the
- * stored parent cannot be found. This is the one sanctioned recovery trigger:
- * a genuinely external, unpredictable API response (#3134 Fix 1).
- */
-function isPreviousResponseNotFoundError(error: unknown): boolean {
-  const status = getErrorStatus(error);
-  if (status !== 400 && status !== 404) return false;
-  const message =
-    error instanceof Error
-      ? error.message.toLowerCase()
-      : String(error).toLowerCase();
-  return (
-    message.includes('previous_response_id') ||
-    message.includes('previous response with id')
+    forceStateless,
   );
 }
 
@@ -240,12 +233,16 @@ export async function* executeOpenAIResponsesRequest(
 
   await dumpFinalizedRequest(requestContext, invocationEphemerals, deps);
 
-  const streamParams = buildStreamParams(
-    requestContext,
-    abortSignal,
-    invocationEphemerals,
-    options,
-  );
+  const streamParams: StreamResponsesParams = {
+    ...buildStreamParams(
+      requestContext,
+      abortSignal,
+      invocationEphemerals,
+      options,
+    ),
+    rebuildStateless: () =>
+      buildStatelessTurn(options, deps, invocationEphemerals, abortSignal),
+  };
 
   // #3134 Fix 1: one-shot recovery when previous_response_id is rejected.
   // The safe replay boundary is "no IContent has been yielded to the consumer"
@@ -318,6 +315,35 @@ export async function* executeOpenAIResponsesRequest(
  * identical (#3134 Fix 1). Extracted to keep executeOpenAIResponsesRequest
  * within the project max-lines budget.
  */
+/**
+ * Re-derives the current turn with statefulness suppressed (full history, no
+ * `previous_response_id`), for the mid-turn WebSocket->HTTP fallback: the HTTP
+ * endpoint cannot resolve a socket-scoped parent.
+ *
+ * Deliberately does NOT mark the session as stateful-failed — a transport blip
+ * is not evidence that the parent itself was bad (#3134).
+ */
+async function buildStatelessTurn(
+  options: NormalizedGenerateChatOptions,
+  deps: ResponsesExecutorDeps,
+  invocationEphemerals: Record<string, unknown>,
+  abortSignal: AbortSignal | undefined,
+): Promise<StreamResponsesParams> {
+  const prepared = await buildResponsesRequestContextForProjection(
+    options,
+    deps,
+    invocationEphemerals,
+    /* forceStateless */ true,
+  );
+  const context = await resolveResponsesTransportContext(
+    options,
+    prepared,
+    deps,
+  );
+  await dumpFinalizedRequest(context, invocationEphemerals, deps);
+  return buildStreamParams(context, abortSignal, invocationEphemerals, options);
+}
+
 function buildStreamParams(
   requestContext: RequestContext,
   abortSignal: AbortSignal | undefined,
@@ -340,6 +366,7 @@ export async function buildRequestContext(
   patchedContent: IContent[],
   invocationEphemerals: Record<string, unknown>,
   deps: ResponsesExecutorDeps,
+  forceStateless = false,
 ): Promise<PreparedResponsesRequestContext> {
   const rawBaseURL = resolveResponsesBaseURL(options, deps);
   const isCodex = deps.isCodexBaseURL(rawBaseURL);
@@ -353,6 +380,12 @@ export async function buildRequestContext(
     typeof requestOverrides['store'] === 'boolean'
       ? requestOverrides['store']
       : undefined;
+  // Codex can only be stateful over the WebSocket transport (the backend
+  // rejects store=true, so the parent lives on the socket). Non-Codex uses
+  // real server-side storage and is transport-independent.
+  const statefulTransportSupported =
+    !forceStateless &&
+    (!isCodex || (deps.isWebSocketTransportActive?.() ?? false));
   const stateful = computeStatefulConversation(
     options,
     patchedContent,
@@ -361,6 +394,7 @@ export async function buildRequestContext(
     isCodex,
     rawBaseURL,
     deps.isResponsesStatefulFailed?.() ?? false,
+    statefulTransportSupported,
     deps.logger,
   );
   const input = buildInput(
@@ -381,13 +415,22 @@ export async function buildRequestContext(
   applyTextVerbosity(request, options, invocationEphemerals, deps);
   applyCodexRequestSettings(request, isCodex, deps);
   applyPromptCaching(request, options, invocationEphemerals, isCodex, deps);
-  applyStatefulConversation(request, stateful, explicitUserStore, deps.logger);
+  applyStatefulConversation(
+    request,
+    stateful,
+    explicitUserStore,
+    isCodex,
+    deps.logger,
+  );
   return {
     rawBaseURL,
     isCodex,
     request,
     includeThinkingInResponse: reasoning.includeThinkingInResponse,
-    responsesStored: request.store === true,
+    // Codex cannot use `store` (the backend rejects store=true), so its
+    // continuation is tracked by the connection instead. A stateful Codex turn
+    // is therefore "stored" for chaining purposes even though store=false.
+    responsesStored: request.store === true || (isCodex && stateful.enabled),
   };
 }
 
@@ -906,7 +949,7 @@ async function* streamResponses(
       transport,
       params.request,
       streamOptions,
-      () => streamOverHttp(params, deps),
+      () => streamOverHttpWithoutStatefulness(params, deps),
       deps.onWebSocketFallback,
       deps.logger,
       deps.onWebSocketSuccess,
@@ -915,6 +958,33 @@ async function* streamResponses(
   }
 
   yield* streamOverHttp(params, deps);
+}
+
+/**
+ * HTTP fallback for a request that was built for the WebSocket.
+ *
+ * A WebSocket-built Codex request can carry a socket-scoped
+ * `previous_response_id` and a trimmed input. The Codex HTTP endpoint cannot
+ * resolve that parent (it rejects the request, since nothing is stored
+ * server-side), so replaying the WebSocket request here would fail and lose
+ * the trimmed-away context. Re-derive a stateless request instead (#3134).
+ */
+async function* streamOverHttpWithoutStatefulness(
+  params: StreamResponsesParams,
+  deps: ResponsesExecutorDeps,
+): AsyncIterableIterator<IContent> {
+  if (
+    params.rebuildStateless === undefined ||
+    params.request.previous_response_id === undefined
+  ) {
+    yield* streamOverHttp(params, deps);
+    return;
+  }
+  deps.logger.debug(
+    () =>
+      'Codex WebSocket fallback: rebuilding the request without previous_response_id for HTTP.',
+  );
+  yield* streamOverHttp(await params.rebuildStateless(), deps);
 }
 
 async function buildWebSocketHandshakeHeaders(

@@ -68,6 +68,12 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       getDefaultModel: () => this.getDefaultModel(),
       getGlobalConfig: () => this.globalConfig,
       getWebSocketTransport: () => this.resolveWebSocketTransport(),
+      // Codex statefulness is only valid over the WebSocket transport, so the
+      // request builder needs to know the transport BEFORE it decides whether
+      // to trim history. Mirrors resolveWebSocketTransport's predicate without
+      // constructing a socket.
+      isWebSocketTransportActive: () =>
+        this.isCodexMode(this.getBaseURL()) && !this.webSocketStickToHttp,
       onWebSocketFallback: () => {
         // One pre-output failure still serves THIS request over HTTP (an
         // invisible in-turn recovery); only a sustained run of them sticks.

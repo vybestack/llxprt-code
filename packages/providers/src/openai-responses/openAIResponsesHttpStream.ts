@@ -38,6 +38,17 @@ import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';
 
 /** Per-request context shared by the executor and the HTTP stream path. */
 export interface StreamResponsesParams {
+  /**
+   * Rebuilds this request with statefulness suppressed (full history, no
+   * `previous_response_id`).
+   *
+   * The Codex WebSocket->HTTP fallback happens mid-turn with an already-built
+   * request. That request may carry a socket-scoped parent id, which the HTTP
+   * endpoint cannot resolve (verified live: the backend rejects it), so the
+   * fallback must re-derive a stateless request rather than replay the
+   * WebSocket one (#3134).
+   */
+  rebuildStateless?: () => Promise<StreamResponsesParams>;
   apiKey: string;
   baseURL: string;
   isCodex: boolean;

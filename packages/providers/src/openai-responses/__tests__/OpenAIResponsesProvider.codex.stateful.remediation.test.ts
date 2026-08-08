@@ -133,7 +133,7 @@ describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request
           unknown
         >;
         expect(sent['previous_response_id']).toBeUndefined();
-        expect(sent['store']).toBe(true);
+        expect(sent['store']).toBe(false);
         const users = userTextsOf(sent['input']);
         expect(users).toContain('new q');
       } finally {
@@ -183,8 +183,8 @@ describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request
     });
   });
 
-  describe('Fix 7 — empty-remainder returns enabled: true', () => {
-    it('a parent with no following content still gets store=true', async () => {
+  describe('Fix 7 — empty-remainder still marks the turn chainable', () => {
+    it('a parent with no following content still yields a chainable turn', async () => {
       const harness = new SocketHarness([completingScript('ok')]);
       const transport = createCodexResponsesWebSocketTransport({
         openSocket: harness.openSocket,
@@ -216,7 +216,7 @@ describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request
         >;
         // store must be true (enabled: true) even though there is no parent id
         // and full history is sent.
-        expect(sent['store']).toBe(true);
+        expect(sent['store']).toBe(false);
         expect(sent['previous_response_id']).toBeUndefined();
       } finally {
         transport.close();
@@ -301,7 +301,7 @@ describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request
           unknown
         >;
         expect(sent['previous_response_id']).toBe('resp_1');
-        expect(sent['store']).toBe(true);
+        expect(sent['store']).toBe(false);
       } finally {
         transport.close();
       }
@@ -494,7 +494,7 @@ describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request
             unknown
           >;
           expect(sent['previous_response_id']).toBe(completionId);
-          expect(sent['store']).toBe(true);
+          expect(sent['store']).toBe(false);
           const users = userTextsOf(sent['input']);
           expect(users).not.toContain('turn 1 question');
           expect(users).toContain('turn 2 question');

@@ -103,8 +103,21 @@ export function computeStatefulConversation(
   isCodex: boolean,
   rawBaseURL: string,
   responsesStatefulFailed: boolean,
+  statefulTransportSupported: boolean,
   logger: DebugLogger,
 ): StatefulConversation {
+  // Codex statefulness is bound to the WebSocket transport. The ChatGPT
+  // backend rejects `store: true` (400 "Store must be set to false"), so a
+  // parent id only resolves on the socket that produced it; sending one over
+  // HTTP is rejected and wastes a round trip.
+  if (!statefulTransportSupported) {
+    logger.debug(
+      () =>
+        'responses-stateful skipped: the active transport cannot resolve a previous_response_id.',
+    );
+    return { enabled: false, parentId: undefined, content };
+  }
+
   if (responsesStatefulFailed) {
     logger.debug(
       () =>
@@ -198,6 +211,7 @@ export function applyStatefulConversation(
   request: OpenAIResponsesRequest,
   stateful: StatefulConversation,
   explicitUserStore: boolean | undefined,
+  isCodex: boolean,
   logger: DebugLogger,
 ): void {
   delete request.previous_response_id;
@@ -211,12 +225,22 @@ export function applyStatefulConversation(
   }
   if (!stateful.enabled) return;
 
-  request.store = true;
+  // The Codex backend REJECTS store=true outright:
+  //   HTTP 400 {"detail":"Store must be set to false"}
+  // (verified against chatgpt.com/backend-api/codex). Its continuation state
+  // is held by the live WebSocket connection, not by durable server-side
+  // storage, which is why upstream sends `store: false` alongside
+  // `previous_response_id` on the WS payload. Raising store here would break
+  // every Codex request, so Codex keeps store=false and relies on the
+  // connection-scoped parent instead.
+  if (!isCodex) {
+    request.store = true;
+  }
   if (stateful.parentId !== undefined) {
     request.previous_response_id = stateful.parentId;
   }
   logger.debug(
     () =>
-      `responses-stateful activated: previous_response_id=${stateful.parentId ?? 'none'}, store=true.`,
+      `responses-stateful activated: previous_response_id=${stateful.parentId ?? 'none'}, store=${String(request.store === true)}.`,
   );
 }

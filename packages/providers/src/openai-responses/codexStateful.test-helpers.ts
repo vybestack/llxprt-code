@@ -152,6 +152,8 @@ export function buildDeps(
     shouldRetryOnError: () => false,
     getDefaultModel: () => 'gpt-5.6-sol',
     getGlobalConfig: () => undefined,
+    // Codex statefulness is WS-bound; these harnesses exercise the WS path.
+    isWebSocketTransportActive: () => true,
     ...overrides,
   };
 }
