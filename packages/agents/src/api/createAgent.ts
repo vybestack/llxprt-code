@@ -78,6 +78,25 @@ import {
 } from './agentBootstrap.js';
 
 /**
+ * Builds the session runtime that owns the ShellJobManager and attaches its
+ * shell-admission reactor to the supplied Config.
+ *
+ * Construction happens BEFORE Config initialization so Config can borrow an
+ * already-built manager during tool assembly and has nothing to lazily create.
+ * The runtime owns construction and disposal; Config only borrows.
+ *
+ * @plan PLAN-20260808-ISSUE2615
+ */
+function assembleSessionRuntime(
+  config: Config,
+  settingsService: SettingsService,
+): SessionRuntime {
+  const sessionRuntime = new SessionRuntime(settingsService);
+  sessionRuntime.attachToConfig(config);
+  return sessionRuntime;
+}
+
+/**
  * Builds a ready Agent by composing shipped primitives through a shared runtime
  * context with a single shared MessageBus.
  * @pseudocode createAgent.md steps 10-176
@@ -130,11 +149,7 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
 
   // @plan PLAN-20260808-ISSUE2615
   // Construct the session-owned ShellJobManager BEFORE initialize so Config can
-  // borrow the already-built manager during tool assembly. Attach the
-  // shell-admission reactor so writes to `shell-max-background-jobs` propagate
-  // synchronously. The runtime owns construction + disposal; Config borrows it.
-  const sessionRuntime = new SessionRuntime(settingsService);
-  sessionRuntime.attachToConfig(config);
+  const sessionRuntime = assembleSessionRuntime(config, settingsService);
 
   // @pseudocode createAgent.md steps 41-58
   // SHARED runtime context — adopts OUR Config/MessageBus. DO NOT pass

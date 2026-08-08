@@ -116,20 +116,27 @@ function main(): void {
     const rel = relative(ROOT, abs);
     const touched = new Set<string>();
 
+    /**
+     * True when the receiver exposes a large slice of Config's member set. This
+     * is the check that cannot be renamed around: a file depending on a
+     * hundred-member type is coupled to the god-object whatever that type is
+     * called.
+     */
+    const receiverIsConfigShaped = (expr: ts.Expression): boolean => {
+      const props = checker.getPropertiesOfType(
+        checker.getTypeAtLocation(expr),
+      );
+      const overlap = props.filter((p) => configNames.has(p.getName())).length;
+      return overlap >= 5;
+    };
+
     const visit = (n: ts.Node): void => {
-      if (ts.isPropertyAccessExpression(n)) {
-        const name = n.name.text;
-        if (configNames.has(name)) {
-          const recv = checker.getTypeAtLocation(n.expression);
-          const props = checker.getPropertiesOfType(recv);
-          // Heuristic that cannot be renamed around: if the receiver exposes a
-          // large slice of Config's member set, the file is coupled to the
-          // god-object regardless of what its declared type is called.
-          const overlap = props.filter((p) =>
-            configNames.has(p.getName()),
-          ).length;
-          if (overlap >= 5) touched.add(name);
-        }
+      if (
+        ts.isPropertyAccessExpression(n) &&
+        configNames.has(n.name.text) &&
+        receiverIsConfigShaped(n.expression)
+      ) {
+        touched.add(n.name.text);
       }
       ts.forEachChild(n, visit);
     };
@@ -137,6 +144,11 @@ function main(): void {
     if (touched.size > 0) perFile.set(rel, touched);
   }
 
+  report(perFile);
+}
+
+/** Prints the coupling report. Split out of main to keep it under the size cap. */
+function report(perFile: Map<string, Set<string>>): void {
   const rows = [...perFile.entries()].sort((a, b) => b[1].size - a[1].size);
   const BUDGET = 12;
 
