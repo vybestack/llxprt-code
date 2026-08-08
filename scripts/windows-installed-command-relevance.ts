@@ -381,6 +381,7 @@ const LIFECYCLE_SCRIPTS: readonly string[] = [
   'prepublishOnly',
   'prepack',
   'postpack',
+  'dependencies',
 ];
 
 /**
@@ -413,10 +414,11 @@ export function lifecycleScriptsDiffer(
   baseScripts: unknown,
   headScripts: unknown,
 ): boolean {
-  const base: JsonRecord = isJsonRecord(baseScripts) ? baseScripts : {};
-  const head: JsonRecord = isJsonRecord(headScripts) ? headScripts : {};
+  if (!isJsonRecord(baseScripts) || !isJsonRecord(headScripts)) {
+    return !jsonDeepEqual(baseScripts, headScripts);
+  }
   for (const script of LIFECYCLE_SCRIPTS) {
-    if (!jsonDeepEqual(base[script], head[script])) {
+    if (!jsonDeepEqual(baseScripts[script], headScripts[script])) {
       return true;
     }
   }

@@ -206,13 +206,42 @@ describe('remediation: preprepare/postprepare lifecycle scripts', () => {
     expect(withScript('postprepare').relevant).toBe(true);
   });
 
-  it('scripts.dependencies is NOT a lifecycle script (top-level dependencies are relevant via manifest fallback)', () => {
-    expect(withScript('dependencies').relevant).toBe(false);
+  it('adding the npm dependencies lifecycle script is relevant', () => {
+    const result = withScript('dependencies');
+    expect(result.relevant).toBe(true);
+    expect(result.reason).toContain('lifecycle');
   });
 
   it('an ordinary named script is NOT relevant (not every script is lifecycle)', () => {
     const result = withScript('lint:custom');
     expect(result.relevant).toBe(false);
+  });
+});
+
+describe('remediation: malformed manifest scripts fail closed', () => {
+  it('treats a change between non-object scripts values as relevant', () => {
+    const base = JSON.parse(BASE_MANIFEST) as Record<string, unknown>;
+    const head = JSON.parse(BASE_MANIFEST) as Record<string, unknown>;
+    base['scripts'] = 'malformed-base';
+    head['scripts'] = 'malformed-head';
+
+    const result = classifyPr({
+      baseManifest: JSON.stringify(base),
+      headManifest: JSON.stringify(head),
+    });
+
+    expect(result.relevant).toBe(true);
+    expect(result.reason).toContain('scripts');
+  });
+
+  it('treats a change from an object to malformed scripts as relevant', () => {
+    const head = JSON.parse(BASE_MANIFEST) as Record<string, unknown>;
+    head['scripts'] = false;
+
+    const result = classifyPr({ headManifest: JSON.stringify(head) });
+
+    expect(result.relevant).toBe(true);
+    expect(result.reason).toContain('scripts');
   });
 });
 
