@@ -12,7 +12,12 @@
  */
 
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { Diagnostics, ModelSelection, WorkspacePaths, RuntimeLifecycle } from '@vybestack/llxprt-code-core/config/roles.js';
+import type {
+  Diagnostics,
+  ModelSelection,
+  WorkspacePaths,
+  RuntimeLifecycle,
+} from '@vybestack/llxprt-code-core/config/roles.js';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
@@ -97,7 +102,6 @@ type CreateAgentConfigView = Diagnostics &
 function asCreateAgentView(config: Config): CreateAgentConfigView {
   return config;
 }
-
 
 export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
   // @pseudocode createAgent.md steps 10-13: validate config, resolve auth, runtimeId
@@ -290,7 +294,9 @@ export async function finalizeAgent(
   });
 
   // @pseudocode createAgent.md steps 115-118: bind POST-auth client
-  const client = asCreateAgentView(config).getAgentClient() as AgentClientContract | undefined;
+  const client = asCreateAgentView(config).getAgentClient() as
+    | AgentClientContract
+    | undefined;
   if (client === undefined) {
     throw new AgentBootstrapError('no post-auth agent client');
   }
@@ -470,7 +476,9 @@ function initializeConfigAndMessageBus(
   // harness.forceConfirmations gate (default true) lets production callers
   // skip the policy injection.
   if (forceConfirmations) {
-    injectConfirmationForcingPolicy(asCreateAgentView(config).getPolicyEngine());
+    injectConfirmationForcingPolicy(
+      asCreateAgentView(config).getPolicyEngine(),
+    );
   }
   const messageBus = new MessageBus(
     asCreateAgentView(config).getPolicyEngine(),

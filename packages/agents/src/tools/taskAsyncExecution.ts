@@ -55,7 +55,9 @@ export interface AsyncSetupResult {
 
 /** Collaborators needed to run an async task. */
 export interface AsyncTaskCollaborators {
-  config: EphemeralSettings & { getSettingsService: Config['getSettingsService']; };
+  config: EphemeralSettings & {
+    getSettingsService: Config['getSettingsService'];
+  };
   normalized: TaskToolInvocationParams;
   params: { timeout_seconds?: number; grace_period_seconds?: number };
   createOrchestrator: () => SubagentOrchestrator;
@@ -89,7 +91,11 @@ export function normalizeSubagentStreamingText(text: string): string {
  * Uses boundary-validation for `getSettingsService` because partial config
  * mocks omit the method even though the static `Config` type requires it.
  */
-export function checkAsyncSettings(config: EphemeralSettings & { getSettingsService: Config['getSettingsService']; }): ToolResult | undefined {
+export function checkAsyncSettings(
+  config: EphemeralSettings & {
+    getSettingsService: Config['getSettingsService'];
+  },
+): ToolResult | undefined {
   const settingsService =
     typeof config.getSettingsService === 'function'
       ? config.getSettingsService()

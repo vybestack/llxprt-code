@@ -15,7 +15,13 @@
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { RuntimeLifecycle, ToolAccess, PolicyAccess, McpAccess, TelemetryAccess } from '@vybestack/llxprt-code-core/config/roles.js';
+import type {
+  RuntimeLifecycle,
+  ToolAccess,
+  PolicyAccess,
+  McpAccess,
+  TelemetryAccess,
+} from '@vybestack/llxprt-code-core/config/roles.js';
 import type { ToolSchedulerContract } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
 import {
   ApprovalMode,
@@ -52,6 +58,7 @@ import {
 } from '@vybestack/llxprt-code-core/filters/EmojiFilter.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import type { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import type { PolicyEngine } from '@vybestack/llxprt-code-core';
 import {
   templateString,
   type ToolConfig,
@@ -76,7 +83,7 @@ type SubagentRuntimeSetupConfig = RuntimeLifecycle &
         toolRegistry?: ToolRegistry;
       },
     ): Promise<ToolSchedulerContract>;
-    getPolicyEngine(): import('@vybestack/llxprt-code-core').PolicyEngine;
+    getPolicyEngine(): PolicyEngine;
   };
 // ---------------------------------------------------------------------------
 // Simple utilities
@@ -289,7 +296,9 @@ export function createToolExecutionConfig(
       sessionId: string,
       callbacks: SchedulerCallbacks,
       options: SchedulerOptions | undefined,
-      dependencies: { messageBus?: MessageBus; toolRegistry?: ToolRegistry } | undefined,
+      dependencies:
+        | { messageBus?: MessageBus; toolRegistry?: ToolRegistry }
+        | undefined,
     ) =>
       foregroundConfig.getOrCreateScheduler(sessionId, callbacks, options, {
         messageBus: dependencies?.messageBus ?? messageBus,

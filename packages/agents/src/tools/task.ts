@@ -793,8 +793,12 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       {
         createOrchestrator: () => this.ensureOrchestrator(messageBus),
         getToolRegistry:
-          typeof (this.config as { getToolRegistry(): ToolRegistry }).getToolRegistry === 'function'
-            ? () => (this.config as { getToolRegistry(): ToolRegistry }).getToolRegistry()
+          typeof (this.config as { getToolRegistry(): ToolRegistry })
+            .getToolRegistry === 'function'
+            ? () =>
+                (
+                  this.config as { getToolRegistry(): ToolRegistry }
+                ).getToolRegistry()
             : undefined,
         getSchedulerFactory: this.dependencies.schedulerFactoryProvider,
         isInteractiveEnvironment:

@@ -470,7 +470,8 @@ export class SubagentOrchestrator {
   }
 
   private getParentMaxTurns(): number | undefined {
-    const config = this.options.foregroundConfig as SubagentOrchestratorConfig & {
+    const config = this.options
+      .foregroundConfig as SubagentOrchestratorConfig & {
       getEphemeralSetting?: (key: string) => unknown;
     };
     if (typeof config.getEphemeralSetting !== 'function') {

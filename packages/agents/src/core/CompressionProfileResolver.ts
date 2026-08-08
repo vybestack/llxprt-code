@@ -535,7 +535,9 @@ export async function resolveCompressionProvider(
     };
   }
 
-  const profileManager = (ctx.providerRuntime.config as ProfileManagerProvider | undefined)?.getProfileManager();
+  const profileManager = (
+    ctx.providerRuntime.config as ProfileManagerProvider | undefined
+  )?.getProfileManager();
   if (!profileManager) {
     throw new CompressionProfileNotFoundError(
       profileName,

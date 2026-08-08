@@ -14,9 +14,7 @@ import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/me
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { toolFailureMarker } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
-import {
-  type CompletedToolCall,
-} from './coreToolScheduler.js';
+import { type CompletedToolCall } from './coreToolScheduler.js';
 import type { ToolSchedulerContract } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 

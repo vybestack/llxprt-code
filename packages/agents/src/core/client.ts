@@ -18,7 +18,10 @@ import type { Turn } from './turn.js';
 import { type ServerAgentStreamEvent } from './turn.js';
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { ModelSelection, SessionIdentity } from '@vybestack/llxprt-code-core/config/roles.js';
+import type {
+  ModelSelection,
+  SessionIdentity,
+} from '@vybestack/llxprt-code-core/config/roles.js';
 import type { UserTierId } from '@vybestack/llxprt-code-core/code_assist/types.js';
 import {
   buildToolDeclarationsFromView,
@@ -81,7 +84,6 @@ type ClientConfigSurface = ModelSelection &
   SessionIdentity & {
     getToolRegistry: Config['getToolRegistry'];
   };
-
 
 export class AgentClient implements AgentClientContract {
   private chat?: ChatSession;
@@ -175,7 +177,9 @@ export class AgentClient implements AgentClientContract {
     this.lastPromptId = runtimeState.sessionId;
 
     // Initialize complexity analyzer with config settings
-    const complexitySettings = (config as ModelSelection).getComplexityAnalyzerSettings();
+    const complexitySettings = (
+      config as ModelSelection
+    ).getComplexityAnalyzerSettings();
     this.complexityAnalyzer = new ComplexityAnalyzer({
       complexityThreshold: complexitySettings.complexityThreshold,
       minTasksForSuggestion: complexitySettings.minTasksForSuggestion,
@@ -315,7 +319,8 @@ export class AgentClient implements AgentClientContract {
     }
     // Use pending config if available (from initialize() call), otherwise fall back to current config
     const contentGenConfig =
-      this._pendingConfig ?? (this.config as ClientConfigSurface).getContentGeneratorConfig();
+      this._pendingConfig ??
+      (this.config as ClientConfigSurface).getContentGeneratorConfig();
     if (!contentGenConfig) {
       throw new Error(
         'Content generator config not initialized. Call config.refreshAuth() first.',
@@ -504,7 +509,9 @@ export class AgentClient implements AgentClientContract {
   }
 
   async setTools(): Promise<void> {
-    const toolRegistry = (this.config as ClientConfigSurface).getToolRegistry() as unknown as
+    const toolRegistry = (
+      this.config as ClientConfigSurface
+    ).getToolRegistry() as unknown as
       | ReturnType<Config['getToolRegistry']>
       | null
       | undefined;

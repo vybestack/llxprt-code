@@ -27,7 +27,14 @@ import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentG
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { isThinkingSupported } from './clientHelpers.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { ModelSelection, MemoryAccess, EphemeralSettings, McpAccess, WorkspacePaths, SessionIdentity } from '@vybestack/llxprt-code-core/config/roles.js';
+import type {
+  ModelSelection,
+  MemoryAccess,
+  EphemeralSettings,
+  McpAccess,
+  WorkspacePaths,
+  SessionIdentity,
+} from '@vybestack/llxprt-code-core/config/roles.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { TodoContinuationService } from './TodoContinuationService.js';
 
@@ -49,7 +56,6 @@ function asConfigView(config: Config): ModelSelection &
   return config;
 }
 
-
 export function buildSettingsSnapshot(
   config: Config,
   getToolGovernance: typeof getToolGovernanceEphemerals = getToolGovernanceEphemerals,
@@ -63,7 +69,8 @@ export function buildSettingsSnapshot(
       ? rawCompressionThreshold
       : undefined;
 
-  const rawContextLimit = asConfigView(config).getEphemeralSetting('context-limit');
+  const rawContextLimit =
+    asConfigView(config).getEphemeralSetting('context-limit');
   const contextLimit =
     typeof rawContextLimit === 'number' &&
     Number.isFinite(rawContextLimit) &&
@@ -86,36 +93,30 @@ export function buildSettingsSnapshot(
     preserveThreshold: preserveThreshold ?? 0.2,
     telemetry: { enabled: true, target: null },
     tools: getToolGovernance(config),
-    'reasoning.enabled': asConfigView(config).getEphemeralSetting('reasoning.enabled') as
-      | boolean
-      | undefined,
+    'reasoning.enabled': asConfigView(config).getEphemeralSetting(
+      'reasoning.enabled',
+    ) as boolean | undefined,
     'reasoning.includeInContext': asConfigView(config).getEphemeralSetting(
       'reasoning.includeInContext',
     ) as boolean | undefined,
     'reasoning.includeInResponse': asConfigView(config).getEphemeralSetting(
       'reasoning.includeInResponse',
     ) as boolean | undefined,
-    'reasoning.format': asConfigView(config).getEphemeralSetting('reasoning.format') as
-      | 'native'
-      | 'field'
-      | undefined,
+    'reasoning.format': asConfigView(config).getEphemeralSetting(
+      'reasoning.format',
+    ) as 'native' | 'field' | undefined,
     'reasoning.stripFromContext': asConfigView(config).getEphemeralSetting(
       'reasoning.stripFromContext',
     ) as 'all' | 'allButLast' | 'none' | undefined,
-    'reasoning.fieldName': asConfigView(config).getEphemeralSetting('reasoning.fieldName') as
-      | string
-      | undefined,
-    'reasoning.effort': asConfigView(config).getEphemeralSetting('reasoning.effort') as
-      | 'minimal'
-      | 'low'
-      | 'medium'
-      | 'high'
-      | 'xhigh'
-      | 'max'
-      | undefined,
-    'reasoning.maxTokens': asConfigView(config).getEphemeralSetting('reasoning.maxTokens') as
-      | number
-      | undefined,
+    'reasoning.fieldName': asConfigView(config).getEphemeralSetting(
+      'reasoning.fieldName',
+    ) as string | undefined,
+    'reasoning.effort': asConfigView(config).getEphemeralSetting(
+      'reasoning.effort',
+    ) as 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | undefined,
+    'reasoning.maxTokens': asConfigView(config).getEphemeralSetting(
+      'reasoning.maxTokens',
+    ) as number | undefined,
   };
 }
 
@@ -137,7 +138,9 @@ export async function buildSystemInstruction(
     : asConfigView(config).getUserMemory();
   const coreMemory = asConfigView(config).getCoreMemory();
 
-  const jitMemory = await asConfigView(config).getJitMemoryForPath(asConfigView(config).getWorkingDir());
+  const jitMemory = await asConfigView(config).getJitMemoryForPath(
+    asConfigView(config).getWorkingDir(),
+  );
   if (jitMemory) {
     userMemory = userMemory ? `${userMemory}\n\n${jitMemory}` : jitMemory;
   }

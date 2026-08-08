@@ -17,7 +17,7 @@
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
-import type { ToolExecutionConfig, } from './nonInteractiveToolExecutor.js';
+import type { ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
 import type { CoreToolScheduler } from './coreToolScheduler.js';
 import {
   type SchedulerCallbacks,

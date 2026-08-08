@@ -38,7 +38,10 @@
 import * as fs from 'node:fs/promises';
 import os from 'node:os';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { EphemeralSettings, ModelSelection } from '@vybestack/llxprt-code-core/config/roles.js';
+import type {
+  EphemeralSettings,
+  ModelSelection,
+} from '@vybestack/llxprt-code-core/config/roles.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import {
   switchActiveProvider,
@@ -70,7 +73,6 @@ export type ProviderActivationConfig = EphemeralSettings &
     getProviderManager: Config['getProviderManager'];
     getSettingsService: Config['getSettingsService'];
   };
-
 
 export interface ProviderActivationResult {
   /** True when the provider-case auth sequence threw (CLI maps this to fatal). */
@@ -606,7 +608,9 @@ function isPureAlreadyActiveRefresh(
   );
 }
 
-function resolveActiveProviderName(config: ProviderActivationConfig): string | undefined {
+function resolveActiveProviderName(
+  config: ProviderActivationConfig,
+): string | undefined {
   return config.getProviderManager()?.getActiveProviderName();
 }
 

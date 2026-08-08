@@ -13,7 +13,14 @@
 
 import type { UserTierId } from '@vybestack/llxprt-code-core/code_assist/types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { McpAccess, RuntimeLifecycle, PolicyAccess, EphemeralSettings, SessionIdentity, WorkspacePaths } from '@vybestack/llxprt-code-core/config/roles.js';
+import type {
+  McpAccess,
+  RuntimeLifecycle,
+  PolicyAccess,
+  EphemeralSettings,
+  SessionIdentity,
+  WorkspacePaths,
+} from '@vybestack/llxprt-code-core/config/roles.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -219,7 +226,6 @@ type AgentImplConfigView = McpAccess &
     getToolRegistry: Config['getToolRegistry'];
     initializeContentGeneratorConfig: Config['initializeContentGeneratorConfig'];
   };
-
 
 export class AgentImpl implements Agent {
   readonly profiles: ProfilesControl;
@@ -1428,7 +1434,10 @@ export class AgentImpl implements Agent {
     );
     for (const extension of activeExtensions) {
       await this.safe(errors, () =>
-        unloadExtensionSafely((ownership.config as AgentImplConfigView).getExtensionLoader(), extension),
+        unloadExtensionSafely(
+          (ownership.config as AgentImplConfigView).getExtensionLoader(),
+          extension,
+        ),
       );
     }
     ownership.extensionsDisposed = true;
