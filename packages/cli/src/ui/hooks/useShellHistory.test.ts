@@ -111,7 +111,7 @@ describe('useShellHistory', () => {
       );
     });
 
-    let command: string | null = null;
+    let command!: string | null;
     act(() => {
       command = result.current.getPreviousCommand();
     });
@@ -131,7 +131,7 @@ describe('useShellHistory', () => {
       expect(mockedFs.readFile).toHaveBeenCalled();
     });
 
-    let command: string | null = null;
+    let command!: string | null;
     act(() => {
       command = result.current.getPreviousCommand();
     });
@@ -158,7 +158,7 @@ describe('useShellHistory', () => {
       );
     });
 
-    let command: string | null = null;
+    let command!: string | null;
     act(() => {
       command = result.current.getPreviousCommand();
     });
@@ -172,7 +172,7 @@ describe('useShellHistory', () => {
     // Wait for history to be loaded: ['cmd3', 'cmd2', 'cmd1']
     await waitFor(() => expect(mockedFs.readFile).toHaveBeenCalled());
 
-    let command: string | null = null;
+    let command!: string | null;
 
     act(() => {
       command = result.current.getPreviousCommand();

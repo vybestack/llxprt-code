@@ -77,15 +77,7 @@ describe('TestRig setup and cleanup behavior', () => {
     const firstRun = rig.runCommand(['--version']);
     const secondRun = rig.runCommand(['--version']);
 
-    try {
-      await secondRun;
-      throw new Error('Expected the overlapping run to reject');
-    } catch (error) {
-      if (!(error instanceof Error)) {
-        throw new Error(`Expected Error, received ${String(error)}`);
-      }
-      expect(error.message).toMatch(/overlapping run operations/);
-    }
+    await expect(secondRun).rejects.toThrow(/overlapping run operations/);
 
     await firstRun;
   });

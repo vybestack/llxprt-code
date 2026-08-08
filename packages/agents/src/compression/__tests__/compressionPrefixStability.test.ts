@@ -245,8 +245,12 @@ describe('A4: HistoryService cache-anchor contract (#3070 Defect B)', () => {
 
   it('setCacheAnchorSeq rejects non-positive and non-integer identities', () => {
     const hs = new HistoryService();
-    expect(() => hs.setCacheAnchorSeq(0)).toThrow();
-    expect(() => hs.setCacheAnchorSeq(1.5)).toThrow();
+    expect(() => hs.setCacheAnchorSeq(0)).toThrow(
+      'Cache-anchor seq must be a positive integer: got 0',
+    );
+    expect(() => hs.setCacheAnchorSeq(1.5)).toThrow(
+      'Cache-anchor seq must be a positive integer: got 1.5',
+    );
   });
 
   it('clear() preserves the anchor (compression rebuild survives)', () => {
@@ -410,14 +414,14 @@ describe('A5: anchor invariants (#3070 Defect B)', () => {
 
     // Either the anchor floor held (applied with topPreserved >= 8) or a clean
     // structural no-op was returned. The floor must NEVER be silently violated.
-    if (result.kind === 'applied') {
-      const topPreserved = result.metadata.topPreserved;
-      // The floor was 8 (anchorIndex 7 + 1). topPreserved must be >= 8.
-      expect(topPreserved).toBeGreaterThanOrEqual(8);
-    } else {
-      // Clean structural no-op is acceptable
-      expect(result.kind).toBe('noop');
-    }
+    expect(['applied', 'noop']).toContain(result.kind);
+    // The unmatched tool_call at index 8 must never be silently dropped. On the
+    // 'applied' path the preserved head must cover the floor; on the 'noop'
+    // path compression was declined so the floor is intact by definition.
+    // Expressed as a single non-conditional assertion — no sentinel fallback.
+    const floorHeld =
+      result.kind === 'noop' || (result.metadata.topPreserved ?? 0) >= 8;
+    expect(floorHeld).toBe(true);
   });
   it('keeps a matched tool call and response on the same side of the anchor floor', async () => {
     const strategy = new MiddleOutStrategy();
@@ -466,9 +470,8 @@ describe('A5: anchor invariants (#3070 Defect B)', () => {
       ),
     );
     expect(callIndex === -1).toBe(responseIndex === -1);
-    if (callIndex >= 0) {
-      expect(responseIndex).toBeGreaterThan(callIndex);
-    }
+    // If found, the response must come after the call
+    expect(callIndex < 0 || responseIndex > callIndex).toBe(true);
   });
 
   it('anchor that would push past the bottom split yields a clean structural no-op with unmodified history', async () => {

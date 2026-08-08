@@ -449,10 +449,7 @@ const NO_TEST_PREFIXES: readonly string[] = [
  * guards, coverage-flag tests). They select the scripts shard so those guard
  * tests run, but do not force all six shards.
  */
-const SCRIPTS_INFRA_FILES: readonly string[] = [
-  'eslint.config.js',
-  'vitest.coverage.ts',
-];
+const SCRIPTS_INFRA_FILES: readonly string[] = ['eslint.config.js'];
 
 /**
  * Maps repository-relative paths whose tests read them without importing to the

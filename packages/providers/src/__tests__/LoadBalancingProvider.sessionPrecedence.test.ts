@@ -249,9 +249,11 @@ describe('LoadBalancingProvider session-scoped delegate precedence (#3151)', () 
       ) as NormalizedGenerateChatOptions;
       const invocation = result.invocation;
 
+      // Assert the class, not the message: writing to a frozen object throws a
+      // TypeError by spec, but the wording differs between engines.
       expect(() => {
         (invocation.ephemerals as Record<string, unknown>).dumpcontext = 'off';
-      }).toThrow();
+      }).toThrow(TypeError);
       expect(delegateDumpMode(invocation)).toBe('on');
       expect(result.metadata.loadBalancerDelegate).toBe(true);
     });

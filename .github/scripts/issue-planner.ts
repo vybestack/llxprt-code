@@ -311,7 +311,7 @@ export function buildPlanningInstructions(): string {
     '',
     'Every plan MUST be test-first: state the tests that must exist BEFORE implementation.',
     '',
-    "Favor adjusting/extending existing test files over creating new ones. Name concrete existing test files to extend (e.g. `packages/core/src/.../__tests__/foo.test.ts` or `scripts/tests/bar.test.ts`) and the specific new cases to add. Respect this repo's vitest conventions.",
+    "Favor adjusting/extending existing test files over creating new ones. Name concrete existing test files to extend (e.g. `packages/core/src/.../__tests__/foo.test.ts` or `scripts/tests/bar.test.ts`) and the specific new cases to add. Respect this repo's Bun/bun:test conventions (see dev-docs/bun.md).",
     '',
     'Only create a new test file when no existing test file can absorb the cases, and justify why in the plan.',
     '',

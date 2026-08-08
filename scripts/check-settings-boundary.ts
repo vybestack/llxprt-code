@@ -290,7 +290,7 @@ function check4_tsconfigReferences() {
  * Check 5: the test setup has no forbidden aliases (warn only).
  *
  * Settings tests run under Bun's native runner, whose per-root preload
- * replaced the former vitest.config.ts. The boundary being protected is the
+ * replaced the former vitest config (removed by #2970). The boundary being protected is the
  * same: the settings test setup must not reach into core or providers.
  */
 function check5_testSetupAliases() {

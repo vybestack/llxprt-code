@@ -349,10 +349,14 @@ describe('ActivateMcpServerTool — schema and description', () => {
     );
     const paramSchema = tool.schema.parametersJsonSchema;
     expect(hasNameEnum(paramSchema)).toBe(true);
-    if (hasNameEnum(paramSchema)) {
-      expect(paramSchema.properties.name.enum).toContain('alpha');
-      expect(paramSchema.properties.name.enum).toContain('beta');
-    }
+    expect(
+      hasNameEnum(paramSchema) &&
+        paramSchema.properties.name.enum.includes('alpha'),
+    ).toBe(true);
+    expect(
+      hasNameEnum(paramSchema) &&
+        paramSchema.properties.name.enum.includes('beta'),
+    ).toBe(true);
   });
 
   it('description contains server names, tool counts, and tool names without full schemas (B2)', () => {

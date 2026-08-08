@@ -84,7 +84,7 @@ cd packages/cli && npm run test -- providerManagerInstance.test.ts
 
 1. **Behavioral Testing**: Tests focus on observable behavior rather than implementation details
 2. **Platform Awareness**: Windows-specific tests check for the platform when needed
-3. **Existing Patterns**: Tests follow the existing vitest framework and mocking patterns
+3. **Existing Patterns**: Tests follow the existing bun:test framework and mocking patterns
 4. **Real-World Scenarios**: Tests include actual encoding issues encountered by users
 
 ## Protection Against Regressions

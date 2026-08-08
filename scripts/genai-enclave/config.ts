@@ -400,7 +400,7 @@ const CONFIG_FILE_PATTERN =
 
 /**
  * Determine if `path` is a runtime export surface (not a config file).
- * Config files (vitest.config.ts, vite.worker.config.mjs, etc.) are exempt
+ * Config files (eslint.config.js, vite.worker.config.mjs, etc.) are exempt
  * from the Gemini-name export check because their exports are build-time
  * configuration, not runtime API surface.
  */

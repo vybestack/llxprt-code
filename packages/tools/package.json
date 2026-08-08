@@ -244,7 +244,6 @@
     "test": "bun ../../scripts/run_bun_tests.ts --workspace tools --junit junit.xml",
     "test:bun": "bun ../../scripts/run_bun_tests.ts --workspace tools",
     "test:ci": "bun ../../scripts/run_bun_tests.ts --workspace tools --junit junit.xml",
-    "test:vitest": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "files": [
@@ -287,7 +286,6 @@
     "@types/node": "^24.2.1",
     "@vybestack/llxprt-code-test-utils": "file:../test-utils",
     "typescript": "^5.3.3",
-    "vitest": "^3.2.6",
     "@types/mime-types": "^3.0.1"
   },
   "engines": {

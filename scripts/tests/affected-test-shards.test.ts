@@ -687,9 +687,9 @@ describe('affected-test-shards selector — repo config/infra paths (issue #2878
     });
   }
 
-  // Config files exercised by scripts-shard guard tests (eslint-guard,
-  // vitest-coverage) must select the scripts shard, not zero shards.
-  const scriptsShardCases = ['eslint.config.js', 'vitest.coverage.ts'];
+  // Config files exercised by scripts-shard guard tests (eslint-guard)
+  // must select the scripts shard, not zero shards.
+  const scriptsShardCases = ['eslint.config.js'];
 
   for (const path of scriptsShardCases) {
     it(`selects scripts shard for ${path}`, async () => {
