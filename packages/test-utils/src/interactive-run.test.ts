@@ -345,6 +345,9 @@ describe('InteractiveRun quota guard integration', () => {
         true,
       );
 
+      // Buffer the quota signal before testing expectExit's timeout-path scan.
+      await run.expectText('HTTP 429 Too Many Requests', 5000);
+
       const error = await captureRejection(run.expectExit(1000));
 
       expect(error.message).toContain('[QUOTA/RATE-LIMIT]');
