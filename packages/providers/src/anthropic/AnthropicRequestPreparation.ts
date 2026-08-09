@@ -346,15 +346,9 @@ function placeSystemInstruction(params: {
 }
 
 /**
- * Build the vendor system field (issue #3172). The resolved auth
- * classification independently controls the vendor-required Claude Code system
- * value and other transport concerns.
- *
- * - system-field placement: the assembled instruction goes directly into the
- *   system field. Auth is necessarily non-OAuth here (OAuth requires
- *   context-prefix, enforced by buildSystemContext).
- * - context-prefix placement: the system field carries the OAuth vendor string
- *   when the resolved token is OAuth, or is undefined otherwise.
+ * Build the vendor system field for context-prefix placement (issue #3172).
+ * The field carries the Claude Code string when the resolved token is OAuth and
+ * remains absent for non-OAuth transports using context-prefix placement.
  */
 function buildContextPrefixSystemField(
   isOAuth: boolean,

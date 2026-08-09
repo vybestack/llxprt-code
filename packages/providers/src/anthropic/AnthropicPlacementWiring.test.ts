@@ -133,7 +133,7 @@ class InvalidPlacementProvider extends PlacementTestProvider {
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function lastItem<T>(items: readonly T[]): T | undefined {
@@ -211,7 +211,7 @@ describe('Anthropic system-prompt placement wiring (issue #3172)', () => {
 
   async function captureWirePayload(
     authToken: ResolvedAuthToken,
-  ): Promise<{ system: unknown; messages: unknown }> {
+  ): Promise<Record<string, unknown>> {
     const provider = new PlacementTestProvider();
     for await (const _chunk of provider.generateChatCompletion(
       buildOptions(authToken),
@@ -222,10 +222,7 @@ describe('Anthropic system-prompt placement wiring (issue #3172)', () => {
     if (!isObject(request)) {
       throw new Error('Expected an SDK request payload');
     }
-    return {
-      system: request['system'],
-      messages: request['messages'],
-    };
+    return request;
   }
 
   async function exhaustCompletion(
