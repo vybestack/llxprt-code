@@ -118,6 +118,63 @@ describe('useQueuedSubmissions', () => {
     });
   });
 
+  describe('enqueueSubmissionFirst', () => {
+    it('inserts a submission at the front of the queue', () => {
+      const { result } = renderHook(() => useQueuedSubmissions());
+
+      act(() => {
+        result.current.enqueueSubmission(makeSubmission('first'));
+        result.current.enqueueSubmission(makeSubmission('second'));
+        result.current.enqueueSubmissionFirst(makeSubmission('front'));
+      });
+
+      expect(result.current.queuedSubmissions.map(firstText)).toStrictEqual([
+        'front',
+        'first',
+        'second',
+      ]);
+    });
+
+    it('assigns a fresh unique queueId distinct from existing entries', () => {
+      const { result } = renderHook(() => useQueuedSubmissions());
+
+      act(() => {
+        result.current.enqueueSubmission(makeSubmission('a'));
+        result.current.enqueueSubmission(makeSubmission('b'));
+      });
+      const existingIds = result.current.queuedSubmissions.map(
+        (s) => s.queueId,
+      );
+
+      act(() => {
+        result.current.enqueueSubmissionFirst(makeSubmission('front'));
+      });
+
+      const frontEntry = result.current.queuedSubmissions[0];
+      expect(frontEntry.queueId).toBeDefined();
+      for (const id of existingIds) {
+        expect(frontEntry.queueId).not.toBe(id);
+      }
+    });
+
+    it('updates both the reactive state and the ref', () => {
+      const { result } = renderHook(() => useQueuedSubmissions());
+
+      act(() => {
+        result.current.enqueueSubmission(makeSubmission('existing'));
+        result.current.enqueueSubmissionFirst(makeSubmission('front'));
+      });
+
+      expect(result.current.queuedSubmissions.map(firstText)).toStrictEqual([
+        'front',
+        'existing',
+      ]);
+      expect(
+        result.current.queuedSubmissionsRef.current.map(firstText),
+      ).toStrictEqual(['front', 'existing']);
+    });
+  });
+
   describe('dequeueSubmission', () => {
     it('returns undefined when the queue is empty', () => {
       const { result } = renderHook(() => useQueuedSubmissions());
