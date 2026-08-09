@@ -274,6 +274,8 @@ describe('nightly.yml: macOS and Windows E2E remain on the nightly cadence (issu
     const windows = (e2eFull.steps ?? []).find(
       (s) => s.name === 'Run E2E tests (Windows)',
     );
+    const env = asOptionalRecord(windows?.env);
+    expect(env?.SANDBOX).toBe('${{ matrix.sandbox }}');
     const run = asString(windows?.run).trim();
     expect(run).toBe(
       [
