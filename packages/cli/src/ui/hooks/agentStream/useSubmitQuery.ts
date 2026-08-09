@@ -105,6 +105,7 @@ export interface UseSubmitQueryDeps {
   setTurnCancelled: (value: boolean) => void;
   queuedSubmissionsRef: React.MutableRefObject<QueuedSubmission[]>;
   enqueueSubmission: (submission: QueuedSubmission) => void;
+  enqueueSubmissionFirst: (submission: QueuedSubmission) => void;
   requeueSubmission: (submission: QueuedSubmission) => void;
   dequeueSubmission: () => QueuedSubmission | undefined;
   clearSubmissions: () => void;
@@ -610,6 +611,19 @@ function useSubmitQueryCallback(cbd: SubmitQueryCallbackDeps) {
         if (fromQueue) {
           return 'requeue';
         }
+        // Issue #3169: a fresh (non-queue-originated) submission arriving
+        // while an acknowledged cancellation still suppresses draining is
+        // explicit intent to resume. It must not inherit that suppression —
+        // which would leave it stuck in the drawer until the user pressed
+        // Enter again — and it must precede any preserved pre-cancel entries,
+        // so it is front-inserted and suppression is released. It still waits
+        // for the cancelled turn to release activeTurnRef, so serialization is
+        // unaffected.
+        if (isResumeAfterAcknowledgedCancellation(current)) {
+          current.enqueueSubmissionFirst({ query, promptId });
+          current.drainSuppressedRef.current = false;
+          return 'consumed';
+        }
         current.enqueueSubmission({
           query,
           promptId,
@@ -812,4 +826,28 @@ async function executeStream(
  */
 function isCurrentTurn(deps: UseSubmitQueryDeps, signal: AbortSignal): boolean {
   return deps.abortControllerRef.current?.signal === signal;
+}
+
+/**
+ * Issue #3169: detects a fresh submission that arrives while an acknowledged
+ * cancellation still suppresses queue draining.
+ *
+ * `drainSuppressedRef` is authoritative here because cancellation is its only
+ * writer of `true` (useCancellation), and the two paths that clear it —
+ * claiming a fresh turn below, and the explicit empty-Enter release in
+ * useAgentStreamOrchestration — both run before any turn can proceed. So
+ * observing it set on a non-queue-originated submission means exactly one
+ * thing: the user cancelled and is now resuming.
+ *
+ * Deliberately NOT gated on `streamingState`. That is a render value derived
+ * from tool calls flattened across every scheduler, so an `awaiting_approval`
+ * call owned by a non-main scheduler keeps it at WaitingForConfirmation even
+ * after cancellation has been acknowledged — which would misclassify the
+ * resume prompt as ordinary queued work and leave it stuck, the very bug this
+ * fixes.
+ */
+function isResumeAfterAcknowledgedCancellation(
+  deps: SubmitQueryCallbackDeps,
+): boolean {
+  return deps.drainSuppressedRef.current;
 }

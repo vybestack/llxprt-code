@@ -12,6 +12,9 @@ export function createQueueOperations(ref: { current: QueuedSubmission[] }) {
     enqueueSubmission: (submission: QueuedSubmission) => {
       ref.current = [...ref.current, submission];
     },
+    enqueueSubmissionFirst: (submission: QueuedSubmission) => {
+      ref.current = [submission, ...ref.current];
+    },
     requeueSubmission: (submission: QueuedSubmission) => {
       ref.current = [submission, ...ref.current];
     },
