@@ -32,19 +32,23 @@ import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/run
 /**
  * Build the system instruction for a compression request.
  *
- * Passes no `userMemory` and no `coreMemory`, no tools
- * (`includeSubagentDelegation` is therefore `false`), and `interactionMode`
- * derived from `config.isInteractive()`.
+ * Passes no `userMemory`, an explicit empty `coreMemory` string, no
+ * `mcpInstructions`, no tools (`includeSubagentDelegation` is therefore
+ * `false`), and `interactionMode` derived from `config.isInteractive()`.
  *
- * NOTE: omitting `coreMemory` does NOT omit core memory. When `coreMemory` is
- * `undefined`, `getCoreSystemPromptAsync` loads `.LLXPRT_SYSTEM` from disk
- * (`resolveEffectiveMemories` in `packages/core/src/core/prompts.ts`) and
- * `mcpInstructions` is merged into the same channel, so the compression LLM
- * does receive core memory and MCP instructions. Only user memory
- * (`LLXPRT.md`) is actually excluded. Suppressing core memory here would be a
- * behaviour change; see issue #3162 finding D3.
+ * The empty `coreMemory` string (not `undefined`) is deliberate: when
+ * `coreMemory` is `undefined`, `getCoreSystemPromptAsync` loads
+ * `.LLXPRT_SYSTEM` from disk (`resolveEffectiveMemories` in
+ * `packages/core/src/core/prompts.ts`) and merges `mcpInstructions` into the
+ * same channel. Passing `''` short-circuits that disk fallback, and omitting
+ * `mcpInstructions` keeps MCP-server instructions out, so the compression LLM
+ * receives only the base instruction appropriate to its model and interaction
+ * mode — never the caller's core memory or MCP instructions (issue #3174).
  *
- * @param config - The Config to read MCP instructions and interaction mode from
+ * `config` is still accepted so the interaction mode can be derived; it is no
+ * longer consulted for MCP instructions.
+ *
+ * @param config - The Config to read interaction mode from
  * @param model  - The resolved model (same as `resolved.model` on the wire)
  * @returns The assembled system instruction, or `undefined` when the
  *          prompt is empty
@@ -53,14 +57,6 @@ export async function buildCompressionSystemInstruction(
   config: Config | undefined,
   model: string,
 ): Promise<string> {
-  const mcpClientManager =
-    config != null && typeof config.getMcpClientManager === 'function'
-      ? config.getMcpClientManager()
-      : undefined;
-  const mcpInstructions = mcpClientManager
-    ? mcpClientManager.getMcpInstructions()
-    : undefined;
-
   const interactionMode =
     config != null &&
     typeof config.isInteractive === 'function' &&
@@ -69,7 +65,7 @@ export async function buildCompressionSystemInstruction(
       : 'non-interactive';
 
   const corePrompt = await getCoreSystemPromptAsync({
-    mcpInstructions,
+    coreMemory: '',
     model,
     tools: undefined,
     includeSubagentDelegation: false,
