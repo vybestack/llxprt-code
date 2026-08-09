@@ -1,3 +1,10 @@
+#!/usr/bin/env bun
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 // Size a realistic per-turn perf record to ground the disk-budget math.
 const rec = {
   ts: '2026-08-08T15:27:40.123Z',
@@ -39,8 +46,21 @@ const bytes = Buffer.byteLength(line);
 console.log('fields:', Object.keys(rec).length);
 console.log('bytes/record:', bytes);
 const perTurn = bytes;
-for (const [label, turns] of [['100 turns (busy day)', 100], ['1k turns', 1000], ['10k turns', 10000], ['100k turns', 100000], ['1M turns', 1000000]]) {
-  console.log(`${label}: ${(perTurn * turns / 1024 / 1024).toFixed(2)} MiB`);
+const tiers: ReadonlyArray<readonly [string, number]> = [
+  ['100 turns (busy day)', 100],
+  ['1k turns', 1000],
+  ['10k turns', 10000],
+  ['100k turns', 100000],
+  ['1M turns', 1000000],
+];
+for (const [label, turns] of tiers) {
+  console.log(`${label}: ${((perTurn * turns) / 1024 / 1024).toFixed(2)} MiB`);
 }
-console.log('\nturns to fill a 32 MiB cap:', Math.floor(32 * 1024 * 1024 / perTurn));
-console.log('turns to fill an 8 MiB cap:', Math.floor(8 * 1024 * 1024 / perTurn));
+console.log(
+  '\nturns to fill a 32 MiB cap:',
+  Math.floor((32 * 1024 * 1024) / perTurn),
+);
+console.log(
+  'turns to fill an 8 MiB cap:',
+  Math.floor((8 * 1024 * 1024) / perTurn),
+);

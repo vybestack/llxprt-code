@@ -19,6 +19,7 @@ import {
   classifyEntry,
   classifyPath,
   gitignoreIsDocs,
+  parseEntry,
   type ChangedFileEntry,
 } from '../docs-only-filter.ts';
 import { selectAffectedShards } from '../affected-test-shards.ts';
@@ -291,5 +292,226 @@ describe('docs-only-filter: cross-classifier invariant', () => {
       changedPaths: ['.gitignore'],
     });
     expect(selection.selectedShards.length).toBe(0);
+  });
+});
+
+describe('docs-only-filter: malformed entries fail closed (pure classifier)', () => {
+  // External GitHub changed-file entries with an unrecognized status or a
+  // renamed entry lacking previous_filename must force full CI (docsOnly=false)
+  // in the pure classifier, not only via CLI parsing.
+
+  it('entry with unknown status fails closed (docsOnly=false)', () => {
+    const e = entry('docs/index.md', { status: 'bogus' });
+    const result = classifyDocsOnly({ entries: [e], changedFiles: 1 });
+    expect(result.docsOnly).toBe(false);
+  });
+
+  it('entry with empty status fails closed (docsOnly=false)', () => {
+    const e = entry('docs/index.md', { status: '' });
+    const result = classifyDocsOnly({ entries: [e], changedFiles: 1 });
+    expect(result.docsOnly).toBe(false);
+  });
+
+  it('renamed entry without previous_filename fails closed', () => {
+    const e = entry('docs/new.md', { status: 'renamed' });
+    const result = classifyDocsOnly({ entries: [e], changedFiles: 1 });
+    expect(result.docsOnly).toBe(false);
+  });
+
+  it('renamed entry with empty previous_filename fails closed', () => {
+    const e = entry('docs/new.md', {
+      status: 'renamed',
+      previous_filename: '',
+    });
+    const result = classifyDocsOnly({ entries: [e], changedFiles: 1 });
+    expect(result.docsOnly).toBe(false);
+  });
+
+  it('valid modified docs entry does NOT fail closed (docsOnly=true)', () => {
+    const e = entry('docs/index.md', { status: 'modified' });
+    const result = classifyDocsOnly({ entries: [e], changedFiles: 1 });
+    expect(result.docsOnly).toBe(true);
+  });
+
+  it('valid removed docs entry does NOT fail closed', () => {
+    const e = entry('docs/index.md', { status: 'removed' });
+    const result = classifyDocsOnly({ entries: [e], changedFiles: 1 });
+    expect(result.docsOnly).toBe(true);
+  });
+
+  it('valid renamed docs entry with previous_filename does NOT fail closed', () => {
+    const e = entry('docs/new.md', {
+      status: 'renamed',
+      previous_filename: 'docs/old.md',
+    });
+    const result = classifyDocsOnly({ entries: [e], changedFiles: 1 });
+    expect(result.docsOnly).toBe(true);
+  });
+});
+
+describe('docs-only-filter: external parser rejects malformed API entries', () => {
+  // The GitHub PR files API is an untrusted external boundary. The parser
+  // (parseEntry) must reject malformed entries by returning null rather than
+  // silently normalizing them, so a count mismatch surfaces and forces full
+  // CI. This closes the gap the pure classifier's validateEntryShape cannot
+  // cover when malformed data is normalized away before it ever reaches the
+  // classifier.
+
+  it('returns null for missing status', () => {
+    expect(parseEntry({ filename: 'docs/index.md' })).toBeNull();
+  });
+
+  it('returns null for non-string status', () => {
+    expect(parseEntry({ filename: 'docs/index.md', status: 42 })).toBeNull();
+  });
+
+  it('returns null for unrecognized status', () => {
+    expect(
+      parseEntry({ filename: 'docs/index.md', status: 'bogus' }),
+    ).toBeNull();
+  });
+
+  it('returns null for empty status', () => {
+    expect(parseEntry({ filename: 'docs/index.md', status: '' })).toBeNull();
+  });
+
+  it('returns null for renamed entry without previous_filename', () => {
+    expect(
+      parseEntry({ filename: 'docs/new.md', status: 'renamed' }),
+    ).toBeNull();
+  });
+
+  it('returns null for renamed entry with non-string previous_filename', () => {
+    expect(
+      parseEntry({
+        filename: 'docs/new.md',
+        status: 'renamed',
+        previous_filename: 42,
+      }),
+    ).toBeNull();
+  });
+
+  it('returns null for renamed entry with empty previous_filename', () => {
+    expect(
+      parseEntry({
+        filename: 'docs/new.md',
+        status: 'renamed',
+        previous_filename: '',
+      }),
+    ).toBeNull();
+  });
+
+  it('returns null for non-object raw (null, string, array)', () => {
+    expect(parseEntry(null)).toBeNull();
+    expect(parseEntry('not-an-object')).toBeNull();
+    expect(parseEntry([1, 2, 3])).toBeNull();
+  });
+
+  it('returns null for missing or empty filename', () => {
+    expect(parseEntry({ status: 'modified' })).toBeNull();
+    expect(parseEntry({ filename: '', status: 'modified' })).toBeNull();
+  });
+
+  it('preserves a valid modified entry with patch', () => {
+    const result = parseEntry({
+      filename: 'docs/index.md',
+      status: 'modified',
+      patch: '@@ -1 +1 @@',
+    });
+    expect(result).toEqual({
+      filename: 'docs/index.md',
+      status: 'modified',
+      previous_filename: undefined,
+      patch: '@@ -1 +1 @@',
+    });
+  });
+
+  it('preserves a valid added entry', () => {
+    const result = parseEntry({
+      filename: 'README.md',
+      status: 'added',
+    });
+    expect(result).toEqual({
+      filename: 'README.md',
+      status: 'added',
+      previous_filename: undefined,
+      patch: undefined,
+    });
+  });
+
+  it('preserves a valid renamed entry with previous_filename', () => {
+    const result = parseEntry({
+      filename: 'docs/new.md',
+      status: 'renamed',
+      previous_filename: 'docs/old.md',
+    });
+    expect(result).toEqual({
+      filename: 'docs/new.md',
+      status: 'renamed',
+      previous_filename: 'docs/old.md',
+      patch: undefined,
+    });
+  });
+
+  it('preserves every recognized status', () => {
+    for (const status of [
+      'added',
+      'removed',
+      'modified',
+      'renamed',
+      'copied',
+      'changed',
+      'unchanged',
+    ]) {
+      // renamed requires previous_filename to survive the boundary check.
+      const raw =
+        status === 'renamed'
+          ? {
+              filename: 'docs/x.md',
+              status,
+              previous_filename: 'docs/old.md',
+            }
+          : { filename: 'docs/x.md', status };
+      const result = parseEntry(raw);
+      expect(result, `status '${status}'`).not.toBeNull();
+      expect(result?.status).toBe(status);
+    }
+  });
+});
+
+describe('docs-only-filter: malformed entries cause count mismatch (fail closed)', () => {
+  // Proves the full boundary chain: malformed raw entry → parseEntry returns
+  // null → entry dropped → parsed count < authoritative changed_files →
+  // classifyDocsOnly fails closed (docsOnly=false).
+
+  it('malformed status drops entry → count mismatch → docsOnly=false', () => {
+    const rawEntries: unknown[] = [
+      { filename: 'docs/index.md', status: 'modified' },
+      { filename: 'docs/bad.md', status: 'bogus' },
+    ];
+    const parsed = rawEntries
+      .map(parseEntry)
+      .filter((e): e is ChangedFileEntry => e !== null);
+    expect(parsed.length).toBe(1);
+    const result = classifyDocsOnly({ entries: parsed, changedFiles: 2 });
+    expect(result.docsOnly).toBe(false);
+    expect(result.reason).toContain('truncation');
+  });
+
+  it('malformed rename drops entry → count mismatch → docsOnly=false', () => {
+    const rawEntries: unknown[] = [
+      {
+        filename: 'docs/good.md',
+        status: 'renamed',
+        previous_filename: 'docs/old.md',
+      },
+      { filename: 'docs/bad.md', status: 'renamed' },
+    ];
+    const parsed = rawEntries
+      .map(parseEntry)
+      .filter((e): e is ChangedFileEntry => e !== null);
+    expect(parsed.length).toBe(1);
+    const result = classifyDocsOnly({ entries: parsed, changedFiles: 2 });
+    expect(result.docsOnly).toBe(false);
   });
 });
