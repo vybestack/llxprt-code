@@ -30,6 +30,7 @@ const thisFile = fileURLToPath(import.meta.url);
 const repoRoot = resolve(thisFile, '..', '..', '..');
 const GUARD_PRELOAD_FRAGMENT = 'browser-launch-guard.ts';
 const GUARD_PRELOAD_PATH = '../../scripts/tests/browser-launch-guard.ts';
+const SUBPROCESS_TIMEOUT_MS = 60_000;
 
 interface RootPackageJson {
   readonly workspaces: string[];
@@ -169,7 +170,7 @@ test('process is marked and browser launch fails closed', async () => {
         cwd: cwd ?? fixture.tempDir,
         encoding: 'utf8',
         env: fixture.environment,
-        timeout: 60_000,
+        timeout: SUBPROCESS_TIMEOUT_MS,
       },
     );
     return {
@@ -212,7 +213,7 @@ if (!blocked) {
       cwd: repoRoot,
       encoding: 'utf8',
       env: fixture.environment,
-      timeout: 60_000,
+      timeout: SUBPROCESS_TIMEOUT_MS,
     });
     return {
       status: result.status,
@@ -236,30 +237,52 @@ function expectSafeSubprocessSuccess(result: SubprocessResult): void {
 }
 
 describe('raw bun test subprocess browser-launch guard', () => {
-  it('fails its marker assertion without a root or workspace bunfig preload', () => {
-    const result = spawnRawBunTest();
+  it(
+    'fails its marker assertion without a root or workspace bunfig preload',
+    () => {
+      const result = spawnRawBunTest();
 
-    expect(result.status).not.toBe(0);
-    expect(result.browserCommandAttempts).toBe('');
-  });
+      expect(result.error).toBeUndefined();
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain('LLXPRT_RUNNING_TESTS');
+      expect(result.browserCommandAttempts).toBe('');
+    },
+    SUBPROCESS_TIMEOUT_MS,
+  );
 
-  it('marks the process and fails closed when run from the repo root', () => {
-    expectSafeSubprocessSuccess(spawnRawBunTest(repoRoot));
-  });
+  it(
+    'marks the process and fails closed when run from the repo root',
+    () => {
+      expectSafeSubprocessSuccess(spawnRawBunTest(repoRoot));
+    },
+    SUBPROCESS_TIMEOUT_MS,
+  );
 
-  it('marks the process and fails closed from a workspace with existing test configuration', () => {
-    expectSafeSubprocessSuccess(
-      spawnRawBunTest(join(repoRoot, 'packages', 'core')),
-    );
-  });
+  it(
+    'marks the process and fails closed from a workspace with existing test configuration',
+    () => {
+      expectSafeSubprocessSuccess(
+        spawnRawBunTest(join(repoRoot, 'packages', 'core')),
+      );
+    },
+    SUBPROCESS_TIMEOUT_MS,
+  );
 
-  it('marks the process and fails closed from a workspace that needs only the browser guard', () => {
-    expectSafeSubprocessSuccess(
-      spawnRawBunTest(join(repoRoot, 'packages', 'settings')),
-    );
-  });
+  it(
+    'marks the process and fails closed from a workspace that needs only the browser guard',
+    () => {
+      expectSafeSubprocessSuccess(
+        spawnRawBunTest(join(repoRoot, 'packages', 'settings')),
+      );
+    },
+    SUBPROCESS_TIMEOUT_MS,
+  );
 
-  it('blocks after the public launcher was cached before the test marker was set', () => {
-    expectSafeSubprocessSuccess(spawnSourceFirstProbe());
-  });
+  it(
+    'blocks after the public launcher was cached before the test marker was set',
+    () => {
+      expectSafeSubprocessSuccess(spawnSourceFirstProbe());
+    },
+    SUBPROCESS_TIMEOUT_MS,
+  );
 });
