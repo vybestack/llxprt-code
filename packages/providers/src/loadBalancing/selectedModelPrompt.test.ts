@@ -33,16 +33,27 @@ const noopLogger = {
   info: () => {},
 } as unknown as import('@vybestack/llxprt-code-core/debug/DebugLogger.js').DebugLogger;
 
-function trackingAssembler(render: (model: string) => string): {
-  assembler: { assemble: (model: string) => Promise<string> };
-  invocations: string[];
+function trackingAssembler(
+  render: (provider: string | undefined, model: string) => string,
+): {
+  assembler: {
+    assemble: (request: {
+      provider: string | undefined;
+      model: string;
+    }) => Promise<string>;
+  };
+  invocations: Array<{ provider: string | undefined; model: string }>;
 } {
-  const invocations: string[] = [];
+  const invocations: Array<{ provider: string | undefined; model: string }> =
+    [];
   return {
     assembler: {
-      assemble: async (model: string): Promise<string> => {
-        invocations.push(model);
-        return render(model);
+      assemble: async (request: {
+        provider: string | undefined;
+        model: string;
+      }): Promise<string> => {
+        invocations.push({ provider: request.provider, model: request.model });
+        return render(request.provider, request.model);
       },
     },
     invocations,
@@ -61,28 +72,40 @@ function makeCtx(): OptionsBuildContext {
 
 describe('optionsWithSelectedModelPrompt — blank systemInstruction (issue #3157 review)', () => {
   it('empty-string systemInstruction: assembler not invoked and original value preserved', async () => {
-    const { assembler, invocations } = trackingAssembler((m) => `[model=${m}]`);
+    const { assembler, invocations } = trackingAssembler(
+      (_p, model) => `[model=${model}]`,
+    );
     const options: GenerateChatOptions = {
       contents: [],
       systemInstruction: '',
       systemPromptAssembler: assembler,
     };
 
-    const result = await optionsWithSelectedModelPrompt(options, 'model-a');
+    const result = await optionsWithSelectedModelPrompt(
+      options,
+      'openai',
+      'model-a',
+    );
 
     expect(invocations).toEqual([]);
     expect(result.systemInstruction).toBe('');
   });
 
   it('whitespace-only systemInstruction: assembler not invoked and original value preserved', async () => {
-    const { assembler, invocations } = trackingAssembler((m) => `[model=${m}]`);
+    const { assembler, invocations } = trackingAssembler(
+      (_p, model) => `[model=${model}]`,
+    );
     const options: GenerateChatOptions = {
       contents: [],
       systemInstruction: '   ',
       systemPromptAssembler: assembler,
     };
 
-    const result = await optionsWithSelectedModelPrompt(options, 'model-a');
+    const result = await optionsWithSelectedModelPrompt(
+      options,
+      'openai',
+      'model-a',
+    );
 
     expect(invocations).toEqual([]);
     expect(result.systemInstruction).toBe('   ');
@@ -91,7 +114,9 @@ describe('optionsWithSelectedModelPrompt — blank systemInstruction (issue #315
 
 describe('legacy whitespace modelId keeps parent prompt and model aligned (issue #3157 review)', () => {
   it('whitespace-only modelId: parent model inherited, prompt untouched, assembler never invoked', async () => {
-    const { assembler, invocations } = trackingAssembler((m) => `[model=${m}]`);
+    const { assembler, invocations } = trackingAssembler(
+      (_p, model) => `[model=${model}]`,
+    );
     const parentOptions: GenerateChatOptions = {
       contents: [],
       resolved: { model: 'parent-model' },
@@ -108,6 +133,7 @@ describe('legacy whitespace modelId keeps parent prompt and model aligned (issue
     const selectedModel = resolveSubProfileModel(subProfile);
     const promptOptions = await optionsWithSelectedModelPrompt(
       parentOptions,
+      subProfile.providerName,
       selectedModel,
     );
     const resolved = buildRoundRobinResolvedOptions(

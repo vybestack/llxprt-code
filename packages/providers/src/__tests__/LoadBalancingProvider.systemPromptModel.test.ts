@@ -85,15 +85,25 @@ function createCapturingProvider(name: string): CapturingProvider {
  * Assembler that records every model it is asked to render, so tests can
  * assert invocation counts (at-most-once per selected attempt).
  */
-function trackingAssembler(render: (model: string) => string): {
-  assembler: { assemble: (model: string) => Promise<string> };
+function trackingAssembler(
+  render: (provider: string | undefined, model: string) => string,
+): {
+  assembler: {
+    assemble: (request: {
+      provider: string | undefined;
+      model: string;
+    }) => Promise<string>;
+  };
   invocations: string[];
 } {
   const invocations: string[] = [];
   const assembler = {
-    assemble: async (model: string): Promise<string> => {
-      invocations.push(model);
-      return render(model);
+    assemble: async (request: {
+      provider: string | undefined;
+      model: string;
+    }): Promise<string> => {
+      invocations.push(request.model);
+      return render(request.provider, request.model);
     },
   };
   return { assembler, invocations };
@@ -169,7 +179,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       );
 
       const { assembler, invocations } = trackingAssembler(
-        (m) => `[model=${m}]`,
+        (_p, m) => `[model=${m}]`,
       );
 
       await consume(lb, {
@@ -229,7 +239,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       );
 
       const { assembler, invocations } = trackingAssembler(
-        (m) => `[model=${m}]`,
+        (_p, m) => `[model=${m}]`,
       );
 
       await consume(lb, {
@@ -343,7 +353,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       );
 
       const { assembler, invocations } = trackingAssembler(
-        (m) => `[model=${m}]`,
+        (_p, m) => `[model=${m}]`,
       );
 
       await consume(lb, {
@@ -421,7 +431,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       );
 
       const { assembler, invocations } = trackingAssembler(
-        (m) => `[model=${m}]`,
+        (_p, m) => `[model=${m}]`,
       );
 
       await consume(lb, {
@@ -508,7 +518,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
         providerManager,
       );
 
-      const { assembler } = trackingAssembler((m) => `[model=${m}]`);
+      const { assembler } = trackingAssembler((_p, m) => `[model=${m}]`);
 
       await consume(lb, {
         contents: [createTextContent('request')],
@@ -698,7 +708,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       );
       lb.setCompressionCallback(async () => [createTextContent('compressed')]);
 
-      const { assembler } = trackingAssembler((m) => `[model=${m}]`);
+      const { assembler } = trackingAssembler((_p, m) => `[model=${m}]`);
 
       await consume(lb, {
         contents: [createTextContent('large request')],
@@ -757,7 +767,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       providerManager.registerProvider(delegate);
 
       const { assembler, invocations } = trackingAssembler(
-        (m) => `[model=${m}]`,
+        (_p, m) => `[model=${m}]`,
       );
 
       const lb = new LoadBalancingProvider(
@@ -790,7 +800,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       providerManager.registerProvider(delegate);
 
       const { assembler, invocations } = trackingAssembler(
-        (m) => `[model=${m}]`,
+        (_p, m) => `[model=${m}]`,
       );
 
       const lbConfig: LoadBalancingProviderConfig = {

@@ -19,12 +19,14 @@ import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runt
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { CompressionProviderResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { CompressionProfileNotFoundError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 
 import { CompressionLoadBalancingProvider } from './CompressionLoadBalancingProvider.js';
 import type { CompressionLoadBalancerCandidate } from './CompressionLoadBalancingProvider.js';
+import { deriveCompressionInteractionMode } from '../compression/compressionSystemPrompt.js';
 
 /**
  * Callbacks and runtime state required to resolve a compression profile
@@ -33,6 +35,11 @@ import type { CompressionLoadBalancerCandidate } from './CompressionLoadBalancin
 export interface CompressionProfileResolverContext {
   /** The base provider-runtime snapshot (runtimeId, metadata, config). */
   readonly providerRuntime: ProviderRuntimeContext;
+  /**
+   * The runtime state of the session being compressed. Used to derive the
+   * interaction mode for load-balanced compression (issue #3176, D8).
+   */
+  readonly runtimeState: AgentRuntimeState;
   /**
    * Resolve an explicit provider by name for a compression sub-profile.
    * Throws CompressionProfileNotFoundError when unavailable.
@@ -460,10 +467,17 @@ export async function resolveLoadBalancedCompressionProvider(
       (initialIndex + 1) % candidates.length,
     );
   }
+  // Derive the interaction mode ONCE from the compressed session so every
+  // candidate gets the same mode (issue #3176, D8).
+  const interactionMode = deriveCompressionInteractionMode(
+    config,
+    ctx.runtimeState,
+  );
   const provider = new CompressionLoadBalancingProvider(
     strategy,
     candidates,
     initialIndex,
+    interactionMode,
   );
   const runtimeId = `${ctx.providerRuntime.runtimeId}::compression-profile:${profileName}`;
   const settings = new SettingsService();

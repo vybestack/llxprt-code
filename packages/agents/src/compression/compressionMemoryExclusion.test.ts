@@ -75,7 +75,8 @@ let projectDir: string;
  * Config is a large class whose real construction requires full session
  * initialization (McpClientManager, MessageBus, tool registry, ...). The MCP
  * accessor is a regression input that the previous compression assembler read;
- * the fixed assembler must ignore it while still reading isInteractive().
+ * the fixed assembler must ignore it. The strategy path still reads
+ * isInteractive() to derive the compressed session's interaction mode.
  */
 function createMcpConfigDouble(mcpInstructions: string): Config {
   const manager = {
@@ -260,10 +261,12 @@ describe('Compression memory exclusion (issue #3174)', () => {
   });
 
   it('excludes core memory and MCP instructions from the assembled compression system instruction', async () => {
-    const config = createMcpConfigDouble(MCP_SENTINEL);
     const instruction = await buildCompressionSystemInstruction(
-      config,
       COMPRESSION_MODEL,
+      {
+        provider: 'compression-test-provider',
+        interactionMode: 'non-interactive',
+      },
     );
 
     expect(typeof instruction).toBe('string');
@@ -276,8 +279,11 @@ describe('Compression memory exclusion (issue #3174)', () => {
   it('still produces a non-empty instruction even without core memory on disk', async () => {
     rmSync(join(projectDir, '.llxprt'), { recursive: true, force: true });
     const instruction = await buildCompressionSystemInstruction(
-      undefined,
       COMPRESSION_MODEL,
+      {
+        provider: 'compression-test-provider',
+        interactionMode: 'non-interactive',
+      },
     );
 
     expect(typeof instruction).toBe('string');
