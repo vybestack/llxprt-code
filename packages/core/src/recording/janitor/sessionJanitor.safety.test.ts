@@ -309,8 +309,12 @@ describe('runSessionCleanup — mutation-time inode revalidation (Item 4, findin
         '\n' +
         '{"type":"user","payload":{"speaker":"human","blocks":[{"type":"text","text":"replacement"}]}}\n';
 
-      await fs.unlink(filePath);
-      await fs.writeFile(filePath, replacementContent, 'utf-8');
+      // Create the replacement while the original still exists, guaranteeing a
+      // distinct inode even on filesystems that immediately recycle unlinked
+      // inode numbers, then atomically replace the scanned path.
+      const replacementPath = `${filePath}.replacement`;
+      await fs.writeFile(replacementPath, replacementContent, 'utf-8');
+      await fs.rename(replacementPath, filePath);
     });
 
     const config = resolveRetentionConfig({ maxTotalSizeMB: 0.001 });
