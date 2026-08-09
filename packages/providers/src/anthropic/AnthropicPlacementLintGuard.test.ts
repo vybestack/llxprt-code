@@ -18,8 +18,6 @@
 
 import { describe, it, expect } from 'bun:test';
 import { ESLint, Linter } from 'eslint';
-import { parser as tsParser } from 'typescript-eslint';
-import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -31,7 +29,7 @@ const TARGET_FILE = path.join(
 const PREPARATION_SOURCE_PATH = TARGET_FILE;
 
 type RuleEntry = { selector: string; message: string };
-type RuleConfig = [severity: number, ...entries: RuleEntry[]];
+type RuleConfig = [severity: Linter.RuleSeverity, ...entries: RuleEntry[]];
 
 function isRuleEntry(value: unknown): value is RuleEntry {
   if (typeof value !== 'object' || value === null) {
@@ -64,14 +62,11 @@ function lintWithEffectiveRule(code: string) {
   const linter = new Linter();
   return linter.verify(code, {
     languageOptions: {
-      parser: tsParser,
-      parserOptions: {
-        ecmaVersion: 'latest',
-        sourceType: 'module',
-      },
+      ecmaVersion: 'latest',
+      sourceType: 'module',
     },
     rules: {
-      'no-restricted-syntax': effectiveRule ?? ['off'],
+      'no-restricted-syntax': effectiveRule ?? 'off',
     },
   });
 }
@@ -93,7 +88,8 @@ describe('AnthropicRequestPreparation placement lint guard (issue #3172 AC-4)', 
   });
 
   it('preserves the pre-existing no-restricted-syntax entries under flat-config replacement', () => {
-    const selectors = effectiveRule!.slice(1).map((entry) => entry.selector);
+    const [, ...entries] = effectiveRule!;
+    const selectors = entries.map((entry) => entry.selector);
     expect(selectors).toContain('CallExpression[callee.name="require"]');
     expect(selectors).toContain(
       'ThrowStatement > Literal:not([value=/^\\w+Error:/])',
@@ -103,7 +99,7 @@ describe('AnthropicRequestPreparation placement lint guard (issue #3172 AC-4)', 
   it('rejects any isOAuth reference inside placeSystemInstruction', () => {
     const messages = lintWithEffectiveRule(
       [
-        'function placeSystemInstruction(params: { isOAuth: boolean }) {',
+        'function placeSystemInstruction(params) {',
         '  if (params.isOAuth) {',
         '    return [];',
         '  }',
@@ -117,7 +113,7 @@ describe('AnthropicRequestPreparation placement lint guard (issue #3172 AC-4)', 
   it('rejects isOAuth when the placement helper is an arrow function', () => {
     const messages = lintWithEffectiveRule(
       [
-        'const placeSystemInstruction = (params: { isOAuth: boolean }) => {',
+        'const placeSystemInstruction = (params) => {',
         '  return params.isOAuth ? [] : [];',
         '};',
       ].join('\n'),
@@ -128,7 +124,7 @@ describe('AnthropicRequestPreparation placement lint guard (issue #3172 AC-4)', 
   it('rejects the exact removed isOAuth branch when reintroduced in buildSystemContext', () => {
     const messages = lintWithEffectiveRule(
       [
-        'function buildSystemContext(params: { isOAuth: boolean }) {',
+        'function buildSystemContext(params) {',
         '  if (params.isOAuth) {',
         '    return buildOAuthSystemContext(params);',
         '  }',
@@ -142,7 +138,7 @@ describe('AnthropicRequestPreparation placement lint guard (issue #3172 AC-4)', 
   it('rejects an inline auth ternary after the placement helper is renamed', () => {
     const messages = lintWithEffectiveRule(
       [
-        'function renamedPlacement(params: { isOAuth: boolean }) {',
+        'function renamedPlacement(params) {',
         '  return params.isOAuth ? buildOAuthSystemContext(params) : [];',
         '}',
       ].join('\n'),
@@ -153,7 +149,7 @@ describe('AnthropicRequestPreparation placement lint guard (issue #3172 AC-4)', 
   it('rejects negation bypass: !params.isOAuth inside placeSystemInstruction', () => {
     const messages = lintWithEffectiveRule(
       [
-        'function placeSystemInstruction(params: { isOAuth: boolean }) {',
+        'function placeSystemInstruction(params) {',
         '  if (!params.isOAuth) {',
         '    return [];',
         '  }',
@@ -167,7 +163,7 @@ describe('AnthropicRequestPreparation placement lint guard (issue #3172 AC-4)', 
   it('rejects equality bypass: params.isOAuth === true inside placeSystemInstruction', () => {
     const messages = lintWithEffectiveRule(
       [
-        'function placeSystemInstruction(params: { isOAuth: boolean }) {',
+        'function placeSystemInstruction(params) {',
         '  if (params.isOAuth === true) {',
         '    return [];',
         '  }',
@@ -181,7 +177,7 @@ describe('AnthropicRequestPreparation placement lint guard (issue #3172 AC-4)', 
   it('rejects ternary bypass: params.isOAuth ? a : b inside placeSystemInstruction', () => {
     const messages = lintWithEffectiveRule(
       [
-        'function placeSystemInstruction(params: { isOAuth: boolean }) {',
+        'function placeSystemInstruction(params) {',
         '  const x = params.isOAuth ? [] : [];',
         '  return x;',
         '}',
@@ -193,7 +189,7 @@ describe('AnthropicRequestPreparation placement lint guard (issue #3172 AC-4)', 
   it('rejects file-wide destructure bypass: const { isOAuth } = params', () => {
     const messages = lintWithEffectiveRule(
       [
-        'function renamedPlacement(params: { isOAuth: boolean }) {',
+        'function renamedPlacement(params) {',
         '  const { isOAuth } = params;',
         '  return isOAuth ? [] : [];',
         '}',
@@ -205,7 +201,7 @@ describe('AnthropicRequestPreparation placement lint guard (issue #3172 AC-4)', 
   it('rejects switch bypass: switch on params.isOAuth inside placeSystemInstruction', () => {
     const messages = lintWithEffectiveRule(
       [
-        'function placeSystemInstruction(params: { isOAuth: boolean }) {',
+        'function placeSystemInstruction(params) {',
         '  switch (params.isOAuth) {',
         '    case true: return [];',
         '    default: return [];',
@@ -219,7 +215,7 @@ describe('AnthropicRequestPreparation placement lint guard (issue #3172 AC-4)', 
   it('allows legitimate auth-only use of a direct isOAuth parameter', () => {
     const messages = lintWithEffectiveRule(
       [
-        'function buildContextPrefixSystemField(isOAuth: boolean) {',
+        'function buildContextPrefixSystemField(isOAuth) {',
         '  if (isOAuth) {',
         '    return "vendor";',
         '  }',
@@ -233,7 +229,7 @@ describe('AnthropicRequestPreparation placement lint guard (issue #3172 AC-4)', 
   it('allows placement-only branching without any isOAuth reference', () => {
     const messages = lintWithEffectiveRule(
       [
-        'function placeSystemInstruction(params: { placement: string }) {',
+        'function placeSystemInstruction(params) {',
         '  if (params.placement === "context-prefix") {',
         '    return [{ role: "user", content: "prompt" }];',
         '  }',
@@ -244,9 +240,9 @@ describe('AnthropicRequestPreparation placement lint guard (issue #3172 AC-4)', 
     expect(messages).toStrictEqual([]);
   });
 
-  it('keeps the candidate AnthropicRequestPreparation.ts source lint-clean', () => {
-    const source = readFileSync(PREPARATION_SOURCE_PATH, 'utf8');
-    const messages = lintWithEffectiveRule(source);
-    expect(messages).toStrictEqual([]);
+  it('keeps the candidate AnthropicRequestPreparation.ts source lint-clean', async () => {
+    const eslint = new ESLint({ cwd: PROJECT_ROOT });
+    const [result] = await eslint.lintFiles(PREPARATION_SOURCE_PATH);
+    expect(result.messages).toStrictEqual([]);
   });
 });

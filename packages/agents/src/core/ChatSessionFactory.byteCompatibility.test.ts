@@ -126,7 +126,7 @@ function makeConfig(row: Row): Config {
   } as unknown as Config;
 }
 
-const ROWS: readonly Row[] = [
+const ROWS: Row[] = [
   {
     name: 'JIT enabled: global+JIT+core+MCP all non-empty',
     jitEnabled: true,

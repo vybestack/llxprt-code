@@ -136,6 +136,10 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+function lastItem<T>(items: readonly T[]): T | undefined {
+  return items[items.length - 1];
+}
+
 function textFromBlocks(blocks: unknown): string {
   if (!Array.isArray(blocks)) {
     return '';
@@ -214,7 +218,7 @@ describe('Anthropic system-prompt placement wiring (issue #3172)', () => {
     )) {
       void _chunk;
     }
-    const request = FakeAnthropicClass.requests.at(-1)?.request;
+    const request = lastItem(FakeAnthropicClass.requests)?.request;
     if (!isObject(request)) {
       throw new Error('Expected an SDK request payload');
     }
@@ -312,7 +316,7 @@ describe('Anthropic system-prompt placement wiring (issue #3172)', () => {
     )) {
       void _chunk;
     }
-    const request = FakeAnthropicClass.requests.at(-1)?.request;
+    const request = lastItem(FakeAnthropicClass.requests)?.request;
     if (!isObject(request)) {
       throw new Error('Expected an SDK request payload');
     }
@@ -375,16 +379,16 @@ describe('Anthropic system-prompt placement wiring (issue #3172)', () => {
       .next();
 
     // The SDK constructor received the FIRST token, proving provide() ran once.
-    const transportOpts = FakeAnthropicClass.created.at(-1)?.options;
+    const transportOpts = lastItem(FakeAnthropicClass.created)?.options;
     expect(transportOpts?.['apiKey']).toBe(API_KEY);
     expect(callIndex).toBe(1);
 
     // Deep-compare against the direct-string baseline.
-    const transportRequest = FakeAnthropicClass.requests.at(-1)?.request;
+    const transportRequest = lastItem(FakeAnthropicClass.requests)?.request;
     FakeAnthropicClass.reset();
     const baselineProvider = new PlacementTestProvider();
     await baselineProvider.generateChatCompletion(buildOptions(API_KEY)).next();
-    const baselineRequest = FakeAnthropicClass.requests.at(-1)?.request;
+    const baselineRequest = lastItem(FakeAnthropicClass.requests)?.request;
 
     expect(isObject(transportRequest)).toBe(true);
     expect(isObject(baselineRequest)).toBe(true);
@@ -416,18 +420,18 @@ describe('Anthropic system-prompt placement wiring (issue #3172)', () => {
       .next();
 
     // The SDK constructor received the FIRST token (OAuth uses authToken).
-    const transportOpts = FakeAnthropicClass.created.at(-1)?.options;
+    const transportOpts = lastItem(FakeAnthropicClass.created)?.options;
     expect(transportOpts?.['authToken']).toBe(OAUTH_TOKEN);
     expect(callIndex).toBe(1);
 
     // Deep-compare against the direct-string baseline.
-    const transportRequest = FakeAnthropicClass.requests.at(-1)?.request;
+    const transportRequest = lastItem(FakeAnthropicClass.requests)?.request;
     FakeAnthropicClass.reset();
     const baselineProvider = new PlacementTestProvider();
     await baselineProvider
       .generateChatCompletion(buildOptions(OAUTH_TOKEN))
       .next();
-    const baselineRequest = FakeAnthropicClass.requests.at(-1)?.request;
+    const baselineRequest = lastItem(FakeAnthropicClass.requests)?.request;
 
     expect(isObject(transportRequest)).toBe(true);
     expect(isObject(baselineRequest)).toBe(true);
