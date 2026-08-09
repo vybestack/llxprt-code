@@ -106,7 +106,14 @@ export async function readBoundedFirstLine(
       // across chunk boundaries.
       const decoded = decoder.write(buf.subarray(0, bytesRead));
       const text = stripBom(decoded, bomStripped);
-      bomStripped = true;
+      // Only mark BOM as handled once the decoder has produced text.
+      // On a short read the first chunk may contain only the leading bytes
+      // of a multi-byte BOM, causing the decoder to buffer them without
+      // emitting any character.  Prematurely setting bomStripped here would
+      // let the BOM leak into a subsequent chunk's output unstripped.
+      if (decoded.length > 0) {
+        bomStripped = true;
+      }
 
       const newlineIdx = text.indexOf('\n');
       if (newlineIdx >= 0) {

@@ -63,9 +63,20 @@ export function isValidSafeSessionId(id: string): boolean {
  * Normalize a path for comparison by resolving `.` and `..` segments without
  * touching the filesystem.  This is used purely for lexical containment
  * checks so that traversal segments are collapsed before comparison.
+ *
+ * A trailing separator is stripped from non-root paths so prefix-based
+ * containment checks work correctly when the parent path ends with a
+ * separator, while filesystem roots remain intact.
  */
 function normalizeLexical(p: string): string {
-  return path.normalize(p);
+  const normalized = path.normalize(p);
+  if (
+    normalized !== path.parse(normalized).root &&
+    normalized.endsWith(path.sep)
+  ) {
+    return normalized.slice(0, -1);
+  }
+  return normalized;
 }
 
 /**

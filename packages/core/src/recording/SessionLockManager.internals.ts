@@ -389,12 +389,11 @@ export async function cleanupOrphanedLocks(chatsDir: string): Promise<number> {
   }
 
   // Also reclaim orphaned stale transition guards left by crashed processes.
+  // Validate exact grammar, direct-child, and regular non-symlink lstat
+  // before any stale check or unlink — consistent with lock temp cleanup.
   const guardFiles = files.filter((f) => f.endsWith(TRANSITION_GUARD_SUFFIX));
   for (const guardFile of guardFiles) {
-    const guardPath = path.join(chatsDir, guardFile);
-    if (await checkStaleWithPidReuse(guardPath)) {
-      await safeUnlink(guardPath);
-    }
+    await cleanupStaleGuard(chatsDir, guardFile);
   }
 
   // Clean up orphaned temp publication artifacts from crashed lock
@@ -749,4 +748,31 @@ async function cleanupStaleLockTemp(
     return; // Can't stat — leave it.
   }
   await safeUnlink(filePath);
+}
+
+/**
+ * Safely clean up a single orphaned transition guard file.  Only removes the
+ * file when the filename matches the exact safe-session grammar
+ * (`<safeSessionId>.lock.tguard`), it is a regular non-symlink direct child
+ * of chatsDir, and its content indicates staleness.  Unknown files and
+ * symlinks are never deleted.
+ */
+async function cleanupStaleGuard(
+  chatsDir: string,
+  fileName: string,
+): Promise<void> {
+  const guardIdMatch = fileName.match(/^(.+)\.lock\.tguard$/);
+  if (!guardIdMatch) return;
+  if (!isValidSafeSessionId(guardIdMatch[1])) return;
+  const guardPath = path.join(chatsDir, fileName);
+  if (!isDirectChildPath(chatsDir, guardPath)) return;
+  try {
+    const lstat = await fs.lstat(guardPath);
+    if (lstat.isSymbolicLink() || !lstat.isFile()) return;
+  } catch {
+    return; // Can't stat — leave it.
+  }
+  if (await checkStaleWithPidReuse(guardPath)) {
+    await safeUnlink(guardPath);
+  }
 }

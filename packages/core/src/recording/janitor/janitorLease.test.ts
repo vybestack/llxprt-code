@@ -115,22 +115,25 @@ describe('JanitorLease — single-process acquisition', () => {
     const afterContent = await fs.readFile(leasePath, 'utf-8');
     expect(JSON.parse(afterContent).ownerToken).toBe('different-owner-token');
   });
-  it('tryAcquire propagates I/O errors instead of masking them as busy', async () => {
-    // Make the temp dir read-only so temp-file creation fails with EACCES.
-    await fs.chmod(tempDir, 0o555);
-    try {
-      let threw = false;
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'tryAcquire propagates I/O errors instead of masking them as busy',
+    async () => {
+      // Make the temp dir read-only so temp-file creation fails with EACCES.
+      await fs.chmod(tempDir, 0o555);
       try {
-        await JanitorLease.tryAcquire(tempDir);
-      } catch {
-        threw = true;
+        let threw = false;
+        try {
+          await JanitorLease.tryAcquire(tempDir);
+        } catch {
+          threw = true;
+        }
+        // A genuine I/O error must propagate — not be swallowed as null (busy).
+        expect(threw).toBe(true);
+      } finally {
+        await fs.chmod(tempDir, 0o755);
       }
-      // A genuine I/O error must propagate — not be swallowed as null (busy).
-      expect(threw).toBe(true);
-    } finally {
-      await fs.chmod(tempDir, 0o755);
-    }
-  });
+    },
+  );
 });
 
 describe('JanitorLease — stale recovery', () => {
@@ -278,8 +281,8 @@ describe('JanitorLease — real subprocess concurrency (AC-6)', () => {
 
     const winners = results.filter((r) => r === 'WON');
     expect(winners.length).toBe(1);
-  });
-}, 30000);
+  }, 30000);
+});
 
 /**
  * Helper: run a Bun script and return its stdout.

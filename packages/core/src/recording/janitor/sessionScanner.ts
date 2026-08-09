@@ -212,7 +212,10 @@ async function scanRawSessions(
           containerDir: chatsDir,
           projectHashDir,
           sessionId: header?.sessionId ?? null,
-          isCurrentSession: header?.sessionId === currentSessionId,
+          isCurrentSession:
+            header?.sessionId != null &&
+            currentSessionId != null &&
+            header.sessionId === currentSessionId,
           sizeBytes: getFileSize(lstat),
           mtime: lstat.mtime,
           dev: lstat.dev,

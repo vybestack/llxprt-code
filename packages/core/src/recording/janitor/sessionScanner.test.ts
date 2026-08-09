@@ -191,6 +191,25 @@ describe('scanGlobalSessions — raw session discovery', () => {
     );
     expect(candidates[0].isCurrentSession).toBe(false);
   });
+
+  it('isCurrentSession is false when both parsed and current IDs are absent', async () => {
+    const hash1 = validHash64();
+    const chats1 = path.join(tempDir, hash1, 'chats');
+    await fs.mkdir(chats1, { recursive: true });
+
+    // Create a session file whose header has NO sessionId (malformed but
+    // parseable JSON) so the scanner reports sessionId=null.
+    await fs.writeFile(
+      path.join(chats1, 'session-noid.jsonl'),
+      JSON.stringify({ type: 'session_start', payload: {} }) + '\n',
+    );
+
+    // Scan without a currentSessionId — both sides are absent.
+    const { candidates } = await scanGlobalSessions(tempDir);
+    expect(candidates.length).toBe(1);
+    expect(candidates[0].sessionId).toBeNull();
+    expect(candidates[0].isCurrentSession).toBe(false);
+  });
 });
 
 describe('scanGlobalSessions — archive discovery', () => {
@@ -357,24 +376,30 @@ describe('scanGlobalSessions — symlink safety (AC-10)', () => {
    * (e.g. EACCES) must be counted in scanErrorCount, not silently treated
    * as "directory doesn't exist".
    */
-  it('counts non-ENOENT archive readdir errors in scanErrorCount (OCR 39)', async () => {
-    const hash = validHash64();
-    const chatsDir = path.join(tempDir, hash, 'chats');
-    const archiveDir = path.join(chatsDir, ARCHIVE_DIR_NAME);
-    await fs.mkdir(archiveDir, { recursive: true });
-    await fs.writeFile(path.join(archiveDir, 'session-real.jsonl.gz'), 'data');
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'counts non-ENOENT archive readdir errors in scanErrorCount (OCR 39)',
+    async () => {
+      const hash = validHash64();
+      const chatsDir = path.join(tempDir, hash, 'chats');
+      const archiveDir = path.join(chatsDir, ARCHIVE_DIR_NAME);
+      await fs.mkdir(archiveDir, { recursive: true });
+      await fs.writeFile(
+        path.join(archiveDir, 'session-real.jsonl.gz'),
+        'data',
+      );
 
-    // Remove read+execute permission on the archive dir so readdir fails
-    // with EACCES (we are not root).
-    await fs.chmod(archiveDir, 0o000);
+      // Remove read+execute permission on the archive dir so readdir fails
+      // with EACCES (we are not root).
+      await fs.chmod(archiveDir, 0o000);
 
-    try {
-      const { scanErrorCount } = await scanGlobalSessions(tempDir);
-      expect(scanErrorCount).toBeGreaterThanOrEqual(1);
-    } finally {
-      await fs.chmod(archiveDir, 0o755);
-    }
-  });
+      try {
+        const { scanErrorCount } = await scanGlobalSessions(tempDir);
+        expect(scanErrorCount).toBeGreaterThanOrEqual(1);
+      } finally {
+        await fs.chmod(archiveDir, 0o755);
+      }
+    },
+  );
 
   /**
    * OCR finding 39: ENOENT races remain benign (not counted as errors).

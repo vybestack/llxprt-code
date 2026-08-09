@@ -363,7 +363,11 @@ async function processSizeReclamation(
         state.rawDeleted++;
         state.totalBytes -= group.raw.sizeBytes;
       }
-      if (outcome.archiveBytes > 0) {
+      // Only add archive bytes to the running total when the archive is
+      // freshly created.  When the archive pre-existed (group.archive !==
+      // null) its bytes were already counted in the initial scan, so adding
+      // them again would double-count.
+      if (outcome.archiveBytes > 0 && group.archive === null) {
         state.totalBytes += outcome.archiveBytes;
       }
       if (outcome.failed) state.failed++;
@@ -491,11 +495,18 @@ async function doArchiveAndDelete(
   const archiveDir = path.join(group.chatsDir, ARCHIVE_DIR_NAME);
   const result = await compressToArchive(candidate.filePath, archiveDir);
   if (!result.success || !result.archivePath) {
+    // Protective refusals (source-invalid, existing-archive) are not platform
+    // failures — data is retained and not counted as failed.  Genuine
+    // platform failures (mkdir, hash, compress, verify, rename) are counted.
+    const isPlatformFailure =
+      result.errorKind !== undefined &&
+      result.errorKind !== 'source-invalid' &&
+      result.errorKind !== 'existing-archive';
     return {
       archived: false,
       rawDeleted: false,
       archiveBytes: 0,
-      failed: false,
+      failed: isPlatformFailure,
     };
   }
 
@@ -580,6 +591,16 @@ async function evictArchivesForBudget(
   }
   // Count per-project scan failures from the rescan (OCR 38/39).
   state.failed += freshScan.scanErrorCount;
+
+  // Use the authoritative fresh scan total so any drift from the compression
+  // phase's running estimate (e.g. reused archives, short-read variance) is
+  // corrected before eviction decisions.
+  state.totalBytes = freshScan.candidates.reduce(
+    (sum, c) => sum + c.sizeBytes,
+    0,
+  );
+
+  if (state.totalBytes <= config.maxTotalSizeBytes) return;
 
   const now = Date.now();
   const evictable: SessionCandidate[] = [];

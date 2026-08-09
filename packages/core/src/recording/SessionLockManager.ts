@@ -68,7 +68,16 @@ function isValidSafeSessionId(id: string): boolean {
 
 /** Normalize a path for comparison without touching the filesystem. */
 function normalizeLexical(p: string): string {
-  return path.normalize(p);
+  const normalized = path.normalize(p);
+  // Preserve filesystem roots (including Windows drive and UNC roots) while
+  // removing a trailing separator from ordinary directory paths.
+  if (
+    normalized !== path.parse(normalized).root &&
+    normalized.endsWith(path.sep)
+  ) {
+    return normalized.slice(0, -1);
+  }
+  return normalized;
 }
 
 /**

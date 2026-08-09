@@ -90,6 +90,29 @@ describe('compressToArchive — symlink safety (Item 1)', () => {
     const result = await compressToArchive(sourcePath, archiveDir);
     expect(result.success).toBe(false);
   });
+
+  it('rejects existing-archive reuse through a symlinked archive directory', async () => {
+    const realArchiveDir = path.join(tempDir, 'real-archive');
+    await fs.mkdir(realArchiveDir, { recursive: true });
+
+    // Create a valid source and archive it into the real directory first.
+    const sourcePath = path.join(tempDir, 'session-reuse-symlink.jsonl');
+    const content = '{"type":"session_start","payload":{}}\n'.repeat(50);
+    await fs.writeFile(sourcePath, content);
+    const result1 = await compressToArchive(sourcePath, realArchiveDir);
+    expect(result1.success).toBe(true);
+
+    // Symlink a new archiveDir name to the real directory.
+    const symlinkArchiveDir = path.join(tempDir, 'symlink-archive');
+    await fs.symlink(realArchiveDir, symlinkArchiveDir, 'dir');
+
+    // The final archive path resolves through the symlink to the real
+    // existing archive.  The archiveDir identity check must reject the
+    // symlink BEFORE attempting reuse so the real directory is never
+    // mutated through the symlink.
+    const result2 = await compressToArchive(sourcePath, symlinkArchiveDir);
+    expect(result2.success).toBe(false);
+  });
 });
 
 describe('cleanupStaleTempArchives — exact grammar (Item 8)', () => {

@@ -318,30 +318,33 @@ describe('compressToArchive — typed error results (finding E)', () => {
    * during the reuse hash computation, compressToArchive must return a typed
    * ArchiveResult — not throw an unhandled rejection.
    */
-  it('returns typed source-invalid error when source becomes unreadable during reuse check', async () => {
-    const archiveDir = path.join(tempDir, 'archive');
-    await fs.mkdir(archiveDir, { recursive: true });
-    const source = path.join(tempDir, 'session-unreadable.jsonl');
-    await fs.writeFile(source, 'data'.repeat(50));
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'returns typed source-invalid error when source becomes unreadable during reuse check',
+    async () => {
+      const archiveDir = path.join(tempDir, 'archive');
+      await fs.mkdir(archiveDir, { recursive: true });
+      const source = path.join(tempDir, 'session-unreadable.jsonl');
+      await fs.writeFile(source, 'data'.repeat(50));
 
-    // Pre-create an existing archive so the reuse path is entered.
-    const existingArchive = path.join(
-      archiveDir,
-      'session-unreadable.jsonl.gz',
-    );
-    await fs.writeFile(existingArchive, 'placeholder'.repeat(20));
+      // Pre-create an existing archive so the reuse path is entered.
+      const existingArchive = path.join(
+        archiveDir,
+        'session-unreadable.jsonl.gz',
+      );
+      await fs.writeFile(existingArchive, 'placeholder'.repeat(20));
 
-    // Make the source unreadable so computeFileHashAndSize fails.
-    await fs.chmod(source, 0o000);
+      // Make the source unreadable so computeFileHashAndSize fails.
+      await fs.chmod(source, 0o000);
 
-    try {
-      const result = await compressToArchive(source, archiveDir);
-      expect(result.success).toBe(false);
-      expect(result.errorKind).toBe('source-invalid');
-    } finally {
-      await fs.chmod(source, 0o644);
-    }
-  });
+      try {
+        const result = await compressToArchive(source, archiveDir);
+        expect(result.success).toBe(false);
+        expect(result.errorKind).toBe('source-invalid');
+      } finally {
+        await fs.chmod(source, 0o644);
+      }
+    },
+  );
 });
 
 describe('verifyArchiveIntegrity', () => {

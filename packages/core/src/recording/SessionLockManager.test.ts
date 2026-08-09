@@ -359,30 +359,33 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
       await handle2.release();
     });
     /**
-     * OCR finding 5: a transient I/O failure (EACCES on a read-only dir)
-     * must propagate, not be swallowed as "lock busy" which could cause a
-     * dangerous stale-takeover of a live lock.
+     * OCR finding 5: a transient I/O failure must propagate, not be
+     * swallowed as "lock busy" which could cause a dangerous stale-takeover
+     * of a live lock.
+     *
+     * Uses a regular file as a path-component blocker so file creation
+     * fails with ENOTDIR — deterministic and privilege-independent (works
+     * on all platforms including root and Windows).
      */
     it('acquire propagates I/O errors instead of masking them as lock-busy', async () => {
-      const readOnlyDir = path.join(tempDir, 'readonly-chats');
-      await fs.mkdir(readOnlyDir, { recursive: true });
-      await fs.chmod(readOnlyDir, 0o555);
+      // Create a regular file that blocks directory traversal.
+      const blockerPath = path.join(tempDir, 'blocker');
+      await fs.writeFile(blockerPath, 'blocker');
+      // chatsDir is inside the blocker "directory" (which is actually a file).
+      const blockedDir = path.join(blockerPath, 'chats');
+
+      let threw = false;
+      let error: unknown;
       try {
-        let threw = false;
-        let error: unknown;
-        try {
-          await SessionLockManager.acquire(readOnlyDir, 'io-fail-session');
-        } catch (e) {
-          threw = true;
-          error = e;
-        }
-        expect(threw).toBe(true);
-        // Must NOT be a SessionLockedError — that would mean the I/O error
-        // was swallowed and the code fell through to stale-takeover logic.
-        expect(error).not.toBeInstanceOf(SessionLockedError);
-      } finally {
-        await fs.chmod(readOnlyDir, 0o755);
+        await SessionLockManager.acquire(blockedDir, 'io-fail-session');
+      } catch (e) {
+        threw = true;
+        error = e;
       }
+      expect(threw).toBe(true);
+      // Must NOT be a SessionLockedError — that would mean the I/O error
+      // was swallowed and the code fell through to stale-takeover logic.
+      expect(error).not.toBeInstanceOf(SessionLockedError);
     });
   });
   // -------------------------------------------------------------------------
@@ -713,6 +716,57 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
       await SessionLockManager.cleanupOrphanedLocks(chatsDir);
 
       expect(await fileExists(badPath)).toBe(true);
+    });
+
+    it('cleanupOrphanedLocks removes a stale guard with safe grammar and dead PID', async () => {
+      const sessionId = 'stale-guard-session';
+      const guardName = `${sessionId}.lock.tguard`;
+      const guardPath = path.join(chatsDir, guardName);
+      await fs.writeFile(
+        guardPath,
+        JSON.stringify({
+          pid: DEAD_PID,
+          timestamp: new Date().toISOString(),
+          sessionId,
+          ownerToken: 'crashed-guard',
+        }),
+        'utf-8',
+      );
+
+      await SessionLockManager.cleanupOrphanedLocks(chatsDir);
+
+      expect(await fileExists(guardPath)).toBe(false);
+    });
+
+    it('cleanupOrphanedLocks does NOT remove a guard with an unsafe name', async () => {
+      // Contains a dot in the session-id portion — does not match safe grammar.
+      const badName = 'a.b.lock.tguard';
+      const badPath = path.join(chatsDir, badName);
+      await fs.writeFile(badPath, 'data', 'utf-8');
+
+      await SessionLockManager.cleanupOrphanedLocks(chatsDir);
+
+      expect(await fileExists(badPath)).toBe(true);
+    });
+
+    it('cleanupOrphanedLocks does NOT remove a non-stale guard with safe grammar', async () => {
+      const sessionId = 'live-guard-session';
+      const guardName = `${sessionId}.lock.tguard`;
+      const guardPath = path.join(chatsDir, guardName);
+      await fs.writeFile(
+        guardPath,
+        JSON.stringify({
+          pid: process.pid,
+          timestamp: new Date().toISOString(),
+          sessionId,
+          ownerToken: 'live-guard',
+        }),
+        'utf-8',
+      );
+
+      await SessionLockManager.cleanupOrphanedLocks(chatsDir);
+
+      expect(await fileExists(guardPath)).toBe(true);
     });
   });
 

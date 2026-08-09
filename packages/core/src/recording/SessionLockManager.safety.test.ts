@@ -116,6 +116,16 @@ describe('SessionLockManager — safe session ID grammar (Item 2)', () => {
     expect(path.basename(lockPath)).toBe('valid-session-id.lock');
   });
 
+  it('accepts a chatsDir with a trailing path separator', () => {
+    const chatsDirWithSep = chatsDir + path.sep;
+    const lockPath = SessionLockManager.getLockPath(
+      chatsDirWithSep,
+      'trailing-sep-test',
+    );
+    expect(path.basename(lockPath)).toBe('trailing-sep-test.lock');
+    expect(path.dirname(lockPath)).toBe(chatsDir);
+  });
+
   it('refuses to acquire a lock with an unsafe session ID', async () => {
     // An unsafe/path-like session ID is a validation failure, distinct from a
     // busy session. The rejection must surface the "Unsafe session ID" reason.
@@ -429,6 +439,54 @@ function runBunScript(
   });
 }
 
+/**
+ * Run N identical subprocess scripts with an explicit readiness barrier so
+ * all children start their lock-acquire work simultaneously, reducing race
+ * flakiness from staggered process startup.
+ *
+ * Each child writes a unique ready file, then polls for a shared go file.
+ * The parent waits for all ready files, creates the go file, then collects
+ * results.
+ */
+async function runBunScriptsWithBarrier(
+  script: string,
+  baseEnv: Record<string, string>,
+  count: number,
+  barrierDir: string,
+): Promise<string[]> {
+  const goFile = path.join(barrierDir, 'barrier-go');
+  const readyFiles = Array.from({ length: count }, (_, i) =>
+    path.join(barrierDir, `barrier-ready-${i}`),
+  );
+
+  // Spawn all children — each will write its ready file and wait.
+  const promises = readyFiles.map((readyFile) =>
+    runBunScript(script, {
+      ...baseEnv,
+      TEST_READY_FILE: readyFile,
+      TEST_GO_FILE: goFile,
+    }),
+  );
+
+  // Wait for every child to signal readiness.
+  for (const readyFile of readyFiles) {
+    const deadline = Date.now() + 15000;
+    while (Date.now() < deadline) {
+      try {
+        await fs.access(readyFile);
+        break;
+      } catch {
+        await new Promise((r) => setTimeout(r, 5));
+      }
+    }
+  }
+
+  // Release the barrier — all children proceed simultaneously.
+  await fs.writeFile(goFile, 'go');
+
+  return Promise.all(promises);
+}
+
 describe('SessionLockManager — genuine transition race (subprocess, Item 3)', () => {
   let tempDir: string;
   let chatsDir: string;
@@ -464,7 +522,13 @@ describe('SessionLockManager — genuine transition race (subprocess, Item 3)', 
       const { SessionLockManager } = require(${JSON.stringify(path.resolve(__dirname, 'SessionLockManager.js'))});
       const chatsDir = process.env.TEST_CHATS_DIR;
       const sessionId = process.env.TEST_SESSION_ID;
+      const readyFile = process.env.TEST_READY_FILE;
+      const goFile = process.env.TEST_GO_FILE;
       (async () => {
+        require('fs').writeFileSync(readyFile, 'ready');
+        while (!require('fs').existsSync(goFile)) {
+          await new Promise(r => setTimeout(r, 5));
+        }
         try {
           const handle = await SessionLockManager.acquire(chatsDir, sessionId);
           await new Promise(r => setTimeout(r, 300));
@@ -476,20 +540,12 @@ describe('SessionLockManager — genuine transition race (subprocess, Item 3)', 
       })();
     `;
 
-    const results = await Promise.all([
-      runBunScript(script, {
-        TEST_CHATS_DIR: chatsDir,
-        TEST_SESSION_ID: sessionId,
-      }),
-      runBunScript(script, {
-        TEST_CHATS_DIR: chatsDir,
-        TEST_SESSION_ID: sessionId,
-      }),
-      runBunScript(script, {
-        TEST_CHATS_DIR: chatsDir,
-        TEST_SESSION_ID: sessionId,
-      }),
-    ]);
+    const results = await runBunScriptsWithBarrier(
+      script,
+      { TEST_CHATS_DIR: chatsDir, TEST_SESSION_ID: sessionId },
+      3,
+      tempDir,
+    );
 
     const winners = results.filter((r) => r === 'WON');
     expect(winners.length).toBe(1);
@@ -561,7 +617,13 @@ describe('SessionLockManager — genuine transition race (subprocess, Item 3)', 
       const { SessionLockManager } = require(${JSON.stringify(path.resolve(__dirname, 'SessionLockManager.js'))});
       const chatsDir = process.env.TEST_CHATS_DIR;
       const sessionId = process.env.TEST_SESSION_ID;
+      const readyFile = process.env.TEST_READY_FILE;
+      const goFile = process.env.TEST_GO_FILE;
       (async () => {
+        require('fs').writeFileSync(readyFile, 'ready');
+        while (!require('fs').existsSync(goFile)) {
+          await new Promise(r => setTimeout(r, 5));
+        }
         try {
           const handle = await SessionLockManager.acquire(chatsDir, sessionId);
           // Hold the lock briefly so contenders see a LIVE lock.
@@ -577,20 +639,12 @@ describe('SessionLockManager — genuine transition race (subprocess, Item 3)', 
       })();
     `;
 
-    const results = await Promise.all([
-      runBunScript(script, {
-        TEST_CHATS_DIR: chatsDir,
-        TEST_SESSION_ID: sessionId,
-      }),
-      runBunScript(script, {
-        TEST_CHATS_DIR: chatsDir,
-        TEST_SESSION_ID: sessionId,
-      }),
-      runBunScript(script, {
-        TEST_CHATS_DIR: chatsDir,
-        TEST_SESSION_ID: sessionId,
-      }),
-    ]);
+    const results = await runBunScriptsWithBarrier(
+      script,
+      { TEST_CHATS_DIR: chatsDir, TEST_SESSION_ID: sessionId },
+      3,
+      tempDir,
+    );
 
     const winners = results.filter((r) => r === 'WON');
     const lost = results.filter((r) => r === 'LOST');

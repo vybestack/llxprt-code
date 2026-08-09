@@ -192,4 +192,35 @@ describe('readBoundedFirstLine', () => {
     const line = await readBoundedFirstLine(filePath);
     expect(line).toBe(first);
   });
+
+  it('correctly strips BOM for a first line spanning multiple 64 KiB chunks', async () => {
+    const filePath = path.join(tempDir, 'session-bom-chunked.jsonl');
+    const READ_CHUNK_SIZE = 64 * 1024;
+    // BOM + content that exceeds a single 64 KiB read so the reader must
+    // continue across chunk boundaries with the BOM already stripped.
+    const padding = 'b'.repeat(READ_CHUNK_SIZE + 100);
+    const payload = JSON.stringify({
+      type: 'session_start',
+      payload: { sessionId: 'bom-chunked', startTime: '2026-01-01T00:00:00Z' },
+    });
+    await fs.writeFile(filePath, '\uFEFF' + padding + payload + '\n');
+    const line = await readBoundedFirstLine(filePath);
+    expect(line).toBe(padding + payload);
+  });
+
+  it('returns null for a file containing only a BOM', async () => {
+    const filePath = path.join(tempDir, 'session-bom-only.jsonl');
+    await fs.writeFile(filePath, '\uFEFF');
+    const line = await readBoundedFirstLine(filePath);
+    expect(line).toBeNull();
+  });
+
+  it('returns an empty string for a file containing only a BOM and a newline', async () => {
+    const filePath = path.join(tempDir, 'session-bom-newline.jsonl');
+    await fs.writeFile(filePath, '\uFEFF\n');
+    const line = await readBoundedFirstLine(filePath);
+    // The first line is empty after BOM stripping (distinct from an empty
+    // file which returns null).  Downstream JSON parsing handles this.
+    expect(line).toBe('');
+  });
 });

@@ -843,3 +843,113 @@ describe('Item 4 — failure isolation and diagnostics', () => {
     expect(await fileExists(archivePath)).toBe(true);
   });
 });
+
+// ===========================================================================
+// Finding 3: No double-counting of reused archive bytes
+// ===========================================================================
+
+describe('Finding 3 — reused archive bytes are not double-counted', () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await makeTempDir();
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('does not evict reused archives when the actual total is within budget', async () => {
+    const hash = validHash64();
+    const chatsDir = path.join(tempDir, hash, 'chats');
+    const archiveDir = path.join(chatsDir, ARCHIVE_DIR_NAME);
+    await fs.mkdir(chatsDir, { recursive: true });
+    await fs.mkdir(archiveDir, { recursive: true });
+
+    // Create two old sessions with compressible content.
+    const sessionA = await createSession(chatsDir, {
+      ageMs: 5 * 24 * 60 * 60 * 1000,
+      content: 'A'.repeat(100_000),
+    });
+    const sessionB = await createSession(chatsDir, {
+      ageMs: 4 * 24 * 60 * 60 * 1000,
+      content: 'B'.repeat(100_000),
+    });
+
+    // Pre-create valid archives for both sessions so compressToArchive reuses
+    // them rather than creating fresh archives.
+    const archivePathA = path.join(
+      archiveDir,
+      path.basename(sessionA.filePath) + '.gz',
+    );
+    const archivePathB = path.join(
+      archiveDir,
+      path.basename(sessionB.filePath) + '.gz',
+    );
+    const rawContentA = await fs.readFile(sessionA.filePath);
+    const rawContentB = await fs.readFile(sessionB.filePath);
+    await fs.writeFile(archivePathA, zlib.gzipSync(rawContentA));
+    await fs.writeFile(archivePathB, zlib.gzipSync(rawContentB));
+    const oldTime = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+    await fs.utimes(archivePathA, oldTime, oldTime);
+    await fs.utimes(archivePathB, oldTime, oldTime);
+
+    // Budget tuned between the actual post-archive total (two small archives)
+    // and the double-counted total.  If reused archive bytes are added to the
+    // running total a second time, the inflated total exceeds the budget and
+    // triggers unnecessary archive eviction.
+    const config = resolveRetentionConfig({ maxTotalSizeMB: 0.012 });
+    const result = await runSessionCleanup({ globalTempDir: tempDir, config });
+
+    // Both raws should be archived (reusing existing archives) and deleted.
+    expect(result.archived).toBeGreaterThanOrEqual(2);
+    expect(result.rawDeleted).toBeGreaterThanOrEqual(2);
+    expect(await fileExists(sessionA.filePath)).toBe(false);
+    expect(await fileExists(sessionB.filePath)).toBe(false);
+
+    // Both reused archives must survive — no double-counting eviction.
+    expect(result.archiveDeleted).toBe(0);
+    expect(await fileExists(archivePathA)).toBe(true);
+    expect(await fileExists(archivePathB)).toBe(true);
+  });
+});
+
+// ===========================================================================
+// Finding 4: Compression platform failures increment failed
+// ===========================================================================
+
+describe('Finding 4 — compression platform failures are counted truthfully', () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await makeTempDir();
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('increments failed when the archive directory is blocked by a file (mkdir error)', async () => {
+    const hash = validHash64();
+    const chatsDir = path.join(tempDir, hash, 'chats');
+    await fs.mkdir(chatsDir, { recursive: true });
+
+    // Create an old eligible session.
+    const session = await createSession(chatsDir, {
+      ageMs: 5 * 24 * 60 * 60 * 1000,
+      content: 'A'.repeat(40_000),
+    });
+
+    // Block the archive directory by creating a regular file at that path.
+    // This triggers a mkdir error in compressToArchive — a platform failure.
+    await fs.writeFile(path.join(chatsDir, ARCHIVE_DIR_NAME), 'blocker');
+
+    const config = resolveRetentionConfig({ maxTotalSizeMB: 0.001 });
+    const result = await runSessionCleanup({ globalTempDir: tempDir, config });
+
+    // mkdir is a platform failure — must increment the failed counter.
+    expect(result.failed).toBeGreaterThanOrEqual(1);
+    expect(result.archived).toBe(0);
+    expect(await fileExists(session.filePath)).toBe(true);
+  });
+});

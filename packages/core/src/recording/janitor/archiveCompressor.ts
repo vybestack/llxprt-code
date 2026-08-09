@@ -190,6 +190,17 @@ export async function compressToArchive(
   const sourceBase = path.basename(sourcePath);
   const finalArchivePath = path.join(archiveDir, sourceBase + '.gz');
 
+  // Item 1: If archiveDir already exists, it must be a regular non-symlink
+  // dir.  This check MUST precede the reuse path so a symlinked archiveDir
+  // is never traversed or mutated through existing-archive reuse.
+  const existingDir = await isRegularNonSymlinkDir(archiveDir);
+  if (existingDir === false && (await pathExists(archiveDir))) {
+    return archiveError(
+      'Archive directory is a symlink or non-directory — refusing to write',
+      'mkdir',
+    );
+  }
+
   // If the archive already exists and is intact, reuse it (with symlink check).
   const reused = await tryReuseExistingArchive(
     sourcePath,
@@ -198,15 +209,6 @@ export async function compressToArchive(
     sourceMtime,
   );
   if (reused !== null) return reused;
-
-  // Item 1: If archiveDir already exists, it must be a regular non-symlink dir.
-  const existingDir = await isRegularNonSymlinkDir(archiveDir);
-  if (existingDir === false && (await pathExists(archiveDir))) {
-    return archiveError(
-      'Archive directory is a symlink or non-directory — refusing to write',
-      'mkdir',
-    );
-  }
 
   try {
     await fsp.mkdir(archiveDir, { recursive: true });
