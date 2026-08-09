@@ -909,15 +909,22 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     // undefined — but only when JIT context is enabled, since
     // getCoreMemory() returns undefined otherwise and the read happens anyway.
     //
-    // NOTE: this whole path is unreachable in production — AgentExecutor is
-    // instantiated only by SubagentInvocation, which has no production caller.
-    // The live subagent path is subagentRuntimeSetup.ts, and this copy's
-    // section order differs from it. See issue #3162 finding D6.
+    // NOTE: this path is unreachable from this repository's own production call
+    // graph. AgentExecutor is constructed only by SubagentInvocation
+    // (agents/invocation.ts), and SubagentInvocation itself is constructed
+    // nowhere outside its own test. The live subagent path is
+    // subagentRuntimeSetup.ts, and this copy's section order differs from it.
+    // See issue #3162 finding D6.
     //
-    // Both classes ARE re-exported from internals.ts and the './internals.js'
-    // subpath is published, so removing them is an API-surface change guarded by
-    // scripts/check-agents-api-surface.ts — not a private cleanup. Removal is
-    // tracked by issue #3152.
+    // "Unreachable" here means in-repo only: both classes ARE re-exported from
+    // internals.ts and the './internals.js' subpath is published, so an external
+    // consumer can still construct them. Removing them is therefore an
+    // API-surface change guarded by scripts/check-agents-api-surface.ts, not a
+    // private cleanup. Removal is tracked by issue #3152.
+    //
+    // Not to be confused with the unrelated AgentExecutor interface from
+    // '@a2a-js/sdk/server' that packages/a2a-server implements; that is a
+    // different type and is live.
     const corePrompt = await getCoreSystemPromptAsync({
       userMemory: this.runtimeContext.getUserMemory(),
       coreMemory: this.runtimeContext.getCoreMemory(),

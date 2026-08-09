@@ -16,10 +16,11 @@
  *
  * It lives in `packages/agents` — NOT `packages/core` — so providers cannot
  * reach it and thereby sidestep the `no-restricted-imports` guard on
- * `getCoreSystemPromptAsync` (`eslint.config.js`). What actually makes that
- * impossible is the dependency direction: `packages/providers` is a dependency
- * OF `packages/agents`, so the reverse import would be circular. The lint rule
- * only bans the direct import.
+ * `getCoreSystemPromptAsync` (`eslint.config.js`), which only bans the direct
+ * import. The placement is intended to prevent the indirect route: the manifests
+ * declare `packages/agents` depending on `packages/providers`, so the reverse
+ * import would invert that direction. Note this is a convention, not an enforced
+ * invariant — no package-cycle check or build rule currently verifies it.
  */
 
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';

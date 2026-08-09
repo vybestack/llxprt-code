@@ -223,8 +223,17 @@ subpath. So both symbols are part of a **published API surface**, guarded by
 `scripts/check-agents-api-surface.ts` in CI. A plain identifier grep cannot see
 an `export *`, which is why this must be checked explicitly.
 
-The reachability verdict stands — nothing *calls* them — but the practical
-consequence is that removal is an API-surface change, not a private cleanup.
+The reachability verdict stands — nothing *calls* them — but "unreachable" means
+in-repo only, and the practical consequence is that removal is an API-surface
+change, not a private cleanup.
+
+**Name-collision warning.** `packages/a2a-server` implements an unrelated
+`AgentExecutor` **interface** imported from `@a2a-js/sdk/server`
+(`a2a-server/src/http/app.ts:11`), and constructs a `CoderAgentExecutor`
+(`app.ts:175`) that implements it. That type is live and has nothing to do with
+`packages/agents/src/agents/executor.ts`. Both automated reviewers on this PR
+conflated the two and reported the class as reachable, so any future analysis of
+this area should disambiguate by import path rather than by name.
 
 Therefore the following are unreachable: `SubagentInvocation`, `AgentExecutor`,
 `AgentExecutor.buildSystemPrompt`, the `getCoreSystemPromptAsync` call at

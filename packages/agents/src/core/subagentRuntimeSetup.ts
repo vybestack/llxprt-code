@@ -835,9 +835,13 @@ async function buildSystemInstruction(
   // context is enabled, since Config.getCoreMemory() returns undefined
   // otherwise and the read happens anyway.
   //
-  // This differs from ChatSessionFactory, which uses getGlobalMemory() plus
-  // getJitMemoryForPath(); subagents therefore miss JIT subdirectory memory and
-  // can receive MCP instructions twice. See issue #3162 findings D2 and D4.
+  // This differs from ChatSessionFactory, which branches on
+  // isJitContextEnabled(): with JIT on it uses getGlobalMemory() and appends
+  // getJitMemoryForPath(), and with JIT off it uses getUserMemory() like this
+  // site does. So the two agree only when JIT is off. With JIT on, subagents
+  // miss JIT subdirectory memory, and because getUserMemory() then also folds in
+  // environment memory (which already carries the MCP block) they can receive
+  // MCP instructions twice. See issue #3162 findings D2 and D4.
   const coreSystemPrompt: unknown = await getCoreSystemPromptAsync({
     userMemory: config.getUserMemory(),
     coreMemory: config.getCoreMemory(),
