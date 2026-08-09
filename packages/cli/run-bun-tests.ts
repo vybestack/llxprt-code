@@ -126,6 +126,106 @@ export function isTestFile(fileName: string): boolean {
   return TEST_FILE_PATTERN.test(fileName);
 }
 
+// ---------------------------------------------------------------------------
+// Partition selection (issue #3185)
+// ---------------------------------------------------------------------------
+
+/**
+ * Environment variable consumed by this runner for partition selection.
+ * Exported so the workflow wiring test can assert the YAML env key matches,
+ * preventing string drift between the runner and the workflow.
+ */
+export const PARTITION_ENV_VAR = 'LLXPRT_CLI_TEST_PARTITION';
+
+/**
+ * A one-based partition identity parsed from the canonical `NofM` form
+ * (e.g. `2of3`). `null` from {@link parsePartitionIdentity} means "no
+ * partition" — run the full discovered inventory.
+ */
+export interface PartitionIdentity {
+  /** One-based partition index (1..count). */
+  readonly index: number;
+  /** Number of partitions (positive integer ≥ 1). */
+  readonly count: number;
+}
+
+/**
+ * Canonical form: one-or-more digits, literal `of`, one-or-more digits. The
+ * first digit must be 1-9 so leading zeros (`01of3`) are rejected as
+ * noncanonical.
+ */
+const PARTITION_RE = /^([1-9][0-9]*)of([1-9][0-9]*)$/;
+
+/**
+ * Parses an optional partition identity from the canonical `NofM` form (e.g.
+ * `2of3`). Returns `null` when the input is absent or blank, meaning the full
+ * discovered inventory should run.
+ *
+ * Throws on any noncanonical, zero, negative, unsafe, or out-of-range value so
+ * a misconfigured {@link PARTITION_ENV_VAR} never silently runs a partial
+ * suite. The variable name appears in every error so the cause is obvious.
+ *
+ * Blank semantics: undefined, empty, and whitespace-only values are treated as
+ * "no partition" (full run). Every nonblank value must match canonical `NofM`
+ * exactly — the raw string is validated, not a trimmed copy — so surrounding
+ * whitespace (` 1of3 `) is rejected rather than silently starting a partial run.
+ */
+export function parsePartitionIdentity(
+  raw: string | undefined,
+): PartitionIdentity | null {
+  if (raw === undefined || raw.trim() === '') return null;
+  const match = PARTITION_RE.exec(raw);
+  if (match === null) {
+    throw new Error(
+      `${PARTITION_ENV_VAR}='${raw}' is not a canonical partition identity (expected NofM, e.g. 2of3)`,
+    );
+  }
+  const indexStr = match[1];
+  const countStr = match[2];
+  const index = Number.parseInt(indexStr, 10);
+  const count = Number.parseInt(countStr, 10);
+  // Number.isSafeInteger rejects values outside [-(2^53 - 1), 2^53 - 1],
+  // including 2^53 which round-trips through String() without precision loss
+  // but is still not safely representable.
+  if (!Number.isSafeInteger(index) || !Number.isSafeInteger(count)) {
+    throw new Error(`${PARTITION_ENV_VAR}='${raw}' contains an unsafe integer`);
+  }
+  if (index > count) {
+    throw new Error(
+      `${PARTITION_ENV_VAR}='${raw}' has index ${index} greater than count ${count}`,
+    );
+  }
+  return { index, count };
+}
+
+/**
+ * Selects one partition from a sorted list by round-robin: file position
+ * modulo partition count equals partition index minus one. This maps every
+ * array position to exactly one partition and preserves relative order.
+ *
+ * Returns the full list (a copy) when there is no partition (`null`) or when
+ * the identity is `1of1`. Throws when a well-formed partitioned identity
+ * (count > 1) selects no files, so an empty explicit selection fails fast
+ * rather than producing a green no-op run.
+ */
+export function selectPartition(
+  files: readonly string[],
+  identity: PartitionIdentity | null,
+): readonly string[] {
+  if (identity === null || identity.count === 1) {
+    return [...files];
+  }
+  const selected = files.filter(
+    (_, i) => i % identity.count === identity.index - 1,
+  );
+  if (selected.length === 0) {
+    throw new Error(
+      `${PARTITION_ENV_VAR}='${identity.index}of${identity.count}' selected 0 of ${files.length} discovered test files`,
+    );
+  }
+  return selected;
+}
+
 function collectTestFiles(
   dir: string,
   results: string[],
@@ -469,10 +569,24 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const concurrency = parseConcurrency();
-  console.log(
-    `Running ${testFiles.length} CLI test files with concurrency ${concurrency}`,
+  // Partition selection (issue #3185): apply only AFTER full discovery so the
+  // test-file coverage guard always inspects the complete inventory. Discovery
+  // itself never reads this env var.
+  const partitionIdentity = parsePartitionIdentity(
+    process.env[PARTITION_ENV_VAR],
   );
+  const selectedFiles = selectPartition(testFiles, partitionIdentity);
+
+  const concurrency = parseConcurrency();
+  if (partitionIdentity !== null && partitionIdentity.count > 1) {
+    console.log(
+      `Running ${selectedFiles.length}/${testFiles.length} CLI test files with concurrency ${concurrency} (${PARTITION_ENV_VAR}=${partitionIdentity.index}of${partitionIdentity.count})`,
+    );
+  } else {
+    console.log(
+      `Running ${testFiles.length} CLI test files with concurrency ${concurrency}`,
+    );
+  }
 
   const results: TestResult[] = [];
   let nextIndex = 0;
@@ -481,13 +595,13 @@ async function main(): Promise<void> {
   async function worker(): Promise<void> {
     for (;;) {
       const index = nextIndex++;
-      if (index >= testFiles.length) return;
-      const result = await runTestFile(testFiles[index]);
+      if (index >= selectedFiles.length) return;
+      const result = await runTestFile(selectedFiles[index]);
       results.push(result);
       completed++;
       if (!result.passed) {
         console.error(
-          `FAIL (${completed}/${testFiles.length}) ${result.file}${
+          `FAIL (${completed}/${selectedFiles.length}) ${result.file}${
             result.timedOut ? ' [timeout]' : ''
           }`,
         );
@@ -496,7 +610,7 @@ async function main(): Promise<void> {
   }
 
   await Promise.all(
-    Array.from({ length: Math.min(concurrency, testFiles.length) }, worker),
+    Array.from({ length: Math.min(concurrency, selectedFiles.length) }, worker),
   );
 
   results.sort((a, b) => a.file.localeCompare(b.file));

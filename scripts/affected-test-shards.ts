@@ -825,21 +825,63 @@ function sanitizeGhValue(value: string): string {
   return value.replace(CRLF_RE, ' ');
 }
 
+// ---------------------------------------------------------------------------
+// Matrix expansion (issue #3185)
+// ---------------------------------------------------------------------------
+
+/**
+ * One physical matrix row consumed by the `test_shard` job's
+ * `fromJSON(needs.shard_selector.outputs.matrix)`.
+ */
+export interface MatrixRow {
+  readonly shard: string;
+  readonly os: string;
+  readonly 'node-version': string;
+  readonly partition: string;
+}
+
+/**
+ * Maps a logical shard name to the number of physical CI legs it expands into.
+ * A shard absent from this map gets a single `1of1` leg. Only `cli` is
+ * partitioned (issue #3185): it is the longest shard (~12 min) and splits into
+ * three balanced legs to target a sub-10-minute critical path.
+ */
+export const SHARD_PARTITION_COUNTS: Readonly<Record<string, number>> = {
+  cli: 3,
+};
+
+/**
+ * Expands logical shard names into physical matrix rows. Each shard expands
+ * into one or more rows carrying a canonical `NofM` partition identity that
+ * the CLI runner consumes via `LLXPRT_CLI_TEST_PARTITION`.
+ *
+ * Pure: no I/O, no env, no side effects. The selection logic, coverage
+ * calculation, and logical shard output are untouched — only the physical
+ * matrix shape changes.
+ */
+export function buildMatrix(
+  selectedShards: readonly string[],
+): readonly MatrixRow[] {
+  return selectedShards.flatMap((shard) => {
+    const count = SHARD_PARTITION_COUNTS[shard] ?? 1;
+    return Array.from({ length: count }, (_, i) => ({
+      shard,
+      os: 'ubuntu-latest',
+      'node-version': '24.x',
+      partition: `${i + 1}of${count}`,
+    }));
+  });
+}
+
 function outputGithubActions(result: SelectionResult, event: string): void {
   const ghOutputPath = process.env.GITHUB_OUTPUT;
   const ghSummaryPath = process.env.GITHUB_STEP_SUMMARY;
 
-  // Build the matrix: one entry per selected shard (issue #2876).
-  // macOS test coverage moved to the nightly workflow (nightly.yml), so
-  // the PR test matrix is ubuntu-only — macOS is nightly-only like Windows.
-  const matrix: Array<{
-    readonly shard: string;
-    readonly os: string;
-    readonly 'node-version': string;
-  }> = [];
-  for (const shard of result.selectedShards) {
-    matrix.push({ shard, os: 'ubuntu-latest', 'node-version': '24.x' });
-  }
+  // Build the matrix via the pure expander (issue #3185): logical shards
+  // expand to physical partition rows — cli into 1of3/2of3/3of3; other
+  // shards remain a single 1of1 row. All physical rows are ubuntu-only
+  // (issue #2876); macOS test coverage moved to the nightly workflow.
+  const matrix = buildMatrix(result.selectedShards);
 
   const selectedStr = sanitizeGhValue(result.selectedShards.join(','));
   const matrixStr = sanitizeGhValue(JSON.stringify(matrix));
