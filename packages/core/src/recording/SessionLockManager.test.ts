@@ -383,6 +383,7 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
         error = e;
       }
       expect(threw).toBe(true);
+      expect(error).toMatchObject({ code: 'ENOTDIR' });
       // Must NOT be a SessionLockedError — that would mean the I/O error
       // was swallowed and the code fell through to stale-takeover logic.
       expect(error).not.toBeInstanceOf(SessionLockedError);

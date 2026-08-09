@@ -471,13 +471,19 @@ async function runBunScriptsWithBarrier(
   // Wait for every child to signal readiness.
   for (const readyFile of readyFiles) {
     const deadline = Date.now() + 15000;
+    let ready = false;
     while (Date.now() < deadline) {
       try {
         await fs.access(readyFile);
+        ready = true;
         break;
       } catch {
         await new Promise((r) => setTimeout(r, 5));
       }
+    }
+    if (!ready) {
+      void Promise.allSettled(promises);
+      throw new Error(`Timed out waiting for child readiness: ${readyFile}`);
     }
   }
 
