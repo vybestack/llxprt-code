@@ -358,6 +358,7 @@ describe('Anthropic anchor cache breakpoint — gating & count via prepareAnthro
     baseURL: string;
     promptCaching: 'off' | '5m' | '1h';
     isOAuth: boolean;
+    placement: 'system-field' | 'context-prefix';
     contents: IContent[];
   }) {
     const callOpts = buildOptions(opts);
@@ -366,6 +367,7 @@ describe('Anthropic anchor cache breakpoint — gating & count via prepareAnthro
       tools: callOpts.tools,
       options: callOpts,
       isOAuth: opts.isOAuth,
+      placement: opts.placement,
       providerName: 'anthropic',
       config: undefined,
       getMaxTokensForModel: () => 4096,
@@ -409,6 +411,7 @@ describe('Anthropic anchor cache breakpoint — gating & count via prepareAnthro
       baseURL: 'https://api.anthropic.com',
       promptCaching: '5m',
       isOAuth: false,
+      placement: 'system-field',
       contents: anchoredHead,
     });
 
@@ -435,6 +438,7 @@ describe('Anthropic anchor cache breakpoint — gating & count via prepareAnthro
       baseURL: 'https://api.anthropic.com',
       promptCaching: '5m',
       isOAuth: true,
+      placement: 'context-prefix',
       contents: anchoredHead,
     });
 
@@ -460,6 +464,7 @@ describe('Anthropic anchor cache breakpoint — gating & count via prepareAnthro
       baseURL: 'https://api.anthropic.com',
       promptCaching: 'off',
       isOAuth: false,
+      placement: 'system-field',
       contents: anchoredHead,
     });
 
@@ -479,6 +484,7 @@ describe('Anthropic anchor cache breakpoint — gating & count via prepareAnthro
       baseURL: 'https://api.z.ai/v1',
       promptCaching: '5m',
       isOAuth: false,
+      placement: 'system-field',
       contents: anchoredHead,
     });
 
@@ -501,6 +507,7 @@ describe('Anthropic anchor cache breakpoint — gating & count via prepareAnthro
       baseURL: 'https://api.anthropic.com',
       promptCaching: '5m',
       isOAuth: false,
+      placement: 'system-field',
       contents: noMarkerHead,
     });
 

@@ -1252,6 +1252,65 @@ export default tseslint.config(
   // ============================================================================
 
   // ============================================================================
+  // Issue #3172 — placement decision must flow from SystemPromptPlacement
+  //
+  // AnthropicRequestPreparation selects system-context placement from the
+  // resolved SystemPromptPlacement (declared by the provider and resolved
+  // through the shared policy), never from a local auth flag. Placement-only
+  // message selection may not reference isOAuth, and request-parameter OAuth
+  // facts may not drive local control flow or be aliased for indirect control.
+  // Direct boolean parameters remain valid in auth-only helpers that build the
+  // vendor system field or assert the OAuth/placement compatibility invariant.
+  //
+  // The two general no-restricted-syntax selectors are repeated here because
+  // flat config REPLACES a rule's array value rather than merging it, so
+  // omitting them would loosen the file's existing guards.
+  {
+    files: ['packages/providers/src/anthropic/AnthropicRequestPreparation.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'CallExpression[callee.name="require"]',
+          message: 'Avoid using require(). Use ES6 imports instead.',
+        },
+        {
+          selector: 'ThrowStatement > Literal:not([value=/^\\w+Error:/])',
+          message:
+            'Do not throw string literals or non-Error objects. Throw new Error("...") instead.',
+        },
+        {
+          selector:
+            ':matches(FunctionDeclaration[id.name="placeSystemInstruction"], VariableDeclarator[id.name="placeSystemInstruction"]) Identifier[name="isOAuth"]',
+          message:
+            'placeSystemInstruction controls only WHERE the prompt goes; it must not reference isOAuth. Use the resolved SystemPromptPlacement for placement and let buildSystemField handle the vendor system field independently (issue #3172).',
+        },
+        {
+          selector:
+            ':matches(FunctionDeclaration, FunctionExpression, ArrowFunctionExpression):has(CallExpression[callee.name="formatContextPrefix"]) Identifier[name="isOAuth"]',
+          message:
+            'System-prompt context placement must not reference isOAuth; use the resolved SystemPromptPlacement (issue #3172).',
+        },
+        {
+          selector:
+            ':matches(IfStatement, ConditionalExpression, SwitchStatement):has(MemberExpression[property.name="isOAuth"])',
+          message:
+            'Request-parameter isOAuth must not drive local placement control flow; pass the auth fact only to an auth-specific helper (issue #3172).',
+        },
+        {
+          selector:
+            'VariableDeclarator[init.type="MemberExpression"][init.property.name="isOAuth"]',
+          message:
+            'Do not alias request-parameter isOAuth for indirect placement control flow (issue #3172).',
+        },
+      ],
+    },
+  },
+  // ============================================================================
+  // End Issue #3172
+  // ============================================================================
+
+  // ============================================================================
   // Issue #1581: subagent.ts decomposition - Size enforcement
   // ============================================================================
   //
