@@ -9,7 +9,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   getExtensionsForLanguage,
   getLanguageId,
-} from '../src/service/language-map';
+} from '../src/service/language-map.js';
 
 const knownMappings: ReadonlyArray<readonly [string, string]> = [
   ['.ts', 'typescript'],

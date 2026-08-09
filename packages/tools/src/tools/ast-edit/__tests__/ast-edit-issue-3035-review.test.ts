@@ -46,6 +46,7 @@ import {
   executeApply,
 } from './test-helpers.js';
 import { ASTEditTool, ASTReadFileTool } from '../../ast-edit.js';
+import { ToolErrorType } from '../../../types/tool-error.js';
 import { createDefaultToolHost } from '../../edit-utils.js';
 import { ToolConfirmationOutcome } from '../../tools.js';
 import type {
@@ -91,7 +92,7 @@ describe('Finding 1 (Blocker): a pre-existing early error must not mask a later 
 
     // The later new error must be detected and the write refused.
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('ast_syntax_error');
+    expect(result.error?.type).toBe(ToolErrorType.AST_SYNTAX_ERROR);
     // File must remain byte-for-byte unchanged.
     expect(readFileSync(filePath, 'utf-8')).toBe(original);
   });
@@ -121,7 +122,7 @@ describe('Finding 1 (Blocker): a pre-existing early error must not mask a later 
     });
 
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('ast_syntax_error');
+    expect(result.error?.type).toBe(ToolErrorType.AST_SYNTAX_ERROR);
     expect(readFileSync(filePath, 'utf-8')).toBe(original);
   });
 });
@@ -185,7 +186,7 @@ describe('Finding 2 (Blocker): whole-file recovery equivalence', () => {
     });
 
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('ast_syntax_error');
+    expect(result.error?.type).toBe(ToolErrorType.AST_SYNTAX_ERROR);
     expect(readFileSync(filePath, 'utf-8')).toBe(original);
   });
 });
@@ -301,7 +302,7 @@ describe('Finding 3 (In-scope): IDE-accepted content classified from the actual 
     );
 
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('ast_syntax_error');
+    expect(result.error?.type).toBe(ToolErrorType.AST_SYNTAX_ERROR);
     expect(readFileSync(filePath, 'utf-8')).toBe(original);
   });
 
@@ -326,7 +327,7 @@ describe('Finding 3 (In-scope): IDE-accepted content classified from the actual 
     );
 
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('ast_syntax_error');
+    expect(result.error?.type).toBe(ToolErrorType.AST_SYNTAX_ERROR);
     expect(readFileSync(filePath, 'utf-8')).toBe(original);
   });
 });
@@ -379,7 +380,7 @@ describe('IDE-accepted candidate diverging at line 1 with zero net line delta is
     );
 
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('ast_syntax_error');
+    expect(result.error?.type).toBe(ToolErrorType.AST_SYNTAX_ERROR);
     expect(readFileSync(filePath, 'utf-8')).toBe(original);
   });
 
@@ -601,7 +602,7 @@ describe('Part A (Blocker): retained whole-file recovery then gains a distinct n
 
     // The distinct new error must be detected → refused.
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('ast_syntax_error');
+    expect(result.error?.type).toBe(ToolErrorType.AST_SYNTAX_ERROR);
     // File must remain byte-for-byte unchanged.
     expect(readFileSync(filePath, 'utf-8')).toBe(baseline);
   });
@@ -661,7 +662,7 @@ describe('Part B (Blocker): exact candidate coordinate mapping — changed-middl
     });
 
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('ast_syntax_error');
+    expect(result.error?.type).toBe(ToolErrorType.AST_SYNTAX_ERROR);
     expect(readFileSync(filePath, 'utf-8')).toBe(original);
   });
 
@@ -718,7 +719,7 @@ describe('Part B (Blocker): exact candidate coordinate mapping — changed-middl
       );
 
       expect(result.error).toBeDefined();
-      expect(result.error?.type).toBe('ast_syntax_error');
+      expect(result.error?.type).toBe(ToolErrorType.AST_SYNTAX_ERROR);
       expect(readFileSync(filePath, 'utf-8')).toBe(original);
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -783,7 +784,7 @@ describe('Evidence gap: nested invalid new file creates neither file nor absent 
     });
 
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('ast_syntax_error');
+    expect(result.error?.type).toBe(ToolErrorType.AST_SYNTAX_ERROR);
     // Neither the file...
     expect(existsSync(filePath)).toBe(false);
     // ...nor the absent parent directories may be created.
@@ -845,7 +846,7 @@ describe('REQ-3035-9: stale last_modified in preview refuses with conflict', () 
     });
 
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('file_modified_conflict');
+    expect(result.error?.type).toBe(ToolErrorType.FILE_MODIFIED_CONFLICT);
     // Must be plain non-JSON text (human-readable error, not structured JSON).
     const content = String(result.llmContent);
     expect(content).toContain('FILE_MODIFIED_CONFLICT');

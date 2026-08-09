@@ -153,7 +153,7 @@ describe('KeyringTokenStore lock inspection API (issue #2819)', () => {
     const hangingStore: ISecureStore = {
       get: async () => new Promise<string | null>(() => {}),
       set: async () => {},
-      delete: async () => {},
+      delete: async () => false,
       list: async () => [],
       has: async () => false,
     };
@@ -174,7 +174,7 @@ describe('KeyringTokenStore lock inspection API (issue #2819)', () => {
         throw new Error('keychain is locked');
       },
       set: async () => {},
-      delete: async () => {},
+      delete: async () => false,
       list: async () => [],
       has: async () => false,
     };

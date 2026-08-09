@@ -221,7 +221,9 @@ describe('OAuthErrorFactory', () => {
 
   describe('fromUnknown', () => {
     it('should classify network errors correctly', () => {
-      const networkError = new Error('Connection timed out');
+      const networkError: NodeJS.ErrnoException = new Error(
+        'Connection timed out',
+      );
       networkError.code = 'ENOTFOUND';
 
       const error = OAuthErrorFactory.fromUnknown(
@@ -246,7 +248,7 @@ describe('OAuthErrorFactory', () => {
     });
 
     it('should classify permission errors correctly', () => {
-      const permissionError = new Error('Access denied');
+      const permissionError: NodeJS.ErrnoException = new Error('Access denied');
       permissionError.code = 'EACCES';
 
       const error = OAuthErrorFactory.fromUnknown(

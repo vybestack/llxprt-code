@@ -1,0 +1,24 @@
+{
+  "extends": "./tsconfig.json",
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/__tests__/**",
+    "**/*.test.*",
+    "**/*.test-d.*",
+    "**/*.spec.*",
+    "../settings/src/**/__tests__/**",
+    "../settings/src/**/*.test.*",
+    "../settings/src/**/*.test-d.*",
+    "../settings/src/**/*.spec.*",
+    "../ide-integration/src/**/__tests__/**",
+    "../ide-integration/src/**/*.test.*",
+    "../ide-integration/src/**/*.test-d.*",
+    "../ide-integration/src/**/*.spec.*"
+  ],
+  "references": [
+    { "path": "../auth/tsconfig.build.json" },
+    { "path": "../settings" },
+    { "path": "../ide-integration/tsconfig.build.json" }
+  ]
+}

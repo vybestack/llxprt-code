@@ -43,7 +43,7 @@ describe('OS keyring suppression for tests', () => {
       fallbackDir: tempDir,
       lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
-      machineSecretLoader: async () => 'test-machine-secret',
+      machineSecretLoader: async () => Buffer.from('test-machine-secret'),
     });
 
     await store.set('token', 'super-secret');

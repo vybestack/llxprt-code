@@ -4,30 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  afterEach,
-  type Mock,
-} from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 
 import * as actualNodeFs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import mime from 'mime-types';
 
 import sharp from 'sharp';
 import { detectFileType, processSingleFileContent } from './fileUtils.js';
 
-void vi.mock('mime-types', () => ({
-  default: { lookup: vi.fn() },
-  lookup: vi.fn(),
-}));
+const mockMimeLookup = vi.fn<(filename: string) => string | false>();
 
-const mockMimeLookup = mime.lookup as Mock<(...args: never[]) => unknown>;
+void vi.mock('mime-types', () => ({
+  default: { lookup: mockMimeLookup },
+  lookup: mockMimeLookup,
+}));
 
 describe('fileUtils.detectFileType', () => {
   let tempRootDir: string;

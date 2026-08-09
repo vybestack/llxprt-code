@@ -34,11 +34,12 @@ const realDetectIdeModule = { ...(await import('./detect-ide.js')) };
 const realNodeOsModule = { ...(await import('node:os')) };
 
 const actual = { ...(await import('node:fs')) };
+const readdirMock = vi.fn();
 void vi.mock('node:fs', () => ({
   ...(actual as object),
   promises: {
     readFile: vi.fn(),
-    readdir: vi.fn(),
+    readdir: readdirMock,
   },
   realpathSync: (p: string) => p,
   existsSync: () => false,
@@ -61,6 +62,9 @@ void vi.mock('node:os', () => automock(realNodeOsModule));
  */
 interface FakeClientController {
   client: Client;
+  // The client.callTool mock, exposed so tests can configure/track tool calls
+  // without re-casting the Client-typed property.
+  callTool: typeof readdirMock;
   contextHandler:
     | ((notification: { params: Record<string, unknown> }) => void)
     | undefined;
@@ -98,6 +102,7 @@ function createFakeClient(): FakeClientController {
     pingReject = reject;
   });
 
+  const callTool = vi.fn();
   const client = {
     connect: vi.fn().mockReturnValue(connectPromise),
     ping: vi.fn().mockReturnValue(pingPromise),
@@ -107,7 +112,7 @@ function createFakeClient(): FakeClientController {
         contextHandler = handler as typeof contextHandler;
       }
     }),
-    callTool: vi.fn(),
+    callTool,
     set onerror(handler: (error: unknown) => void) {
       (client as unknown as { _onerror: unknown })._onerror = handler;
     },
@@ -127,6 +132,7 @@ function createFakeClient(): FakeClientController {
 
   return {
     client,
+    callTool,
     get contextHandler() {
       return contextHandler;
     },
@@ -209,11 +215,7 @@ describe('IdeClient connection lifecycle isolation', () => {
     (
       fs.promises.readFile as Mock<typeof fs.promises.readFile>
     ).mockResolvedValue(JSON.stringify({ port: '8080' }));
-    (
-      fs.promises.readdir as Mock<
-        typeof fs.promises.readdir
-      > as unknown as ReturnType<typeof vi.fn>
-    ).mockResolvedValue([]);
+    readdirMock.mockResolvedValue([]);
 
     ideClient = await IdeClient.getInstance();
     ideContext.clearIdeContext();
@@ -658,9 +660,9 @@ describe('IdeClient connection lifecycle isolation', () => {
     await flushAsync();
     expect(createdFakes.length).toBeGreaterThanOrEqual(2);
     const fake2 = createdFakes[createdFakes.length - 1];
-    fake2.client.callTool = vi.fn().mockResolvedValue({
+    fake2.callTool.mockResolvedValue({
       content: [{ type: 'text', text: 'closed' }],
-    }) as unknown as typeof fake2.client.callTool;
+    });
     await driveSuccess(fake2);
     await connect2;
     expect(ideClient.getConnectionStatus().status).toBe(
@@ -675,7 +677,7 @@ describe('IdeClient connection lifecycle isolation', () => {
 
     // Track all closeDiff calls on fake2 (the new client). None should occur.
     const fake2CloseDiffCalls = () =>
-      fake2.client.callTool.mock.calls.filter(
+      fake2.callTool.mock.calls.filter(
         (c: unknown[]) => (c[0] as { name?: string }).name === 'closeDiff',
       );
 

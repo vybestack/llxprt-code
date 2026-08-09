@@ -64,8 +64,13 @@ function createCapturingProvider(name: string): CapturingProvider {
     name,
     captured,
     async *generateChatCompletion(
-      options: GenerateChatOptions,
+      options: GenerateChatOptions | IContent[],
     ): AsyncGenerator<IContent> {
+      if (Array.isArray(options)) {
+        throw new Error(
+          'legacy array overload of generateChatCompletion is not exercised by these tests',
+        );
+      }
       captured.push(options);
       yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
     },
@@ -272,8 +277,13 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       const primary: IProvider = {
         name: 'openai',
         async *generateChatCompletion(
-          options: GenerateChatOptions,
+          options: GenerateChatOptions | IContent[],
         ): AsyncGenerator<IContent> {
+          if (Array.isArray(options)) {
+            throw new Error(
+              'legacy array overload of generateChatCompletion is not exercised by these tests',
+            );
+          }
           primaryCaptured.push(options);
           primaryAttempts++;
           if (primaryAttempts === 1) {
@@ -289,8 +299,13 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       const secondary: IProvider = {
         name: 'anthropic',
         async *generateChatCompletion(
-          options: GenerateChatOptions,
+          options: GenerateChatOptions | IContent[],
         ): AsyncGenerator<IContent> {
+          if (Array.isArray(options)) {
+            throw new Error(
+              'legacy array overload of generateChatCompletion is not exercised by these tests',
+            );
+          }
           secondaryCaptured.push(options);
           yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
         },
@@ -355,8 +370,13 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       const delegate: IProvider = {
         name: 'openai',
         async *generateChatCompletion(
-          options: GenerateChatOptions,
+          options: GenerateChatOptions | IContent[],
         ): AsyncGenerator<IContent> {
+          if (Array.isArray(options)) {
+            throw new Error(
+              'legacy array overload of generateChatCompletion is not exercised by these tests',
+            );
+          }
           captured.push(options);
           attempts++;
           if (attempts === 1) {
@@ -453,8 +473,13 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
           };
         },
         async *generateChatCompletion(
-          options: GenerateChatOptions,
+          options: GenerateChatOptions | IContent[],
         ): AsyncGenerator<IContent> {
+          if (Array.isArray(options)) {
+            throw new Error(
+              'legacy array overload of generateChatCompletion is not exercised by these tests',
+            );
+          }
           sentSystemInstructions.push(options.systemInstruction ?? '<none>');
           yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
         },
@@ -636,8 +661,13 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
           };
         },
         async *generateChatCompletion(
-          options: GenerateChatOptions,
+          options: GenerateChatOptions | IContent[],
         ): AsyncGenerator<IContent> {
+          if (Array.isArray(options)) {
+            throw new Error(
+              'legacy array overload of generateChatCompletion is not exercised by these tests',
+            );
+          }
           sentSystemInstructions.push(options.systemInstruction ?? '<none>');
           sentTokens.push(options.promptEnvelopeTransportToken);
           yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };

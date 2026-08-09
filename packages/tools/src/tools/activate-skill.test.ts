@@ -70,6 +70,10 @@ describe('ActivateSkillTool', () => {
     expect(details).not.toBe(false);
     if (details === false) throw new Error('unreachable: narrowing failed');
     expect(details.title).toBe('Activate Skill: test-skill');
+    expect(details.type).toBe('info');
+    if (details.type !== 'info') {
+      throw new Error('Expected informational confirmation details');
+    }
     expect(details.prompt).toContain('enable the specialized agent skill');
     expect(details.prompt).toContain('A test skill');
     expect(details.prompt).toContain('Mock folder structure');

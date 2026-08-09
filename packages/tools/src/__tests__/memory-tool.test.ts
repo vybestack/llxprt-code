@@ -65,7 +65,9 @@ function createFakeStorageService(baseDir: string): IStorageService {
     readFile: async (path: string) => readFileSync(path, 'utf-8'),
     writeFile: async (path: string, content: string) =>
       writeFileSync(path, content, 'utf-8'),
-    ensureDir: async (path: string) => mkdirSync(path, { recursive: true }),
+    ensureDir: async (path: string) => {
+      mkdirSync(path, { recursive: true });
+    },
   };
 }
 

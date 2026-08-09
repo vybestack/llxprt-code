@@ -26,7 +26,7 @@ import type { ILspService } from '../interfaces/index.js';
 
 import { ApplyPatchTool } from '../index.js';
 import { ToolErrorType } from '../index.js';
-import type { ToolResult } from '../index.js';
+import type { ToolResult, ApplyPatchToolParams } from '../index.js';
 
 function createTempDir(prefix = 'llxprt-apply-patch-test-'): {
   dir: string;
@@ -71,12 +71,29 @@ describe('ApplyPatchTool issue #2133 regressions', () => {
       setApprovalMode: () => {},
       isInteractive: () => false,
       hasFeatureFlag: () => false,
+      getFileService: () => ({
+        shouldGitIgnoreFile: () => false,
+        shouldLlxprtIgnoreFile: () => false,
+        shouldIgnoreFile: () => false,
+        filterFiles: (paths: string[]) => paths,
+      }),
+      getFileFilteringOptions: () => ({
+        respectGitIgnore: true,
+        respectLlxprtIgnore: true,
+      }),
+      getFileExclusions: () => [],
+      getReadManyFilesExclusions: () => [],
+      getFileFilteringRespectLlxprtIgnore: () => true,
+      getLlxprtIgnoreFilePath: () => null,
+      recordFileRead: () => {},
+      getLlxprtIgnorePatterns: () => [],
       getEphemeralSettings: () => ({}),
+      getDebugMode: () => false,
     };
   }
 
   async function executePatch(
-    params: Record<string, unknown>,
+    params: ApplyPatchToolParams,
     options?: { lsp?: ILspService },
   ): Promise<ToolResult> {
     // Constructor signature: (host, messageBusOrIdeService, ideServiceOrLspService, lspService)

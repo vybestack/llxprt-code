@@ -85,7 +85,7 @@ function syncMode(engine: PolicyEngine, mode: ApprovalMode): void {
 describe('Editor mode matrix: PolicyEngine + MessageBus (issue #2659)', () => {
   // ── Six-editor × three-mode matrix ───────────────────────────────────
 
-  describe.each(AUTO_EDIT_TOOLS)('editor tool: %s', (toolName) => {
+  describe.each([...AUTO_EDIT_TOOLS])('editor tool: %s', (toolName) => {
     it('DEFAULT mode: policy evaluates to ASK_USER (editor/preview shown)', () => {
       const engine = new PolicyEngine(buildTomlStyleConfig());
       syncMode(engine, ApprovalMode.DEFAULT);

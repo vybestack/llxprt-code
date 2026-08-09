@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { runCleanupTaskGroups } from './cleanup';
+import { runCleanupTaskGroups } from './cleanup.js';
 
 describe('runCleanupTaskGroups', () => {
   it('attempts every task in every group and aggregates all failures', async () => {

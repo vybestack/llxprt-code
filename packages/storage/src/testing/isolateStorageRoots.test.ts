@@ -62,7 +62,7 @@ describe('isolateStorageRoots', () => {
       delete process.env.LLXPRT_TEST_STORAGE_ISOLATED;
       isolateStorageRoots();
 
-      expect(process.env.LLXPRT_TEST_STORAGE_ISOLATED).toBe('1');
+      expect(String(process.env.LLXPRT_TEST_STORAGE_ISOLATED)).toBe('1');
     } finally {
       for (const [key, value] of originalEnv) {
         if (value === undefined) {

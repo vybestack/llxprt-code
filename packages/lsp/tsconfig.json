@@ -1,10 +1,11 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "rootDir": "src",
+    "rootDir": ".",
     "outDir": "dist",
-    "composite": false
+    "composite": false,
+    "types": ["node", "bun-types/test"]
   },
-  "include": ["../../bun-test-corrections.d.ts", "src/**/*.ts"],
-  "exclude": ["dist", "test"]
+  "include": ["../../bun-test-corrections.d.ts", "src/**/*.ts", "test/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
 }

@@ -28,6 +28,7 @@ import type {
   IToolHostFileSystemService,
   ILspService,
   ToolCallConfirmationDetails,
+  ToolEditConfirmationDetails,
   ToolResult,
   FileDiff,
 } from '../index.js';
@@ -88,23 +89,40 @@ function createFakeToolHost(
   options?: FakeHostOptions,
 ): IToolHost & FakeToolHostRecorder {
   const fileSystemService = options?.fileSystemService;
-  // Typed so recordedApprovalMode widens to ApprovalMode | undefined and a
-  // real mode written by setApprovalMode stays assignable (no type assertion).
-  const initialMode: ApprovalMode | undefined = undefined;
-  const host = {
-    recordedApprovalMode: initialMode,
+  let recordedApprovalMode: ApprovalMode | undefined = undefined;
+  const host: IToolHost & FakeToolHostRecorder = {
+    get recordedApprovalMode(): ApprovalMode | undefined {
+      return recordedApprovalMode;
+    },
     getTargetDir: () => targetDir,
     getWorkspaceRoots: () => [targetDir],
     getApprovalMode: (): ApprovalMode => options?.approvalMode ?? 'auto',
     setApprovalMode: (mode: ApprovalMode): void => {
-      host.recordedApprovalMode = mode;
+      recordedApprovalMode = mode;
     },
     isInteractive: () => false,
     hasFeatureFlag: () => false,
-    getEphemeralSettings: () => ({}),
+    getFileService: () => ({
+      shouldGitIgnoreFile: () => false,
+      shouldLlxprtIgnoreFile: () => false,
+      shouldIgnoreFile: () => false,
+      filterFiles: (paths: string[]) => paths,
+    }),
+    getFileFilteringOptions: () => ({
+      respectGitIgnore: true,
+      respectLlxprtIgnore: true,
+    }),
+    getFileExclusions: () => [],
+    getReadManyFilesExclusions: () => [],
+    getFileFilteringRespectLlxprtIgnore: () => true,
+    getLlxprtIgnoreFilePath: () => null,
+    recordFileRead: () => {},
     getFileSystemService: fileSystemService
       ? (): IToolHostFileSystemService => fileSystemService
       : undefined,
+    getLlxprtIgnorePatterns: () => [],
+    getEphemeralSettings: () => ({}),
+    getDebugMode: () => false,
   };
   return host;
 }
@@ -161,17 +179,10 @@ function isFileDisplay(rd: unknown): rd is FileDiff {
   );
 }
 
-interface EditConfirmationLike {
-  type: string;
-  title: string;
-  newContent: string;
-  filePath?: string;
-}
-
 function isEditConfirmation(
   c: ToolCallConfirmationDetails,
-): c is EditConfirmationLike {
-  return 'newContent' in c;
+): c is ToolEditConfirmationDetails {
+  return c.type === 'edit';
 }
 
 function countOccurrences(haystack: string, needle: string): number {

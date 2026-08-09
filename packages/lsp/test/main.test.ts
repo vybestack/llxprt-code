@@ -3,7 +3,61 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { PassThrough } from 'node:stream';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import {
+  createMessageConnection,
+  StreamMessageReader,
+  StreamMessageWriter,
+  type MessageConnection,
+} from 'vscode-jsonrpc/node.js';
 import { main, parseBootstrapFromEnv } from '../src/main.js';
+import { createMcpChannel as createRealMcpChannel } from '../src/channels/mcp-channel.js';
+import type { Orchestrator } from '../src/service/orchestrator.js';
+import { createOrchestrator as createRealOrchestrator } from '../src/service/orchestrator.js';
+
+type OrchestratorConfig = NonNullable<
+  Parameters<typeof createRealOrchestrator>[0]
+>;
+
+function createOrchestratorDouble(
+  shutdown: () => Promise<void> = vi.fn().mockResolvedValue(undefined),
+): Orchestrator {
+  const orchestrator = createRealOrchestrator({}, '/tmp/ws');
+  vi.spyOn(orchestrator, 'shutdown').mockImplementation(shutdown);
+  return orchestrator;
+}
+
+function createRpcConnectionDouble(
+  dispose: () => void = vi.fn(),
+): MessageConnection {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  const connection = createMessageConnection(
+    new StreamMessageReader(input),
+    new StreamMessageWriter(output),
+  );
+  vi.spyOn(connection, 'listen').mockImplementation(() => {});
+  vi.spyOn(connection, 'dispose').mockImplementation(dispose);
+  vi.spyOn(connection, 'sendNotification').mockResolvedValue(undefined);
+  return connection;
+}
+
+function createMcpChannelDouble(
+  close: () => Promise<void> = vi.fn().mockResolvedValue(undefined),
+) {
+  return vi.fn(async (..._args: Parameters<typeof createRealMcpChannel>) => {
+    const server = new McpServer({ name: 'test-lsp', version: '1.0.0' });
+    vi.spyOn(server, 'close').mockImplementation(close);
+    return server;
+  });
+}
+
+function createSetupRpcChannelDouble() {
+  return vi.fn(
+    (_connection: MessageConnection, _orchestrator: Orchestrator) => {},
+  );
+}
 
 type BootstrapResult = {
   workspaceRoot: string;
@@ -257,7 +311,6 @@ describe('main bootstrap parsing', () => {
 });
 
 describe('main channel wiring', () => {
-  let onSpy: ReturnType<typeof vi.spyOn>;
   let exitSpy: ReturnType<typeof vi.spyOn>;
   const lifecycles: Array<{ dispose(): Promise<void> }> = [];
 
@@ -267,15 +320,46 @@ describe('main channel wiring', () => {
     return lifecycle;
   };
 
-  const createRpcConnection = (sendNotification = vi.fn()) => ({
-    listen: vi.fn(),
-    dispose: vi.fn(),
-    sendNotification,
-  });
+  const createRpcConnection = (): MessageConnection =>
+    createRpcConnectionDouble();
+
+  const createOrchestratorFactory = (orchestrator: Orchestrator) =>
+    vi.fn(
+      (_config?: OrchestratorConfig, _workspaceRoot?: string) => orchestrator,
+    );
+
+  type MainEvent =
+    | 'SIGTERM'
+    | 'SIGINT'
+    | 'uncaughtException'
+    | 'unhandledRejection';
+
+  const listenersFor = (event: MainEvent) => {
+    switch (event) {
+      case 'SIGTERM':
+        return process.listeners('SIGTERM');
+      case 'SIGINT':
+        return process.listeners('SIGINT');
+      case 'uncaughtException':
+        return process.listeners('uncaughtException');
+      case 'unhandledRejection':
+        return process.listeners('unhandledRejection');
+    }
+  };
+
+  const invokeLatestListener = (
+    event: MainEvent,
+    args: readonly unknown[],
+  ): unknown => {
+    const listener = listenersFor(event).at(-1);
+    if (listener === undefined) {
+      throw new Error(`Missing ${event} listener`);
+    }
+    return Reflect.apply(listener, process, args);
+  };
 
   beforeEach(() => {
     vi.restoreAllMocks();
-    onSpy = vi.spyOn(process, 'on');
     exitSpy = vi
       .spyOn(process, 'exit')
       .mockImplementation((() => undefined) as never);
@@ -294,12 +378,10 @@ describe('main channel wiring', () => {
       config: {},
     });
 
-    const orchestrator = { shutdown: vi.fn().mockResolvedValue(undefined) };
-    const setupRpcChannel = vi.fn();
-    const createMcpChannel = vi
-      .fn()
-      .mockResolvedValue({ close: vi.fn().mockResolvedValue(undefined) });
-    const createOrchestrator = vi.fn(() => orchestrator);
+    const orchestrator = createOrchestratorDouble();
+    const setupRpcChannel = createSetupRpcChannelDouble();
+    const createMcpChannel = createMcpChannelDouble();
+    const createOrchestrator = createOrchestratorFactory(orchestrator);
 
     await runMain({
       createOrchestrator,
@@ -326,17 +408,19 @@ describe('main channel wiring', () => {
       },
     });
 
-    const orchestrator = { shutdown: vi.fn().mockResolvedValue(undefined) };
-    const createOrchestrator = vi.fn(() => orchestrator);
+    const orchestrator = createOrchestratorDouble();
+    const createOrchestrator = createOrchestratorFactory(orchestrator);
 
     await runMain({
       createOrchestrator,
-      setupRpcChannel: vi.fn(),
-      createMcpChannel: vi.fn(),
+      setupRpcChannel: createSetupRpcChannelDouble(),
+      createMcpChannel: createMcpChannelDouble(),
       createRpcConnection,
     });
 
-    expect(createOrchestrator.mock.calls[0]?.[0].servers).toEqual([
+    expect(createOrchestrator).toHaveBeenCalledTimes(1);
+    const config = createOrchestrator.mock.calls[0]?.[0];
+    expect(config?.servers).toEqual([
       {
         id: 'tsserver',
         command: 'typescript-language-server',
@@ -354,10 +438,8 @@ describe('main channel wiring', () => {
     const createMcpChannel = vi.fn();
 
     await runMain({
-      createOrchestrator: vi.fn(() => ({
-        shutdown: vi.fn().mockResolvedValue(undefined),
-      })),
-      setupRpcChannel: vi.fn(),
+      createOrchestrator: createOrchestratorFactory(createOrchestratorDouble()),
+      setupRpcChannel: createSetupRpcChannelDouble(),
       createMcpChannel,
       createRpcConnection,
     });
@@ -371,23 +453,18 @@ describe('main channel wiring', () => {
       config: { navigationTools: false },
     });
 
-    const orchestrator = { shutdown: vi.fn().mockResolvedValue(undefined) };
+    const orchestrator = createOrchestratorDouble();
 
     await runMain({
-      createOrchestrator: vi.fn(() => orchestrator),
-      setupRpcChannel: vi.fn(),
-      createMcpChannel: vi.fn(),
+      createOrchestrator: createOrchestratorFactory(orchestrator),
+      setupRpcChannel: createSetupRpcChannelDouble(),
+      createMcpChannel: createMcpChannelDouble(),
       createRpcConnection,
     });
 
-    const sigterm = onSpy.mock.calls.find(
-      (call) => call[0] === 'SIGTERM',
-    )?.[1] as (() => Promise<void>) | undefined;
-    expect(sigterm).toBeTypeOf('function');
-
-    const cleanupPromise = sigterm?.();
+    const cleanupPromise = invokeLatestListener('SIGTERM', []);
     expect(cleanupPromise).toBeInstanceOf(Promise);
-    await cleanupPromise;
+    await Promise.resolve(cleanupPromise);
 
     expect(orchestrator.shutdown).toHaveBeenCalledTimes(1);
     expect(exitSpy).toHaveBeenCalledWith(0);
@@ -399,18 +476,16 @@ describe('main channel wiring', () => {
       config: { navigationTools: false },
     });
 
-    const sendNotification = vi.fn();
+    const connection = createRpcConnectionDouble();
 
     await runMain({
-      createOrchestrator: vi.fn(() => ({
-        shutdown: vi.fn().mockResolvedValue(undefined),
-      })),
-      setupRpcChannel: vi.fn(),
-      createMcpChannel: vi.fn(),
-      createRpcConnection: () => createRpcConnection(sendNotification),
+      createOrchestrator: createOrchestratorFactory(createOrchestratorDouble()),
+      setupRpcChannel: createSetupRpcChannelDouble(),
+      createMcpChannel: createMcpChannelDouble(),
+      createRpcConnection: () => connection,
     });
 
-    expect(sendNotification).toHaveBeenCalledWith('lsp/ready');
+    expect(connection.sendNotification).toHaveBeenCalledWith('lsp/ready');
   });
 
   it('disposal restores process listener counts', async () => {
@@ -418,20 +493,18 @@ describe('main channel wiring', () => {
       workspaceRoot: '/tmp/ws',
       config: { navigationTools: false },
     });
-    const events = [
+    const events: readonly MainEvent[] = [
       'SIGTERM',
       'SIGINT',
       'uncaughtException',
       'unhandledRejection',
-    ] as const;
+    ];
     const baseline = events.map((event) => process.listenerCount(event));
 
     const lifecycle = await runMain({
-      createOrchestrator: vi.fn(() => ({
-        shutdown: vi.fn().mockResolvedValue(undefined),
-      })),
-      setupRpcChannel: vi.fn(),
-      createMcpChannel: vi.fn(),
+      createOrchestrator: createOrchestratorFactory(createOrchestratorDouble()),
+      setupRpcChannel: createSetupRpcChannelDouble(),
+      createMcpChannel: createMcpChannelDouble(),
       createRpcConnection,
     });
     await lifecycle.dispose();
@@ -452,14 +525,12 @@ describe('main channel wiring', () => {
     const rpcDispose = vi.fn();
 
     const lifecycle = await runMain({
-      createOrchestrator: vi.fn(() => ({ shutdown: orchestratorShutdown })),
-      setupRpcChannel: vi.fn(),
-      createMcpChannel: vi.fn().mockResolvedValue({ close: mcpClose }),
-      createRpcConnection: () => ({
-        listen: vi.fn(),
-        dispose: rpcDispose,
-        sendNotification: vi.fn(),
-      }),
+      createOrchestrator: createOrchestratorFactory(
+        createOrchestratorDouble(orchestratorShutdown),
+      ),
+      setupRpcChannel: createSetupRpcChannelDouble(),
+      createMcpChannel: createMcpChannelDouble(mcpClose),
+      createRpcConnection: () => createRpcConnectionDouble(rpcDispose),
     });
     await lifecycle.dispose();
 
@@ -480,14 +551,12 @@ describe('main channel wiring', () => {
     const rpcDispose = vi.fn();
 
     const lifecycle = await runMain({
-      createOrchestrator: vi.fn(() => ({ shutdown: orchestratorShutdown })),
-      setupRpcChannel: vi.fn(),
-      createMcpChannel: vi.fn().mockResolvedValue({ close: mcpClose }),
-      createRpcConnection: () => ({
-        listen: vi.fn(),
-        dispose: rpcDispose,
-        sendNotification: vi.fn(),
-      }),
+      createOrchestrator: createOrchestratorFactory(
+        createOrchestratorDouble(orchestratorShutdown),
+      ),
+      setupRpcChannel: createSetupRpcChannelDouble(),
+      createMcpChannel: createMcpChannelDouble(mcpClose),
+      createRpcConnection: () => createRpcConnectionDouble(rpcDispose),
     });
 
     await Promise.all([lifecycle.dispose(), lifecycle.dispose()]);
@@ -505,11 +574,9 @@ describe('main channel wiring', () => {
     });
 
     const lifecycle = await runMain({
-      createOrchestrator: vi.fn(() => ({
-        shutdown: vi.fn().mockResolvedValue(undefined),
-      })),
-      setupRpcChannel: vi.fn(),
-      createMcpChannel: vi.fn(),
+      createOrchestrator: createOrchestratorFactory(createOrchestratorDouble()),
+      setupRpcChannel: createSetupRpcChannelDouble(),
+      createMcpChannel: createMcpChannelDouble(),
       createRpcConnection,
     });
     await lifecycle.dispose();
@@ -523,23 +590,18 @@ describe('main channel wiring', () => {
       config: { navigationTools: false },
     });
 
-    const orchestrator = { shutdown: vi.fn().mockResolvedValue(undefined) };
+    const orchestrator = createOrchestratorDouble();
 
     await runMain({
-      createOrchestrator: vi.fn(() => orchestrator),
-      setupRpcChannel: vi.fn(),
-      createMcpChannel: vi.fn(),
+      createOrchestrator: createOrchestratorFactory(orchestrator),
+      setupRpcChannel: createSetupRpcChannelDouble(),
+      createMcpChannel: createMcpChannelDouble(),
       createRpcConnection,
     });
 
-    const sigint = onSpy.mock.calls.find(
-      (call) => call[0] === 'SIGINT',
-    )?.[1] as (() => Promise<void>) | undefined;
-    expect(sigint).toBeTypeOf('function');
-
-    const cleanupPromise = sigint?.();
+    const cleanupPromise = invokeLatestListener('SIGINT', []);
     expect(cleanupPromise).toBeInstanceOf(Promise);
-    await cleanupPromise;
+    await Promise.resolve(cleanupPromise);
 
     expect(orchestrator.shutdown).toHaveBeenCalledTimes(1);
     expect(exitSpy).toHaveBeenCalledWith(0);
@@ -551,24 +613,21 @@ describe('main channel wiring', () => {
       config: { navigationTools: false },
     });
 
-    const orchestrator = { shutdown: vi.fn().mockResolvedValue(undefined) };
+    const orchestrator = createOrchestratorDouble();
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
 
     await runMain({
-      createOrchestrator: vi.fn(() => orchestrator),
-      setupRpcChannel: vi.fn(),
-      createMcpChannel: vi.fn(),
+      createOrchestrator: createOrchestratorFactory(orchestrator),
+      setupRpcChannel: createSetupRpcChannelDouble(),
+      createMcpChannel: createMcpChannelDouble(),
       createRpcConnection,
     });
 
-    const handler = onSpy.mock.calls.find(
-      (call) => call[0] === 'uncaughtException',
-    )?.[1] as ((error: Error) => Promise<void>) | undefined;
-    expect(handler).toBeTypeOf('function');
-
-    const cleanupPromise = handler?.(new Error('boom'));
+    const cleanupPromise = invokeLatestListener('uncaughtException', [
+      new Error('boom'),
+    ]);
     expect(cleanupPromise).toBeInstanceOf(Promise);
-    await cleanupPromise;
+    await Promise.resolve(cleanupPromise);
 
     expect(stderrSpy).toHaveBeenCalledWith(
       expect.stringContaining('Uncaught exception in LSP service'),
@@ -583,24 +642,21 @@ describe('main channel wiring', () => {
       config: { navigationTools: false },
     });
 
-    const orchestrator = { shutdown: vi.fn().mockResolvedValue(undefined) };
+    const orchestrator = createOrchestratorDouble();
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
 
     await runMain({
-      createOrchestrator: vi.fn(() => orchestrator),
-      setupRpcChannel: vi.fn(),
-      createMcpChannel: vi.fn(),
+      createOrchestrator: createOrchestratorFactory(orchestrator),
+      setupRpcChannel: createSetupRpcChannelDouble(),
+      createMcpChannel: createMcpChannelDouble(),
       createRpcConnection,
     });
 
-    const handler = onSpy.mock.calls.find(
-      (call) => call[0] === 'unhandledRejection',
-    )?.[1] as ((error: unknown) => Promise<void>) | undefined;
-    expect(handler).toBeTypeOf('function');
-
-    const cleanupPromise = handler?.('rejected');
+    const cleanupPromise = invokeLatestListener('unhandledRejection', [
+      'rejected',
+    ]);
     expect(cleanupPromise).toBeInstanceOf(Promise);
-    await cleanupPromise;
+    await Promise.resolve(cleanupPromise);
 
     expect(stderrSpy).toHaveBeenCalledWith(
       expect.stringContaining('Unhandled rejection in LSP service'),
@@ -616,31 +672,25 @@ describe('main channel wiring', () => {
     });
 
     let resolveShutdown: () => void = () => {};
-    const orchestrator = {
-      shutdown: vi.fn(
-        () =>
-          new Promise<void>((resolve) => {
-            resolveShutdown = resolve;
-          }),
-      ),
-    };
+    const orchestrator = createOrchestratorDouble(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveShutdown = resolve;
+        }),
+    );
 
     await runMain({
-      createOrchestrator: vi.fn(() => orchestrator),
-      setupRpcChannel: vi.fn(),
-      createMcpChannel: vi.fn(),
+      createOrchestrator: createOrchestratorFactory(orchestrator),
+      setupRpcChannel: createSetupRpcChannelDouble(),
+      createMcpChannel: createMcpChannelDouble(),
       createRpcConnection,
     });
 
-    const sigterm = onSpy.mock.calls.find(
-      (call) => call[0] === 'SIGTERM',
-    )?.[1] as (() => Promise<void>) | undefined;
-
-    const cleanupPromise = sigterm?.();
+    const cleanupPromise = invokeLatestListener('SIGTERM', []);
     expect(exitSpy).not.toHaveBeenCalled();
 
     resolveShutdown();
-    await cleanupPromise;
+    await Promise.resolve(cleanupPromise);
 
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
@@ -656,26 +706,26 @@ describe('main channel wiring', () => {
     const rpcDispose = vi.fn();
     const startupError = new Error('sendNotification failed');
 
-    const events = [
+    const events: readonly MainEvent[] = [
       'SIGTERM',
       'SIGINT',
       'uncaughtException',
       'unhandledRejection',
-    ] as const;
+    ];
     const baseline = events.map((event) => process.listenerCount(event));
+    const connection = createRpcConnectionDouble(rpcDispose);
+    vi.spyOn(connection, 'sendNotification').mockImplementation(() => {
+      throw startupError;
+    });
 
     await expect(
       main({
-        createOrchestrator: vi.fn(() => ({ shutdown: orchestratorShutdown })),
-        setupRpcChannel: vi.fn(),
-        createMcpChannel: vi.fn().mockResolvedValue({ close: mcpClose }),
-        createRpcConnection: () => ({
-          listen: vi.fn(),
-          dispose: rpcDispose,
-          sendNotification: vi.fn(() => {
-            throw startupError;
-          }),
-        }),
+        createOrchestrator: createOrchestratorFactory(
+          createOrchestratorDouble(orchestratorShutdown),
+        ),
+        setupRpcChannel: createSetupRpcChannelDouble(),
+        createMcpChannel: createMcpChannelDouble(mcpClose),
+        createRpcConnection: () => connection,
       }),
     ).rejects.toBe(startupError);
 

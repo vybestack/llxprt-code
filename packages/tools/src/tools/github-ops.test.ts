@@ -98,12 +98,11 @@ describe('github operation catalog', () => {
     expect([...GITHUB_MUTATING_OPS].sort()).toStrictEqual(
       [...EXPECTED_MUTATING].sort(),
     );
-    for (const op of GITHUB_SUPPORTED_OPS) {
-      expect(
-        !GITHUB_MUTATING_OPS.has(op) || EXPECTED_MUTATING.includes(op),
-        `${op} is not a known write`,
-      ).toBe(true);
-    }
+    const expectedMutating: string[] = [...EXPECTED_MUTATING];
+    const unexpectedMutating = GITHUB_SUPPORTED_OPS.filter(
+      (op) => GITHUB_MUTATING_OPS.has(op) && !expectedMutating.includes(op),
+    );
+    expect(unexpectedMutating).toStrictEqual([]);
   });
 
   /**
