@@ -76,6 +76,15 @@ function lintWithEffectiveRule(code: string) {
   });
 }
 
+function hasPlacementViolation(
+  messages: ReturnType<typeof lintWithEffectiveRule>,
+): boolean {
+  return messages.some(
+    (message) =>
+      message.severity === 2 && message.message.includes('issue #3172'),
+  );
+}
+
 describe('AnthropicRequestPreparation placement lint guard (issue #3172 AC-4)', () => {
   it('registers an error-level rule in the EFFECTIVE config for the target file', () => {
     expect(effectiveRule).toBeDefined();
@@ -102,8 +111,7 @@ describe('AnthropicRequestPreparation placement lint guard (issue #3172 AC-4)', 
         '}',
       ].join('\n'),
     );
-    expect(messages.length).toBeGreaterThanOrEqual(1);
-    expect(messages[0].severity).toBe(2);
+    expect(hasPlacementViolation(messages)).toBe(true);
   });
 
   it('rejects isOAuth when the placement helper is an arrow function', () => {
@@ -114,8 +122,7 @@ describe('AnthropicRequestPreparation placement lint guard (issue #3172 AC-4)', 
         '};',
       ].join('\n'),
     );
-    expect(messages.length).toBeGreaterThanOrEqual(1);
-    expect(messages[0].severity).toBe(2);
+    expect(hasPlacementViolation(messages)).toBe(true);
   });
 
   it('rejects the exact removed isOAuth branch when reintroduced in buildSystemContext', () => {
@@ -129,8 +136,7 @@ describe('AnthropicRequestPreparation placement lint guard (issue #3172 AC-4)', 
         '}',
       ].join('\n'),
     );
-    expect(messages.length).toBeGreaterThanOrEqual(1);
-    expect(messages[0].severity).toBe(2);
+    expect(hasPlacementViolation(messages)).toBe(true);
   });
 
   it('rejects an inline auth ternary after the placement helper is renamed', () => {
@@ -141,8 +147,7 @@ describe('AnthropicRequestPreparation placement lint guard (issue #3172 AC-4)', 
         '}',
       ].join('\n'),
     );
-    expect(messages.length).toBeGreaterThanOrEqual(1);
-    expect(messages[0].severity).toBe(2);
+    expect(hasPlacementViolation(messages)).toBe(true);
   });
 
   it('rejects negation bypass: !params.isOAuth inside placeSystemInstruction', () => {
@@ -156,8 +161,7 @@ describe('AnthropicRequestPreparation placement lint guard (issue #3172 AC-4)', 
         '}',
       ].join('\n'),
     );
-    expect(messages.length).toBeGreaterThanOrEqual(1);
-    expect(messages[0].severity).toBe(2);
+    expect(hasPlacementViolation(messages)).toBe(true);
   });
 
   it('rejects equality bypass: params.isOAuth === true inside placeSystemInstruction', () => {
@@ -171,7 +175,7 @@ describe('AnthropicRequestPreparation placement lint guard (issue #3172 AC-4)', 
         '}',
       ].join('\n'),
     );
-    expect(messages.length).toBeGreaterThanOrEqual(1);
+    expect(hasPlacementViolation(messages)).toBe(true);
   });
 
   it('rejects ternary bypass: params.isOAuth ? a : b inside placeSystemInstruction', () => {
@@ -183,19 +187,19 @@ describe('AnthropicRequestPreparation placement lint guard (issue #3172 AC-4)', 
         '}',
       ].join('\n'),
     );
-    expect(messages.length).toBeGreaterThanOrEqual(1);
+    expect(hasPlacementViolation(messages)).toBe(true);
   });
 
-  it('rejects alias/destructure bypass: const { isOAuth } = params', () => {
+  it('rejects file-wide destructure bypass: const { isOAuth } = params', () => {
     const messages = lintWithEffectiveRule(
       [
-        'function placeSystemInstruction(params: { isOAuth: boolean }) {',
+        'function renamedPlacement(params: { isOAuth: boolean }) {',
         '  const { isOAuth } = params;',
         '  return isOAuth ? [] : [];',
         '}',
       ].join('\n'),
     );
-    expect(messages.length).toBeGreaterThanOrEqual(1);
+    expect(hasPlacementViolation(messages)).toBe(true);
   });
 
   it('rejects switch bypass: switch on params.isOAuth inside placeSystemInstruction', () => {
@@ -209,7 +213,7 @@ describe('AnthropicRequestPreparation placement lint guard (issue #3172 AC-4)', 
         '}',
       ].join('\n'),
     );
-    expect(messages.length).toBeGreaterThanOrEqual(1);
+    expect(hasPlacementViolation(messages)).toBe(true);
   });
 
   it('allows legitimate auth-only use of a direct isOAuth parameter', () => {

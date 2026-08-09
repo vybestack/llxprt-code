@@ -362,9 +362,9 @@ describe('Anthropic system-prompt placement wiring (issue #3172)', () => {
     const options = buildOptions(rotatingProvider);
 
     // Projection resolves the token but creates no SDK client.
-    const requestsBeforeProjection = FakeAnthropicClass.requests.length;
+    const createdBeforeProjection = FakeAnthropicClass.created.length;
     const projection = await provider.projectPromptEnvelope(options);
-    expect(FakeAnthropicClass.requests.length).toBe(requestsBeforeProjection);
+    expect(FakeAnthropicClass.created.length).toBe(createdBeforeProjection);
 
     // Transport uses the prepared token without resolving again.
     await provider
@@ -404,9 +404,9 @@ describe('Anthropic system-prompt placement wiring (issue #3172)', () => {
     const provider = new PlacementTestProvider();
     const options = buildOptions(rotatingProvider);
 
-    const requestsBeforeProjection = FakeAnthropicClass.requests.length;
+    const createdBeforeProjection = FakeAnthropicClass.created.length;
     const projection = await provider.projectPromptEnvelope(options);
-    expect(FakeAnthropicClass.requests.length).toBe(requestsBeforeProjection);
+    expect(FakeAnthropicClass.created.length).toBe(createdBeforeProjection);
 
     await provider
       .generateChatCompletion({

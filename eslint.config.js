@@ -1303,6 +1303,12 @@ export default tseslint.config(
           message:
             'Do not alias request-parameter isOAuth for indirect placement control flow (issue #3172).',
         },
+        {
+          selector:
+            'VariableDeclarator > ObjectPattern > Property[key.name="isOAuth"]',
+          message:
+            'Do not destructure request-parameter isOAuth for indirect placement control flow; pass the auth fact directly to an auth-specific helper (issue #3172).',
+        },
       ],
     },
   },

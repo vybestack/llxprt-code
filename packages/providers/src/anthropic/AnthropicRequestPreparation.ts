@@ -573,7 +573,6 @@ function convertMessagesAndTools(params: {
   const {
     content,
     tools,
-    isOAuth,
     reasoningSettings,
     config,
     currentModel,
@@ -584,7 +583,7 @@ function convertMessagesAndTools(params: {
 
   // Convert IContent to Anthropic API format
   const anthropicMessages = convertToAnthropicMessages(content, {
-    isOAuth,
+    isOAuth: params.isOAuth,
     stripFromContext: reasoningSettings.stripFromContext,
     includeInContext: reasoningSettings.includeInContext,
     reasoningEnabled: reasoningSettings.reasoningEnabled as boolean,
@@ -596,7 +595,7 @@ function convertMessagesAndTools(params: {
   });
 
   // Convert tools to Anthropic format and stabilize ordering
-  let anthropicTools = convertToolsToAnthropic(tools, isOAuth);
+  let anthropicTools = convertToolsToAnthropic(tools, params.isOAuth);
 
   if (anthropicTools && anthropicTools.length > 0) {
     anthropicTools = [...anthropicTools]
