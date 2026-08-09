@@ -21,14 +21,13 @@ import type { GenerateChatOptions } from '../IProvider.js';
 import {
   type SystemPromptPlacement,
   requireAssembledSystemInstruction,
+  resolveSystemPromptPlacement,
 } from '../utils/systemPromptPlacement.js';
+import { isRuntimeAuthTokenProvider } from '../utils/authToken.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import { type OAuthManager } from '@vybestack/llxprt-code-auth';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type {
-  ProviderTelemetryContext,
-  RuntimeAuthTokenProvider,
-} from '../types/providerRuntime.js';
+import type { ProviderTelemetryContext } from '../types/providerRuntime.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 import {
   type AnthropicRateLimitInfo,
@@ -372,30 +371,32 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   /**
-   * Issue #3136: declare where the assembled system prompt may go.
+   * Issue #3136/#3172: declare where the assembled system prompt may go.
    *
    * Under OAuth (`claudecode`) Anthropic REJECTS any request whose `system`
    * field carries content other than the Claude Code string, so the prompt
-   * must be placed at the top of the context instead. This is a declaration
-   * consumed by the shared placement policy, not a placement decision made
-   * here.
+   * must be placed at the top of the context instead. Classification is driven
+   * by the RESOLVED token string: a runtime auth-token provider is resolved
+   * before placement is declared, so an unresolved provider object's shape
+   * alone never implies OAuth. This declaration is consumed by the shared
+   * placement policy, not a placement decision made in isolation here.
    */
   getSystemPromptPlacement(
     options: GenerateChatOptions,
   ): SystemPromptPlacement {
-    const authToken = options.resolved?.authToken;
-    if (typeof authToken === 'string') {
-      return this.classifyOAuthToken(authToken)
-        ? 'context-prefix'
-        : 'system-field';
+    const resolvedToken = options.resolved?.authToken;
+    if (isRuntimeAuthTokenProvider(resolvedToken)) {
+      throw new Error(
+        'SystemPromptPlacementError: Anthropic placement requires a resolved auth-token string (issue #3172).',
+      );
     }
-    // A RuntimeAuthTokenProvider is this provider's OAuth refresh mechanism
-    // (see resolveClientAuthToken), so it resolves to an sk-ant-oat token at
-    // request time. Treating it as system-field would put our prompt in the
-    // reserved OAuth `system` field and Anthropic would reject the request.
-    return isRuntimeAuthTokenProvider(authToken)
-      ? 'context-prefix'
-      : 'system-field';
+    if (
+      typeof resolvedToken === 'string' &&
+      this.classifyOAuthToken(resolvedToken)
+    ) {
+      return 'context-prefix';
+    }
+    return 'system-field';
   }
 
   /**
@@ -636,7 +637,7 @@ export class AnthropicProvider extends BaseProvider {
     const isOAuth = prepared?.isOAuth ?? this.classifyOAuthToken(authToken);
     const requestContext =
       prepared?.requestContext ??
-      (await this.prepareRequestContext(options, isOAuth));
+      (await this.prepareRequestContext(options, isOAuth, authToken));
 
     const customHeaders = this.buildCustomHeaders(requestContext, isOAuth);
 
@@ -677,12 +678,22 @@ export class AnthropicProvider extends BaseProvider {
   private async prepareRequestContext(
     options: NormalizedGenerateChatOptions,
     isOAuth: boolean,
+    authToken: string,
   ) {
+    // Issue #3172: placement is declared from the RESOLVED-token fact and
+    // resolved through the shared policy, never re-derived from isOAuth here.
+    const placement = resolveSystemPromptPlacement(
+      this.getSystemPromptPlacement({
+        ...options,
+        resolved: { ...options.resolved, authToken },
+      }),
+    );
     return prepareAnthropicRequest({
       content: options.contents,
       tools: options.tools,
       options,
       isOAuth,
+      placement,
       providerName: this.name,
       config: options.config ?? options.runtime?.config ?? this.globalConfig,
       getMaxTokensForModel: (m) => this.getMaxTokensForModel(m),
@@ -713,6 +724,7 @@ export class AnthropicProvider extends BaseProvider {
     const requestContext = await this.prepareRequestContext(
       normalized,
       isOAuth,
+      authToken,
     );
     const transportToken = Object.freeze({});
     this.preparedPromptEnvelopes.set(transportToken, {
@@ -838,14 +850,3 @@ export class AnthropicProvider extends BaseProvider {
 // Issue #2410: extracted to a standalone module to avoid a circular import
 // between AnthropicProvider and AnthropicRequestPreparation.
 export { isAnthropicOAuthBaseURL } from './AnthropicEndpointUtils.js';
-
-function isRuntimeAuthTokenProvider(
-  value: unknown,
-): value is RuntimeAuthTokenProvider {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'provide' in value &&
-    typeof value.provide === 'function'
-  );
-}

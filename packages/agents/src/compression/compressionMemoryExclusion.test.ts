@@ -222,10 +222,8 @@ function buildCompressionContext(
     promptBaseDir: '/tmp/test-prompts',
     promptContext: { provider: 'test-provider', model: COMPRESSION_MODEL },
     promptId: 'test-prompt',
+    ...(overrides.config === undefined ? {} : { config: overrides.config }),
   };
-  if (overrides.config !== undefined) {
-    context.config = overrides.config;
-  }
   return context;
 }
 
