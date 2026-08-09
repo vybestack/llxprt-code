@@ -12,7 +12,7 @@ import * as path from 'node:path';
 // implementation and overriding only `homedir`. `vi.hoisted` ensures the mock
 // fn is available inside the hoisted vi.mock factory.
 const { homedirMock } = {
-  homedirMock: vi.fn<[], string | undefined>(),
+  homedirMock: vi.fn<() => string | undefined>(),
 };
 
 const actual = { ...(await import('os')) };

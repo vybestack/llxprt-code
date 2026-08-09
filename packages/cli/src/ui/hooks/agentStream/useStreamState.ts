@@ -57,6 +57,7 @@ export interface UseStreamStateReturn {
   queuedSubmissionsRef: React.MutableRefObject<QueuedSubmission[]>;
   queuedSubmissions: readonly QueuedSubmission[];
   enqueueSubmission: (submission: QueuedSubmission) => void;
+  enqueueSubmissionFirst: (submission: QueuedSubmission) => void;
   requeueSubmission: (submission: QueuedSubmission) => void;
   dequeueSubmission: () => QueuedSubmission | undefined;
   clearSubmissions: () => void;
@@ -242,6 +243,7 @@ function useBasicStreamState() {
     queuedSubmissions,
     queuedSubmissionsRef,
     enqueueSubmission,
+    enqueueSubmissionFirst,
     requeueSubmission,
     dequeueSubmission,
     clearSubmissions,
@@ -275,6 +277,7 @@ function useBasicStreamState() {
     queuedSubmissions,
     queuedSubmissionsRef,
     enqueueSubmission,
+    enqueueSubmissionFirst,
     requeueSubmission,
     dequeueSubmission,
     clearSubmissions,

@@ -21,6 +21,7 @@ import {
   getFileMtime,
 } from './test-helpers.js';
 import { ASTEditTool } from '../../ast-edit.js';
+import { ToolErrorType } from '../../../types/tool-error.js';
 
 describe('ast_edit last_modified: stale timestamp triggers conflict', () => {
   const ctx = useTempDir();
@@ -39,7 +40,7 @@ describe('ast_edit last_modified: stale timestamp triggers conflict', () => {
     });
 
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('file_modified_conflict');
+    expect(result.error?.type).toBe(ToolErrorType.FILE_MODIFIED_CONFLICT);
   });
 
   it('includes both current and provided timestamps in the conflict error', async () => {
@@ -74,7 +75,7 @@ describe('ast_edit last_modified: stale timestamp triggers conflict', () => {
       last_modified: actualMtime - 1000,
     });
 
-    expect(result.error?.type).toBe('file_modified_conflict');
+    expect(result.error?.type).toBe(ToolErrorType.FILE_MODIFIED_CONFLICT);
     expect(readFileSync(filePath, 'utf-8')).toBe('const x = 1;\n');
   });
 });
@@ -159,7 +160,7 @@ describe('ast_edit last_modified: stale error is actionable plain text (REQ-3035
     });
 
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('file_modified_conflict');
+    expect(result.error?.type).toBe(ToolErrorType.FILE_MODIFIED_CONFLICT);
     const raw = String(result.llmContent);
     // Both timestamps must be present so the caller can diagnose the mismatch.
     expect(raw).toContain(String(actualMtime));

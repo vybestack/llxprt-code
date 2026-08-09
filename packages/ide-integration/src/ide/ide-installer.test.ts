@@ -57,15 +57,24 @@ describe('ide-installer', () => {
     function setup({
       ide = IDE_DEFINITIONS.vscode,
       existsResult = false,
-      execSync = () => '',
+      execSyncFails = false,
+      execSyncResult = '',
       platform = 'linux' as NodeJS.Platform,
     }: {
       ide?: IdeInfo;
       existsResult?: boolean;
-      execSync?: () => string;
+      execSyncFails?: boolean;
+      execSyncResult?: string;
       platform?: NodeJS.Platform;
     } = {}) {
-      vi.spyOn(child_process, 'execSync').mockImplementation(execSync);
+      const execSyncSpy = vi.spyOn(child_process, 'execSync');
+      if (execSyncFails) {
+        execSyncSpy.mockImplementation(() => {
+          throw new Error('Command not found');
+        });
+      } else {
+        execSyncSpy.mockReturnValue(execSyncResult);
+      }
       vi.spyOn(fs, 'existsSync').mockReturnValue(existsResult);
       const installer = getIdeInstaller(ide, platform)!;
 
@@ -100,9 +109,7 @@ describe('ide-installer', () => {
         async ({ platform, expectedLookupPaths }) => {
           const { installer } = setup({
             platform,
-            execSync: () => {
-              throw new Error('Command not found'); // `code` is not in PATH
-            },
+            execSyncFails: true,
           });
           await installer.install();
           for (const [idx, path] of expectedLookupPaths.entries()) {
@@ -130,7 +137,7 @@ describe('ide-installer', () => {
       it('installs the extension using code cli on windows', async () => {
         const { installer } = setup({
           platform: 'win32',
-          execSync: () => 'C:\\Program Files\\Microsoft VS Code\\bin\\code.cmd',
+          execSyncResult: 'C:\\Program Files\\Microsoft VS Code\\bin\\code.cmd',
         });
         await installer.install();
         expect(child_process.spawnSync).toHaveBeenCalledWith(
@@ -179,9 +186,7 @@ describe('ide-installer', () => {
         async ({ ide, expectedErr }) => {
           const { installer } = setup({
             ide,
-            execSync: () => {
-              throw new Error('Command not found');
-            },
+            execSyncFails: true,
             existsResult: false,
           });
           const result = await installer.install();

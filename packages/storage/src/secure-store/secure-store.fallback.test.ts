@@ -365,7 +365,6 @@ describe('SecureStore — Probe Cache Invalidation', () => {
 
     // Initial probe succeeds
     await store.isKeychainAvailable();
-    const _countAfterFirst = probeCallCount;
 
     // Cause failures to invalidate cache
     shouldFail = true;
@@ -508,7 +507,7 @@ describe('SecureStore — Fault Injection', () => {
 
     // Result must be one of the two values — not corrupt or partial
     const validValues = ['value-from-writer-1', 'value-from-writer-2'];
-    expect(validValues).toContain(result);
+    expect(result !== null && validValues.includes(result)).toBe(true);
   });
 });
 

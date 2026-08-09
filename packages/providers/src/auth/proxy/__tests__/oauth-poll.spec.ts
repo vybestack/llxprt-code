@@ -554,7 +554,11 @@ describe('oauth_poll handler', () => {
 
     // NOTE: Session expiry test requires oauthSessionTimeoutMs option
     // which will be added in Phase 05 implementation
-    it.todo('expired session returns SESSION_EXPIRED');
+    it.todo('expired session returns SESSION_EXPIRED', () => {
+      throw new Error(
+        'requires oauthSessionTimeoutMs (Phase 05) to expire a session before polling',
+      );
+    });
   });
 
   // ─── Provider Integration Tests ──────────────────────────────────────────

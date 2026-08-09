@@ -281,11 +281,11 @@ describe('E2E mergeability gate wiring (.github/workflows/e2e.yml)', () => {
       mac: false,
     },
     {
-      name: 'failed doc filter',
+      name: 'failed doc filter fails closed to running E2E',
       eventName: 'merge_group',
       docResult: 'failure',
-      linux: false,
-      mac: false,
+      linux: true,
+      mac: true,
     },
     {
       name: 'documentation-only change',

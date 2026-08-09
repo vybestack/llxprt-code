@@ -8,18 +8,19 @@
  * Shared helper that assembles the system instruction for compression LLM
  * calls (issue #3136, Step 3).
  *
- * Today the three compression call sites (OneShotStrategy.callProvider,
- * MiddleOutStrategy.callProvider, runVerificationPass) omit
- * `systemInstruction` from their `provider.generateChatCompletion` options.
- * The provider then rebuilds a core prompt via `getCoreSystemPromptAsync`.
- * Once provider-side assembly is removed (next task) these calls would send
- * NO system prompt at all.
+ * The three compression call sites (OneShotStrategy.callProvider,
+ * MiddleOutStrategy.callProvider, runVerificationPass) all obtain their
+ * `systemInstruction` from here. Providers no longer rebuild a core prompt and
+ * now throw when the instruction is absent, so without this helper these calls
+ * would fail rather than silently send a prompt-less request.
  *
- * This helper reproduces the EXACT arguments the provider path uses so the
- * compression LLM receives the same system prompt it does today. It lives in
- * `packages/agents` — NOT `packages/core` — so a future `no-restricted-imports`
- * guard on `getCoreSystemPromptAsync` in providers does not let providers
- * reach it indirectly.
+ * It lives in `packages/agents` — NOT `packages/core` — so providers cannot
+ * reach it and thereby sidestep the `no-restricted-imports` guard on
+ * `getCoreSystemPromptAsync` (`eslint.config.js`), which only bans the direct
+ * import. The placement is intended to prevent the indirect route: the manifests
+ * declare `packages/agents` depending on `packages/providers`, so the reverse
+ * import would invert that direction. Note this is a convention, not an enforced
+ * invariant — no package-cycle check or build rule currently verifies it.
  */
 
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -31,12 +32,23 @@ import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/run
 /**
  * Build the system instruction for a compression request.
  *
- * Replicates the provider's `getCoreSystemPromptAsync` arguments exactly:
- * no `coreMemory` (matches current provider behavior), no tools
- * (`includeSubagentDelegation` is therefore `false`), and `interactionMode`
- * derived from `config.isInteractive()`.
+ * Passes no `userMemory`, an explicit empty `coreMemory` string, no
+ * `mcpInstructions`, no tools (`includeSubagentDelegation` is therefore
+ * `false`), and `interactionMode` derived from `config.isInteractive()`.
  *
- * @param config - The Config to read MCP instructions and interaction mode from
+ * The empty `coreMemory` string (not `undefined`) is deliberate: when
+ * `coreMemory` is `undefined`, `getCoreSystemPromptAsync` loads
+ * `.LLXPRT_SYSTEM` from disk (`resolveEffectiveMemories` in
+ * `packages/core/src/core/prompts.ts`) and merges `mcpInstructions` into the
+ * same channel. Passing `''` short-circuits that disk fallback, and omitting
+ * `mcpInstructions` keeps MCP-server instructions out, so the compression LLM
+ * receives only the base instruction appropriate to its model and interaction
+ * mode — never the caller's core memory or MCP instructions (issue #3174).
+ *
+ * `config` is still accepted so the interaction mode can be derived; it is no
+ * longer consulted for MCP instructions.
+ *
+ * @param config - The Config to read interaction mode from
  * @param model  - The resolved model (same as `resolved.model` on the wire)
  * @returns The assembled system instruction, or `undefined` when the
  *          prompt is empty
@@ -45,14 +57,6 @@ export async function buildCompressionSystemInstruction(
   config: Config | undefined,
   model: string,
 ): Promise<string> {
-  const mcpClientManager =
-    config != null && typeof config.getMcpClientManager === 'function'
-      ? config.getMcpClientManager()
-      : undefined;
-  const mcpInstructions = mcpClientManager
-    ? mcpClientManager.getMcpInstructions()
-    : undefined;
-
   const interactionMode =
     config != null &&
     typeof config.isInteractive === 'function' &&
@@ -61,7 +65,7 @@ export async function buildCompressionSystemInstruction(
       : 'non-interactive';
 
   const corePrompt = await getCoreSystemPromptAsync({
-    mcpInstructions,
+    coreMemory: '',
     model,
     tools: undefined,
     includeSubagentDelegation: false,

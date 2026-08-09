@@ -68,22 +68,28 @@ describe('parseTokenUsageLogRecord — legacy normalization', () => {
     expect(result).not.toBeNull();
     expect(result?.record_type).toBe('turn');
     expect(result?.schema_version).toBe(0);
-    expect(result?.prompt_id).toBe('p-legacy');
+    if (result?.record_type !== 'turn') {
+      throw new Error(`expected turn record, got ${result?.record_type}`);
+    }
+    expect(result.prompt_id).toBe('p-legacy');
   });
 
   it('preserves all 17 existing fields from a legacy record', () => {
     const result = parseTokenUsageLogRecord(LEGACY_TURN);
     expect(result).not.toBeNull();
-    expect(result?.ts).toBe('2025-01-01T00:00:00.000Z');
-    expect(result?.provider).toBe('openai');
-    expect(result?.model).toBe('gpt-4');
-    expect(result?.estimated_tokens).toBe(100);
-    expect(result?.estimator).toBe('openai-tiktoken');
-    expect(result?.tiktoken_tokens).toBe(95);
-    expect(result?.tiktoken_estimation_failed).toBe(false);
-    expect(result?.actual_prompt_tokens).toBe(120);
-    expect(result?.cached_tokens).toBe(0);
-    expect(result?.effective_actual_tokens).toBe(120);
+    if (result?.record_type !== 'turn') {
+      throw new Error(`expected turn record, got ${result?.record_type}`);
+    }
+    expect(result.ts).toBe('2025-01-01T00:00:00.000Z');
+    expect(result.provider).toBe('openai');
+    expect(result.model).toBe('gpt-4');
+    expect(result.estimated_tokens).toBe(100);
+    expect(result.estimator).toBe('openai-tiktoken');
+    expect(result.tiktoken_tokens).toBe(95);
+    expect(result.tiktoken_estimation_failed).toBe(false);
+    expect(result.actual_prompt_tokens).toBe(120);
+    expect(result.cached_tokens).toBe(0);
+    expect(result.effective_actual_tokens).toBe(120);
   });
 
   it('accepts legacy records with null tiktoken_tokens', () => {
@@ -92,7 +98,10 @@ describe('parseTokenUsageLogRecord — legacy normalization', () => {
       tiktoken_tokens: null,
     });
     expect(result).not.toBeNull();
-    expect(result?.tiktoken_tokens).toBeNull();
+    if (result?.record_type !== 'turn') {
+      throw new Error(`expected turn record, got ${result?.record_type}`);
+    }
+    expect(result.tiktoken_tokens).toBeNull();
   });
 });
 

@@ -9,12 +9,15 @@ import { writeFileSync, mkdirSync, rmSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { GlobTool, type GlobToolParams } from '../tools/glob.js';
-import type { IToolHost } from '../interfaces/index.js';
+import type {
+  IToolHost,
+  IToolHostFileFilteringOverrides,
+} from '../interfaces/index.js';
 import type { ToolResult } from '../index.js';
 
 interface FilterCall {
   paths: string[];
-  opts: { respectGitIgnore: boolean; respectLlxprtIgnore: boolean };
+  opts: IToolHostFileFilteringOverrides;
 }
 
 function createTempDir(prefix = 'llxprt-glob-test-'): {
@@ -42,7 +45,7 @@ function createHost(
   },
   filterImpl: (
     paths: string[],
-    opts: { respectGitIgnore: boolean; respectLlxprtIgnore: boolean },
+    opts: IToolHostFileFilteringOverrides,
   ) => string[],
 ): { host: IToolHost; calls: FilterCall[] } {
   const calls: FilterCall[] = [];
@@ -59,7 +62,7 @@ function createHost(
       shouldIgnoreFile: () => false,
       filterFiles: (paths, opts) => {
         calls.push({ paths, opts: { ...opts } });
-        return filterImpl(paths, opts);
+        return filterImpl(paths, opts ?? {});
       },
     }),
     getFileFilteringOptions: () => ({ ...defaultFiltering }),
@@ -114,7 +117,7 @@ describe('GlobTool file filtering', () => {
       tempDir,
       { respectGitIgnore: true, respectLlxprtIgnore: true },
       (paths, opts) => {
-        if (opts.respectLlxprtIgnore) {
+        if (opts.respectLlxprtIgnore === true) {
           return paths.filter((p) => !p.includes('skip.js'));
         }
         return paths;
@@ -194,7 +197,10 @@ describe('GlobTool file filtering', () => {
       tempDir,
       { respectGitIgnore: true, respectLlxprtIgnore: true },
       (paths, opts) => {
-        if (opts.respectGitIgnore || opts.respectLlxprtIgnore) {
+        if (
+          opts.respectGitIgnore === true ||
+          opts.respectLlxprtIgnore === true
+        ) {
           return paths.filter((p) => !p.includes('skip.js'));
         }
         return paths;
@@ -218,7 +224,7 @@ describe('GlobTool file filtering', () => {
       { respectGitIgnore: true, respectLlxprtIgnore: true },
       (paths, opts) => {
         let result = paths;
-        if (opts.respectLlxprtIgnore) {
+        if (opts.respectLlxprtIgnore === true) {
           result = result.filter((p) => !p.includes('skip.js'));
         }
         return result;

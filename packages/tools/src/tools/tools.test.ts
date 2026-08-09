@@ -21,7 +21,7 @@ import {
   hasPublishSubscribe,
 } from '../interfaces/IToolMessageBus.js';
 
-interface TestParams extends object {
+interface TestParams {
   path: string;
 }
 
@@ -40,9 +40,9 @@ class TestToolInvocation extends BaseToolInvocation<TestParams, ToolResult> {
 
   async execute(): Promise<ToolResult> {
     return {
-      error: undefined,
-      result: 'ok',
-    } as ToolResult;
+      llmContent: 'ok',
+      returnDisplay: 'ok',
+    };
   }
 
   // expose protected method for testing
@@ -68,11 +68,8 @@ class RealPublishSubscribeBus
     new Map();
   private published: Array<Record<string, unknown>> = [];
 
-  async requestConfirmation(): Promise<{
-    confirmed: boolean;
-    outcome?: ToolConfirmationOutcome;
-  }> {
-    return { confirmed: true };
+  async requestConfirmation(): Promise<ToolConfirmationOutcome> {
+    return ToolConfirmationOutcome.ProceedOnce;
   }
 
   publish(message: Record<string, unknown>): void {
@@ -121,10 +118,8 @@ class RealPublishSubscribeBus
 class RealPublishOnlyBus implements IToolMessageBus, PublishCapable {
   private published: Array<Record<string, unknown>> = [];
 
-  async requestConfirmation(): Promise<{
-    confirmed: boolean;
-  }> {
-    return { confirmed: true };
+  async requestConfirmation(): Promise<ToolConfirmationOutcome> {
+    return ToolConfirmationOutcome.ProceedOnce;
   }
 
   publish(message: Record<string, unknown>): void {
@@ -138,20 +133,14 @@ class RealPublishOnlyBus implements IToolMessageBus, PublishCapable {
 
 /** A plain bus with neither publish nor subscribe. */
 class PlainBus implements IToolMessageBus {
-  async requestConfirmation(): Promise<{
-    confirmed: boolean;
-  }> {
-    return { confirmed: true };
+  async requestConfirmation(): Promise<ToolConfirmationOutcome> {
+    return ToolConfirmationOutcome.ProceedOnce;
   }
 }
 
 describe('normalizeConfirmationOutcome', () => {
   it('maps malformed object outcomes to cancel instead of allowing execution', () => {
-    const malformedOutcome = {} as unknown as Parameters<
-      typeof normalizeConfirmationOutcome
-    >[0];
-
-    expect(normalizeConfirmationOutcome(malformedOutcome)).toBe(
+    expect(Reflect.apply(normalizeConfirmationOutcome, undefined, [{}])).toBe(
       ToolConfirmationOutcome.Cancel,
     );
   });
@@ -166,19 +155,14 @@ describe('normalizeConfirmationOutcome', () => {
   });
 
   it('maps objects with present but invalid outcomes to cancel', () => {
-    const invalidStringOutcome = {
-      outcome: 'invalid-string',
-    } as unknown as Parameters<typeof normalizeConfirmationOutcome>[0];
-    const invalidNumberOutcome = {
-      outcome: 42,
-    } as unknown as Parameters<typeof normalizeConfirmationOutcome>[0];
-
-    expect(normalizeConfirmationOutcome(invalidStringOutcome)).toBe(
-      ToolConfirmationOutcome.Cancel,
-    );
-    expect(normalizeConfirmationOutcome(invalidNumberOutcome)).toBe(
-      ToolConfirmationOutcome.Cancel,
-    );
+    expect(
+      Reflect.apply(normalizeConfirmationOutcome, undefined, [
+        { outcome: 'invalid-string' },
+      ]),
+    ).toBe(ToolConfirmationOutcome.Cancel);
+    expect(
+      Reflect.apply(normalizeConfirmationOutcome, undefined, [{ outcome: 42 }]),
+    ).toBe(ToolConfirmationOutcome.Cancel);
   });
 
   it('maps boolean confirmation outcomes to tool outcomes', () => {
@@ -217,9 +201,9 @@ describe('normalizeConfirmationOutcome', () => {
   });
 
   it('maps invalid string outcomes to cancel', () => {
-    expect(normalizeConfirmationOutcome('garbage')).toBe(
-      ToolConfirmationOutcome.Cancel,
-    );
+    expect(
+      Reflect.apply(normalizeConfirmationOutcome, undefined, ['garbage']),
+    ).toBe(ToolConfirmationOutcome.Cancel);
   });
 });
 
@@ -311,7 +295,7 @@ describe('BaseToolInvocation message bus capabilities', () => {
       } | null = null;
       const bus: IToolMessageBus = {
         async requestConfirmation() {
-          return { confirmed: true };
+          return ToolConfirmationOutcome.ProceedOnce;
         },
         async publishPolicyUpdate(
           outcome: ToolConfirmationOutcome,

@@ -128,8 +128,10 @@ describe('auth runtime scope gaps', () => {
 
     const getTokenMock = vi
       .fn<
-        [string, OAuthTokenRequestMetadata | undefined],
-        Promise<string | null>
+        (
+          provider: string,
+          metadata: OAuthTokenRequestMetadata | undefined,
+        ) => Promise<string | null>
       >()
       .mockResolvedValueOnce('scoped-token-runtime-a')
       .mockImplementationOnce(() =>
@@ -172,8 +174,10 @@ describe('auth runtime scope gaps', () => {
     );
 
     const getTokenMock = vi.fn<
-      [string, OAuthTokenRequestMetadata | undefined],
-      Promise<string | null>
+      (
+        provider: string,
+        metadata: OAuthTokenRequestMetadata | undefined,
+      ) => Promise<string | null>
     >(() => Promise.resolve('scoped-token'));
 
     const oauthManager: OAuthManager = {
@@ -206,8 +210,10 @@ describe('auth runtime scope gaps', () => {
     );
 
     const getTokenMock = vi.fn<
-      [string, OAuthTokenRequestMetadata | undefined],
-      Promise<string | null>
+      (
+        provider: string,
+        metadata: OAuthTokenRequestMetadata | undefined,
+      ) => Promise<string | null>
     >(() => Promise.resolve('scoped-token-cleanup'));
 
     const oauthManager: OAuthManager = {

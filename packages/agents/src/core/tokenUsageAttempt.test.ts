@@ -43,6 +43,7 @@ import { createConfigParams } from './chatSession-runtime-helpers.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 function makeTempLogPath(): string {
   return path.join(
@@ -134,21 +135,17 @@ describe('Issue #3130 slice 3b — attempt-level token-usage records', () => {
   }
 
   function registerProvider(
-    generateChatCompletion: (
-      options: GenerateChatOptions,
-    ) => AsyncGenerator<unknown>,
+    generateChatCompletion: IProvider['generateChatCompletion'],
   ): void {
     const provider: IProvider = {
       name: 'stub',
       isDefault: true,
-      getModels: vi.fn(async () => []),
+      getModels: async () => [],
       getDefaultModel: () => 'stub-model',
-      generateChatCompletion:
-        generateChatCompletion as IProvider['generateChatCompletion'],
+      generateChatCompletion,
       getServerTools: () => [],
-      invokeServerTool: vi.fn(),
-      getAuthToken: vi.fn(async () => 'stub-auth-token'),
-    } as unknown as IProvider;
+      invokeServerTool: async () => ({}),
+    };
     manager.registerProvider(provider);
   }
 
@@ -174,8 +171,8 @@ describe('Issue #3130 slice 3b — attempt-level token-usage records', () => {
     const logFile = makeTempLogPath();
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
-      _options: GenerateChatOptions,
-    ) {
+      _options: GenerateChatOptions | IContent[],
+    ): AsyncGenerator<IContent> {
       attempt++;
       if (attempt === 1) {
         yield {
@@ -263,8 +260,8 @@ describe('Issue #3130 slice 3b — attempt-level token-usage records', () => {
   it('records attempt_index 0 and attempt_outcome success for a normal turn', async () => {
     const logFile = makeTempLogPath();
     const generateChatCompletionMock = vi.fn(async function* (
-      _options: GenerateChatOptions,
-    ) {
+      _options: GenerateChatOptions | IContent[],
+    ): AsyncGenerator<IContent> {
       yield {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'hello' }],

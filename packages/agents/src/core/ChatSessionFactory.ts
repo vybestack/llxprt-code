@@ -33,6 +33,7 @@ import { isThinkingSupported } from './clientHelpers.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { TodoContinuationService } from './TodoContinuationService.js';
+import { resolvePromptMemory } from './promptMemoryPolicy.js';
 
 /**
  * Assembles ephemeral settings into an immutable snapshot for the runtime.
@@ -111,8 +112,11 @@ export function buildSettingsSnapshot(
  * Builds the full system instruction: env context, core memory, JIT memory,
  * user memory, MCP instructions, subagent delegation.
  *
- * This is the FULL path used by startChat — differs from the lightweight path
- * in clientLlmUtilities which skips env context, core memory, and JIT memory.
+ * Memory sourcing is shared with the subagent builder via
+ * {@link resolvePromptMemory} so both execution contexts apply the same JIT
+ * policy (issue #3173). This is the FULL path used by startChat — differs from
+ * the lightweight path in clientLlmUtilities which skips env context, core
+ * memory, and JIT memory.
  */
 export async function buildSystemInstruction(
   config: Config,
@@ -120,17 +124,9 @@ export async function buildSystemInstruction(
   envParts: Array<{ text?: string }>,
   model: string,
 ): Promise<string> {
-  let userMemory = config.isJitContextEnabled()
-    ? config.getGlobalMemory()
-    : config.getUserMemory();
-  const coreMemory = config.getCoreMemory();
+  const { userMemory, coreMemory, mcpInstructions } =
+    await resolvePromptMemory(config);
 
-  const jitMemory = await config.getJitMemoryForPath(config.getWorkingDir());
-  if (jitMemory) {
-    userMemory = userMemory ? `${userMemory}\n\n${jitMemory}` : jitMemory;
-  }
-
-  const mcpInstructions = config.getMcpInstructions();
   const includeSubagentDelegation =
     await shouldIncludeSubagentDelegationForConfig(config, enabledToolNames);
   const interactionMode = config.isInteractive()

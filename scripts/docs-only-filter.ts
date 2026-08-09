@@ -202,6 +202,41 @@ export function classifyEntry(entry: ChangedFileEntry): PathClassification {
 // ---------------------------------------------------------------------------
 
 /**
+ * Recognized GitHub changed-file statuses (subset of the files API).
+ * Any status outside this set is treated as malformed and forces fail-closed.
+ */
+const RECOGNIZED_STATUSES: ReadonlySet<string> = new Set([
+  'added',
+  'removed',
+  'modified',
+  'renamed',
+  'copied',
+  'changed',
+  'unchanged',
+]);
+
+/**
+ * Validates a structured changed-file entry's shape. Returns an error message
+ * string when the entry is malformed (unknown/empty status, or a renamed
+ * entry without a nonempty previous_filename); returns null when valid.
+ *
+ * Called in the pure classifier so malformed external data fails closed even
+ * in direct pure-classifier calls, not only via CLI parsing.
+ */
+function validateEntryShape(entry: ChangedFileEntry): string | null {
+  if (!RECOGNIZED_STATUSES.has(entry.status)) {
+    return `entry '${entry.filename}' has unrecognized status '${entry.status}' — fail closed to full CI`;
+  }
+  if (
+    entry.status === 'renamed' &&
+    (entry.previous_filename === undefined || entry.previous_filename === '')
+  ) {
+    return `renamed entry '${entry.filename}' lacks previous_filename — fail closed to full CI`;
+  }
+  return null;
+}
+
+/**
  * Classifies a whole change set as docs-only iff every entry is docs AND the
  * returned entry count matches the authoritative PR `changed_files` count.
  *
@@ -209,6 +244,7 @@ export function classifyEntry(entry: ChangedFileEntry): PathClassification {
  * - zero entries
  * - `changedFiles` is not a usable count (undefined, NaN, negative, fractional)
  * - `changedFiles` not equal to the entry count (API truncation)
+ * - any entry with an unrecognized status or malformed rename shape
  * - any entry that is CODE, unclassifiable, or part of a non-docs rename
  */
 export function classifyDocsOnly({
@@ -245,6 +281,15 @@ export function classifyDocsOnly({
 
   const pathReasons: DocsPathReason[] = [];
   for (const entry of entries) {
+    // Fail closed on malformed external entry shapes (pure classifier level).
+    const shapeError = validateEntryShape(entry);
+    if (shapeError !== null) {
+      return {
+        docsOnly: false,
+        reason: shapeError,
+        pathReasons: [],
+      };
+    }
     const classification = classifyEntry(entry);
     const previous = entry.previous_filename;
     const detail =
@@ -291,11 +336,26 @@ export function parseEntry(raw: unknown): ChangedFileEntry | null {
   const filename = rec['filename'];
   if (typeof filename !== 'string' || filename === '') return null;
   const status = rec['status'];
+  // Fail closed at the external boundary: reject unrecognized, missing, or
+  // non-string status rather than normalizing to 'modified'. Returning null
+  // drops the entry, causing a count mismatch against the authoritative
+  // changed_files total and therefore full CI (docsOnly=false).
+  if (typeof status !== 'string' || !RECOGNIZED_STATUSES.has(status)) {
+    return null;
+  }
   const previous = rec['previous_filename'];
+  // A renamed entry must carry a nonempty previous_filename; anything else is
+  // malformed and must be rejected (not silently dropped).
+  if (
+    status === 'renamed' &&
+    (typeof previous !== 'string' || previous === '')
+  ) {
+    return null;
+  }
   const patch = rec['patch'];
   return {
     filename,
-    status: typeof status === 'string' ? status : 'modified',
+    status,
     previous_filename:
       typeof previous === 'string' && previous !== '' ? previous : undefined,
     patch: typeof patch === 'string' ? patch : undefined,

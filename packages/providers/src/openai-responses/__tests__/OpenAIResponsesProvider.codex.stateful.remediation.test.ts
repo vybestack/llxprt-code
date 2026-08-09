@@ -30,6 +30,7 @@ import {
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { OAuthManager } from '@vybestack/llxprt-code-auth';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
 import {
@@ -542,7 +543,7 @@ class RecordingTransport implements WebSocketTransport {
 class TestableCodexProvider extends OpenAIResponsesProvider {
   readonly recordingTransport = new RecordingTransport();
 
-  constructor(oauthManager: object) {
+  constructor(oauthManager: OAuthManager) {
     super('codex-api-key', CODEX_BASE_URL, undefined, oauthManager);
   }
 

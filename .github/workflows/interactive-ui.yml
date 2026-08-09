@@ -6,11 +6,26 @@ on:
       - 'main'
       - 'release/**'
     paths:
-      # Harness infrastructure
+      # Harness infrastructure — direct inputs consumed by the test
       - 'scripts/tmux-harness.ts'
-      - 'scripts/tmux-script*.json'
-      - 'scripts/tests/**'
-      - 'scripts/fixtures/**'
+      - 'scripts/tmux-harness-helpers.ts'
+      - 'scripts/tmux-harness-io.ts'
+      - 'scripts/tmux-harness-scenarios.ts'
+      - 'scripts/tmux-harness-steps.ts'
+      # The interactive UI test and its Bun test preload
+      - 'scripts/tests/test-setup.ts'
+      - 'scripts/tests/interactive-ui.test.ts'
+      # The three scenario JSON files executed by the test
+      - 'scripts/tmux-script.slash-autocomplete.json'
+      - 'scripts/tmux-script.approval-ui.json'
+      - 'scripts/tmux-script.issue2208-newlines.fake.json'
+      # Scenario config referenced by ALL three scenarios (welcome banner +
+      # system settings env paths set in each scenario)
+      - 'scripts/fixtures/welcome-completed.json'
+      - 'scripts/system-settings.interactive-ui.json'
+      # Fixtures referenced by the executed scenarios
+      - 'scripts/fixtures/approval-ui.responses.jsonl'
+      - 'scripts/fixtures/issue2208-newlines.responses.jsonl'
       # CLI UI layer (dialogs, autocomplete, input handling)
       - 'packages/cli/src/ui/**'
       - 'packages/cli/src/commands/**'
@@ -23,9 +38,11 @@ on:
       - 'packages/providers/src/fake/**'
       - 'packages/tools/src/tools/**'
       - '.llxprt/skills/**'
-      # OpenTUI UI package
-      - 'packages/ui/**'
-      # Workflow and package scripts
+      # Setup/install inputs consumed by the job (node-version-file, bun-version-file, npm ci config)
+      - '.nvmrc'
+      - '.bun-version'
+      - '.npmrc'
+      # Workflow and package scripts (the job runs npm ci + npm run build)
       - '.github/workflows/interactive-ui.yml'
       - 'package.json'
       - 'package-lock.json'
@@ -34,9 +51,19 @@ on:
       - 'main'
     paths:
       - 'scripts/tmux-harness.ts'
-      - 'scripts/tmux-script*.json'
-      - 'scripts/tests/**'
-      - 'scripts/fixtures/**'
+      - 'scripts/tmux-harness-helpers.ts'
+      - 'scripts/tmux-harness-io.ts'
+      - 'scripts/tmux-harness-scenarios.ts'
+      - 'scripts/tmux-harness-steps.ts'
+      - 'scripts/tests/test-setup.ts'
+      - 'scripts/tests/interactive-ui.test.ts'
+      - 'scripts/tmux-script.slash-autocomplete.json'
+      - 'scripts/tmux-script.approval-ui.json'
+      - 'scripts/tmux-script.issue2208-newlines.fake.json'
+      - 'scripts/fixtures/welcome-completed.json'
+      - 'scripts/system-settings.interactive-ui.json'
+      - 'scripts/fixtures/approval-ui.responses.jsonl'
+      - 'scripts/fixtures/issue2208-newlines.responses.jsonl'
       - 'packages/cli/src/ui/**'
       - 'packages/cli/src/commands/**'
       - 'packages/agents/src/scheduler/**'
@@ -47,7 +74,9 @@ on:
       - 'packages/providers/src/fake/**'
       - 'packages/tools/src/tools/**'
       - '.llxprt/skills/**'
-      - 'packages/ui/**'
+      - '.nvmrc'
+      - '.bun-version'
+      - '.npmrc'
       - '.github/workflows/interactive-ui.yml'
       - 'package.json'
       - 'package-lock.json'

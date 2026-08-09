@@ -58,6 +58,23 @@ function createTestIdToken(accountId: string): string {
   return `${headerEncoded}.${payloadEncoded}.fake-signature`;
 }
 
+/**
+ * Builds a fetch stand-in that reroutes OpenAI token endpoint calls to the
+ * ephemeral test HTTP server, while forwarding every other request to the real
+ * fetch. The captured server port is the only per-test variable.
+ */
+function createRedirectingFetch(serverPort: number): typeof fetch {
+  return (input) => {
+    const url = input.toString();
+    if (url.includes('auth.openai.com/oauth/token')) {
+      return originalFetch(`http://localhost:${serverPort}/oauth/token`, {
+        method: 'POST',
+      });
+    }
+    return originalFetch(input);
+  };
+}
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('CodexDeviceFlow DI behavioral tests', () => {
@@ -409,16 +426,7 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
       const state = 'exchange-test-state';
       flow.buildAuthorizationUrl(redirectUri, state);
 
-      const realFetch = originalFetch;
-      global.fetch = vi.fn((input: RequestInfo | URL) => {
-        const url = input.toString();
-        if (url.includes('auth.openai.com/oauth/token')) {
-          return realFetch(`http://localhost:${serverPort}/oauth/token`, {
-            method: 'POST',
-          });
-        }
-        return realFetch(input);
-      }) as typeof fetch;
+      global.fetch = vi.fn(createRedirectingFetch(serverPort));
 
       try {
         const token = await flow.exchangeCodeForToken(
@@ -456,16 +464,7 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
         res.end(JSON.stringify(mockRefreshResponse));
       });
 
-      const realFetch = originalFetch;
-      global.fetch = vi.fn((input: RequestInfo | URL) => {
-        const url = input.toString();
-        if (url.includes('auth.openai.com/oauth/token')) {
-          return realFetch(`http://localhost:${serverPort}/oauth/token`, {
-            method: 'POST',
-          });
-        }
-        return realFetch(input);
-      }) as typeof fetch;
+      global.fetch = vi.fn(createRedirectingFetch(serverPort));
 
       try {
         const token = await flow.refreshToken('old-refresh-token');

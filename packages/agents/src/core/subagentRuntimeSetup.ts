@@ -50,6 +50,7 @@ import {
 } from './toolGovernance.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { resolvePromptMemory } from './promptMemoryPolicy.js';
 import {
   EmojiFilter,
   type EmojiFilterMode,
@@ -826,15 +827,15 @@ async function buildSystemInstruction(
     ),
   );
 
-  const mcpInstructions = config.getMcpInstructions();
-  // Issue #3136: a subagent's user/core memory previously reached the model
-  // only because the provider layer rebuilt its own core prompt. Supply both
-  // here so collapsing to a single assembler cannot strip subagent memory.
-  // coreMemory is passed explicitly to avoid the per-call two-file disk read
-  // in getCoreSystemPromptAsync when it is undefined.
+  // Memory sourcing is shared with the main-agent builder (ChatSessionFactory)
+  // via resolvePromptMemory so subagents get the same JIT policy: under JIT,
+  // global memory plus the working directory's JIT subdirectory memory, with
+  // MCP instructions carried only through their dedicated option (issue #3173).
+  const { userMemory, coreMemory, mcpInstructions } =
+    await resolvePromptMemory(config);
   const coreSystemPrompt: unknown = await getCoreSystemPromptAsync({
-    userMemory: config.getUserMemory(),
-    coreMemory: config.getCoreMemory(),
+    userMemory,
+    coreMemory,
     mcpInstructions,
     model: modelConfig.model,
     tools: toolNames,

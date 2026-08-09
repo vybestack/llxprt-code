@@ -11,7 +11,11 @@
 
 import { describe, it, expect } from 'bun:test';
 import { TodoPauseTool, TodoWriteTool, TodoReadTool } from '../index.js';
-import type { ITodoService, TodoStore } from '../interfaces/index.js';
+import type {
+  IToolHost,
+  ITodoService,
+  TodoStore,
+} from '../interfaces/index.js';
 import type { Todo } from '../types/todo-schemas.js';
 import { executeToolForBehavioralAssertion } from './red-test-helpers.js';
 
@@ -29,7 +33,7 @@ const CLEAN_SUBTASK_ITEM = ' Write unit tests';
 /**
  * Minimal IToolHost stub. Only provides what TodoWrite needs.
  */
-function createToolHostWithEmojiMode(mode: string) {
+function createToolHostWithEmojiMode(mode: string): IToolHost {
   return {
     getTargetDir: () => '/tmp',
     getWorkspaceRoots: () => [],
@@ -575,7 +579,7 @@ describe('TodoWrite Emoji Filtering Behavioral Tests', () => {
         expect(result.llmContent).toContain('avoid using emojis');
 
         const feedbackPattern = /avoid using emojis/g;
-        const matches = result.llmContent.match(feedbackPattern);
+        const matches = String(result.llmContent).match(feedbackPattern);
         expect(matches).not.toBeNull();
         if (matches === null) return;
         expect(matches.length).toBe(1);

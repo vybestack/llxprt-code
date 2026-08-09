@@ -272,8 +272,16 @@ describe('TokenUsageLogger — lifecycle event emission (issue #3130 slice 5)', 
     expect(record.session_id).toBe(SESSION_ID);
     expect(record.tokens_before).toBe(TOKENS_BEFORE);
     expect(record.tokens_after).toBe(TOKENS_AFTER);
-    // AC-12: tokens_after < tokens_before
-    expect(record.tokens_after).toBeLessThan(record.tokens_before);
+    // AC-12: tokens_after < tokens_before. The record is read back as plain
+    // JSON, so narrow the unknown numeric fields before comparing them.
+    const tokensBefore = record.tokens_before;
+    const tokensAfter = record.tokens_after;
+    if (typeof tokensBefore !== 'number' || typeof tokensAfter !== 'number') {
+      throw new Error(
+        `tokens_before/tokens_after must be numbers (got ${typeof tokensBefore}, ${typeof tokensAfter})`,
+      );
+    }
+    expect(tokensAfter).toBeLessThan(tokensBefore);
     // The compression model is carried
     expect(record.compression_model).toBe(COMPRESSION_MODEL);
     expect(record.compression_provider).toBe(COMPRESSION_PROVIDER);

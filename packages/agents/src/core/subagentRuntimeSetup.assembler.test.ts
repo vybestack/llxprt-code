@@ -32,10 +32,23 @@ import {
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 
 // Capture getCoreSystemPromptAsync calls so we can assert interactionMode
-// on both the creation-time call and the per-turn call.
+// on both the creation-time call and the per-turn call. The mock echoes its
+// memory inputs verbatim so the rendered prompt reflects exactly which memory
+// channels were sourced — letting issue #3173 tests assert, for example, that
+// the MCP marker appears exactly once (only via the dedicated mcpInstructions
+// option) rather than also inside user memory.
 const mockGetCorePrompt = vi.fn(async (args: Record<string, unknown>) => {
-  const mode = args.interactionMode ?? 'unknown';
-  return `[CORE_PROMPT mode=${mode}]`;
+  const mode =
+    typeof args.interactionMode === 'string' ? args.interactionMode : 'unknown';
+  const sections: string[] = [`[CORE_PROMPT mode=${mode}]`];
+  const userMemory = typeof args.userMemory === 'string' ? args.userMemory : '';
+  const coreMemory = typeof args.coreMemory === 'string' ? args.coreMemory : '';
+  const mcp =
+    typeof args.mcpInstructions === 'string' ? args.mcpInstructions : '';
+  if (userMemory.length > 0) sections.push(userMemory);
+  if (coreMemory.length > 0) sections.push(coreMemory);
+  if (mcp.length > 0) sections.push(mcp);
+  return sections.join('\n\n');
 });
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -77,6 +90,11 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
     runtimeId: string;
     userMemory?: string;
     coreMemory?: string;
+    jitContextEnabled?: boolean;
+    globalMemory?: string;
+    jitMemory?: string;
+    mcpInstructions?: string;
+    workingDir?: string;
   }): Promise<ChatSession> {
     const providerRuntime = createProviderRuntimeContext({
       settingsService,
@@ -114,6 +132,27 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
     }
     if (opts.coreMemory !== undefined) {
       memoryOverrides['getCoreMemory'] = { value: () => opts.coreMemory };
+    }
+    if (opts.jitContextEnabled !== undefined) {
+      memoryOverrides['isJitContextEnabled'] = {
+        value: () => opts.jitContextEnabled,
+      };
+    }
+    if (opts.globalMemory !== undefined) {
+      memoryOverrides['getGlobalMemory'] = { value: () => opts.globalMemory };
+    }
+    if (opts.jitMemory !== undefined) {
+      memoryOverrides['getJitMemoryForPath'] = {
+        value: async () => opts.jitMemory,
+      };
+    }
+    if (opts.mcpInstructions !== undefined) {
+      memoryOverrides['getMcpInstructions'] = {
+        value: () => opts.mcpInstructions,
+      };
+    }
+    if (opts.workingDir !== undefined) {
+      memoryOverrides['getWorkingDir'] = { value: () => opts.workingDir };
     }
 
     Object.defineProperties(config, {
@@ -224,6 +263,7 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
     const chat = await buildSubagentFixture({
       persona: 'You are a subagent.',
       runtimeId: 'test.subagent.memory',
+      jitContextEnabled: false,
       userMemory: USER_MEMORY,
       coreMemory: CORE_MEMORY,
     });
@@ -240,6 +280,120 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
     expect(mockGetCorePrompt.mock.calls[1][0]).toMatchObject({
       userMemory: USER_MEMORY,
       coreMemory: CORE_MEMORY,
+    });
+  });
+
+  describe('Subagent JIT memory sourcing (issue #3173)', () => {
+    /**
+     * Distinct markers used to trace which memory channel sourced each piece of
+     * the prompt. ENV_WITH_MCP_MARKER deliberately embeds the MCP token so that
+     * the pre-fix subagent path (which sources getUserMemory() under JIT and so
+     * folds in environment memory that already carries MCP instructions) can be
+     * shown to deliver the MCP block more than once.
+     */
+    const GLOBAL = 'GLOBAL_MARKER';
+    const JIT = 'JIT_MARKER';
+    const MCP = 'MCP_MARKER';
+    const ENV_WITH_MCP = 'ENV_WITH_MCP_MARKER';
+    const CORE = 'CORE_MARKER';
+    const PERSONA = 'You are a focused subagent.';
+
+    function countOccurrences(haystack: string, needle: string): number {
+      if (!needle) return 0;
+      return haystack.split(needle).length - 1;
+    }
+
+    it('sources global plus JIT user memory and delivers the MCP block exactly once when JIT is enabled', async () => {
+      const chat = await buildSubagentFixture({
+        persona: PERSONA,
+        runtimeId: 'test.subagent.jit.enabled',
+        jitContextEnabled: true,
+        globalMemory: GLOBAL,
+        // Under JIT, Config.getUserMemory() folds in environment memory (which
+        // already carries MCP instructions). Simulate that contract so the test
+        // proves the shared policy avoids that accessor under JIT.
+        userMemory: `${GLOBAL}
+
+${ENV_WITH_MCP}`,
+        jitMemory: JIT,
+        mcpInstructions: MCP,
+        coreMemory: CORE,
+        workingDir: '/sub/work',
+      });
+
+      // --- Creation-time assembly ---
+      expect(mockGetCorePrompt).toHaveBeenCalledTimes(1);
+      const creationArgs = mockGetCorePrompt.mock.calls[0][0];
+      expect(creationArgs).toMatchObject({
+        interactionMode: 'subagent',
+        includeSubagentDelegation: false,
+        coreMemory: CORE,
+        mcpInstructions: MCP,
+      });
+      // User memory must carry global + JIT subdirectory memory and must NOT
+      // carry the environment-memory channel (which would double MCP).
+      expect(creationArgs.userMemory).toBe(`${GLOBAL}
+
+${JIT}`);
+      expect(creationArgs.userMemory).not.toContain(ENV_WITH_MCP);
+      expect(creationArgs.userMemory).not.toContain(MCP);
+
+      // --- Per-turn assembly ---
+      await chat.sendMessage({ message: 'do it' }, 'p1');
+      expect(mockGetCorePrompt).toHaveBeenCalledTimes(2);
+      const turnArgs = mockGetCorePrompt.mock.calls[1][0];
+      expect(turnArgs).toMatchObject({
+        interactionMode: 'subagent',
+        coreMemory: CORE,
+        mcpInstructions: MCP,
+      });
+      expect(turnArgs.userMemory).toBe(`${GLOBAL}
+
+${JIT}`);
+      expect(turnArgs.userMemory).not.toContain(MCP);
+
+      // The rendered prompt the provider receives must contain the JIT
+      // subdirectory marker and the MCP marker exactly once.
+      const rendered = capturedCalls[0].systemInstruction as string;
+      expect(rendered).toContain(JIT);
+      expect(countOccurrences(rendered, MCP)).toBe(1);
+      expect(rendered).toContain(PERSONA);
+    });
+
+    it('preserves the getUserMemory path and a single MCP block when JIT is disabled', async () => {
+      const USER = 'USER_MEMORY_MARKER';
+      const chat = await buildSubagentFixture({
+        persona: PERSONA,
+        runtimeId: 'test.subagent.jit.disabled',
+        jitContextEnabled: false,
+        userMemory: USER,
+        // Production returns '' when JIT is disabled.
+        jitMemory: '',
+        mcpInstructions: MCP,
+        coreMemory: CORE,
+      });
+
+      // Creation-time assembly: unchanged user-memory path, no JIT memory.
+      const creationArgs = mockGetCorePrompt.mock.calls[0][0];
+      expect(creationArgs).toMatchObject({
+        interactionMode: 'subagent',
+        coreMemory: CORE,
+        mcpInstructions: MCP,
+      });
+      expect(creationArgs.userMemory).toBe(USER);
+
+      // Per-turn assembly: identical policy behavior.
+      await chat.sendMessage({ message: 'go' }, 'p1');
+      const turnArgs = mockGetCorePrompt.mock.calls[1][0];
+      expect(turnArgs.userMemory).toBe(USER);
+      expect(turnArgs).toMatchObject({
+        coreMemory: CORE,
+        mcpInstructions: MCP,
+      });
+
+      // Exactly one MCP marker reaches the provider.
+      const rendered = capturedCalls[0].systemInstruction as string;
+      expect(countOccurrences(rendered, MCP)).toBe(1);
     });
   });
 });

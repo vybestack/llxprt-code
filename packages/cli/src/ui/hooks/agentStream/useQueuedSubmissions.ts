@@ -15,7 +15,11 @@ import type { QueuedSubmission } from './types.js';
  * - `queuedSubmissions` (reactive state for rendering)
  * - `queuedSubmissionsRef` (stable ref for callback access)
  * - `enqueueSubmission` (immutable append — updates both ref and state)
- * - `requeueSubmission` (immutable front insertion for retry)
+ * - `enqueueSubmissionFirst` (immutable front insertion of a NEW submission,
+ *   minting a fresh `queueId`; used for post-cancel resume priority, issue
+ *   #3169)
+ * - `requeueSubmission` (immutable front insertion for retry — deliberately
+ *   preserves the existing `queueId` of an already-identified item)
  * - `dequeueSubmission` (FIFO shift — updates both ref and state)
  * - `clearSubmissions` (clear — updates both ref and state)
  *
@@ -41,13 +45,27 @@ export function useQueuedSubmissions() {
   const drainInFlightRef = useRef(false);
   const nextQueueIdRef = useRef(0);
 
-  const enqueueSubmission = useCallback(
-    (submission: QueuedSubmission): void => {
+  const withQueueId = useCallback(
+    (submission: QueuedSubmission): QueuedSubmission => {
       const queueId = nextQueueIdRef.current;
       nextQueueIdRef.current = queueId + 1;
-      setQueuedSubmissions((prev) => [...prev, { ...submission, queueId }]);
+      return { ...submission, queueId };
     },
-    [setQueuedSubmissions],
+    [],
+  );
+
+  const enqueueSubmission = useCallback(
+    (submission: QueuedSubmission): void => {
+      setQueuedSubmissions((prev) => [...prev, withQueueId(submission)]);
+    },
+    [setQueuedSubmissions, withQueueId],
+  );
+
+  const enqueueSubmissionFirst = useCallback(
+    (submission: QueuedSubmission): void => {
+      setQueuedSubmissions((prev) => [withQueueId(submission), ...prev]);
+    },
+    [setQueuedSubmissions, withQueueId],
   );
 
   const requeueSubmission = useCallback(
@@ -86,6 +104,7 @@ export function useQueuedSubmissions() {
     queuedSubmissions,
     queuedSubmissionsRef,
     enqueueSubmission,
+    enqueueSubmissionFirst,
     requeueSubmission,
     dequeueSubmission,
     clearSubmissions,

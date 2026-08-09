@@ -20,11 +20,11 @@
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ShellTool } from '../index.js';
+import { ToolConfirmationOutcome } from '../types/tool-confirmation-types.js';
 import type {
   IShellExecutionService,
   ShellResult,
   IToolMessageBus,
-  ToolConfirmationOutcome,
   IShellToolHost,
   HostShellJobInfo,
   HostShellJobTailResult,
@@ -39,8 +39,8 @@ const { mockPlatform, mockTmpdir } = {
 
 const actual = { ...(await import('node:os')) };
 void vi.mock('node:os', () => ({
-  default: { ...actual, platform: mockPlatform, tmpdir: mockTmpdir },
   ...actual,
+  default: { ...actual, platform: mockPlatform, tmpdir: mockTmpdir },
   platform: mockPlatform,
   tmpdir: mockTmpdir,
 }));
@@ -95,7 +95,7 @@ describe('Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', 
       const result = await executeToolForBehavioralAssertion(
         new ShellTool(
           createFakeShellService(responses),
-          createFakeMessageBus('proceed_once'),
+          createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
         ),
         { command: 'echo hello' },
       );
@@ -118,7 +118,7 @@ describe('Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', 
       const result = await executeToolForBehavioralAssertion(
         new ShellTool(
           createFakeShellService(responses),
-          createFakeMessageBus('proceed_once'),
+          createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
         ),
         { command: 'false' },
       );
@@ -133,7 +133,7 @@ describe('Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', 
       const result = await executeToolForBehavioralAssertion(
         new ShellTool(
           createFakeShellService(new Map<string, ShellResult>()),
-          createFakeMessageBus('proceed_once'),
+          createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
         ),
         { command: 'rm -rf /' },
       );
@@ -147,7 +147,10 @@ describe('Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', 
       const shell = createFakeShellService(responses);
 
       const result = await executeToolForBehavioralAssertion(
-        new ShellTool(shell, createFakeMessageBus('proceed_once')),
+        new ShellTool(
+          shell,
+          createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
+        ),
         { command: 'rm -rf /' },
       );
 
@@ -169,7 +172,7 @@ describe('Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', 
       const result = await executeToolForBehavioralAssertion(
         new ShellTool(
           createFakeShellService(responses),
-          createFakeMessageBus('proceed_once'),
+          createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
         ),
         { command: 'echo test' },
       );
@@ -182,7 +185,7 @@ describe('Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', 
       const result = await executeToolForBehavioralAssertion(
         new ShellTool(
           createFakeShellService(new Map<string, ShellResult>()),
-          createFakeMessageBus('cancel'),
+          createFakeMessageBus(ToolConfirmationOutcome.Cancel),
         ),
         { command: 'echo cancelled' },
       );
@@ -204,7 +207,7 @@ describe('Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', 
 
       const tool = new ShellTool(
         createFakeShellService(responses),
-        createFakeMessageBus('proceed_once'),
+        createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
       );
 
       const result1 = await executeToolForBehavioralAssertion(tool, {
@@ -260,7 +263,7 @@ describe('is_background managed job behavior @plan:issue1995', () => {
         executionOptions: {},
       }),
       getTimeoutConfig: () => ({
-        timeoutSeconds: undefined,
+        timeoutSeconds: -1,
         defaultTimeoutSeconds: 60,
       }),
       getOutputLimits: () => ({}),
@@ -309,7 +312,10 @@ describe('is_background managed job behavior @plan:issue1995', () => {
       return fakeJob;
     });
 
-    const tool = new ShellTool(host, createFakeMessageBus('proceed_once'));
+    const tool = new ShellTool(
+      host,
+      createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
+    );
 
     const result = await executeToolForBehavioralAssertion(tool, {
       command: 'echo started',
@@ -350,7 +356,10 @@ describe('is_background managed job behavior @plan:issue1995', () => {
       () => ({ id: 'shell_def456', output: 'done\n', truncated: false }),
     );
 
-    const tool = new ShellTool(host, createFakeMessageBus('proceed_once'));
+    const tool = new ShellTool(
+      host,
+      createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
+    );
 
     const result = await executeToolForBehavioralAssertion(tool, {
       command: 'true',
@@ -378,7 +387,10 @@ describe('is_background managed job behavior @plan:issue1995', () => {
     };
 
     const host = createFakeHostWithBackground(() => fakeJob);
-    const tool = new ShellTool(host, createFakeMessageBus('proceed_once'));
+    const tool = new ShellTool(
+      host,
+      createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
+    );
 
     const result = await executeToolForBehavioralAssertion(tool, {
       command: 'true',
@@ -404,7 +416,7 @@ describe('is_background managed job behavior @plan:issue1995', () => {
 
     const tool = new ShellTool(
       createFakeShellService(responses),
-      createFakeMessageBus('proceed_once'),
+      createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
     );
 
     const result = await executeToolForBehavioralAssertion(tool, {
@@ -427,7 +439,10 @@ describe('is_background managed job behavior @plan:issue1995', () => {
       pid: 1,
     };
     const host = createFakeHostWithBackground(() => fakeJob);
-    const tool = new ShellTool(host, createFakeMessageBus('proceed_once'));
+    const tool = new ShellTool(
+      host,
+      createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
+    );
 
     const invocationWith = tool.build({
       command: 'echo started',
@@ -449,7 +464,10 @@ describe('is_background managed job behavior @plan:issue1995', () => {
       pid: 1,
     };
     const host = createFakeHostWithBackground(() => fakeJob);
-    const tool = new ShellTool(host, createFakeMessageBus('proceed_once'));
+    const tool = new ShellTool(
+      host,
+      createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
+    );
 
     const invocationWith = tool.build({
       command: 'echo started',
@@ -461,6 +479,11 @@ describe('is_background managed job behavior @plan:issue1995', () => {
     expect(confirmationWith).not.toBe(false);
     if (confirmationWith === false) return; // narrows the union for the compiler
     expect(confirmationWith.type).toBe('exec');
+    if (confirmationWith.type !== 'exec') {
+      throw new Error(
+        `expected exec confirmation, got ${confirmationWith.type}`,
+      );
+    }
     expect(confirmationWith.isBackground).toBe(true);
   });
 
@@ -468,7 +491,7 @@ describe('is_background managed job behavior @plan:issue1995', () => {
     mockPlatform.mockReturnValue('win32');
     const tool = new ShellTool(
       createFakeShellService(new Map<string, ShellResult>()),
-      createFakeMessageBus('proceed_once'),
+      createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
     );
 
     // Windows now supports managed background jobs — build() must NOT throw.
@@ -488,7 +511,10 @@ describe('is_background managed job behavior @plan:issue1995', () => {
     };
 
     const host = createFakeHostWithBackground(() => fakeJob);
-    const tool = new ShellTool(host, createFakeMessageBus('proceed_once'));
+    const tool = new ShellTool(
+      host,
+      createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
+    );
 
     const result = await executeToolForBehavioralAssertion(tool, {
       command: 'sleep 60',
@@ -514,7 +540,10 @@ describe('is_background managed job behavior @plan:issue1995', () => {
       isCommandAllowed: () => true,
     };
 
-    const tool = new ShellTool(service, createFakeMessageBus('proceed_once'));
+    const tool = new ShellTool(
+      service,
+      createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
+    );
 
     const result = await executeToolForBehavioralAssertion(tool, {
       command: 'echo started',

@@ -26,6 +26,24 @@ describe('DirectWebFetchTool', () => {
       setApprovalMode: () => {},
       isInteractive: () => false,
       hasFeatureFlag: () => false,
+      getFileService: () => ({
+        shouldGitIgnoreFile: () => false,
+        shouldLlxprtIgnoreFile: () => false,
+        shouldIgnoreFile: () => false,
+        filterFiles: (paths: string[]) => paths,
+      }),
+      getFileFilteringOptions: () => ({
+        respectGitIgnore: true,
+        respectLlxprtIgnore: true,
+      }),
+      getFileExclusions: () => [],
+      getReadManyFilesExclusions: () => [],
+      getFileFilteringRespectLlxprtIgnore: () => true,
+      getLlxprtIgnoreFilePath: () => null,
+      recordFileRead: () => {},
+      getLlxprtIgnorePatterns: () => [],
+      getEphemeralSettings: () => ({}),
+      getDebugMode: () => false,
     };
     tool = new DirectWebFetchTool(config);
     vi.clearAllMocks();

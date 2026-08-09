@@ -161,6 +161,9 @@ function renderUseSubmitQuery(
     enqueueSubmission: vi.fn((sub: QueuedSubmission) =>
       hookDeps.queuedSubmissionsRef.current.push(sub),
     ),
+    enqueueSubmissionFirst: vi.fn((sub: QueuedSubmission) =>
+      hookDeps.queuedSubmissionsRef.current.unshift(sub),
+    ),
     requeueSubmission: vi.fn((sub: QueuedSubmission) =>
       hookDeps.queuedSubmissionsRef.current.unshift(sub),
     ),

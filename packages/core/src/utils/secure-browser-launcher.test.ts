@@ -176,7 +176,10 @@ describe('secure-browser-launcher', () => {
       expect(result.error).toContain('Browser launch is disabled during tests');
     });
 
-    it.each([
+    const replacementEnvironmentCases: Array<{
+      signal: string;
+      replacementEnvironment: Readonly<Record<string, string>>;
+    }> = [
       {
         signal: 'the explicit test marker',
         replacementEnvironment: {
@@ -190,7 +193,9 @@ describe('secure-browser-launcher', () => {
           NODE_ENV: 'test',
         },
       },
-    ])(
+    ];
+
+    it.each(replacementEnvironmentCases)(
       'blocks after the imported launcher sees process.env replaced with $signal',
       ({ replacementEnvironment }) => {
         const result = runBrowserGuardProbe(
