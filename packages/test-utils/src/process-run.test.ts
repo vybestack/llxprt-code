@@ -23,7 +23,7 @@ import {
 
 const tempDirs: string[] = [];
 const SPAWN_TIMEOUT_MS = 5000;
-const QUOTA_SIGNAL_TIMEOUT_MS = 2000;
+const QUOTA_SIGNAL_TIMEOUT_MS = 8000;
 
 /**
  * Stub a fresh, isolated guard state directory and disable both the

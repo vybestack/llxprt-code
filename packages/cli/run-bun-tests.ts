@@ -30,6 +30,8 @@ import {
   resolveTestConcurrency,
 } from '../../scripts/lib/bun-test-policy.js';
 
+process.env.LLXPRT_RUNNING_TESTS = 'true';
+
 const PER_FILE_TIMEOUT_MS = DEFAULT_PER_FILE_TIMEOUT_MS;
 const PER_INTEGRATION_FILE_TIMEOUT_MS = 900_000;
 /**

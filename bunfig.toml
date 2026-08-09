@@ -3,3 +3,6 @@
 # node_modules behaves identically under bun and npm during the migration.
 linker = "hoisted"
 
+[test]
+preload = ["./scripts/tests/browser-launch-guard.ts"]
+

@@ -158,7 +158,14 @@ export {
   type ResponseOutcome,
 } from './utils/generateContentResponseUtilities.js';
 export * from './utils/filesearch/fileSearch.js';
-export * from './utils/secure-browser-launcher.js';
+export {
+  isBrowserLaunchDisabledDuringTests,
+  openBrowserSecurely,
+  shouldLaunchBrowser,
+  validateProfileDirectory,
+  type BrowserKind,
+  type BrowserLaunchOptions,
+} from './utils/secure-browser-launcher.js';
 export * from './utils/browser-profile-discovery.js';
 export * from './utils/errorParsing.js';
 export * from './utils/ignorePatterns.js';

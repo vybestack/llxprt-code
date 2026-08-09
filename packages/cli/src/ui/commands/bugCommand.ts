@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { isBrowserLaunchDisabledDuringTests } from '@vybestack/llxprt-code-core';
 import open from 'open';
 import process from 'node:process';
 import {
@@ -17,6 +18,16 @@ import { formatMemoryUsage } from '../utils/formatters.js';
 import { getCliVersion } from '../../utils/version.js';
 import { terminalCapabilityManager } from '../utils/terminalCapabilityManager.js';
 import { exportHistoryForBugReport } from '../utils/historyExportUtils.js';
+
+interface BugCommandDependencies {
+  readonly openUrl: (url: string) => Promise<unknown>;
+  readonly isBrowserLaunchDisabledDuringTests: () => boolean;
+}
+
+const defaultDependencies: BugCommandDependencies = {
+  openUrl: open,
+  isBrowserLaunchDisabledDuringTests,
+};
 
 function getSandboxEnv(): string {
   if (process.env.SANDBOX && process.env.SANDBOX !== 'sandbox-exec') {
@@ -131,6 +142,7 @@ function buildBugReportUrl(
 async function openBugReport(
   context: CommandContext,
   bugReportUrl: string,
+  dependencies: BugCommandDependencies,
 ): Promise<void> {
   context.ui.addItem(
     {
@@ -140,8 +152,12 @@ async function openBugReport(
     Date.now(),
   );
 
+  if (dependencies.isBrowserLaunchDisabledDuringTests()) {
+    return;
+  }
+
   try {
-    await open(bugReportUrl);
+    await dependencies.openUrl(bugReportUrl);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     context.ui.addItem(
@@ -154,19 +170,25 @@ async function openBugReport(
   }
 }
 
-export const bugCommand: SlashCommand = {
-  name: 'bug',
-  description: 'submit a bug report',
-  kind: CommandKind.BUILT_IN,
-  action: async (context: CommandContext, args?: string): Promise<void> => {
-    const bugDescription = (args ?? '').trim();
-    const info = await buildBugInfo(context);
-    const infoWithHistory = await appendHistoryExport(context, info);
-    const bugReportUrl = buildBugReportUrl(
-      infoWithHistory,
-      bugDescription,
-      context.services.config,
-    );
-    await openBugReport(context, bugReportUrl);
-  },
-};
+export function createBugCommand(
+  dependencies: BugCommandDependencies = defaultDependencies,
+): SlashCommand {
+  return {
+    name: 'bug',
+    description: 'submit a bug report',
+    kind: CommandKind.BUILT_IN,
+    action: async (context: CommandContext, args?: string): Promise<void> => {
+      const bugDescription = (args ?? '').trim();
+      const info = await buildBugInfo(context);
+      const infoWithHistory = await appendHistoryExport(context, info);
+      const bugReportUrl = buildBugReportUrl(
+        infoWithHistory,
+        bugDescription,
+        context.services.config,
+      );
+      await openBugReport(context, bugReportUrl, dependencies);
+    },
+  };
+}
+
+export const bugCommand = createBugCommand();
