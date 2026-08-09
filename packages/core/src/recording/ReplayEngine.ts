@@ -28,6 +28,7 @@
 
 import * as fs from 'node:fs';
 import * as readline from 'node:readline';
+import { readBoundedFirstLine } from './boundedHeaderReader.js';
 import {
   type ReplayResult,
   type SessionMetadata,
@@ -855,6 +856,9 @@ export async function replaySessionThroughSequence(
  * Read only the session header (first line) from a JSONL file.
  * Useful for listing sessions without replaying the entire file.
  *
+ * Uses the canonical bounded header reader shared with session discovery and
+ * the janitor (Item 7).
+ *
  * @plan PLAN-20260211-SESSIONRECORDING.P08
  * @requirement REQ-RPL-001
  * @pseudocode replay-engine.md lines 175-198
@@ -865,37 +869,13 @@ export async function replaySessionThroughSequence(
 export async function readSessionHeader(
   filePath: string,
 ): Promise<SessionStartPayload | null> {
+  const firstLine = await readBoundedFirstLine(filePath);
+  if (firstLine === null) return null;
   try {
-    // @pseudocode line 177-178: Open stream and reader
-    const stream = fs.createReadStream(filePath, { encoding: 'utf-8' });
-    const reader = readline.createInterface({ input: stream });
-    let firstLine: string | null = null;
-
-    // @pseudocode line 181-184: Read only first line
-    for await (const line of reader) {
-      firstLine = line;
-      break;
-    }
-
-    // @pseudocode line 186-187: Clean up
-    reader.close();
-    stream.destroy();
-
-    // @pseudocode line 189: Check if file was empty
-    if (firstLine === null) return null;
-
-    // @pseudocode line 190a-190d: Strip UTF-8 BOM
-    if (firstLine.startsWith('\uFEFF')) {
-      firstLine = firstLine.slice(1);
-    }
-
-    // @pseudocode line 192-194: Parse and validate
     const parsed = JSON.parse(firstLine) as Record<string, unknown>;
     if (parsed.type !== 'session_start') return null;
-
     return parsed.payload as SessionStartPayload;
   } catch {
-    // @pseudocode line 196: Return null on any error
     return null;
   }
 }

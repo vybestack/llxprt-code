@@ -4,370 +4,98 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
-import { type Config } from '@vybestack/llxprt-code-core';
-import { debugLogger } from '@vybestack/llxprt-code-telemetry';
-import { Storage } from '@vybestack/llxprt-code-storage';
-import type { Settings, SessionRetentionSettings } from '../config/settings.js';
-import { getAllSessionFiles, type SessionFileEntry } from './sessionUtils.js';
-import { firstNonEmptyString } from './coalesce.js';
-
-// Constants
-export const DEFAULT_MIN_RETENTION = '1d' as string;
-const MIN_MAX_COUNT = 1;
-const MULTIPLIERS = {
-  h: 60 * 60 * 1000, // hours to ms
-  d: 24 * 60 * 60 * 1000, // days to ms
-  w: 7 * 24 * 60 * 60 * 1000, // weeks to ms
-  m: 30 * 24 * 60 * 60 * 1000, // months (30 days) to ms
-};
-
 /**
- * Result of session cleanup operation
- */
-export interface CleanupResult {
-  disabled: boolean;
-  scanned: number;
-  deleted: number;
-  skipped: number;
-  failed: number;
-  debugLogsDeleted?: number;
-}
-/**
- * Attempts to cleanup debug log files associated with a session ID.
- * Debug logs reside beneath the platform-standard global log directory.
- * This is a best-effort cleanup that silently handles missing files or directories.
+ * CLI entry point for session-recording cleanup.
  *
- * @param sessionId - The session ID to look for in debug log filenames
- * @returns The number of debug log files successfully deleted
+ * Delegates to the core session-recording janitor which performs a global
+ * sweep across all 64-hex project-hash directories under the global temp
+ * root.  Default-on with a 4 GiB aggregate size budget, no default age/count
+ * limits, and a 1-day minimum retention floor.
+ *
+ * User-provided `sessionRetention` objects are resolved over defaults at the
+ * consumer so a partial object cannot accidentally remove default-on size
+ * bounding (AC-2).
  */
-async function cleanupDebugLogsForSession(sessionId: string): Promise<number> {
-  try {
-    const debugDir = path.join(Storage.getGlobalLogDir(), 'debug');
 
-    // Check if debug directory exists
-    try {
-      await fs.access(debugDir);
-    } catch {
-      // Debug directory doesn't exist, nothing to clean
-      return 0;
-    }
+import { type Config } from '@vybestack/llxprt-code-core';
+import {
+  resolveRetentionConfig,
+  runSessionCleanup,
+  emptyResult,
+  type SessionCleanupResult,
+} from '@vybestack/llxprt-code-core/recording/janitor/index.js';
+import { Storage } from '@vybestack/llxprt-code-storage';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
+import type { Settings } from '../config/settings.js';
 
-    // Read all files in the debug directory
-    const files = await fs.readdir(debugDir);
-
-    // Filter for files that contain the session ID in their name
-    // Debug log format: llxprt-debug-{runId}-{timestamp}.jsonl
-    // where runId might be a session ID
-    const matchingFiles = files.filter(
-      (file) => file.includes(sessionId) && file.endsWith('.jsonl'),
-    );
-
-    if (matchingFiles.length === 0) {
-      return 0;
-    }
-
-    let deletedCount = 0;
-    for (const file of matchingFiles) {
-      try {
-        await fs.unlink(path.join(debugDir, file));
-        deletedCount++;
-        debugLogger.debug('Deleted debug log file', { file, sessionId });
-      } catch (error) {
-        // Ignore errors (file might have been deleted already, permissions, etc.)
-        debugLogger.debug('Failed to delete debug log file', { file, error });
-      }
-    }
-
-    return deletedCount;
-  } catch (error) {
-    // Silently handle any errors during debug log cleanup
-    debugLogger.debug('Error during debug log cleanup', { sessionId, error });
-    return 0;
-  }
-}
-
-async function deleteSingleSession(
-  sessionToDelete: SessionFileEntry,
-  chatsDir: string,
-  config: Config,
-  result: CleanupResult,
-): Promise<void> {
-  try {
-    const sessionPath = path.join(chatsDir, sessionToDelete.fileName);
-    await fs.unlink(sessionPath);
-
-    if (config.getDebugMode()) {
-      if (sessionToDelete.sessionInfo === null) {
-        debugLogger.debug(
-          `Deleted corrupted session file: ${sessionToDelete.fileName}`,
-        );
-      } else {
-        debugLogger.debug(
-          `Deleted expired session: ${sessionToDelete.sessionInfo.id} (${sessionToDelete.sessionInfo.lastUpdated})`,
-        );
-      }
-    }
-    result.deleted++;
-
-    const sessionInfo = sessionToDelete.sessionInfo;
-    if (sessionInfo === null) {
-      return;
-    }
-    const debugLogsDeleted = await cleanupDebugLogsForSession(sessionInfo.id);
-    if (debugLogsDeleted <= 0) {
-      return;
-    }
-    result.debugLogsDeleted = (result.debugLogsDeleted ?? 0) + debugLogsDeleted;
-    if (config.getDebugMode()) {
-      debugLogger.debug(
-        `Deleted ${debugLogsDeleted} debug log file(s) for session ${sessionInfo.id}`,
-      );
-    }
-  } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
-      // File already deleted, do nothing.
-    } else {
-      const sessionId =
-        sessionToDelete.sessionInfo === null
-          ? sessionToDelete.fileName
-          : sessionToDelete.sessionInfo.id;
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      debugLogger.error(
-        `Failed to delete session ${sessionId}: ${errorMessage}`,
-      );
-      result.failed++;
-    }
-  }
-}
+export type { SessionCleanupResult as CleanupResult };
 
 /**
- * Main entry point for session cleanup during CLI startup
+ * Main entry point for session cleanup during CLI startup.
+ *
+ * Cleanup is default-on.  The global janitor scans all project-hash
+ * directories, losslessly archives eligible raw sessions, evicts cold
+ * archives to meet the size budget, cleans stale locks, and removes
+ * genuinely empty directories — all behind a single cross-process lease.
+ *
+ * Configuration resolution is intentionally separated from external,
+ * best-effort filesystem handling (finding D): an invalid
+ * `sessionRetention` value surfaces as a thrown configuration error rather
+ * than being swallowed into a `configuredByteLimit`-0 result.  External
+ * filesystem failures remain best-effort (logged, never blocking startup)
+ * and preserve the resolved configured limit in their diagnostics.
+ *
+ * @param config - The CLI configuration (provides session ID and debug mode).
+ * @param settings - User settings (provides `sessionRetention` overrides).
+ * @param globalTempDirOverride - Optional override for the machine-global temp
+ *   root.  Production callers omit this; it defaults to
+ *   `Storage.getGlobalTempDir()`.  Tests pass a real temp directory so the
+ *   full CLI→core pipeline is exercised without affecting the real machine
+ *   global temp directory.
  */
 export async function cleanupExpiredSessions(
   config: Config,
   settings: Settings,
-): Promise<CleanupResult> {
-  const result: CleanupResult = {
-    disabled: false,
-    scanned: 0,
-    deleted: 0,
-    skipped: 0,
-    failed: 0,
-  };
+  globalTempDirOverride?: string,
+): Promise<SessionCleanupResult> {
+  // Configuration resolution happens before any external filesystem access so
+  // invalid settings fail fast and clearly (finding D).  This throw is
+  // intentionally NOT caught here — it is a configuration error.
+  const resolvedConfig = resolveRetentionConfig(settings.sessionRetention);
+
+  const globalTempDir = globalTempDirOverride ?? Storage.getGlobalTempDir();
+  const currentSessionId = config.getSessionId();
 
   try {
-    if (settings.sessionRetention?.enabled !== true) {
-      return { ...result, disabled: true };
-    }
+    const result = await runSessionCleanup({
+      globalTempDir,
+      currentSessionId,
+      config: resolvedConfig,
+    });
 
-    const retentionConfig = settings.sessionRetention;
-    const chatsDir = path.join(config.storage.getProjectTempDir(), 'chats');
-
-    const validationErrorMessage = validateRetentionConfig(
-      config,
-      retentionConfig,
-    );
-    if (validationErrorMessage) {
-      debugLogger.error(`Session cleanup disabled: ${validationErrorMessage}`);
-      return { ...result, disabled: true };
-    }
-
-    const allFiles = await getAllSessionFiles(chatsDir, config.getSessionId());
-    result.scanned = allFiles.length;
-
-    if (allFiles.length === 0) {
-      return result;
-    }
-
-    const sessionsToDelete = await identifySessionsToDelete(
-      allFiles,
-      retentionConfig,
-    );
-
-    for (const sessionToDelete of sessionsToDelete) {
-      await deleteSingleSession(sessionToDelete, chatsDir, config, result);
-    }
-
-    result.skipped = result.scanned - result.deleted - result.failed;
-
-    if (config.getDebugMode() && result.deleted > 0) {
+    if (config.getDebugMode() && !result.disabled) {
       debugLogger.debug(
-        `Session cleanup: deleted ${result.deleted}, skipped ${result.skipped}, failed ${result.failed}`,
+        `Session cleanup: scanned=${result.scanned} archived=${result.archived} ` +
+          `rawDeleted=${result.rawDeleted} archiveDeleted=${result.archiveDeleted} ` +
+          `staleLocksRemoved=${result.staleLocksRemoved} skipped=${result.skipped} ` +
+          `failed=${result.failed} bytesBefore=${result.bytesBefore} ` +
+          `bytesAfter=${result.bytesAfter} wonLease=${result.janitorWonLease}`,
       );
     }
+
+    return result;
   } catch (error) {
+    // Best-effort external filesystem failure — log and continue startup
+    // (AC-9).  The resolved configured limit is preserved so diagnostics
+    // remain coherent instead of reporting a zeroed limit (finding D).
     const errorMessage =
       error instanceof Error ? error.message : 'Unknown error';
-    debugLogger.error(`Session cleanup failed: ${errorMessage}`);
-    result.failed++;
-  }
-
-  return result;
-}
-
-/**
- * Identifies sessions that should be deleted (corrupted or expired based on retention policy)
- */
-async function identifySessionsToDelete(
-  allFiles: SessionFileEntry[],
-  retentionConfig: SessionRetentionSettings,
-): Promise<SessionFileEntry[]> {
-  const sessionsToDelete: SessionFileEntry[] = [];
-
-  // All corrupted files should be deleted
-  sessionsToDelete.push(
-    ...allFiles.filter((entry) => entry.sessionInfo === null),
-  );
-
-  // Now handle valid sessions based on retention policy
-  const validSessions = allFiles.filter((entry) => entry.sessionInfo !== null);
-  if (validSessions.length === 0) {
-    return sessionsToDelete;
-  }
-
-  const now = new Date();
-
-  // Calculate cutoff date for age-based retention
-  let cutoffDate: Date | null = null;
-  if (retentionConfig.maxAge) {
-    try {
-      const maxAgeMs = parseRetentionPeriod(retentionConfig.maxAge);
-      cutoffDate = new Date(now.getTime() - maxAgeMs);
-    } catch {
-      // This should not happen as validation should have caught it,
-      // but handle gracefully just in case
-      cutoffDate = null;
-    }
-  }
-
-  // Sort valid sessions by lastUpdated (newest first) for count-based retention
-  const sortedValidSessions = [...validSessions].sort(
-    (a, b) =>
-      new Date(b.sessionInfo!.lastUpdated).getTime() -
-      new Date(a.sessionInfo!.lastUpdated).getTime(),
-  );
-
-  // Separate deletable sessions from the active session
-  const deletableSessions = sortedValidSessions.filter(
-    (entry) => !entry.sessionInfo!.isCurrentSession,
-  );
-
-  // Calculate how many deletable sessions to keep (accounting for the active session)
-  const hasActiveSession = sortedValidSessions.some(
-    (e) => e.sessionInfo!.isCurrentSession,
-  );
-  const maxDeletableSessions =
-    retentionConfig.maxCount !== undefined &&
-    retentionConfig.maxCount > 0 &&
-    hasActiveSession
-      ? Math.max(0, retentionConfig.maxCount - 1)
-      : retentionConfig.maxCount;
-
-  for (let i = 0; i < deletableSessions.length; i++) {
-    const entry = deletableSessions[i];
-    const session = entry.sessionInfo!;
-
-    let shouldDelete = false;
-
-    // Age-based retention check
-    if (cutoffDate && new Date(session.lastUpdated) < cutoffDate) {
-      shouldDelete = true;
-    }
-
-    // Count-based retention check (keep only N most recent deletable sessions)
-    if (maxDeletableSessions !== undefined && i >= maxDeletableSessions) {
-      shouldDelete = true;
-    }
-
-    if (shouldDelete) {
-      sessionsToDelete.push(entry);
-    }
-  }
-
-  return sessionsToDelete;
-}
-
-/**
- * Parses retention period strings like "30d", "7d", "24h" into milliseconds
- * @throws {Error} If the format is invalid
- */
-function parseRetentionPeriod(period: string): number {
-  const match = period.match(/^(\d+)([dhwm])$/);
-  if (!match) {
-    throw new Error(
-      `Invalid retention period format: ${period}. Expected format: <number><unit> where unit is h, d, w, or m`,
+    debugLogger.error(
+      `Session cleanup failed (configuredByteLimit=${resolvedConfig.maxTotalSizeBytes}): ${errorMessage}`,
     );
+    return {
+      ...emptyResult(false, false, resolvedConfig.maxTotalSizeBytes),
+      failed: 1,
+    };
   }
-
-  const value = parseInt(match[1], 10);
-  const unit = match[2];
-
-  // Reject zero values as they're semantically invalid
-  if (value === 0) {
-    throw new Error(
-      `Invalid retention period: ${period}. Value must be greater than 0`,
-    );
-  }
-
-  return value * MULTIPLIERS[unit as keyof typeof MULTIPLIERS];
-}
-
-/**
- * Validates retention configuration
- */
-function validateRetentionConfig(
-  config: Config,
-  retentionConfig: SessionRetentionSettings,
-): string | null {
-  if (retentionConfig.enabled !== true) {
-    return 'Retention not enabled';
-  }
-
-  // Validate maxAge if provided
-  if (retentionConfig.maxAge) {
-    let maxAgeMs: number;
-    try {
-      maxAgeMs = parseRetentionPeriod(retentionConfig.maxAge);
-    } catch (error) {
-      return (error as Error | string).toString();
-    }
-
-    // Enforce minimum retention period
-    const minRetention = firstNonEmptyString(
-      retentionConfig.minRetention,
-      DEFAULT_MIN_RETENTION,
-    );
-    let minRetentionMs: number;
-    try {
-      minRetentionMs = parseRetentionPeriod(minRetention);
-    } catch (error) {
-      // If minRetention format is invalid, fall back to default
-      if (config.getDebugMode()) {
-        debugLogger.error(`Failed to parse minRetention: ${error}`);
-      }
-      minRetentionMs = parseRetentionPeriod(DEFAULT_MIN_RETENTION);
-    }
-
-    if (maxAgeMs < minRetentionMs) {
-      return `maxAge cannot be less than minRetention (${minRetention})`;
-    }
-  }
-
-  // Validate maxCount if provided
-  if (
-    retentionConfig.maxCount !== undefined &&
-    retentionConfig.maxCount < MIN_MAX_COUNT
-  ) {
-    return `maxCount must be at least ${MIN_MAX_COUNT}`;
-  }
-
-  // At least one retention method must be specified
-  if (!retentionConfig.maxAge && retentionConfig.maxCount === undefined) {
-    return 'Either maxAge or maxCount must be specified';
-  }
-
-  return null;
 }

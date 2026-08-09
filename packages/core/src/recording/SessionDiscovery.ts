@@ -28,6 +28,7 @@ import { createReadStream } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as readline from 'node:readline';
+import { readBoundedFirstLine } from './boundedHeaderReader.js';
 import {
   SESSION_TITLE_MAX_LENGTH,
   type ContinueResolution,
@@ -57,35 +58,19 @@ export interface SessionResolutionError {
 }
 
 /**
- * Read the first line from a file using a partial buffer read.
- * Much faster than opening a readline stream for each file.
+ * Read the first line from a file using the canonical bounded header reader.
+ *
+ * This is the single shared reader used by session discovery, resume, and the
+ * session-recording janitor.  It handles UTF-8 BOM and first-line headers of
+ * any size up to a documented maximum, classifying no-newline/malformed huge
+ * files as unreadable without whole-file buffering.
  */
-async function readFirstLineFromFile(
+export async function readFirstLineFromFile(
   filePath: string,
 ): Promise<SessionStartPayload | null> {
-  let fh: fs.FileHandle | undefined;
+  const firstLine = await readBoundedFirstLine(filePath);
+  if (firstLine === null || firstLine.trim() === '') return null;
   try {
-    fh = await fs.open(filePath, 'r');
-    const buf = Buffer.alloc(4096);
-    const { bytesRead } = await fh.read(buf, 0, 4096, 0);
-    if (bytesRead === 0) return null;
-
-    let chunk = buf.subarray(0, bytesRead).toString('utf-8');
-    if (chunk.startsWith('\uFEFF')) chunk = chunk.slice(1);
-
-    const newlineIdx = chunk.indexOf('\n');
-
-    // Fallback: if the first line exceeds the 4096-byte buffer, delegate to
-    // readSessionHeader which uses a full readline stream.
-    if (newlineIdx < 0 && bytesRead === buf.length) {
-      await fh.close();
-      fh = undefined;
-      return await readSessionHeader(filePath);
-    }
-
-    const firstLine = newlineIdx >= 0 ? chunk.slice(0, newlineIdx) : chunk;
-    if (firstLine.trim() === '') return null;
-
     const parsed = JSON.parse(firstLine) as Record<string, unknown>;
     if (parsed.type !== 'session_start') return null;
     if (
@@ -97,8 +82,6 @@ async function readFirstLineFromFile(
     return parsed.payload as SessionStartPayload;
   } catch {
     return null;
-  } finally {
-    await fh?.close();
   }
 }
 

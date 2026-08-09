@@ -27,29 +27,13 @@
  * the Phase 09 stub — that is correct TDD.
  */
 
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  vi,
-  type Mock,
-} from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as path from 'path';
 import * as os from 'os';
 import {
   SessionLockManager,
   SessionLockedError,
 } from './SessionLockManager.js';
-
-const realPromisesModule = { ...(await import('node:fs/promises')) };
-
-const actual = { ...(await import('node:fs/promises')) };
-void vi.mock('node:fs/promises', () => ({
-  ...actual,
-  writeFile: vi.fn(actual.writeFile),
-}));
 
 const fs = await import('node:fs/promises');
 
@@ -113,11 +97,6 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
   });
 
   afterEach(async () => {
-    const actualFs = realPromisesModule;
-    (fs.writeFile as Mock<typeof fs.writeFile>).mockReset();
-    (fs.writeFile as Mock<typeof fs.writeFile>).mockImplementation(
-      actualFs.writeFile,
-    );
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
@@ -379,10 +358,33 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
       await handle1.release();
       await handle2.release();
     });
+    /**
+     * OCR finding 5: a transient I/O failure (EACCES on a read-only dir)
+     * must propagate, not be swallowed as "lock busy" which could cause a
+     * dangerous stale-takeover of a live lock.
+     */
+    it('acquire propagates I/O errors instead of masking them as lock-busy', async () => {
+      const readOnlyDir = path.join(tempDir, 'readonly-chats');
+      await fs.mkdir(readOnlyDir, { recursive: true });
+      await fs.chmod(readOnlyDir, 0o555);
+      try {
+        let threw = false;
+        let error: unknown;
+        try {
+          await SessionLockManager.acquire(readOnlyDir, 'io-fail-session');
+        } catch (e) {
+          threw = true;
+          error = e;
+        }
+        expect(threw).toBe(true);
+        // Must NOT be a SessionLockedError — that would mean the I/O error
+        // was swallowed and the code fell through to stale-takeover logic.
+        expect(error).not.toBeInstanceOf(SessionLockedError);
+      } finally {
+        await fs.chmod(readOnlyDir, 0o755);
+      }
+    });
   });
-
-  // -------------------------------------------------------------------------
-  // Stale Lock Detection
   // -------------------------------------------------------------------------
 
   describe('Stale lock detection @requirement:REQ-CON-005 @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
@@ -417,15 +419,16 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
     /**
      * @plan PLAN-20260211-SESSIONRECORDING.P10
      * @requirement REQ-CON-005
-     * Test 18: Corrupt lock file treated as stale
+     * Test 18: Corrupt (unreadable) lock file is treated as busy, not stale
+     * (Item 3: unreadable/recent lock files are busy, not instantly stale).
      */
-    it('checkStale returns true for corrupt (non-JSON) lock file', async () => {
+    it('checkStale returns false for corrupt (non-JSON) recent lock file', async () => {
       const sessionId = 'test-session-018';
       const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
       await fs.writeFile(lockPath, 'this is not json garbage!!!', 'utf-8');
 
       const stale = await SessionLockManager.checkStale(lockPath);
-      expect(stale).toBe(true);
+      expect(stale).toBe(false);
     });
 
     /**
@@ -546,45 +549,36 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
     });
   });
 
-  it('acquire maps ENOENT then EEXIST race to in-use error', async () => {
-    const sessionId = 'test-session-enoent-race';
-    const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
-    const writeFileMock = fs.writeFile as Mock<typeof fs.writeFile>;
+  /**
+   * When a live lock already exists, acquire detects it and rejects with
+   * SessionLockedError (no mock theater — real filesystem).
+   */
+  it('acquire rejects with SessionLockedError when a live lock already exists', async () => {
+    const nestedDir = path.join(tempDir, 'race', 'nested', 'chats');
+    const sessionId = 'test-session-race-dir';
+    const lockPath = SessionLockManager.getLockPath(nestedDir, sessionId);
 
-    writeFileMock.mockClear();
-    writeFileMock
-      .mockRejectedValueOnce(
-        Object.assign(new Error('no such file'), { code: 'ENOENT' }),
-      )
-      .mockRejectedValueOnce(
-        Object.assign(new Error('already exists'), { code: 'EEXIST' }),
-      );
-
-    await expect(
-      SessionLockManager.acquire(chatsDir, sessionId),
-    ).rejects.toThrow('Session is in use by another process');
-
-    const lockWriteCalls = writeFileMock.mock.calls.filter(
-      ([targetPath, , options]) =>
-        isWxLockWriteCall(targetPath, options, lockPath),
+    // Pre-create the lock before acquire to simulate a concurrent winner.
+    await fs.mkdir(nestedDir, { recursive: true });
+    await fs.writeFile(
+      lockPath,
+      JSON.stringify({
+        pid: process.pid,
+        timestamp: new Date().toISOString(),
+        sessionId,
+        ownerToken: 'concurrent-winner',
+      }),
+      'utf-8',
     );
 
-    expect(lockWriteCalls).toHaveLength(2);
-  });
+    // Acquire should detect the existing live lock (PID alive, recent) and fail.
+    await expect(
+      SessionLockManager.acquire(nestedDir, sessionId),
+    ).rejects.toBeInstanceOf(SessionLockedError);
 
-  /**
-   * Helper function to check if a write call is a 'wx' flag lock write.
-   */
-  function isWxLockWriteCall(
-    targetPath: string,
-    options: unknown,
-    expectedLockPath: string,
-  ): boolean {
-    if (targetPath !== expectedLockPath) return false;
-    if (typeof options !== 'object' || options === null) return false;
-    if (!('flag' in options)) return false;
-    return (options as { flag?: string }).flag === 'wx';
-  }
+    // Clean up (force: true avoids ENOENT if acquire already removed it).
+    await fs.rm(lockPath, { force: true });
+  });
 
   // -------------------------------------------------------------------------
   // removeStaleLock
@@ -673,6 +667,52 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
       await SessionLockManager.cleanupOrphanedLocks(chatsDir);
 
       expect(await fileExists(lockPath)).toBe(true);
+    });
+
+    /**
+     * OCR finding 11: orphaned lock temp publication artifacts from crashed
+     * acquisitions must be cleaned up, but only when they match the exact
+     * generated grammar, are regular non-symlink direct children, and are
+     * older than the conservative age threshold.
+     */
+    it('cleanupOrphanedLocks removes stale lock temp artifacts matching the exact grammar', async () => {
+      const sessionId = 'stale-temp-session';
+      // Real grammar: <safeId>.lock.<uuid>.locktmp
+      const tempName = `${sessionId}.lock.550e8400-e29b-41d4-a716-446655440000.locktmp`;
+      const tempPath = path.join(chatsDir, tempName);
+      await fs.writeFile(tempPath, 'partial', 'utf-8');
+      // Back-date the mtime past the conservative threshold.
+      const old = new Date(Date.now() - 10 * 60 * 1000);
+      await fs.utimes(tempPath, old, old);
+
+      await SessionLockManager.cleanupOrphanedLocks(chatsDir);
+
+      expect(await fileExists(tempPath)).toBe(false);
+    });
+
+    it('cleanupOrphanedLocks does NOT remove a recent lock temp artifact', async () => {
+      const sessionId = 'recent-temp-session';
+      const tempName = `${sessionId}.lock.550e8400-e29b-41d4-a716-446655440000.locktmp`;
+      const tempPath = path.join(chatsDir, tempName);
+      await fs.writeFile(tempPath, 'partial', 'utf-8');
+      // Recent mtime — within the conservative threshold.
+
+      await SessionLockManager.cleanupOrphanedLocks(chatsDir);
+
+      expect(await fileExists(tempPath)).toBe(true);
+    });
+
+    it('cleanupOrphanedLocks does NOT remove unknown files ending in .locktmp', async () => {
+      // Does not match the exact grammar (no valid UUID).
+      const badName = 'random.locktmp';
+      const badPath = path.join(chatsDir, badName);
+      await fs.writeFile(badPath, 'data', 'utf-8');
+      const old = new Date(Date.now() - 10 * 60 * 1000);
+      await fs.utimes(badPath, old, old);
+
+      await SessionLockManager.cleanupOrphanedLocks(chatsDir);
+
+      expect(await fileExists(badPath)).toBe(true);
     });
   });
 
