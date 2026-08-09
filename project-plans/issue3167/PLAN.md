@@ -227,15 +227,15 @@ v25.2.1. These are primitive costs, **not** an end-to-end instrumentation budget
 
 | Fact                                       | Value                             | Script            |
 | ------------------------------------------ | --------------------------------- | ----------------- |
-| `performance.now()`                        | 25.1 ns / 26.6 ns                 | `perfprobe.mjs`   |
-| counter increment                          | 1.97 ns / 5.05 ns                 | `perfprobe.mjs`   |
-| `process.memoryUsage()`                    | 0.42 us / 0.66 us (idle heap)     | `perfprobe.mjs`   |
-| one record, 33 fields                      | 688 B                             | `recsize.mjs`     |
-| gzip -6 on 2.29 MiB                        | 7.9x in 24 ms                     | `gziptest.mjs`    |
-| concurrent `O_APPEND`, 8 writers, APFS     | 12,000/12,000 records, 0 torn     | `appendrace.mjs`  |
-| shared file + private byte counter         | 49% of records destroyed          | `rotaterace.mjs`  |
-| per-file counter, one writer per file      | 9,600/9,600, 0 over cap           | `perproc.mjs`     |
-| archive overwritten by a late record       | 2,000 of 2,001 destroyed          | `boundary2.mjs`   |
+| `performance.now()`                        | 25.1 ns / 26.6 ns                 | `perfprobe.ts`   |
+| counter increment                          | 1.97 ns / 5.05 ns                 | `perfprobe.ts`   |
+| `process.memoryUsage()`                    | 0.42 us / 0.66 us (idle heap)     | `perfprobe.ts`   |
+| one record, 33 fields                      | 688 B                             | `recsize.ts`     |
+| gzip -6 on 2.29 MiB                        | 7.9x in 24 ms                     | `gziptest.ts`    |
+| concurrent `O_APPEND`, 8 writers, APFS     | 12,000/12,000 records, 0 torn     | `appendrace.ts`  |
+| shared file + private byte counter         | 49% of records destroyed          | `rotaterace.ts`  |
+| per-file counter, one writer per file      | 9,600/9,600, 0 over cap           | `perproc.ts`     |
+| archive overwritten by a late record       | 2,000 of 2,001 destroyed          | `boundary2.ts`   |
 
 **The rev.2 "~49 us per turn" budget is withdrawn.** It summed isolated primitive costs and omitted recorder
 dispatch, argument evaluation in the disabled path, byte-length work, record allocation and `JSON.stringify`,
@@ -246,7 +246,7 @@ under streaming load, reporting p50/p95/p99 event-loop impact. No overhead claim
 Likewise the APFS append result establishes the tested filesystem only, and the final design does not depend
 on shared-file appends.
 
-### Runtime traps (verified, `perfprobe.mjs`)
+### Runtime traps (verified, `perfprobe.ts`)
 
 | API                                      | Finding                                                   | Decision                    |
 | ---------------------------------------- | --------------------------------------------------------- | --------------------------- |
