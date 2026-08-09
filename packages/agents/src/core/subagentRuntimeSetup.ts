@@ -773,21 +773,23 @@ export async function createChatObject(
     combinedDeclarations,
     config,
     personaPrompt,
+    runtimeContext.state.provider,
     logger,
   );
 
   // Per-turn assembler: reuses the EXISTING buildSystemInstruction with the
-  // provider-resolved model, preserving subagent interactionMode and persona
-  // ordering (issue #3136).
+  // request-scoped provider and model, preserving subagent interactionMode
+  // and persona ordering (issue #3136, #3176).
   const systemPromptAssembler: SystemPromptAssembler = {
-    assemble: (turnModel: string) =>
+    assemble: (request: { provider: string | undefined; model: string }) =>
       buildSystemInstruction(
         environmentContextLoader,
         runtimeContext,
-        { ...modelConfig, model: turnModel },
+        { ...modelConfig, model: request.model },
         combinedDeclarations,
         config,
         personaPrompt,
+        request.provider,
         logger,
       ),
   };
@@ -811,6 +813,7 @@ async function buildSystemInstruction(
   combinedDeclarations: ToolDeclaration[],
   config: Config,
   personaPrompt: string,
+  provider: string | undefined,
   logger: { debug: (fn: () => string) => void },
 ): Promise<string> {
   const envParts = await environmentContextLoader(runtimeContext);
@@ -838,6 +841,7 @@ async function buildSystemInstruction(
     coreMemory,
     mcpInstructions,
     model: modelConfig.model,
+    provider,
     tools: toolNames,
     includeSubagentDelegation: false,
     interactionMode: 'subagent',

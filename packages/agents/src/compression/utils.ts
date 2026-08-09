@@ -296,6 +296,8 @@ export async function runVerificationPass(
         resolvedOptions,
         invocation,
         fallbackModel: context.runtimeState.model,
+        runtimeState: context.runtimeState,
+        provider,
         source: 'runVerificationPass',
       }),
     );

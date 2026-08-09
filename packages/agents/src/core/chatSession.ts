@@ -128,7 +128,10 @@ import { resolveModelForSystemPrompt } from './systemPromptModel.js';
  * as seeded at construction time.
  */
 export interface SystemPromptAssembler {
-  assemble(model: string): Promise<string>;
+  assemble(request: {
+    provider: string | undefined;
+    model: string;
+  }): Promise<string>;
 }
 
 /**
@@ -490,6 +493,7 @@ export class ChatSession {
   private getCompressionProfileResolverContext(): CompressionProfileResolverContext {
     return {
       providerRuntime: this.runtimeContext.providerRuntime,
+      runtimeState: this.runtimeState,
       resolveExplicitCompressionProvider:
         this.resolveExplicitCompressionProvider.bind(this),
       roundRobinIndexes: this.compressionLoadBalancerRoundRobinIndexes,
@@ -563,15 +567,14 @@ export class ChatSession {
     if (!this.systemPromptAssembler) {
       return;
     }
-    // Use the SAME resolver ChatSessionFactory uses at session start
-    // (issue #3138). Introducing a second mechanism here — e.g. asking the
-    // provider directly — would recreate the two-sources-disagree defect this
-    // issue exists to remove.
     const config = this.runtimeContext.providerRuntime.config;
     const model = config
       ? resolveModelForSystemPrompt(config)
       : this.runtimeState.model;
-    const systemInstruction = await this.systemPromptAssembler.assemble(model);
+    const systemInstruction = await this.systemPromptAssembler.assemble({
+      provider: this.runtimeState.provider,
+      model,
+    });
     this.generationConfig.systemInstruction = systemInstruction;
     const tokens = await this.historyService.estimateTokensForText(
       systemInstruction,

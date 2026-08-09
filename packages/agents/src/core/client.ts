@@ -370,6 +370,7 @@ export class AgentClient implements AgentClientContract {
       this.config,
       enabledToolNames,
       envParts,
+      this.runtimeState.provider,
       model,
     );
 
@@ -808,6 +809,7 @@ export class AgentClient implements AgentClientContract {
       model,
       { ...this.generateContentConfig, ...config },
       this.lastPromptId ?? this.config.getSessionId(),
+      this.runtimeState.provider,
     );
   }
 
@@ -827,6 +829,7 @@ export class AgentClient implements AgentClientContract {
       model,
       this.lastPromptId ?? this.config.getSessionId(),
       this.generateContentConfig,
+      this.runtimeState.provider,
     );
     return output;
   }

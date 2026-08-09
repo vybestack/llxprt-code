@@ -118,7 +118,9 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     getMcpInstructions: vi.fn().mockReturnValue(undefined),
     isInteractive: vi.fn().mockReturnValue(true),
     getWorkingDir: vi.fn().mockReturnValue('/workspace'),
-    getSettingsService: vi.fn().mockReturnValue({}),
+    getSettingsService: vi.fn().mockReturnValue({
+      get: vi.fn().mockReturnValue(undefined),
+    }),
     getContentGeneratorConfig: vi.fn().mockReturnValue({}),
     getModel: vi.fn().mockReturnValue('gemini-2.5-flash'),
     getToolRegistry: vi.fn().mockReturnValue(undefined),
@@ -247,7 +249,7 @@ describe('buildSystemInstruction', () => {
       getUserMemory: vi.fn().mockReturnValue('remember this'),
     });
 
-    await buildSystemInstruction(config, ['tool_a'], [], MODEL);
+    await buildSystemInstruction(config, ['tool_a'], [], undefined, MODEL);
 
     expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
       expect.objectContaining({ userMemory: 'remember this' }),
@@ -259,7 +261,7 @@ describe('buildSystemInstruction', () => {
       getCoreMemory: vi.fn().mockReturnValue('core memory'),
     });
 
-    await buildSystemInstruction(config, ['tool_a'], [], MODEL);
+    await buildSystemInstruction(config, ['tool_a'], [], undefined, MODEL);
 
     expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
       expect.objectContaining({ coreMemory: 'core memory' }),
@@ -271,7 +273,7 @@ describe('buildSystemInstruction', () => {
       getMcpInstructions: vi.fn().mockReturnValue('use the mcp tool'),
     });
 
-    await buildSystemInstruction(config, [], [], MODEL);
+    await buildSystemInstruction(config, [], [], undefined, MODEL);
 
     expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
       expect.objectContaining({ mcpInstructions: 'use the mcp tool' }),
@@ -286,7 +288,13 @@ describe('buildSystemInstruction', () => {
       getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
     ).mockResolvedValue('base prompt');
 
-    const result = await buildSystemInstruction(config, [], envParts, MODEL);
+    const result = await buildSystemInstruction(
+      config,
+      [],
+      envParts,
+      undefined,
+      MODEL,
+    );
 
     expect(result).toBe('CWD: /workspace\n\nbase prompt');
   });
@@ -298,7 +306,7 @@ describe('buildSystemInstruction', () => {
       getJitMemoryForPath: vi.fn().mockResolvedValue('jit memory content'),
     });
 
-    await buildSystemInstruction(config, [], [], MODEL);
+    await buildSystemInstruction(config, [], [], undefined, MODEL);
 
     expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -318,7 +326,13 @@ describe('buildSystemInstruction', () => {
     ).mockResolvedValueOnce(true);
 
     const config = makeConfig();
-    await buildSystemInstruction(config, ['task', 'list_subagents'], [], MODEL);
+    await buildSystemInstruction(
+      config,
+      ['task', 'list_subagents'],
+      [],
+      undefined,
+      MODEL,
+    );
 
     expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
       expect.objectContaining({ includeSubagentDelegation: true }),
@@ -330,7 +344,7 @@ describe('buildSystemInstruction', () => {
       isInteractive: vi.fn().mockReturnValue(false),
     });
 
-    await buildSystemInstruction(config, [], [], MODEL);
+    await buildSystemInstruction(config, [], [], undefined, MODEL);
 
     expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
       expect.objectContaining({ interactionMode: 'non-interactive' }),
@@ -846,7 +860,7 @@ describe('createChatSession: model identity in system prompt (issue #3138)', () 
     ).toHaveBeenCalledWith('profile-model', 'openai');
   });
 
-  it('reflects a provider switch in the prompt model on the next chat creation', async () => {
+  it('pairs the runtime provider with the current config model', async () => {
     const config = makeConfig({
       getModel: vi.fn().mockReturnValue('claude-opus-4'),
     });
@@ -868,7 +882,10 @@ describe('createChatSession: model identity in system prompt (issue #3138)', () 
     });
 
     expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'claude-opus-4' }),
+      expect.objectContaining({
+        model: 'claude-opus-4',
+        provider: 'openai',
+      }),
     );
   });
 

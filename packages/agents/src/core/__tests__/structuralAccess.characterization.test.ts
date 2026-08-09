@@ -399,9 +399,11 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 
 function makeConfig(): Config {
   return {
-    getUserMemory: vi.fn().mockReturnValue(''),
-    getMcpInstructions: vi.fn().mockReturnValue(undefined),
-    isInteractive: vi.fn().mockReturnValue(true),
+    getUserMemory: () => '',
+    getCoreMemory: () => '',
+    getMcpInstructions: () => undefined,
+    getSettingsService: () => ({ get: () => 'test-provider' }),
+    isInteractive: () => true,
   } as unknown as Config;
 }
 

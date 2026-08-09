@@ -32,5 +32,8 @@ export type UserMemoryInput = string | UserMemoryProfileProvider;
  * three declarations with no adapter and no cross-package import.
  */
 export interface SystemPromptAssembler {
-  assemble(model: string): Promise<string>;
+  assemble(request: {
+    provider: string | undefined;
+    model: string;
+  }): Promise<string>;
 }

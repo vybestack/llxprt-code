@@ -182,6 +182,11 @@ function setupConfigMock(): ContentGeneratorConfig {
     getEphemeralSetting: vi.fn().mockReturnValue(undefined),
     isInteractive: vi.fn().mockReturnValue(true),
     getMcpInstructions: vi.fn().mockReturnValue(undefined),
+    getSettingsService: vi.fn().mockReturnValue({
+      get: vi.fn((key: string) =>
+        key === 'activeProvider' ? 'gemini' : undefined,
+      ),
+    }),
     getModelRouterService: vi.fn().mockReturnValue(undefined),
   };
   MockedConfig.mockImplementation(() => mockConfigObject as unknown as Config);

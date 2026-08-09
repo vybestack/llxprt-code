@@ -246,6 +246,7 @@ describe('buildSystemInstruction byte-for-byte compatibility with pre-change mai
       makeConfig(row),
       [],
       row.envParts,
+      undefined,
       MODEL,
     );
     const legacy = await legacyBuildSystemInstruction(
