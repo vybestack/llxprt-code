@@ -8,18 +8,19 @@
  * Shared helper that assembles the system instruction for compression LLM
  * calls (issue #3136, Step 3).
  *
- * Today the three compression call sites (OneShotStrategy.callProvider,
- * MiddleOutStrategy.callProvider, runVerificationPass) omit
- * `systemInstruction` from their `provider.generateChatCompletion` options.
- * The provider then rebuilds a core prompt via `getCoreSystemPromptAsync`.
- * Once provider-side assembly is removed (next task) these calls would send
- * NO system prompt at all.
+ * The three compression call sites (OneShotStrategy.callProvider,
+ * MiddleOutStrategy.callProvider, runVerificationPass) all obtain their
+ * `systemInstruction` from here. Providers no longer rebuild a core prompt and
+ * now throw when the instruction is absent, so without this helper these calls
+ * would fail rather than silently send a prompt-less request.
  *
- * This helper reproduces the EXACT arguments the provider path uses so the
- * compression LLM receives the same system prompt it does today. It lives in
- * `packages/agents` — NOT `packages/core` — so a future `no-restricted-imports`
- * guard on `getCoreSystemPromptAsync` in providers does not let providers
- * reach it indirectly.
+ * It lives in `packages/agents` — NOT `packages/core` — so providers cannot
+ * reach it and thereby sidestep the `no-restricted-imports` guard on
+ * `getCoreSystemPromptAsync` (`eslint.config.js`), which only bans the direct
+ * import. The placement is intended to prevent the indirect route: the manifests
+ * declare `packages/agents` depending on `packages/providers`, so the reverse
+ * import would invert that direction. Note this is a convention, not an enforced
+ * invariant — no package-cycle check or build rule currently verifies it.
  */
 
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -31,10 +32,17 @@ import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/run
 /**
  * Build the system instruction for a compression request.
  *
- * Replicates the provider's `getCoreSystemPromptAsync` arguments exactly:
- * no `coreMemory` (matches current provider behavior), no tools
+ * Passes no `userMemory` and no `coreMemory`, no tools
  * (`includeSubagentDelegation` is therefore `false`), and `interactionMode`
  * derived from `config.isInteractive()`.
+ *
+ * NOTE: omitting `coreMemory` does NOT omit core memory. When `coreMemory` is
+ * `undefined`, `getCoreSystemPromptAsync` loads `.LLXPRT_SYSTEM` from disk
+ * (`resolveEffectiveMemories` in `packages/core/src/core/prompts.ts`) and
+ * `mcpInstructions` is merged into the same channel, so the compression LLM
+ * does receive core memory and MCP instructions. Only user memory
+ * (`LLXPRT.md`) is actually excluded. Suppressing core memory here would be a
+ * behaviour change; see issue #3162 finding D3.
  *
  * @param config - The Config to read MCP instructions and interaction mode from
  * @param model  - The resolved model (same as `resolved.model` on the wire)

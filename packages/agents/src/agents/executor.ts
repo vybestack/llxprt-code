@@ -904,9 +904,27 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     // Issue #3136: the agent layer owns system-prompt assembly. Providers
     // transport options.systemInstruction verbatim and never rebuild a core
     // prompt. Assemble the complete prompt here: core prompt first, then
-    // persona, blank-line separated. coreMemory is passed explicitly to avoid
-    // the per-call two-file disk read in getCoreSystemPromptAsync when it is
-    // undefined.
+    // persona, blank-line separated. Passing coreMemory skips the two-file
+    // .LLXPRT_SYSTEM disk read that getCoreSystemPromptAsync performs when it is
+    // undefined — but only when JIT context is enabled, since
+    // getCoreMemory() returns undefined otherwise and the read happens anyway.
+    //
+    // NOTE: this path is unreachable from this repository's own production call
+    // graph. AgentExecutor is constructed only by SubagentInvocation
+    // (agents/invocation.ts), and SubagentInvocation itself is constructed
+    // nowhere outside its own test. The live subagent path is
+    // subagentRuntimeSetup.ts, and this copy's section order differs from it.
+    // See issue #3162 finding D6.
+    //
+    // "Unreachable" here means in-repo only: both classes ARE re-exported from
+    // internals.ts and the './internals.js' subpath is published, so an external
+    // consumer can still construct them. Removing them is therefore an
+    // API-surface change guarded by scripts/check-agents-api-surface.ts, not a
+    // private cleanup. Removal is tracked by issue #3152.
+    //
+    // Not to be confused with the unrelated AgentExecutor interface from
+    // '@a2a-js/sdk/server' that packages/a2a-server implements; that is a
+    // different type and is live.
     const corePrompt = await getCoreSystemPromptAsync({
       userMemory: this.runtimeContext.getUserMemory(),
       coreMemory: this.runtimeContext.getCoreMemory(),
