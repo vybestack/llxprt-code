@@ -1482,6 +1482,12 @@ jobs:
   codeql:
     name: 'CodeQL'
     runs-on: 'ubuntu-latest'
+    # Issue #3187: bound CodeQL's pull-request runner time so candidate runs can
+    # satisfy the umbrella's under-ten-minute verdict target (#2702). Measured
+    # full push scans routinely take 70–79 minutes, so all non-PR events retain
+    # the 360-minute allowance. A timeout remains a non-success conclusion;
+    # candidate CI measures the end-to-end verdict.
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 9 || 360 }}
     needs:
       - 'skip_check'
     if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
@@ -1492,6 +1498,8 @@ jobs:
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: 'Initialize CodeQL'
         uses: 'github/codeql-action/init@bce182f857edf1feab116e9795a3393d21977282' # ratchet:github/codeql-action/init@v4
