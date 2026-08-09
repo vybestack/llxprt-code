@@ -21,6 +21,7 @@ import {
   writeFileWithMtime,
 } from './test-helpers.js';
 import { ASTEditTool } from '../../ast-edit.js';
+import { ToolErrorType } from '../../../types/tool-error.js';
 
 describe('ast_edit force flag: refuses a newly-introduced AST syntax error (REQ-3035-2)', () => {
   const ctx = useTempDir();
@@ -39,7 +40,7 @@ describe('ast_edit force flag: refuses a newly-introduced AST syntax error (REQ-
 
     // Typed failure, no success-leading output, file untouched.
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('ast_syntax_error');
+    expect(result.error?.type).toBe(ToolErrorType.AST_SYNTAX_ERROR);
     const output = String(result.llmContent);
     expect(output).not.toContain('Successfully applied edit');
     expect(output).not.toContain('Successfully created file');
@@ -57,17 +58,10 @@ describe('ast_edit force flag: refuses a newly-introduced AST syntax error (REQ-
     });
 
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('ast_syntax_error');
-
-    // Assert the stable errno rather than the message text: `code` is Node's
-    // documented contract, the wording of the message is not.
-    let readError: NodeJS.ErrnoException | undefined;
-    try {
-      readFileSync(filePath, 'utf-8');
-    } catch (error) {
-      readError = error as NodeJS.ErrnoException;
-    }
-    expect(readError).toMatchObject({ code: 'ENOENT' });
+    expect(result.error?.type).toBe(ToolErrorType.AST_SYNTAX_ERROR);
+    expect(() => readFileSync(filePath, 'utf-8')).toThrow(
+      expect.objectContaining({ code: 'ENOENT' }),
+    );
   });
 });
 
@@ -108,7 +102,7 @@ describe('ast_edit force flag: does NOT override missing old_string', () => {
     });
 
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('edit_no_occurrence_found');
+    expect(result.error?.type).toBe(ToolErrorType.EDIT_NO_OCCURRENCE_FOUND);
     expect(String(result.llmContent)).toContain('0 occurrences');
     expect(readFileSync(filePath, 'utf-8')).toBe(originalContent);
   });
@@ -128,7 +122,7 @@ describe('ast_edit force flag: does NOT override file-not-found', () => {
     });
 
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('file_not_found');
+    expect(result.error?.type).toBe(ToolErrorType.FILE_NOT_FOUND);
     expect(() => readFileSync(filePath, 'utf-8')).toThrow(
       expect.objectContaining({ code: 'ENOENT' }),
     );
@@ -152,7 +146,7 @@ describe('ast_edit force flag: does NOT override stale last_modified', () => {
     });
 
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('file_modified_conflict');
+    expect(result.error?.type).toBe(ToolErrorType.FILE_MODIFIED_CONFLICT);
     expect(readFileSync(filePath, 'utf-8')).toBe('const x = 1;\n');
   });
 });

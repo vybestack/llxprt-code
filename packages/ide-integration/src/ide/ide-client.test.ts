@@ -35,11 +35,12 @@ const realDetectIdeModule = { ...(await import('./detect-ide.js')) };
 const realNodeOsModule = { ...(await import('node:os')) };
 
 const actual = { ...(await import('node:fs')) };
+const readdirMock = vi.fn();
 void vi.mock('node:fs', () => ({
   ...(actual as object),
   promises: {
     readFile: vi.fn(),
-    readdir: vi.fn(),
+    readdir: readdirMock,
   },
   realpathSync: (p: string) => p,
   existsSync: () => false,
@@ -212,11 +213,7 @@ describe('IdeClient', () => {
 
     it('should discover port file using readdir in new location', async () => {
       const portFileContent = { port: '7070', authToken: 'test-token' };
-      (
-        fs.promises.readdir as Mock<typeof fs.promises.readdir> as Mock<
-          (path: fs.PathLike) => Promise<string[]>
-        >
-      ).mockResolvedValue(['llxprt-ide-server-12345-7070.json']);
+      readdirMock.mockResolvedValue(['llxprt-ide-server-12345-7070.json']);
       (
         fs.promises.readFile as Mock<typeof fs.promises.readFile>
       ).mockResolvedValue(JSON.stringify(portFileContent));
@@ -242,11 +239,7 @@ describe('IdeClient', () => {
     });
 
     it('should handle empty directory when discovering port files', async () => {
-      (
-        fs.promises.readdir as Mock<typeof fs.promises.readdir> as Mock<
-          (path: fs.PathLike) => Promise<string[]>
-        >
-      ).mockResolvedValue([]);
+      readdirMock.mockResolvedValue([]);
       (
         fs.promises.readFile as Mock<typeof fs.promises.readFile>
       ).mockRejectedValue(new Error('File not found'));
@@ -264,11 +257,7 @@ describe('IdeClient', () => {
     });
 
     it('should fall back to old location when readdir fails', async () => {
-      (
-        fs.promises.readdir as Mock<typeof fs.promises.readdir> as Mock<
-          (path: fs.PathLike) => Promise<string[]>
-        >
-      ).mockRejectedValue(new Error('Directory not found'));
+      readdirMock.mockRejectedValue(new Error('Directory not found'));
 
       const oldLocationConfig = { port: '6060' };
       (
@@ -294,11 +283,7 @@ describe('IdeClient', () => {
     });
 
     it('should ignore non-matching files in port directory', async () => {
-      (
-        fs.promises.readdir as Mock<typeof fs.promises.readdir> as Mock<
-          (path: fs.PathLike) => Promise<string[]>
-        >
-      ).mockResolvedValue([
+      readdirMock.mockResolvedValue([
         'other-file.json',
         'llxprt-ide-server-99999-8080.json', // Wrong PID
         'llxprt-ide-server-12345-9090.txt', // Wrong extension
@@ -327,11 +312,7 @@ describe('IdeClient', () => {
       (
         fs.promises.readFile as Mock<typeof fs.promises.readFile>
       ).mockResolvedValue(JSON.stringify(config));
-      (
-        fs.promises.readdir as Mock<typeof fs.promises.readdir> as Mock<
-          (path: fs.PathLike) => Promise<string[]>
-        >
-      ).mockResolvedValue([]);
+      readdirMock.mockResolvedValue([]);
 
       IdeClient.resetInstance();
       const ideClient = await IdeClient.getInstance();
@@ -356,11 +337,7 @@ describe('IdeClient', () => {
       (
         fs.promises.readFile as Mock<typeof fs.promises.readFile>
       ).mockRejectedValue(new Error('File not found'));
-      (
-        fs.promises.readdir as Mock<typeof fs.promises.readdir> as Mock<
-          (path: fs.PathLike) => Promise<string[]>
-        >
-      ).mockResolvedValue([]);
+      readdirMock.mockResolvedValue([]);
       process.env['LLXPRT_CODE_IDE_SERVER_PORT'] = '9090';
       process.env['LLXPRT_CODE_IDE_AUTH_TOKEN'] = 'env-auth-token';
 
@@ -408,11 +385,7 @@ describe('IdeClient', () => {
         authToken: 'token-xyz',
         ideInfo: { name: 'vscode', displayName: 'VS Code' },
       };
-      (
-        fs.promises.readdir as Mock<typeof fs.promises.readdir> as Mock<
-          (path: fs.PathLike) => Promise<string[]>
-        >
-      ).mockResolvedValue(['llxprt-ide-server-29396-64365.json']);
+      readdirMock.mockResolvedValue(['llxprt-ide-server-29396-64365.json']);
       (
         fs.promises.readFile as Mock<typeof fs.promises.readFile>
       ).mockResolvedValue(JSON.stringify(liveFile));

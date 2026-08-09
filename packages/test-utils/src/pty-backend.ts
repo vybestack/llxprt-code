@@ -21,7 +21,10 @@
  * `core`'s full `IPty` contract.
  */
 
-const utf8Decoder = (): TextDecoder => new TextDecoder('utf-8');
+// Return type expressed via the constructor's instance type so this helper
+// compiles in workspaces whose `lib` omits the DOM `TextDecoder` type (#3161).
+const utf8Decoder = (): InstanceType<typeof TextDecoder> =>
+  new TextDecoder('utf-8');
 
 /** Exit notification shape, matching node-pty's `onExit` payload. */
 export interface TestPtyExit {

@@ -7,9 +7,9 @@ import * as fs from 'node:fs';
 import {
   createLspClient,
   LspRequestTimeoutError,
-} from '../src/service/lsp-client';
-import type { LspServerConfig } from '../src/types';
-import { runCleanupTaskGroups } from './cleanup';
+} from '../src/service/lsp-client.js';
+import type { LspServerConfig } from '../src/types.js';
+import { runCleanupTaskGroups } from './cleanup.js';
 
 const WORKSPACE_ROOT = path.resolve('/workspace');
 const WORKSPACE_URI = pathToFileURL(WORKSPACE_ROOT).toString();

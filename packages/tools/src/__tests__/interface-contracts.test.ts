@@ -44,6 +44,10 @@ import type {
   IPromptRegistryService,
   PublishSubscribeCapable,
   PolicyUpdateOptions,
+  AsyncWorkInfo,
+  DiffUpdateResult,
+  SkillInfo,
+  McpFunctionCall,
 } from '../interfaces/index.js';
 
 /**
@@ -76,6 +80,11 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
         respectLlxprtIgnore: true,
       }),
       getFileExclusions: () => [],
+      getReadManyFilesExclusions: () => ['**/fixtures/**'],
+      getFileFilteringRespectLlxprtIgnore: () => true,
+      getLlxprtIgnoreFilePath: () => '/tmp/workspace/.llxprtignore',
+      recordFileRead: () => {},
+      getLlxprtIgnorePatterns: () => ['*.secret'],
       getEphemeralSettings: () => ({}),
       getDebugMode: () => false,
       ...overrides,
@@ -89,6 +98,7 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
       assertImplements<IToolHost>(host);
       expect(host.getTargetDir()).toBe('/tmp/workspace');
       expect(typeof host.getTargetDir()).toBe('string');
+      expect(host.getReadManyFilesExclusions()).toEqual(['**/fixtures/**']);
     });
 
     it('requires getWorkspaceRoots returning string array', () => {
@@ -115,30 +125,34 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
   });
 
   describe('IToolRegistryHost contract', () => {
-    it('requires getCoreTools, getExcludeTools, getDiscoveryCommand, isToolEnabled', () => {
-      const registryHost: IToolRegistryHost = {
+    it('supports current optional tool discovery and enablement methods', () => {
+      const registryHost = {
         getCoreTools: () => ['shell', 'read-file'],
         getExcludeTools: () => ['dangerous-tool'],
-        getDiscoveryCommand: () => 'llm-tools discover',
+        getToolDiscoveryCommand: () => 'llm-tools discover',
+        getToolCallCommand: () => 'llm-tools call',
         isToolEnabled: (name: string) => name !== 'dangerous-tool',
-      };
+      } satisfies IToolRegistryHost;
       assertImplements<IToolRegistryHost>(registryHost);
 
       expect(registryHost.getCoreTools()).toEqual(['shell', 'read-file']);
       expect(registryHost.getExcludeTools()).toEqual(['dangerous-tool']);
-      expect(registryHost.getDiscoveryCommand()).toBe('llm-tools discover');
+      expect(registryHost.getToolDiscoveryCommand()).toBe('llm-tools discover');
+      expect(registryHost.getToolCallCommand()).toBe('llm-tools call');
       expect(registryHost.isToolEnabled('shell')).toBe(true);
       expect(registryHost.isToolEnabled('dangerous-tool')).toBe(false);
     });
 
-    it('allows getDiscoveryCommand to return undefined', () => {
-      const registryHost: IToolRegistryHost = {
+    it('allows optional discovery methods to return undefined', () => {
+      const registryHost = {
         getCoreTools: () => [],
         getExcludeTools: () => [],
-        getDiscoveryCommand: () => undefined,
+        getToolDiscoveryCommand: () => undefined,
+        getToolCallCommand: () => undefined,
         isToolEnabled: (_name: string) => true,
-      };
-      expect(registryHost.getDiscoveryCommand()).toBeUndefined();
+      } satisfies IToolRegistryHost;
+      expect(registryHost.getToolDiscoveryCommand()).toBeUndefined();
+      expect(registryHost.getToolCallCommand()).toBeUndefined();
     });
   });
 
@@ -291,14 +305,46 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
   });
 
   describe('IAsyncTaskService contract', () => {
-    it('requires checkAsyncTask and getTaskStatus', async () => {
+    it('requires status, lookup, output, and cancellation operations', async () => {
+      const workItems: AsyncWorkInfo[] = [
+        {
+          kind: 'subagent',
+          id: 'task-1',
+          subagentName: 'typescript-expert',
+          goalPrompt: 'Fix the typecheck diagnostics',
+          status: 'completed',
+          output: 'Typecheck passed',
+        },
+        {
+          kind: 'shell',
+          id: 'task-2',
+          command: 'npm run typecheck',
+          cwd: '/tmp/workspace',
+          status: 'running',
+          pid: 3141,
+        },
+      ];
       const service: IAsyncTaskService = {
         checkAsyncTask: async (id: string) =>
           id === 'task-1' ? 'completed' : 'running',
-        getTaskStatus: () => [
-          { id: 'task-1', status: 'completed' },
-          { id: 'task-2', status: 'running' },
-        ],
+        getTaskStatus: () => workItems,
+        getTask: (id: string) => workItems.find((task) => task.id === id),
+        getTaskByPrefix: (prefix: string) => {
+          const candidates = workItems.filter((task) =>
+            task.id.startsWith(prefix),
+          );
+          const [task] = candidates;
+          if (candidates.length === 1) {
+            return { task };
+          }
+          return { candidates };
+        },
+        getOutputTail: (id: string) => ({
+          id,
+          output: id === 'task-2' ? 'Checking types...' : '',
+          truncated: false,
+        }),
+        cancel: async (id: string) => id === 'task-2',
       };
       assertImplements<IAsyncTaskService>(service);
 
@@ -306,15 +352,28 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
       expect(await service.checkAsyncTask('task-2')).toBe('running');
       const tasks = service.getTaskStatus();
       expect(tasks).toHaveLength(2);
+      expect(tasks).toContainEqual(
+        expect.objectContaining({
+          kind: 'shell',
+          command: 'npm run typecheck',
+        }),
+      );
+      expect(service.getTask('task-1')).toEqual(
+        expect.objectContaining({ kind: 'subagent' }),
+      );
+      expect(service.getTaskByPrefix('task-2').task?.id).toBe('task-2');
+      expect(service.getOutputTail('task-2').output).toBe('Checking types...');
+      expect(await service.cancel('task-2')).toBe(true);
     });
   });
 
   describe('IIdeService contract', () => {
     it('requires applyDiff, getConnectionStatus, openDiff', async () => {
       const service: IIdeService = {
-        applyDiff: async (params) => ({
-          success: params.diff.length > 0,
-        }),
+        applyDiff: async (params): Promise<DiffUpdateResult> =>
+          params.diff.length > 0
+            ? { status: 'accepted', content: params.diff }
+            : { status: 'rejected', content: undefined },
         getConnectionStatus: () => 'connected',
         openDiff: async () => {},
       };
@@ -324,14 +383,21 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
         filePath: '/tmp/test.ts',
         diff: 'some diff content',
       });
-      expect(result.success).toBe(true);
+      expect(result.status).toBe('accepted');
+      expect(result.content).toBe('some diff content');
 
       expect(service.getConnectionStatus()).toBe('connected');
+
+      const rejected = await service.applyDiff({
+        filePath: '/tmp/test.ts',
+        diff: '',
+      });
+      expect(rejected).toEqual({ status: 'rejected', content: undefined });
     });
   });
 
   describe('ILspService contract', () => {
-    it('requires getDiagnostics and waitForDiagnostics', async () => {
+    it('requires diagnostics operations and LSP configuration', async () => {
       const service: ILspService = {
         getDiagnostics: (filePath: string) =>
           filePath.endsWith('.ts')
@@ -339,6 +405,10 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
             : [],
         waitForDiagnostics: async (filePath: string, _timeout: number) =>
           service.getDiagnostics(filePath),
+        getLspConfig: () => ({
+          includeSeverities: ['error', 'warning'],
+          maxDiagnosticsPerFile: 25,
+        }),
       };
       assertImplements<ILspService>(service);
 
@@ -348,6 +418,10 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
 
       const waited = await service.waitForDiagnostics('/tmp/test.ts', 5000);
       expect(waited).toHaveLength(1);
+      expect(service.getLspConfig()).toEqual({
+        includeSeverities: ['error', 'warning'],
+        maxDiagnosticsPerFile: 25,
+      });
     });
   });
 
@@ -375,7 +449,9 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
     it('requires getTodoStore, getReminderService, getContextTracker, getDefaultAgentId', () => {
       const service: ITodoService = {
         getTodoStore: () => ({
-          getTodos: () => [{ id: '1', content: 'Task 1' }],
+          getTodos: () => [
+            { id: '1', content: 'Task 1', status: 'in_progress' },
+          ],
           setTodos: () => {},
         }),
         getReminderService: () => ({
@@ -390,7 +466,9 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
       assertImplements<ITodoService>(service);
 
       const store = service.getTodoStore();
-      expect(store.getTodos!()).toHaveLength(1);
+      const todos = store.getTodos?.();
+      expect(todos).toHaveLength(1);
+      expect(todos?.[0]?.status).toBe('in_progress');
       expect(service.getDefaultAgentId()).toBe('agent-001');
     });
   });
@@ -436,15 +514,28 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
   });
 
   describe('ISkillService contract', () => {
-    it('requires activateSkill and getSkillManager', async () => {
+    it('requires activation, discovery, lookup, and resource operations', async () => {
+      const skills: SkillInfo[] = [
+        {
+          name: 'pr-creator',
+          description: 'Creates pull requests',
+          location: '/skills/pr-creator',
+        },
+      ];
       const service: ISkillService = {
-        activateSkill: async (name: string) => ({
-          success: name === 'pr-creator',
-          instructions: name === 'pr-creator' ? 'PR creation skill' : undefined,
-        }),
+        activateSkill: async (name: string) =>
+          name === 'pr-creator'
+            ? { success: true, instructions: 'PR creation skill' }
+            : { success: false, availableSkills: ['pr-creator'] },
         getSkillManager: () => ({
-          getSkills: () => [{ name: 'pr-creator' }],
+          getSkills: () => skills,
+          getSkill: (name: string) =>
+            skills.find((skill) => skill.name === name) ?? null,
         }),
+        listSkills: () => skills,
+        getSkill: (name: string) =>
+          skills.find((skill) => skill.name === name) ?? null,
+        getFolderStructure: async (name: string) => `${name}/SKILL.md`,
       };
       assertImplements<ISkillService>(service);
 
@@ -453,40 +544,45 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
       expect(result.instructions).toBe('PR creation skill');
 
       const mgr = service.getSkillManager();
-      expect(mgr.getSkills!()).toHaveLength(1);
+      expect(mgr.getSkills?.()).toHaveLength(1);
+      expect(service.listSkills()).toEqual(skills);
+      expect(service.getSkill('pr-creator')?.description).toBe(
+        'Creates pull requests',
+      );
+      expect(service.getSkill('missing')).toBeNull();
+      expect(await service.getFolderStructure('pr-creator')).toBe(
+        'pr-creator/SKILL.md',
+      );
     });
   });
 
   describe('IMcpToolService contract', () => {
-    it('requires callTool, discoverTools, getTool', async () => {
+    it('requires one-argument callTool and permits trusted-folder queries', async () => {
       const service: IMcpToolService = {
-        callTool: async (_server, _tool, _params) => [
-          { text: 'result', type: 'text' },
-        ],
-        discoverTools: async () => [
-          { serverName: 'test-server', toolName: 'search' },
-        ],
-        getTool: (_server: string, tool: string) =>
-          tool === 'search'
-            ? {
-                name: 'search',
-                serverName: 'test-server',
-                description: 'Search tool',
-              }
-            : undefined,
+        callTool: async (functionCalls) =>
+          functionCalls.map((functionCall) => ({
+            text: functionCall.name ?? 'unnamed',
+            functionResponse: {
+              name: functionCall.name,
+              response: { content: functionCall.args ?? {} },
+            },
+          })),
+        isTrustedFolder: () => true,
       };
       assertImplements<IMcpToolService>(service);
 
-      const parts = await service.callTool('server', 'search', {});
+      const functionCalls: McpFunctionCall[] = [
+        { name: 'search', args: { query: 'interface contracts' } },
+      ];
+      const parts = await service.callTool(functionCalls);
       expect(parts).toHaveLength(1);
-      expect(parts[0].text).toBe('result');
-
-      const tools = await service.discoverTools();
-      expect(tools).toHaveLength(1);
-
-      const tool = service.getTool('test-server', 'search');
-      expect(tool?.name).toBe('search');
-      expect(service.getTool('server', 'nonexistent')).toBeUndefined();
+      expect(parts[0]?.text).toBe('search');
+      expect(parts[0]?.functionResponse?.name).toBe('search');
+      expect(parts[0]?.functionResponse?.response?.content).toEqual({
+        query: 'interface contracts',
+      });
+      expect(service.isTrustedFolder?.()).toBe(true);
+      expect(await service.callTool([])).toEqual([]);
     });
   });
 

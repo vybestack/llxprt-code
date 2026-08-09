@@ -32,16 +32,21 @@ import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-util
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ResponsesExecutorDeps } from './openAIResponsesExecutor.js';
 import type { NormalizedGenerateChatOptions } from './../BaseProvider.js';
+import type {
+  OAuthManager,
+  CodexOAuthToken,
+} from '@vybestack/llxprt-code-auth';
 
 export const CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
 export const TEST_RUNTIME_ID = 'codex-stateful-remediation-test';
 
-export function buildCodexOAuthManager(): object {
+export function buildCodexOAuthManager(): OAuthManager {
   return {
-    getOAuthToken: async () => ({
+    getToken: async () => 'codex-token',
+    isAuthenticated: async () => true,
+    getOAuthToken: async (): Promise<CodexOAuthToken> => ({
       access_token: 'codex-token',
       token_type: 'Bearer',
-      expires_in: 3600,
       expiry: Math.floor(Date.now() / 1000) + 3600,
       refresh_token: 'test-refresh',
       scope: 'openid',

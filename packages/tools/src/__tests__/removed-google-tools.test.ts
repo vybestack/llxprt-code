@@ -22,9 +22,12 @@
  *    GoogleWebFetchToolParams type and GoogleWebSearchToolInvocation class.
  */
 
+import { createRequire } from 'node:module';
 import { describe, it, expect } from 'bun:test';
 import * as ToolsNamespace from '../index.js';
 import * as TypesNamespace from '../types/tool-names.js';
+
+const localRequire = createRequire(import.meta.url);
 
 describe('Removed Google client tools', () => {
   it('does not export GoogleWebSearchTool', () => {
@@ -52,22 +55,22 @@ describe('Removed Google client tools', () => {
   // for the removed type-only export (GoogleWebFetchToolParams) and the
   // internal invocation class (GoogleWebSearchToolInvocation): neither
   // existed as a runtime property, so the modules' absence is the real check.
-  it('does not ship the google-web-search module', async () => {
-    await expect(import('../tools/google-web-search.js')).rejects.toThrow(
+  it('does not ship the google-web-search module', () => {
+    expect(() => localRequire.resolve('../tools/google-web-search.js')).toThrow(
       /Cannot find module|Failed to (?:resolve|load)/i,
     );
   });
 
-  it('does not ship the google-web-fetch module', async () => {
-    await expect(import('../tools/google-web-fetch.js')).rejects.toThrow(
+  it('does not ship the google-web-fetch module', () => {
+    expect(() => localRequire.resolve('../tools/google-web-fetch.js')).toThrow(
       /Cannot find module|Failed to (?:resolve|load)/i,
     );
   });
 
-  it('does not ship the google-web-search-invocation module', async () => {
-    await expect(
-      import('../tools/google-web-search-invocation.js'),
-    ).rejects.toThrow(/Cannot find module|Failed to (?:resolve|load)/i);
+  it('does not ship the google-web-search-invocation module', () => {
+    expect(() =>
+      localRequire.resolve('../tools/google-web-search-invocation.js'),
+    ).toThrow(/Cannot find module|Failed to (?:resolve|load)/i);
   });
 });
 

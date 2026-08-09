@@ -10,7 +10,7 @@ import { once } from 'node:events';
 import {
   forceKillProcess,
   observeProcessClose,
-} from '../src/service/process-termination';
+} from '../src/service/process-termination.js';
 
 function isRunning(proc: ChildProcessWithoutNullStreams): boolean {
   return proc.exitCode === null && proc.signalCode === null;

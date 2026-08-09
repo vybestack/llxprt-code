@@ -53,7 +53,7 @@ describe('StandardFileSystemService', () => {
 
   describe('writeTextFile', () => {
     it('should write file content using fs', async () => {
-      mockWriteFile.mockResolvedValue();
+      mockWriteFile.mockResolvedValue(undefined);
 
       await fileSystem.writeTextFile('/test/file.txt', 'Hello, World!');
 

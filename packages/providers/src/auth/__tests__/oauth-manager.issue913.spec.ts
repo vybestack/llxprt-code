@@ -368,6 +368,11 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
      */
     it.todo(
       'should only prompt for unauthenticated buckets in multi-bucket profile (requires profile-level integration)',
+      () => {
+        throw new Error(
+          'multi-bucket eager-auth flow is not yet implemented (issue #913)',
+        );
+      },
     );
   });
 });

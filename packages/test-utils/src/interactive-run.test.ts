@@ -339,11 +339,13 @@ describe('InteractiveRun quota guard integration', () => {
       // The child prints a quota signal then hangs forever (never exits), so the
       // ONLY way expectExit can surface the quota wall is by scanning output on
       // the timeout path — the exit event never fires.
+      const quotaSignal = 'HTTP 429 Too Many Requests';
       const run = await spawnInteractive(
         dir,
-        keepAliveScript('HTTP 429 Too Many Requests'),
+        keepAliveScript(quotaSignal),
         true,
       );
+      await run.expectText(quotaSignal, 5000);
 
       const error = await captureRejection(run.expectExit(1000));
 

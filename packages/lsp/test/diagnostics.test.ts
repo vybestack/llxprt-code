@@ -13,7 +13,7 @@ import {
   type Diagnostic,
   type LspConfig,
   type RawLspDiagnostic,
-} from '../src/service/diagnostics';
+} from '../src/service/diagnostics.js';
 
 const DEFAULT_CONFIG: LspConfig = {
   severities: ['error'],

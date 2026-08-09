@@ -27,7 +27,10 @@ import type {
 } from './tools.js';
 import { DeleteLineRangeTool } from './delete_line_range.js';
 import { InsertAtLineTool } from './insert_at_line.js';
-import { ReadLineRangeTool } from './read_line_range.js';
+import {
+  ReadLineRangeTool,
+  type ReadLineRangeToolParams,
+} from './read_line_range.js';
 
 /**
  * Registers a per-describe temp dir lifecycle and returns a lazy accessor.
@@ -90,14 +93,6 @@ interface InsertParams {
   readonly content: string;
 }
 
-interface ReadParams {
-  readonly file_path: string;
-  readonly start_line: number;
-  readonly end_line: number;
-  readonly showLineNumbers?: boolean;
-  readonly showGitChanges?: boolean;
-}
-
 async function runDelete(
   targetDir: string,
   params: DeleteParams,
@@ -118,7 +113,7 @@ async function runInsert(
 
 async function runRead(
   targetDir: string,
-  params: ReadParams,
+  params: ReadLineRangeToolParams,
 ): Promise<ToolResult> {
   return new ReadLineRangeTool(createHost(targetDir))
     .build(params)
@@ -463,7 +458,7 @@ describe('AB4: read_line_range plain status vs genuine line shortening', () => {
     );
 
     const result = await runRead(tempDir(), {
-      file_path: filePath,
+      absolute_path: filePath,
       start_line: 1,
       end_line: 5,
     });
@@ -489,7 +484,7 @@ describe('AB4: read_line_range plain status vs genuine line shortening', () => {
     );
 
     const result = await runRead(tempDir(), {
-      file_path: filePath,
+      absolute_path: filePath,
       start_line: 10,
       end_line: 30,
     });
@@ -511,7 +506,7 @@ describe('AB4: read_line_range plain status vs genuine line shortening', () => {
     writeFileSync(filePath, `${longLine}\nshort\nl3\nl4\n`, 'utf-8');
 
     const result = await runRead(tempDir(), {
-      file_path: filePath,
+      absolute_path: filePath,
       start_line: 1,
       end_line: 1,
     });
@@ -530,7 +525,7 @@ describe('AB4: read_line_range plain status vs genuine line shortening', () => {
     writeFileSync(filePath, 'line1\nline2\nline3\nline4\nline5\n', 'utf-8');
 
     const result = await runRead(tempDir(), {
-      file_path: filePath,
+      absolute_path: filePath,
       start_line: 1,
       end_line: 2,
       showLineNumbers: true,
@@ -548,7 +543,7 @@ describe('AB4: read_line_range plain status vs genuine line shortening', () => {
     writeFileSync(filePath, 'line1\nline2\nline3\nline4\nline5\n', 'utf-8');
 
     const result = await runRead(tempDir(), {
-      file_path: filePath,
+      absolute_path: filePath,
       start_line: 1,
       end_line: 2,
       showGitChanges: true,
@@ -576,7 +571,7 @@ describe('AB5: reads starting past EOF error instead of an inverted range', () =
     writeFileSync(filePath, fourteenLineFile(), 'utf-8');
 
     const result = await runRead(tempDir(), {
-      file_path: filePath,
+      absolute_path: filePath,
       start_line: 20,
       end_line: 30,
     });
@@ -595,7 +590,7 @@ describe('AB5: reads starting past EOF error instead of an inverted range', () =
     writeFileSync(filePath, fourteenLineFile(), 'utf-8');
 
     const result = await runRead(tempDir(), {
-      file_path: filePath,
+      absolute_path: filePath,
       start_line: 14,
       end_line: 30,
     });
@@ -610,7 +605,7 @@ describe('AB5: reads starting past EOF error instead of an inverted range', () =
     writeFileSync(filePath, NEWLINE, 'utf-8');
 
     const result = await runRead(tempDir(), {
-      file_path: filePath,
+      absolute_path: filePath,
       start_line: 2,
       end_line: 2,
     });

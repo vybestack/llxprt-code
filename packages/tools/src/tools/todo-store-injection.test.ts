@@ -43,16 +43,11 @@ describe('TodoStore — explicit data-dir authority (no global resolver)', () =>
   });
 
   it('throws at construction when no data-dir dependency is provided', () => {
-    // The XOR union makes `{}` a type error, but a runtime guard remains for
-    // defensive construction. Cast through unknown to exercise the runtime
-    // guard without disabling type-checking elsewhere.
-    expect(
-      () =>
-        new TodoStore(
-          'session-1',
-          {} as unknown as { dataDirResolver: undefined; dataDir: undefined },
-        ),
-    ).toThrow(/path.*string|explicit data directory/i);
+    // The XOR union prevents constructing `{}` at compile time, but a runtime
+    // guard remains for defensive construction against untyped callers.
+    expect(() => new TodoStore('session-1', JSON.parse('{}'))).toThrow(
+      /path.*string|explicit data directory/i,
+    );
   });
 
   it('writes todos into the injected data dir and reads them back (round-trip)', async () => {

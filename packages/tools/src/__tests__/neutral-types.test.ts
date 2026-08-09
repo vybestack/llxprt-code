@@ -39,7 +39,8 @@ describe('Type enum runtime values', () => {
     ['ARRAY', Type.ARRAY, 'ARRAY'],
     ['OBJECT', Type.OBJECT, 'OBJECT'],
   ])('Type.%s serializes to the expected wire value', (_name, value, wire) => {
-    expect(value).toBe(wire);
+    expect(Object.is(value, wire)).toBe(true);
+    expect(typeof value).toBe('string');
   });
 });
 

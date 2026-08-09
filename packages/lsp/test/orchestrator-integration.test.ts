@@ -2,9 +2,9 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as path from 'node:path';
 
-import { createOrchestrator } from '../src/service/orchestrator';
-import type { LspConfig } from '../src/service/diagnostics';
-import { runCleanupTaskGroups } from './cleanup';
+import { createOrchestrator } from '../src/service/orchestrator.js';
+type OrchestratorConfig = NonNullable<Parameters<typeof createOrchestrator>[0]>;
+import { runCleanupTaskGroups } from './cleanup.js';
 
 const WORKSPACE_ROOT = path.resolve('/workspace');
 const WORKSPACE_URI = pathToFileURL(WORKSPACE_ROOT).toString();
@@ -26,7 +26,9 @@ function createFakeServer(
   };
 }
 
-function createConfig(servers: LspConfig['servers']): LspConfig {
+function createConfig(
+  servers: OrchestratorConfig['servers'],
+): OrchestratorConfig {
   return { servers };
 }
 
