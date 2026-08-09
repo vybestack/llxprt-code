@@ -73,7 +73,6 @@ describe('memoryDiscovery subfunctions', () => {
 
     vi.resetAllMocks();
     process.env.NODE_ENV = 'test';
-    process.env.VITEST = 'true';
 
     projectRoot = await createEmptyDir(path.join(testRootDir, 'project'));
     cwd = await createEmptyDir(path.join(projectRoot, 'src'));

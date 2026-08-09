@@ -18,17 +18,15 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import open from 'open';
-import { bugCommand } from './bugCommand.js';
+import { createBugCommand } from './bugCommand.js';
+import type { SlashCommand } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { getCliVersion } from '../../utils/version.js';
 import { formatMemoryUsage } from '../utils/formatters.js';
 
-const realOpenModule = { ...(await import('open')) };
 const realVersionModule = { ...(await import('../../utils/version.js')) };
 const realFormattersModule = { ...(await import('../utils/formatters.js')) };
 
-void vi.mock('open', () => automock(realOpenModule));
 void vi.mock('../../utils/version.js', () => automock(realVersionModule));
 void vi.mock('../utils/formatters.js', () => automock(realFormattersModule));
 // Mock the git-commit loader to a deterministic value so the assertion below
@@ -56,12 +54,21 @@ void vi.mock('../utils/terminalCapabilityManager.js', () => ({
 }));
 
 describe('bugCommand', () => {
+  let command: SlashCommand;
+  let browserLaunchDisabled: boolean;
+  const mockOpen = vi.fn(async (_url: string): Promise<void> => {});
+
   beforeEach(() => {
     (getCliVersion as Mock<typeof getCliVersion>).mockResolvedValue('0.1.0');
     (formatMemoryUsage as Mock<typeof formatMemoryUsage>).mockReturnValue(
       '100 MB',
     );
     setEnv('SANDBOX', 'gemini-test');
+    browserLaunchDisabled = false;
+    command = createBugCommand({
+      openUrl: mockOpen,
+      isBrowserLaunchDisabledDuringTests: () => browserLaunchDisabled,
+    });
   });
 
   afterEach(() => {
@@ -83,7 +90,7 @@ describe('bugCommand', () => {
       },
     });
 
-    await bugCommand.action!(mockContext, 'A test bug');
+    await command.action!(mockContext, 'A test bug');
 
     const expectedInfo = `
 * **CLI Version:** 0.1.0
@@ -101,7 +108,7 @@ describe('bugCommand', () => {
       'https://github.com/vybestack/llxprt-code/issues/new?template=bug_report.yml&title=A%20test%20bug&info=' +
       encodeURIComponent(expectedInfo);
 
-    expect(open).toHaveBeenCalledWith(expectedUrl);
+    expect(mockOpen).toHaveBeenCalledWith(expectedUrl);
   });
 
   it('should use a custom URL template from config if provided', async () => {
@@ -119,7 +126,7 @@ describe('bugCommand', () => {
         },
       },
     });
-    await bugCommand.action!(mockContext, 'A custom bug');
+    await command.action!(mockContext, 'A custom bug');
 
     const expectedInfo = `
 * **CLI Version:** 0.1.0
@@ -137,6 +144,24 @@ describe('bugCommand', () => {
       .replace('{title}', encodeURIComponent('A custom bug'))
       .replace('{info}', encodeURIComponent(expectedInfo));
 
-    expect(open).toHaveBeenCalledWith(expectedUrl);
+    expect(mockOpen).toHaveBeenCalledWith(expectedUrl);
+  });
+
+  it('does not launch a browser when test policy fails closed', async () => {
+    browserLaunchDisabled = true;
+    const mockContext = createMockCommandContext({
+      services: {
+        config: {
+          getModel: () => 'gemini-pro',
+          getBugCommand: () => undefined,
+          getIdeClient: () => undefined,
+          getIdeMode: () => false,
+        },
+      },
+    });
+
+    await command.action!(mockContext, 'A test bug');
+
+    expect(mockOpen).not.toHaveBeenCalled();
   });
 });

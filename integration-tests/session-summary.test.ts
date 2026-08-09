@@ -14,7 +14,12 @@ describe('session-summary flag', () => {
 
   beforeEach(() => {
     rig = new TestRig();
-    rig.setup('should write a session summary in non-interactive mode');
+    rig.setup('should write a session summary in non-interactive mode', {
+      fakeResponsesPath: join(
+        import.meta.dirname,
+        'session-summary.responses.jsonl',
+      ),
+    });
   });
 
   afterEach(async () => {

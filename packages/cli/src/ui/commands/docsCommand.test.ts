@@ -5,48 +5,40 @@
  */
 
 import { restoreEnv } from '@vybestack/llxprt-code-test-utils';
-import {
-  vi,
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  type Mock,
-} from 'bun:test';
-import open from 'open';
-import { docsCommand } from './docsCommand.js';
-import { type CommandContext } from './types.js';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { createDocsCommand } from './docsCommand.js';
+import { type CommandContext, type SlashCommand } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { MessageType } from '../types.js';
 import { assertDefined } from '../../test-utils/assertions.js';
 
-// Mock the 'open' library
-void vi.mock('open', () => ({
-  default: vi.fn(),
-}));
+const docsUrl =
+  'https://github.com/vybestack/llxprt-code/blob/main/docs/index.md';
 
 describe('docsCommand', () => {
   let mockContext: CommandContext;
+  let command: SlashCommand;
+  let browserLaunchDisabled: boolean;
+  const mockOpen = vi.fn(async (_url: string): Promise<void> => {});
+
   beforeEach(() => {
-    // Create a fresh mock context before each test
     mockContext = createMockCommandContext();
-    // Reset the `open` mock
-    (open as Mock<typeof open>).mockClear();
+    mockOpen.mockClear();
+    browserLaunchDisabled = false;
+    command = createDocsCommand({
+      openUrl: mockOpen,
+      isBrowserLaunchDisabledDuringTests: () => browserLaunchDisabled,
+    });
   });
 
   afterEach(() => {
-    // Restore any stubbed environment variables
     restoreEnv();
   });
 
   it("should add an info message and call 'open' in a non-sandbox environment", async () => {
-    assertDefined(docsCommand.action);
+    assertDefined(command.action);
 
-    const docsUrl =
-      'https://github.com/vybestack/llxprt-code/blob/main/docs/index.md';
-
-    await docsCommand.action(mockContext, '');
+    await command.action(mockContext, '');
 
     expect(mockContext.ui.addItem).toHaveBeenCalledWith(
       {
@@ -55,19 +47,14 @@ describe('docsCommand', () => {
       },
       expect.any(Number),
     );
-
-    expect(open).toHaveBeenCalledWith(docsUrl);
+    expect(mockOpen).toHaveBeenCalledWith(docsUrl);
   });
 
   it('should only add an info message in a sandbox environment', async () => {
-    assertDefined(docsCommand.action);
-
-    // Simulate a sandbox environment
+    assertDefined(command.action);
     process.env.SANDBOX = 'gemini-sandbox';
-    const docsUrl =
-      'https://github.com/vybestack/llxprt-code/blob/main/docs/index.md';
 
-    await docsCommand.action(mockContext, '');
+    await command.action(mockContext, '');
 
     expect(mockContext.ui.addItem).toHaveBeenCalledWith(
       {
@@ -76,22 +63,15 @@ describe('docsCommand', () => {
       },
       expect.any(Number),
     );
-
-    // Ensure 'open' was not called in the sandbox
-    expect(open).not.toHaveBeenCalled();
+    expect(mockOpen).not.toHaveBeenCalled();
   });
 
-  it("should not open browser for 'sandbox-exec'", async () => {
-    assertDefined(docsCommand.action);
-
-    // Simulate the specific 'sandbox-exec' environment
+  it("should open the browser for 'sandbox-exec'", async () => {
+    assertDefined(command.action);
     process.env.SANDBOX = 'sandbox-exec';
-    const docsUrl =
-      'https://github.com/vybestack/llxprt-code/blob/main/docs/index.md';
 
-    await docsCommand.action(mockContext, '');
+    await command.action(mockContext, '');
 
-    // The logic should fall through to the 'else' block
     expect(mockContext.ui.addItem).toHaveBeenCalledWith(
       {
         type: MessageType.INFO,
@@ -99,8 +79,22 @@ describe('docsCommand', () => {
       },
       expect.any(Number),
     );
+    expect(mockOpen).toHaveBeenCalledWith(docsUrl);
+  });
 
-    // 'open' should be called in this specific sandbox case
-    expect(open).toHaveBeenCalledWith(docsUrl);
+  it('does not launch a browser when test policy fails closed', async () => {
+    assertDefined(command.action);
+    browserLaunchDisabled = true;
+
+    await command.action(mockContext, '');
+
+    expect(mockContext.ui.addItem).toHaveBeenCalledWith(
+      {
+        type: MessageType.INFO,
+        text: `Please open the following URL in your browser to view the documentation:\n${docsUrl}`,
+      },
+      expect.any(Number),
+    );
+    expect(mockOpen).not.toHaveBeenCalled();
   });
 });

@@ -66,6 +66,10 @@ describe('run_shell_command', () => {
   it('should be able to run a shell command via stdin', async () => {
     await rig.setup('should be able to run a shell command via stdin', {
       settings: { tools: { core: ['run_shell_command'] } },
+      fakeResponsesPath: join(
+        import.meta.dirname,
+        'run-shell-command.stdin.responses.jsonl',
+      ),
     });
 
     const prompt = `Please run the command "echo test-stdin" and show me what it outputs`;

@@ -31,11 +31,28 @@ import {
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 
-// Capture getCoreSystemPromptAsync calls so we can assert interactionMode
-// on both the creation-time call and the per-turn call.
+// Capture getCoreSystemPromptAsync calls so we can assert interactionMode,
+// provider, and model on both the creation-time call and the per-turn call.
+// The mock echoes those values and every memory channel into the rendered
+// prompt. That keeps the assertions on observable prompt content while the
+// issue #3173 tests can also prove MCP instructions appear exactly once.
 const mockGetCorePrompt = vi.fn(async (args: Record<string, unknown>) => {
-  const mode = args.interactionMode ?? 'unknown';
-  return `[CORE_PROMPT mode=${mode}]`;
+  const mode =
+    typeof args.interactionMode === 'string' ? args.interactionMode : 'unknown';
+  const provider =
+    typeof args.provider === 'string' ? args.provider : 'NO_PROVIDER';
+  const model = typeof args.model === 'string' ? args.model : 'NO_MODEL';
+  const sections: string[] = [
+    `[CORE_PROMPT mode=${mode} provider=${provider} model=${model}]`,
+  ];
+  const userMemory = typeof args.userMemory === 'string' ? args.userMemory : '';
+  const coreMemory = typeof args.coreMemory === 'string' ? args.coreMemory : '';
+  const mcp =
+    typeof args.mcpInstructions === 'string' ? args.mcpInstructions : '';
+  if (userMemory.length > 0) sections.push(userMemory);
+  if (coreMemory.length > 0) sections.push(coreMemory);
+  if (mcp.length > 0) sections.push(mcp);
+  return sections.join('\n\n');
 });
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -75,8 +92,14 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
   async function buildSubagentFixture(opts: {
     persona: string;
     runtimeId: string;
+    provider?: string;
     userMemory?: string;
     coreMemory?: string;
+    jitContextEnabled?: boolean;
+    globalMemory?: string;
+    jitMemory?: string;
+    mcpInstructions?: string;
+    workingDir?: string;
   }): Promise<ChatSession> {
     const providerRuntime = createProviderRuntimeContext({
       settingsService,
@@ -85,8 +108,9 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
       metadata: { source: 'subagent-assembler.test' },
     });
 
+    const providerName = opts.provider ?? 'stub';
     const provider: IProvider = {
-      name: 'stub',
+      name: providerName,
       isDefault: true,
       getModels: vi.fn(async () => []),
       getDefaultModel: () => 'sub-model-v1',
@@ -115,6 +139,27 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
     if (opts.coreMemory !== undefined) {
       memoryOverrides['getCoreMemory'] = { value: () => opts.coreMemory };
     }
+    if (opts.jitContextEnabled !== undefined) {
+      memoryOverrides['isJitContextEnabled'] = {
+        value: () => opts.jitContextEnabled,
+      };
+    }
+    if (opts.globalMemory !== undefined) {
+      memoryOverrides['getGlobalMemory'] = { value: () => opts.globalMemory };
+    }
+    if (opts.jitMemory !== undefined) {
+      memoryOverrides['getJitMemoryForPath'] = {
+        value: async () => opts.jitMemory,
+      };
+    }
+    if (opts.mcpInstructions !== undefined) {
+      memoryOverrides['getMcpInstructions'] = {
+        value: () => opts.mcpInstructions,
+      };
+    }
+    if (opts.workingDir !== undefined) {
+      memoryOverrides['getWorkingDir'] = { value: () => opts.workingDir };
+    }
 
     Object.defineProperties(config, {
       getConversationLoggingEnabled: { value: () => false },
@@ -132,7 +177,7 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
 
     const runtimeState = createAgentRuntimeState({
       runtimeId: opts.runtimeId,
-      provider: 'stub',
+      provider: providerName,
       model: 'sub-model-v1',
       sessionId: config.getSessionId(),
     });
@@ -202,7 +247,7 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
 
     // The system instruction must contain BOTH the core prompt and persona
     const sysInstr = capturedCalls[0].systemInstruction as string;
-    expect(sysInstr).toContain('[CORE_PROMPT mode=subagent]');
+    expect(sysInstr).toContain('mode=subagent');
     expect(sysInstr).toContain(PERSONA);
   });
 
@@ -224,6 +269,7 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
     const chat = await buildSubagentFixture({
       persona: 'You are a subagent.',
       runtimeId: 'test.subagent.memory',
+      jitContextEnabled: false,
       userMemory: USER_MEMORY,
       coreMemory: CORE_MEMORY,
     });
@@ -240,6 +286,155 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
     expect(mockGetCorePrompt.mock.calls[1][0]).toMatchObject({
       userMemory: USER_MEMORY,
       coreMemory: CORE_MEMORY,
+    });
+  });
+
+  describe('Subagent JIT memory sourcing (issue #3173)', () => {
+    /**
+     * Distinct markers used to trace which memory channel sourced each piece of
+     * the prompt. ENV_WITH_MCP_MARKER deliberately embeds the MCP token so that
+     * the pre-fix subagent path (which sources getUserMemory() under JIT and so
+     * folds in environment memory that already carries MCP instructions) can be
+     * shown to deliver the MCP block more than once.
+     */
+    const GLOBAL = 'GLOBAL_MARKER';
+    const JIT = 'JIT_MARKER';
+    const MCP = 'MCP_MARKER';
+    const ENV_WITH_MCP = 'ENV_WITH_MCP_MARKER';
+    const CORE = 'CORE_MARKER';
+    const PERSONA = 'You are a focused subagent.';
+
+    function countOccurrences(haystack: string, needle: string): number {
+      if (!needle) return 0;
+      return haystack.split(needle).length - 1;
+    }
+
+    it('sources global plus JIT user memory and delivers the MCP block exactly once when JIT is enabled', async () => {
+      const chat = await buildSubagentFixture({
+        persona: PERSONA,
+        runtimeId: 'test.subagent.jit.enabled',
+        jitContextEnabled: true,
+        globalMemory: GLOBAL,
+        // Under JIT, Config.getUserMemory() folds in environment memory (which
+        // already carries MCP instructions). Simulate that contract so the test
+        // proves the shared policy avoids that accessor under JIT.
+        userMemory: `${GLOBAL}
+
+${ENV_WITH_MCP}`,
+        jitMemory: JIT,
+        mcpInstructions: MCP,
+        coreMemory: CORE,
+        workingDir: '/sub/work',
+      });
+
+      // --- Creation-time assembly ---
+      expect(mockGetCorePrompt).toHaveBeenCalledTimes(1);
+      const creationArgs = mockGetCorePrompt.mock.calls[0][0];
+      expect(creationArgs).toMatchObject({
+        interactionMode: 'subagent',
+        includeSubagentDelegation: false,
+        coreMemory: CORE,
+        mcpInstructions: MCP,
+      });
+      // User memory must carry global + JIT subdirectory memory and must NOT
+      // carry the environment-memory channel (which would double MCP).
+      expect(creationArgs.userMemory).toBe(`${GLOBAL}
+
+${JIT}`);
+      expect(creationArgs.userMemory).not.toContain(ENV_WITH_MCP);
+      expect(creationArgs.userMemory).not.toContain(MCP);
+
+      // --- Per-turn assembly ---
+      await chat.sendMessage({ message: 'do it' }, 'p1');
+      expect(mockGetCorePrompt).toHaveBeenCalledTimes(2);
+      const turnArgs = mockGetCorePrompt.mock.calls[1][0];
+      expect(turnArgs).toMatchObject({
+        interactionMode: 'subagent',
+        coreMemory: CORE,
+        mcpInstructions: MCP,
+      });
+      expect(turnArgs.userMemory).toBe(`${GLOBAL}
+
+${JIT}`);
+      expect(turnArgs.userMemory).not.toContain(MCP);
+
+      // The rendered prompt the provider receives must contain the JIT
+      // subdirectory marker and the MCP marker exactly once.
+      const rendered = capturedCalls[0].systemInstruction as string;
+      expect(rendered).toContain(JIT);
+      expect(countOccurrences(rendered, MCP)).toBe(1);
+      expect(rendered).toContain(PERSONA);
+    });
+
+    it('preserves the getUserMemory path and a single MCP block when JIT is disabled', async () => {
+      const USER = 'USER_MEMORY_MARKER';
+      const chat = await buildSubagentFixture({
+        persona: PERSONA,
+        runtimeId: 'test.subagent.jit.disabled',
+        jitContextEnabled: false,
+        userMemory: USER,
+        // Production returns '' when JIT is disabled.
+        jitMemory: '',
+        mcpInstructions: MCP,
+        coreMemory: CORE,
+      });
+
+      // Creation-time assembly: unchanged user-memory path, no JIT memory.
+      const creationArgs = mockGetCorePrompt.mock.calls[0][0];
+      expect(creationArgs).toMatchObject({
+        interactionMode: 'subagent',
+        coreMemory: CORE,
+        mcpInstructions: MCP,
+      });
+      expect(creationArgs.userMemory).toBe(USER);
+
+      // Per-turn assembly: identical policy behavior.
+      await chat.sendMessage({ message: 'go' }, 'p1');
+      const turnArgs = mockGetCorePrompt.mock.calls[1][0];
+      expect(turnArgs.userMemory).toBe(USER);
+      expect(turnArgs).toMatchObject({
+        coreMemory: CORE,
+        mcpInstructions: MCP,
+      });
+
+      // Exactly one MCP marker reaches the provider.
+      const rendered = capturedCalls[0].systemInstruction as string;
+      expect(countOccurrences(rendered, MCP)).toBe(1);
+    });
+  });
+
+  describe('Subagent system-prompt provider (issue #3176, D5)', () => {
+    it('sends a prompt rendered for the executing provider, not ambient settings', async () => {
+      settingsService.set('activeProvider', 'foreground-provider-alpha');
+      const chat = await buildSubagentFixture({
+        persona: 'You are a subagent.',
+        runtimeId: 'test.subagent.provider',
+        provider: 'subagent-provider-beta',
+      });
+
+      await chat.sendMessage({ message: 'do the task' }, 'p1');
+
+      const sentPrompt = capturedCalls[0].systemInstruction as string;
+      expect(sentPrompt).toContain('provider=subagent-provider-beta');
+      expect(sentPrompt).not.toContain('provider=foreground-provider-alpha');
+    });
+
+    it('keeps the runtime provider while resolving the current request model', async () => {
+      settingsService.set('activeProvider', 'foreground-provider-alpha');
+      const chat = await buildSubagentFixture({
+        persona: 'You are a subagent.',
+        runtimeId: 'test.subagent.coherence',
+        provider: 'subagent-provider-beta',
+      });
+
+      settingsService.set('activeProvider', 'unrelated-provider-switch');
+      settingsService.set('model', 'sub-model-v2');
+      await chat.sendMessage({ message: 'go' }, 'p1');
+
+      const sentPrompt = capturedCalls[0].systemInstruction as string;
+      expect(sentPrompt).toContain('provider=subagent-provider-beta');
+      expect(sentPrompt).toContain('model=sub-model-v2');
+      expect(sentPrompt).not.toContain('provider=unrelated-provider-switch');
     });
   });
 });

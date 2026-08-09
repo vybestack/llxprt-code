@@ -27,6 +27,7 @@ import type { SystemPromptPlacement } from './utils/systemPromptPlacement.js';
 import type {
   ProviderTelemetryContext,
   ResolvedAuthToken,
+  SystemPromptAssembler,
   UserMemoryInput,
 } from './types/providerRuntime.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
@@ -84,6 +85,14 @@ export interface GenerateChatOptions {
    * the provider, because the provider rebuilds its own generic core prompt.
    */
   systemInstruction?: string;
+  /**
+   * Caller-supplied re-renderer for the assembled system prompt (issue #3157).
+   * A router provider (e.g. a load balancer) that overrides the model invokes
+   * this after sub-profile selection so the rendered model matches
+   * `resolved.model`. Assembly stays owned by the agent layer; this port only
+   * re-invokes it.
+   */
+  systemPromptAssembler?: SystemPromptAssembler;
 }
 
 /**
@@ -132,15 +141,17 @@ export interface IProvider {
   getDefaultModel(): string;
   /**
    * Declares WHERE this provider can accept the assembled system prompt for
-   * the given request (issue #3136).
+   * the given request (issue #3136/#3172).
    *
-   * This is a declaration, not a decision: the shared placement policy in
-   * `utils/systemPromptPlacement.ts` consumes it. Providers must not re-derive
-   * placement from transport details.
+   * This is a declaration, not a decision: it is consumed by the shared
+   * placement policy in `utils/systemPromptPlacement.ts` so that providers do
+   * not re-derive placement from transport details. Callers resolve runtime
+   * auth-token providers first and pass the resolved token string so placement
+   * and transport share one credential fact.
    *
    * Omitting it means `system-field`. Anthropic returns `context-prefix` when
-   * OAuth is active, because its `system` field may carry only the Claude Code
-   * string and the real prompt must go at the top of the context instead.
+   * the resolved token is OAuth, because its `system` field may carry only the
+   * Claude Code string and the real prompt must go at the top of the context.
    */
   getSystemPromptPlacement?(
     options: GenerateChatOptions,

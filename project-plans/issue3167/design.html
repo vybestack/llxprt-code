@@ -1,0 +1,1184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>llxprt — Client-Side Performance Telemetry: Design</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2128; --bd:#30363d;
+    --tx:#e6edf3; --mu:#8b949e; --dim:#6e7681;
+    --blue:#58a6ff; --green:#3fb950; --yellow:#d29922;
+    --red:#f85149; --purple:#bc8cff; --cyan:#39c5cf; --grey:#484f58;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--tx);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:56px 32px 120px}
+  header{border-bottom:1px solid var(--bd);padding-bottom:28px;margin-bottom:44px}
+  h1{font-size:34px;line-height:1.2;margin:0 0 10px;letter-spacing:-.02em}
+  h1 small{display:block;font-size:15px;font-weight:400;color:var(--mu);margin-top:10px;letter-spacing:0}
+  h2{font-size:24px;margin:56px 0 6px;letter-spacing:-.01em;padding-top:8px}
+  h2 .n{color:var(--dim);font-variant-numeric:tabular-nums;margin-right:10px;font-weight:400}
+  h3{font-size:17px;margin:32px 0 8px;color:var(--blue)}
+  p{margin:14px 0}
+  code,kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px}
+  code{background:var(--panel2);border:1px solid var(--bd);border-radius:5px;padding:1px 5px;color:#c9d1d9}
+  pre{background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:16px 18px;overflow-x:auto;font-size:13px;line-height:1.6}
+  pre code{background:none;border:none;padding:0}
+  .lead{font-size:18px;color:#c9d1d9}
+  .panel{background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:22px 26px;margin:26px 0}
+  .fig{background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:22px;margin:28px 0}
+  .fig svg{display:block;width:100%;height:auto}
+  .cap{color:var(--mu);font-size:13.5px;margin-top:14px;padding-top:14px;border-top:1px solid var(--bd)}
+  .cap b{color:var(--tx)}
+  table{width:100%;border-collapse:collapse;margin:22px 0;font-size:14.5px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--bd);vertical-align:top}
+  th{color:var(--mu);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.06em}
+  td.num{font-family:ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+  tr:last-child td{border-bottom:none}
+  .tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.05em;padding:2px 7px;border-radius:20px;vertical-align:middle}
+  .have{background:rgba(63,185,80,.14);color:var(--green);border:1px solid rgba(63,185,80,.35)}
+  .new{background:rgba(248,81,73,.14);color:var(--red);border:1px solid rgba(248,81,73,.35)}
+  .der{background:rgba(88,166,255,.13);color:var(--blue);border:1px solid rgba(88,166,255,.35)}
+  .no{background:rgba(139,148,158,.13);color:var(--mu);border:1px solid rgba(139,148,158,.3)}
+  ul,ol{padding-left:22px} li{margin:7px 0}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:26px 0}
+  .kpi{background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:16px}
+  .kpi .v{font-family:ui-monospace,Menlo,monospace;font-size:23px;color:var(--blue);font-variant-numeric:tabular-nums}
+  .kpi .l{font-size:12px;color:var(--mu);margin-top:5px;line-height:1.4}
+  .warn{border-left:3px solid var(--yellow);background:rgba(210,153,34,.07)}
+  .bad{border-left:3px solid var(--red);background:rgba(248,81,73,.07)}
+  .good{border-left:3px solid var(--green);background:rgba(63,185,80,.07)}
+  .legend{display:flex;flex-wrap:wrap;gap:18px;margin:6px 0 2px;font-size:13px;color:var(--mu)}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+  hr{border:none;border-top:1px solid var(--bd);margin:52px 0}
+  a{color:var(--blue)}
+  .mono{font-family:ui-monospace,Menlo,monospace;font-size:13px}
+  footer{margin-top:70px;padding-top:22px;border-top:1px solid var(--bd);color:var(--dim);font-size:13px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media (max-width:820px){ .kpis{grid-template-columns:repeat(2,1fr)} .two{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Client-Side Performance Telemetry
+    <small>llxprt-code &middot; design rev.2 &middot; 2026-08-08 &middot; answers &ldquo;is llxprt itself getting faster or slower over time?&rdquo;</small>
+  </h1>
+</header>
+
+<p class="lead">
+  We measure the provider well and ourselves not at all. This design closes that gap with
+  <strong>two new measurements</strong> and a <strong>bounded global log directory</strong>, at a cost of
+  roughly <strong>50&nbsp;&micro;s per turn</strong>.
+</p>
+
+<div class="kpis">
+  <div class="kpi"><div class="v">2</div><div class="l">new measurements required; everything else is derived from data we already collect</div></div>
+  <div class="kpi"><div class="v">~50 &micro;s</div><div class="l">instrumentation cost per turn &mdash; under 0.001% of an 18 s turn</div></div>
+  <div class="kpi"><div class="v">688 B</div><div class="l">measured size of one per-turn record (33 fields, all numeric/enum)</div></div>
+  <div class="kpi"><div class="v">8x</div><div class="l">gzip ratio on these records (24 ms/day) &mdash; bounded directory sweep enforces the disk cap independently</div></div>
+</div>
+
+<div class="panel bad">
+  <p style="margin:0 0 12px"><b>Revision notes &mdash; read these before the rest of the document.</b></p>
+  <p style="margin:0 0 10px">
+    <b>Rev.1 &rarr; Rev.2 (storage).</b> A single file rotated on an in-process byte counter cannot bound a
+    shared file across concurrent instances. Measured under 8 writers: ceiling breached 1.5&times;,
+    <strong>49% of records destroyed</strong>. Corrected in &sect;06.
+  </p>
+  <p style="margin:0 0 10px">
+    <b>Rev.2 &rarr; Rev.3 (the measurement model itself).</b> Review found the headline arithmetic
+    <strong>algebraically invalid</strong>. A provider request&rsquo;s wall duration <em>contains</em> our
+    stream handling and Ink rendering, so <code>llxprtMs = turnBusy &minus; agentActive</code> subtracts away
+    the very work it claims to measure, and <code>coreMs = llxprtMs &minus; uiMs</code> can go
+    <strong>negative on an ordinary sequential turn</strong>. Provider/tool figures are also <em>sums</em>
+    while the residual is a <em>union</em>, so the three were never a partition. <b>&sect;02&rsquo;s waterfall
+    is retained below only as a record of the rejected model</b> — see the correction immediately after it.
+    <a href="./PLAN.md">PLAN.md</a> carries the replacement: directly measured client phases, provider/tool
+    reported as overlapping sum <em>and</em> union, and the leftover named
+    <code>unclassified_elapsed_ms</code> rather than &ldquo;llxprt time&rdquo;.
+  </p>
+  <p style="margin:0">
+    <b>Also withdrawn in Rev.3:</b> the &ldquo;~49&nbsp;us per turn&rdquo; budget (primitive costs only, not
+    end-to-end), the &ldquo;frames&rdquo; counter (a stdout write is not a frame &mdash; Ink exposes
+    <code>onRender</code>), the &ldquo;load-invariant counters&rdquo; claim, pid-as-ownership, startup-only
+    maintenance, and the &ldquo;negative mtime age&rdquo; finding, which was a test artifact.
+  </p>
+</div>
+
+<hr>
+
+<h2><span class="n">01</span>The problem, precisely</h2>
+
+<p>
+  <code>SessionMetricsAggregator</code> already tracks provider and tool timing well.
+  But <code>packages/cli/src/ui/utils/computeStats.ts:70</code> says this:
+</p>
+
+<pre><code>// Percentages are relative to accumulated work (API + Tool), which is
+// the denominator that makes the parts sum to 100%.
+apiTimePercent  = totalApiTime  / accumulatedWork
+toolTimePercent = totalToolTime / accumulatedWork</code></pre>
+
+<div class="panel bad">
+  <p style="margin:0">
+    The denominator is <code>accumulatedWork = API + Tool</code>, so <strong>API% + Tool% = 100% by construction.</strong>
+    llxprt&rsquo;s own time is not merely unmeasured &mdash; it is <em>structurally excluded from the arithmetic</em>.
+    That is why the UI can feel like it regressed while every number on <code>/stats</code> looks perfectly healthy.
+  </p>
+</div>
+
+<h2><span class="n">02</span>The time-accounting model</h2>
+
+<p>
+  Change the denominator from <code>API + Tool</code> to <code>wall &minus; humanIdle</code>, and the remainder
+  <em>is</em> llxprt. Every bucket below either exists today, is one of the two new measurements, or is
+  arithmetic on the other two.
+</p>
+
+<div class="fig">
+<div class="legend">
+  <span><i style="background:var(--grey)"></i>human idle</span>
+  <span><i style="background:var(--green)"></i>provider</span>
+  <span><i style="background:var(--yellow)"></i>tool</span>
+  <span><i style="background:var(--red)"></i>llxprt (invisible today)</span>
+  <span><i style="background:var(--purple)"></i>UI / Ink</span>
+  <span><i style="background:var(--cyan)"></i>core loop</span>
+</div>
+<svg viewBox="0 0 1000 430" role="img" aria-label="Time decomposition waterfall">
+  <defs>
+    <style>
+      .lb{fill:#e6edf3;font:600 13px ui-monospace,Menlo,monospace}
+      .sb{fill:#0d1117;font:700 12px ui-monospace,Menlo,monospace}
+      .an{fill:#8b949e;font:11.5px ui-monospace,Menlo,monospace}
+      .tk{fill:#6e7681;font:10.5px ui-monospace,Menlo,monospace}
+      .cn{stroke:#30363d;stroke-width:1;stroke-dasharray:3 3;fill:none}
+    </style>
+  </defs>
+
+  <text class="an" x="0" y="22">LEVEL 1 &mdash; what the clock says</text>
+  <rect x="0" y="32" width="1000" height="44" rx="6" fill="#21262d" stroke="#484f58"/>
+  <text class="lb" x="500" y="59" text-anchor="middle">sessionWallMs</text>
+  <text class="tk" x="988" y="59" text-anchor="end">have</text>
+
+  <text class="an" x="0" y="112">LEVEL 2 &mdash; split out the human</text>
+  <rect x="0" y="122" width="392" height="44" rx="6" fill="#484f58"/>
+  <text class="sb" x="196" y="149" text-anchor="middle" fill="#e6edf3">humanIdleMs</text>
+  <text class="tk" x="196" y="182" text-anchor="middle" fill="#f85149">NEW (1)</text>
+
+  <rect x="400" y="122" width="600" height="44" rx="6" fill="#1f6feb" fill-opacity=".25" stroke="#58a6ff"/>
+  <text class="lb" x="700" y="149" text-anchor="middle">turnBusyMs = wall &minus; idle</text>
+  <text class="tk" x="700" y="182" text-anchor="middle" fill="#58a6ff">derived</text>
+
+  <text class="an" x="0" y="222">LEVEL 3 &mdash; inside the time the user actually waits</text>
+  <path class="cn" d="M400 170 L400 232 M1000 170 L1000 232"/>
+  <rect x="400" y="232" width="392" height="44" rx="6" fill="#3fb950"/>
+  <text class="sb" x="596" y="259" text-anchor="middle">providerMs</text>
+  <text class="tk" x="596" y="292" text-anchor="middle">have &middot; splits into ttftMs + streamGapMs (both have)</text>
+
+  <rect x="798" y="232" width="104" height="44" rx="6" fill="#d29922"/>
+  <text class="sb" x="850" y="259" text-anchor="middle">toolMs</text>
+  <text class="tk" x="850" y="292" text-anchor="middle">have</text>
+
+  <rect x="908" y="232" width="92" height="44" rx="6" fill="#f85149"/>
+  <text class="sb" x="954" y="259" text-anchor="middle">llxprt</text>
+
+  <text class="an" x="0" y="252">overlap already</text>
+  <text class="an" x="0" y="267">merged by</text>
+  <text class="an" x="0" y="282" style="fill:#3fb950">agentActiveTimeMs</text>
+
+  <text class="an" x="0" y="336">LEVEL 4 &mdash; zoom on llxprtMs = turnBusy &minus; agentActive</text>
+  <path class="cn" d="M908 278 L520 344 M1000 278 L1000 344"/>
+  <rect x="520" y="344" width="180" height="44" rx="6" fill="#bc8cff"/>
+  <text class="sb" x="610" y="371" text-anchor="middle">uiMs</text>
+  <text class="tk" x="610" y="404" text-anchor="middle" fill="#f85149">NEW (2)</text>
+
+  <rect x="706" y="344" width="294" height="44" rx="6" fill="#39c5cf"/>
+  <text class="sb" x="853" y="371" text-anchor="middle">coreMs = llxprtMs &minus; uiMs</text>
+  <text class="tk" x="853" y="404" text-anchor="middle" fill="#58a6ff">derived</text>
+</svg>
+<div class="cap">
+  <b>REJECTED MODEL &mdash; retained as a record of what does not work.</b> Bar widths are illustrative.
+  Read the correction below before using anything from this diagram.
+</div>
+</div>
+
+<div class="panel bad">
+  <p style="margin:0 0 12px"><b>Why the waterfall above is invalid.</b></p>
+  <p style="margin:0 0 10px">
+    It presumes provider time and llxprt time are disjoint. They are not.
+    <code>ApiAttemptRecord.durationMs</code> is the whole request wall duration including TTFT
+    (<code>sessionMetricsAggregator.ts:38-43</code>) and the entire interval goes into the active union
+    (<code>:404-410</code>). While that request streams, we are decoding deltas and Ink is painting —
+    <em>inside</em> the provider interval. So an ordinary sequential turn can look like:
+  </p>
+<pre style="margin:0 0 10px"><code>busy        = 10,000 ms
+API union   = 10,000 ms      (the whole turn was one streaming request)
+Ink render  =    200 ms      (which happened DURING that request)
+
+llxprtMs = busy - active = 0
+coreMs   = llxprtMs - uiMs = -200      <-- negative, on a completely normal turn</code></pre>
+  <p style="margin:0 0 10px">
+    Second defect: <code>accumulatedApiTimeMs</code> and <code>accumulatedToolTimeMs</code> are <b>sums</b>
+    (<code>:93-100</code>, <code>:435-436</code>, <code>:594-596</code>) while the residual subtracts a
+    <b>union</b> (<code>agentActiveTimeMs</code>). Parallel tools, a subagent request nested inside a tool, and
+    failover attempts all make the sums exceed elapsed active time, so provider + tool + residual was never a
+    partition of anything.
+  </p>
+  <p style="margin:0 0 10px">
+    Third defect: <code>SessionMetricsAggregator</code> holds one session-global interval union and no
+    per-turn or per-runtime identity (<code>:274-301</code>, <code>:23-50</code>), and
+    <code>uiTelemetry.ts:358-390</code> discards <code>prompt_id</code> on the way in. Per-operation
+    attribution cannot be recovered by differencing session snapshots while intervals cross the boundary.
+  </p>
+  <p style="margin:0">
+    <b>Replacement:</b> measure client phases directly (<code>client_prepare_ms</code>,
+    <code>stream_handler_ms</code>, <code>ink_render_ms</code> from Ink&rsquo;s <code>onRender</code>,
+    <code>stdout_write_sync_ms</code>, <code>client_finalize_ms</code>); report
+    <code>provider_attempt_sum_ms</code> <em>and</em> <code>provider_union_ms</code>,
+    <code>tool_call_sum_ms</code> <em>and</em> <code>tool_union_ms</code> as explicitly overlapping metrics;
+    and name the leftover <code>unclassified_elapsed_ms</code>. Do not promise they sum. Full specification in
+    <a href="./PLAN.md">PLAN.md</a>.
+  </p>
+</div>
+
+<h3>What each bucket costs to obtain</h3>
+<table>
+  <tr><th>Bucket</th><th>Status</th><th>Source</th></tr>
+  <tr><td class="mono">sessionWallMs</td><td><span class="tag have">HAVE</span></td><td><code>SessionMetricsAggregator</code></td></tr>
+  <tr><td class="mono">providerMs</td><td><span class="tag have">HAVE</span></td><td><code>accumulatedApiTimeMs</code></td></tr>
+  <tr><td class="mono">ttftMs / streamGapMs</td><td><span class="tag have">HAVE</span></td><td><code>sumTtftMs</code>, <code>sumGenerationGapMs</code> &mdash; separates &ldquo;slow to start&rdquo; from &ldquo;slow to stream&rdquo;</td></tr>
+  <tr><td class="mono">toolMs</td><td><span class="tag have">HAVE</span></td><td><code>accumulatedToolTimeMs</code></td></tr>
+  <tr><td class="mono">overlap handling</td><td><span class="tag have">HAVE</span></td><td><code>agentActiveTimeMs</code> &mdash; a real interval-union (<code>IntervalUnion</code>), not a sum</td></tr>
+  <tr><td class="mono">humanIdleMs</td><td><span class="tag new">NEW (1)</span></td><td>interval union of <code>Idle&rarr;Responding&rarr;Idle</code> windows; complement is human time</td></tr>
+  <tr><td class="mono">uiMs</td><td><span class="tag new">NEW (2)</span></td><td>clock around Ink&rsquo;s frame write at the <code>createInkStdio</code> seam</td></tr>
+  <tr><td class="mono">turnBusyMs / llxprtMs / coreMs</td><td><span class="tag der">DERIVED</span></td><td>subtraction only &mdash; no instrumentation</td></tr>
+</table>
+
+<div class="panel warn">
+  <p style="margin:0">
+    <b>Correctness trap.</b> <code>useStreamingState</code> (<code>useAgentStreamLifecycle.ts:35</code>) has a
+    third state: <code>WaitingForConfirmation</code>. Time spent waiting on a tool-approval prompt is
+    <em>human</em> time. If it is not excluded, a slow human approving a shell command gets billed to
+    <code>llxprtMs</code> and silently corrupts the headline metric.
+  </p>
+</div>
+
+<h2><span class="n">03</span>Where the measurements attach</h2>
+
+<p>
+  Both new measurements land on seams that already exist. Neither requires touching the
+  <code>@jrichman/ink</code> fork, and nothing is added to the per-delta path.
+</p>
+
+<div class="fig">
+<svg viewBox="0 0 1000 400" role="img" aria-label="Instrumentation seams in the streaming pipeline">
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L7,3 z" fill="#484f58"/>
+    </marker>
+    <style>
+      .bx{fill:#1c2128;stroke:#30363d}
+      .bt{fill:#e6edf3;font:600 12.5px ui-monospace,Menlo,monospace}
+      .bs{fill:#6e7681;font:10.5px ui-monospace,Menlo,monospace}
+      .fl{stroke:#484f58;stroke-width:1.6;fill:none;marker-end:url(#ar)}
+      .pin{fill:#f85149;font:700 11px ui-monospace,Menlo,monospace}
+      .hd{fill:#8b949e;font:11.5px ui-monospace,Menlo,monospace}
+    </style>
+  </defs>
+
+  <text class="hd" x="0" y="16">STREAM PATH (per delta &mdash; counters only, never I/O)</text>
+
+  <rect class="bx" x="0" y="30" width="176" height="56" rx="8"/>
+  <text class="bt" x="88" y="54" text-anchor="middle">provider</text>
+  <text class="bs" x="88" y="72" text-anchor="middle">network / LLM</text>
+
+  <rect class="bx" x="206" y="30" width="196" height="56" rx="8"/>
+  <text class="bt" x="304" y="54" text-anchor="middle">MessageStream-</text>
+  <text class="bt" x="304" y="70" text-anchor="middle">Orchestrator</text>
+
+  <rect class="bx" x="432" y="30" width="196" height="56" rx="8"/>
+  <text class="bt" x="530" y="54" text-anchor="middle">useStreamEvent-</text>
+  <text class="bt" x="530" y="70" text-anchor="middle">Handlers</text>
+
+  <rect class="bx" x="658" y="30" width="166" height="56" rx="8"/>
+  <text class="bt" x="741" y="54" text-anchor="middle">contentEvent-</text>
+  <text class="bt" x="741" y="70" text-anchor="middle">Processor</text>
+
+  <rect class="bx" x="854" y="30" width="146" height="56" rx="8"/>
+  <text class="bt" x="927" y="54" text-anchor="middle">PendingResp-</text>
+  <text class="bt" x="927" y="70" text-anchor="middle">onseBuffer</text>
+
+  <path class="fl" d="M176 58 L200 58"/>
+  <path class="fl" d="M402 58 L426 58"/>
+  <path class="fl" d="M628 58 L652 58"/>
+  <path class="fl" d="M824 58 L848 58"/>
+
+  <text class="hd" x="0" y="140">RENDER PATH (per frame)</text>
+
+  <rect class="bx" x="0" y="154" width="196" height="56" rx="8"/>
+  <text class="bt" x="98" y="178" text-anchor="middle">React 19 commit</text>
+  <text class="bs" x="98" y="196" text-anchor="middle">MarkdownDisplay etc.</text>
+
+  <rect class="bx" x="226" y="154" width="196" height="56" rx="8"/>
+  <text class="bt" x="324" y="178" text-anchor="middle">Ink reconciler</text>
+  <text class="bs" x="324" y="196" text-anchor="middle">@jrichman/ink 6.4.8</text>
+
+  <rect x="452" y="148" width="256" height="68" rx="8" fill="rgba(188,140,255,.14)" stroke="#bc8cff" stroke-width="1.8"/>
+  <text class="bt" x="580" y="172" text-anchor="middle" style="fill:#bc8cff">createInkStdio()</text>
+  <text class="bs" x="580" y="189" text-anchor="middle">Proxy &middot; get('write') &rarr; writeToStdout</text>
+  <text class="bs" x="580" y="205" text-anchor="middle">core/src/utils/stdio.ts</text>
+
+  <rect class="bx" x="738" y="154" width="146" height="56" rx="8"/>
+  <text class="bt" x="811" y="185" text-anchor="middle">terminal</text>
+
+  <path class="fl" d="M196 182 L220 182"/>
+  <path class="fl" d="M422 182 L446 182"/>
+  <path class="fl" d="M708 182 L732 182"/>
+
+  <text class="pin" x="580" y="240" text-anchor="middle">SEAM (2) &mdash; stdout_bytes, stdout_write_calls, stdout_write_sync_ms</text>
+  <text class="bs" x="580" y="257" text-anchor="middle">NOT frames and NOT render time — Ink exposes onRender for that (see correction below)</text>
+
+  <text class="hd" x="0" y="300">TURN BOUNDARY (once per turn &mdash; the only place I/O happens)</text>
+
+  <rect x="0" y="314" width="256" height="62" rx="8" fill="rgba(248,81,73,.12)" stroke="#f85149" stroke-width="1.8"/>
+  <text class="bt" x="128" y="336" text-anchor="middle" style="fill:#f85149">useStreamingState</text>
+  <text class="bs" x="128" y="353" text-anchor="middle">Idle / Responding / WaitingForConfirm</text>
+  <text class="pin" x="128" y="369" text-anchor="middle">SEAM (1) &mdash; humanIdleMs</text>
+
+  <rect class="bx" x="286" y="314" width="216" height="62" rx="8"/>
+  <text class="bt" x="394" y="336" text-anchor="middle">memoryUsage()</text>
+  <text class="bs" x="394" y="353" text-anchor="middle">rss / heap / external /</text>
+  <text class="bs" x="394" y="369" text-anchor="middle">arrayBuffers &mdash; 0.42 &micro;s</text>
+
+  <rect class="bx" x="532" y="314" width="216" height="62" rx="8"/>
+  <text class="bt" x="640" y="336" text-anchor="middle">aggregate + derive</text>
+  <text class="bs" x="640" y="353" text-anchor="middle">pure arithmetic on fixed</text>
+  <text class="bs" x="640" y="369" text-anchor="middle">accumulators &mdash; cannot throw</text>
+
+  <rect x="778" y="314" width="222" height="62" rx="8" fill="rgba(63,185,80,.12)" stroke="#3fb950" stroke-width="1.8"/>
+  <text class="bt" x="889" y="336" text-anchor="middle" style="fill:#3fb950">append 688 B</text>
+  <text class="bs" x="889" y="353" text-anchor="middle">async, to THIS process's</text>
+  <text class="bs" x="889" y="369" text-anchor="middle">own file (see &sect;06)</text>
+
+  <path class="fl" d="M502 345 L526 345"/>
+  <path class="fl" d="M748 345 L772 345"/>
+</svg>
+<div class="cap">
+  <b>Both seam claims were corrected in review.</b> See the two panels below.
+</div>
+</div>
+
+<div class="panel bad">
+  <p style="margin:0 0 10px"><b>A stdout write is not a frame, and this seam cannot time rendering.</b>
+  Ink computes layout and serialises output <em>before</em> writing, and already exposes that work through
+  <code>RenderOptions.onRender</code>. Writes then happen on several branches — static output can clear, write
+  and render separately, and normal output can be throttled or suppressed when unchanged. One write may be
+  zero, one, or part of a render. Timing around the call also measures only the synchronous invocation, not
+  callback, drain, or terminal flush.</p>
+  <p style="margin:0 0 10px"><b>Corrected split:</b> <code>ink_render_ms</code> and render count come from
+  <code>onRender</code>; the Proxy contributes <code>stdout_bytes</code> (encoded via
+  <code>Buffer.byteLength</code> / <code>Uint8Array.byteLength</code>, not string length),
+  <code>stdout_write_calls</code>, and <code>stdout_write_sync_ms</code>. If React reconciliation is needed,
+  that is a separate Profiler concern.</p>
+  <p style="margin:0">
+    <b>Scope, too:</b> <code>createInkStdio()</code> is not Ink-exclusive — Zed calls it at
+    <code>runZedIntegration.ts:105-112</code>, and interactive title writes bypass it via
+    <code>writeToStdout</code>. Instrument the <em>instance</em> passed by <code>inkRenderOptions.ts</code>,
+    not the helper globally. Any wrapper must delegate to <code>writeToStdout</code> (not
+    <code>target.write</code>) and preserve every overload, encoding, callback and the backpressure boolean.
+  </p>
+</div>
+
+<div class="panel bad">
+  <p style="margin:0 0 10px"><b><code>useStreamingState</code> is not a sound busy/idle boundary.</b>
+  It is derived React display state (<code>useAgentStreamLifecycle.ts:35-76</code>). It gives
+  <code>WaitingForConfirmation</code> precedence whenever <em>any</em> tool awaits approval — even while
+  another parallel tool, request, or subagent is still active, so subtracting that whole window as idle can make
+  active time exceed busy time. Completed tools keep it in <code>Responding</code> until
+  <code>displayCleared</code>. It starts after query preparation and ends before the recording flush
+  (<code>useSubmitQuery.ts:671-727</code>), so it excludes real client work at both ends. And a queued-drain
+  gap passes through <code>Idle</code>, which is <em>our</em> scheduling, not human think time.</p>
+  <p style="margin:0"><b>Corrected:</b> bound the operation on <code>useSubmitQuery</code>&rsquo;s existing
+  ownership acquire/release (~<code>:620-640</code> / <code>:650-659</code>), measure approval waits at the
+  confirmation seam, and mark queued operations explicitly.</p>
+</div>
+
+<h2><span class="n">04</span>Counters over timers: how noise is handled</h2>
+
+<div class="panel warn">
+  <p style="margin:0 0 10px;font-size:17px">
+    <b>Counters are strong covariates. They are not load-invariant, and not a gate.</b>
+  </p>
+  <p style="margin:0">
+    Rev.2 claimed <code>stdout_bytes</code> and write counts are &ldquo;identical on a busy laptop and an idle
+    one&rdquo;. Review rejected that, correctly: React batching, Ink throttling and output coalescing all
+    respond to load, and terminal width/height, screen-reader mode, resize, static output, and the
+    alternate-buffer / <code>incrementalRendering</code> settings
+    (<code>inkRenderOptions.ts:34-48</code>) all change them independently of our code quality.
+  </p>
+</div>
+
+<p>
+  They remain the most useful signal we have &mdash; far less machine-sensitive than milliseconds &mdash; but
+  they must be recorded <em>alongside</em> terminal geometry and render mode, and compared only within matched
+  dimensions. Similarly <code>llxprtMs / turnBusyMs</code> does not normalise machine speed: the denominator
+  contains provider, network and human components that do not scale with local CPU.
+</p>
+<h3>Normalizing the timers we do keep</h3>
+<ul>
+  <li><code>llxprtMs / turnBusyMs</code> &mdash; a ratio; a slow machine inflates numerator and denominator together.</li>
+  <li><code>coreMs per 1k context_tokens</code> &mdash; removes context growth, which otherwise looks like a regression.</li>
+  <li><code>uiMs per 1k output_tokens</code> &mdash; removes response length.</li>
+  <li><b>p50 across many turns per version</b>, never single samples. High load inflates the tail, not the median.</li>
+  <li><code>contended</code> and <code>concurrent_instances</code> let us <em>discard</em> polluted samples rather than trying to filter noise statistically (&sect;06).</li>
+</ul>
+
+<h2><span class="n">05</span>Memory: two slopes, not one number</h2>
+
+<p>
+  Absolute RSS tells you nothing &mdash; contexts legitimately get large. The #3114 leak grew
+  <strong>with uptime, not activity</strong>, and that distinction is the whole diagnostic.
+</p>
+
+<div class="fig">
+<svg viewBox="0 0 1000 300" role="img" aria-label="Activity slope versus uptime slope">
+  <defs><style>
+    .ax{stroke:#484f58;stroke-width:1.4}
+    .gl{stroke:#21262d;stroke-width:1}
+    .t1{fill:#e6edf3;font:600 13px ui-monospace,Menlo,monospace}
+    .t2{fill:#8b949e;font:11px ui-monospace,Menlo,monospace}
+    .ln{fill:none;stroke-width:2.6}
+  </style></defs>
+
+  <text class="t1" x="60" y="20">A &middot; sampled at TURN boundaries</text>
+  <text class="t2" x="60" y="38">x = turns &nbsp;&rarr;&nbsp; slope per turn = activity-driven</text>
+  <g>
+    <line class="gl" x1="60" y1="90" x2="440" y2="90"/><line class="gl" x1="60" y1="140" x2="440" y2="140"/><line class="gl" x1="60" y1="190" x2="440" y2="190"/>
+    <line class="ax" x1="60" y1="230" x2="440" y2="230"/><line class="ax" x1="60" y1="55" x2="60" y2="230"/>
+    <text class="t2" x="52" y="60" text-anchor="end">MB</text>
+    <text class="t2" x="250" y="252" text-anchor="middle">turn number</text>
+    <path class="ln" stroke="#3fb950" d="M60 205 C120 160, 170 140, 230 134 S340 130, 440 129"/>
+    <text class="t2" x="434" y="120" text-anchor="end" style="fill:#3fb950">healthy: plateaus</text>
+    <path class="ln" stroke="#f85149" stroke-dasharray="5 4" d="M60 205 C140 178, 240 150, 440 96"/>
+    <text class="t2" x="434" y="88" text-anchor="end" style="fill:#f85149">grows with work</text>
+  </g>
+
+  <text class="t1" x="560" y="20">B &middot; sampled on a COARSE wall-clock interval</text>
+  <text class="t2" x="560" y="38">x = minutes &nbsp;&rarr;&nbsp; slope per minute = uptime-driven</text>
+  <g>
+    <line class="gl" x1="560" y1="90" x2="960" y2="90"/><line class="gl" x1="560" y1="140" x2="960" y2="140"/><line class="gl" x1="560" y1="190" x2="960" y2="190"/>
+    <line class="ax" x1="560" y1="230" x2="960" y2="230"/><line class="ax" x1="560" y1="55" x2="560" y2="230"/>
+    <text class="t2" x="552" y="60" text-anchor="end">MB</text>
+    <text class="t2" x="760" y="252" text-anchor="middle">minutes of uptime</text>
+    <path class="ln" stroke="#3fb950" d="M560 205 C620 165, 680 142, 760 136 S880 132, 960 131"/>
+    <path class="ln" stroke="#f85149" stroke-dasharray="5 4" d="M560 205 C660 180, 800 140, 960 78"/>
+    <text class="t2" x="954" y="70" text-anchor="end" style="fill:#f85149">grows while IDLE &larr; #3114</text>
+  </g>
+
+  <text class="t2" x="60" y="285">Slope(B) &gt;&gt; 0 while Slope(A) is flat &nbsp;=&gt;&nbsp; retention tied to uptime, not work. A different bug class, and the pair localises it immediately.</text>
+</svg>
+<div class="cap">
+  <b>Curves are schematic.</b> <code>external</code> and <code>arrayBuffers</code> are first-class here &mdash;
+  under Bun/JSC that is where the mass hid in #3112. Cost is one <code>memoryUsage()</code> call per turn at
+  <b>0.42 &micro;s</b>. No GC hooks are involved (see &sect;07).
+</div>
+</div>
+
+<h2><span class="n">06</span>Concurrency: where rev.1 was wrong</h2>
+
+<p>
+  llxprt is not a single-instance program. Deriving session windows from every recording on this machine
+  (start time from the <code>session_start</code> event, end approximated by mtime):
+</p>
+
+<div class="two">
+  <div class="panel" style="margin:0">
+    <div class="mono" style="color:var(--red);font-size:22px">182</div>
+    <div style="color:var(--mu);font-size:13px;margin-top:4px">peak overlapping sessions (2026-06-29)</div>
+  </div>
+  <div class="panel" style="margin:0">
+    <div class="mono" style="color:var(--red);font-size:22px">98.9%</div>
+    <div style="color:var(--mu);font-size:13px;margin-top:4px">of observed time with 2 or more concurrent</div>
+  </div>
+</div>
+
+<p style="color:var(--mu);font-size:13.5px">
+  Methodology caveat: mtime overstates session end for recordings that were later resumed, so these are an
+  <em>upper bound</em>. The qualitative conclusion is unaffected &mdash; multi-instance is the normal case, not the
+  exception.
+</p>
+
+<h3>What is actually safe, measured with 8 concurrent processes</h3>
+
+<div class="two">
+  <div class="panel good" style="margin:0">
+    <b>Appending is safe.</b>
+    <pre style="margin:12px 0 0"><code>8 procs x 1500 lines x 642 B
+expected lines : 12000
+actual lines   : 12000
+parsed OK      : 12000
+TORN / corrupt : 0
+per-writer     : all exactly 1500</code></pre>
+    <p style="margin:10px 0 0;font-size:13.5px;color:var(--mu)">
+      <code>O_APPEND</code> makes seek-to-end and write atomic for a regular file. Small records do not tear.
+      Lock-free appending is fine.
+    </p>
+  </div>
+  <div class="panel bad" style="margin:0">
+    <b>Rotation is not.</b>
+    <pre style="margin:12px 0 0"><code>per-process byte counter, cap 1 MiB
+intended ceiling : 2.00 MiB
+ACTUAL total     : 2.92 MiB  (1.5x over)
+records written  : 9600
+still readable   : 4891
+LOST             : 4709  (49%)</code></pre>
+    <p style="margin:10px 0 0;font-size:13.5px;color:var(--mu)">
+      Each process counts only its own bytes, so none of them knows the shared file is full; and simultaneous
+      <code>rename</code>&nbsp;+&nbsp;<code>unlink</code> destroys data another process just rotated.
+    </p>
+  </div>
+</div>
+
+<p>
+  So the fix is not a better counter and not a lock. <strong>Give every process its own file and move the
+  bound to the directory.</strong> Then no file ever has two writers, and the only shared operation is
+  &ldquo;delete the oldest&rdquo; &mdash; which is idempotent, so losing that race is harmless.
+</p>
+
+<div class="fig">
+<svg viewBox="0 0 1000 380" role="img" aria-label="Per-process files with a global directory sweep">
+  <defs>
+    <marker id="ar3" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L7,3 z" fill="#58a6ff"/>
+    </marker>
+    <style>
+      .pbx{fill:#1c2128;stroke:#30363d}
+      .pt{fill:#e6edf3;font:600 12px ui-monospace,Menlo,monospace}
+      .ps{fill:#6e7681;font:10.5px ui-monospace,Menlo,monospace}
+      .pa{stroke:#58a6ff;stroke-width:1.6;fill:none;marker-end:url(#ar3)}
+      .ph{fill:#8b949e;font:11.5px ui-monospace,Menlo,monospace}
+    </style>
+  </defs>
+
+  <text class="ph" x="0" y="16">N CONCURRENT INSTANCES &mdash; each the sole writer of exactly one file</text>
+
+  <rect class="pbx" x="0" y="28" width="150" height="52" rx="8"/>
+  <text class="pt" x="75" y="49" text-anchor="middle">llxprt pid 4102</text>
+  <text class="ps" x="75" y="66" text-anchor="middle">project A</text>
+
+  <rect class="pbx" x="0" y="90" width="150" height="52" rx="8"/>
+  <text class="pt" x="75" y="111" text-anchor="middle">llxprt pid 4530</text>
+  <text class="ps" x="75" y="128" text-anchor="middle">project B</text>
+
+  <rect class="pbx" x="0" y="152" width="150" height="52" rx="8"/>
+  <text class="pt" x="75" y="173" text-anchor="middle">llxprt pid 4711</text>
+  <text class="ps" x="75" y="190" text-anchor="middle">project A (2nd)</text>
+
+  <text class="ps" x="75" y="228" text-anchor="middle">... up to 182 observed</text>
+
+  <path class="pa" d="M156 54 L246 54"/>
+  <path class="pa" d="M156 116 L246 116"/>
+  <path class="pa" d="M156 178 L246 178"/>
+
+  <rect x="254" y="28" width="330" height="52" rx="8" fill="rgba(63,185,80,.12)" stroke="#3fb950"/>
+  <text class="pt" x="419" y="52" text-anchor="middle" style="fill:#3fb950">perf-20260808-4102-000.jsonl</text>
+  <text class="ps" x="419" y="69" text-anchor="middle">one writer &middot; no lock &middot; day+size roll</text>
+
+  <rect x="254" y="90" width="330" height="52" rx="8" fill="rgba(63,185,80,.12)" stroke="#3fb950"/>
+  <text class="pt" x="419" y="114" text-anchor="middle" style="fill:#3fb950">perf-20260808-4530-000.jsonl</text>
+  <text class="ps" x="419" y="131" text-anchor="middle">one writer &middot; no lock &middot; day+size roll</text>
+
+  <rect x="254" y="152" width="330" height="52" rx="8" fill="rgba(63,185,80,.12)" stroke="#3fb950"/>
+  <text class="pt" x="419" y="176" text-anchor="middle" style="fill:#3fb950">perf-20260809-4102-000.jsonl</text>
+  <text class="ps" x="419" y="193" text-anchor="middle">same pid, next UTC day &mdash; new file</text>
+
+  <rect x="254" y="216" width="330" height="34" rx="8" fill="none" stroke="#30363d" stroke-dasharray="4 3"/>
+  <text class="ps" x="419" y="237" text-anchor="middle">crashed process leaves a COMPLETE file &mdash; no stale lock to reclaim</text>
+
+  <text class="ph" x="640" y="16">ONE GLOBAL DIRECTORY</text>
+  <rect class="pbx" x="640" y="28" width="360" height="88" rx="8"/>
+  <text class="pt" x="660" y="52">~/Library/Logs/llxprt-code/perf/</text>
+  <text class="ps" x="660" y="72">global &mdash; NOT under sha256(projectRoot)</text>
+  <text class="ps" x="660" y="88">so it can never become unreachable (#3164)</text>
+  <text class="ps" x="660" y="104">project identity is a FIELD in the record</text>
+
+  <path class="pa" d="M820 122 L820 152"/>
+
+  <rect x="640" y="160" width="360" height="120" rx="8" fill="rgba(88,166,255,.10)" stroke="#58a6ff" stroke-width="1.8"/>
+  <text class="pt" x="820" y="184" text-anchor="middle" style="fill:#58a6ff">startup sweep (idempotent)</text>
+  <text class="ps" x="660" y="206">1. readdir, sort by mtime</text>
+  <text class="ps" x="660" y="223">2. while (files &gt; MAX_FILES || bytes &gt; MAX_BYTES)</text>
+  <text class="ps" x="660" y="240">3. &nbsp;&nbsp; unlink oldest &mdash; best-effort</text>
+  <text class="ps" x="660" y="260">Two instances sweeping at once is harmless:</text>
+  <text class="ps" x="660" y="274">the loser's unlink returns ENOENT.</text>
+
+  <text class="ph" x="640" y="310">BOUND</text>
+  <rect class="pbx" x="640" y="322" width="360" height="52" rx="8"/>
+  <text class="pt" x="820" y="344" text-anchor="middle">64 MiB &nbsp;&middot;&nbsp; 8,000 files</text>
+  <text class="ps" x="820" y="362" text-anchor="middle">about 97,000 turns &mdash; roughly 5 weeks at observed volume</text>
+</svg>
+<div class="cap">
+  <b>This is <code>rotateReports()</code> applied to a directory instead of a file.</b>
+  <code>packages/core/src/utils/errorReporting.ts</code> already bounds on file count <em>and</em> total bytes
+  simultaneously and unlinks oldest-first, best-effort. Count-only fails when records fatten; byte-only fails
+  when files multiply. The per-file shape matches <code>TokenUsageLogger</code> &mdash; which the data shows is
+  fine (50 MB across 1,281 files). The lesson of
+  <a href="https://github.com/vybestack/llxprt-code/issues/3164">#3164</a> was never &ldquo;per-file is
+  bad&rdquo;; it was &ldquo;per-project-hash directories are unreachable <em>and</em> nothing sweeps.&rdquo;
+  One global directory with a sweep has neither problem.
+</div>
+</div>
+
+<h3>Long-lived processes: the filename must be time-driven</h3>
+
+<p>
+  &ldquo;One file per process&rdquo; alone is not enough &mdash; llxprt often runs 24/7, and a process that lives for
+  weeks would write one unbounded file. The file a record lands in is therefore chosen by
+  <strong>the UTC day of the record&rsquo;s own timestamp</strong>, with a sequence suffix when the process&rsquo;s
+  own file gets large:
+</p>
+
+<pre><code>perf-&lt;YYYYMMDD&gt;-&lt;runUuid&gt;-&lt;nnn&gt;.jsonl        (Rev.3: runUuid, not pid)
+     |          |         └─ sub-roll when THIS file passes 8 MiB
+     |          └─ per-run UUID, created with the exclusive 'wx' flag
+     └─ UTC day taken from the record's ts, never from a timer</code></pre>
+
+<div class="panel bad">
+  <p style="margin:0">
+    <b>Corrected in Rev.3: a pid is not an ownership claim.</b> Rev.2 used
+    <code>perf-&lt;day&gt;-&lt;pid&gt;-&lt;nnn&gt;</code> and asserted a sole writer forever. Pids are reused
+    across reboots, two containers sharing a mounted home can hold the same pid, and a second run on the same
+    day would reopen <code>-000</code> — at which point both the sole-writer invariant and the private byte
+    counter are wrong. Discovering the next sequence with an existence check is also check-then-use. The shipped
+    name uses a <b>per-run UUID</b> with <b>exclusive creation</b> (<code>wx</code>) and initialises its byte
+    counter from <code>stat</code>. <code>errorReporting.ts:367-373</code> already adds random bytes for the
+    same reason.
+  </p>
+</div>
+
+<p>
+  Deriving the day from the record rather than a scheduled timer means a process that is idle or suspended
+  across midnight still rolls correctly on its next write, with no wakeups and no clock callbacks. UTC avoids
+  DST ambiguity. And the per-process byte counter that was <em>wrong</em> in rev.1 is <em>correct</em> here &mdash;
+  the bug was never private counters, it was a private counter on a <b>shared</b> file. Re-running the same
+  8-process test against this scheme:
+</p>
+
+<div class="panel good">
+<pre style="margin:0"><code>8 processes, 9,600 records, simulated UTC midnight crossing
+files created                  : 24
+records readable               : 9600      LOST: 0
+files over the per-file cap     : 0
+files with more than one writer : 0
+VERDICT: no loss, cap respected, single writer per file</code></pre>
+</div>
+
+<h3>Compression: worth it, but it must not tax an interactive session</h3>
+
+<p>
+  Measured on a heavy 24/7 day-file (3,000 turns, 2.29 MiB) &mdash; these records are almost all numbers, so they
+  compress extremely well:
+</p>
+
+<table>
+  <tr><th>Level</th><th>Result</th><th>Ratio</th><th>CPU</th></tr>
+  <tr><td>gzip -1</td><td class="num">2.29 &rarr; 0.374 MiB</td><td class="num">6.1&times;</td><td class="num">7 ms</td></tr>
+  <tr><td>gzip -6</td><td class="num">2.29 &rarr; 0.291 MiB</td><td class="num">7.9&times;</td><td class="num">24 ms</td></tr>
+  <tr><td>gzip -9</td><td class="num">2.29 &rarr; 0.277 MiB</td><td class="num">8.3&times;</td><td class="num">37 ms</td></tr>
+  <tr><td>gunzip (read side)</td><td class="num">&mdash;</td><td class="num">&mdash;</td><td class="num">2 ms</td></tr>
+  <tr><td colspan="2">30 heavy days, uncompressed</td><td class="num">69 MiB</td><td></td></tr>
+  <tr><td colspan="2">30 heavy days, gzip -6</td><td class="num">9 MiB</td><td></td></tr>
+</table>
+
+<p>
+  So compression buys roughly <b>8&times; more history for the same disk</b>, and the cost of a whole day-file is
+  <b>24 ms</b> &mdash; less than one render frame. The concern is therefore not the cost, it is the
+  <em>unboundedness</em>: a janitor that might compress fifty files is not something an interactive session
+  should discover. Four rules make it safe:
+</p>
+
+<h3>Who compresses? Any instance &mdash; but only because every step is made idempotent</h3>
+
+<p>
+  There is no elected janitor and no lock. Any instance may compress at startup, and concurrent attempts are
+  made harmless rather than prevented. That requires five rules, three of which came out of testing rather
+  than reasoning.
+</p>
+
+<ol>
+  <li><b>Private scratch path.</b> <code>x.jsonl.gz.&lt;pid&gt;.tmp</code>, never a shared <code>.tmp</code>. With 8 concurrent compressors on a shared tmp path, 1&ndash;3 workers per run threw <code>ENOENT</code> on rename; the archive happened to survive only because gzip is byte-deterministic (verified) and every worker compressed identical input. That is luck, not safety &mdash; mixed llxprt versions or gzip levels would produce differing bytes into one file. A private tmp is correct by construction and costs nothing.</li>
+  <li><b>Refuse to overwrite an existing archive.</b> If <code>x.jsonl.gz</code> exists, skip. See the boundary hazard below &mdash; this is the rule that prevents catastrophic loss.</li>
+  <li><b>Idle grace, not just a day check.</b> Eligible only when the file&rsquo;s UTC day is past <em>and</em> its mtime is older than ~1&nbsp;h &mdash; <em>and</em> the file is not claimed by a live writer, because an idle mtime does not prove a 24/7 process is dead.</li>
+  <li><b>Bounded work.</b> At most 1&ndash;2 files per startup, oldest first. Worst case ~48 ms, once, before the UI is interactive; a backlog drains over several launches. Concurrent duplicate work costs at most N&times;24 ms of wasted CPU, never correctness.</li>
+  <li><b>Startup only, never mid-session</b> &mdash; so it can never land during streaming, which is the thing we are measuring. Crash safety comes from the atomic rename: a crash leaves either the intact original or a complete archive, never a truncated one.</li>
+</ol>
+
+<div class="panel bad">
+  <p style="margin:0 0 12px"><b>The boundary hazard, and why rule 2 is not optional.</b>
+  A turn that begins at 23:59:50 and is recorded after midnight carries a timestamp belonging to
+  <em>yesterday</em>, so it appends to a day-file that may already have been archived. Without the
+  refuse-to-overwrite rule, the next pass compresses that one-record file to the <em>same</em>
+  <code>.gz</code> name and destroys the whole day:</p>
+<pre style="margin:0"><code>NAIVE
+  after archive           : 2000 records readable (of 2000)
+  after late append       : 2001 readable (of 2001)   files=2
+  after 2nd compress pass :    1 readable (of 2001)
+  >>> 2000 RECORDS DESTROYED — a full day wiped by one late record
+
+GUARDED (idle grace + refuse-if-exists)
+  pass 1 (file fresh)       -> SKIP: 0.0s since last write (&lt; 1h grace)
+  pass 2 (3h idle)          -> COMPRESSED
+  late record appended      -> readable 2001 of 2001
+  pass 3 (archive exists)   -> SKIP: refuse to overwrite
+  pass 4 (stray 3h idle)    -> SKIP: refuse to overwrite
+  FINAL: 2001 of 2001 readable, lost: 0</code></pre>
+  <p style="margin:12px 0 0;font-size:13.5px;color:var(--mu)">
+    The stray one-record <code>.jsonl</code> is simply left beside the archive. Both are read by
+    <code>gzcat -f</code>, so nothing is lost, and the sweep evicts both together by age.
+  </p>
+</div>
+
+<div class="panel warn">
+  <p style="margin:0 0 10px"><b>Withdrawn: the &ldquo;negative mtime age&rdquo; finding.</b>
+  Rev.2 reported that <code>Date.now() - mtimeMs</code> going negative on APFS (&minus;0.65 ms) made an
+  <code>age &lt; grace</code> check &ldquo;silently skip forever&rdquo;, and treated a
+  <code>Math.max(0, …)</code> clamp as a required fix. That is wrong. For any positive grace the clamp does not
+  change the verdict:</p>
+<pre style="margin:0 0 10px"><code>grace = 1h : raw (age &lt; grace) = true , clamped = true   -&gt; same verdict
+grace = 0  : raw = true , clamped = false                -&gt; differs, but grace=0 is not the design</code></pre>
+  <p style="margin:0">
+    The original test used <code>grace = 0</code>, a configuration this design never uses, so it was green for
+    the wrong reason and the conclusion was over-generalised. The genuine hazard is a <em>materially</em> future
+    mtime (an NTP step) delaying eligibility until <code>mtime + grace</code> &mdash; a benign delay. Retained
+    as a test case, not a design constraint. Recorded here because a green test that never exercised the code
+    under test is worse than a red one, and this one fooled me twice.
+  </p>
+</div>
+
+<div class="panel good">
+  <p style="margin:0">
+    <b>Eviction must not depend on compression.</b> The sweep evicts oldest-first on age and bytes
+    <em>regardless</em> of whether anything was ever compressed. Compression buys history depth; the sweep is
+    what bounds the disk. Because of that independence, Rev.3 <b>defers compression to last</b> (PLAN.md
+    Phase&nbsp;7) &mdash; it is an optimisation, not a prerequisite, and it is the riskiest concurrency state
+    machine in the design.
+  </p>
+</div>
+
+<div class="panel bad">
+  <p style="margin:0 0 10px"><b>Three further Rev.3 corrections to this section.</b></p>
+  <p style="margin:0 0 10px">
+    <b>1. Startup-only maintenance cannot bound a 24/7 process.</b> The diagram above says startup sweep, and
+    the requirement explicitly names processes that never restart. Maintenance must also run on file-roll
+    boundaries and on a coarse interval.
+  </p>
+  <p style="margin:0 0 10px">
+    <b>2. A hard instantaneous ceiling, zero record loss, and no coordination cannot all hold.</b> Rev.2
+    claimed all three. Concurrent appends overshoot between scan and delete, and many active files can
+    collectively exceed the ceiling while each stays under its sub-roll threshold. The honest guarantee is an
+    <em>eventual</em> bound with a documented maximum overshoot. Relatedly, on a read-only or full volume
+    eviction itself cannot run, so the guarantee there is &ldquo;no further growth&rdquo;, not &ldquo;the cap is
+    enforced&rdquo;.
+  </p>
+  <p style="margin:0">
+    <b>3. The sweep must not delete a live writer&rsquo;s file.</b> An idle mtime does not prove a 24/7 process
+    is dead, and unlinking a live writer&rsquo;s file makes already-written records vanish while the next
+    <code>appendFile</code> silently recreates the path. Live files need an explicit claim, and only closed
+    generations may be swept. <code>rotateReports()</code> is a weaker precedent than Rev.2 implied: it scans a
+    20-file / 1 MiB cohort, protects only in-process paths, and decrements its accounting even when
+    <code>unlink</code> fails (<code>errorReporting.ts:354-408</code>). Reuse the shape, not the guarantees.
+  </p>
+</div>
+
+<p style="color:var(--mu);font-size:13.5px">
+  Rejected alternative, for the record: gzip members are concatenable (verified &mdash; two members decode to
+  <code>"a
+b
+"</code>), so we <em>could</em> append pre-compressed records. But compressing 800-byte records
+  individually gives a poor ratio and puts a codec on the write path. Not worth it.
+</p>
+
+<h3>Why not a lock?</h3>
+<p>
+  Two lock protocols already exist in-tree and both argue against it here.
+  <code>reconcileLock.ts</code> takes an O_EXCL lock with <em>deliberately no PID-liveness reclaim</em>
+  (&ldquo;safety over availability&rdquo;) &mdash; applied to rotation, one crash would stop rotation permanently.
+  <code>CredentialWriteLock</code> does it properly with a fenced O_EXCL owner protocol, process probing and
+  TIMEOUT &mdash; far too much machinery for a log file. And we have just filed
+  <a href="https://github.com/vybestack/llxprt-code/issues/3164">#3164</a> about 417 stale locks.
+  Adding another lock is the wrong direction. Per-process files need no lock at all.
+</p>
+
+<div class="panel good">
+  <p style="margin:0">
+    <b>A bonus we get for free.</b> With 2+ instances running 98.9% of the time, the dominant source of
+    &ldquo;llxprt feels slow&rdquo; may be <em>llxprt competing with itself</em>. Recording
+    <code>concurrent_instances</code> (countable from live files in the perf dir) makes that measurable for the
+    first time &mdash; and lets you filter it out of trend comparisons instead of guessing.
+  </p>
+</div>
+
+<h3>Growth math (measured record size, observed volume)</h3>
+<table>
+  <tr><th>Scope</th><th>Size</th><th></th></tr>
+  <tr><td>1 turn</td><td class="num">688 B</td><td>measured, fixed schema</td></tr>
+  <tr><td>1 typical session (~20 turns)</td><td class="num">13.8 KiB</td><td>one file</td></tr>
+  <tr><td>1 day (~140 sessions observed)</td><td class="num">1.9 MiB</td><td>~140 files</td></tr>
+  <tr><td>Directory ceiling</td><td class="num">64 MiB</td><td>~5 weeks, then oldest-first eviction</td></tr>
+  <tr><td>For comparison: <code>chats</code> today</td><td class="num">3.1 GiB</td><td>48&times; the entire perf budget</td></tr>
+</table>
+
+<h2><span class="n">07</span>Runtime reality check</h2>
+
+<table>
+  <tr><th>Capability</th><th>Bun 1.3.14</th><th>Node v25.2.1</th><th>Verdict</th></tr>
+  <tr>
+    <td><code>PerformanceObserver</code> gc entries</td>
+    <td>not in <code>supportedEntryTypes</code>; <code>observe()</code> <b>accepts and yields 0</b></td>
+    <td>11 entries</td>
+    <td><span class="tag no">DO NOT USE</span> silent no-op &mdash; a GC dashboard would read flat-zero forever and look healthy</td>
+  </tr>
+  <tr>
+    <td><code>monitorEventLoopDelay</code></td>
+    <td>min 0.34 ms / mean 1.59 ms (pure delay)</td>
+    <td>min 10.3 ms / mean 12.1 ms (includes interval)</td>
+    <td><span class="tag no">DO NOT USE</span> same API, incomparable baselines, silently</td>
+  </tr>
+  <tr>
+    <td><code>eventLoopUtilization</code></td>
+    <td>absent</td>
+    <td>present</td>
+    <td><span class="tag no">UNAVAILABLE</span> would have been the ideal busy/idle normalizer</td>
+  </tr>
+  <tr>
+    <td><code>v8.getHeapStatistics().heap_size_limit</code></td>
+    <td>768 MB</td>
+    <td>4.49 GB</td>
+    <td><span class="tag no">DO NOT USE</span> confirms #3112&rsquo;s removal of the V8 denominator</td>
+  </tr>
+  <tr>
+    <td>self-scheduled drift probe</td>
+    <td>median 1.93 ms, max 2.01 ms</td>
+    <td>median 2.09 ms, max 2.15 ms</td>
+    <td><span class="tag have">USE</span> identical semantics on both; supplies <code>contended</code></td>
+  </tr>
+  <tr>
+    <td>concurrent <code>O_APPEND</code>, 8 writers</td>
+    <td colspan="2">12,000 / 12,000 records intact, 0 torn (APFS)</td>
+    <td><span class="tag have">USE</span> lock-free appends are safe</td>
+  </tr>
+  <tr><td><code>process.memoryUsage()</code></td><td>0.42 &micro;s</td><td>0.66 &micro;s</td><td><span class="tag have">USE</span></td></tr>
+  <tr><td><code>performance.now()</code></td><td>25.1 ns</td><td>26.6 ns</td><td><span class="tag have">USE</span></td></tr>
+</table>
+
+<h2><span class="n">08</span>Observer-effect budget</h2>
+
+<div class="panel bad">
+  <p style="margin:0">
+    <b>This budget is WITHDRAWN.</b> It sums isolated primitive costs and calls the result an instrumentation
+    budget. It omits recorder dispatch, argument evaluation on the disabled path, byte-length work, record
+    allocation and <code>JSON.stringify</code>, promise and microtask cost, roll checks, queue growth,
+    filesystem contention, GC, maintenance scans, and compression. It also prices one memory sample while the
+    design asks for turn-boundary <em>and</em> interval sampling, and treats the drift probe as free when
+    ~180 ticks per turn implies an added ~10&nbsp;Hz timer &mdash; existing intervals are 1&nbsp;s, 2&nbsp;s and
+    60&nbsp;s, so there is nothing to piggyback on. The table is kept only as the primitive-cost measurements
+    it actually is. A real end-to-end figure, enabled and disabled, under streaming load, with p50/p95/p99
+    event-loop impact, is a Phase&nbsp;0.5 deliverable in <a href="./PLAN.md">PLAN.md</a>, and no overhead claim
+    ships before it exists.
+  </p>
+</div>
+
+<p>Primitive costs against one realistic turn &mdash; 18.4 s wall, 1,204 deltas, 388 renders:</p>
+
+<table>
+  <tr><th>Source</th><th>Count</th><th>Unit cost</th><th>Total</th></tr>
+  <tr><td>counter increments (8/delta)</td><td class="num">9,632</td><td class="num">1.97 ns</td><td class="num">19.0 &micro;s</td></tr>
+  <tr><td>frame timing (2 clock reads/frame)</td><td class="num">776</td><td class="num">25.1 ns</td><td class="num">19.5 &micro;s</td></tr>
+  <tr><td>drift probe ticks</td><td class="num">~180</td><td class="num">~55 ns</td><td class="num">9.9 &micro;s</td></tr>
+  <tr><td>memory sample</td><td class="num">1</td><td class="num">0.42 &micro;s</td><td class="num">0.4 &micro;s</td></tr>
+  <tr><td>JSONL append</td><td class="num">1</td><td>async, off-path</td><td class="num">~0 &micro;s</td></tr>
+  <tr><td><b>Total</b></td><td></td><td></td><td class="num"><b>about 49 &micro;s</b></td></tr>
+  <tr><td colspan="3"><b>As a fraction of an 18.4 s turn</b></td><td class="num"><b>0.00027%</b></td></tr>
+</table>
+
+<h3>What actually causes observer effect (and how each is avoided)</h3>
+<ol>
+  <li><b>I/O on the hot path.</b> One async append per turn, to this process&rsquo;s own file. Nothing per delta.</li>
+  <li><b>Allocation per sample.</b> Fixed preallocated accumulators &mdash; count/sum/min/max plus a fixed integer bucket array. No per-sample objects, no per-sample attribute maps (an OTel allocation trap).</li>
+  <li><b>Emitting events per sample.</b> Perf samples never flow through <code>uiTelemetryService</code>; that would build a render-triggering feedback loop.</li>
+  <li><b>A HUD that re-renders on every sample.</b> <code>/perf</code> reads a mutable ref on a slow interval &mdash; the pattern Footer&rsquo;s memory display already uses.</li>
+  <li><b>Global async instrumentation.</b> No new <code>AsyncLocalStorage</code> / <code>async_hooks</code> usage.</li>
+  <li><b>Extra timers.</b> Piggyback on intervals that already exist rather than adding wakeups.</li>
+</ol>
+
+<div class="panel warn">
+  <p style="margin:0 0 10px">
+    <b>Enable/disable: the mechanism stands, the justification does not.</b> Installing a recorder object at
+    init &mdash; real or no-op &mdash; is still the right shape, because it keeps
+    <code>if (perfEnabled)</code> branches out of the hot path.
+  </p>
+  <p style="margin:0">
+    But &ldquo;monomorphic call sites, the JIT inlines the no-op away&rdquo; is a <b>hypothesis, not a verified
+    fact</b>, and it was stated as fact. A no-op method does not prevent evaluation of its
+    <em>arguments</em> — <code>performance.now()</code>, byte sizing, object construction all still run. React
+    closures, proxies, and runtime setting changes can make a site polymorphic, and JSC and V8 behave
+    differently. The disabled fast path must be designed so the expensive work is <em>structurally absent</em>,
+    not merely passed to an empty function, and proven with an exact-path benchmark on both runtimes.
+  </p>
+</div>
+
+<h2><span class="n">09</span>Reading the trend</h2>
+
+<div class="panel bad">
+  <p style="margin:0">
+    <b>A shell one-liner is not a deliverable.</b> It is macOS-oriented (<code>gzcat</code>), breaks on
+    argument limits once the directory holds thousands of entries, aborts on a single malformed or truncated
+    line, has no schema-version dispatch, and does not exist on Windows. Without a real consumer this feature
+    accumulates JSONL nobody reads. <a href="./PLAN.md">PLAN.md</a> Phase&nbsp;5 makes a Bun/TypeScript report
+    command a requirement, including <b>telemetry self-health</b> (records dropped, queue high-water mark, last
+    write error, evictions) &mdash; without which a flat trend is indistinguishable from broken
+    instrumentation. The command below is illustrative of the <em>shape</em> of the query only.
+  </p>
+</div>
+
+<div class="panel bad">
+  <p style="margin:0 0 10px">
+    <b>The example query and field table that stood here have been deleted, not marked.</b>
+    They referenced <code>core_ms</code>, <code>ui_ms</code>, <code>llxprt_ms</code> and
+    <code>turn_busy_ms</code> &mdash; every one of them a field from the model rejected in &sect;02. Keeping
+    superseded <em>prose</em> in place is defensible; keeping a runnable-looking code block and a field list that
+    <em>looks like a schema</em> is not, because that is exactly what an implementer copies. The record schema
+    does not exist yet: it is a Phase&nbsp;1 deliverable in <a href="./PLAN.md">PLAN.md</a>, to be written once as
+    a Zod schema from which both the writer and the reader derive their types.
+  </p>
+  <p style="margin:0">
+    This is the same failure mode as <a href="https://github.com/vybestack/llxprt-code/issues/3164">#3164</a>,
+    where a reader drifted from its writer&rsquo;s format and consequently deleted nothing for months, with green
+    tests, because the fixtures encoded the legacy shape. The round-trip test must therefore assert against a
+    record produced by the real writer &mdash; never a hand-authored fixture.
+  </p>
+</div>
+
+<p>
+  The dimensions a trend must be grouped by, as distinct from the measurements themselves, are listed in
+  <a href="./PLAN.md">PLAN.md</a>: version and commit for the x-axis; provider, model, render mode and terminal
+  geometry as matched comparison dimensions; and <code>concurrent_instances</code> for contamination. Two facts
+  worth carrying forward from the version investigation in &sect;10: <code>llxprt_version</code> comes from
+  <code>CLI_VERSION</code>, baked at build time, and <code>git_sha</code> needs no build change at all because
+  <code>getGitCommitInfo()</code> already exists.
+</p>
+
+<h2><span class="n">10</span>Correlating a slow turn to what was happening</h2>
+
+<p>
+  A perf number nobody can trace back to a conversation is a curiosity, not a diagnostic. I checked what join
+  keys actually exist by scanning 120 recordings / 173,129 events. The vocabulary is narrow:
+</p>
+
+<pre><code>event types : content(170555)  compressed(1982)  session_event(387)
+              session_start(120)  provider_switch(85)
+every event : { v, seq, ts, type, payload }
+
+session_start payload: sessionId, projectHash, workspaceDirs, provider, model, startTime
+content payload      : { content: IContent }  -- carries IContent.metadata verbatim</code></pre>
+
+<div class="panel good">
+  <p style="margin:0">
+    <b>#3130 changed this for the better.</b> It landed as
+    <a href="https://github.com/vybestack/llxprt-code/pull/3155">#3155</a> and mints
+    <code>turn_id</code> / <code>prompt_id</code> <em>before</em> the request is sent, stamping them onto the
+    content that gets persisted (<code>packages/agents/src/core/turnIdentity.ts</code>). Since
+    <code>recordContent()</code> enqueues <code>{ content }</code> whole, recordings now carry the turn id.
+    Verified in live recordings on this machine:
+  </p>
+  <pre style="margin:12px 0 0"><code>metadata keys seen: ['chronology', 'model', 'providerBaseURL', 'turnId', 'usage']</code></pre>
+  <p style="margin:12px 0 0">
+    So the turn-level join is <b>exact</b>, not a timestamp approximation. An earlier draft of this design
+    assumed otherwise and planned a <code>ts</code>-window join; that is no longer necessary.
+  </p>
+</div>
+
+<div class="fig">
+<svg viewBox="0 0 1000 300" role="img" aria-label="Join paths from a perf record to session and tool data">
+  <defs>
+    <marker id="ar4" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L7,3 z" fill="#3fb950"/>
+    </marker>
+    <marker id="ar5" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L7,3 z" fill="#d29922"/>
+    </marker>
+    <style>
+      .jbx{fill:#1c2128;stroke:#30363d}
+      .jt{fill:#e6edf3;font:600 12.5px ui-monospace,Menlo,monospace}
+      .js{fill:#6e7681;font:10.5px ui-monospace,Menlo,monospace}
+      .jok{stroke:#3fb950;stroke-width:2;fill:none;marker-end:url(#ar4)}
+      .jwk{stroke:#d29922;stroke-width:2;fill:none;stroke-dasharray:6 4;marker-end:url(#ar5)}
+      .jh{fill:#8b949e;font:11.5px ui-monospace,Menlo,monospace}
+    </style>
+  </defs>
+
+  <rect x="0" y="88" width="250" height="86" rx="8" fill="rgba(88,166,255,.12)" stroke="#58a6ff" stroke-width="1.8"/>
+  <text class="jt" x="125" y="114" text-anchor="middle" style="fill:#58a6ff">perf record</text>
+  <text class="js" x="125" y="133" text-anchor="middle">session_id (full UUID)</text>
+  <text class="js" x="125" y="148" text-anchor="middle">turn_start_ts / turn_end_ts</text>
+  <text class="js" x="125" y="163" text-anchor="middle">llxprt_version, git_sha, pid</text>
+
+  <path class="jok" d="M256 112 L392 62"/>
+  <text class="js" x="318" y="76" text-anchor="middle" style="fill:#3fb950">exact</text>
+
+  <rect class="jbx" x="400" y="20" width="290" height="76" rx="8"/>
+  <text class="jt" x="545" y="44" text-anchor="middle">session recording</text>
+  <text class="js" x="545" y="62" text-anchor="middle">match sessionId in session_start</text>
+  <text class="js" x="545" y="78" text-anchor="middle">gives project path, provider, model</text>
+
+  <path class="jok" d="M256 131 L392 131"/>
+  <text class="js" x="318" y="124" text-anchor="middle" style="fill:#3fb950">turn_id</text>
+
+  <rect class="jbx" x="400" y="104" width="290" height="76" rx="8"/>
+  <text class="jt" x="545" y="128" text-anchor="middle">the turn&rsquo;s content events</text>
+  <text class="js" x="545" y="146" text-anchor="middle">match content.metadata.turnId</text>
+  <text class="js" x="545" y="162" text-anchor="middle">exact since #3130 / #3155</text>
+
+  <path class="jwk" d="M256 152 L392 212"/>
+  <text class="js" x="318" y="200" text-anchor="middle" style="fill:#d29922">not in recording</text>
+
+  <rect class="jbx" x="400" y="190" width="290" height="90" rx="8" stroke="#d29922"/>
+  <text class="jt" x="545" y="214" text-anchor="middle" style="fill:#d29922">which tool was slow?</text>
+  <text class="js" x="545" y="232" text-anchor="middle">recordings contain NO tool events</text>
+  <text class="js" x="545" y="248" text-anchor="middle">must come from logToolCall /</text>
+  <text class="js" x="545" y="264" text-anchor="middle">tool.call.latency or #3130</text>
+
+  <path class="jok" d="M696 58 L788 58"/>
+  <path class="jok" d="M696 142 L788 142"/>
+  <path class="jwk" d="M696 235 L788 235"/>
+
+  <rect x="796" y="20" width="204" height="260" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text class="jh" x="898" y="44" text-anchor="middle">VERDICT</text>
+  <text class="jt" x="898" y="72" text-anchor="middle" style="fill:#3fb950">session: YES</text>
+  <text class="js" x="898" y="90" text-anchor="middle">exact, via full UUID</text>
+  <text class="jt" x="898" y="128" text-anchor="middle" style="fill:#3fb950">turn: YES</text>
+  <text class="js" x="898" y="146" text-anchor="middle">exact, via turn_id</text>
+  <text class="js" x="898" y="161" text-anchor="middle">(shipped in #3130)</text>
+  <text class="jt" x="898" y="212" text-anchor="middle" style="fill:#d29922">tool: NO</text>
+  <text class="js" x="898" y="230" text-anchor="middle">needs a second source</text>
+</svg>
+<div class="cap">
+  <b>Implementation gotcha.</b> <code>SESSION_FILE_ID_PREFIX_LENGTH = 12</code>
+  (<code>SessionRecordingService.ts:49,262</code>), so the recording <em>filename</em> carries only the first 12
+  characters of the session UUID &mdash; e.g. <code>session-2026-07-15T12-04-48-ca59252d-f60.jsonl</code> for
+  <code>ca59252d-f604-4355-b2db-d4e22ee4fdbc</code>. <b>Join on the full <code>sessionId</code> in the
+  <code>session_start</code> payload, never on the filename</b>, which is both lossy and collision-prone.
+</div>
+</div>
+
+<h3>Adopt #3130&rsquo;s shipped key names verbatim</h3>
+<p>
+  #3130 has landed, so these are no longer a proposal to align with &mdash; they are the schema on disk.
+  From <code>docs/token-usage-log.md</code>, the identity block the perf record must reuse
+  <em>character for character</em>:
+</p>
+<pre><code>prompt_id          joins to metadata.promptId on recorded content
+session_id         the session identifier
+turn_id            minted pre-send, stamped on the persisted turn
+runtime_id         the agent runtime that served the request
+parent_runtime_id  null for the main agent
+subagent_name      null for the main agent
+record_type        turn | compression | provider_switch | model_switch | ...
+schema_version</code></pre>
+<p>
+  Inventing parallel names would produce three logs &mdash; perf, token-usage, session recording &mdash; that
+  cannot be joined, which is precisely the reader-drift failure that produced
+  <a href="https://github.com/vybestack/llxprt-code/issues/3164">#3164</a>.
+</p>
+
+<div class="panel warn">
+  <p style="margin:0">
+    <b>Do not join on <code>user_turn</code> or <code>step</code>.</b>
+    <code>docs/token-usage-log.md</code> documents that both name <em>the newest turn already in history,
+    not the turn being sent</em>, and are <code>null</code> on a session&rsquo;s first request. They are useful
+    context, and wrong as join keys. Use <code>turn_id</code> / <code>prompt_id</code>.
+  </p>
+</div>
+
+<h3>The commit SHA is already there &mdash; use it, don&rsquo;t rebuild it</h3>
+
+<p>
+  There is a complete commit-stamp pipeline in the tree already, the one <code>/about</code> displays and that
+  nightly versioning uses. Nothing new is required:
+</p>
+
+<pre><code>scripts/generate-git-commit-info.ts     git rev-parse --short HEAD
+   └─ writes packages/cli/src/generated/git-commit.json   {"commit":"a4f6067ad"}
+scripts/copy_bundle_assets.ts:342       copies it to bundle/git-commit.json
+packages/cli/src/utils/gitCommitInfo.ts getGitCommitInfo() -> short sha or 'N/A'
+   └─ resolves source / dist / bundle layouts, env override, misses not cached
+packages/cli/src/ui/components/AboutBox.tsx   the /about consumer
+scripts/get-release-version.ts:31       same short sha for nightly versions
+
+wired via  package.json: "generate", "bundle" (runs generate), "prepack"</code></pre>
+
+<p>
+  So <code>git_sha</code> is one function call, and it is already gitignored-generated, bundle-aware and
+  fail-soft. The perf record should simply call <code>getGitCommitInfo()</code>.
+</p>
+
+<div class="panel warn">
+  <p style="margin:0">
+    <b>One freshness caveat.</b> The artifact is only regenerated by <code>generate</code>,
+    <code>bundle</code> and <code>prepack</code> &mdash; plain <code>npm run build</code>
+    (<code>bun scripts/build.ts</code>) does <em>not</em> refresh it. Observed live in this checkout:
+    <code>git-commit.json</code> said <code>a4f6067ad</code> while <code>HEAD</code> was
+    <code>d604b4db3</code>, one commit and ~30 minutes apart. Released and nightly artifacts are correct
+    (<code>prepack</code> / <code>bundle</code> run the generator), so <b>cross-release trending is sound</b>;
+    a local dev build can report a stale sha. Worth recording <code>llxprt_version</code> alongside it, since
+    nightly versions already embed the same short sha independently.
+  </p>
+</div>
+
+<h2><span class="n">11</span>Build order</h2>
+
+<table>
+  <tr><th>#</th><th>Slice</th><th>Delivers</th></tr>
+  <tr><td class="num">0.5</td><td><b>Preflight (blocking)</b> &mdash; confirm <code>onRender</code> availability, the <code>useSubmitQuery</code> ownership seams, <code>operation_id</code> propagation through <code>AgenticLoop</code>, an end-to-end overhead harness, and an opt-in setting</td><td>nothing is built until these are verified in the tree</td></tr>
+  <tr><td class="num">1</td><td>Schema + writer contract: run-UUID exclusive-create, bounded queue, fail-open self-disable, opt-in gate</td><td>a writer that cannot lose another writer&rsquo;s records and is off by default</td></tr>
+  <tr><td class="num">2</td><td>Operation lifecycle and identity: <code>operation_id</code>, child <code>prompt_id</code>/<code>turn_id</code>, terminal status, exactly-once finalisation</td><td>a record that survives retries, subagents, cancellation and no-send paths</td></tr>
+  <tr><td class="num">3</td><td>Directly measured client phases + provider/tool sums <em>and</em> unions + <code>unclassified_elapsed_ms</code></td><td>the actual answer to &ldquo;us or the model&rdquo;, without invalid subtraction</td></tr>
+  <tr><td class="num">4</td><td>Retention: roll-triggered and interval maintenance, live-writer claim, eventual bound with documented overshoot</td><td>a disk guarantee that holds for a 24/7 process</td></tr>
+  <tr><td class="num">5</td><td>Consumer: Bun/TypeScript report + <code>/perf</code>, schema dispatch, truncated-tail tolerance, self-health</td><td>makes the trend readable &mdash; without this the data is inert</td></tr>
+  <tr><td class="num">6</td><td>Memory trend (separable, may be its own PR)</td><td>leak detection of the #3114 class</td></tr>
+  <tr><td class="num">7</td><td>Compression (optional, last)</td><td>history depth only; retention never depends on it</td></tr>
+</table>
+
+<p>
+  Reordered in Rev.3. The consumer moved up because a trend nobody can read is not a feature; memory and
+  compression moved down because each is a separable second concern. No phase requires touching the
+  <code>@jrichman/ink</code> fork, none needs a lock, and none is blocked on
+  <a href="https://github.com/vybestack/llxprt-code/issues/3164">#3164</a>. Full requirement mapping and test
+  obligations are in <a href="./PLAN.md">PLAN.md</a>.
+</p>
+
+<footer>
+  <p style="margin:0 0 10px">
+    <b>Rev.3</b> &mdash; measurement model, storage identity, maintenance cadence, overhead budget, counter
+    claims and the consumer story all corrected after design review. Superseded material is retained in place,
+    marked, rather than deleted, so the reasoning trail survives. The authoritative specification is
+    <a href="./PLAN.md">PLAN.md</a>; where this document and the plan disagree, the plan wins.
+  </p>
+  <p style="margin:0">
+    Timing, size and concurrency figures are measured on this machine (Bun&nbsp;1.3.14 / Node&nbsp;v25.2.1,
+    darwin-arm64, APFS) and reproducible from <a href="./benchmarks">benchmarks/</a>. They are primitive costs,
+    not an end-to-end overhead budget &mdash; see &sect;08. Concurrency counts are an mtime-derived upper bound
+    (&sect;06). Diagram proportions are schematic.
+  </p>
+</footer>
+
+</div>
+</body>
+</html>

@@ -31,13 +31,14 @@ let queuedText = '';
 let queuedOk = true;
 let queuedStatus: number | undefined;
 
-const fetchStub: Mock<[string, unknown], Promise<FetchResponse>> = mock(
-  async (_url: string, _init: unknown): Promise<FetchResponse> => ({
-    ok: queuedOk,
-    status: queuedStatus,
-    text: async () => queuedText,
-  }),
-);
+const fetchStub: Mock<(url: string, init: unknown) => Promise<FetchResponse>> =
+  mock(
+    async (_url: string, _init: unknown): Promise<FetchResponse> => ({
+      ok: queuedOk,
+      status: queuedStatus,
+      text: async () => queuedText,
+    }),
+  );
 
 // Register the mock BEFORE dynamically importing codesearch.js, so the mock
 // is active when that module resolves its `import fetch from 'node-fetch'`.
@@ -53,10 +54,10 @@ interface CapturedCall {
 
 function lastCall(): CapturedCall {
   const calls = fetchStub.mock.calls;
-  const last = calls[calls.length - 1];
-  if (last === undefined) {
+  if (calls.length === 0) {
     throw new Error('fetch was never called');
   }
+  const last = calls[calls.length - 1];
   return { url: String(last[0]), body: last[1] };
 }
 
@@ -89,7 +90,7 @@ function extractRequestBody(init: unknown): { name: string; query: string } {
   ) {
     throw new Error('Expected params.arguments object');
   }
-  const args: unknown = params.arguments;
+  const args = params.arguments;
   if (!('query' in args) || typeof args.query !== 'string') {
     throw new Error('Expected params.arguments.query string');
   }

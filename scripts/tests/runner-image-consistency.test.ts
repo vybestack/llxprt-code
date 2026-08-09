@@ -15,8 +15,11 @@
  * only discovered by the nightly, hours after the causing commit merged.
  *
  * A runner image used by exactly one non-PR workflow is an untested platform
- * by construction. These tests pin the invariant that workflows share runner
- * images, so a reintroduced pin has to be deliberate rather than accidental.
+ * by construction unless that platform is intentionally reserved for
+ * mandatory nightly validation. These tests pin the invariant that workflows
+ * share runner images except for the macOS nightly-only cadence established by
+ * issue #3189, so a reintroduced pin or any other singleton has to be deliberate
+ * rather than accidental.
  */
 
 import { describe, expect, it } from 'bun:test';
@@ -160,15 +163,17 @@ describe('runner image consistency (#2688)', () => {
     expect(ciRunners.get(releaseRunner ?? '')).toContain('ci.yml');
   });
 
-  it('exercises every referenced runner image in more than one workflow', () => {
+  it('keeps macOS nightly-only and exercises every other image in multiple workflows', () => {
     // The concrete failure mode from #2688: an image referenced by exactly
     // one workflow is, by definition, only as tested as that workflow. When
     // that workflow is not a PR check, the platform has no pre-merge gate.
+    // Issue #3189 deliberately makes macOS the sole exception while preserving
+    // its mandatory nightly coverage.
     const images = collectRunnerImages();
     const orphans = [...images.entries()]
       .filter(([, files]) => files.length === 1)
       .map(([image, files]) => `${image} used only by ${files[0]}`);
 
-    expect(orphans).toStrictEqual([]);
+    expect(orphans).toStrictEqual(['macos-latest used only by nightly.yml']);
   });
 });

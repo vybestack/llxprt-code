@@ -34,7 +34,7 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import sharp from 'sharp';
-import type { IToolHost, IStorageService } from '../interfaces/index.js';
+import type { IToolHost } from '../interfaces/index.js';
 import {
   DeleteLineRangeTool,
   GlobTool,
@@ -45,6 +45,7 @@ import {
   ReadLineRangeTool,
   RipGrepTool,
   WriteFileTool,
+  ToolErrorType,
 } from '../index.js';
 import {
   READ_FILE_FIXTURE,
@@ -133,20 +134,6 @@ function createGrepHost(
   };
 }
 
-/**
- * Minimal structural fake for IStorageService using real filesystem.
- */
-function _createFakeStorageService(baseDir: string): IStorageService {
-  return {
-    getGlobalMemoryDir: () => baseDir,
-    getGlobalDataDir: () => baseDir,
-    readFile: async (path: string) => readFileSync(path, 'utf-8'),
-    writeFile: async (path: string, content: string) =>
-      writeFileSync(path, content, 'utf-8'),
-    ensureDir: async (path: string) => mkdirSync(path, { recursive: true }),
-  };
-}
-
 async function executeDeclarativeToolForBehavioralAssertion(
   tool: {
     build(params: unknown): {
@@ -172,17 +159,18 @@ function readInlineImage(result: ToolResult): {
   mimeType: string | undefined;
   displayName: string | undefined;
 } {
-  if (typeof result.llmContent === 'string') {
-    throw new Error(result.llmContent);
+  const content = result.llmContent;
+  if (typeof content === 'string') {
+    throw new Error(content);
   }
-  const inlineData = result.llmContent.inlineData;
-  if (inlineData?.data === undefined) {
+  const part = Array.isArray(content) ? content[0] : content;
+  if (typeof part === 'string' || part.inlineData?.data === undefined) {
     throw new Error('Expected inline image data');
   }
   return {
-    data: Buffer.from(inlineData.data, 'base64'),
-    mimeType: inlineData.mimeType,
-    displayName: inlineData.displayName,
+    data: Buffer.from(part.inlineData.data, 'base64'),
+    mimeType: part.inlineData.mimeType,
+    displayName: part.inlineData.displayName,
   };
 }
 
@@ -252,7 +240,7 @@ describe('Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P
       // error is no longer coerced to a string, and llmContent carries the
       // model-facing remedy rather than the terse error.message.
       expect(result.error?.message).toContain('does-not-exist.txt');
-      expect(result.error?.type).toBe('file_not_found');
+      expect(result.error?.type).toBe(ToolErrorType.FILE_NOT_FOUND);
       expect(result.llmContent).toContain('no file was found');
     });
 

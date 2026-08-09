@@ -41,10 +41,10 @@ function makeRunnerError(
   message: string,
   stage: ImageOperationRunnerError['stage'],
 ): ImageOperationRunnerError {
-  const error = new Error(message) as ImageOperationRunnerError;
-  error.name = 'ImageOperationError';
-  error.stage = stage;
-  return error;
+  return Object.assign(new Error(message), {
+    name: 'ImageOperationError',
+    stage,
+  });
 }
 
 interface ToolOptions {

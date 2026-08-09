@@ -14,6 +14,7 @@ import {
 } from './systemPromptPlacement.js';
 import { AnthropicProvider } from '../anthropic/AnthropicProvider.js';
 import type { GenerateChatOptions } from '../IProvider.js';
+import type { RuntimeAuthTokenProvider } from '../types/providerRuntime.js';
 
 describe('system prompt placement policy (issue #3136)', () => {
   describe('resolveSystemPromptPlacement', () => {
@@ -29,6 +30,12 @@ describe('system prompt placement policy (issue #3136)', () => {
 
     it('defaults to system-field when a provider declares nothing', () => {
       expect(resolveSystemPromptPlacement(undefined)).toBe('system-field');
+    });
+
+    it('fails fast for an unsupported runtime declaration', () => {
+      expect(() => resolveSystemPromptPlacement('invalid-placement')).toThrow(
+        'SystemPromptPlacementError: unsupported placement declaration invalid-placement',
+      );
     });
   });
 
@@ -77,7 +84,7 @@ describe('system prompt placement policy (issue #3136)', () => {
   describe('Anthropic declares its placement capability', () => {
     const provider = new AnthropicProvider(undefined, undefined, undefined);
 
-    const optionsWithToken = (authToken: string): GenerateChatOptions =>
+    const optionsWithToken = (authToken: unknown): GenerateChatOptions =>
       ({
         resolved: { authToken },
       }) as unknown as GenerateChatOptions;
@@ -96,6 +103,15 @@ describe('system prompt placement policy (issue #3136)', () => {
           optionsWithToken('sk-ant-api03-example-key'),
         ),
       ).toBe('system-field');
+    });
+
+    it('fails fast when declaration receives an unresolved runtime provider', () => {
+      const runtimeProvider: RuntimeAuthTokenProvider = {
+        provide: () => 'sk-ant-oat01-example-oauth',
+      };
+      expect(() =>
+        provider.getSystemPromptPlacement(optionsWithToken(runtimeProvider)),
+      ).toThrow('requires a resolved auth-token string');
     });
   });
 });

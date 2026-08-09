@@ -10,4 +10,5 @@
 [test]
 preload = [
   "./test-setup-storage-isolation.ts",
+  "../../scripts/tests/browser-launch-guard.ts",
 ]

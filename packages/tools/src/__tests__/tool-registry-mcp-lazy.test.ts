@@ -15,6 +15,7 @@ import type {
   ToolInvocation,
   ToolResult,
 } from '../index.js';
+import type { PublishSubscribeCapable } from '../interfaces/index.js';
 import { ActivateMcpServerTool } from '../tools/activate-mcp-server.js';
 import { ACTIVATE_MCP_SERVER_TOOL_NAME } from '../types/tool-names.js';
 
@@ -82,8 +83,9 @@ function createHost(
   };
 }
 
-function createMessageBus(): IToolMessageBus {
+function createMessageBus(): IToolMessageBus & PublishSubscribeCapable {
   return {
+    requestConfirmation: async () => undefined,
     publish: () => {},
     subscribe: () => () => {},
     unsubscribe: () => {},
@@ -91,7 +93,10 @@ function createMessageBus(): IToolMessageBus {
 }
 
 function namesOf(decls: Array<{ name?: string }>): string[] {
-  return decls.map((d) => d.name).sort();
+  return decls
+    .map((d) => d.name)
+    .filter((n): n is string => typeof n === 'string')
+    .sort();
 }
 
 function mcpTool(name: string, server: string, desc = name): TestMcpTool {

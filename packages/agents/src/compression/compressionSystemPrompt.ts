@@ -8,61 +8,148 @@
  * Shared helper that assembles the system instruction for compression LLM
  * calls (issue #3136, Step 3).
  *
- * Today the three compression call sites (OneShotStrategy.callProvider,
- * MiddleOutStrategy.callProvider, runVerificationPass) omit
- * `systemInstruction` from their `provider.generateChatCompletion` options.
- * The provider then rebuilds a core prompt via `getCoreSystemPromptAsync`.
- * Once provider-side assembly is removed (next task) these calls would send
- * NO system prompt at all.
+ * The three compression call sites (OneShotStrategy.callProvider,
+ * MiddleOutStrategy.callProvider, runVerificationPass) all obtain their
+ * `systemInstruction` from here. Providers no longer rebuild a core prompt and
+ * now throw when the instruction is absent, so without this helper these calls
+ * would fail rather than silently send a prompt-less request.
  *
- * This helper reproduces the EXACT arguments the provider path uses so the
- * compression LLM receives the same system prompt it does today. It lives in
- * `packages/agents` — NOT `packages/core` — so a future `no-restricted-imports`
- * guard on `getCoreSystemPromptAsync` in providers does not let providers
- * reach it indirectly.
+ * It lives in `packages/agents` — NOT `packages/core` — so providers cannot
+ * reach it and thereby sidestep the `no-restricted-imports` guard on
+ * `getCoreSystemPromptAsync` (`eslint.config.js`), which only bans the direct
+ * import. The placement is intended to prevent the indirect route: the manifests
+ * declare `packages/agents` depending on `packages/providers`, so the reverse
+ * import would invert that direction. Note this is a convention, not an enforced
+ * invariant — no package-cycle check or build rule currently verifies it.
  */
 
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+
+type CompressionInteractionMode =
+  | 'interactive'
+  | 'non-interactive'
+  | 'subagent';
+
+export type { CompressionInteractionMode };
+
+/** Brands the compression-specific load-balancer wrapper. */
+export const COMPRESSION_LOAD_BALANCER_WRAPPER = Symbol(
+  'compression-load-balancer-wrapper',
+);
+
+interface CompressionLoadBalancerWrapper extends IProvider {
+  readonly [COMPRESSION_LOAD_BALANCER_WRAPPER]: true;
+}
+
+/**
+ * Derives the interaction mode from `config.isInteractive()` when no explicit
+ * mode is supplied. Shared by both compression entry points.
+ */
+function deriveInteractiveMode(
+  config: Config | undefined,
+): CompressionInteractionMode {
+  if (
+    config != null &&
+    typeof config.isInteractive === 'function' &&
+    config.isInteractive() === true
+  ) {
+    return 'interactive';
+  }
+  return 'non-interactive';
+}
+
+/**
+ * Returns `true` when the runtime state belongs to a subagent — the marker
+ * that makes compression render `'subagent'` (issue #3176, D8).
+ */
+function isSubagentRuntime(runtimeState: AgentRuntimeState): boolean {
+  return (
+    typeof runtimeState.subagentName === 'string' &&
+    runtimeState.subagentName.trim() !== ''
+  );
+}
+
+/**
+ * Single derivation point for the compressed session's interaction mode
+ * (issue #3176, D8). Returns `'subagent'` when the runtime state belongs to a
+ * subagent, otherwise falls back to `config.isInteractive()`.
+ *
+ * Used by {@link buildCompressionChatOptions} (ordinary compression) and by
+ * {@link CompressionLoadBalancingProvider} (load-balanced compression) so the
+ * mode is consistent across every candidate.
+ */
+export function deriveCompressionInteractionMode(
+  config: Config | undefined,
+  runtimeState: AgentRuntimeState,
+): CompressionInteractionMode {
+  return isSubagentRuntime(runtimeState)
+    ? 'subagent'
+    : deriveInteractiveMode(config);
+}
+
+/** Validates the concrete provider identity for ordinary compression. */
+function requireCompressionProvider(providerName: string): string {
+  if (providerName.trim() === '') {
+    throw new Error('Compression provider identity is required');
+  }
+  return providerName;
+}
+
+function isCompressionLoadBalancerWrapper(
+  provider: IProvider,
+): provider is CompressionLoadBalancerWrapper {
+  return (
+    COMPRESSION_LOAD_BALANCER_WRAPPER in provider &&
+    provider[COMPRESSION_LOAD_BALANCER_WRAPPER] === true
+  );
+}
 
 /**
  * Build the system instruction for a compression request.
  *
- * Replicates the provider's `getCoreSystemPromptAsync` arguments exactly:
- * no `coreMemory` (matches current provider behavior), no tools
- * (`includeSubagentDelegation` is therefore `false`), and `interactionMode`
- * derived from `config.isInteractive()`.
+ * Passes no `userMemory`, an explicit empty `coreMemory` string, no
+ * `mcpInstructions`, no tools (`includeSubagentDelegation` is therefore
+ * `false`), and the caller-supplied request interaction mode.
  *
- * @param config - The Config to read MCP instructions and interaction mode from
+ * The empty `coreMemory` string (not `undefined`) is deliberate: when
+ * `coreMemory` is `undefined`, `getCoreSystemPromptAsync` loads
+ * `.LLXPRT_SYSTEM` from disk (`resolveEffectiveMemories` in
+ * `packages/core/src/core/prompts.ts`) and merges `mcpInstructions` into the
+ * same channel. Passing `''` short-circuits that disk fallback, and omitting
+ * `mcpInstructions` keeps MCP-server instructions out, so the compression LLM
+ * receives only the base instruction appropriate to its model and interaction
+ * mode — never the caller's core memory or MCP instructions (issue #3174).
+ *
+ * The `provider` and `interactionMode` are caller-supplied and request-scoped
+ * (issue #3176, D5 + D8). Ordinary compression derives them through
+ * {@link buildCompressionChatOptions}; load-balanced compression supplies the
+ * selected candidate provider and the compressed session's interaction mode.
+ *
  * @param model  - The resolved model (same as `resolved.model` on the wire)
- * @returns The assembled system instruction, or `undefined` when the
- *          prompt is empty
+ * @param options - Request-scoped `provider` and `interactionMode`; both
+ *                  required, derived by {@link buildCompressionChatOptions}
+ * @returns The assembled system instruction
  */
 export async function buildCompressionSystemInstruction(
-  config: Config | undefined,
   model: string,
+  options: {
+    provider: string;
+    interactionMode: CompressionInteractionMode;
+  },
 ): Promise<string> {
-  const mcpClientManager =
-    config != null && typeof config.getMcpClientManager === 'function'
-      ? config.getMcpClientManager()
-      : undefined;
-  const mcpInstructions = mcpClientManager
-    ? mcpClientManager.getMcpInstructions()
-    : undefined;
-
-  const interactionMode =
-    config != null &&
-    typeof config.isInteractive === 'function' &&
-    config.isInteractive() === true
-      ? 'interactive'
-      : 'non-interactive';
+  const interactionMode = options.interactionMode;
+  const provider = requireCompressionProvider(options.provider);
 
   const corePrompt = await getCoreSystemPromptAsync({
-    mcpInstructions,
+    coreMemory: '',
     model,
+    provider,
     tools: undefined,
     includeSubagentDelegation: false,
     interactionMode,
@@ -92,12 +179,27 @@ export async function buildCompressionChatOptions(params: {
   invocation: RuntimeGenerateChatOptions['invocation'] | undefined;
   fallbackModel: string;
   source: string;
+  runtimeState: AgentRuntimeState;
+  provider: IProvider;
 }): Promise<RuntimeGenerateChatOptions> {
   const config = params.resolvedConfig ?? params.fallbackConfig;
-  const systemInstruction = await buildCompressionSystemInstruction(
+
+  // Single derivation point for the request-scoped provider and the
+  // compressed session's interaction mode (issue #3176, D5 + D8). All three
+  // call sites thread these through here so none can drift.
+  const providerName = requireCompressionProvider(params.provider.name);
+  const interactionMode = deriveCompressionInteractionMode(
     config,
-    params.resolvedOptions?.model ?? params.fallbackModel,
+    params.runtimeState,
   );
+  // Only the branded wrapper defers assembly. A concrete provider that happens
+  // to use the same display name must still receive its own prompt.
+  const systemInstruction = isCompressionLoadBalancerWrapper(params.provider)
+    ? undefined
+    : await buildCompressionSystemInstruction(
+        params.resolvedOptions?.model ?? params.fallbackModel,
+        { provider: providerName, interactionMode },
+      );
 
   return {
     contents: params.contents,

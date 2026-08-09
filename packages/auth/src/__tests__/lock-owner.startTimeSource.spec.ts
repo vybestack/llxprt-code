@@ -104,8 +104,8 @@ describe('LockOwnerMetadata startTimeSource quality (issue #2819)', () => {
 
   it('still marks an owner dead via ESRCH even with approximate startTimeSource', async () => {
     const kill = vi.fn(() => {
-      const err = new Error('No such process');
-      (err as { code: string }).code = 'ESRCH';
+      const err: NodeJS.ErrnoException = new Error('No such process');
+      err.code = 'ESRCH';
       throw err;
     });
     const liveness = await probeOwnerLiveness(

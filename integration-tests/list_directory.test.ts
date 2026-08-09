@@ -26,6 +26,10 @@ describe('list_directory', () => {
   it('should be able to list a directory', async () => {
     await rig.setup('should be able to list a directory', {
       settings: { tools: { core: ['list_directory'] } },
+      fakeResponsesPath: join(
+        import.meta.dirname,
+        'list-directory.responses.jsonl',
+      ),
     });
     rig.createFile('file1.txt', 'file 1 content');
     rig.mkdir('subdir');

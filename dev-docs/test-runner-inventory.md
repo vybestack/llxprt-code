@@ -28,25 +28,24 @@ wiring assertions).
 
 | Root                          | Bun-native files | Primary runner                    |
 | ----------------------------- | ---------------- | --------------------------------- |
-| packages/a2a-server           | 21               | Bun (shared runner)               |
-| packages/agents (src)         | 340              | Bun (`run-bun-tests.ts`)          |
+| packages/a2a-server           | 22               | Bun (shared runner)               |
+| packages/agents (src)         | 354              | Bun (`run-bun-tests.ts`)          |
 | packages/agents (test-bun)    | 6                | Bun (shared runner)               |
-| packages/auth                 | 42               | Bun (`run-bun-tests.ts`)          |
-| packages/cli                  | 670              | Bun (`run-bun-tests.ts`)          |
-| packages/core                 | 352              | Bun (`run-bun-tests.ts`)          |
+| packages/auth                 | 43               | Bun (`run-bun-tests.ts`)          |
+| packages/cli                  | 680              | Bun (`run-bun-tests.ts`)          |
+| packages/core                 | 363              | Bun (`run-bun-tests.ts`)          |
 | packages/ide-integration      | 10               | Bun (shared runner)               |
 | packages/lsp                  | 13               | Bun (shared runner)               |
 | packages/mcp                  | 43               | Bun (shared runner)               |
 | packages/policy               | 12               | Bun (shared runner)               |
-| packages/providers            | 544              | Bun (shared runner)               |
-| packages/settings             | 15               | Bun (shared runner)               |
+| packages/providers            | 558              | Bun (shared runner)               |
+| packages/settings             | 16               | Bun (shared runner)               |
 | packages/storage              | 38               | Bun (shared runner)               |
 | packages/telemetry            | 13               | Bun (shared runner)               |
-| packages/test-utils           | 11               | Bun (shared runner)               |
+| packages/test-utils           | 12               | Bun (shared runner)               |
 | packages/tools                | 88               | Bun (shared runner)               |
 | packages/vscode-ide-companion | 7                | Bun (shared runner)               |
-| scripts/tests                 | 225              | Bun (shared runner)               |
-| test-setup                    | 3                | Bun (shared runner)               |
+| scripts/tests                 | 234              | Bun (shared runner)               |
 | evals                         | 1                | Bun (shared runner, credentialed) |
 | integration-tests             | 32               | Bun (shared runner, credentialed) |
 
@@ -67,6 +66,45 @@ No workspace uses Vitest. The `test:vitest` escape-hatch scripts, Vitest config
 files, Vitest devDependencies, and the `@vitest/eslint-plugin` have all been
 deleted. A CI guard (`npm run lint:no-vitest`) prevents reintroduction.
 
+### Criterion 8: remaining "vitest" text classification
+
+After the active runtime references were removed (issue #2578), no execution
+path references or invokes Vitest. The word "vitest" still appears in text
+elsewhere in the repository; every remaining occurrence falls into one of the
+following **non-execution** categories and is not edited merely to erase the
+word:
+
+1. **Historical artifacts** — released changelog entries (`CHANGELOG.md`),
+   historical project plans under `project-plans/`, and JUnit/snapshot
+   artifacts (e.g. `core/__snapshots__/prompts.test.js.snap` carrying the
+   `// Vitest Snapshot v1` header, `junit-integration.xml`). These are frozen
+   records of what shipped; they are not loaded or executed by any test run.
+2. **Compatibility prose, comments, and schema names** — explanatory comments
+   in test and source files that describe the migration history (e.g. "vitest
+   hoist-safe", "Bun's mock.module ... unlike Vitest"), and compatibility
+   schema/identifier names that must retain the word for historical lookup.
+   These are documentation, not executable code.
+3. **`vi.*` calls are Bun's `bun:test` API** — test files import `vi` from
+   `'bun:test'`, not from `'vitest'`. `vi.mock`, `vi.fn`, `vi.spyOn`, etc. are
+   Bun's native mock API surface that intentionally mirrors the familiar
+   `vi.*` ergonomics; they do not depend on or invoke Vitest.
+4. **The no-Vitest guard's own fixtures** — `scripts/check-no-vitest.ts` and
+   its test suite (`scripts/tests/no-vitest-guard*.ts`) intentionally contain
+   detector patterns and fixture text referencing the vitest specifier. The
+   guard is self-excluded (`SELF_EXCLUDE_FILES`), so this is by design: the
+   detector must name what it detects.
+5. **Orchestrator command fixtures** —
+   `scripts/tests/test-orchestrator.test.ts` and
+   `scripts/tests/test-shard-orchestrator.test.ts` contain synthetic historical
+   `vitest run` package-script values. Their injected command runners only
+   record the command or return a deterministic result; they never launch
+   Vitest. These fixtures preserve coverage of generic command orchestration.
+
+The guard's lexical masking ensures these prose/comment/string-literal
+mentions never cause a false positive, while genuine imports, config files,
+dependency entries, script invocations, lockfile entries, and active
+`process.env.VITEST` references are caught and fail CI.
+
 ## Fully migrated workspaces (Bun-native as primary `test` script)
 
 These workspaces run Bun as their `test`/`test:ci` scripts. Most now delegate
@@ -80,7 +118,7 @@ run their own bespoke `run-bun-tests.ts`.
 
 **Command:** `bun ../../scripts/run_bun_tests.ts --workspace a2a-server --junit junit.xml`
 
-All 21 test files are Bun-native. Uses a storage-isolation preload that calls
+All 22 test files are Bun-native. Uses a storage-isolation preload that calls
 `isolateStorageRoots()` before any test module imports Storage, plus the
 workspace preload.
 
@@ -88,7 +126,7 @@ workspace preload.
 
 **Command:** `bun run-bun-tests.ts`
 
-All 340 test files are Bun-native and the workspace `test`/`test:ci` scripts run
+All 354 test files are Bun-native and the workspace `test`/`test:ci` scripts run
 Bun. Vitest is gone from this workspace — no `test:vitest` fallback,
 no vitest config, no vitest devDependency, and no test file imports it.
 The test API comes straight from `bun:test`.
@@ -124,7 +162,7 @@ CI job.
 
 **Command:** `bun run-bun-tests.ts`
 
-All 352 core test files are Bun-native. The workspace `test`/`test:ci` scripts
+All 363 core test files are Bun-native. The workspace `test`/`test:ci` scripts
 use `bun run-bun-tests.ts`, which discovers every `*.{test,spec}.{ts,tsx}`
 file under `src` and `test`. A `bunfig.toml` preloads a workspace-specific
 `bun-preload.ts` that replicates the
@@ -151,7 +189,7 @@ Migration changes:
 
 **Command:** `bun run-bun-tests.ts`
 
-All 42 auth test files are Bun-native. The workspace `test`/`test:ci` scripts
+All 43 auth test files are Bun-native. The workspace `test`/`test:ci` scripts
 use `bun run-bun-tests.ts`, which discovers every `*.{test,spec}.{ts,tsx}`
 file under `src`. A `bunfig.toml` preloads a
 workspace-specific `bun-preload.ts` for storage isolation.
@@ -182,24 +220,14 @@ All 12 test files are Bun-native and discovered by the shared `policy` root.
 There is no `src/research` directory and no exclusion list — discovery walks
 `packages/policy` and runs every matching file.
 
-### packages/test-utils (partially migrated in this PR)
+### packages/test-utils
 
-**Bun-native files (2):**
+**Command:** `bun ../../scripts/run_bun_tests.ts --workspace test-utils --junit junit.xml`
 
-- `src/quota-guard.test.ts` (44 tests)
-- `src/util.test.ts` (7 tests)
-
-**Root entry:** `bun scripts/run_bun_tests.ts --workspace test-utils`
-
-**Deferred files (2) — Bun runtime compatibility:**
-
-- `src/process-run.test.ts` — Spawns child processes with signal handling
-  (SIGTERM/SIGKILL). Bun's child_process emits duplicate output events
-  compared to Node.js, causing assertion failures. Deferred until the
-  runtime difference is resolved or the test is adapted.
-- `src/interactive-run.test.ts` — Uses `@lydell/node-pty` for interactive
-  PTY-based testing. Has timing-sensitive behavior under Bun's event loop.
-  Deferred for the same runtime reasons as process-run.
+All 12 test-utils test files are Bun-native and discovered by the shared
+`test-utils` root, including `src/process-run.test.ts` and
+`src/interactive-run.test.ts`. There is no allowlist and no exclusion list —
+discovery walks `packages/test-utils` and runs every matching file.
 
 ## Shared-runner test files (discovery-based)
 
@@ -219,7 +247,7 @@ The workspace runs all of its `src/**/*.{test,spec}.{ts,tsx}` files through
 runner's `*.test.*` / `*.spec.*` discovery does not match — run through the
 shared runner instead. Nothing in `agents/src` runs twice.
 
-### packages/cli — bespoke runner (670 files)
+### packages/cli — bespoke runner (680 files)
 
 `cli` migrated under #2843. Its `test` / `test:ci` scripts run
 `packages/cli/run-bun-tests.ts`, which discovers every
@@ -232,7 +260,7 @@ shared root: it would be strictly redundant with the bespoke runner.
 
 ### packages/core — fully migrated (see above)
 
-### packages/providers (discovery-driven, 544 files)
+### packages/providers (discovery-driven, 558 files)
 
 The providers workspace primary `test` script is fully discovery-driven
 (`bun ../../scripts/run_bun_tests.ts --workspace providers`). The shared root
@@ -306,11 +334,6 @@ it.
 - `src/telemetry/tool-call-decision.test.ts`
 - `src/telemetry/types.test.ts`
 
-### test-setup (3 files at repo root)
-
-- `test-setup/stub-helpers.bun.test.ts`
-- `test-setup/vitest-parity.test.ts`
-
 ## Remaining workspaces (future migration slices)
 
 Every workspace now runs its full suite under Bun (see the bespoke runners for
@@ -324,21 +347,39 @@ the ESLint plugin).
 
 ## Canonical Bun-native test command
 
-```bash
-# All native Bun test files (discovery-based, all non-credentialed roots):
-bun scripts/run_bun_tests.ts
+The canonical command that runs _every_ Bun-native test root in the repository
+— the uncredentialed workspace-plus-script suite, the credentialed
+integration-tests root (sandbox:none mode), and all credentialed evals
+(`RUN_EVALS=1`) — in fail-fast order is:
 
+```bash
+bun run test:bun:all
+```
+
+**Credentials and provider quota are required** for this command because the
+integration and evals roots call a real provider. Every test file executes
+directly under Bun.
+
+The complete _uncredentialed_ suite (all workspaces plus the script harness,
+honouring pretest hooks) is:
+
+```bash
+bun run test:bun
+```
+
+`npm run test` runs the same per-workspace `test` scripts but does **not**
+include the `scripts/tests` harness, so the two do not agree fully:
+`test:bun` additionally runs `scripts/tests`. `npm run test` is a
+legacy-compatible entry point for per-workspace suites.
+
+For narrower runs:
+
+```bash
 # A specific workspace:
 bun scripts/run_bun_tests.ts --workspace telemetry
 
 # List what would run without executing (--dry-run):
 bun scripts/run_bun_tests.ts --dry-run
-```
-
-For the full repository test suite:
-
-```bash
-npm run test
 ```
 
 ## Test API

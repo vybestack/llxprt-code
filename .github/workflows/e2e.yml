@@ -80,6 +80,7 @@ jobs:
   e2e_doc_change_filter:
     name: 'Detect doc-only changes for E2E'
     runs-on: 'ubuntu-latest'
+    timeout-minutes: 5
     needs:
       - 'skip_check'
     if: >-
@@ -96,6 +97,11 @@ jobs:
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
         with:
           fetch-depth: 1
+
+      - name: 'Set up Node.js'
+        uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
 
       - name: 'Determine documentation-only PR'
         id: 'detect'
@@ -115,56 +121,36 @@ jobs:
             exit 0
           fi
 
-          files="$(gh api \
+          # Fetch the full structured PR file list as NDJSON (one entry per line
+          # across all pages, including status/previous_filename/patch so renames
+          # and the .gitignore carve-out are handled) and the authoritative
+          # changed_files count. || true keeps an API blip from failing this
+          # job: the shared classifier then resolves to docs_only=false (run
+          # full CI) rather than skipping E2E and wedging the PR.
+          files_json="${RUNNER_TEMP}/pr-files.ndjson"
+          : >"$files_json"
+          gh api \
             --paginate \
             -H "Accept: application/vnd.github+json" \
             "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
-            --jq '.[].filename' || true)"
+            --jq '.[]' >"$files_json" || true
 
-          if [[ -z "$files" ]]; then
-            echo "docs_only=false" >>"$GITHUB_OUTPUT"
-            exit 0
-          fi
+          changed_files="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
+            --jq '.changed_files' || true)"
 
-          gitignore_patch=''
-          if grep -Fxq '.gitignore' <<<"$files"; then
-            gitignore_patch="$(gh api \
-              --paginate \
-              -H "Accept: application/vnd.github+json" \
-              "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
-              --jq '.[] | select(.filename == ".gitignore") | .patch' || true)"
-          fi
-
-          docs_only=true
-          while IFS= read -r file; do
-            [[ -z "$file" ]] && continue
-            case "$file" in
-              docs/*|README.md|README.*|CHANGELOG.md|CHANGELOG.*)
-                ;;
-              CONTRIBUTING.md|CONTRIBUTING.*|CODE_OF_CONDUCT.md|SECURITY.md)
-                ;;
-              *.md|*.mdx|*.rst|*.txt|*.adoc)
-                ;;
-              .gitignore)
-                if [[ -z "$gitignore_patch" ]]; then
-                  docs_only=false
-                  break
-                fi
-                if printf '%s\n' "$gitignore_patch" \
-                  | grep -E '^[+-][^+-]' \
-                  | grep -Ev '^[+-](!docs/reference/|#.*docs/reference)' >/dev/null; then
-                  docs_only=false
-                  break
-                fi
-                ;;
-              *)
-                docs_only=false
-                break
-                ;;
-            esac
-          done <<<"$files"
-
-          echo "docs_only=${docs_only}" >>"$GITHUB_OUTPUT"
+          # The shared classifier (scripts/docs-only-filter.ts) is the
+          # authoritative docs-only policy (issue #342, reused for E2E by
+          # issue #2693): runtime .md/.txt under packages/ are CODE, renames
+          # require both sides to be docs, scripts/, .github/, integration-tests/
+          # are CODE, and the changed_files count guards against the 3000-file
+          # API ceiling. It writes docs_only to GITHUB_OUTPUT and a summary to
+          # GITHUB_STEP_SUMMARY, always exiting 0.
+          node scripts/docs-only-filter.ts \
+            --files-json "$files_json" \
+            --changed-files "$changed_files" \
+            --output github-actions || true
 
   e2e_linux:
     name: 'E2E Test (Linux) - ${{ matrix.sandbox }}'
@@ -182,8 +168,7 @@ jobs:
     if: |
       !cancelled() &&
       needs.skip_check.result == 'success' &&
-      needs.e2e_doc_change_filter.result == 'success' &&
-      needs.e2e_doc_change_filter.outputs.docs_only != 'true' &&
+      !(needs.e2e_doc_change_filter.result == 'success' && needs.e2e_doc_change_filter.outputs.docs_only == 'true') &&
       needs.skip_check.outputs.should_skip != 'true' &&
       (
         (
@@ -327,6 +312,8 @@ jobs:
           VERBOSE: 'true'
           # Force file storage to avoid keytar/libsecret dependency in CI
           LLXPRT_FORCE_FILE_STORAGE: 'true'
+          # Record real-provider runs for budget enforcement (issue #2278)
+          LLXPRT_E2E_MODEL_LEDGER: '${{ runner.temp }}/e2e-model-ledger.jsonl'
         shell: 'bash'
         run: |
           if [[ "${{ matrix.sandbox }}" == "sandbox:docker" ]]; then
@@ -347,163 +334,10 @@ jobs:
               --testNamePattern="should be able to run a shell command|should be able to run a shell command via stdin|should run a platform-specific file listing command"
           fi
 
-  e2e_mac:
-    name: 'E2E Test (macOS)'
-    needs:
-      - e2e_doc_change_filter
-      - skip_check
-      - mergeability-gate
-    timeout-minutes: 60
-    concurrency:
-      group: >-
-        ${{ github.workflow }}-${{ github.event_name }}-${{
-        github.event.pull_request.number || inputs.branch_ref || github.ref
-        }}-${{ github.event.label.name }}-macos
-      cancel-in-progress: true
-    if: |
-      !cancelled() &&
-      needs.skip_check.result == 'success' &&
-      needs.e2e_doc_change_filter.result == 'success' &&
-      needs.e2e_doc_change_filter.outputs.docs_only != 'true' &&
-      needs.skip_check.outputs.should_skip != 'true' &&
-      (
-        (
-          (
-            github.event_name == 'merge_group' ||
-            github.event_name == 'workflow_dispatch' ||
-            (github.event_name == 'pull_request' &&
-              github.event.pull_request.head.repo.full_name == github.repository)
-          ) &&
-          needs.mergeability-gate.result == 'skipped'
-        ) ||
-        (
-          github.event_name == 'pull_request_target' &&
-          github.event.action == 'labeled' &&
-          github.event.label.name == 'maintainer:e2e:ok' &&
-          github.event.pull_request.head.repo.full_name == github.repository &&
-          needs.mergeability-gate.result == 'success' &&
-          needs.mergeability-gate.outputs.should-run == 'true'
-        )
-      )
-    runs-on: 'macos-latest'
-    continue-on-error: true
-    steps:
-      - name: 'Checkout trusted quota selector'
-        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
-        with:
-          ref: ${{ (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') && github.event.pull_request.base.sha || github.event.inputs.branch_ref || github.ref }}
-
-      - name: 'Set up Node.js 24.x'
-        uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
-        with:
-          node-version: '24.x'
-
-      - name: 'Setup Bun'
-        # The trusted quota selector runs under Bun before PR code is checked
-        # out, so Bun must be on PATH before that step. npm run build below is
-        # also backed by bun scripts/build.ts.
-        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
-        with:
-          bun-version-file: '.bun-version'
-
-      - name: 'Check API quota and select optimal key (macOS)'
-        id: 'quota_macos'
-        shell: 'bash'
-        run: |
-          set -euo pipefail
-          quota_selectors=(scripts/ci-quota-check.*)
-          if (( ${#quota_selectors[@]} != 1 )) || [[ ! -f "${quota_selectors[0]}" ]]; then
-            echo 'Trusted checkout must contain exactly one quota selector' >&2
-            exit 1
-          fi
-          bun "${quota_selectors[0]}"
-
-          # The trusted legacy selector writes the secret to GITHUB_ENV. Remove
-          # it before checking out PR code; downstream steps resolve one secret.
-          if [[ -f "$GITHUB_ENV" ]]; then
-            awk '!/^OPENAI_API_KEY=/' "$GITHUB_ENV" >"${GITHUB_ENV}.quota"
-            mv "${GITHUB_ENV}.quota" "$GITHUB_ENV"
-          fi
-
-          if ! grep -Eq '^selected_key=(primary|secondary)$' "$GITHUB_OUTPUT"; then
-            if grep -q '^selected_key=' "$GITHUB_OUTPUT"; then
-              echo 'Trusted quota selector emitted an invalid selected_key' >&2
-              exit 1
-            fi
-            if [[ "${KEY_VAR_NAME:-}" == *SYNTHETIC* ]]; then
-              echo 'Trusted Synthetic quota selector did not emit selected_key' >&2
-              exit 1
-            fi
-            echo 'selected_key=primary' >>"$GITHUB_OUTPUT"
-          fi
+      - name: 'Check E2E real-model budget (issue #2278)'
+        if: success()
         env:
-          KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
-          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
-          OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
-
-      - name: 'Checkout PR head (internal target)'
-        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
-        if: "github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository"
-        with:
-          ref: '${{ github.event.pull_request.head.sha }}'
-          repository: '${{ github.repository }}'
-          persist-credentials: false
-
-      - name: 'Checkout PR merge ref (internal)'
-        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
-        if: "github.event_name == 'pull_request'"
-        with:
-          ref: '${{ github.ref }}'
-          persist-credentials: false
-          clean: false
-
-      - name: 'Install dependencies'
-        run: 'npm ci'
-
-      - name: 'Build project'
-        run: 'npm run build'
-
-      - name: 'Fix rollup optional dependencies on macOS'
-        if: "runner.os == 'macOS'"
-        run: |
-          npm cache clean --force
-
-      - name: 'Validate E2E provider environment (macOS)'
+          LLXPRT_E2E_MODEL_LEDGER: '${{ runner.temp }}/e2e-model-ledger.jsonl'
         shell: 'bash'
-        env:
-          OPENAI_API_KEY: ${{ steps.quota_macos.outputs.selected_key == 'primary' && secrets[vars.KEY_VAR_NAME] || steps.quota_macos.outputs.selected_key == 'secondary' && secrets[vars.KEY_VAR_NAME_2] || '' }}
-          OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
-          LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
-          LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
-        run: |
-          set -euo pipefail
-          [[ -n "${OPENAI_API_KEY:-}" ]] || { echo "OPENAI_API_KEY missing after quota selection"; exit 1; }
-          [[ -n "${OPENAI_BASE_URL:-}" ]] || { echo "OPENAI_BASE_URL is required"; exit 1; }
-          [[ -n "${LLXPRT_DEFAULT_PROVIDER:-}" ]] || { echo "LLXPRT_DEFAULT_PROVIDER is required"; exit 1; }
-          [[ -n "${LLXPRT_DEFAULT_MODEL:-}" ]] || { echo "LLXPRT_DEFAULT_MODEL is required"; exit 1; }
-          echo "E2E env summary: provider=${LLXPRT_DEFAULT_PROVIDER}, model=${LLXPRT_DEFAULT_MODEL}, baseurl=${OPENAI_BASE_URL}"
-
-      - name: 'Run E2E tests (non-Windows)'
-        if: "runner.os != 'Windows'"
-        env:
-          # Provider configuration from repository secrets/variables
-          OPENAI_API_KEY: ${{ steps.quota_macos.outputs.selected_key == 'primary' && secrets[vars.KEY_VAR_NAME] || steps.quota_macos.outputs.selected_key == 'secondary' && secrets[vars.KEY_VAR_NAME_2] || '' }}
-          KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
-          OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
-          LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
-          LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
-          # Set auth type to provider for API key authentication
-          LLXPRT_AUTH_TYPE: 'provider'
-          KEEP_OUTPUT: 'true'
-          VERBOSE: 'true'
-          # Force file storage to avoid keytar/libsecret dependency in CI
-          LLXPRT_FORCE_FILE_STORAGE: 'true'
-        shell: 'bash'
-        run: |
-          npm run test:integration:sandbox:none -- \
-            --exclude="**/todo-continuation.e2e.test.ts" \
-            --exclude="**/run_shell_command.test.ts"
-          npm run test:integration:sandbox:none -- \
-            --exclude="**/todo-continuation.e2e.test.ts" \
-            integration-tests/run_shell_command.test.ts \
-            --testNamePattern="should be able to run a shell command|should be able to run a shell command via stdin|should run a platform-specific file listing command"
+        run: |-
+          bun scripts/check-e2e-model-budget.ts --ledger "$LLXPRT_E2E_MODEL_LEDGER"

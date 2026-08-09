@@ -12,5 +12,6 @@
     }
   },
   "include": ["../../bun-test-corrections.d.ts", "index.ts", "src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
+  "exclude": ["node_modules", "dist"],
+  "references": [{ "path": "../test-utils" }]
 }

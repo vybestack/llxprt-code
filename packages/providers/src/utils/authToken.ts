@@ -7,7 +7,7 @@ import type { ResolvedAuthToken } from '../types/providerRuntime.js';
  */
 
 interface AuthTokenProviderLike {
-  provide?: () => Promise<string | undefined> | string | undefined;
+  provide: () => Promise<string | undefined> | string | undefined;
 }
 
 export function isRuntimeAuthTokenProvider(

@@ -109,7 +109,9 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     getMcpInstructions: vi.fn().mockReturnValue(undefined),
     isInteractive: vi.fn().mockReturnValue(true),
     getWorkingDir: vi.fn().mockReturnValue('/workspace'),
-    getSettingsService: vi.fn().mockReturnValue({}),
+    getSettingsService: vi.fn().mockReturnValue({
+      get: vi.fn().mockReturnValue(undefined),
+    }),
     getContentGeneratorConfig: vi.fn().mockReturnValue({}),
     getModel: vi.fn().mockReturnValue('gemini-2.5-flash'),
     getToolRegistry: vi.fn().mockReturnValue(undefined),

@@ -4,11 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
+import {
+  getCoreSystemPromptAsync,
+  loadCoreMemoryContent,
+} from '@vybestack/llxprt-code-core/core/prompts.js';
+import process from 'node:process';
 import {
   getEnabledToolNamesForPrompt,
   shouldIncludeSubagentDelegationForConfig,
 } from './clientToolGovernance.js';
+import { resolveProviderForSystemPrompt } from './systemPromptProvider.js';
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { getErrorMessage } from '@vybestack/llxprt-code-core/utils/errors.js';
@@ -22,19 +27,55 @@ import type { BaseLLMClient } from './baseLlmClient.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
+/**
+ * Config-scoped async snapshot for the on-disk core-memory content loaded
+ * when `config.getCoreMemory()` returns `undefined` (JIT context disabled).
+ *
+ * The exact `loadCoreMemoryContent(process.cwd())` result — including the
+ * empty string — is cached per Config so the two-file `.LLXPRT_SYSTEM` disk
+ * read happens at most once per Config lifetime, not once per auxiliary LLM
+ * call (issue #3176, finding D7). This mirrors the disk-load fallback in
+ * `resolveEffectiveMemories` but makes it a snapshot rather than a per-call
+ * re-read.
+ */
+const coreMemorySnapshotCache = new WeakMap<Config, Promise<string>>();
+
+/**
+ * Resolves a defined `coreMemory` value for the auxiliary prompt path.
+ * Prefers `config.getCoreMemory()` (in-memory when JIT is enabled); falls
+ * back to a cached disk snapshot otherwise so `getCoreSystemPromptAsync`
+ * never performs a per-call `.LLXPRT_SYSTEM` load.
+ */
+async function resolveAuxiliaryCoreMemory(config: Config): Promise<string> {
+  const explicit = config.getCoreMemory();
+  if (explicit !== undefined) {
+    return explicit;
+  }
+  let snapshot = coreMemorySnapshotCache.get(config);
+  if (snapshot === undefined) {
+    snapshot = loadCoreMemoryContent(process.cwd());
+    coreMemorySnapshotCache.set(config, snapshot);
+  }
+  return snapshot;
+}
+
 async function buildLightweightSystemPrompt(
   config: Config,
   model: string,
+  provider: string | undefined,
 ): Promise<string> {
   const userMemory = config.getUserMemory();
+  const coreMemory = await resolveAuxiliaryCoreMemory(config);
   const mcpInstructions = config.getMcpInstructions();
   const enabledToolNames = getEnabledToolNamesForPrompt(config);
   const includeSubagentDelegation =
     await shouldIncludeSubagentDelegationForConfig(config, enabledToolNames);
   return getCoreSystemPromptAsync({
     userMemory,
+    coreMemory,
     mcpInstructions,
     model,
+    provider: provider ?? resolveProviderForSystemPrompt(config),
     includeSubagentDelegation,
     tools: enabledToolNames,
     interactionMode: config.isInteractive() ? 'interactive' : 'non-interactive',
@@ -57,11 +98,16 @@ export async function generateJson(
   model: string,
   generationConfig: ModelGenerationSettings = {},
   lastPromptId: string,
+  provider?: string,
 ): Promise<Record<string, unknown>> {
   const logger = new DebugLogger('llxprt:core:clientLlmUtilities');
 
   try {
-    const systemInstruction = await buildLightweightSystemPrompt(config, model);
+    const systemInstruction = await buildLightweightSystemPrompt(
+      config,
+      model,
+      provider,
+    );
 
     // Already neutral IContent[] — read TextBlock.text directly (no Google Part access).
     const iContents = contents;
@@ -140,6 +186,7 @@ export async function generateContent(
   model: string,
   lastPromptId: string,
   baseGenerateContentConfig: ModelGenerationSettings,
+  provider?: string,
 ): Promise<ModelOutput> {
   const configToUse: ModelGenerationSettings = {
     ...baseGenerateContentConfig,
@@ -147,7 +194,11 @@ export async function generateContent(
   };
 
   try {
-    const systemInstruction = await buildLightweightSystemPrompt(config, model);
+    const systemInstruction = await buildLightweightSystemPrompt(
+      config,
+      model,
+      provider,
+    );
 
     const icontents = contents;
 

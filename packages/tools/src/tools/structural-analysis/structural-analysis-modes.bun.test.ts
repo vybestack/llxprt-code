@@ -20,7 +20,10 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { IToolHost } from '../../interfaces/index.js';
-import { StructuralAnalysisTool } from '../structural-analysis.js';
+import {
+  StructuralAnalysisTool,
+  type StructuralAnalysisParams,
+} from '../structural-analysis.js';
 import { createFakeToolHost } from '../ast-edit/__tests__/test-helpers.js';
 import type { ToolResult } from '../tools.js';
 
@@ -36,7 +39,7 @@ interface ImportRecord {
  * unknown, failing loudly if the payload shape is wrong.
  */
 function extractResults(result: ToolResult): unknown {
-  const parsed: unknown = JSON.parse(result.llmContent);
+  const parsed: unknown = JSON.parse(String(result.llmContent));
   if (typeof parsed !== 'object' || parsed === null || !('results' in parsed)) {
     throw new Error(
       `Unexpected payload: missing results — ${result.llmContent}`,
@@ -154,7 +157,7 @@ function asImportsWrapper(value: unknown): { imports: ImportRecord[] } {
 
 async function runTool(
   host: IToolHost,
-  params: Record<string, unknown>,
+  params: StructuralAnalysisParams,
 ): Promise<ToolResult> {
   const tool = new StructuralAnalysisTool(host);
   return tool.build(params).execute(new AbortController().signal);
@@ -225,7 +228,7 @@ class Ship {
       );
     });
 
-    const baseParams = (symbol: string): Record<string, unknown> => ({
+    const baseParams = (symbol: string): StructuralAnalysisParams => ({
       mode: 'callees',
       language: 'typescript',
       path: join(tempDir, 'callees-fixture.ts'),
@@ -404,7 +407,7 @@ const outerArrow = (): void => {
       );
     });
 
-    const baseParams = (symbol: string): Record<string, unknown> => ({
+    const baseParams = (symbol: string): StructuralAnalysisParams => ({
       mode: 'callees',
       language: 'typescript',
       path: nestedFilePath,
@@ -470,7 +473,7 @@ const outerArrow = (): void => {
       );
     });
 
-    const baseParams = (symbol: string): Record<string, unknown> => ({
+    const baseParams = (symbol: string): StructuralAnalysisParams => ({
       mode: 'callees',
       language: 'typescript',
       path: dedupFilePath,
@@ -502,7 +505,7 @@ const outerArrow = (): void => {
       );
     });
 
-    const baseParams = (symbol: string): Record<string, unknown> => ({
+    const baseParams = (symbol: string): StructuralAnalysisParams => ({
       mode: 'definitions',
       language: 'typescript',
       path: filePath,
@@ -582,7 +585,7 @@ const outerArrow = (): void => {
       );
     });
 
-    const baseParams = (symbol: string): Record<string, unknown> => ({
+    const baseParams = (symbol: string): StructuralAnalysisParams => ({
       mode: 'definitions',
       language: 'typescript',
       path: varFnFilePath,

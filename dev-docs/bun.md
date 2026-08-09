@@ -21,6 +21,9 @@ configures Bun's install behavior:
 ```toml
 [install]
 linker = "hoisted"
+
+[test]
+preload = ["./scripts/tests/browser-launch-guard.ts"]
 ```
 
 ### Why `linker = "hoisted"`
@@ -35,6 +38,18 @@ isolated linker) during S1. Bun's hoisting is not byte-for-byte identical to
 npm's algorithm, but using the hoisted layout removes the large class of
 "works under npm but not bun" (or vice-versa) surprises caused by an isolated
 layout.
+
+### Why the browser-launch guard is preloaded
+
+Bun module mocks are process-wide and do not replace dependencies already held
+by a cached module. Root and workspace-local `bun test` invocations therefore
+preload a test marker, and the repository's test runners set the same marker
+before spawning their Bun test processes. The marker also propagates to
+subprocesses. Browser-launching production code fails closed when either
+`LLXPRT_RUNNING_TESTS` is exactly `true` or `NODE_ENV` is exactly `test`. A test
+that intentionally needs to exercise the operating system's real browser
+launcher must opt in explicitly. The only accepted opt-in is the exact,
+case-sensitive value `LLXPRT_ALLOW_BROWSER_LAUNCH_IN_TESTS=true`.
 
 ## .bun-version
 
@@ -510,18 +525,34 @@ The `--workspace` flag matches by directory name (`core`), relative path
 
 ### The canonical command
 
-One command runs the complete suite:
+The canonical command that runs _every_ Bun-native test root in the repository
+— the uncredentialed workspace-plus-script suite, the credentialed
+integration-tests root (sandbox:none mode), and all credentialed evals
+(`RUN_EVALS=1`) — in fail-fast order is:
+
+```bash
+bun run test:bun:all
+```
+
+**Credentials and provider quota are required** for this command because the
+integration and evals roots call a real provider. Every test file executes
+directly under Bun.
+
+The complete _uncredentialed_ suite (every workspace plus the script harness,
+honouring pretest hooks) is:
 
 ```bash
 bun run test:bun
 ```
 
-It orchestrates every workspace plus the script harness, honouring pretest
-hooks. `npm run test` remains available and runs the same per-workspace
-`test` scripts, so the two agree by construction.
+`npm run test` runs the same per-workspace `test` scripts but does **not**
+include the `scripts/tests` harness, so the two do not agree fully:
+`test:bun` additionally runs scripts/tests. `npm run test` is useful as a
+legacy-compatible entry point for per-workspace suites.
 
-Two roots are deliberately **not** part of that run because they call a real
-provider and consume quota. Request them by name when you have credentials:
+Two roots are deliberately **not** part of the uncredentialed run because
+they call a real provider and consume quota. `test:bun:all` includes them, or
+request them by name when you have credentials:
 
 ```bash
 npm run test:integration:sandbox:none   # bun scripts/run_bun_tests.ts --root integration-tests

@@ -21,7 +21,10 @@
  * `core`'s full `IPty` contract.
  */
 
-const utf8Decoder = (): TextDecoder => new TextDecoder('utf-8');
+// Return type expressed via the constructor's instance type so this helper
+// compiles in workspaces whose `lib` omits the DOM `TextDecoder` type (#3161).
+const utf8Decoder = (): InstanceType<typeof TextDecoder> =>
+  new TextDecoder('utf-8');
 
 /** Exit notification shape, matching node-pty's `onExit` payload. */
 export interface TestPtyExit {
@@ -117,6 +120,8 @@ function spawnBunTerminal(
 ): TestPtyProcess {
   const dataListeners: Array<(data: string) => void> = [];
   const exitListeners: Array<(event: TestPtyExit) => void> = [];
+  const pendingData: string[] = [];
+  let pendingExit: TestPtyExit | null = null;
   const decoder = utf8Decoder();
 
   const subprocess = bunSpawnGlobal().spawn([file, ...args], {
@@ -131,6 +136,10 @@ function spawnBunTerminal(
         if (text === '') {
           return;
         }
+        if (dataListeners.length === 0) {
+          pendingData.push(text);
+          return;
+        }
         for (const listener of dataListeners) {
           listener(text);
         }
@@ -139,11 +148,13 @@ function spawnBunTerminal(
   });
 
   void subprocess.exited.then((code) => {
-    // Match node-pty: dispatch once, to whoever is subscribed at that moment.
-    // Callers already account for a late subscription never firing.
-    const exitCode = code ?? 0;
+    const event = { exitCode: code ?? 0 };
+    if (exitListeners.length === 0) {
+      pendingExit = event;
+      return;
+    }
     for (const listener of exitListeners.splice(0)) {
-      listener({ exitCode });
+      listener(event);
     }
   });
 
@@ -155,8 +166,16 @@ function spawnBunTerminal(
     kill: (signal) => subprocess.kill(signal),
     onData: (listener) => {
       dataListeners.push(listener);
+      for (const data of pendingData.splice(0)) {
+        listener(data);
+      }
     },
     onExit: (listener) => {
+      if (pendingExit !== null) {
+        listener(pendingExit);
+        pendingExit = null;
+        return;
+      }
       exitListeners.push(listener);
     },
   };

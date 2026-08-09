@@ -23,6 +23,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
+import { ToolConfirmationOutcome } from '../index.js';
 import type {
   IToolHost,
   IToolMessageBus,
@@ -54,6 +55,11 @@ function createFakeToolHost(overrides?: Partial<IToolHost>): IToolHost {
       respectLlxprtIgnore: true,
     }),
     getFileExclusions: () => [],
+    getReadManyFilesExclusions: () => [],
+    getFileFilteringRespectLlxprtIgnore: () => true,
+    getLlxprtIgnoreFilePath: () => null,
+    recordFileRead: () => {},
+    getLlxprtIgnorePatterns: () => [],
     getEphemeralSettings: () => ({}),
     getDebugMode: () => false,
     ...overrides,
@@ -65,7 +71,7 @@ function createFakeToolHost(overrides?: Partial<IToolHost>): IToolHost {
  */
 function createFakeMessageBus(): IToolMessageBus {
   return {
-    requestConfirmation: async () => 'proceed_once' as const,
+    requestConfirmation: async () => ToolConfirmationOutcome.ProceedOnce,
     publishPolicyUpdate: async () => {},
   };
 }
@@ -95,7 +101,7 @@ class SampleShellTool {
   constructor(
     private readonly host: IToolHost,
     private readonly shell: IShellExecutionService,
-    private readonly bus: IToolMessageBus,
+    _bus: IToolMessageBus,
   ) {}
 
   async execute(command: string) {
@@ -276,16 +282,16 @@ describe('Registry Contract Tests @plan:PLAN-20260608-ISSUE1585.P04', () => {
       const registryHost: IToolRegistryHost = {
         getCoreTools: () => ['shell', 'read-file', 'write-file'],
         getExcludeTools: () => ['dangerous-tool'],
-        getDiscoveryCommand: () => undefined,
+        getToolDiscoveryCommand: () => undefined,
         isToolEnabled: (name: string) => !['dangerous-tool'].includes(name),
       };
 
-      const coreTools = registryHost.getCoreTools();
+      const coreTools = registryHost.getCoreTools?.() ?? [];
       expect(coreTools).toContain('shell');
       expect(coreTools).toContain('read-file');
 
-      expect(registryHost.isToolEnabled('shell')).toBe(true);
-      expect(registryHost.isToolEnabled('dangerous-tool')).toBe(false);
+      expect(registryHost.isToolEnabled?.('shell')).toBe(true);
+      expect(registryHost.isToolEnabled?.('dangerous-tool')).toBe(false);
     });
   });
 });

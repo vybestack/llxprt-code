@@ -4,8 +4,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { createOrchestrator } from '../src/service/orchestrator';
-import type { Diagnostic, LspConfig } from '../src/service/diagnostics';
+import { createOrchestrator } from '../src/service/orchestrator.js';
+import type { Diagnostic } from '../src/service/diagnostics.js';
+type OrchestratorConfig = NonNullable<Parameters<typeof createOrchestrator>[0]>;
 
 const WORKSPACE_ROOT = path.resolve('/workspace');
 const WORKSPACE_URI = pathToFileURL(WORKSPACE_ROOT).toString();
@@ -29,7 +30,9 @@ function createFakeServer(
   };
 }
 
-function createConfig(servers: LspConfig['servers']): LspConfig {
+function createConfig(
+  servers: OrchestratorConfig['servers'],
+): OrchestratorConfig {
   return { servers };
 }
 
@@ -97,32 +100,26 @@ describe('Orchestrator unit tests against real implementation', () => {
     expect(status).toEqual([{ serverId: 'fake-ts', state: 'idle' }]);
   });
 
-  it(
-    'status marks broken after crash during checkFile',
-    { timeout: 15_000 },
-    async () => {
-      const broken = createOrchestrator(
-        createConfig([
-          createFakeServer('fake-crash', ['.ts'], ['--crash-on-did-open']),
-        ]),
-        WORKSPACE_ROOT,
+  it('status marks broken after crash during checkFile', async () => {
+    const broken = createOrchestrator(
+      createConfig([
+        createFakeServer('fake-crash', ['.ts'], ['--crash-on-did-open']),
+      ]),
+      WORKSPACE_ROOT,
+    );
+    try {
+      await broken.checkFile(
+        path.join(WORKSPACE_ROOT, 'src/crash.ts'),
+        'const x = TYPE_ERROR',
       );
-      try {
-        await broken.checkFile(
-          path.join(WORKSPACE_ROOT, 'src/crash.ts'),
-          'const x = TYPE_ERROR',
-        );
-        const status = await broken.status();
-        expect(
-          status.some(
-            (s) => s.serverId === 'fake-crash' && s.state === 'broken',
-          ),
-        ).toBe(true);
-      } finally {
-        await broken.shutdown();
-      }
-    },
-  );
+      const status = await broken.status();
+      expect(
+        status.some((s) => s.serverId === 'fake-crash' && s.state === 'broken'),
+      ).toBe(true);
+    } finally {
+      await broken.shutdown();
+    }
+  }, 15_000);
 
   it('gotoDefinition returns empty for unknown extension', async () => {
     await expect(
@@ -232,7 +229,7 @@ describe('Orchestrator unit tests against real implementation', () => {
     expect(orchestrator.getDiagnosticEpoch()).toBe(0);
   });
 
-  it('serializes per-client operations', { timeout: 15_000 }, async () => {
+  it('serializes per-client operations', async () => {
     const delayed = createOrchestrator(
       {
         ...createConfig([
@@ -270,7 +267,7 @@ describe('Orchestrator unit tests against real implementation', () => {
     } finally {
       await delayed.shutdown();
     }
-  });
+  }, 15_000);
 
   it('property: unknown extensions always produce empty diagnostics', async () => {
     await fc.assert(

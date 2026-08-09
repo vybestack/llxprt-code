@@ -73,6 +73,7 @@ export function buildProviderChatOptions(
   invocation: RuntimeGenerateChatOptions['invocation'],
   requestContext: Record<string, unknown> | undefined,
   systemInstruction: unknown,
+  systemPromptAssembler?: RuntimeGenerateChatOptions['systemPromptAssembler'],
 ): RuntimeGenerateChatOptions {
   return {
     contents: requestContents,
@@ -88,6 +89,7 @@ export function buildProviderChatOptions(
     },
     userMemory: resolveUserMemory(runtimeContext.config),
     systemInstruction: extractSystemInstructionText(systemInstruction),
+    ...(systemPromptAssembler !== undefined && { systemPromptAssembler }),
   };
 }
 

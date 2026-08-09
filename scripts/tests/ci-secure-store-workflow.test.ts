@@ -75,13 +75,13 @@ describe('Issue #2147: SecureStore backend coverage is separated from full CI su
     secureStoreJob = jobs['secure_store_backend'];
   });
 
-  it('runs the full test suite once per OS per shard under normal keyring behavior', () => {
+  it('runs partition-aware shard jobs under normal keyring behavior', () => {
     expect(
       testShardJob,
       'ci.yml must contain the test_shard matrix job',
     ).toBeTruthy();
     expect(testShardJob?.name).toBe(
-      'Test (${{ matrix.os }}) [${{ matrix.shard }}]',
+      'Test (${{ matrix.os }}) [${{ matrix.shard }} ${{ matrix.partition }}]',
     );
     const matrix = asOptionalRecord(
       asOptionalRecord(testShardJob?.strategy)?.['matrix'],
@@ -112,7 +112,7 @@ describe('Issue #2147: SecureStore backend coverage is separated from full CI su
       'Upload Test Results Artifact (for forks)',
     );
     expect(forkArtifact.with?.['name']).toBe(
-      'test-results-fork-${{ matrix.shard }}-${{ matrix.node-version }}-${{ matrix.os }}',
+      'test-results-fork-${{ matrix.shard }}-${{ matrix.partition }}-${{ matrix.node-version }}-${{ matrix.os }}',
     );
 
     // Issue #2970: the dead coverage pipeline (Upload coverage reports step)

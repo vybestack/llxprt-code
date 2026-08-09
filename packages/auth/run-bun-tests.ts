@@ -13,12 +13,15 @@
 
 import { spawn } from 'node:child_process';
 import { readdirSync, statSync, writeFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { dirname, join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   DEFAULT_PER_FILE_TIMEOUT_MS,
   DEFAULT_PER_TEST_TIMEOUT_MS,
   resolveTestConcurrency,
 } from '../../scripts/lib/bun-test-policy.js';
+
+process.env.LLXPRT_RUNNING_TESTS = 'true';
 
 /**
  * Every path this runner touches — discovery, the child's working directory,
@@ -26,7 +29,7 @@ import {
  * `process.cwd()`, so the runner behaves identically no matter where it is
  * invoked from.
  */
-const WORKSPACE_ROOT = import.meta.dir;
+const WORKSPACE_ROOT = dirname(fileURLToPath(import.meta.url));
 const PRELOAD = join(WORKSPACE_ROOT, 'bun-preload.ts');
 const JUNIT_PATH = join(WORKSPACE_ROOT, 'junit.xml');
 const CONCURRENCY = resolveTestConcurrency({

@@ -18,5 +18,12 @@
     "src/**/*.ts",
     "src/**/*.json"
   ],
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/debug/DebugLogger.test.ts",
+    "src/debug/FileOutput.test.ts",
+    "src/telemetry/canonicalConsumer.behavior.test.ts",
+    "src/telemetry/types.test.ts"
+  ]
 }

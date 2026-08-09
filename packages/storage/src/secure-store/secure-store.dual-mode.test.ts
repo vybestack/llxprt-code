@@ -159,7 +159,7 @@ const SHARED_CONTRACT_MODES: readonly ContractMode[] = [
   },
 ];
 
-describe.each(SHARED_CONTRACT_MODES)(
+describe.each([...SHARED_CONTRACT_MODES])(
   'SecureStore shared contract [$mode]',
   ({ makeLoader, fallbackPolicy }) => {
     let tempDir: string;

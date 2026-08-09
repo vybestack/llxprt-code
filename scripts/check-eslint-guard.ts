@@ -10,7 +10,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { diffFromGit, parseArgs } from './eslint-guard/git.ts';
+import { diffFromGit, parseArgs, resolveBase } from './eslint-guard/git.ts';
 import { checkDiff } from './eslint-guard/check-diff.ts';
 import {
   scanCliProductionTypeEscapes,
@@ -28,6 +28,7 @@ import {
   checkModuleDirectiveScopesInConfig,
   checkCoreDirectiveScopesInConfig,
 } from './eslint-guard/bypass-detector.ts';
+import { scanRepositoryTestExclusions } from './eslint-guard/test-exclusion-scanner.ts';
 import { formatViolations } from './eslint-guard/violations.ts';
 
 export { checkDiff } from './eslint-guard/check-diff.ts';
@@ -58,9 +59,22 @@ export {
   checkCoreDirectiveScopesInConfig,
 } from './eslint-guard/bypass-detector.ts';
 export { formatViolations } from './eslint-guard/violations.ts';
+export {
+  scanRepositoryTestExclusions,
+  isBlanketTestExclusion,
+  isLiteralTestOptOut,
+  isTestIndicator,
+  hasGlobWildcards,
+  normalizePosixPath,
+  extractExcludeArray,
+  scanConfigExclusions,
+  parseBaseline,
+  BASELINE_PATH,
+} from './eslint-guard/test-exclusion-scanner.ts';
 
 function main(): void {
   const args = parseArgs(process.argv.slice(2));
+  const resolvedBase = resolveBase(args.base, args.head);
   const diff = diffFromGit(args.base, args.head);
   const violations = checkDiff(diff);
 
@@ -95,6 +109,11 @@ function main(): void {
   // integration-tests must be free of lint/type escape hatches, and central
   // lint policy must not preserve carve-outs for directives or explicit any.
   violations.push(...scanRepositoryLintEscapeHatches(process.cwd(), '2227'));
+
+  // Issue #3161 durable guard: every typecheck-feeding package config must be
+  // free of blanket test exclusions, and remaining literal test opt-outs are
+  // ratcheted against a committed baseline so the debt cannot grow silently.
+  violations.push(...scanRepositoryTestExclusions(process.cwd(), resolvedBase));
   const configPath = join(process.cwd(), 'eslint.config.js');
   if (existsSync(configPath)) {
     const configSource = readFileSync(configPath, 'utf8');

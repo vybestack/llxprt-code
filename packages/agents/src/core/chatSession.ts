@@ -38,6 +38,13 @@ export interface ChatSessionConfig extends ModelGenerationSettings {
   providerRequestContext?: Record<string, unknown>;
   tools?: ToolGroupArray;
   toolConfig?: unknown;
+  /**
+   * Caller-supplied re-renderer carried onto provider options so a router
+   * provider (e.g. a load balancer) can re-render the assembled prompt for the
+   * sub-profile model it selects (issue #3157). Assembly stays owned by
+   * ChatSession; this port only re-invokes it.
+   */
+  systemPromptAssembler?: SystemPromptAssembler;
 }
 
 /**
@@ -121,7 +128,10 @@ import { resolveModelForSystemPrompt } from './systemPromptModel.js';
  * as seeded at construction time.
  */
 export interface SystemPromptAssembler {
-  assemble(model: string): Promise<string>;
+  assemble(request: {
+    provider: string | undefined;
+    model: string;
+  }): Promise<string>;
 }
 
 /**
@@ -222,6 +232,13 @@ export class ChatSession {
     this.historyService = view.history;
     this.generationConfig = generationConfig;
     this.systemPromptAssembler = systemPromptAssembler;
+    // Carry the assembler onto the generation config so the three send seams
+    // (TurnProcessor/StreamProcessor/DirectMessageProcessor) thread it onto
+    // the provider options alongside systemInstruction. A router provider
+    // re-invokes it after sub-profile selection (issue #3157).
+    if (systemPromptAssembler !== undefined) {
+      this.generationConfig.systemPromptAssembler = systemPromptAssembler;
+    }
     void contentGenerator;
 
     // Wire density-dirty tracking on historyService.add
@@ -476,6 +493,7 @@ export class ChatSession {
   private getCompressionProfileResolverContext(): CompressionProfileResolverContext {
     return {
       providerRuntime: this.runtimeContext.providerRuntime,
+      runtimeState: this.runtimeState,
       resolveExplicitCompressionProvider:
         this.resolveExplicitCompressionProvider.bind(this),
       roundRobinIndexes: this.compressionLoadBalancerRoundRobinIndexes,
@@ -549,15 +567,14 @@ export class ChatSession {
     if (!this.systemPromptAssembler) {
       return;
     }
-    // Use the SAME resolver ChatSessionFactory uses at session start
-    // (issue #3138). Introducing a second mechanism here — e.g. asking the
-    // provider directly — would recreate the two-sources-disagree defect this
-    // issue exists to remove.
     const config = this.runtimeContext.providerRuntime.config;
     const model = config
       ? resolveModelForSystemPrompt(config)
       : this.runtimeState.model;
-    const systemInstruction = await this.systemPromptAssembler.assemble(model);
+    const systemInstruction = await this.systemPromptAssembler.assemble({
+      provider: this.runtimeState.provider,
+      model,
+    });
     this.generationConfig.systemInstruction = systemInstruction;
     const tokens = await this.historyService.estimateTokensForText(
       systemInstruction,

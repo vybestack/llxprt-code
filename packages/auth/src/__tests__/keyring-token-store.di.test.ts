@@ -560,12 +560,13 @@ describe('KeyringTokenStore lockDir contract (P8)', () => {
 
   it('constructor requires lockDir and directs callers to createKeyringTokenStore()', () => {
     const store = createInMemorySecureStore();
-    expect(
-      () =>
-        new KeyringTokenStore({
+    expect(() =>
+      Reflect.construct(KeyringTokenStore, [
+        {
           secureStore: store,
           logger: createNoOpLogger(),
-        }),
+        },
+      ]),
     ).toThrow(/createKeyringTokenStore/);
   });
 
@@ -628,7 +629,7 @@ interface SecureStoreMode {
   readonly makeStore: (dir: string) => ISecureStore;
 }
 
-const DUAL_MODES: readonly SecureStoreMode[] = [
+const DUAL_MODES: SecureStoreMode[] = [
   {
     mode: 'in-memory',
     makeStore: () => createInMemorySecureStore(),

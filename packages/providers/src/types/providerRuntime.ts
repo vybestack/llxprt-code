@@ -22,3 +22,18 @@ export interface UserMemoryProfileProvider {
 }
 
 export type UserMemoryInput = string | UserMemoryProfileProvider;
+
+/**
+ * Caller-supplied renderer for the assembled system prompt, parameterized by
+ * the model that will appear on the wire (issue #3157).
+ *
+ * Structurally identical to `RuntimeSystemPromptAssembler` (core) and to the
+ * agent layer's `SystemPromptAssembler` so the same object flows across all
+ * three declarations with no adapter and no cross-package import.
+ */
+export interface SystemPromptAssembler {
+  assemble(request: {
+    provider: string | undefined;
+    model: string;
+  }): Promise<string>;
+}

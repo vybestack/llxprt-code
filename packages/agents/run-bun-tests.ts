@@ -47,6 +47,8 @@ import {
   resolveTestConcurrency,
 } from '../../scripts/lib/bun-test-policy.js';
 
+process.env.LLXPRT_RUNNING_TESTS = 'true';
+
 /**
  * Every path this runner touches — discovery, the child's working directory
  * and the JUnit report — is anchored here rather than at `process.cwd()`, so
