@@ -71,9 +71,24 @@ describe('shell-parser: Node production smoke', () => {
     mkdirSync(tmpParent, { recursive: true });
     const tempDir = mkdtempSync(join(tmpParent, 'node-prod-smoke-'));
     const wrapperPath = join(tempDir, 'entry.ts');
+    const debugLoggerStubPath = join(tempDir, 'DebugLogger.ts');
     const outPath = join(tempDir, 'entry.js');
 
     try {
+      // The parser's logging implementation belongs to another workspace and is
+      // irrelevant to this smoke. Stub that boundary so isolated CI shards can
+      // bundle the production parser without requiring prebuilt workspace dist.
+      writeFileSync(
+        debugLoggerStubPath,
+        `export class DebugLogger {
+  constructor(_namespace: string) {}
+  log(..._args: unknown[]) {}
+  warn(..._args: unknown[]) {}
+  error(..._args: unknown[]) {}
+}
+`,
+      );
+
       // Wrapper that exercises the REAL production shell-parser module.
       writeFileSync(
         wrapperPath,
@@ -96,13 +111,27 @@ console.log(JSON.stringify(result));
 
       // Bundle the wrapper + production shell-parser + all relative deps.
       // Externalize web-tree-sitter so Node resolves it from node_modules;
-      // everything else (DebugLogger, runtime.ts, etc.) is bundled inline.
+      // bundle runtime.ts and substitute only the unrelated logger boundary.
       const buildResult = await build({
         entrypoints: [wrapperPath],
         outdir: tempDir,
         target: 'node',
         format: 'esm',
         external: ['web-tree-sitter'],
+        plugins: [
+          {
+            name: 'debug-logger-workspace-boundary',
+            setup(builder) {
+              builder.onResolve(
+                {
+                  filter:
+                    /^@vybestack\/llxprt-code-telemetry\/debug\/DebugLogger\.js$/,
+                },
+                () => ({ path: debugLoggerStubPath }),
+              );
+            },
+          },
+        ],
       });
 
       if (!buildResult.success) {
