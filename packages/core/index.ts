@@ -15,6 +15,7 @@ export {
   UNCONFIGURED_PROVIDER,
 } from './src/config/models.js';
 export {
+  isBrowserLaunchDisabledDuringTests,
   openBrowserSecurely,
   shouldLaunchBrowser,
 } from './src/utils/secure-browser-launcher.js';

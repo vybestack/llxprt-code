@@ -21,6 +21,9 @@ configures Bun's install behavior:
 ```toml
 [install]
 linker = "hoisted"
+
+[test]
+preload = ["./scripts/tests/browser-launch-guard.ts"]
 ```
 
 ### Why `linker = "hoisted"`
@@ -35,6 +38,18 @@ isolated linker) during S1. Bun's hoisting is not byte-for-byte identical to
 npm's algorithm, but using the hoisted layout removes the large class of
 "works under npm but not bun" (or vice-versa) surprises caused by an isolated
 layout.
+
+### Why the browser-launch guard is preloaded
+
+Bun module mocks are process-wide and do not replace dependencies already held
+by a cached module. Root and workspace-local `bun test` invocations therefore
+preload a test marker, and the repository's test runners set the same marker
+before spawning their Bun test processes. The marker also propagates to
+subprocesses. Browser-launching production code fails closed when either
+`LLXPRT_RUNNING_TESTS` is exactly `true` or `NODE_ENV` is exactly `test`. A test
+that intentionally needs to exercise the operating system's real browser
+launcher must opt in explicitly. The only accepted opt-in is the exact,
+case-sensitive value `LLXPRT_ALLOW_BROWSER_LAUNCH_IN_TESTS=true`.
 
 ## .bun-version
 

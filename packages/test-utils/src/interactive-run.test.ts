@@ -344,6 +344,7 @@ describe('InteractiveRun quota guard integration', () => {
         keepAliveScript('HTTP 429 Too Many Requests'),
         true,
       );
+      await run.expectText('HTTP 429 Too Many Requests', 5000);
 
       const error = await captureRejection(run.expectExit(1000));
 

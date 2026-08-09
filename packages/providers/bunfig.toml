@@ -1,4 +1,5 @@
 [test]
 preload = [
   "./bun-test-setup.ts",
+  "../../scripts/tests/browser-launch-guard.ts",
 ]
