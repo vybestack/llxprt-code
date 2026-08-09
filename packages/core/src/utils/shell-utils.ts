@@ -39,13 +39,14 @@ import { isWindows } from './runtime.js';
 import { doesToolInvocationMatch } from './tool-utils.js';
 import {
   isParserAvailable,
-  parseShellCommand,
-  extractCommandNames,
-  hasCommandSubstitution as treeSitterHasCommandSubstitution,
-  splitCommandsWithTree,
-  parseCommandDetails,
+  parseShellCommandForLanguage,
+  extractCommandNamesForLanguage,
+  hasCommandSubstitutionForLanguage,
+  splitCommandsWithTreeForLanguage,
+  parseCommandDetailsForLanguage,
   hasPromptCommandTransform,
 } from './shell-parser.js';
+import type { ParserLanguage, ParsedCommandDetail } from './shell-parser.js';
 import { debugLogger } from './debugLogger.js';
 
 export const SHELL_TOOL_NAMES = ['run_shell_command', 'ShellTool'];
@@ -54,6 +55,30 @@ export const SHELL_TOOL_NAMES = ['run_shell_command', 'ShellTool'];
  * An identifier for the shell type.
  */
 export type ShellType = 'cmd' | 'powershell' | 'bash';
+
+/**
+ * Map an execution {@link ShellType} to the corresponding parser grammar
+ * language.  Only `powershell` maps to the PowerShell grammar; `cmd` maps
+ * to `bash` (the default) because cmd.exe syntax is not PowerShell and no
+ * dedicated cmd grammar exists — using Bash is the same as the pre-#3181
+ * behavior and does not make a false claim about the language.
+ */
+export function shellTypeToParserLanguage(
+  shellType?: ShellType,
+): ParserLanguage {
+  if (shellType === 'powershell') {
+    return 'powershell';
+  }
+  return 'bash';
+}
+
+/**
+ * Resolve the execution shell type, using the platform shell configuration
+ * when no override is provided.
+ */
+function resolveShellType(shellType?: ShellType): ShellType {
+  return shellType ?? getShellConfiguration().shell;
+}
 
 /**
  * Defines the configuration required to execute a command string within a specific shell.
@@ -155,19 +180,24 @@ export interface SplitCommandsOptions {
  * Uses tree-sitter for accurate parsing when available.
  * @param command The shell command string to parse
  * @param options Optional settings for split behavior
+ * @param shellType Optional shell type override; defaults to the platform shell
  * @returns An array of individual command strings
  */
 export function splitCommands(
   command: string,
   options?: SplitCommandsOptions,
+  shellType?: ShellType,
 ): string[] {
   const splitOnPipes = options?.splitOnPipes ?? true;
+  const language = shellTypeToParserLanguage(shellType);
 
   // Try tree-sitter first for accurate parsing
-  if (isParserAvailable()) {
-    const tree = parseShellCommand(command);
+  if (isParserAvailable(language)) {
+    const tree = parseShellCommandForLanguage(command, language);
     if (tree) {
-      const result = splitCommandsWithTree(tree, { splitOnPipes });
+      const result = splitCommandsWithTreeForLanguage(tree, language, {
+        splitOnPipes,
+      });
       if (result.length > 0) {
         return result;
       }
@@ -343,29 +373,42 @@ export function getCommandRoot(command: string): string | undefined {
   return undefined;
 }
 
-export function getCommandRoots(command: string): string[] {
+export function getCommandRoots(
+  command: string,
+  shellType?: ShellType,
+): string[] {
   if (!command) {
     return [];
   }
 
+  const language = shellTypeToParserLanguage(shellType);
+
   // Try tree-sitter first for accurate parsing
-  if (isParserAvailable()) {
-    const tree = parseShellCommand(command);
+  if (isParserAvailable(language)) {
+    const tree = parseShellCommandForLanguage(command, language);
     if (tree) {
       // Prompt transformations (${var@P}) can execute arbitrary commands, so
       // the command is treated as unsafe and no roots are returned.
-      if (hasPromptCommandTransform(tree.rootNode)) {
+      // This is a Bash-specific check; skip for PowerShell.
+      if (language === 'bash' && hasPromptCommandTransform(tree.rootNode)) {
         return [];
       }
-      const result = extractCommandNames(tree);
+      const result = extractCommandNamesForLanguage(tree, language);
       if (result.length > 0) {
         return result;
+      }
+      // When the PowerShell parser is available and found no static command
+      // names (e.g., a pure .NET expression), do not fall back to regex —
+      // a pure expression has no command root and the regex fallback would
+      // fabricate one (#3181 OCR Finding 11).
+      if (language === 'powershell') {
+        return [];
       }
     }
   }
 
   // Fall back to regex-based parsing
-  return splitCommands(command)
+  return splitCommands(command, undefined, shellType)
     .map((c) => getCommandRoot(c))
     .filter((c): c is string => !!c);
 }
@@ -459,27 +502,41 @@ function matchShellWrapperPrefix(cmd: string): number {
 }
 
 /**
- * Detects command substitution patterns in a shell command, following bash quoting rules:
- * - Single quotes ('): Everything literal, no substitution possible
- * - Double quotes ("): Command substitution with $() and backticks unless escaped with \
- * - No quotes: Command substitution with $(), <(), and backticks
- * Uses tree-sitter for accurate parsing when available, falls back to regex.
- * @param command The shell command string to check
- * @returns true if command substitution would be executed by bash
+ * Detects command substitution patterns in a shell command.
+ *
+ * **Bash** (default): `$()`, backticks, and `<()`/`>()` process substitution.
+ *
+ * **PowerShell**: `$()` subexpressions only.  Backticks are escapes, not
+ * substitution.  When the PowerShell parser is unavailable, fail closed
+ * (return true) because structural substitution detection cannot be trusted.
  */
-export function detectCommandSubstitution(command: string): boolean {
-  // Try tree-sitter first for accurate parsing
-  if (isParserAvailable()) {
-    const tree = parseShellCommand(command);
+export function detectCommandSubstitution(
+  command: string,
+  shellType?: ShellType,
+): boolean {
+  const language = shellTypeToParserLanguage(shellType);
+
+  if (isParserAvailable(language)) {
+    const tree = parseShellCommandForLanguage(command, language);
     if (tree) {
-      const detected = treeSitterHasCommandSubstitution(tree);
+      const detected = hasCommandSubstitutionForLanguage(tree, language);
+      if (language === 'powershell') {
+        // Fail closed on parse errors: a malformed tree may have missed
+        // $() subexpressions during error recovery. PowerShell backticks
+        // are escapes, not substitution — only valid trees are trusted.
+        return detected || tree.rootNode.hasError;
+      }
       if (detected || !tree.rootNode.hasError) {
         return detected;
       }
     }
   }
 
-  // Parser errors require conservative detection of malformed substitution starts.
+  if (language === 'powershell') {
+    // PowerShell parser unavailable: fail closed.
+    return true;
+  }
+
   return detectCommandSubstitutionRegex(command);
 }
 
@@ -645,17 +702,20 @@ function hasHeredocOperator(command: string): boolean {
 function checkParserUnavailableBlock(
   command: string,
   shellReplacementMode: 'allowlist' | 'all' | 'none',
+  language: ParserLanguage,
 ): PermissionCheckResult | null {
   if (
     shellReplacementMode !== 'all' &&
-    !isParserAvailable() &&
+    !isParserAvailable(language) &&
     (/\r|\n/u.test(command) || hasHeredocOperator(command))
   ) {
     return {
       allAllowed: false,
       disallowedCommands: [command],
       blockReason:
-        'Command rejected because multiline and heredoc syntax requires the shell parser',
+        language === 'powershell'
+          ? 'Command rejected because multiline syntax requires the PowerShell shell parser'
+          : 'Command rejected because multiline and heredoc syntax requires the shell parser',
       isHardDenial: true,
     };
   }
@@ -665,52 +725,142 @@ function checkParserUnavailableBlock(
 function checkShellReplacementBlock(
   command: string,
   shellReplacementMode: 'allowlist' | 'all' | 'none',
+  language: ParserLanguage,
 ): PermissionCheckResult | null {
-  if (shellReplacementMode === 'none' && detectCommandSubstitution(command)) {
+  if (
+    shellReplacementMode === 'none' &&
+    detectCommandSubstitution(
+      command,
+      language === 'powershell' ? 'powershell' : 'bash',
+    )
+  ) {
     return {
       allAllowed: false,
       disallowedCommands: [command],
       blockReason:
-        'Command substitution using $(), `` ` ``, <(), or >() is not allowed for security reasons',
+        language === 'powershell'
+          ? 'PowerShell command substitution using $() is not allowed for security reasons'
+          : 'Command substitution using $(), `` ` ``, <(), or >() is not allowed for security reasons',
       isHardDenial: true,
     };
   }
   return null;
 }
 
+function getStrictAllowlistDenial(
+  details: readonly ParsedCommandDetail[],
+  hasStrictAllowlist: boolean,
+  command: string,
+): PermissionCheckResult | null {
+  if (!hasStrictAllowlist) {
+    return null;
+  }
+  const unresolvable = details.find(
+    (d) => d.nameKind === 'dynamic' || d.nameKind === 'expression',
+  );
+  if (!unresolvable) {
+    return null;
+  }
+  return {
+    allAllowed: false,
+    disallowedCommands: [command],
+    blockReason:
+      'Command rejected because it contains a dynamic or ' +
+      'expression invocation target that cannot be validated ' +
+      'against the allowlist',
+    isHardDenial: true,
+  };
+}
+
 function extractCommandsToValidate(
   command: string,
   shellReplacementMode: 'allowlist' | 'all' | 'none',
+  language: ParserLanguage,
+  hasStrictAllowlist: boolean,
 ): string[] | PermissionCheckResult {
   const normalize = (cmd: string): string => cmd.trim().replace(/\s+/g, ' ');
 
   if (shellReplacementMode === 'allowlist') {
-    const parseResult = parseCommandDetails(command);
-    if (
-      parseResult &&
-      parseResult.hasError !== true &&
-      parseResult.details.length > 0
-    ) {
-      return parseResult.details
-        .map((detail) => normalize(detail.text))
-        .filter(Boolean);
-    }
+    const parseResult = parseCommandDetailsForLanguage(command, language);
+
     if (parseResult?.hasError === true) {
       return {
         allAllowed: false,
         disallowedCommands: [command],
-        blockReason: 'Command rejected because it could not be parsed safely',
+        blockReason:
+          parseResult.errorReason ??
+          'Command rejected because it could not be parsed safely',
         isHardDenial: true,
       };
     }
-    return splitCommands(command).map(normalize);
+
+    if (parseResult) {
+      const strictDenial = getStrictAllowlistDenial(
+        parseResult.details,
+        hasStrictAllowlist,
+        command,
+      );
+      if (strictDenial) {
+        return strictDenial;
+      }
+
+      if (parseResult.details.length > 0) {
+        return parseResult.details
+          .map((detail) => normalize(detail.canonicalText ?? detail.text))
+          .filter(Boolean);
+      }
+
+      const normalized = normalize(command);
+      if (normalized) {
+        return [normalized];
+      }
+
+      // Successful parse produced zero details and the command normalizes
+      // to empty. Return an empty array rather than falling through to the
+      // parser-unavailable diagnostic — the parser WAS available (#3181
+      // OCR Finding 6).
+      return [];
+    }
+
+    // Parser unavailable.
+    if (language === 'powershell') {
+      return {
+        allAllowed: false,
+        disallowedCommands: [command],
+        blockReason:
+          'PowerShell command rejected because the structural parser ' +
+          'is unavailable',
+        isHardDenial: true,
+      };
+    }
+
+    // Bash: fall back to regex splitting.
+    return splitCommands(command, undefined, language).map(normalize);
   }
-  return splitCommands(command).map(normalize);
+
+  // For 'all' and 'none' modes: use recursive structured details when the
+  // parser is available so that blocklisted commands nested inside script
+  // blocks, pipelines, and wrapper payloads are caught (Finding 6, #3181).
+  // Substitution was already handled by checkShellReplacementBlock for 'none'.
+  if (isParserAvailable(language)) {
+    const parseResult = parseCommandDetailsForLanguage(command, language);
+    if (parseResult?.hasError === false && parseResult.details.length > 0) {
+      return parseResult.details
+        .map((detail) => normalize(detail.canonicalText ?? detail.text))
+        .filter(Boolean);
+    }
+  }
+
+  // Parser unavailable or parse error: fall back to shallow splitting for
+  // best-effort blocklist checking. For PowerShell without parser, the
+  // shallow regex splitter is the only option (substitution already checked).
+  return splitCommands(command, undefined, language).map(normalize);
 }
 
 function checkBlocklist(
   commandsToValidate: string[],
   config: ShellPermissionConfig,
+  language: ParserLanguage,
 ): PermissionCheckResult | null {
   const excludeTools = config.getExcludeTools() ?? [];
   const isWildcardBlocked = SHELL_TOOL_NAMES.some((name) =>
@@ -726,6 +876,9 @@ function checkBlocklist(
     };
   }
 
+  // PowerShell command resolution is case-insensitive; Bash is case-sensitive.
+  const caseInsensitive = language === 'powershell';
+
   const invocation: AnyToolInvocation & { params: { command: string } } = {
     params: { command: '' },
   } as AnyToolInvocation & { params: { command: string } };
@@ -733,7 +886,12 @@ function checkBlocklist(
   for (const cmd of commandsToValidate) {
     invocation.params['command'] = cmd;
     if (
-      doesToolInvocationMatch('run_shell_command', invocation, excludeTools)
+      doesToolInvocationMatch(
+        'run_shell_command',
+        invocation,
+        excludeTools,
+        caseInsensitive,
+      )
     ) {
       return {
         allAllowed: false,
@@ -750,6 +908,7 @@ function checkSessionAllowlistMode(
   commandsToValidate: string[],
   sessionAllowlist: Set<string>,
   coreTools: string[],
+  language: ParserLanguage,
 ): PermissionCheckResult | null {
   const invocation: AnyToolInvocation & { params: { command: string } } = {
     params: { command: '' },
@@ -761,6 +920,9 @@ function checkSessionAllowlistMode(
     ),
   );
 
+  // PowerShell command resolution is case-insensitive; Bash is case-sensitive.
+  const caseInsensitive = language === 'powershell';
+
   const disallowedCommands: string[] = [];
 
   for (const cmd of commandsToValidate) {
@@ -769,10 +931,16 @@ function checkSessionAllowlistMode(
       'run_shell_command',
       invocation,
       [...normalizedSessionAllowlist],
+      caseInsensitive,
     );
     const isGloballyAllowed = isSessionAllowed
       ? true
-      : doesToolInvocationMatch('run_shell_command', invocation, coreTools);
+      : doesToolInvocationMatch(
+          'run_shell_command',
+          invocation,
+          coreTools,
+          caseInsensitive,
+        );
     if (isSessionAllowed || isGloballyAllowed) {
       continue;
     }
@@ -796,6 +964,7 @@ function checkSessionAllowlistMode(
 function checkDefaultAllowMode(
   commandsToValidate: string[],
   coreTools: string[],
+  language: ParserLanguage,
 ): PermissionCheckResult | null {
   const hasSpecificAllowedCommands =
     coreTools.filter((tool) =>
@@ -803,6 +972,9 @@ function checkDefaultAllowMode(
     ).length > 0;
 
   if (!hasSpecificAllowedCommands) return null;
+
+  // PowerShell command resolution is case-insensitive; Bash is case-sensitive.
+  const caseInsensitive = language === 'powershell';
 
   const invocation: AnyToolInvocation & { params: { command: string } } = {
     params: { command: '' },
@@ -815,6 +987,7 @@ function checkDefaultAllowMode(
       'run_shell_command',
       invocation,
       coreTools,
+      caseInsensitive,
     );
     if (!isGloballyAllowed) {
       disallowedCommands.push(cmd);
@@ -855,14 +1028,18 @@ function checkDefaultAllowMode(
  * @param config The application configuration.
  * @param sessionAllowlist A session-level list of approved commands. Its
  *   presence activates "Default Deny" mode.
+ * @param shellType Optional override for the shell type; defaults to the
+ *   platform's execution shell so validation always matches execution (#3181).
  * @returns An object detailing which commands are not allowed.
  */
 export function checkCommandPermissions(
   command: string,
   config: ShellPermissionConfig,
   sessionAllowlist?: Set<string>,
+  shellType?: ShellType,
 ): PermissionCheckResult {
   const shellReplacementMode = resolveShellReplacementMode(config);
+  const language = shellTypeToParserLanguage(resolveShellType(shellType));
 
   // Debug logging when VERBOSE is set
   if (process.env.VERBOSE === 'true') {
@@ -872,6 +1049,7 @@ export function checkCommandPermissions(
       ephemeralValue,
       configValue,
       shellReplacementMode,
+      language,
       command: command.substring(0, 50) + (command.length > 50 ? '...' : ''),
     });
   }
@@ -879,29 +1057,39 @@ export function checkCommandPermissions(
   const parserUnavailableBlock = checkParserUnavailableBlock(
     command,
     shellReplacementMode,
+    language,
   );
   if (parserUnavailableBlock) return parserUnavailableBlock;
 
   const replacementBlock = checkShellReplacementBlock(
     command,
     shellReplacementMode,
+    language,
   );
   if (replacementBlock) return replacementBlock;
-
-  const commandsOrError = extractCommandsToValidate(
-    command,
-    shellReplacementMode,
-  );
-  if (!Array.isArray(commandsOrError)) return commandsOrError;
-  const commandsToValidate = commandsOrError;
-
-  const blocklistResult = checkBlocklist(commandsToValidate, config);
-  if (blocklistResult) return blocklistResult;
 
   const coreTools = config.getCoreTools() ?? [];
   const isWildcardAllowed = SHELL_TOOL_NAMES.some((name) =>
     coreTools.includes(name),
   );
+  const hasSpecificAllowedCommands = coreTools.some((tool) =>
+    SHELL_TOOL_NAMES.some((name) => tool.startsWith(`${name}(`)),
+  );
+  const hasStrictAllowlist =
+    !isWildcardAllowed && (!!sessionAllowlist || hasSpecificAllowedCommands);
+
+  const commandsOrError = extractCommandsToValidate(
+    command,
+    shellReplacementMode,
+    language,
+    hasStrictAllowlist,
+  );
+  if (!Array.isArray(commandsOrError)) return commandsOrError;
+  const commandsToValidate = commandsOrError;
+
+  const blocklistResult = checkBlocklist(commandsToValidate, config, language);
+  if (blocklistResult) return blocklistResult;
+
   if (isWildcardAllowed) {
     return { allAllowed: true, disallowedCommands: [] };
   }
@@ -911,10 +1099,15 @@ export function checkCommandPermissions(
       commandsToValidate,
       sessionAllowlist,
       coreTools,
+      language,
     );
     if (sessionResult) return sessionResult;
   } else {
-    const defaultResult = checkDefaultAllowMode(commandsToValidate, coreTools);
+    const defaultResult = checkDefaultAllowMode(
+      commandsToValidate,
+      coreTools,
+      language,
+    );
     if (defaultResult) return defaultResult;
   }
 
@@ -930,14 +1123,22 @@ export function checkCommandPermissions(
  *
  * @param command The shell command string to validate.
  * @param config The application configuration.
+ * @param shellType Optional override for the shell type; defaults to the
+ *   platform's execution shell.
  * @returns An object with 'allowed' boolean and optional 'reason' string if not allowed.
  */
 export function isCommandAllowed(
   command: string,
   config: ShellPermissionConfig,
+  shellType?: ShellType,
 ): { allowed: boolean; reason?: string } {
   // By not providing a sessionAllowlist, we invoke "default allow" behavior.
-  const { allAllowed, blockReason } = checkCommandPermissions(command, config);
+  const { allAllowed, blockReason } = checkCommandPermissions(
+    command,
+    config,
+    undefined,
+    shellType,
+  );
   if (allAllowed) {
     return { allowed: true };
   }

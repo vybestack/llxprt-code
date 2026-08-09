@@ -27,6 +27,7 @@ import type { ShellJob } from '../services/shellJobManager.js';
 import { validatePathWithinWorkspace } from '../safety/index.js';
 import {
   getCommandRoots,
+  getShellConfiguration,
   isCommandAllowed,
   stripShellWrapper,
 } from '../utils/shell-utils.js';
@@ -57,13 +58,18 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
   }
 
   isCommandAllowed(command: string): { allowed: boolean; reason?: string } {
-    return isCommandAllowed(command, this.config);
+    return isCommandAllowed(
+      command,
+      this.config,
+      getShellConfiguration().shell,
+    );
   }
 
   isShellInvocationAllowlisted(command: string): boolean {
     return isShellInvocationAllowlisted(
       { params: { command } } as AnyToolInvocation,
       this.config.getAllowedTools() ?? [],
+      getShellConfiguration().shell,
     );
   }
 
@@ -163,7 +169,7 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
   }
 
   getCommandRoots(command: string): string[] {
-    return getCommandRoots(command);
+    return getCommandRoots(command, getShellConfiguration().shell);
   }
 
   stripShellWrapper(command: string): string {

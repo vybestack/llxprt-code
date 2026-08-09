@@ -84,6 +84,12 @@ trusted. These are the 16 entries in `trustedDependencies`:
   When it was still a dependency it did not need trust: its platform binary was
   delivered by the separate `@esbuild/<platform>` package, which Bun installs
   directly without running a script.
+- **`tree-sitter-pwsh`** — the shell validator loads only the package's
+  published `tree-sitter-powershell.wasm` with `web-tree-sitter`. Its install
+  script prepares the native Node binding, which the validator never imports
+  and which is deliberately runtime-gated out under Node because loading the
+  PowerShell grammar there is unstable. The published WASM does not require the
+  lifecycle script, so granting install-time trust would add unnecessary risk.
 - **`node-pty`** — not trusted because the runtime prefers `@lydell/node-pty`
   (see `packages/core/src/utils/getPty.ts`), whose native binary is supplied by
   the prebuilt `@lydell/node-pty-*` platform packages. `node-pty` is the

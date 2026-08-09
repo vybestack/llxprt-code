@@ -7,7 +7,17 @@
 import levenshtein from 'fast-levenshtein';
 import type { AnyDeclarativeTool, AnyToolInvocation } from '../index.js';
 import { isTool } from '../index.js';
-import { SHELL_TOOL_NAMES, splitCommands } from './shell-utils.js';
+import {
+  SHELL_TOOL_NAMES,
+  splitCommands,
+  shellTypeToParserLanguage,
+  type ShellType,
+} from './shell-utils.js';
+import {
+  parseCommandDetailsForLanguage,
+  isParserAvailable,
+} from './shell-parser.js';
+import type { ParserLanguage } from './shell-parser.js';
 
 /**
  * Checks if a tool invocation matches any of a list of patterns.
@@ -25,6 +35,7 @@ export function doesToolInvocationMatch(
   toolOrToolName: AnyDeclarativeTool | string,
   invocation: AnyToolInvocation | string,
   patterns: string[],
+  caseInsensitive = false,
 ): boolean {
   let toolNames: string[];
   if (isTool(toolOrToolName)) {
@@ -38,7 +49,7 @@ export function doesToolInvocationMatch(
   }
 
   for (const pattern of patterns) {
-    if (matchesToolPattern(pattern, toolNames, invocation)) {
+    if (matchesToolPattern(pattern, toolNames, invocation, caseInsensitive)) {
       return true;
     }
   }
@@ -50,6 +61,7 @@ function matchesToolPattern(
   pattern: string,
   toolNames: string[],
   invocation: AnyToolInvocation | string,
+  caseInsensitive = false,
 ): boolean {
   const openParen = pattern.indexOf('(');
 
@@ -74,9 +86,17 @@ function matchesToolPattern(
     command = String((invocation.params as { command: string }).command);
   }
 
+  // PowerShell command resolution is case-insensitive; Bash is case-sensitive.
+  // Normalize both sides for comparison without mutating the original values.
+  const compareCommand = caseInsensitive ? command.toLowerCase() : command;
+  const compareArgPattern = caseInsensitive
+    ? argPattern.toLowerCase()
+    : argPattern;
+
   return (
     toolNames.some((name) => SHELL_TOOL_NAMES.includes(name)) &&
-    (command === argPattern || command.startsWith(argPattern + ' '))
+    (compareCommand === compareArgPattern ||
+      compareCommand.startsWith(compareArgPattern + ' '))
   );
 }
 
@@ -85,13 +105,19 @@ function matchesToolPattern(
  * This function handles chained commands (e.g., "echo foo && ls -l") by ensuring
  * ALL segments of the chained command are allowlisted.
  *
+ * When `shellType` is provided, uses shell-aware recursive structured detail
+ * parsing so that nested commands inside script blocks, pipelines, subshells,
+ * and wrapper payloads are all validated (Finding 5, #3181).
+ *
  * @param invocation The tool invocation containing the command to check.
  * @param allowedPatterns A list of patterns that represent allowed tools/commands.
+ * @param shellType The execution shell type; defaults to Bash when omitted.
  * @returns True if the invocation is allowlisted, false otherwise.
  */
 export function isShellInvocationAllowlisted(
   invocation: AnyToolInvocation,
   allowedPatterns: string[],
+  shellType?: ShellType,
 ): boolean {
   if (allowedPatterns.length === 0) {
     return false;
@@ -124,23 +150,73 @@ export function isShellInvocationAllowlisted(
   }
 
   const command = commandValue.trim();
-
   const normalize = (cmd: string): string => cmd.trim().replace(/\s+/g, ' ');
-  const commandsToValidate = splitCommands(command)
-    .map(normalize)
-    .filter(Boolean);
+  const language: ParserLanguage = shellTypeToParserLanguage(shellType);
+
+  const commandsToValidate = resolveAllowlistCommands(
+    command,
+    language,
+    normalize,
+  );
 
   if (commandsToValidate.length === 0) {
     return false;
   }
+
+  // PowerShell command resolution is case-insensitive; Bash is case-sensitive.
+  const caseInsensitive = language === 'powershell';
 
   return commandsToValidate.every((commandSegment) =>
     doesToolInvocationMatch(
       SHELL_TOOL_NAMES[0],
       { params: { command: commandSegment } } as AnyToolInvocation,
       allowedPatterns,
+      caseInsensitive,
     ),
   );
+}
+
+/**
+ * Resolve the list of command texts to validate against the allowlist.
+ *
+ * For shells with a matching parser (Bash, PowerShell under Bun), use the
+ * recursive structured detail extraction so nested commands, script blocks,
+ * pipelines, and wrapper payloads are all enumerated. Dynamic/expression
+ * targets that cannot be statically matched are represented as empty-name
+ * details, causing the allowlist check to fail closed.
+ *
+ * For Bash without a parser, fall back to `splitCommands`.
+ * For PowerShell without a parser, fail closed (return an empty array,
+ * which matches no specific allowlist pattern).
+ */
+function resolveAllowlistCommands(
+  command: string,
+  language: ParserLanguage,
+  normalize: (cmd: string) => string,
+): string[] {
+  if (isParserAvailable(language)) {
+    const parseResult = parseCommandDetailsForLanguage(command, language);
+
+    if (parseResult?.hasError === false && parseResult.details.length > 0) {
+      return parseResult.details
+        .map((detail) => normalize(detail.canonicalText ?? detail.text))
+        .filter(Boolean);
+    }
+
+    // Parse error: fail closed by returning the raw command text, which
+    // will not match any specific allowlist pattern.
+    if (parseResult?.hasError === true) {
+      return [];
+    }
+  }
+
+  // PowerShell parser unavailable: fail closed.
+  if (language === 'powershell') {
+    return [];
+  }
+
+  // Bash fallback: split using regex.
+  return splitCommands(command).map(normalize).filter(Boolean);
 }
 
 /**

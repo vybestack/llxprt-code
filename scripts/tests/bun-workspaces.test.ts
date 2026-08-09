@@ -103,6 +103,9 @@ const REVIEWED_UNTRUSTED_INSTALL_SCRIPTS: readonly string[] = [
   // separate prebuilt platform packages, or the script is dev/build-only).
   'esbuild', // platform binary delivered by @esbuild/<platform>, no script needed
   'msw', // dev/test-only mock service worker; postinstall not runtime-required
+  // Only the published PowerShell WASM is loaded; the native Node binding built
+  // by this lifecycle script is intentionally unused (and unstable on Node 24).
+  'tree-sitter-pwsh',
   'node-pty', // legacy fallback; runtime prefers prebuilt @lydell/node-pty
   // Transitive deps that ship a lifecycle script we deliberately do not run.
   '@vscode/vsce-sign', // release/VSCE signing tooling, not a CLI runtime need
