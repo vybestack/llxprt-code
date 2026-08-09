@@ -149,7 +149,10 @@ function isWrapperFlagMatch(
     return true;
   }
   if (category === 'pwsh') {
-    const param = lowered.replace(/^-/, '');
+    if (!lowered.startsWith('-')) {
+      return false;
+    }
+    const param = lowered.slice(1);
     return param.length >= 2 && 'command'.startsWith(param);
   }
   return false;

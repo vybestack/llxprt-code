@@ -109,6 +109,19 @@ describe.skipIf(!pwshAvailable)(
       expect(allowed).toBe(false);
     });
 
+    it('does not treat a bare command argument as the -Command flag', () => {
+      const command = 'powershell -File deploy.ps1 command Write-Output safe';
+      const result = parseCommandDetailsForLanguage(command, 'powershell');
+
+      expect(result?.hasError).toBe(false);
+      expect(result?.details).toContainEqual(
+        expect.objectContaining({ nameKind: 'expression', text: command }),
+      );
+      expect(result?.details.map((detail) => detail.name)).not.toContain(
+        'Write-Output',
+      );
+    });
+
     it('blocks executable content supplied in an argument after a quoted -Command payload', () => {
       const { allowed } = isCommandAllowed(
         "powershell -Command 'Write-Output safe' '; rm -rf /tmp'",
