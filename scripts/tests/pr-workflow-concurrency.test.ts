@@ -272,9 +272,6 @@ describe('PR workflow concurrency cancellation', () => {
     const linuxConcurrency = asOptionalRecord(
       workflowJob(workflow, 'e2e_linux')['concurrency'],
     );
-    const macConcurrency = asOptionalRecord(
-      workflowJob(workflow, 'e2e_mac')['concurrency'],
-    );
 
     expectConcurrencyGroup(workflowConcurrency, [
       '${{ github.workflow }}',
@@ -296,17 +293,6 @@ describe('PR workflow concurrency cancellation', () => {
     expectGroupsEqual(
       normalize(asOptionalString(linuxConcurrency?.['group'])),
       '${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.branch_ref || github.ref }}-${{ github.event.label.name }}-${{ matrix.sandbox }}',
-    );
-    expectConcurrencyGroup(macConcurrency, [
-      '${{ github.workflow }}',
-      '${{ github.event_name }}',
-      'github.event.pull_request.number || inputs.branch_ref || github.ref',
-      '${{ github.event.label.name }}',
-      '-macos',
-    ]);
-    expectGroupsEqual(
-      normalize(asOptionalString(macConcurrency?.['group'])),
-      '${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.branch_ref || github.ref }}-${{ github.event.label.name }}-macos',
     );
     expect(workflowJob(workflow, 'skip_check').concurrency).toBeUndefined();
     expect(
@@ -495,45 +481,21 @@ describe('PR workflow concurrency cancellation', () => {
     );
   });
 
-  it('isolates e2e_mac pull_request and target job groups', () => {
-    const group = jobConcurrencyGroup('.github/workflows/e2e.yml', 'e2e_mac');
+  it('isolates E2E job groups by pull_request_target label', () => {
+    const group = jobConcurrencyGroup('.github/workflows/e2e.yml', 'e2e_linux');
+    const approved = withSandbox(
+      e2ePullRequestContext('pull_request_target', 123, 'maintainer:e2e:ok'),
+      'sandbox:none',
+    );
+    const unrelated = withSandbox(
+      e2ePullRequestContext('pull_request_target', 123, 'ci/cd'),
+      'sandbox:none',
+    );
 
     expectGroupsDifferent(
-      resolveConcurrencyGroup(
-        group,
-        withSandbox(e2ePullRequestContext('pull_request', 123), 'sandbox:none'),
-      ),
-      resolveConcurrencyGroup(
-        group,
-        withSandbox(
-          e2ePullRequestContext(
-            'pull_request_target',
-            123,
-            'maintainer:e2e:ok',
-          ),
-          'sandbox:none',
-        ),
-      ),
+      resolveConcurrencyGroup(group, approved),
+      resolveConcurrencyGroup(group, unrelated),
     );
-  });
-
-  it('isolates E2E job groups by pull_request_target label', () => {
-    for (const job of ['e2e_linux', 'e2e_mac']) {
-      const group = jobConcurrencyGroup('.github/workflows/e2e.yml', job);
-      const approved = withSandbox(
-        e2ePullRequestContext('pull_request_target', 123, 'maintainer:e2e:ok'),
-        'sandbox:none',
-      );
-      const unrelated = withSandbox(
-        e2ePullRequestContext('pull_request_target', 123, 'ci/cd'),
-        'sandbox:none',
-      );
-
-      expectGroupsDifferent(
-        resolveConcurrencyGroup(group, approved),
-        resolveConcurrencyGroup(group, unrelated),
-      );
-    }
   });
 
   it('isolates an E2E PR number from the same dispatch branch_ref', () => {

@@ -113,12 +113,6 @@ describe('e2e.yml: heavy jobs gate on docs_only', () => {
     expect(condition).toContain('docs_only');
   });
 
-  it('e2e_mac uses docs_only in the skip condition', () => {
-    const job = workflowJob(workflow, 'e2e_mac');
-    const condition = job.if ?? '';
-    expect(condition).toContain('docs_only');
-  });
-
   it('e2e_doc_change_filter outputs docs_only', () => {
     const job = workflowJob(workflow, 'e2e_doc_change_filter');
     const outputs = asOptionalRecord(job['outputs']);
@@ -161,12 +155,10 @@ describe('e2e.yml: e2e_doc_change_filter has a short timeout', () => {
  */
 describe('e2e.yml: docs-only is the ONLY detector-based skip (fail-closed gate)', () => {
   let linuxCondition: string;
-  let macCondition: string;
 
   beforeAll(() => {
     const workflow = loadWorkflow();
     linuxCondition = workflowJob(workflow, 'e2e_linux').if ?? '';
-    macCondition = workflowJob(workflow, 'e2e_mac').if ?? '';
   });
 
   it('e2e_linux uses negated conjunction (not standalone result == success gate)', () => {
@@ -181,36 +173,18 @@ describe('e2e.yml: docs-only is the ONLY detector-based skip (fail-closed gate)'
     );
   });
 
-  it('e2e_mac uses negated conjunction (not standalone result == success gate)', () => {
-    expect(macCondition).toMatch(
-      /!\(\s*needs\.e2e_doc_change_filter\.result\s*==\s*'success'\s*&&\s*needs\.e2e_doc_change_filter\.outputs\.docs_only\s*==\s*'true'\s*\)/,
-    );
-  });
-
   it('e2e_linux preserves !cancelled()', () => {
     expect(linuxCondition).toMatch(/!cancelled\(\)/);
-  });
-
-  it('e2e_mac preserves !cancelled()', () => {
-    expect(macCondition).toMatch(/!cancelled\(\)/);
   });
 
   it('e2e_linux preserves should_skip != true (duplicate suppression)', () => {
     expect(linuxCondition).toMatch(/should_skip\s*!=\s*'true'/);
   });
 
-  it('e2e_mac preserves should_skip != true (duplicate suppression)', () => {
-    expect(macCondition).toMatch(/should_skip\s*!=\s*'true'/);
-  });
-
   it('e2e_linux preserves skip_check result == success', () => {
     expect(linuxCondition).toMatch(
       /needs\.skip_check\.result\s*==\s*'success'/,
     );
-  });
-
-  it('e2e_mac preserves skip_check result == success', () => {
-    expect(macCondition).toMatch(/needs\.skip_check\.result\s*==\s*'success'/);
   });
 
   /**
