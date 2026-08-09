@@ -159,7 +159,9 @@ describe('affected-test-shards selector — CLI partition matrix (issue #3185)',
     const cli = buildMatrix(['cli']);
     expect(cli).toHaveLength(3);
     expect(cli.map((r) => r.partition)).toEqual(['1of3', '2of3', '3of3']);
-    expect(buildMatrix(['core'])[0]?.partition).toBe('1of1');
+    const core = buildMatrix(['core']);
+    expect(core).toHaveLength(1);
+    expect(core[0]?.partition).toBe('1of1');
     expect(buildMatrix([])).toEqual([]);
     const full = buildMatrix(ALL_SHARDS);
     expect([...new Set(full.map((r) => r.shard))]).toEqual(ALL_SHARDS);
