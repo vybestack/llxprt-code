@@ -67,6 +67,13 @@ interface ReplayResult {
   readonly criticalPathSavingSeconds: number;
 }
 
+interface MatrixRow {
+  readonly shard: string;
+  readonly os: string;
+  readonly 'node-version': string;
+  readonly partition: string;
+}
+
 interface SelectorModule {
   selectAffectedShards: (params: {
     readonly event: string;
@@ -76,6 +83,8 @@ interface SelectorModule {
     readonly count: number;
     readonly base?: string;
   }) => ReplayResult;
+  buildMatrix: (selectedShards: readonly string[]) => readonly MatrixRow[];
+  SHARD_PARTITION_COUNTS: Readonly<Record<string, number>>;
 }
 
 async function loadSelector(): Promise<SelectorModule> {
@@ -771,7 +780,7 @@ describe('affected-test-shards selector — ubuntu-only PR matrix (issue #2876)'
     }
   });
 
-  it('does not emit any macOS matrix rows for full-run pull_request events', () => {
+  it('does not emit any macOS matrix rows for full-run pull_request events', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'affected-shards-no-macos-'));
     try {
       const files = join(dir, 'files.txt');
@@ -796,12 +805,19 @@ describe('affected-test-shards selector — ubuntu-only PR matrix (issue #2876)'
       expect(run.status).toBe(0);
       const records = readFileSync(output, 'utf8').split('\n');
       const matrixRecord = records.find((line) => line.startsWith('matrix='));
-      expect(matrixRecord).toBeDefined();
+      if (!matrixRecord) throw new Error('expected matrix= record in output');
+      const { SHARD_PARTITION_COUNTS } = await loadSelector();
+      const expectedRows = ALL_SHARDS.reduce(
+        (sum, shard) => sum + (SHARD_PARTITION_COUNTS[shard] ?? 1),
+        0,
+      );
       const matrixJson = JSON.parse(
-        matrixRecord!.substring('matrix='.length),
+        matrixRecord.substring('matrix='.length),
       ) as ReadonlyArray<{ readonly os: string }>;
-      // Full-run selects all shards, but all on ubuntu-latest.
-      expect(matrixJson.length).toBe(ALL_SHARDS.length);
+      // Full-run selects all shards, all on ubuntu-latest. The expected row
+      // count is derived from SHARD_PARTITION_COUNTS (issue #3185 expands cli
+      // into three legs) rather than a hard-coded adjustment.
+      expect(matrixJson.length).toBe(expectedRows);
       for (const entry of matrixJson) {
         expect(entry.os).toBe('ubuntu-latest');
       }
