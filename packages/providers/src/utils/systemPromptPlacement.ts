@@ -15,7 +15,17 @@
  * message on one path, a doubled `role: user` block on another) instead of one
  * recognizable defect.
  *
- * Providers now DECLARE a capability; this module DECIDES and formats.
+ * The intended contract is that providers DECLARE a capability
+ * (`IProvider.getSystemPromptPlacement`) and this module DECIDES and formats.
+ *
+ * Only the FORMATTING half is live. `formatContextPrefix` below is the sole
+ * producer of the context-prefix wrapper and is called by the Anthropic OAuth
+ * path. The DECIDING half is not wired: `resolveSystemPromptPlacement` has no
+ * production caller, nor does `IProvider.getSystemPromptPlacement`, and the
+ * live Anthropic decision is still made from a local `isOAuth` flag in
+ * `anthropic/AnthropicRequestPreparation.ts`. See issue #3162 finding D1,
+ * which also records that the declaration and the transport flag use different
+ * OAuth predicates and can disagree.
  */
 
 /**
@@ -57,6 +67,8 @@ export function formatContextPrefix(systemPrompt: string): string {
  * about to make. Anthropic declares `context-prefix` when OAuth is active and
  * `system-field` otherwise; every other provider declares `system-field`.
  * Callers must not re-derive this from transport details.
+ *
+ * NOT YET WIRED: no production caller (issue #3162 finding D1).
  */
 export function resolveSystemPromptPlacement(
   declaredPlacement: SystemPromptPlacement | undefined,
