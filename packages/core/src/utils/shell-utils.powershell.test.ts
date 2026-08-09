@@ -378,8 +378,7 @@ describePwsh('shell-utils: PowerShell permission path', () => {
         undefined,
         'powershell',
       );
-      // With the parser available, this should parse correctly (no error).
-      // We just verify it does not hard-deny with a Bash message.
+      expect(result.allAllowed).toBe(true);
       expect(result.blockReason ?? '').not.toContain(
         'could not be parsed safely',
       );
