@@ -14,6 +14,7 @@ import { spawnTestPty, type TestPtySpawnOptions } from './pty-backend.js';
 import stripAnsi from 'strip-ansi';
 import { createDiagnosticsSink } from './diagnostics.js';
 import { InteractiveRun } from './interactive-run.js';
+import { recordRealProviderRun } from './model-request-ledger.js';
 import { getDefaultTimeout, poll, sanitizeTestName } from './util.js';
 import {
   assertProviderConfig,
@@ -135,6 +136,25 @@ export class TestRig {
     return this._lastRunCapture === null ? null : { ...this._lastRunCapture };
   }
 
+  /**
+   * Record a CLI invocation that is not pinned to a fixture, so the E2E
+   * real-model budget guard can account for it. A fake-responses run replays its
+   * model turn from a checked-in fixture and never reaches a provider, so it is
+   * not recorded.
+   */
+  private _recordIfRealProviderRun(caller: string): void {
+    if (this.fakeResponsesPath !== undefined) {
+      return;
+    }
+    const { testName, testDir } = this;
+    if (testName === undefined || testDir === null) {
+      throw new Error(
+        `TestRig.${caller}() against a real provider requires setup() to be called first to establish the test name and directory`,
+      );
+    }
+    recordRealProviderRun({ testName, testDir });
+  }
+
   private beginRun(): void {
     if (this._runInProgress) {
       throw new Error('TestRig does not support overlapping run operations');
@@ -198,6 +218,7 @@ export class TestRig {
     this.beginRun();
     try {
       assertProviderConfig(this.fakeResponsesPath);
+      this._recordIfRealProviderRun('run');
 
       const yolo = options.yolo !== false;
       const extraArgs = buildExtraArgs(this.fakeResponsesPath, yolo);
@@ -250,6 +271,12 @@ export class TestRig {
   ): Promise<string> {
     this.beginRun();
     try {
+      // runCommand does not inject the fake-provider flags, so without a
+      // fixture the child inherits whatever real credentials the environment
+      // holds. It is therefore a real-provider invocation for budget purposes
+      // even when the subcommand it drives never starts a model turn.
+      this._recordIfRealProviderRun('runCommand');
+
       const { command, initialArgs } = this._getCommandAndArgs();
       const commandArgs = [...initialArgs, ...args];
 
@@ -473,6 +500,7 @@ export class TestRig {
     yolo?: boolean;
   }): Promise<InteractiveRun> {
     assertProviderConfig(this.fakeResponsesPath);
+    this._recordIfRealProviderRun('runInteractive');
 
     const yolo = options?.yolo !== false;
     const extraArgs = buildExtraArgs(this.fakeResponsesPath, yolo);

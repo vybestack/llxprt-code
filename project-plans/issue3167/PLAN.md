@@ -9,7 +9,8 @@ Requirements: REQ-3167-1 … REQ-3167-9
 
 Companion design with diagrams and measured evidence: [`design.html`](./design.html) — open in a browser.
 Reproducible benchmarks: [`benchmarks/`](./benchmarks) — every number quoted in this plan comes from one of
-these scripts.
+these Bun/TypeScript scripts. Run them directly with `bun benchmarks/<name>.ts`; keeping them as TypeScript
+satisfies the repo-wide `no-new-js` guard (issue #2745), which forbids new tracked `.js`/`.mjs` files.
 
 ## Purpose
 
@@ -201,8 +202,21 @@ therefore "no further growth", not "the cap is enforced".
 - AND a command can show where the data lives, what fields it contains, and delete it
 
 `docs/telemetry-privacy.md` makes persistent telemetry opt-in and disabled by default; records carry session,
-project, provider and model identity, so this is not optional. Also decide the fate of the three retention
-getters in `packages/core/src/config/configBaseCore.ts:655-662`, which have no consumers today: wire or remove.
+project, provider and model identity, so this is not optional.
+
+**Correction:** an earlier revision of this plan claimed three retention getters in
+`packages/core/src/config/configBaseCore.ts:655-662` have no consumers. That was wrong — verified by grep across
+`packages/*/src` excluding tests:
+
+| Getter                         | Consumers                                              |
+| ------------------------------ | ------------------------------------------------------ |
+| `getConversationRetentionDays` | **has one** — `PrivacyManager.ts:122`, interface at :16 |
+| `getMaxLogFiles`               | none — dead                                            |
+| `getMaxLogSizeMB`              | none — dead                                            |
+
+So it is two dead getters, not three. Their fate belongs to **#3164**, which already owns the retention story
+and already lists them as a proposed-direction item citing the same lines. Removed from this issue's scope —
+two in-flight issues editing the same lines invites a conflict for no benefit.
 
 ### REQ-3167-9: A supported consumer answers the question
 
@@ -230,12 +244,23 @@ v25.2.1. These are primitive costs, **not** an end-to-end instrumentation budget
 | `performance.now()`                        | 25.1 ns / 26.6 ns                 | `perfprobe.ts`   |
 | counter increment                          | 1.97 ns / 5.05 ns                 | `perfprobe.ts`   |
 | `process.memoryUsage()`                    | 0.42 us / 0.66 us (idle heap)     | `perfprobe.ts`   |
-| one record, 33 fields                      | 688 B                             | `recsize.ts`     |
+| a 33-field flat numeric record              | 688 B — **rejected schema, see below** | `recsize.ts`     |
 | gzip -6 on 2.29 MiB                        | 7.9x in 24 ms                     | `gziptest.ts`    |
 | concurrent `O_APPEND`, 8 writers, APFS     | 12,000/12,000 records, 0 torn     | `appendrace.ts`  |
 | shared file + private byte counter         | 49% of records destroyed          | `rotaterace.ts`  |
 | per-file counter, one writer per file      | 9,600/9,600, 0 over cap           | `perproc.ts`     |
 | archive overwritten by a late record       | 2,000 of 2,001 destroyed          | `boundary2.ts`   |
+
+**The record-size and retention budgets are withdrawn too.** The 688 B figure prices the **rejected rev.2
+field set**, and it is the sole basis for the 64 MiB ceiling, the "~97,000 turns" figure and the "~5 weeks"
+estimate. Rev.3's record is strictly larger — five client phases instead of two, sum *and* union pairs plus
+`agent_activity_union_ms`, `unclassified_elapsed_ms`, `operation_id`, terminal geometry, render mode, terminal
+status. Worse, REQ-3167-3 requires the record to carry the child `prompt_id` / `turn_id` values it covers
+rather than a scalar, and those ids look like
+`${sessionId}#agentic-loop#${uuid}#continuation#${n}` — roughly 80-110 B each and unbounded in count. A
+tool-heavy operation with 30 continuations would add kilobytes, making the record **variable length**, which
+breaks the fixed-size arithmetic the eviction design rests on. Recompute the size budget from the real schema
+once it exists (Phase 1), and either cap or hash the child-id list.
 
 **The rev.2 "~49 us per turn" budget is withdrawn.** It summed isolated primitive costs and omitted recorder
 dispatch, argument evaluation in the disabled path, byte-length work, record allocation and `JSON.stringify`,
@@ -278,8 +303,17 @@ Following `dev-docs/PLAN.md`: preflight first, integration contracts before unit
 
 No implementation until each of these is confirmed in the tree and written up in this directory:
 
-1. Ink's installed version exposes `RenderOptions.onRender` with the expected signature, and
-   `inkRenderOptions.ts` can pass it.
+1. ~~Ink's installed version exposes `RenderOptions.onRender`.~~ **CLOSED — verified.**
+   `node_modules/ink/build/render.d.ts:44` declares `onRender?: (metrics: RenderMetrics) => void`, the type is
+   exported from `ink.d.ts:9`, and `ink.js:74-76` throttles it so it fires per actual render pass. Ink computes
+   the duration itself, so `ink_render_ms` is a pure accumulate with no added clock reads — cheaper than this
+   plan assumed.
+   **Still open, and it is the real blocker here:** `inkRenderOptions.ts:24` constructs
+   `const sharedStdio = createInkStdio();` at *module scope*, at import time, before any config or settings
+   object exists. There is therefore no seam to inject an observer into — the streams are already built by the
+   time `inkRenderOptions(config, settings)` runs. Decide the injection mechanism (an optional observer
+   parameter on `createInkStdio()` with the call moved inside the factory, or a settable module slot) here in
+   Phase 0.5, not in an implementation phase.
 2. `useSubmitQuery`'s ownership acquire/release points are stable seams for an operation lifecycle, including
    cancel, pre-send failure, slash commands, direct shell, and queued drain.
 3. `operation_id` can be propagated from the UI submission through `AgenticLoop` to every child send.

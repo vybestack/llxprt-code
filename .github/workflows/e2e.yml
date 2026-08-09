@@ -312,6 +312,8 @@ jobs:
           VERBOSE: 'true'
           # Force file storage to avoid keytar/libsecret dependency in CI
           LLXPRT_FORCE_FILE_STORAGE: 'true'
+          # Record real-provider runs for budget enforcement (issue #2278)
+          LLXPRT_E2E_MODEL_LEDGER: '${{ runner.temp }}/e2e-model-ledger.jsonl'
         shell: 'bash'
         run: |
           if [[ "${{ matrix.sandbox }}" == "sandbox:docker" ]]; then
@@ -331,6 +333,14 @@ jobs:
               integration-tests/run_shell_command.test.ts \
               --testNamePattern="should be able to run a shell command|should be able to run a shell command via stdin|should run a platform-specific file listing command"
           fi
+
+      - name: 'Check E2E real-model budget (issue #2278)'
+        if: success()
+        env:
+          LLXPRT_E2E_MODEL_LEDGER: '${{ runner.temp }}/e2e-model-ledger.jsonl'
+        shell: 'bash'
+        run: |-
+          bun scripts/check-e2e-model-budget.ts --ledger "$LLXPRT_E2E_MODEL_LEDGER"
 
   e2e_mac:
     name: 'E2E Test (macOS)'
@@ -482,6 +492,8 @@ jobs:
           VERBOSE: 'true'
           # Force file storage to avoid keytar/libsecret dependency in CI
           LLXPRT_FORCE_FILE_STORAGE: 'true'
+          # Record real-provider runs for budget enforcement (issue #2278)
+          LLXPRT_E2E_MODEL_LEDGER: '${{ runner.temp }}/e2e-model-ledger.jsonl'
         shell: 'bash'
         run: |
           npm run test:integration:sandbox:none -- \
@@ -491,3 +503,11 @@ jobs:
             --exclude="**/todo-continuation.e2e.test.ts" \
             integration-tests/run_shell_command.test.ts \
             --testNamePattern="should be able to run a shell command|should be able to run a shell command via stdin|should run a platform-specific file listing command"
+
+      - name: 'Check E2E real-model budget (issue #2278)'
+        if: success()
+        env:
+          LLXPRT_E2E_MODEL_LEDGER: '${{ runner.temp }}/e2e-model-ledger.jsonl'
+        shell: 'bash'
+        run: |-
+          bun scripts/check-e2e-model-budget.ts --ledger "$LLXPRT_E2E_MODEL_LEDGER"

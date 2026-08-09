@@ -5,7 +5,7 @@
  */
 
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { SendMessageParams } from './chatSession.js';
+import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { resolveStreamIdleTimeoutMs } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
@@ -135,7 +135,7 @@ export class TurnProcessor {
       source: string,
       extras?: Record<string, unknown>,
     ) => ProviderRuntimeContext,
-    private readonly generationConfig: AgentClientGenerateConfig,
+    private readonly generationConfig: ChatSessionConfig,
     private readonly historyService: HistoryService,
     private readonly streamProcessor: StreamProcessor,
     private readonly resolveProviderBaseUrl: (
@@ -674,6 +674,7 @@ export class TurnProcessor {
       } as GenerateChatOptions['invocation'],
       requestContext,
       this.generationConfig.systemInstruction,
+      this.generationConfig.systemPromptAssembler,
     );
   }
 

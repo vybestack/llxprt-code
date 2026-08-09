@@ -51,6 +51,15 @@ else
     FAILED=1
 fi
 
+# E2E real-model budget guard (issue #2278)
+echo -e "\n${YELLOW}Running e2e-model-budget guard...${NC}"
+if npm run lint:e2e-model-budget; then
+    echo -e "${GREEN}✓ e2e-model-budget guard passed${NC}"
+else
+    echo -e "${RED}✗ e2e-model-budget guard failed${NC}"
+    FAILED=1
+fi
+
 # LSP package linting (separate config, excluded from root eslint)
 echo -e "\n${YELLOW}Running ESLint on LSP package...${NC}"
 if (cd packages/lsp && npx eslint .); then

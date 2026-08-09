@@ -83,7 +83,7 @@ function buildDelegateResolvedOptions(
     resolved: {
       ...resolvedWithoutAuth,
       ...(typeof subProfile.modelId === 'string' &&
-        subProfile.modelId !== '' && { model: subProfile.modelId }),
+        subProfile.modelId.trim() !== '' && { model: subProfile.modelId }),
       ...(typeof subProfile.baseURL === 'string' &&
         subProfile.baseURL !== '' && { baseURL: subProfile.baseURL }),
       ...(typeof subProfile.authToken === 'string' &&

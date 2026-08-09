@@ -60,10 +60,7 @@ async function findProjectRoot(startDir: string): Promise<string | null> {
         (error as { code: string }).code === 'ENOENT';
 
       // Only log unexpected errors in non-test environments
-      // process.env['NODE_ENV'] === 'test' or VITEST are common test indicators
-      const isTestEnv =
-        process.env['NODE_ENV'] === 'test' ||
-        process.env['VITEST'] !== undefined;
+      const isTestEnv = process.env['NODE_ENV'] === 'test';
 
       if (isENOENT === false && isTestEnv === false) {
         logGitDirectoryError(error, gitPath);
@@ -339,9 +336,7 @@ async function readLlxprtMdFiles(
 
           return { filePath, content: processedResult.content };
         } catch (error: unknown) {
-          const isTestEnv =
-            process.env['NODE_ENV'] === 'test' ||
-            process.env['VITEST'] !== undefined;
+          const isTestEnv = process.env['NODE_ENV'] === 'test';
           if (isTestEnv === false) {
             const message =
               error instanceof Error ? error.message : String(error);
@@ -618,9 +613,7 @@ export async function loadCoreMemory(
       }
       results.push({ path: filePath, content });
     } catch (error: unknown) {
-      const isTestEnv =
-        process.env['NODE_ENV'] === 'test' ||
-        process.env['VITEST'] !== undefined;
+      const isTestEnv = process.env['NODE_ENV'] === 'test';
       if (isTestEnv === false) {
         const message = error instanceof Error ? error.message : String(error);
         logger.warn(

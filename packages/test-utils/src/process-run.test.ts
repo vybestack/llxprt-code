@@ -23,6 +23,7 @@ import {
 
 const tempDirs: string[] = [];
 const SPAWN_TIMEOUT_MS = 5000;
+const QUOTA_SIGNAL_TIMEOUT_MS = 2000;
 
 /**
  * Stub a fresh, isolated guard state directory and disable both the
@@ -534,7 +535,13 @@ describe('process-run quota guard integration', () => {
     };
 
     const error = await captureRejection(
-      spawnRunWithTimeout(ctx, {}, false, identityTransform, 800),
+      spawnRunWithTimeout(
+        ctx,
+        {},
+        false,
+        identityTransform,
+        QUOTA_SIGNAL_TIMEOUT_MS,
+      ),
     );
 
     expect(error.message).toContain('[QUOTA/RATE-LIMIT]');

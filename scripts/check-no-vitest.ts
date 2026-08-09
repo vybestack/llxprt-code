@@ -86,6 +86,7 @@ const SELF_EXCLUDE_FILES: ReadonlySet<string> = new Set([
   'scripts/check-no-vitest.ts',
   'scripts/tests/no-vitest-guard.test.ts',
   'scripts/tests/no-vitest-guard-helpers.ts',
+  'scripts/tests/no-vitest-env-reference.test.ts',
 ]);
 
 /** Code-file extensions eligible for the import/require scan. */
@@ -160,6 +161,19 @@ const VITEST_IMPORT_PATTERN =
  */
 const VITEST_TRIPLE_SLASH_REFERENCE =
   /^\/\/\/\s*<reference\s+types=["']vitest(?:\/[^"']*)?["']\s*\/?>/m;
+
+/**
+ * Detects an active source reference to the `process.env.VITEST` environment
+ * variable in either dot (`process.env.VITEST`) or bracket
+ * (`process.env['VITEST']` / `process.env["VITEST"]`) notation. No repository
+ * execution path sets `VITEST`, so any active reference is stale Vitest-runtime
+ * compatibility behavior (issue #2578). The word boundary after `VITEST`
+ * prevents matching unrelated variables such as `process.env.VITESTING`. Prose
+ * and comment mentions are excluded by the same lexical masking as the import
+ * scan (finding A): only references in active code are flagged.
+ */
+const VITEST_ENV_REFERENCE_PATTERN =
+  /process\.env\.VITEST\b|process\.env\[\s*['"]VITEST['"]\s*\]/;
 
 /**
  * Matches the `vitest` binary invoked anywhere in a package script value.
@@ -588,6 +602,25 @@ function scanCodeFile(filePath: string, content: string): Violation[] {
     });
     if (match.index === refPattern.lastIndex) {
       refPattern.lastIndex++;
+    }
+  }
+
+  // Active `process.env.VITEST` / `process.env['VITEST']` references (issue
+  // #2578). No repository execution path sets VITEST, so any active reference
+  // is stale compatibility behavior. The same lexical masking as the import
+  // scan suppresses prose/comment/string-literal mentions.
+  const envPattern = new RegExp(VITEST_ENV_REFERENCE_PATTERN.source, 'g');
+  while ((match = envPattern.exec(content)) !== null) {
+    if (!isOffsetMasked(match.index, maskedSpans)) {
+      violations.push({
+        file: relRepo(filePath),
+        line: lineOfOffset(content, match.index),
+        match: match[0].trim().replace(/\s+/g, ' '),
+        kind: 'active process.env.VITEST reference',
+      });
+    }
+    if (match.index === envPattern.lastIndex) {
+      envPattern.lastIndex++;
     }
   }
   return violations;

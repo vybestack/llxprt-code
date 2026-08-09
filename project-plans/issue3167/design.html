@@ -948,36 +948,32 @@ b
   </p>
 </div>
 
-<p>Illustrative query shape:</p>
+<div class="panel bad">
+  <p style="margin:0 0 10px">
+    <b>The example query and field table that stood here have been deleted, not marked.</b>
+    They referenced <code>core_ms</code>, <code>ui_ms</code>, <code>llxprt_ms</code> and
+    <code>turn_busy_ms</code> &mdash; every one of them a field from the model rejected in &sect;02. Keeping
+    superseded <em>prose</em> in place is defensible; keeping a runnable-looking code block and a field list that
+    <em>looks like a schema</em> is not, because that is exactly what an implementer copies. The record schema
+    does not exist yet: it is a Phase&nbsp;1 deliverable in <a href="./PLAN.md">PLAN.md</a>, to be written once as
+    a Zod schema from which both the writer and the reader derive their types.
+  </p>
+  <p style="margin:0">
+    This is the same failure mode as <a href="https://github.com/vybestack/llxprt-code/issues/3164">#3164</a>,
+    where a reader drifted from its writer&rsquo;s format and consequently deleted nothing for months, with green
+    tests, because the fixtures encoded the legacy shape. The round-trip test must therefore assert against a
+    record produced by the real writer &mdash; never a hand-authored fixture.
+  </p>
+</div>
 
-<pre><code># gzcat -f reads plain and gzipped files transparently (verified), so
-# archived days need no special handling in the analysis command.
-gzcat -f ~/Library/Logs/llxprt-code/perf/*.jsonl* \
-| jq -s 'map(select(.contended == false and .concurrent_instances &lt;= 2))
-       | group_by(.llxprt_version)
-       | map({version:    .[0].llxprt_version,
-              turns:      length,
-              core_p50:   (map(.core_ms) | sort | .[length/2|floor]),
-              ui_p50:     (map(.ui_ms)   | sort | .[length/2|floor]),
-              llxprt_pct: (map(.llxprt_ms / .turn_busy_ms * 100) | add / length)})'</code></pre>
-
-<p>The fields that make this a trend rather than a pile of numbers:</p>
-<table>
-  <tr><th>Field</th><th>Availability</th><th>Why it is load-bearing</th></tr>
-  <tr><td class="mono">llxprt_version</td><td><span class="tag have">EXISTS</span></td><td>the x-axis. <code>CLI_VERSION</code> is baked at build time (<code>scripts/bun-build.config.ts:155,192</code>) and read by <code>getCliVersion()</code>.</td></tr>
-  <tr><td class="mono">git_sha</td><td><span class="tag have">EXISTS</span></td><td>Already available at runtime via <code>getGitCommitInfo()</code> (<code>packages/cli/src/utils/gitCommitInfo.ts</code>). Just call it &mdash; no build change needed. Freshness caveat in &sect;10.</td></tr>
-  <tr><td class="mono">session_id</td><td><span class="tag have">EXISTS</span></td><td>the join key back to the session recording &mdash; see &sect;10</td></tr>
-  <tr><td class="mono">turn_start_ts / turn_end_ts</td><td><span class="tag new">NEW</span></td><td>the only way to reach turn granularity in the recording, which has no turn id</td></tr>
-  <tr><td class="mono">provider, model</td><td><span class="tag have">EXISTS</span></td><td>never compare a fast model&rsquo;s turn against a slow one</td></tr>
-  <tr><td class="mono">context_tokens</td><td><span class="tag have">EXISTS</span></td><td>the normalizer &mdash; turn cost scales with it</td></tr>
-  <tr><td class="mono">instance_id, pid</td><td><span class="tag have">EXISTS</span></td><td>separate the N concurrent instances; also implicit in the filename</td></tr>
-  <tr><td class="mono">concurrent_instances</td><td><span class="tag new">NEW</span></td><td>lets you exclude turns where llxprt was competing with itself &mdash; the dominant contention source</td></tr>
-  <tr><td class="mono">contended</td><td><span class="tag new">NEW</span></td><td>drift-probe flag; drop machine-polluted samples instead of averaging them in</td></tr>
-  <tr><td class="mono">project_hash</td><td><span class="tag have">EXISTS</span></td><td>project identity as a field, so the path can stay global; resolves to a real path via the recording</td></tr>
-  <tr><td class="mono">runtime, platform</td><td><span class="tag have">EXISTS</span></td><td>Bun-vs-Node and OS differences are real (see &sect;07)</td></tr>
-</table>
-
-<p><code>/perf</code> reads this process&rsquo;s own file for the current session. Same schema, two consumers.</p>
+<p>
+  The dimensions a trend must be grouped by, as distinct from the measurements themselves, are listed in
+  <a href="./PLAN.md">PLAN.md</a>: version and commit for the x-axis; provider, model, render mode and terminal
+  geometry as matched comparison dimensions; and <code>concurrent_instances</code> for contamination. Two facts
+  worth carrying forward from the version investigation in &sect;10: <code>llxprt_version</code> comes from
+  <code>CLI_VERSION</code>, baked at build time, and <code>git_sha</code> needs no build change at all because
+  <code>getGitCommitInfo()</code> already exists.
+</p>
 
 <h2><span class="n">10</span>Correlating a slow turn to what was happening</h2>
 
