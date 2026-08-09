@@ -2,7 +2,8 @@
 
 Plan ID: PLAN-20260808-PERFTREND
 Issue: #3167
-Status: **schema and placement settled; two fields pending the full-vs-halved decision** (marked below)
+Status: **settled.** Schema, placement, delivery shape and memory trend are all decided; see §9 for the one
+remaining process question.
 
 Companions: [`PLAN.md`](./PLAN.md) (phases, requirements, rejected approaches) ·
 [`decision.html`](./decision.html) (plain-language explainer) · [`design.html`](./design.html) (evidence)
@@ -12,8 +13,8 @@ the contract between the writer and the reader, and #3164 is what happens when t
 matched `.json` while the writer produced `.jsonl`, so it deleted nothing for months — with passing tests,
 because the fixtures encoded the old shape. That is 3.8 GB of accumulated files.
 
-Everything specified here is independent of the outstanding full-vs-halved decision except the two fields
-explicitly tagged **DECISION**.
+Scope note: all accepted work for #3167 — including the memory trend in §7 — ships as **one PR**. Fields that
+were considered and excluded are recorded in §1.7 so they are not silently reintroduced.
 
 ---
 
@@ -122,15 +123,29 @@ dropped, and the trend would under-sample exactly the pathological cases worth m
 
 **The record must not claim these sum.** That assumption is precisely what made rev.1 invalid.
 
-### 1.7 Pending the full-vs-halved decision
+**Memory, sampled at operation end:**
 
-| Field            | Type    | Present in                                                     |
-| ---------------- | ------- | -------------------------------------------------------------- |
-| `contended`      | boolean | **DECISION** — FULL only. Requires the ~10 Hz drift probe. If halved, `concurrent_instances` is the contention covariate and no timer is added |
-| `records_dropped`| number  | **DECISION** — FULL only. Meaningless without a bounded queue; if halved, the serialized write chain provides back-pressure and nothing is dropped |
+| Field                     | Type   | Notes                                                                 |
+| ------------------------- | ------ | --------------------------------------------------------------------- |
+| `rss_bytes`               | number |                                                                       |
+| `heap_used_bytes`         | number |                                                                       |
+| `external_bytes`          | number | First-class, not an afterthought — under Bun/JSC this is where the mass hid in #3112 |
+| `array_buffers_bytes`     | number | Same                                                                  |
+| `session_operation_index` | number | Monotonic per session. The x-axis for the per-**operation** slope     |
+| `uptime_ms`               | number | `performance.now()` at sample time. The x-axis for the per-**minute** slope |
 
-`operation_id` is present in **both** versions. Only how it is *produced* differs — derived from the prompt-id
-prefix (halved) or minted and propagated (full). See §3.
+Do **not** store a computed slope. Slopes are derived at read time from these columns, so a fix to the
+regression maths does not require re-collecting data, and a single record is never asked to describe a trend it
+cannot see.
+
+### 1.7 Excluded fields, and why
+
+Both were considered and are **not** in the schema. Recorded so they are not reintroduced without new argument.
+
+| Field             | Excluded because                                                                                                                                              |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `contended`       | Requires a ~10 Hz drift probe. At an observed peak of 182 concurrent instances that is ≈1,820 timer wakeups/second machine-wide — the measurement would materially contribute to the contention it reports. `concurrent_instances` (§1.5) carries the signal at zero timer cost. |
+| `records_dropped` | Meaningless without a bounded queue with a drop policy, and there is no burst to absorb: one record per operation, written through a serialized chain that provides its own back-pressure. |
 
 ### 1.8 Size
 
@@ -283,7 +298,86 @@ or full volume the guarantee degrades to "no further growth", because eviction i
 
 ---
 
-## 7. Claim verification
+## 7. Memory trend
+
+In scope for this issue and this PR, not deferred. It shares the schema, the sink and the retention, and is
+disableable on its own (§7.4).
+
+### 7.1 Why two slopes rather than one number
+
+Absolute memory tells you nothing: a 400k-token context legitimately uses a lot of it. What is diagnostic is
+**what the growth tracks**.
+
+| Signature                                     | Reading                                                      |
+| --------------------------------------------- | ------------------------------------------------------------ |
+| Grows per operation, flattens while idle       | Normal. More work, more memory.                              |
+| Grows per minute **while idle**                | Leak. Something is retained by uptime, not by activity.       |
+
+The second is exactly #3114, where memory climbed with how long llxprt had been running rather than with how
+much it had been asked to do. One RSS number can never show that; two slopes make it obvious. This is the live
+in-session equivalent of the offline plateau gate in `scripts/issue-2852-memory-runner.ts`, which already
+evaluates JSC heap, `external` and dirty WebKit Malloc independently.
+
+### 7.2 Two sample sources, one discriminated record stream
+
+The `record_type` discriminator from §1.1 earns its keep here:
+
+- `record_type: "operation"` — carries the memory columns from §1.6, giving the **per-operation** axis for free.
+  No extra sampling; it rides the record already being written.
+- `record_type: "memory_sample"` — a bare sample carrying only the four memory values, `uptime_ms` and
+  `ms_since_last_operation`, giving the **per-minute** axis. `ms_since_last_operation` is what makes an *idle*
+  sample identifiable, and idle samples are the ones that expose the #3114 signature.
+
+A reader that ignores unknown `record_type` values (§2) tolerates this addition without a version bump.
+
+### 7.3 Zero new timers — the performance answer
+
+`useMemoryMonitor` **already** runs an unconditional 60-second interval calling `process.memoryUsage().rss`
+(`MEMORY_CHECK_INTERVAL_MS = 60 * 1000`). 60 s is exactly the right cadence for an uptime slope. Extend that
+existing interval; do **not** add one.
+
+Two things must be fixed in that hook, both improvements in their own right:
+
+1. It calls `clearInterval(intervalId)` **immediately after warning once**, so today it stops monitoring
+   precisely when memory is known to be a problem. Separate the warn-once latch from the sampling loop.
+2. Give the sample a bounded in-memory ring for the live `/perf` view. It would be absurd for the leak detector
+   to leak; the ring must be fixed-capacity with overwrite, never a growing array.
+
+**Do not** piggyback `Footer.tsx`'s 2-second interval. It is gated on the `showMemoryUsage` setting and on the
+component being mounted, so telemetry hung off it would silently collect nothing depending on unrelated UI
+configuration.
+
+Measured cost (`darwin-arm64`, both runtimes) — and critically, measured on a **large fragmented heap** rather
+than an idle one, because idle is not the operating condition:
+
+| Runtime | idle heap | 233 MB fragmented heap | ratio |
+| ------- | --------- | ---------------------- | ----- |
+| Bun 1.3.14 | `full` 0.43 µs · `rss()` 0.39 µs | `full` 0.44 µs · `rss()` 0.38 µs | **1.03×** |
+| Node 25.2.1 | `full` 0.67 µs · `rss()` 0.44 µs | `full` 0.65 µs · `rss()` 0.43 µs | **0.98×** |
+
+The cost is **independent of heap size and fragmentation**, which is the property that matters — a leak
+investigation runs precisely when the heap is large, and the probe must not get more expensive exactly then. One
+full sample per 60 s is on the order of 1e-6 % of wall time. The earlier 0.42 µs figure was taken on an idle
+heap and was rightly flagged as unrepresentative; re-measured under load, it holds.
+
+### 7.4 Its own off switch
+
+Two independent settings, both defaulting to **false** (REQ-3167-8 requires the whole subsystem be opt-in per
+`docs/telemetry-privacy.md`):
+
+| Setting                 | Effect                                                                    |
+| ----------------------- | ------------------------------------------------------------------------- |
+| `telemetry.perf`        | Master. Off means nothing is collected and no file is opened.              |
+| `telemetry.perf.memory` | Memory columns and `memory_sample` records. Off means the memory columns are omitted and the 60 s hook reverts to its warn-only behaviour. |
+
+Semantics: memory requires the master to be on, and can be turned off while leaving timing collection running.
+The reverse is not offered — there is no configuration that collects memory without the perf record, because the
+memory columns live on that record.
+
+Turning memory off must **remove the fields**, not write zeros. A zero is indistinguishable from a real
+measurement; an absent field is unambiguous, and §2 already requires readers to tolerate absent fields.
+
+## 8. Claim verification
 
 Every load-bearing claim above was checked against source rather than taken from a review. Earlier revisions of
 this plan propagated a finding that turned out to be a test artifact, so the evidence is recorded here to stop
@@ -331,10 +425,33 @@ unguarded `console.error`. Confirms §5.
 `onRender?: (metrics: RenderMetrics) => void`, `ink.d.ts:9` exports the type, and `ink.js:74-76` throttles the
 callback so it fires per actual render pass. Confirms that `ink_render_ms` is a pure accumulate.
 
-## 8. Still open
+**A 60 s memory interval already exists, and it self-terminates** — `useMemoryMonitor.ts`:
+`MEMORY_CHECK_INTERVAL_MS = 60 * 1000`, the effect has no conditional guard, and the callback calls
+`clearInterval(intervalId)` inside the warning branch. Confirms §7.3: there is a host timer to extend, and its
+self-termination is a real defect to fix rather than a behaviour to preserve.
 
-| Item                                                                    | Blocks                          |
-| ----------------------------------------------------------------------- | ------------------------------- |
-| Full vs halved (`contended`, `records_dropped`, retry threshold, gzip, sub-rolling, id plumbing) | §1.7, §3, and Phase ordering |
-| Memory trend as its own issue                                            | Whether Phase 6 belongs here    |
-| Full `dev-docs/PLAN.md` structure (`analysis/pseudocode/`, numbered phase files) vs a recorded deviation | `@pseudocode` traceability at implementation time |
+**`Footer.tsx`'s 2 s interval is not a viable host** — `setInterval(updateMemory, 2000)` lives inside
+`ResponsiveMemoryDisplay`, which is gated on the `showMemoryUsage` setting and only samples while mounted.
+Confirms §7.3's exclusion.
+
+**`process.memoryUsage()` is heap-size independent** — measured full-call and `rss()` cost at an idle heap and
+again at a 233 MB fragmented heap with 900k live objects, punched holes and 75 MB of external buffers. Ratios
+1.03× (Bun) and 0.98× (Node). Confirms §7.3.
+
+## 9. Still open
+
+| Item                                                                                                     | Blocks                                            |
+| -------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| Full `dev-docs/PLAN.md` structure (`analysis/pseudocode/`, numbered phase files) vs a recorded deviation  | `@pseudocode` traceability at implementation time |
+
+### Decided
+
+- **Scope shape — one issue, one PR.** All accepted work for #3167 ships together, including the memory trend
+  (§7). Splitting a single issue across issues or stacked PRs is not the default here.
+- **Memory trend is in scope**, first-class rather than a separable trailing phase. Sampling design and its
+  independent off switch are specified in §7.
+- **Delivery is the reduced shape.** `contended` and `records_dropped` are dropped along with the ~10 Hz drift
+  probe, the bounded queue with drop policy, the retry-threshold self-disable, gzip and sub-rolling.
+  `concurrent_instances` carries the contention signal instead, and `operation_id` is derived from the prompt-id
+  prefix (§3) rather than plumbed through `packages/agents`. The deciding factor is the dependency direction
+  verified in §8: keeping a measurement concern out of the agent loop outweighs every feature dropped.
