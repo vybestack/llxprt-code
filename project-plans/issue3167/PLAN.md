@@ -7,7 +7,12 @@ Issue: #3167
 Milestone: 0.11.0
 Requirements: REQ-3167-1 … REQ-3167-9
 
-Companion design with diagrams and measured evidence: [`design.html`](./design.html) — open in a browser.
+Companion documents:
+
+- [`specification.md`](./specification.md) — **the record schema, package placement, compatibility rules and
+  reuse decisions.** Read this before implementing anything; it is the contract between writer and reader.
+- [`decision.html`](./decision.html) — plain-language explainer of the one open decision, with diagrams.
+- [`design.html`](./design.html) — full design detail, measured evidence, and the rejected approaches.
 Reproducible benchmarks: [`benchmarks/`](./benchmarks) — every number quoted in this plan comes from one of
 these scripts. They are stored with a `.mjs.txt` suffix so the repo-wide
 `no-new-js` guard (issue #2745), which forbids new tracked `.js`/`.mjs` files,
@@ -244,7 +249,8 @@ v25.2.1. These are primitive costs, **not** an end-to-end instrumentation budget
 | ------------------------------------------ | --------------------------------- | ----------------- |
 | `performance.now()`                        | 25.1 ns / 26.6 ns                 | `perfprobe.mjs.txt`   |
 | counter increment                          | 1.97 ns / 5.05 ns                 | `perfprobe.mjs.txt`   |
-| `process.memoryUsage()`                    | 0.42 us / 0.66 us (idle heap)     | `perfprobe.mjs.txt`   |
+| `process.memoryUsage()` idle heap          | 0.42 us / 0.66 us                 | `perfprobe.mjs.txt`   |
+| `process.memoryUsage()` 233 MB fragmented heap | 0.44 us / 0.65 us — **1.03x / 0.98x vs idle, so heap-size independent** | re-measured, see `specification.md` §8 |
 | a 33-field flat numeric record              | 688 B — **rejected schema, see below** | `recsize.mjs.txt`     |
 | gzip -6 on 2.29 MiB                        | 7.9x in 24 ms                     | `gziptest.mjs.txt`    |
 | concurrent `O_APPEND`, 8 writers, APFS     | 12,000/12,000 records, 0 torn     | `appendrace.mjs.txt`  |
@@ -323,9 +329,19 @@ No implementation until each of these is confirmed in the tree and written up in
 
 ### Phase 1 — Schema and writer contract
 
-REQ-3167-5, -7, -8. Record schema with `schema_version`; exclusive-create writer with run UUID; bounded queue;
-fail-open with self-disable; opt-in gate. Tests: run-id collision, reopen after restart, clock step backwards
-and forwards, EROFS/ENOSPC, abrupt exit leaving a partial line, disabled-by-default.
+REQ-3167-5, -7, -8. **The schema, placement, compatibility rules and reuse decisions are now written up in
+[`specification.md`](./specification.md)** — implement from there, not from this summary.
+
+Key points settled there: the record is declared once as a Zod schema from which both writer and reader derive
+their types; the sink is an extension of `packages/telemetry/src/debug/FileOutput.ts` rather than a parallel
+implementation (it already provides run-id filenames, size rolling, batching and drain-on-dispose, and needs
+four defects fixed — singleton-only construction, `fs.stat` per flush, unbounded `console.error`, and **zero
+eviction**, verified: no `unlink` call anywhere in the file); `IntervalUnion` is extracted from
+`sessionMetricsAggregator.ts` and its quadratic recompute fixed; and the live-writer rule needs no lock.
+
+Tests: run-id collision, reopen after restart, clock step backwards and forwards, EROFS/ENOSPC, abrupt exit
+leaving a partial line, disabled-by-default, and a round-trip test that asserts against a record produced by the
+**real writer** rather than a hand-authored fixture.
 
 ### Phase 2 — Operation lifecycle and identity
 
@@ -356,11 +372,30 @@ process vs longitudinal report — rev.2 said both). Streams plain and gzip, sch
 truncated tail, groups by version/commit within matched dimensions, reports self-health. Tests: mixed schema
 versions, malformed and truncated records, thousands of files, Windows.
 
-### Phase 6 — Memory trend (separable)
+### Phase 6 — Memory trend (in scope, ships with this issue)
 
-REQ-3167 memory behaviour is a second feature and may ship as its own PR after Phases 1-5 prove the pipeline:
-per-turn and coarse-interval sampling of `rss / heapUsed / external / arrayBuffers`, dual slopes, its own
-report path. Memory costs must be re-measured at representative heap sizes rather than idle.
+Not separable and not a second PR: all accepted work for #3167 ships together.
+**Specified in [`specification.md`](./specification.md) §7 — implement from there.**
+
+Summary: memory columns ride the operation record for the per-operation axis, plus a
+`record_type: "memory_sample"` row carrying `ms_since_last_operation` for the per-minute axis. The two slopes
+together separate legitimate growth (tracks work) from a leak (tracks uptime) — the #3114 signature. Slopes are
+derived at read time, never stored. `external` / `arrayBuffers` are first-class: that is where the mass hid under
+Bun/JSC in #3112.
+
+**Zero new timers.** `useMemoryMonitor` already runs an unconditional 60 s interval calling
+`process.memoryUsage().rss`; extend it. Two defects in it must be fixed: it `clearInterval`s itself after warning
+once (so it stops monitoring exactly when memory is known to be a problem), and the live view needs a
+fixed-capacity ring rather than a growing array — the leak detector must not leak. `Footer.tsx`'s 2 s interval is
+explicitly **not** a host: it is gated on `showMemoryUsage` and on being mounted.
+
+**Independently disableable** via `telemetry.perf.memory`, separate from the `telemetry.perf` master; both
+default off. Disabling omits the fields rather than writing zeros, since a zero is indistinguishable from a
+measurement.
+
+Memory cost re-measured under load, resolving the earlier idle-heap caveat: cost is **independent of heap size
+and fragmentation** (1.03x Bun, 0.98x Node between an idle heap and a 233 MB fragmented one), which is the
+property that matters because leak investigations run when the heap is large.
 
 ### Phase 7 — Compression (optional, last)
 
