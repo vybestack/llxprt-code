@@ -37,7 +37,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import * as path from 'node:path';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn } from 'node:child_process';
 
 /**
  * Run a Bun subprocess with the given inline script and return stdout.
@@ -45,7 +45,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
  */
 function runBunScript(code: string, timeoutMs = 30000): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child: ChildProcess = spawn('bun', ['-e', code], {
+    const child = spawn('bun', ['-e', code], {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env },
     });
