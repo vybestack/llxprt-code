@@ -20,7 +20,10 @@ import {
   stripShellWrapper,
 } from './shell-utils.js';
 import { isShellInvocationAllowlisted } from './tool-utils.js';
-import { initializeParser as initializeShellParsers } from './shell-parser.js';
+import {
+  initializeParser as initializeShellParsers,
+  isParserAvailable,
+} from './shell-parser.js';
 import type { Config } from '../config/config.js';
 import type { AnyToolInvocation } from '../index.js';
 
@@ -42,6 +45,8 @@ void vi.mock('shell-quote', () => ({
 
 let config: Config;
 const parserInitialized = await initializeShellParsers();
+const pwshAvailable = parserInitialized && isParserAvailable('powershell');
+const describePwsh = describe.skipIf(!pwshAvailable);
 
 describe('shell-utils', () => {
   beforeAll(async () => {
@@ -539,7 +544,7 @@ describe('shell-utils', () => {
     );
   });
 
-  describe.skipIf(!parserInitialized)('PowerShell parser integration', () => {
+  describe.skipIf(!pwshAvailable)('PowerShell parser integration', () => {
     // These tests exercise the real tree-sitter-pwsh grammar by passing the
     // shell type explicitly.  Full PowerShell behavior coverage lives in
     // shell-utils.powershell.test.ts and shell-parser-pwsh.test.ts.
@@ -559,7 +564,7 @@ describe('shell-utils', () => {
         'powershell',
       );
       expect(allowed).toBe(false);
-      expect(reason).toContain('powershell-tree-sitter');
+      expect(reason).toContain('tree-sitter-pwsh');
     });
   });
 
@@ -649,7 +654,7 @@ describe('shell-utils', () => {
     });
   });
 
-  describe('isShellInvocationAllowlisted: PowerShell shell-aware', () => {
+  describePwsh('isShellInvocationAllowlisted: PowerShell shell-aware', () => {
     it('should require all pipeline stages to be allowlisted for PowerShell', () => {
       const invocation = createInvocation(
         'Get-Process | Where-Object { $_.Name -eq "x" }',

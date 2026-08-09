@@ -180,7 +180,7 @@ export interface SplitCommandsOptions {
  * Uses tree-sitter for accurate parsing when available.
  * @param command The shell command string to parse
  * @param options Optional settings for split behavior
- * @param shellType Optional shell type override; defaults to the platform shell
+ * @param shellType Optional shell type override; defaults to bash grammar
  * @returns An array of individual command strings
  */
 export function splitCommands(
@@ -804,11 +804,14 @@ function extractCommandsToValidate(
         return strictDenial;
       }
 
-      if (parseResult.details.length > 0) {
-        return parseResult.details
-          .map((detail) => normalize(detail.canonicalText ?? detail.text))
-          .filter(Boolean);
+      const commands = parseResult.details
+        .map((detail) => normalize(detail.canonicalText ?? detail.text))
+        .filter(Boolean);
+      if (commands.length > 0) {
+        return commands;
       }
+      // All details filtered to empty (e.g., empty targets). Fall through
+      // to the normalized command so allowlist checking is not bypassed.
 
       const normalized = normalize(command);
       if (normalized) {
@@ -845,9 +848,14 @@ function extractCommandsToValidate(
   if (isParserAvailable(language)) {
     const parseResult = parseCommandDetailsForLanguage(command, language);
     if (parseResult?.hasError === false && parseResult.details.length > 0) {
-      return parseResult.details
+      const commands = parseResult.details
         .map((detail) => normalize(detail.canonicalText ?? detail.text))
         .filter(Boolean);
+      if (commands.length > 0) {
+        return commands;
+      }
+      // All details filtered to empty; fall through to shallow splitter so
+      // blocklist checking is not bypassed (#3181 review).
     }
   }
 

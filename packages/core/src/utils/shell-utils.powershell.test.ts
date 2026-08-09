@@ -20,10 +20,15 @@ import {
   detectCommandSubstitution,
   shellTypeToParserLanguage,
 } from './shell-utils.js';
-import { initializeParser } from './shell-parser.js';
+import { initializeParser, isParserAvailable } from './shell-parser.js';
 import type { Config } from '../config/config.js';
 
-const parserReady = await initializeParser();
+await initializeParser();
+const pwshAvailable = isParserAvailable('powershell');
+if (!pwshAvailable) {
+  throw new Error('PowerShell grammar failed to load under Bun');
+}
+const describePwsh = describe.skipIf(!pwshAvailable);
 
 const mockPlatform = vi.fn();
 void vi.mock('os', () => ({
@@ -56,7 +61,7 @@ function makeConfig(
   } as unknown as Config;
 }
 
-describe.skipIf(!parserReady)('shell-utils: PowerShell permission path', () => {
+describePwsh('shell-utils: PowerShell permission path', () => {
   beforeAll(() => {
     mockPlatform.mockReturnValue('linux');
   });
@@ -145,7 +150,7 @@ describe.skipIf(!parserReady)('shell-utils: PowerShell permission path', () => {
         'powershell',
       );
       expect(allowed).toBe(false);
-      expect(reason).toContain('powershell-tree-sitter');
+      expect(reason).toContain('tree-sitter-pwsh');
     });
 
     it('does not use the generic Bash parse-safely message', () => {
@@ -351,7 +356,7 @@ describe.skipIf(!parserReady)('shell-utils: PowerShell permission path', () => {
       // recovery dropped or misclassified as a non-sub_expression node.
       // Return true (fail closed) rather than trusting AST detection on a
       // broken tree. Get-ChildItem | has no $() but produces hasError,
-      // so the current code returns false (the gap).
+      // so detection must still return true.
       expect(detectCommandSubstitution('Get-ChildItem |', 'powershell')).toBe(
         true,
       );
@@ -365,11 +370,8 @@ describe.skipIf(!parserReady)('shell-utils: PowerShell permission path', () => {
     });
   });
 
-  describe('PowerShell parser unavailable', () => {
-    it('fails closed for multiline PowerShell when parser unavailable', () => {
-      // By not passing shellType, the function defaults to platform shell.
-      // On a mocked-linux environment this is bash, so we test the
-      // language-specific behavior by checking the actual mode.
+  describe('PowerShell parser available', () => {
+    it('accepts valid multiline PowerShell', () => {
       const result = checkCommandPermissions(
         'Get-Process\nWrite-Host done',
         config,

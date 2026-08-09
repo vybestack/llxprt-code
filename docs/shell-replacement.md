@@ -78,7 +78,7 @@ cmd.exe execution maps to the Bash grammar because no dedicated cmd grammar exis
 
 PowerShell command resolution is case-insensitive. Blocklist and allowlist matching for PowerShell commands is therefore case-insensitive: `ShellTool(Get-Process)` matches `GET-PROCESS`, `get-process`, and `Get-Process`. Bash matching remains strictly case-sensitive. The case-insensitivity is PowerShell-scoped and does not affect Bash behavior.
 
-Literal call targets (`& "C:	ools	ool.exe"`) and dot-source paths (`. .\script.ps1`) normalize to the basename before matching, so policy patterns do not require broad wildcards like `ShellTool(&)`.
+Literal call targets (`& 'C:/tools/tool.exe'`) and dot-source paths (`. ./script.ps1`) normalize to the basename before matching, so policy patterns do not require broad wildcards like `ShellTool(&)`.
 
 ## Wrapper and Evaluator Bypass Prevention
 

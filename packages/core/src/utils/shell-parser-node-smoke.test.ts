@@ -149,26 +149,17 @@ console.log(JSON.stringify(result));
         );
       }
 
-      // Spawn Node to run the bundled production code.
+      // Spawn Node to run the bundled production code. Keep only the spawn
+      // in the try so the catch reports real spawn/exit failures; assertion
+      // failures below are allowed to surface with their own diagnostics (#3198).
+      let stdout: string;
       try {
-        const stdout = execFileSync('node', [outPath], {
+        stdout = execFileSync('node', [outPath], {
           cwd: tempDir,
           encoding: 'utf8',
           timeout: 30_000,
           env: { ...process.env },
         });
-
-        const result = JSON.parse(stdout.trim()) as {
-          initOk: boolean;
-          bashAvailable: boolean;
-          pwshAvailable: boolean;
-        };
-
-        // Bash grammar must load and be available under Node.
-        expect(result.initOk).toBe(true);
-        expect(result.bashAvailable).toBe(true);
-        // PowerShell grammar must NOT be loaded under Node (isBunRuntime guard).
-        expect(result.pwshAvailable).toBe(false);
       } catch (error: unknown) {
         const status = isNodeExecError(error) ? error.status : undefined;
         const stderrText = isNodeExecError(error)
@@ -185,6 +176,18 @@ console.log(JSON.stringify(result));
             `${detail ?? String(error)}`,
         );
       }
+
+      const result = JSON.parse(stdout.trim()) as {
+        initOk: boolean;
+        bashAvailable: boolean;
+        pwshAvailable: boolean;
+      };
+
+      // Bash grammar must load and be available under Node.
+      expect(result.initOk).toBe(true);
+      expect(result.bashAvailable).toBe(true);
+      // PowerShell grammar must NOT be loaded under Node (isBunRuntime guard).
+      expect(result.pwshAvailable).toBe(false);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }

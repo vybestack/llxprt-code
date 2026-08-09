@@ -31,6 +31,21 @@ import {
   isParserAvailable,
 } from './shell-parser.js';
 
+await initializeParser();
+const pwshAvailable = isParserAvailable('powershell');
+if (!pwshAvailable) {
+  throw new Error('PowerShell grammar failed to load under Bun');
+}
+
+async function restoreParsers(context: string): Promise<void> {
+  const initialized = await initializeParser();
+  if (!initialized || !isParserAvailable('powershell')) {
+    throw new Error(
+      `PowerShell parser re-initialization failed after ${context}`,
+    );
+  }
+}
+
 function createConfig(
   mode: 'none' | 'allowlist' | 'all',
   coreTools: string[],
@@ -70,9 +85,7 @@ describe('PowerShell permission behavior when parser unavailable', () => {
     resetParser();
   });
 
-  afterAll(async () => {
-    await initializeParser();
-  });
+  afterAll(() => restoreParsers('unavailable-state tests'));
 
   it('allowlist mode hard-denies one-line PowerShell with truthful diagnostic', () => {
     const result = decide('Get-Process', 'allowlist', [
@@ -126,36 +139,37 @@ describe('PowerShell permission behavior when parser unavailable', () => {
  * initialization produces a consistent state, and that concurrent
  * initializeParser calls are de-duplicated.
  */
-describe('parser reset/init lifecycle consistency', () => {
-  afterAll(async () => {
-    await initializeParser();
-  });
+describe.skipIf(!pwshAvailable)(
+  'parser reset/init lifecycle consistency',
+  () => {
+    afterAll(() => restoreParsers('lifecycle tests'));
 
-  it('concurrent initializeParser calls return the same promise', async () => {
-    resetParser();
-    const p1 = initializeParser();
-    const p2 = initializeParser();
-    expect(p1).toBe(p2);
-    const result = await p1;
-    expect(result).toBe(true);
-    expect(isParserAvailable('powershell')).toBe(true);
-  });
+    it('concurrent initializeParser calls return the same promise', async () => {
+      resetParser();
+      const p1 = initializeParser();
+      const p2 = initializeParser();
+      expect(p1).toBe(p2);
+      const result = await p1;
+      expect(result).toBe(true);
+      expect(isParserAvailable('powershell')).toBe(true);
+    });
 
-  it('resetParser after init clears both parsers', async () => {
-    await initializeParser();
-    expect(isParserAvailable('powershell')).toBe(true);
-    expect(isParserAvailable('bash')).toBe(true);
-    resetParser();
-    expect(isParserAvailable('powershell')).toBe(false);
-    expect(isParserAvailable('bash')).toBe(false);
-  });
+    it('resetParser after init clears both parsers', async () => {
+      await initializeParser();
+      expect(isParserAvailable('powershell')).toBe(true);
+      expect(isParserAvailable('bash')).toBe(true);
+      resetParser();
+      expect(isParserAvailable('powershell')).toBe(false);
+      expect(isParserAvailable('bash')).toBe(false);
+    });
 
-  it('re-initialize after reset restores parser availability', async () => {
-    resetParser();
-    expect(isParserAvailable('powershell')).toBe(false);
-    const ok = await initializeParser();
-    expect(ok).toBe(true);
-    expect(isParserAvailable('powershell')).toBe(true);
-    expect(isParserAvailable('bash')).toBe(true);
-  });
-});
+    it('re-initialize after reset restores parser availability', async () => {
+      resetParser();
+      expect(isParserAvailable('powershell')).toBe(false);
+      const ok = await initializeParser();
+      expect(ok).toBe(true);
+      expect(isParserAvailable('powershell')).toBe(true);
+      expect(isParserAvailable('bash')).toBe(true);
+    });
+  },
+);

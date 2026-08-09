@@ -181,9 +181,8 @@ export function isShellInvocationAllowlisted(
  *
  * For shells with a matching parser (Bash, PowerShell under Bun), use the
  * recursive structured detail extraction so nested commands, script blocks,
- * pipelines, and wrapper payloads are all enumerated. Dynamic/expression
- * targets that cannot be statically matched are represented as empty-name
- * details, causing the allowlist check to fail closed.
+ * pipelines, and wrapper payloads are all enumerated. Each detail's
+ * canonicalText (or text fallback) is normalized for pattern matching.
  *
  * For Bash without a parser, fall back to `splitCommands`.
  * For PowerShell without a parser, fail closed (return an empty array,
@@ -203,8 +202,8 @@ function resolveAllowlistCommands(
         .filter(Boolean);
     }
 
-    // Parse error: fail closed by returning the raw command text, which
-    // will not match any specific allowlist pattern.
+    // Parse error: fail closed by returning an empty array, which will not
+    // match any specific allowlist pattern.
     if (parseResult?.hasError === true) {
       return [];
     }

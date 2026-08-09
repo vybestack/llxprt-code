@@ -18,10 +18,14 @@ import {
   getCommandRoots,
   isCommandAllowed,
 } from './shell-utils.js';
-import { initializeParser } from './shell-parser.js';
+import { initializeParser, isParserAvailable } from './shell-parser.js';
 import type { Config } from '../config/config.js';
 
-const parserReady = await initializeParser();
+await initializeParser();
+const pwshAvailable = isParserAvailable('powershell');
+if (!pwshAvailable) {
+  throw new Error('PowerShell grammar failed to load under Bun');
+}
 
 const mockPlatform = vi.fn();
 void vi.mock('os', () => ({
@@ -53,7 +57,7 @@ function makeConfig(
   } as unknown as Config;
 }
 
-describe.skipIf(!parserReady)(
+describe.skipIf(!pwshAvailable)(
   'shell-utils: PowerShell wrapper/evaluator bypass prevention',
   () => {
     beforeAll(() => {
@@ -469,7 +473,9 @@ describe.skipIf(!parserReady)(
 
       it('does not truncate blocklist validation for deeply nested literal evaluators', () => {
         let command = 'rm -rf /tmp';
-        for (let nesting = 0; nesting < 8; nesting += 1) {
+        // Exceeds the rejected fixed depth of 16; strict payload shrinkage,
+        // rather than a shallow budget, guarantees recursion terminates.
+        for (let nesting = 0; nesting < 17; nesting += 1) {
           command = `iex '${command.replace(/'/g, "''")}'`;
         }
 
@@ -497,7 +503,7 @@ describe.skipIf(!parserReady)(
       });
 
       it('finds blocklisted command behind doubled-double-quote in pwsh -Command payload', () => {
-        // powershell -Command "rm "" -rf /tmp"  decodes to: rm " -rf /tmp
+        // powershell -Command "rm ""-rf"" /tmp" decodes to: rm "-rf" /tmp
         const { allowed } = isCommandAllowed(
           'powershell -Command "rm ""-rf"" /tmp"',
           wrapperBlocklist,

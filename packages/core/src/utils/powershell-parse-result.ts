@@ -35,7 +35,7 @@ export function buildPwshCommandParseResult(
     return {
       details: [],
       hasError: true,
-      errorReason: `PowerShell command rejected because powershell-tree-sitter reported a syntax error${position}`,
+      errorReason: `PowerShell command rejected because tree-sitter-pwsh reported a syntax error${position}`,
     };
   }
 

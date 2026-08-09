@@ -235,6 +235,10 @@ export function initializeParser(): Promise<boolean> {
 async function performParserInitialization(
   initGeneration: number,
 ): Promise<boolean> {
+  // Declare local parsers outside the try so the outer catch can dispose
+  // them if an error occurs after allocation but before publication (#3181).
+  let localParser: ParserType | null = null;
+  let localPwshParser: ParserType | null = null;
   try {
     const TreeSitter = (await import('web-tree-sitter')) as TreeSitterModule;
     const parserCandidate = TreeSitter.Parser;
@@ -260,18 +264,12 @@ async function performParserInitialization(
     // Load the Bash grammar (required for all paths) into local variables.
     const bashWasmBytes = await resolveBashWasmBytes();
     const localBashLanguage = await LanguageLoader.load(bashWasmBytes);
-    const localParser = new Parser();
-    try {
-      localParser.setLanguage(localBashLanguage);
-    } catch (e) {
-      safeDeleteParser(localParser);
-      throw e;
-    }
+    localParser = new Parser();
+    localParser.setLanguage(localBashLanguage);
 
     // PowerShell grammar loads only under Bun: the tree-sitter-pwsh WASM
     // causes a V8 Zone OOM crash at shutdown under Node 24. Under Node,
     // PowerShell validation fails closed with a truthful diagnostic (#3181).
-    let localPwshParser: ParserType | null = null;
     let localPwshLanguage: Language | null = null;
     if (isBunRuntime()) {
       try {
@@ -306,6 +304,8 @@ async function performParserInitialization(
 
     return true;
   } catch (error) {
+    safeDeleteParser(localParser);
+    safeDeleteParser(localPwshParser);
     if (initGeneration === generation) {
       initializationError =
         error instanceof Error ? error : new Error(String(error));
@@ -501,8 +501,8 @@ export interface ParsedCommandDetail {
    * Canonical text used for policy matching (blocklist/allowlist). This is the
    * command text normalized to the executable basename/root so that policy
    * matching does not require broad patterns like `ShellTool(&)`. For example,
-   * `& 'C:	ools\my-tool.exe' --safe` has canonicalText `my-tool.exe --safe`.
-   * When absent, callers should fall back to `text`.
+   * `& 'C:/tools/my-tool.exe' --safe` has canonicalText
+   * `my-tool.exe --safe`. When absent, callers should fall back to `text`.
    */
   canonicalText?: string;
   nameKind?: 'static' | 'dynamic' | 'expression';

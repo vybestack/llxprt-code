@@ -20,6 +20,7 @@ import type {
   ParserLanguage,
   SplitCommandsTreeOptions,
 } from './shell-parser.js';
+import { extractPwshWrapperPayloadDetails } from './powershell-wrapper-payload.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -35,34 +36,10 @@ export type ParsePayloadFn = (
   language: ParserLanguage,
 ) => CommandParseResult | null;
 
-/**
- * Classification of a PowerShell wrapper/launcher command name.
- */
-type PwshWrapperCategory =
-  | 'evaluator'
-  | 'pwsh'
-  | 'bash'
-  | 'cmd'
-  | 'launcher'
-  | 'none';
-
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const PWSH_EVALUATORS = new Set(['invoke-expression', 'iex']);
-const PWSH_SHELL_WRAPPERS_PWSH = new Set([
-  'powershell',
-  'powershell.exe',
-  'pwsh',
-  'pwsh.exe',
-]);
-const PWSH_SHELL_WRAPPERS_BASH = new Set(['bash', 'bash.exe', 'sh', 'sh.exe']);
-const PWSH_SHELL_WRAPPERS_CMD = new Set(['cmd', 'cmd.exe']);
-// Start-Process and its default aliases launch an external process; the target
-// executable must be extracted as a static command name for blocklist /
-// allowlist validation (Finding 4, #3181).
-const PWSH_PROCESS_LAUNCHERS = new Set(['start-process', 'saps', 'start']);
 const START_PROCESS_PARAMETERS = [
   'argumentlist',
   'confirm',
@@ -123,7 +100,7 @@ const DYNAMIC_BOUNDARY_TYPES = new Set<string>([
 // Small helpers
 // ---------------------------------------------------------------------------
 
-function findNamedChild(node: Node, type: string): Node | null {
+export function findNamedChild(node: Node, type: string): Node | null {
   for (let index = 0; index < node.namedChildCount; index += 1) {
     const child = node.namedChild(index);
     if (child?.type === type) {
@@ -133,7 +110,7 @@ function findNamedChild(node: Node, type: string): Node | null {
   return null;
 }
 
-function expressionDetail(text: string): ParsedCommandDetail {
+export function expressionDetail(text: string): ParsedCommandDetail {
   return { name: '', text, nameKind: 'expression' };
 }
 
@@ -272,11 +249,17 @@ function extractPwshCommandDetail(
   for (let i = 0; i < commandNode.namedChildCount; i += 1) {
     const child = commandNode.namedChild(i);
     if (child?.type === 'command_name') {
-      return {
-        name: normalizePwshCommandName(child.text),
-        text,
-        nameKind: 'static',
-      };
+      const name = normalizePwshCommandName(child.text);
+      if (name !== child.text.trim()) {
+        return buildPwshStaticInvocationDetail(
+          name,
+          child,
+          commandNode,
+          source,
+          text,
+        );
+      }
+      return { name, text, nameKind: 'static' };
     }
   }
 
@@ -311,7 +294,7 @@ function findInvocationOperatorTarget(commandNode: Node): Node | null {
   return hasInvocationOperator ? nameExprNode : null;
 }
 
-function getPwshCommandName(commandNode: Node): string | null {
+export function getPwshCommandName(commandNode: Node): string | null {
   for (let i = 0; i < commandNode.namedChildCount; i += 1) {
     const child = commandNode.namedChild(i);
     if (child?.type === 'command_name') {
@@ -344,7 +327,7 @@ function getPwshCommandName(commandNode: Node): string | null {
 // String argument extraction
 // ---------------------------------------------------------------------------
 
-function extractPwshStaticStringDescendant(node: Node): string | null {
+export function extractPwshStaticStringDescendant(node: Node): string | null {
   const stack: Node[] = [node];
   while (stack.length > 0) {
     const current = stack.pop();
@@ -370,58 +353,6 @@ function extractPwshStaticStringDescendant(node: Node): string | null {
       if (child) {
         stack.push(child);
       }
-    }
-  }
-  return null;
-}
-
-function extractPwshStringArgument(commandNode: Node): string | null {
-  const commandElements = findNamedChild(commandNode, 'command_elements');
-  return commandElements
-    ? extractPwshStaticStringDescendant(commandElements)
-    : null;
-}
-
-function extractPwshStringArgumentAfterFlag(
-  commandNode: Node,
-  flags: ReadonlySet<string>,
-): string | null {
-  const commandElements = findNamedChild(commandNode, 'command_elements');
-  if (!commandElements) {
-    return null;
-  }
-
-  const flagIndex = findFlagElementIndex(commandElements, flags);
-  return flagIndex >= 0
-    ? extractFirstStringAfterFlag(commandElements, flagIndex + 1)
-    : null;
-}
-
-function findFlagElementIndex(
-  commandElements: Node,
-  flags: ReadonlySet<string>,
-): number {
-  for (let index = 0; index < commandElements.namedChildCount; index += 1) {
-    const child = commandElements.namedChild(index);
-    if (child && flags.has(child.text.toLowerCase())) {
-      return index;
-    }
-  }
-  return -1;
-}
-
-function extractFirstStringAfterFlag(
-  commandElements: Node,
-  startIndex: number,
-): string | null {
-  for (
-    let index = startIndex;
-    index < commandElements.namedChildCount;
-    index += 1
-  ) {
-    const child = commandElements.namedChild(index);
-    if (child && child.type !== 'command_argument_sep') {
-      return extractPwshStaticStringDescendant(child);
     }
   }
   return null;
@@ -464,7 +395,7 @@ function extractPwshStaticStringContent(stringNode: Node): string | null {
  * target. Literal string targets and bare tokens are classified as `static`;
  * variable/subexpression targets are classified as `dynamic` (Finding 4, #3181).
  */
-function extractPwshLauncherTarget(
+export function extractPwshLauncherTarget(
   commandNode: Node,
 ): ParsedCommandDetail | null {
   const commandElements = findNamedChild(commandNode, 'command_elements');
@@ -593,167 +524,11 @@ function classifyUnaryExpressionArg(arg: Node): ParsedCommandDetail | null {
       return dynamicDetail(arg.text);
     }
   }
-  return null;
-}
-
-// ---------------------------------------------------------------------------
-// Wrapper / evaluator payload extraction and recursive parsing
-// ---------------------------------------------------------------------------
-
-function classifyPwshWrapperName(name: string): PwshWrapperCategory {
-  if (PWSH_EVALUATORS.has(name)) {
-    return 'evaluator';
-  }
-  if (PWSH_SHELL_WRAPPERS_PWSH.has(name)) {
-    return 'pwsh';
-  }
-  if (PWSH_SHELL_WRAPPERS_BASH.has(name)) {
-    return 'bash';
-  }
-  if (PWSH_SHELL_WRAPPERS_CMD.has(name)) {
-    return 'cmd';
-  }
-  if (PWSH_PROCESS_LAUNCHERS.has(name)) {
-    return 'launcher';
-  }
-  return 'none';
-}
-
-function isShellWrapperCategory(category: PwshWrapperCategory): boolean {
-  return category === 'pwsh' || category === 'bash' || category === 'cmd';
-}
-
-function resolveBareWrapperFlags(
-  category: PwshWrapperCategory,
-): ReadonlySet<string> {
-  if (category === 'cmd') {
-    return new Set(['/c']);
-  }
-  if (category === 'bash') {
-    return new Set(['-c']);
-  }
-  return new Set(['-command', '-c']);
-}
-
-function extractPwshBareWrapperPayload(
-  commandNode: Node,
-  source: string,
-  flags: ReadonlySet<string>,
-): string | null {
-  const commandElements = findNamedChild(commandNode, 'command_elements');
-  if (!commandElements) {
-    return null;
-  }
-
-  for (let index = 0; index < commandElements.namedChildCount; index += 1) {
-    const child = commandElements.namedChild(index);
-    if (!child || !flags.has(child.text.toLowerCase())) {
-      continue;
-    }
-    const payload = source.slice(child.endIndex, commandNode.endIndex).trim();
-    return payload || null;
-  }
-  return null;
-}
-
-/**
- * Extract and recursively parse wrapper/evaluator payloads from a
- * PowerShell `command` node (Finding 4, #3181).
- *
- * - Invoke-Expression/iex: parse literal payload with PowerShell grammar;
- *   dynamic payload -> expression.
- * - powershell/pwsh -Command: parse literal payload with PowerShell grammar;
- *   dynamic payload -> expression.
- * - bash/sh -c: parse literal payload with Bash grammar;
- *   dynamic payload -> expression.
- * - cmd/cmd.exe /c: no dedicated parser; literal -> expression (unresolved);
- *   dynamic -> expression.
- */
-function extractPwshWrapperPayloadDetails(
-  commandNode: Node,
-  source: string,
-  parsePayload: ParsePayloadFn,
-): ParsedCommandDetail[] {
-  const name = getPwshCommandName(commandNode);
-  const category = name !== null ? classifyPwshWrapperName(name) : 'none';
-  if (category === 'none') {
-    return [];
-  }
-
-  const fullText = source
-    .slice(commandNode.startIndex, commandNode.endIndex)
-    .trim();
-
-  if (category === 'launcher') {
-    return extractLauncherPayload(commandNode);
-  }
-
-  return extractWrapperPayload(
-    commandNode,
-    source,
-    category,
-    fullText,
-    parsePayload,
-  );
-}
-
-function extractLauncherPayload(commandNode: Node): ParsedCommandDetail[] {
-  const target = extractPwshLauncherTarget(commandNode);
-  if (target === null) {
-    return [];
-  }
-  return [target];
-}
-
-function extractWrapperPayload(
-  commandNode: Node,
-  source: string,
-  category: PwshWrapperCategory,
-  fullText: string,
-  parsePayload: ParsePayloadFn,
-): ParsedCommandDetail[] {
-  const wrapperFlags = isShellWrapperCategory(category)
-    ? resolveBareWrapperFlags(category)
-    : null;
-  let payload = wrapperFlags
-    ? extractPwshStringArgumentAfterFlag(commandNode, wrapperFlags)
-    : extractPwshStringArgument(commandNode);
-  if (payload === null && wrapperFlags) {
-    payload = extractPwshBareWrapperPayload(commandNode, source, wrapperFlags);
-  }
-
-  if (payload === null) {
-    return [expressionDetail(fullText)];
-  }
-
-  if (category === 'cmd') {
-    return [expressionDetail(payload)];
-  }
-
-  // Recursive expansion terminates because every payload must be a strict
-  // substring of its wrapper command. Treat any grammar anomaly that violates
-  // that invariant as unresolved instead of silently skipping validation.
-  if (payload.length >= fullText.length) {
-    return [expressionDetail(fullText)];
-  }
-
-  return parseWrapperPayload(payload, category, parsePayload);
-}
-
-function parseWrapperPayload(
-  payload: string,
-  category: PwshWrapperCategory,
-  parsePayload: ParsePayloadFn,
-): ParsedCommandDetail[] {
-  const payloadLanguage: ParserLanguage =
-    category === 'bash' ? 'bash' : 'powershell';
-  const nestedResult = parsePayload(payload, payloadLanguage);
-
-  if (nestedResult?.hasError === false && nestedResult.details.length > 0) {
-    return nestedResult.details;
-  }
-
-  return [expressionDetail(payload)];
+  // Any other unary_expression content (parenthesized member access,
+  // element access, string concatenation, nested invocation, etc.) cannot
+  // resolve to a static command name. Classify it as dynamic so a strict
+  // allowlist fails closed instead of skipping the target (#3181 review).
+  return dynamicDetail(arg.text);
 }
 
 // ---------------------------------------------------------------------------
@@ -773,8 +548,16 @@ function classifyPwshInvocationTarget(
     }
 
     if (inner.type === 'string_literal' && !hasExpandableChild(inner)) {
+      const resolvedName = normalizePwshCommandName(
+        extractPwshStringLiteralText(inner.text),
+      );
+      // An empty target like & '' cannot resolve to a safe static name.
+      // Classify as dynamic so strict allowlist fails closed (#3181).
+      if (!resolvedName) {
+        return dynamicDetail(text);
+      }
       return buildPwshStaticInvocationDetail(
-        normalizePwshCommandName(extractPwshStringLiteralText(inner.text)),
+        resolvedName,
         nameExprNode,
         commandNode,
         source,
@@ -930,7 +713,10 @@ export function findFirstErrorNode(root: Node): Node | null {
   if (!root.hasError) {
     return null;
   }
-  if (root.type === 'ERROR' || root.type === 'MISSING') {
+  // tree-sitter represents missing tokens as nodes whose expected type is
+  // preserved (e.g. 'command_name') with isMissing === true; the 'MISSING'
+  // pseudo-type is never set on the node.type field.
+  if (root.type === 'ERROR' || root.isMissing) {
     return root;
   }
 

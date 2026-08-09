@@ -13,7 +13,7 @@ import { debugLogger } from '../utils/debugLogger.js';
 import type { ShellJob, ShellJobManager } from '../services/shellJobManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ShellTool, type IToolMessageBus } from '@vybestack/llxprt-code-tools';
-import { initializeParser } from '../utils/shell-parser.js';
+import { initializeParser, isParserAvailable } from '../utils/shell-parser.js';
 
 /**
  * Windows-only end-to-end coverage for the real background-job path that was
@@ -112,7 +112,12 @@ function extractJobId(llm: string): string {
 
 // Ensure the PowerShell grammar is loaded so ShellTool.build() validation
 // succeeds on Windows where the execution shell is PowerShell (#3181).
-await initializeParser();
+// Only initialize on Windows to avoid loading parsers unnecessarily on
+// non-Windows CI runners.
+const pwshAvailable =
+  os.platform() === 'win32' &&
+  (await initializeParser()) &&
+  isParserAvailable('powershell');
 
 describe.skipIf(os.platform() !== 'win32')(
   'CoreShellToolHostAdapter -> real ShellJobManager (Windows end-to-end)',
@@ -224,7 +229,7 @@ describe.skipIf(os.platform() !== 'win32')(
  * (d) isShellInvocationAllowlisted requires EVERY nested command to be allowed.
  * (e) Dynamic/expression targets fail closed under a strict allowedTools set.
  */
-describe.skipIf(os.platform() !== 'win32')(
+describe.skipIf(os.platform() !== 'win32' || !pwshAvailable)(
   'CoreShellToolHostAdapter -> ShellTool permission integration (#3181)',
   () => {
     function makePermissionConfig(
@@ -271,14 +276,14 @@ describe.skipIf(os.platform() !== 'win32')(
       const { adapter } = makePermissionConfig();
       const result = adapter.isCommandAllowed('Get-ChildItem |');
       expect(result.allowed).toBe(false);
-      expect(result.reason).toContain('powershell-tree-sitter');
+      expect(result.reason).toContain('tree-sitter-pwsh');
     });
 
     it('(b) ShellTool.build throws for malformed PowerShell', () => {
       const { adapter } = makePermissionConfig();
       const tool = new ShellTool(adapter);
       expect(() => tool.build({ command: 'Get-ChildItem |' })).toThrow(
-        /powershell-tree-sitter/,
+        /tree-sitter-pwsh/,
       );
     });
 

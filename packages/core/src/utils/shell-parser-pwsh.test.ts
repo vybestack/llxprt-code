@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { expect, describe, it, beforeAll } from 'bun:test';
+import { expect, describe, it, beforeAll, afterAll } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import {
   initializeParser,
@@ -16,9 +16,23 @@ import {
   hasCommandSubstitutionForLanguage,
 } from './shell-parser.js';
 
-const parserReady = await initializeParser();
+await initializeParser();
+const pwshAvailable = isParserAvailable('powershell');
+if (!pwshAvailable) {
+  throw new Error('PowerShell grammar failed to load under Bun');
+}
+const describePwsh = describe.skipIf(!pwshAvailable);
 
-describe.skipIf(!parserReady)('shell-parser: tree-sitter-pwsh grammar', () => {
+async function restoreParsers(): Promise<void> {
+  const initialized = await initializeParser();
+  if (!initialized || !isParserAvailable('powershell')) {
+    throw new Error(
+      'PowerShell parser restoration failed after lifecycle tests',
+    );
+  }
+}
+
+describePwsh('shell-parser: tree-sitter-pwsh grammar', () => {
   beforeAll(() => {
     if (!isParserAvailable('powershell')) {
       throw new Error('PowerShell grammar failed to load');
@@ -87,14 +101,14 @@ describe.skipIf(!parserReady)('shell-parser: tree-sitter-pwsh grammar', () => {
       );
       expect(result).not.toBeNull();
       expect(result!.hasError).toBe(true);
-      expect(result!.errorReason).toContain('powershell-tree-sitter');
+      expect(result!.errorReason).toContain('tree-sitter-pwsh');
     });
 
     it('rejects incomplete if', () => {
       const result = parseCommandDetailsForLanguage('if (', 'powershell');
       expect(result).not.toBeNull();
       expect(result!.hasError).toBe(true);
-      expect(result!.errorReason).toContain('powershell-tree-sitter');
+      expect(result!.errorReason).toContain('tree-sitter-pwsh');
     });
 
     it('reports a useful row:column location', () => {
@@ -316,7 +330,9 @@ describe.skipIf(!parserReady)('shell-parser: tree-sitter-pwsh grammar', () => {
   });
 });
 
-describe.skipIf(!parserReady)('shell-parser: pwsh clean lifecycle', () => {
+describe.skipIf(!pwshAvailable)('shell-parser: pwsh clean lifecycle', () => {
+  afterAll(restoreParsers);
+
   it('initializes, resets with disposal, and re-initializes cleanly', async () => {
     expect(isParserAvailable('powershell')).toBe(true);
     expect(isParserAvailable('bash')).toBe(true);
@@ -369,7 +385,7 @@ describe.skipIf(!parserReady)('shell-parser: pwsh clean lifecycle', () => {
  * the tree-sitter-pwsh grammar does NOT produce a syntax error, proving
  * valid PowerShell is no longer hard-denied as malformed.
  */
-describe.skipIf(!parserReady)('saved-corpus construct families', () => {
+describe.skipIf(!pwshAvailable)('saved-corpus construct families', () => {
   const corpus: Array<{ label: string; cmd: string }> = [
     // Family 1: variable assignment + cmdlet
     {
@@ -486,7 +502,7 @@ describe.skipIf(!parserReady)('saved-corpus construct families', () => {
  * The tree-sitter-pwsh grammar classifies them as expression details,
  * which are excluded from command name extraction.
  */
-describe.skipIf(!parserReady)('exact .NET roots', () => {
+describe.skipIf(!pwshAvailable)('exact .NET roots', () => {
   it('static .NET method produces no command names', () => {
     const tree = parseShellCommandForLanguage(
       '[System.Diagnostics.Process]::Start("cmd.exe")',
@@ -527,7 +543,7 @@ describe.skipIf(!parserReady)('exact .NET roots', () => {
  * NEVER interpolated into the script body. ParseInput parses but does not
  * execute the input. This test NEVER executes any corpus command.
  */
-describe.skipIf(!parserReady || process.platform !== 'win32')(
+describe.skipIf(process.platform !== 'win32')(
   'Parser.ParseInput conformance (Windows-only)',
   () => {
     const conformanceSubset = [
@@ -553,7 +569,7 @@ describe.skipIf(!parserReady || process.platform !== 'win32')(
           '$inputText, [ref]$null, [ref]$errors); ' +
           'if ($errors.Count -gt 0) { exit 1 } else { exit 0 }';
 
-        expect(() =>
+        try {
           execFileSync(
             'powershell.exe',
             ['-NoProfile', '-NonInteractive', '-Command', helperScript],
@@ -562,8 +578,17 @@ describe.skipIf(!parserReady || process.platform !== 'win32')(
               encoding: 'utf8',
               timeout: 10_000,
             },
-          ),
-        ).not.toThrow();
+          );
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            'code' in error &&
+            (error as NodeJS.ErrnoException).code === 'ENOENT'
+          ) {
+            return;
+          }
+          throw error;
+        }
       }, 15_000);
     }
   },
