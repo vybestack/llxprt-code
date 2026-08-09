@@ -54,16 +54,15 @@ function extractCommitSha(usesReference: string): string {
 
 /**
  * Asserts the raw workflow source retains a `# ratchet:` comment on the line
- * holding the quoted `uses` reference. Parsed YAML strips comments, so this
- * check operates on the verbatim source text to prove the pin is
- * ratchet-managed.
+ * holding the `uses` reference. Parsed YAML strips comments, so this check
+ * operates on the verbatim source text to prove the pin is ratchet-managed.
  */
 function expectRatchetCommentInSource(
   source: string,
   usesReference: string,
 ): void {
   const escaped = usesReference.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const pattern = new RegExp(`${escaped}'?\\s*#\\s*ratchet:`);
+  const pattern = new RegExp(`${escaped}['"]?\\s*#\\s*ratchet:`);
   if (!pattern.test(source)) {
     throw new Error(
       `workflow source should retain a ratchet comment for: ${usesReference}`,
