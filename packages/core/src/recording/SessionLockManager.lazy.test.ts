@@ -144,4 +144,28 @@ describe('SessionLockManager lazy loading @plan:PLAN-20260211-SESSIONRECORDING.P
     );
     expect(result.trim()).toBe('NOT_LOADED');
   }, 35000);
+
+  it('importing the core public root does not eagerly load the session janitor', async () => {
+    const result = await runBunScript(
+      `const mod = require(${JSON.stringify(CORE_ROOT_PATH)});` +
+        `mod.resolveRetentionConfig({});` +
+        `process.stdout.write(Object.keys(require.cache).some((loadedPath) => loadedPath.includes('janitor/sessionJanitor')) ? 'LOADED' : 'NOT_LOADED');`,
+    );
+    expect(result.trim()).toBe('NOT_LOADED');
+  }, 35000);
+
+  it('loads the session janitor when a cleanup sweep is requested', async () => {
+    const result = await runBunScript(
+      `const mod = require(${JSON.stringify(CORE_ROOT_PATH)});` +
+        `(async () => {` +
+        `const config = mod.resolveRetentionConfig({ enabled: false });` +
+        `const before = Object.keys(require.cache).some((loadedPath) => loadedPath.includes('janitor/sessionJanitor'));` +
+        `await mod.runSessionCleanup({ globalTempDir: '/tmp', config });` +
+        `const after = Object.keys(require.cache).some((loadedPath) => loadedPath.includes('janitor/sessionJanitor'));` +
+        `process.stdout.write(before ? '1' : '0');` +
+        `process.stdout.write(after ? '1' : '0');` +
+        `})();`,
+    );
+    expect(result.trim()).toBe('01');
+  }, 35000);
 });

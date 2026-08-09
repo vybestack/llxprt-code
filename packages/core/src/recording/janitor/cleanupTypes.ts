@@ -57,6 +57,18 @@ export interface ResolvedRetentionConfig {
   readonly minRetentionMs: number;
 }
 
+/** Parameters for the cleanup entry point. */
+export interface SessionCleanupParams {
+  /** The global temp directory root (Storage.getGlobalTempDir()). */
+  readonly globalTempDir: string;
+  /** The current process's session ID (protected from deletion). */
+  readonly currentSessionId?: string;
+  /** Fully resolved retention configuration. */
+  readonly config: ResolvedRetentionConfig;
+  /** When true, suppress debug logging. */
+  readonly quiet?: boolean;
+}
+
 /** Kind of physical file a candidate represents. */
 export type CandidateKind = 'raw' | 'archive';
 
@@ -127,4 +139,28 @@ export interface SessionCleanupResult {
   readonly configuredByteLimit: number;
   /** Remaining over-budget bytes that could not be reclaimed because data is protected. */
   readonly overBudgetBytes: number;
+}
+
+/** Build a coherent result when no sweep was run. */
+export function emptyResult(
+  disabled = false,
+  janitorWonLease = false,
+  configuredByteLimit = 0,
+): SessionCleanupResult {
+  return {
+    disabled,
+    janitorWonLease,
+    scanned: 0,
+    archived: 0,
+    rawDeleted: 0,
+    archiveDeleted: 0,
+    staleLocksRemoved: 0,
+    skipped: 0,
+    failed: 0,
+    ageCountShortfall: 0,
+    bytesBefore: 0,
+    bytesAfter: 0,
+    configuredByteLimit,
+    overBudgetBytes: 0,
+  };
 }

@@ -18,12 +18,14 @@
  * Barrel export for the session-recording janitor module.
  */
 
-export type {
-  UserRetentionSettings,
-  ResolvedRetentionConfig,
-  SessionCandidate,
-  SessionCleanupResult,
-  CandidateKind,
+export {
+  emptyResult,
+  type UserRetentionSettings,
+  type ResolvedRetentionConfig,
+  type SessionCandidate,
+  type SessionCleanupParams,
+  type SessionCleanupResult,
+  type CandidateKind,
 } from './cleanupTypes.js';
 
 export {
@@ -59,8 +61,6 @@ export {
 export {
   runSessionCleanup,
   runSessionCleanupWithSettings,
-  emptyResult,
-  type SessionCleanupParams,
 } from './sessionJanitor.js';
 
 export {

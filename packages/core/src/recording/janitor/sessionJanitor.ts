@@ -32,11 +32,13 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type {
-  ResolvedRetentionConfig,
-  SessionCandidate,
-  SessionCleanupResult,
-  UserRetentionSettings,
+import {
+  emptyResult,
+  type ResolvedRetentionConfig,
+  type SessionCandidate,
+  type SessionCleanupParams,
+  type SessionCleanupResult,
+  type UserRetentionSettings,
 } from './cleanupTypes.js';
 import { scanGlobalSessions, ARCHIVE_DIR_NAME } from './sessionScanner.js';
 import { JanitorLease, type JanitorLeaseHandle } from './janitorLease.js';
@@ -45,18 +47,6 @@ import { resolveRetentionConfig } from './retentionPolicy.js';
 import { runReclamation } from './reclamationEngine.js';
 import { SessionLockManager } from '../SessionLockManager.js';
 import { debugLogger } from '../../utils/debugLogger.js';
-
-/** Parameters for the cleanup entry point. */
-export interface SessionCleanupParams {
-  /** The global temp directory root (Storage.getGlobalTempDir()). */
-  readonly globalTempDir: string;
-  /** The current process's session ID (protected from deletion). */
-  readonly currentSessionId?: string;
-  /** Fully resolved retention configuration. */
-  readonly config: ResolvedRetentionConfig;
-  /** When true, suppress debug logging. */
-  readonly quiet?: boolean;
-}
 
 /** Age threshold for recognizing stale temporary archive artifacts. */
 const STALE_TEMP_ARCHIVE_AGE_MS = 60 * 1000;
@@ -106,30 +96,6 @@ export function setScanToMutationHookForTest(
   fn: (() => Promise<void>) | null,
 ): void {
   scanToMutationHook = fn;
-}
-
-/** Empty result factory.  Exported so the CLI can build coherent results. */
-export function emptyResult(
-  disabled = false,
-  janitorWonLease = false,
-  configuredByteLimit = 0,
-): SessionCleanupResult {
-  return {
-    disabled,
-    janitorWonLease,
-    scanned: 0,
-    archived: 0,
-    rawDeleted: 0,
-    archiveDeleted: 0,
-    staleLocksRemoved: 0,
-    skipped: 0,
-    failed: 0,
-    ageCountShortfall: 0,
-    bytesBefore: 0,
-    bytesAfter: 0,
-    configuredByteLimit,
-    overBudgetBytes: 0,
-  };
 }
 
 /**

@@ -83,3 +83,12 @@ export {
   type HistoryMutationResult,
   type HistoryMutationError,
 } from './HistoryMutationService.js';
+export {
+  emptyResult,
+  resolveRetentionConfig,
+  runSessionCleanup,
+  type ResolvedRetentionConfig,
+  type SessionCleanupParams,
+  type SessionCleanupResult,
+  type UserRetentionSettings,
+} from './SessionJanitor.js';

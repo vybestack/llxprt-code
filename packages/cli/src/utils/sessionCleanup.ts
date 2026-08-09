@@ -17,13 +17,13 @@
  * bounding (AC-2).
  */
 
-import { type Config } from '@vybestack/llxprt-code-core';
 import {
+  emptyResult,
   resolveRetentionConfig,
   runSessionCleanup,
-  emptyResult,
+  type Config,
   type SessionCleanupResult,
-} from '@vybestack/llxprt-code-core/recording/janitor/index.js';
+} from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-storage';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { Settings } from '../config/settings.js';
