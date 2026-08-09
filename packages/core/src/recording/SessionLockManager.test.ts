@@ -383,9 +383,12 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
         error = e;
       }
       expect(threw).toBe(true);
-      expect(error).toMatchObject({ code: 'ENOTDIR' });
-      // Must NOT be a SessionLockedError — that would mean the I/O error
-      // was swallowed and the code fell through to stale-takeover logic.
+      // On POSIX, traversing a path through a regular file yields ENOTDIR.
+      // On Windows the same scenario can surface as ENOENT.  Either is a
+      // valid system error — what matters is that it is NOT masked as
+      // SessionLockedError (lock-busy).
+      const errno = (error as NodeJS.ErrnoException).code;
+      expect(['ENOTDIR', 'ENOENT']).toContain(errno);
       expect(error).not.toBeInstanceOf(SessionLockedError);
     });
   });

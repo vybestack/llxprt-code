@@ -28,7 +28,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { JanitorLease } from './janitorLease.js';
 import type { JanitorLeaseHandle } from './janitorLease.js';
 
@@ -48,6 +48,7 @@ afterEach(async () => {
     await trackedLease.release().catch(() => {});
     trackedLease = null;
   }
+  JanitorLease.setPreClaimHookForTest(null);
 });
 
 async function makeTempDir(): Promise<string> {
@@ -61,6 +62,134 @@ async function fileExists(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * Wait for a specific marker string on a child's stdout.  Rejects with the
+ * captured stderr on timeout or unexpected exit so failures are diagnosable.
+ */
+function waitForChildSignal(
+  child: ChildProcessWithoutNullStreams,
+  getStdout: () => string,
+  getStderr: () => string,
+  marker: string,
+  timeoutMs = 10000,
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const cleanup = (): void => {
+      clearTimeout(timer);
+      child.stdout.off('data', onData);
+      child.off('close', onClose);
+      child.off('error', onError);
+    };
+    const succeed = (): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve();
+    };
+    const fail = (message: string): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error(message));
+    };
+
+    const timer = setTimeout(
+      () =>
+        fail(
+          `Timeout waiting for "${marker}"
+stderr: ${getStderr()}`,
+        ),
+      timeoutMs,
+    );
+    const onData = (_d: Buffer): void => {
+      if (getStdout().includes(marker)) succeed();
+    };
+    const onClose = (): void => {
+      if (getStdout().includes(marker)) succeed();
+      else
+        fail(
+          `Child exited before "${marker}"
+stderr: ${getStderr()}`,
+        );
+    };
+    const onError = (err: Error): void => {
+      fail(
+        `Child error before "${marker}": ${err.message}
+stderr: ${getStderr()}`,
+      );
+    };
+
+    if (getStdout().includes(marker)) {
+      succeed();
+      return;
+    }
+    child.stdout.on('data', onData);
+    child.on('close', onClose);
+    child.on('error', onError);
+  });
+}
+
+/**
+ * Ensure a spawned child is terminated and its exit awaited, regardless of
+ * test outcome.  Idempotent — safe to call in a finally block even if the
+ * child already exited.  Sends SIGTERM to the exact child only; escalates to
+ * SIGKILL if the child does not close within a grace period; awaits the
+ * 'close' event in both cases.  Fails (rejects) with diagnostics if even
+ * SIGKILL cannot produce an observed close.
+ */
+async function killAndAwaitChild(
+  child: ChildProcessWithoutNullStreams,
+): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const cleanup = (): void => {
+      child.off('close', onClose);
+    };
+    const onClose = (): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(escalationTimer);
+      cleanup();
+      resolve();
+    };
+    child.on('close', onClose);
+
+    const escalationTimer = setTimeout(() => {
+      if (settled) return;
+      // SIGTERM grace period elapsed without close — escalate to SIGKILL on
+      // the exact child.
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        // ignore — fall through to final guard
+      }
+      // Final guard: if SIGKILL also fails to produce a close, fail loudly.
+      setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(
+          new Error(
+            `killAndAwaitChild: child (pid=${child.pid}) did not close after SIGKILL`,
+          ),
+        );
+      }, 5000);
+    }, 2000);
+
+    try {
+      child.kill('SIGTERM');
+    } catch {
+      settled = true;
+      clearTimeout(escalationTimer);
+      cleanup();
+      resolve();
+    }
+  });
 }
 
 describe('JanitorLease — old-createdAt / fresh-heartbeat (Item 5)', () => {
@@ -429,7 +558,7 @@ describe('JanitorLease — transition claim protocol (OCR 18/19)', () => {
           } else {
             process.stdout.write('SKIP');
           }
-        })().catch(() => process.stdout.write('ERROR'));
+        })().catch(e => { process.stderr.write(String(e)); process.stdout.write('ERROR'); });
       `;
 
     const child = spawn('bun', ['-e', script], {
@@ -438,58 +567,97 @@ describe('JanitorLease — transition claim protocol (OCR 18/19)', () => {
     });
 
     let childStdout = '';
+    let childStderr = '';
     child.stdout.on('data', (d) => (childStdout += d.toString()));
+    child.stderr.on('data', (d) => (childStderr += d.toString()));
 
-    // Wait for the subprocess to acquire the lease.
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(
-        () => reject(new Error('Timeout waiting for HOLDING')),
-        10000,
+    try {
+      // Wait for the subprocess to acquire the lease.
+      await waitForChildSignal(
+        child,
+        () => childStdout,
+        () => childStderr,
+        'HOLDING',
       );
-      child.stdout.on('data', (d: Buffer) => {
-        if (d.toString().includes('HOLDING')) {
-          clearTimeout(timer);
-          resolve();
-        }
-      });
-      child.on('error', (err) => {
-        clearTimeout(timer);
-        reject(err);
-      });
-    });
 
-    // The subprocess holds a fresh lease — main process cannot take over.
-    const attempt = await JanitorLease.tryAcquire(tempDir);
-    expect(attempt).toBeNull();
+      // The subprocess holds a fresh lease — main process cannot take over.
+      const attempt = await JanitorLease.tryAcquire(tempDir);
+      expect(attempt).toBeNull();
 
-    // Wait for the subprocess to release.
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(
-        () => reject(new Error('Timeout waiting for RELEASED')),
-        10000,
+      // Wait for the subprocess to release.
+      await waitForChildSignal(
+        child,
+        () => childStdout,
+        () => childStderr,
+        'RELEASED',
       );
-      child.stdout.on('data', (d: Buffer) => {
-        if (d.toString().includes('RELEASED')) {
-          clearTimeout(timer);
-          resolve();
-        }
-      });
-      child.on('close', () => {
-        clearTimeout(timer);
-        if (childStdout.includes('RELEASED')) resolve();
-        else reject(new Error('Subprocess exited without RELEASED'));
-      });
-      child.on('error', (err) => {
-        clearTimeout(timer);
-        reject(err);
-      });
-    });
 
-    // After release, the main process can acquire.
-    const lease = await JanitorLease.tryAcquire(tempDir);
-    expect(lease).not.toBeNull();
-    trackedLease = lease;
-    await lease!.release();
-    trackedLease = null;
+      // After release, the main process can acquire.
+      const lease = await JanitorLease.tryAcquire(tempDir);
+      expect(lease).not.toBeNull();
+      trackedLease = lease;
+      await lease!.release();
+      trackedLease = null;
+    } finally {
+      // Guarantee child termination regardless of pass/fail/timeout.
+      await killAndAwaitChild(child);
+    }
   }, 30000);
+
+  /**
+   * When the lease vanishes between the staleness pre-check and the claim
+   * acquisition (ENOENT), the caller proceeds without owning a claim.  The
+   * finally block must NOT release a claim it never created — otherwise it
+   * could unlink a contender's subsequently-created claim file.
+   *
+   * The pre-claim hook deterministically forces this race: it removes the
+   * stale lease (so `link` fails with ENOENT) and creates a standalone
+   * "foreign" claim file.  After `tryAcquire` returns, the foreign claim
+   * must still exist.
+   */
+  it('does not release an unowned claim when the lease vanishes during takeover (ENOENT race)', async () => {
+    const leasePath = path.join(tempDir, LEASE_FILE_NAME);
+    const claimPath = leasePath + LEASE_CLAIM_SUFFIX;
+    const staleTime = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+
+    // Write a stale lease so the pre-check determines staleness.
+    await fs.writeFile(
+      leasePath,
+      JSON.stringify({
+        ownerToken: 'stale-to-take-over',
+        pid: 999999,
+        hostname: os.hostname(),
+        createdAt: staleTime,
+        heartbeatAt: staleTime,
+      }),
+    );
+
+    // Hook fires after the pre-check passes but before claim acquisition.
+    JanitorLease.setPreClaimHookForTest(async () => {
+      // Remove the lease so acquireTransitionClaim's `link` hits ENOENT
+      // (returns canProceed=true, ownsClaim=false).
+      await fs.unlink(leasePath).catch(() => {});
+      // Simulate a contender that created a claim while the lease was
+      // absent.  This standalone file is NOT a hard link to our lease.
+      const freshTime = new Date().toISOString();
+      await fs.writeFile(
+        claimPath,
+        JSON.stringify({
+          ownerToken: 'foreign-contender',
+          pid: process.pid,
+          hostname: os.hostname(),
+          createdAt: freshTime,
+          heartbeatAt: freshTime,
+        }),
+      );
+    });
+
+    // tryAcquire hits the ENOENT path; it must not take over (fresh claim
+    // content via the foreign claim) and must not remove the foreign claim.
+    const lease = await JanitorLease.tryAcquire(tempDir);
+    expect(lease).toBeNull();
+
+    // The foreign claim file must survive — we never owned it.
+    expect(await fileExists(claimPath)).toBe(true);
+  });
 });

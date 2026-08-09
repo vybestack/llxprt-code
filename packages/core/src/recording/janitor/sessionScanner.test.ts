@@ -278,79 +278,91 @@ describe('scanGlobalSessions — symlink safety (AC-10)', () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
-  it('does not follow symlinks to project-hash dirs', async () => {
-    const hash1 = validHash64();
-    const realChats = path.join(tempDir, hash1, 'chats');
-    await fs.mkdir(realChats, { recursive: true });
-    await createSessionFile(realChats);
+  it.skipIf(process.platform === 'win32')(
+    'does not follow symlinks to project-hash dirs',
+    async () => {
+      const hash1 = validHash64();
+      const realChats = path.join(tempDir, hash1, 'chats');
+      await fs.mkdir(realChats, { recursive: true });
+      await createSessionFile(realChats);
 
-    // Create a symlink that looks like a hash dir pointing outside.
-    const symlinkHash = validHash64();
-    const symlinkPath = path.join(tempDir, symlinkHash);
-    await fs.symlink(tempDir, symlinkPath, 'dir');
+      // Create a symlink that looks like a hash dir pointing outside.
+      const symlinkHash = validHash64();
+      const symlinkPath = path.join(tempDir, symlinkHash);
+      await fs.symlink(tempDir, symlinkPath, 'dir');
 
-    const { candidates } = await scanGlobalSessions(tempDir);
-    // Should find sessions but not double-count through the symlink.
-    const raws = candidates.filter((c) => c.kind === 'raw');
-    expect(raws.length).toBe(1);
-  });
-  it('does not follow a symlinked chats directory (AC-10)', async () => {
-    const hash = validHash64();
-    const hashDir = path.join(tempDir, hash);
-    await fs.mkdir(hashDir, { recursive: true });
+      const { candidates } = await scanGlobalSessions(tempDir);
+      // Should find sessions but not double-count through the symlink.
+      const raws = candidates.filter((c) => c.kind === 'raw');
+      expect(raws.length).toBe(1);
+    },
+  );
+  it.skipIf(process.platform === 'win32')(
+    'does not follow a symlinked chats directory (AC-10)',
+    async () => {
+      const hash = validHash64();
+      const hashDir = path.join(tempDir, hash);
+      await fs.mkdir(hashDir, { recursive: true });
 
-    // A real chats dir with a session elsewhere.
-    const realChats = path.join(tempDir, 'real-chats');
-    await fs.mkdir(realChats, { recursive: true });
-    await createSessionFile(realChats);
+      // A real chats dir with a session elsewhere.
+      const realChats = path.join(tempDir, 'real-chats');
+      await fs.mkdir(realChats, { recursive: true });
+      await createSessionFile(realChats);
 
-    // Replace chats with a symlink to the outside dir.
-    await fs.symlink(realChats, path.join(hashDir, 'chats'), 'dir');
+      // Replace chats with a symlink to the outside dir.
+      await fs.symlink(realChats, path.join(hashDir, 'chats'), 'dir');
 
-    const { candidates } = await scanGlobalSessions(tempDir);
-    // The symlinked chats dir must not be traversed.
-    expect(candidates.length).toBe(0);
-  });
+      const { candidates } = await scanGlobalSessions(tempDir);
+      // The symlinked chats dir must not be traversed.
+      expect(candidates.length).toBe(0);
+    },
+  );
 
-  it('does not follow a symlinked archive directory (AC-10)', async () => {
-    const hash = validHash64();
-    const chatsDir = path.join(tempDir, hash, 'chats');
-    await fs.mkdir(chatsDir, { recursive: true });
+  it.skipIf(process.platform === 'win32')(
+    'does not follow a symlinked archive directory (AC-10)',
+    async () => {
+      const hash = validHash64();
+      const chatsDir = path.join(tempDir, hash, 'chats');
+      await fs.mkdir(chatsDir, { recursive: true });
 
-    // A real archive dir outside the tree with a fake archive file.
-    const outsideArchive = path.join(tempDir, 'outside-archive');
-    await fs.mkdir(outsideArchive, { recursive: true });
-    await fs.writeFile(
-      path.join(outsideArchive, 'session-fake.jsonl.gz'),
-      'data',
-    );
+      // A real archive dir outside the tree with a fake archive file.
+      const outsideArchive = path.join(tempDir, 'outside-archive');
+      await fs.mkdir(outsideArchive, { recursive: true });
+      await fs.writeFile(
+        path.join(outsideArchive, 'session-fake.jsonl.gz'),
+        'data',
+      );
 
-    // Symlink archive -> outside.
-    await fs.symlink(outsideArchive, path.join(chatsDir, 'archive'), 'dir');
+      // Symlink archive -> outside.
+      await fs.symlink(outsideArchive, path.join(chatsDir, 'archive'), 'dir');
 
-    const { candidates } = await scanGlobalSessions(tempDir);
-    // The symlinked archive must not be traversed.
-    const archives = candidates.filter((c) => c.kind === 'archive');
-    expect(archives.length).toBe(0);
-  });
+      const { candidates } = await scanGlobalSessions(tempDir);
+      // The symlinked archive must not be traversed.
+      const archives = candidates.filter((c) => c.kind === 'archive');
+      expect(archives.length).toBe(0);
+    },
+  );
 
-  it('does not follow a symlinked archive file (AC-10)', async () => {
-    const hash = validHash64();
-    const chatsDir = path.join(tempDir, hash, 'chats');
-    const archiveDir = path.join(chatsDir, 'archive');
-    await fs.mkdir(archiveDir, { recursive: true });
+  it.skipIf(process.platform === 'win32')(
+    'does not follow a symlinked archive file (AC-10)',
+    async () => {
+      const hash = validHash64();
+      const chatsDir = path.join(tempDir, hash, 'chats');
+      const archiveDir = path.join(chatsDir, 'archive');
+      await fs.mkdir(archiveDir, { recursive: true });
 
-    // A target file outside.
-    const target = path.join(tempDir, 'secret.txt');
-    await fs.writeFile(target, 'secret');
+      // A target file outside.
+      const target = path.join(tempDir, 'secret.txt');
+      await fs.writeFile(target, 'secret');
 
-    // Symlink a fake archive file to the outside target.
-    await fs.symlink(target, path.join(archiveDir, 'session-fake.jsonl.gz'));
+      // Symlink a fake archive file to the outside target.
+      await fs.symlink(target, path.join(archiveDir, 'session-fake.jsonl.gz'));
 
-    const { candidates } = await scanGlobalSessions(tempDir);
-    const archives = candidates.filter((c) => c.kind === 'archive');
-    expect(archives.length).toBe(0);
-  });
+      const { candidates } = await scanGlobalSessions(tempDir);
+      const archives = candidates.filter((c) => c.kind === 'archive');
+      expect(archives.length).toBe(0);
+    },
+  );
 
   /**
    * OCR finding 38: when the archive entry is a regular file (not a

@@ -147,39 +147,42 @@ describe('runSessionCleanup — symlinked archive directory (Item 1)', () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
-  it('does not write into or follow a symlinked archive directory during sweep', async () => {
-    const hash = validHash64();
-    const chatsDir = path.join(tempDir, hash, 'chats');
-    await fs.mkdir(chatsDir, { recursive: true });
+  it.skipIf(process.platform === 'win32')(
+    'does not write into or follow a symlinked archive directory during sweep',
+    async () => {
+      const hash = validHash64();
+      const chatsDir = path.join(tempDir, hash, 'chats');
+      await fs.mkdir(chatsDir, { recursive: true });
 
-    // Create a target directory outside the tree.
-    const outsideDir = path.join(tempDir, 'outside-archive-target');
-    await fs.mkdir(outsideDir, { recursive: true });
-    await fs.writeFile(path.join(outsideDir, 'secret.txt'), 'secret');
+      // Create a target directory outside the tree.
+      const outsideDir = path.join(tempDir, 'outside-archive-target');
+      await fs.mkdir(outsideDir, { recursive: true });
+      await fs.writeFile(path.join(outsideDir, 'secret.txt'), 'secret');
 
-    // Replace chats/archive with a symlink to the outside dir.
-    const archiveDir = path.join(chatsDir, ARCHIVE_DIR_NAME);
-    await fs.symlink(outsideDir, archiveDir, 'dir');
+      // Replace chats/archive with a symlink to the outside dir.
+      const archiveDir = path.join(chatsDir, ARCHIVE_DIR_NAME);
+      await fs.symlink(outsideDir, archiveDir, 'dir');
 
-    // Create an old session that will be over-budget.
-    await createSession(chatsDir, {
-      ageMs: 2 * 24 * 60 * 60 * 1000,
-      content: 'A'.repeat(50_000),
-    });
+      // Create an old session that will be over-budget.
+      await createSession(chatsDir, {
+        ageMs: 2 * 24 * 60 * 60 * 1000,
+        content: 'A'.repeat(50_000),
+      });
 
-    const config = resolveRetentionConfig({ maxTotalSizeMB: 0.001 });
-    await runSessionCleanup({
-      globalTempDir: tempDir,
-      config,
-    });
+      const config = resolveRetentionConfig({ maxTotalSizeMB: 0.001 });
+      await runSessionCleanup({
+        globalTempDir: tempDir,
+        config,
+      });
 
-    // The outside secret file must survive — no archive was written through
-    // the symlink.
-    expect(await fileExists(path.join(outsideDir, 'secret.txt'))).toBe(true);
-    // No .gz files should have been created in the outside dir.
-    const outsideEntries = await fs.readdir(outsideDir);
-    expect(outsideEntries.some((f) => f.endsWith('.gz'))).toBe(false);
-  });
+      // The outside secret file must survive — no archive was written through
+      // the symlink.
+      expect(await fileExists(path.join(outsideDir, 'secret.txt'))).toBe(true);
+      // No .gz files should have been created in the outside dir.
+      const outsideEntries = await fs.readdir(outsideDir);
+      expect(outsideEntries.some((f) => f.endsWith('.gz'))).toBe(false);
+    },
+  );
 });
 
 describe('runSessionCleanup — post-scan file replacement (Item 4)', () => {
@@ -193,40 +196,43 @@ describe('runSessionCleanup — post-scan file replacement (Item 4)', () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
-  it('retains data when a session file is replaced with a symlink between scan and mutation', async () => {
-    const hash = validHash64();
-    const chatsDir = path.join(tempDir, hash, 'chats');
-    const { filePath } = await createSession(chatsDir, {
-      ageMs: 2 * 24 * 60 * 60 * 1000,
-      content: 'A'.repeat(50_000),
-    });
+  it.skipIf(process.platform === 'win32')(
+    'retains data when a session file is replaced with a symlink between scan and mutation',
+    async () => {
+      const hash = validHash64();
+      const chatsDir = path.join(tempDir, hash, 'chats');
+      const { filePath } = await createSession(chatsDir, {
+        ageMs: 2 * 24 * 60 * 60 * 1000,
+        content: 'A'.repeat(50_000),
+      });
 
-    // Replace the file with a symlink to an outside file right before cleanup.
-    const outsideTarget = path.join(tempDir, 'outside-target.jsonl');
-    await fs.writeFile(
-      outsideTarget,
-      '{"type":"session_start","payload":{"sessionId":"evil"}}\n',
-    );
-    await fs.unlink(filePath);
-    await fs.symlink(outsideTarget, filePath);
+      // Replace the file with a symlink to an outside file right before cleanup.
+      const outsideTarget = path.join(tempDir, 'outside-target.jsonl');
+      await fs.writeFile(
+        outsideTarget,
+        '{"type":"session_start","payload":{"sessionId":"evil"}}\n',
+      );
+      await fs.unlink(filePath);
+      await fs.symlink(outsideTarget, filePath);
 
-    const config = resolveRetentionConfig({ maxTotalSizeMB: 0.001 });
-    await runSessionCleanup({
-      globalTempDir: tempDir,
-      config,
-    });
+      const config = resolveRetentionConfig({ maxTotalSizeMB: 0.001 });
+      await runSessionCleanup({
+        globalTempDir: tempDir,
+        config,
+      });
 
-    // The symlinked file must survive — revalidation caught the replacement.
-    expect(await fileExists(filePath)).toBe(true);
-    expect(await fileExists(outsideTarget)).toBe(true);
-    // No archives should have been created from the symlink.
-    const archiveDir = path.join(chatsDir, ARCHIVE_DIR_NAME);
-    let archiveEntries: string[] = [];
-    if (await fileExists(archiveDir)) {
-      archiveEntries = await fs.readdir(archiveDir);
-    }
-    expect(archiveEntries.some((f) => f.endsWith('.gz'))).toBe(false);
-  });
+      // The symlinked file must survive — revalidation caught the replacement.
+      expect(await fileExists(filePath)).toBe(true);
+      expect(await fileExists(outsideTarget)).toBe(true);
+      // No archives should have been created from the symlink.
+      const archiveDir = path.join(chatsDir, ARCHIVE_DIR_NAME);
+      let archiveEntries: string[] = [];
+      if (await fileExists(archiveDir)) {
+        archiveEntries = await fs.readdir(archiveDir);
+      }
+      expect(archiveEntries.some((f) => f.endsWith('.gz'))).toBe(false);
+    },
+  );
 });
 
 describe('runSessionCleanup — exact temp grammar cleanup (Item 8)', () => {

@@ -58,61 +58,70 @@ describe('compressToArchive — symlink safety (Item 1)', () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
-  it('rejects a symlinked archive directory', async () => {
-    const chatsDir = path.join(tempDir, 'chats');
-    const archiveDir = path.join(chatsDir, 'archive');
-    await fs.mkdir(chatsDir, { recursive: true });
+  it.skipIf(process.platform === 'win32')(
+    'rejects a symlinked archive directory',
+    async () => {
+      const chatsDir = path.join(tempDir, 'chats');
+      const archiveDir = path.join(chatsDir, 'archive');
+      await fs.mkdir(chatsDir, { recursive: true });
 
-    // Create an outside directory and symlink archive → it.
-    const outsideDir = path.join(tempDir, 'outside');
-    await fs.mkdir(outsideDir, { recursive: true });
-    await fs.symlink(outsideDir, archiveDir, 'dir');
+      // Create an outside directory and symlink archive → it.
+      const outsideDir = path.join(tempDir, 'outside');
+      await fs.mkdir(outsideDir, { recursive: true });
+      await fs.symlink(outsideDir, archiveDir, 'dir');
 
-    const sourcePath = path.join(chatsDir, 'session-test.jsonl');
-    await fs.writeFile(sourcePath, '{"type":"session_start","payload":{}}\n');
+      const sourcePath = path.join(chatsDir, 'session-test.jsonl');
+      await fs.writeFile(sourcePath, '{"type":"session_start","payload":{}}\n');
 
-    const result = await compressToArchive(sourcePath, archiveDir);
-    expect(result.success).toBe(false);
-    expect(result.archivePath).toBeNull();
-  });
+      const result = await compressToArchive(sourcePath, archiveDir);
+      expect(result.success).toBe(false);
+      expect(result.archivePath).toBeNull();
+    },
+  );
 
-  it('rejects a symlinked source file', async () => {
-    const chatsDir = path.join(tempDir, 'chats');
-    const archiveDir = path.join(chatsDir, 'archive');
-    await fs.mkdir(chatsDir, { recursive: true });
+  it.skipIf(process.platform === 'win32')(
+    'rejects a symlinked source file',
+    async () => {
+      const chatsDir = path.join(tempDir, 'chats');
+      const archiveDir = path.join(chatsDir, 'archive');
+      await fs.mkdir(chatsDir, { recursive: true });
 
-    // Create a real target file and symlink the source to it.
-    const targetPath = path.join(tempDir, 'real-target.jsonl');
-    await fs.writeFile(targetPath, '{"type":"session_start","payload":{}}\n');
-    const sourcePath = path.join(chatsDir, 'session-symlinked.jsonl');
-    await fs.symlink(targetPath, sourcePath);
+      // Create a real target file and symlink the source to it.
+      const targetPath = path.join(tempDir, 'real-target.jsonl');
+      await fs.writeFile(targetPath, '{"type":"session_start","payload":{}}\n');
+      const sourcePath = path.join(chatsDir, 'session-symlinked.jsonl');
+      await fs.symlink(targetPath, sourcePath);
 
-    const result = await compressToArchive(sourcePath, archiveDir);
-    expect(result.success).toBe(false);
-  });
+      const result = await compressToArchive(sourcePath, archiveDir);
+      expect(result.success).toBe(false);
+    },
+  );
 
-  it('rejects existing-archive reuse through a symlinked archive directory', async () => {
-    const realArchiveDir = path.join(tempDir, 'real-archive');
-    await fs.mkdir(realArchiveDir, { recursive: true });
+  it.skipIf(process.platform === 'win32')(
+    'rejects existing-archive reuse through a symlinked archive directory',
+    async () => {
+      const realArchiveDir = path.join(tempDir, 'real-archive');
+      await fs.mkdir(realArchiveDir, { recursive: true });
 
-    // Create a valid source and archive it into the real directory first.
-    const sourcePath = path.join(tempDir, 'session-reuse-symlink.jsonl');
-    const content = '{"type":"session_start","payload":{}}\n'.repeat(50);
-    await fs.writeFile(sourcePath, content);
-    const result1 = await compressToArchive(sourcePath, realArchiveDir);
-    expect(result1.success).toBe(true);
+      // Create a valid source and archive it into the real directory first.
+      const sourcePath = path.join(tempDir, 'session-reuse-symlink.jsonl');
+      const content = '{"type":"session_start","payload":{}}\n'.repeat(50);
+      await fs.writeFile(sourcePath, content);
+      const result1 = await compressToArchive(sourcePath, realArchiveDir);
+      expect(result1.success).toBe(true);
 
-    // Symlink a new archiveDir name to the real directory.
-    const symlinkArchiveDir = path.join(tempDir, 'symlink-archive');
-    await fs.symlink(realArchiveDir, symlinkArchiveDir, 'dir');
+      // Symlink a new archiveDir name to the real directory.
+      const symlinkArchiveDir = path.join(tempDir, 'symlink-archive');
+      await fs.symlink(realArchiveDir, symlinkArchiveDir, 'dir');
 
-    // The final archive path resolves through the symlink to the real
-    // existing archive.  The archiveDir identity check must reject the
-    // symlink BEFORE attempting reuse so the real directory is never
-    // mutated through the symlink.
-    const result2 = await compressToArchive(sourcePath, symlinkArchiveDir);
-    expect(result2.success).toBe(false);
-  });
+      // The final archive path resolves through the symlink to the real
+      // existing archive.  The archiveDir identity check must reject the
+      // symlink BEFORE attempting reuse so the real directory is never
+      // mutated through the symlink.
+      const result2 = await compressToArchive(sourcePath, symlinkArchiveDir);
+      expect(result2.success).toBe(false);
+    },
+  );
 });
 
 describe('cleanupStaleTempArchives — exact grammar (Item 8)', () => {
@@ -179,28 +188,31 @@ describe('cleanupStaleTempArchives — exact grammar (Item 8)', () => {
     expect(await fileExists(youngTemp)).toBe(true);
   });
 
-  it('uses lstat — does not follow symlinked temp files', async () => {
-    // Create a target file outside the archive dir.
-    const target = path.join(tempDir, 'target.txt');
-    await fs.writeFile(target, 'target');
+  it.skipIf(process.platform === 'win32')(
+    'uses lstat — does not follow symlinked temp files',
+    async () => {
+      // Create a target file outside the archive dir.
+      const target = path.join(tempDir, 'target.txt');
+      await fs.writeFile(target, 'target');
 
-    // Symlink that looks like a valid temp file.
-    const symlinkTemp = path.join(
-      archiveDir,
-      'session-2026-01-01T00-00-00-abc.jsonl.550e8400-e29b-41d4-a716-446655440000.gz.tmp',
-    );
-    await fs.symlink(target, symlinkTemp);
+      // Symlink that looks like a valid temp file.
+      const symlinkTemp = path.join(
+        archiveDir,
+        'session-2026-01-01T00-00-00-abc.jsonl.550e8400-e29b-41d4-a716-446655440000.gz.tmp',
+      );
+      await fs.symlink(target, symlinkTemp);
 
-    // Make it old.
-    const oldTime = new Date(Date.now() - 120 * 1000);
-    await fs.utimes(symlinkTemp, oldTime, oldTime).catch(() => {});
+      // Make it old.
+      const oldTime = new Date(Date.now() - 120 * 1000);
+      await fs.utimes(symlinkTemp, oldTime, oldTime).catch(() => {});
 
-    const removed = await cleanupStaleTempArchives(archiveDir, 60 * 1000);
+      const removed = await cleanupStaleTempArchives(archiveDir, 60 * 1000);
 
-    // Symlink temp should NOT be removed (lstat rejects it).
-    expect(removed).toBe(0);
-    expect(await fileExists(target)).toBe(true);
-  });
+      // Symlink temp should NOT be removed (lstat rejects it).
+      expect(removed).toBe(0);
+      expect(await fileExists(target)).toBe(true);
+    },
+  );
 });
 
 describe('compressToArchive — fsync directory durability (Item 6)', () => {

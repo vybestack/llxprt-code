@@ -79,11 +79,39 @@ export interface JanitorLeaseHandle {
 }
 
 /**
+ * Result of acquiring the per-lease transition claim.
+ *
+ * `canProceed` indicates whether the caller may run its guarded operation.
+ * `ownsClaim` indicates whether the caller created a real on-disk claim that
+ * it MUST release.  When the lease vanishes (ENOENT) the caller may proceed
+ * (nothing to serialize against) but owns no claim, so it must NOT unlink the
+ * claim path — doing so could remove a contender's subsequently-created claim.
+ */
+interface TransitionClaimResult {
+  readonly canProceed: boolean;
+  readonly ownsClaim: boolean;
+}
+
+/**
  * The single global janitor lease manager.
  */
 export class JanitorLease {
   private static heartbeatTimer: ReturnType<typeof setInterval> | undefined;
   private static inFlightHeartbeat: Promise<void> | undefined;
+
+  /**
+   * Test-only hook invoked in `tryStaleTakeover` after the staleness
+   * pre-check passes but before the transition claim is acquired.  Lets
+   * tests deterministically simulate a lease vanishing between the
+   * pre-check and the claim (ENOENT race).  Mirrors the test-seam pattern in
+   * `sessionJanitor.ts`.
+   */
+  private static preClaimHook: (() => Promise<void>) | null | undefined;
+
+  /** Install or clear the pre-claim test hook. */
+  static setPreClaimHookForTest(fn: (() => Promise<void>) | null): void {
+    JanitorLease.preClaimHook = fn;
+  }
 
   /**
    * Attempt to acquire the global janitor lease.
@@ -139,6 +167,23 @@ export class JanitorLease {
       await fd.writeFile(JSON.stringify(record), 'utf-8');
       await fd.sync();
     } catch (error: unknown) {
+      // Close the descriptor before unlinking: Windows refuses to remove a
+      // file whose handle is still open, so cleanup must close first.  If
+      // close itself fails, surface both the original I/O error and the
+      // close failure (AggregateError) rather than silently claiming a safe
+      // close, and skip unlink since the handle may still be open.
+      if (fd) {
+        try {
+          await fd.close();
+        } catch (closeError: unknown) {
+          fd = undefined;
+          throw new AggregateError(
+            [error, closeError],
+            'tryCreateLease: descriptor close failed during cleanup',
+          );
+        }
+        fd = undefined;
+      }
       await safeUnlink(tempPath);
       // EEXIST (uuid collision) is the only benign retryable case.
       if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false;
@@ -192,8 +237,14 @@ export class JanitorLease {
       return null;
     }
 
+    // Test seam for deterministic race injection between pre-check and claim.
+    if (JanitorLease.preClaimHook) {
+      await JanitorLease.preClaimHook();
+    }
+
     // Acquire the transition claim to serialize the mutation.
-    if (!(await JanitorLease.acquireTransitionClaim(leasePath))) {
+    const claim = await JanitorLease.acquireTransitionClaim(leasePath);
+    if (!claim.canProceed) {
       return null; // Another transition is in progress — busy.
     }
 
@@ -232,7 +283,11 @@ export class JanitorLease {
         if (code !== 'ENOENT') return null;
       }
     } finally {
-      await JanitorLease.releaseTransitionClaim(leasePath);
+      // Release only the claim we actually own, so a vanished-lease (ENOENT)
+      // path never unlinks a contender's subsequently-created claim.
+      if (claim.ownsClaim) {
+        await JanitorLease.releaseTransitionClaim(leasePath);
+      }
     }
 
     // Create fresh lease (outside the claim — racing acquisition may win).
@@ -282,7 +337,8 @@ export class JanitorLease {
     leasePath: string,
     ownerToken: string,
   ): Promise<void> {
-    if (!(await JanitorLease.acquireTransitionClaim(leasePath))) {
+    const claim = await JanitorLease.acquireTransitionClaim(leasePath);
+    if (!claim.canProceed) {
       return; // Another transition in progress — skip heartbeat.
     }
     try {
@@ -324,7 +380,9 @@ export class JanitorLease {
         await fd?.close().catch(() => {});
       }
     } finally {
-      await JanitorLease.releaseTransitionClaim(leasePath);
+      if (claim.ownsClaim) {
+        await JanitorLease.releaseTransitionClaim(leasePath);
+      }
     }
   }
 
@@ -346,7 +404,8 @@ export class JanitorLease {
       JanitorLease.inFlightHeartbeat = undefined;
     }
 
-    if (!(await JanitorLease.acquireTransitionClaim(leasePath))) {
+    const claim = await JanitorLease.acquireTransitionClaim(leasePath);
+    if (!claim.canProceed) {
       return; // Can't acquire claim — best-effort, leave lease in place.
     }
     try {
@@ -375,7 +434,9 @@ export class JanitorLease {
     } catch {
       // Best-effort release.
     } finally {
-      await JanitorLease.releaseTransitionClaim(leasePath);
+      if (claim.ownsClaim) {
+        await JanitorLease.releaseTransitionClaim(leasePath);
+      }
     }
   }
 
@@ -393,22 +454,26 @@ export class JanitorLease {
    * current lease inode to the well-known claim path.
    *
    * - `link(leasePath, claimPath)` succeeds for exactly one contender.
-   * - ENOENT means the lease does not exist (no inode to claim — proceed).
+   * - ENOENT means the lease does not exist (no inode to claim — proceed
+   *   without owning a claim).
    * - EEXIST means another contender owns the claim — try conservative reclaim.
    * - A crashed claim is a hard link, so removing it only decrements a link
    *   count and cannot remove or replace the live lease.
    */
   private static async acquireTransitionClaim(
     leasePath: string,
-  ): Promise<boolean> {
+  ): Promise<TransitionClaimResult> {
     const claimPath = JanitorLease.getClaimPath(leasePath);
     try {
       await fsp.link(leasePath, claimPath);
-      return true; // Claimed the lease inode.
+      return { canProceed: true, ownsClaim: true }; // Claimed the lease inode.
     } catch (error: unknown) {
       const code = (error as NodeJS.ErrnoException).code;
-      if (code === 'ENOENT') return true; // No lease — no claim needed.
-      if (code !== 'EEXIST') return false;
+      // No lease exists — nothing to serialize against.  Proceed without a
+      // claim so the caller can try to create a fresh lease, but DO NOT
+      // release a claim we never created.
+      if (code === 'ENOENT') return { canProceed: true, ownsClaim: false };
+      if (code !== 'EEXIST') return { canProceed: false, ownsClaim: false };
     }
     return JanitorLease.tryReclaimClaim(leasePath);
   }
@@ -422,34 +487,36 @@ export class JanitorLease {
    * count.  A live claim (fresh heartbeat or alive PID within bound) is
    * NEVER removed.
    */
-  private static async tryReclaimClaim(leasePath: string): Promise<boolean> {
+  private static async tryReclaimClaim(
+    leasePath: string,
+  ): Promise<TransitionClaimResult> {
     const claimPath = JanitorLease.getClaimPath(leasePath);
 
     let claimContent: string | null;
     try {
       claimContent = await fsp.readFile(claimPath, 'utf-8');
     } catch {
-      return false; // Can't read — can't determine staleness.
+      return { canProceed: false, ownsClaim: false }; // Can't read — can't determine staleness.
     }
 
     if ((await checkLeaseStaleness(claimContent, claimPath)) !== 'stale') {
-      return false; // Live claim — never remove.
+      return { canProceed: false, ownsClaim: false }; // Live claim — never remove.
     }
 
     try {
       await fsp.unlink(claimPath);
     } catch {
-      return false;
+      return { canProceed: false, ownsClaim: false };
     }
 
     // Retry the claim.  The lease inode may have changed during recovery.
     try {
       await fsp.link(leasePath, claimPath);
-      return true;
+      return { canProceed: true, ownsClaim: true };
     } catch (error: unknown) {
       const code = (error as NodeJS.ErrnoException).code;
-      if (code === 'ENOENT') return true; // Lease vanished — no claim needed.
-      return false;
+      if (code === 'ENOENT') return { canProceed: true, ownsClaim: false }; // Lease vanished.
+      return { canProceed: false, ownsClaim: false };
     }
   }
 
