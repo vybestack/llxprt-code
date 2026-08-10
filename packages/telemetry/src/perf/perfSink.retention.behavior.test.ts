@@ -272,11 +272,11 @@ describe('PerfSink without retention — backward compatible', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Concurrent appends: documented overshoot then convergence
+// Manual sweep convergence after exceeding retention caps
 // ---------------------------------------------------------------------------
 
-describe('PerfSink + retention — concurrent overshoot (AC-7)', () => {
-  it('concurrent appends overshoot, but next sweep converges', async () => {
+describe('PerfSink + retention — manual sweep convergence (AC-7)', () => {
+  it('a manual sweep converges after sequential setup exceeds the cap', async () => {
     const retention = new PerfRetention({
       dir,
       runUuid: '00000000-0000-4000-8000-000000000007',
@@ -310,8 +310,7 @@ describe('PerfSink + retention — concurrent overshoot (AC-7)', () => {
 
     const jsonlFiles = fs.readdirSync(dir).filter((f) => f.endsWith('.jsonl'));
 
-    // The overshoot is documented — not zero loss. But after the sweep,
-    // the total should be at most maxFiles.
+    // The temporary over-cap state converges after the sweep.
     expect(jsonlFiles.length).toBeLessThanOrEqual(2);
 
     await sink.dispose();

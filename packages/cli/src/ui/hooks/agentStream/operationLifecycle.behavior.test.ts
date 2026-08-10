@@ -116,18 +116,19 @@ function createRegistry(
   sink: PerfSink;
   retention: PerfRetention;
 } {
+  const runUuid = crypto.randomUUID();
   const retention =
     overrides.retention ??
     new PerfRetention({
       dir,
-      runUuid: crypto.randomUUID(),
+      runUuid,
       maintenanceIntervalMs: 60_000,
     });
   const sink =
     overrides.sink ??
     new PerfSink({
       dir,
-      runUuid: crypto.randomUUID(),
+      runUuid,
       retention,
     });
   const registry = new OperationLifecycleRegistry({
@@ -166,7 +167,7 @@ async function startAndCreate(
     overrides.sink ??
     new PerfSink({
       dir,
-      runUuid: crypto.randomUUID(),
+      runUuid,
       retention,
     });
   await sink.start();
@@ -686,7 +687,7 @@ describe('OperationLifecycleRegistry — error policy', () => {
     });
     const sink = new PerfSink({
       dir,
-      runUuid: crypto.randomUUID(),
+      runUuid,
       retention,
       fs: failingFs,
     });
@@ -759,7 +760,7 @@ describe('OperationLifecycleRegistry — drain/queueWrite internal error (P06-D8
     });
     const sink = new PerfSink({
       dir,
-      runUuid: crypto.randomUUID(),
+      runUuid,
       retention,
       fs: failingFs,
     });
@@ -790,7 +791,7 @@ describe('OperationLifecycleRegistry — drain/queueWrite internal error (P06-D8
     });
     const sink = new PerfSink({
       dir,
-      runUuid: crypto.randomUUID(),
+      runUuid,
       retention,
       fs: failingFs,
     });
@@ -828,7 +829,7 @@ describe('OperationLifecycleRegistry — drain/queueWrite internal error (P06-D8
     });
     const sink = new PerfSink({
       dir,
-      runUuid: crypto.randomUUID(),
+      runUuid,
       retention,
       fs: failingFs,
     });

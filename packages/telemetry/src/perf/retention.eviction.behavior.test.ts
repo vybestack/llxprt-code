@@ -154,7 +154,7 @@ describe('PerfRetention claim handling in retention (AC-7, D3)', () => {
     await retention.maintain(now);
 
     const remaining = listFiles();
-    expect(remaining.length).toBeLessThanOrEqual(1);
+    expect(remaining).toEqual(['perf-20260101-a.jsonl']);
   });
 
   it('a fresh claim is never evicted', async () => {
@@ -163,7 +163,7 @@ describe('PerfRetention claim handling in retention (AC-7, D3)', () => {
 
     const retention = new PerfRetention({
       dir,
-      runUuid: '00000000-0000-4000-8000-00000000000e',
+      runUuid: '00000000-0000-4000-8000-00000000000d',
       maxFiles: 1,
       maxBytes: 1,
     });
@@ -213,7 +213,7 @@ describe('PerfRetention claim handling in retention (AC-7, D3)', () => {
 
     const retention = new PerfRetention({
       dir,
-      runUuid: '00000000-0000-4000-8000-000000000010',
+      runUuid: '00000000-0000-4000-8000-000000000011',
       maxFiles: 1,
       maxBytes: 1,
     });

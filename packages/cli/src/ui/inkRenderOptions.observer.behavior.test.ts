@@ -58,6 +58,21 @@ describe('interactive stdio — lazy cache + stdout observer', () => {
     stdioB.stdout.write('');
     expect(second).toBe(1);
     expect(first).toBe(1);
+
+    stdioA.stdout.write('');
+    expect(second).toBe(2);
+    expect(first).toBe(1);
+  });
+
+  it('clearing the observer detaches an already-built stdout proxy', () => {
+    let count = 0;
+    setInteractiveStdoutObserver({ onWrite: () => count++ });
+    const { stdout } = getInteractiveStdio();
+
+    setInteractiveStdoutObserver(null);
+    stdout.write('');
+
+    expect(count).toBe(0);
   });
 
   it('setting the same stdout observer reuses the cached instance', () => {
@@ -102,11 +117,17 @@ describe('interactive render observer — onRender wiring', () => {
     expect(captured).toBe(7.5);
   });
 
-  it('clearing the render observer removes the onRender wiring', () => {
-    setInteractiveRenderObserver({ onRender: () => {} });
+  it('clearing the render observer detaches existing options and new wiring', () => {
+    let count = 0;
+    setInteractiveRenderObserver({ onRender: () => count++ });
+    const activeOptions = inkRenderOptions(baseConfig, baseSettings);
+
     setInteractiveRenderObserver(null);
-    const opts = inkRenderOptions(baseConfig, baseSettings);
-    expect(opts.onRender).toBeUndefined();
+    activeOptions.onRender?.({ renderTime: 1 });
+    const clearedOptions = inkRenderOptions(baseConfig, baseSettings);
+
+    expect(count).toBe(0);
+    expect(clearedOptions.onRender).toBeUndefined();
   });
 
   it('render passes are counted distinctly from stdout write calls', () => {

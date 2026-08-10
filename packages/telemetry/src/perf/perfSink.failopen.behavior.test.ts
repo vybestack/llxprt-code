@@ -290,6 +290,7 @@ describe('PerfSink failure recovery (AC-8)', () => {
     await sink.write(operationRecord());
     await sink.dispose();
 
+    expect(openAttempts).toBe(2);
     const files = fs.readdirSync(dir);
     expect(files).toHaveLength(1);
   });

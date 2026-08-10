@@ -44,6 +44,11 @@ type InkRenderOptionsSettings = {
 // separate direct createInkStdio() call stays observer-free and uncounted.
 let interactiveStdio: ReturnType<typeof createInkStdio> | null = null;
 let interactiveStdoutObserver: StdoutWriteObserver | null = null;
+const forwardingStdoutObserver: StdoutWriteObserver = {
+  onWrite(encodedBytes, syncDurationMs): void {
+    interactiveStdoutObserver?.onWrite(encodedBytes, syncDurationMs);
+  },
+};
 
 // --- Optional render observer (P05) ---
 let interactiveRenderObserver: InteractiveRenderObserver | null = null;
@@ -74,7 +79,7 @@ export function setInteractiveStdoutObserver(
  */
 export function getInteractiveStdio(): ReturnType<typeof createInkStdio> {
   return (interactiveStdio ??= createInkStdio(
-    interactiveStdoutObserver ?? undefined,
+    interactiveStdoutObserver === null ? undefined : forwardingStdoutObserver,
   ));
 }
 
@@ -133,14 +138,12 @@ export const inkRenderOptions = (
     incrementalRendering,
   };
 
-  // Render observer is wired only when installed (default-off). The observer
-  // value is captured into a local closure at options-construction time; a
-  // later setInteractiveRenderObserver(null) does NOT retroactively clear an
-  // already-built options object. Rebuild the options to pick up a change.
+  // Render observer is wired only when installed (default-off). The callback
+  // resolves the active observer at invocation time so disposal detaches
+  // already-built render options.
   if (interactiveRenderObserver !== null) {
-    const renderObserver = interactiveRenderObserver;
     options.onRender = (metrics: InkRenderMetrics) => {
-      renderObserver.onRender(metrics.renderTime);
+      interactiveRenderObserver?.onRender(metrics.renderTime);
     };
   }
 
