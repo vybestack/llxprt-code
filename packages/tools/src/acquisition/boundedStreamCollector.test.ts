@@ -124,6 +124,11 @@ describe('ByteBudget - absolute hard-max invariants (issue #3200 finding 10)', (
     expect(budget.bytes).toBe(ACQUISITION_HARD_MAX_BYTES);
   });
 
+  it('normalizes an invalid custom hard max before resolving -1', () => {
+    const budget = resolveByteBudgetFromSetting(-1, Infinity);
+    expect(budget.bytes).toBe(ACQUISITION_HARD_MAX_BYTES);
+  });
+
   it('resolveByteBudgetFromSetting falls back to default for undefined', () => {
     const budget = resolveByteBudgetFromSetting(undefined);
     expect(budget.bytes).toBe(DEFAULT_ACQUISITION_BUDGET_BYTES);

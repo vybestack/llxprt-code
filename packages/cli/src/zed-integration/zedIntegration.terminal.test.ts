@@ -159,6 +159,42 @@ describe('Zed terminal execution', () => {
     expect(connection.releaseCalls).toBe(1);
   });
 
+  it('retries after a transient terminal output poll failure', async () => {
+    const connection = new RecordingConnection();
+    connection.delayTerminalExit();
+    connection.setTerminalOutput('recovered output\n');
+    connection.failNextTerminalOutputPoll();
+    const terminals = terminalManager(connection);
+    let resolveOutput: () => void = () => undefined;
+    const sawOutput = new Promise<void>((resolve) => {
+      resolveOutput = resolve;
+    });
+
+    const execution = terminals.executeShellCommand(
+      preparedEcho,
+      '/project',
+      (event) => {
+        if (
+          event.type === 'data' &&
+          typeof event.chunk === 'string' &&
+          event.chunk.includes('recovered output')
+        ) {
+          resolveOutput();
+        }
+      },
+      new AbortController().signal,
+    );
+
+    await connection.waitForTerminalProcessCreated();
+    await sawOutput;
+    connection.resolveDelayedTerminalExit();
+    const result = await execution;
+
+    expect(result.output).toBe('recovered output\n');
+    expect(connection.killCalls).toBe(0);
+    expect(connection.releaseCalls).toBe(1);
+  });
+
   it('correlates a raw command that already ends with a semicolon', async () => {
     const connection = new RecordingConnection();
     const terminals = terminalManager(connection);
@@ -538,10 +574,12 @@ describe('Zed terminal byte-budget enforcement (issue #3200 finding 4)', () => {
     connection.resolveDelayedTerminalExit();
     const result = await execution;
 
-    // Quantifiable loss: observed (the big peak) exceeds retained (the tail).
+    // Quantifiable lower bound: observed (the big peak) exceeds retained (the
+    // tail), but the peer may have evicted bytes before they were observed.
     expect(result.outputTruncation).toBeDefined();
     expect(result.outputTruncation?.truncated).toBe(true);
     expect(result.outputTruncation?.omittedBytes).toBeGreaterThan(0);
+    expect(result.outputTruncation?.omittedBytesExact).toBe(false);
     expect(result.outputTruncation?.budgetBytes).toBe(budget);
     // Exactly one durable discontinuity notice is streamed and retained.
     expect(

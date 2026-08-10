@@ -195,7 +195,7 @@ These prevent a single tool call from flooding the context. This matters more th
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------- | --------- |
 | `shell-output-retention-max-bytes` | Shell bytes retained in memory while a command runs; excess is represented by bounded head/tail output and metadata | `4194304` |
 
-This byte budget is enforced while output is acquired, before the separate model-facing token limiter. Commands continue to drain and complete after the budget fills. Values are clamped to a minimum of 1024 bytes and a hard maximum of 64 MiB; `-1` selects that finite hard maximum rather than disabling the bound.
+This byte budget is enforced while output is acquired, before the separate model-facing token limiter. Commands continue to drain and complete after the budget fills. For PTY commands, the same budget also constrains in-memory terminal display scrollback when its byte-derived line limit is lower than `ptyScrollbackLimit`. Values are clamped to a minimum of 1024 bytes and a hard maximum of 64 MiB; `-1` selects that finite hard maximum rather than disabling the bound.
 
 ### Timeouts
 

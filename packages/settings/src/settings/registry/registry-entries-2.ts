@@ -455,7 +455,7 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
     key: 'shell-output-retention-max-bytes',
     category: 'cli-behavior',
     description:
-      'Maximum bytes of shell output retained in memory during acquisition. Output beyond this is head/tail truncated with a visible notice. Separate from model token limits.',
+      'Maximum bytes of shell output retained in memory during acquisition. Output beyond this is head/tail truncated with a visible notice. Also constrains PTY display scrollback when its byte-derived limit is lower than ptyScrollbackLimit. Separate from model token limits.',
     type: 'number',
     persistToProfile: true,
     validate: (value: unknown): ValidationResult => {

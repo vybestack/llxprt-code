@@ -14,6 +14,7 @@ import type {
   ShellExecutionResult,
 } from './shellExecutionTypes.js';
 import type { ExitGuard } from './shellExitGuard.js';
+import { decodeClixmlStderr } from './shellJobTail.js';
 import { stripAnsiIfPresent, MAX_SNIFF_SIZE } from './shellOutputUtils.js';
 import { BoundedCombinedCollector } from '@vybestack/llxprt-code-tools/acquisition.js';
 import type { ByteBudget } from '@vybestack/llxprt-code-tools/acquisition.js';
@@ -151,6 +152,16 @@ export function cleanupCpResources(
   return { finalBuffer };
 }
 
+function combineOutputSections(first: string, second: string): string {
+  if (first === '') {
+    return second;
+  }
+  if (second === '') {
+    return first;
+  }
+  return first + (first.endsWith('\n') ? '' : '\n') + second;
+}
+
 /** Build the ShellExecutionResult for a child_process exit. */
 export function buildCpExitResult(
   state: CpExecState,
@@ -162,15 +173,23 @@ export function buildCpExitResult(
   const rawMetadata = rawResult?.metadata;
 
   let combinedOutput = '';
-  if (rawResult?.metadata.truncated === true) {
-    combinedOutput = stripAnsiIfPresent(rawResult.text);
-  } else if (rawResult !== undefined) {
+  if (rawResult !== undefined) {
     const stdout = stripAnsiIfPresent(rawResult.stdoutText);
-    const stderr = stripAnsiIfPresent(rawResult.stderrText);
-    const separator = stdout.endsWith('\n') ? '' : '\n';
-    combinedOutput = stdout;
-    if (stderr !== '') {
-      combinedOutput += (stdout !== '' ? separator : '') + stderr;
+    const retainedStderr = rawResult.stderrText;
+    const decodedStderr = state.isWindows
+      ? decodeClixmlStderr(retainedStderr)
+      : retainedStderr;
+    const stderr = stripAnsiIfPresent(decodedStderr);
+    const sourceOutput = combineOutputSections(stdout, stderr);
+    const decodedClixml = decodedStderr !== retainedStderr;
+
+    if (rawResult.metadata.truncated && !decodedClixml) {
+      combinedOutput = stripAnsiIfPresent(rawResult.text);
+    } else {
+      combinedOutput = combineOutputSections(
+        sourceOutput,
+        rawResult.metadata.truncated ? (rawResult.omissionNotice ?? '') : '',
+      );
     }
   }
 

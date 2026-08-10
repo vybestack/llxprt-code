@@ -483,6 +483,45 @@ describe('ShellExecutionService child_process fallback', () => {
       );
     });
 
+    it('decodes PowerShell CLIXML stderr on Windows', async () => {
+      mockPlatform.mockReturnValue('win32');
+      stubProcessPlatform('win32');
+      const clixml =
+        '#< CLIXML\r\n<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04"><S S="Error">kaboom_x000D__x000A_</S></Objs>';
+
+      const { result } = await simulateExecution('Write-Error kaboom', (cp) => {
+        cp.stderr?.emit('data', Buffer.from(clixml));
+        cp.emit('exit', 1, null);
+      });
+
+      expect(result.output).toBe('kaboom');
+      expect(result.output).not.toContain('#< CLIXML');
+    });
+
+    it('decodes retained CLIXML and reports truncation once', async () => {
+      mockPlatform.mockReturnValue('win32');
+      stubProcessPlatform('win32');
+      const clixml =
+        '#< CLIXML\r\n<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04"><S S="Error">kaboom_x000D__x000A_</S></Objs>';
+
+      const { result } = await simulateExecution(
+        'Write-Error kaboom',
+        (cp) => {
+          cp.stdout?.emit('data', Buffer.from('x'.repeat(1600)));
+          cp.stderr?.emit('data', Buffer.from(clixml));
+          cp.emit('exit', 1, null);
+        },
+        true,
+        { ...defaultShellConfig, outputRetentionMaxBytes: 1024 },
+      );
+
+      expect(result.output).toContain('kaboom');
+      expect(result.output).not.toContain('#< CLIXML');
+      expect(result.output.match(/LLXPRT output truncated/g)).toHaveLength(1);
+      expect(result.outputTruncation?.truncated).toBe(true);
+      expect(result.outputTruncation?.retainedBytes).toBe(1024);
+    });
+
     it('should use bash and detached process group on Linux', async () => {
       mockPlatform.mockReturnValue('linux');
       await simulateExecution('ls "foo bar"', (cp) => cp.emit('exit', 0, null));

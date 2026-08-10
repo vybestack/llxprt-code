@@ -81,15 +81,15 @@ function longestSuffixPrefixOverlap(pattern: string, text: string): number {
  * bounded, truly-linear (KMP) overlap search (issue #3200 finding 6).
  *
  * - **Clean append** (current starts with previous): O(previous.length) slice.
- * - **Truncated / evicted**: a bounded overlap search (capped at
+ * - **Non-prefix snapshot**: a bounded overlap search (capped at
  *   {@link OVERLAP_SEARCH_BOUND}) finds the longest suffix of `previous` that
  *   is a prefix of `current` in O(bound) time via the KMP prefix function. If
- *   found, the delta skips the overlap. If no overlap is found within the
- *   bound, a {@link TERMINAL_DISCONTINUITY_NOTICE} is emitted instead of
- *   silently replaying the entire window. If the true overlap extends beyond
- *   the bounded search operands, content outside the detected overlap may be
- *   replayed; the discontinuity flag makes that uncertainty explicit.
- * - **Non-truncated, non-prefix** (output reset): the full current is the delta.
+ *   found, the delta skips the overlap. For truncated snapshots with no overlap,
+ *   a {@link TERMINAL_DISCONTINUITY_NOTICE} is emitted instead of silently
+ *   replaying the entire window. If the true overlap extends beyond the bounded
+ *   search operands, content outside the detected overlap may be replayed; the
+ *   discontinuity flag makes that uncertainty explicit for truncated output.
+ *   A non-truncated snapshot with no overlap is treated as a reset.
  */
 export function computeBoundedDelta(
   previous: string,
@@ -105,13 +105,9 @@ export function computeBoundedDelta(
     return { delta: current.slice(previous.length), discontinuity: false };
   }
 
-  if (!truncated) {
-    // No truncation flag — the peer reset/replaced the output entirely.
-    return { delta: current, discontinuity: false };
-  }
-
-  // Truncated: bounded KMP overlap search for the longest suffix of `previous`
-  // that is a prefix of `current`. Both operands are capped to the bound.
+  // The snapshot is not a clean append. Search a bounded suffix/prefix window
+  // even when the peer did not report truncation so screen rewrites do not
+  // replay bytes that are still present at the snapshot boundary.
   const maxK = Math.min(previous.length, current.length, OVERLAP_SEARCH_BOUND);
   const prevTail = previous.slice(previous.length - maxK);
   const currHead = current.slice(0, maxK);
@@ -120,8 +116,13 @@ export function computeBoundedDelta(
   if (overlap > 0) {
     return {
       delta: current.slice(overlap),
-      discontinuity: overlap < previous.length,
+      discontinuity: truncated && overlap < previous.length,
     };
+  }
+
+  if (!truncated) {
+    // No truncation flag and no overlap: the peer replaced the snapshot.
+    return { delta: current, discontinuity: false };
   }
 
   // No overlap found within the bounded search — represent the discontinuity

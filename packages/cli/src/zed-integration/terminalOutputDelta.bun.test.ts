@@ -33,6 +33,16 @@ describe('computeBoundedDelta - bounded linear-time overlap (issue #3200 finding
     expect(result.discontinuity).toBe(false);
   });
 
+  it('avoids replaying overlap during a non-truncated rewrite', () => {
+    const previous = 'old-kept-content';
+    const current = 'kept-content plus output';
+
+    const result = computeBoundedDelta(previous, current, false);
+
+    expect(result.delta).toBe(' plus output');
+    expect(result.discontinuity).toBe(false);
+  });
+
   it('recovers the overlap when the peer evicts the head (truncated)', () => {
     // The peer evicted "head-evicted-" from the beginning.
     const previous = 'head-evicted-kept-content';

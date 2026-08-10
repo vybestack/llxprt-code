@@ -189,6 +189,7 @@ export class RecordingConnection {
 
   private terminalOutput = '';
   private terminalTruncated = false;
+  private terminalOutputFailuresRemaining = 0;
   private terminalExitDelayed = false;
   private terminalExitResolvers = new Map<string, Array<() => void>>();
   private terminalCreationWaiters = new Set<() => void>();
@@ -200,6 +201,10 @@ export class RecordingConnection {
 
   setTerminalTruncated(truncated: boolean): void {
     this.terminalTruncated = truncated;
+  }
+
+  failNextTerminalOutputPoll(): void {
+    this.terminalOutputFailuresRemaining += 1;
   }
 
   delayTerminalExit(): void {
@@ -435,11 +440,17 @@ export class RecordingConnection {
   private buildFakeTerminalHandle(terminalId: string): FakeTerminalHandle {
     const handle = {
       id: terminalId,
-      currentOutput: vi.fn(async () => ({
-        output: this.terminalOutput,
-        exitStatus: null,
-        truncated: this.terminalTruncated,
-      })),
+      currentOutput: vi.fn(async () => {
+        if (this.terminalOutputFailuresRemaining > 0) {
+          this.terminalOutputFailuresRemaining -= 1;
+          throw new Error('transient terminal output failure');
+        }
+        return {
+          output: this.terminalOutput,
+          exitStatus: null,
+          truncated: this.terminalTruncated,
+        };
+      }),
       waitForExit: vi.fn(async () => {
         if (this.terminalExitDelayed) {
           await new Promise<void>((resolve) => {

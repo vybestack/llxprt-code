@@ -114,18 +114,26 @@ interface TurnRunResult {
  */
 function createCompletionController(): {
   resolveCompletion: (calls: CompletedToolCall[]) => void;
+  rejectCompletion: (error: unknown) => void;
   completionPromise: Promise<CompletedToolCall[]>;
 } {
   let resolver: ((calls: CompletedToolCall[]) => void) | null = null;
-  let resolved = false;
+  let rejecter: ((error: unknown) => void) | null = null;
+  let settled = false;
   return {
     resolveCompletion(calls: CompletedToolCall[]) {
-      if (resolved) return;
-      resolved = true;
+      if (settled) return;
+      settled = true;
       resolver?.(calls);
     },
-    completionPromise: new Promise<CompletedToolCall[]>((resolve) => {
+    rejectCompletion(error: unknown) {
+      if (settled) return;
+      settled = true;
+      rejecter?.(error);
+    },
+    completionPromise: new Promise<CompletedToolCall[]>((resolve, reject) => {
       resolver = resolve;
+      rejecter = reject;
     }),
   };
 }
@@ -503,7 +511,7 @@ export class AgenticLoop {
     const queue = new AgenticEventQueue();
     const sessionId = this.schedulerSessionId;
 
-    const { resolveCompletion, completionPromise } =
+    const { resolveCompletion, rejectCompletion, completionPromise } =
       createCompletionController();
 
     let acceptedToolUpdateSeen = false;
@@ -513,6 +521,7 @@ export class AgenticLoop {
       sessionId,
       queue,
       resolveCompletion,
+      rejectCompletion,
       forwardingState,
       () => {
         acceptedToolUpdateSeen = true;
@@ -597,10 +606,27 @@ export class AgenticLoop {
     sessionId: string,
     queue: AgenticEventQueue,
     resolveCompletion: (calls: CompletedToolCall[]) => void,
+    rejectCompletion: (error: unknown) => void,
     forwardingState: { active: boolean },
     markAcceptedUpdate: () => void,
   ): Promise<ToolSchedulerContract> {
     const display = this.displayCallbacks;
+    const pushQueueEvent = (event: AgenticLoopEvent): boolean => {
+      try {
+        queue.push(event);
+        return true;
+      } catch (error) {
+        forwardingState.active = false;
+        logger.debug(
+          () =>
+            `agentic event queue rejected a scheduler event: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+        );
+        rejectCompletion(error);
+        return false;
+      }
+    };
 
     return this.config.getOrCreateScheduler(
       sessionId,
@@ -609,8 +635,15 @@ export class AgenticLoop {
           if (!forwardingState.active) {
             return;
           }
-          if (update.mode === 'append') {
-            queue.push({ kind: 'tool_output', callId, chunk: update.data });
+          if (
+            update.mode === 'append' &&
+            !pushQueueEvent({
+              kind: 'tool_output',
+              callId,
+              chunk: update.data,
+            })
+          ) {
+            return;
           }
           display?.outputUpdateHandler?.(callId, update);
         },
@@ -621,18 +654,26 @@ export class AgenticLoop {
           if (toolCalls.length > 0) {
             markAcceptedUpdate();
           }
-          queue.push({ kind: 'tool_update', toolCalls });
-          if (toolCalls.some((tc) => tc.status === 'awaiting_approval')) {
-            queue.push({ kind: 'awaiting_approval', toolCalls });
+          if (!pushQueueEvent({ kind: 'tool_update', toolCalls })) {
+            return;
+          }
+          if (
+            toolCalls.some((tc) => tc.status === 'awaiting_approval') &&
+            !pushQueueEvent({ kind: 'awaiting_approval', toolCalls })
+          ) {
+            return;
           }
           display?.onToolCallsUpdate?.(toolCalls);
         },
         onAllToolCallsComplete: async (completed) => {
-          if (forwardingState.active) {
-            queue.push({ kind: 'tool_update', toolCalls: [] });
-            display?.onToolCallsUpdate?.([]);
+          try {
+            if (forwardingState.active) {
+              pushQueueEvent({ kind: 'tool_update', toolCalls: [] });
+              display?.onToolCallsUpdate?.([]);
+            }
+          } finally {
+            resolveCompletion(completed);
           }
-          resolveCompletion(completed);
         },
         getPreferredEditor: display?.getPreferredEditor ?? (() => undefined),
         onEditorOpen: display?.onEditorOpen ?? (() => {}),

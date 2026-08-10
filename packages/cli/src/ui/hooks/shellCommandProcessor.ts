@@ -24,6 +24,7 @@ import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   BoundedStreamCollector,
+  createByteBudget,
   resolveByteBudgetFromSetting,
 } from '@vybestack/llxprt-code-tools/acquisition.js';
 import { type UseHistoryManagerReturn } from './useHistoryManager.js';
@@ -44,6 +45,7 @@ type ShellCommandRuntime = ShellState & SessionIdentity;
 // Throttle interval for PTY output updates to avoid excessive re-renders.
 // Using 100ms provides smooth visual updates without overwhelming React.
 export const OUTPUT_UPDATE_INTERVAL_MS = 100;
+const LIVE_DISPLAY_MAX_BYTES = 512 * 1024;
 const MAX_OUTPUT_LENGTH = 10000;
 
 interface ShellExecutionParams {
@@ -78,6 +80,7 @@ interface ShellEventState {
   binaryBytesReceived: number;
   cumulativeStdout: string | AnsiOutput;
   liveDisplayCollector: BoundedStreamCollector;
+  lastMaterializedLiveBytes: number;
   lastUpdateTime: number;
 }
 
@@ -253,8 +256,16 @@ function createShellEventHandler(
       event.type === 'data' && config.getShouldUseNodePtyShell();
     if (!isPtyData && !pastThrottle) return;
 
-    if (event.type === 'data' && !isPtyData && !state.isBinaryStream) {
+    if (
+      event.type === 'data' &&
+      !isPtyData &&
+      !state.isBinaryStream &&
+      state.liveDisplayCollector.observedByteCount !==
+        state.lastMaterializedLiveBytes
+    ) {
       state.cumulativeStdout = state.liveDisplayCollector.getResult().text;
+      state.lastMaterializedLiveBytes =
+        state.liveDisplayCollector.observedByteCount;
     }
     const currentDisplayOutput = computeDisplayOutput(
       state.isBinaryStream,
@@ -475,15 +486,20 @@ function handleExecutionResult(
 
 async function initiateShellExecution(params: ShellExecutionParams) {
   const shellExecutionConfig = params.config.getShellExecutionConfig();
+  const outputBudget = resolveByteBudgetFromSetting(
+    shellExecutionConfig.outputRetentionMaxBytes,
+  );
+  const liveDisplayBudget = createByteBudget(
+    Math.min(outputBudget.bytes, LIVE_DISPLAY_MAX_BYTES),
+  );
   const state: ShellEventState = {
     isBinaryStream: false,
     binaryBytesReceived: 0,
     cumulativeStdout: '',
     liveDisplayCollector: new BoundedStreamCollector({
-      budget: resolveByteBudgetFromSetting(
-        shellExecutionConfig.outputRetentionMaxBytes,
-      ),
+      budget: liveDisplayBudget,
     }),
+    lastMaterializedLiveBytes: 0,
     lastUpdateTime: -Infinity,
   };
 

@@ -122,6 +122,13 @@ export class AgenticEventQueue {
     return this.bufferedOutputBytes;
   }
 
+  /**
+   * Enqueue a scheduler event.
+   *
+   * @throws When a semantic event would consume capacity reserved for reporting
+   * output omission and terminal completion, or when the hard queue bound is
+   * exhausted. Scheduler callback adapters must contain this failure.
+   */
   push(event: AgenticLoopEvent): void {
     if (this.closed) {
       return;

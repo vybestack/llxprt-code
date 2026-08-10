@@ -280,7 +280,7 @@ export class TerminalManager {
       this.logger.debug(
         () => `Terminal output poll failed: ${errorMessage(error)}`,
       );
-      throw error;
+      return;
     }
     this.applyTerminalSnapshot(state, current, onOutput);
   }
@@ -365,6 +365,7 @@ export class TerminalManager {
             observedBytes: state.maxObservedBytes,
             retainedBytes,
             omittedBytes,
+            omittedBytesExact: false,
             truncated: true,
             budgetBytes: this.outputBudget.bytes,
           }
