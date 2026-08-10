@@ -676,15 +676,24 @@ P11 reader/consumer remains TODO.
    stale claim artifacts. Protects the current UTC-day perf file with recent
    mtime (active writer) and any perf JSONL whose run UUID has a non-stale claim
    (lease). Reuses shared `isLiveWriterFile` / `isNonStaleClaim` / `extractRunUuid`
-   from `perfArtifacts.ts` so retention and delete cannot drift. Never deletes
-   unrelated files. External fs failures fail open and are counted. Internal
-   invalid options (NaN/negative timing) fail fast. Injected `PerfDeleteFilesystem`
-   port for deterministic fault injection.
+   from `perfArtifacts.ts`. Never deletes unrelated files. External fs failures
+   fail open and are counted. Internal invalid options (NaN/negative timing) fail
+   fast. Injected `PerfDeleteFilesystem` port for deterministic fault injection.
+   Delete's claim→JSONL protection is deliberately broader than automatic
+   retention (see item 6).
 
 6. **Shared artifact protection helpers** (`perfArtifacts.ts`): single source of
    truth for `isPerfJsonl`, `isClaimFile`, `isOwnedArtifact`, `parseDayKeyFromName`,
-   `extractRunUuid`, `utcDayKey`, `isLiveWriterFile`, `isNonStaleClaim`. Both
-   retention and delete import these so protection semantics cannot diverge.
+   `extractRunUuid`, `utcDayKey`, `isLiveWriterFile`, `isNonStaleClaim`. Retention
+   and delete share these primitives but apply deliberately different JSONL
+   policies: automatic retention protects a JSONL only as a live writer (today's
+   UTC day-key + mtime within the maintenance window) so a 24×7 process converges
+   to the eventual caps by evicting its own old-day files; explicit delete
+   additionally protects any JSONL whose run holds a fresh claim
+   (`isPerfJsonlProtected`) to avoid unlinking a file another active process may
+   still be appending. Fresh claims themselves remain protected in retention
+   (non-stale claims survive and count toward caps) but never shield that run's
+   older JSONL.
 
 7. **Self-health** (P04/P08 source): `PerfSink.lastWriteErrorCode` (string | null)
    and `PerfRetention.evictionCount` (number). No `records_dropped` counter.

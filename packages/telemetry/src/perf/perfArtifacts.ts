@@ -8,9 +8,13 @@
  * Shared artifact parsing/protection logic for the perf directory (P11, F).
  *
  * Extracted from {@link PerfRetention} so that retention eviction and
- * {@link perfDelete} cannot drift apart. Both operations must agree on what
- * constitutes an owned artifact, how to parse day-key / run-UUID from a
- * filename, and how to determine live-writer / claim protection.
+ * {@link perfDelete} share the same primitives: what constitutes an owned
+ * artifact, how to parse day-key / run-UUID from a filename, and how to
+ * evaluate live-writer and claim freshness. The two operations apply these
+ * primitives with deliberately different policies: automatic retention
+ * protects a JSONL only as a live writer (so a 24×7 run can converge), while
+ * explicit delete additionally protects any JSONL whose run holds a fresh
+ * claim (see {@link isPerfJsonlProtected}).
  *
  * File-name conventions (P04B):
  *   - Perf JSONL: `perf-YYYYMMDD-<runUuid>.jsonl`
@@ -227,7 +231,7 @@ export function isNonStaleClaim(
 }
 
 // ---------------------------------------------------------------------------
-// Centralized claim→run→JSONL protection (A — retention + delete share this)
+// Claim→run→JSONL protection (used by explicit delete; F)
 // ---------------------------------------------------------------------------
 
 /** A stated claim artifact with its run UUID and mtime for protection logic. */
@@ -241,8 +245,7 @@ export interface ClaimProtectionInput {
  * `now - mtime ≤ claimLeaseMs` (future mtimes are also fresh — negative
  * delta).
  *
- * This is the centralized claim→run protection used by both retention
- * eviction and delete so their algorithms cannot drift (A).
+ * Used by {@link perfDelete} to protect JSONL whose run holds a fresh claim.
  */
 export function collectFreshClaimRunUuids(
   claims: readonly ClaimProtectionInput[],
@@ -262,22 +265,22 @@ export function collectFreshClaimRunUuids(
 }
 
 /**
- * Determines whether a perf JSONL file is protected from eviction/deletion
- * based on centralized claim→run→JSONL protection logic (A).
+ * Determines whether a perf JSONL file is protected from explicit deletion,
+ * based on live-writer AND claim→run protection.
+ *
+ * Used by {@link perfDelete} (perfDelete.ts). Explicit delete deliberately
+ * protects a JSONL whose run holds a fresh claim, to avoid unlinking a file
+ * another active process may still be appending. This is intentionally BROADER
+ * than automatic retention, which protects JSONL only as a live writer
+ * ({@link isLiveWriterFile}) so a 24×7 process can converge to the eventual
+ * byte/file caps (see PerfRetention.isProtected).
  *
  * A JSONL file is protected if ANY of:
  *   1. It is a live writer (today's day-key + mtime within maintenance window).
  *   2. Its run UUID has a fresh/future claim (in `protectedRunUuids`).
- *   3. Its run UUID matches the owner's own run UUID (always protect own run).
- *
- * This is shared by retention eviction and delete so their protection logic
- * cannot diverge.
  *
  * @param protectedRunUuids Run UUIDs with fresh/future claims (from
- *   {@link collectFreshClaimRunUuids}). For delete, this is the only
- *   claim-based protection (no own-run override).
- * @param ownRunUuid The retention owner's own run UUID. Retention always
- *   protects its own run; pass `null` for delete (no owner override).
+ *   {@link collectFreshClaimRunUuids}).
  */
 export function isPerfJsonlProtected(
   name: string,
@@ -285,15 +288,13 @@ export function isPerfJsonlProtected(
   now: number,
   maintenanceIntervalMs: number,
   protectedRunUuids: ReadonlySet<string>,
-  ownRunUuid: string | null,
 ): boolean {
   if (isLiveWriterFile(name, mtimeMs, now, maintenanceIntervalMs)) {
     return true;
   }
   const runUuid = extractRunUuid(name);
-  if (runUuid !== null) {
-    if (ownRunUuid !== null && runUuid === ownRunUuid) return true;
-    if (protectedRunUuids.has(runUuid)) return true;
+  if (runUuid !== null && protectedRunUuids.has(runUuid)) {
+    return true;
   }
   return false;
 }

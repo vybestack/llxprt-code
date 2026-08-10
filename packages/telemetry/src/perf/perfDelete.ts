@@ -11,8 +11,9 @@
  *   - The current UTC-day perf file with recent/future mtime (active writer).
  *   - Any perf JSONL whose run UUID has a non-stale / future-dated claim (lease).
  *
- * Reuses the shared artifact parsing/protection logic from `perfArtifacts.ts`
- * so retention and delete cannot drift.
+ * Reuses the shared artifact parsing and protection primitives from
+ * `perfArtifacts.ts`. Explicit delete intentionally applies broader JSONL
+ * protection than automatic retention by honoring fresh run claims.
  *
  * Never deletes unrelated files (only `perf-YYYYMMDD-*.jsonl` and `*.claim`).
  * External filesystem failures fail open and are counted. Internal invalid
@@ -101,10 +102,11 @@ const DIRECTORY_SENTINEL = '<directory>';
  * - External filesystem failures fail open and are counted.
  * - Internal invalid options (NaN/negative timing) fail fast.
  *
- * Protection rules (shared with retention via `perfArtifacts.ts`):
+ * Explicit-delete protection rules (using primitives from `perfArtifacts.ts`):
  *   - A perf JSONL whose day-key is today UTC AND mtime is within the
  *     maintenance interval is protected (active writer).
- *   - A perf JSONL whose run UUID has a non-stale/future claim is protected.
+ *   - A perf JSONL whose run UUID has a non-stale/future claim is protected;
+ *     automatic retention deliberately does not apply this broader rule.
  *   - A claim that is non-stale (now - mtime ≤ lease) is protected.
  */
 interface StatedArtifact {
@@ -231,8 +233,7 @@ async function attemptDelete(
 /**
  * Phase 2: Delete claims. Non-stale claims are protected; stale claims are
  * deleted. Returns the set of non-stale claim UUIDs for JSONL protection,
- * computed via the centralized {@link collectFreshClaimRunUuids} so delete
- * and retention cannot drift (A).
+ * computed via the centralized {@link collectFreshClaimRunUuids}.
  */
 async function deleteClaims(
   fsPort: PerfDeleteFilesystem,
@@ -260,11 +261,12 @@ async function deleteClaims(
 }
 
 /**
- * Phase 3: Delete perf JSONL. Protects live-writer files and files whose
+ * Phase 3: Delete perf JSONL. Protects live-writer files and any file whose
  * run UUID has a non-stale claim, via the centralized
- * {@link isPerfJsonlProtected} so delete and retention cannot drift (A).
- * Delete has no own-run override (pass null) — it protects only via
- * live-writer + claim lease.
+ * {@link isPerfJsonlProtected}. This claim→JSONL protection is deliberate for
+ * explicit delete (avoid unlinking a file another active process appends) and
+ * is intentionally broader than automatic retention, which protects JSONL only
+ * as a live writer.
  */
 async function deletePerfJsonl(
   fsPort: PerfDeleteFilesystem,
@@ -281,7 +283,6 @@ async function deletePerfJsonl(
       now,
       maintenanceIntervalMs,
       nonStaleClaimUuids,
-      null, // delete has no own-run override
     );
 
     if (isProtected) {

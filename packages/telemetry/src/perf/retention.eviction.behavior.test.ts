@@ -137,9 +137,12 @@ describe('PerfRetention live-writer safety (AC-7)', () => {
 describe('PerfRetention claim handling in retention (AC-7, D3)', () => {
   it('claims count toward artifact count and bytes but are never JSONL parsed', async () => {
     const now = Date.now();
+    const todayKey = utcDayKey(now);
 
-    writePerfFile('perf-20260101-a.jsonl', 3);
-    setMtime('perf-20260101-a.jsonl', now - 86_400_000);
+    // Today's live JSONL — protected by live-writer safety.
+    writePerfFile(`perf-${todayKey}-live.jsonl`, 3);
+    setMtime(`perf-${todayKey}-live.jsonl`, now - 5_000);
+    // A stale claim (0 bytes) — counts toward the count cap and is eligible.
     createClaimFile(
       '00000000-0000-4000-8000-00000000000f',
       now - PERF_CLAIM_LEASE_MS - 1,
@@ -147,14 +150,16 @@ describe('PerfRetention claim handling in retention (AC-7, D3)', () => {
 
     const retention = new PerfRetention({
       dir,
-      runUuid: 'a',
+      runUuid: '00000000-0000-4000-8000-0000000000a0',
       maxFiles: 1,
       maxBytes: 10_000_000,
     });
     await retention.maintain(now);
 
+    // The stale claim was counted (2 artifacts > 1 cap) and evicted; the
+    // live JSONL survives. Claims are accounting-only, never parsed as records.
     const remaining = listFiles();
-    expect(remaining).toEqual(['perf-20260101-a.jsonl']);
+    expect(remaining).toEqual([`perf-${todayKey}-live.jsonl`]);
   });
 
   it('a fresh claim is never evicted', async () => {
@@ -183,7 +188,7 @@ describe('PerfRetention claim handling in retention (AC-7, D3)', () => {
       '00000000-0000-4000-8000-00000000000a',
       now - PERF_CLAIM_LEASE_MS - 1,
     );
-    // The owner's own claim, kept fresh — protected (and own-run).
+    // The owner's own claim, kept fresh — protected (non-stale).
     createClaimFile('00000000-0000-4000-8000-00000000000f', now - 10_000);
 
     const retention = new PerfRetention({

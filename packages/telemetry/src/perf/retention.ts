@@ -38,9 +38,7 @@ import {
   isNonStaleClaim,
   isClaimFile,
   isPerfJsonl,
-  extractRunUuid,
-  collectFreshClaimRunUuids,
-  isPerfJsonlProtected,
+  isLiveWriterFile,
   requireValidRunUuid,
 } from './perfArtifacts.js';
 
@@ -571,25 +569,20 @@ export class PerfRetention {
 
     if (filesLeft <= this.maxFiles && bytesLeft <= this.maxBytes) return;
 
-    // Centralized claim→run→JSONL protection (A): collect canonical run IDs
-    // from fresh/future claims. Every JSONL belonging to a non-stale claim is
-    // protected regardless of mtime/day. The retention owner's own run is
-    // always protected.
-    const claimArtifacts = artifacts.filter((a) => isClaimFile(a.name));
-    const protectedRunUuids = collectFreshClaimRunUuids(
-      claimArtifacts.map((a) => ({
-        runUuid: extractRunUuid(a.name),
-        mtimeMs: a.mtimeMs,
-      })),
-      now,
-      this.claimLeaseMs,
-    );
-
     // Sort oldest-first with stable deterministic tie-break by name.
     // Pre-filter to eligible (non-protected) artifacts to keep the eviction
     // loop simple (single break for cap check — no nested continues).
+    //
+    // Automatic retention protects a JSONL only as a genuinely-live writer
+    // (today's UTC day-key AND mtime within the maintenance interval). A fresh
+    // claim protects the claim FILE itself (and counts toward caps) but does
+    // NOT shield that run's historical JSONL — otherwise a long-running
+    // process could never converge to the eventual byte/file caps. Explicit
+    // /perf delete intentionally keeps claim→JSONL protection
+    // (perfArtifacts.isPerfJsonlProtected) to avoid unlinking a file another
+    // active process may still be appending.
     const sorted = artifacts
-      .filter((a) => !this.isProtected(a, now, protectedRunUuids))
+      .filter((a) => !this.isProtected(a, now))
       .sort(compareArtifactAge);
 
     for (const artifact of sorted) {
@@ -774,31 +767,30 @@ export class PerfRetention {
   }
 
   /**
-   * Determines whether an artifact is protected from eviction. Delegates to
-   * the centralized {@link isPerfJsonlProtected} / {@link isNonStaleClaim}
-   * logic so retention and delete cannot drift (A).
+   * Determines whether an artifact is protected from automatic eviction.
    *
-   * JSONL protection now includes claim-based protection: every JSONL file
-   * belonging to a non-stale claim's run UUID is protected, regardless of
-   * the JSONL's own mtime/day. The retention owner's own run is always
-   * protected.
+   * Automatic retention uses the narrow live-writer predicate for JSONL: a
+   * file is protected only when its day-key is the current UTC day AND its
+   * mtime is within the maintenance interval. This deliberately differs from
+   * explicit {@link perfDelete} (perfDelete.ts), which additionally protects
+   * any JSONL whose run holds a fresh claim — the narrower retention rule is
+   * what lets a 24×7 process converge to the eventual byte/file caps by
+   * evicting its own old-day files.
+   *
+   * Claims are protected individually by freshness (a non-stale claim is
+   * never reaped, and counts toward the caps) but a fresh claim never
+   * shields that run's older JSONL from retention eviction.
    */
-  private isProtected(
-    artifact: ArtifactInfo,
-    now: number,
-    protectedRunUuids: ReadonlySet<string>,
-  ): boolean {
+  private isProtected(artifact: ArtifactInfo, now: number): boolean {
     if (isClaimFile(artifact.name)) {
       return isNonStaleClaim(artifact.mtimeMs, now, this.claimLeaseMs);
     }
     if (isPerfJsonl(artifact.name)) {
-      return isPerfJsonlProtected(
+      return isLiveWriterFile(
         artifact.name,
         artifact.mtimeMs,
         now,
         this.maintenanceIntervalMs,
-        protectedRunUuids,
-        this.runUuid,
       );
     }
     return false;
