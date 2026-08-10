@@ -26,10 +26,22 @@ import TurndownService from 'turndown';
 import * as cheerio from 'cheerio';
 import { retryWithBackoff } from '../utils/retry.js';
 import { ensureJsonSafe } from '../utils/unicodeUtils.js';
+import { createByteBudget } from '../acquisition/index.js';
+import {
+  acquireBoundedHttpBody,
+  disposeHttpResponseBody,
+} from '../utils/bounded-http-response.js';
 
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024; // 5MB
+const FETCH_BYTE_BUDGET = createByteBudget(MAX_RESPONSE_SIZE);
 const DEFAULT_TIMEOUT = 30 * 1000; // 30 seconds
 const MAX_TIMEOUT = 120 * 1000; // 2 minutes
+
+/** A fetched response paired with its per-attempt cancellation handle. */
+interface FetchedResponse {
+  readonly response: Awaited<ReturnType<typeof fetch>>;
+  readonly cancelRequest: () => void;
+}
 const ACCEPT_HEADERS: Record<DirectWebFetchToolParams['format'], string> = {
   markdown:
     'text/markdown;q=1.0, text/x-markdown;q=0.9, text/plain;q=0.8, text/html;q=0.7, */*;q=0.1',
@@ -117,12 +129,18 @@ class DirectWebFetchToolInvocation extends BaseToolInvocation<
     try {
       if (signal.aborted) return this.createAbortResult();
 
-      const response = await this.fetchResponse(controller.signal);
-      const arrayBuffer = await this.readBoundedResponse(response);
-      const content = new TextDecoder().decode(arrayBuffer);
+      const fetched = await this.fetchResponse(controller.signal);
+      const content = await this.readBoundedResponse(
+        fetched.response,
+        controller.signal,
+        fetched.cancelRequest,
+      );
       const output = this.convertContent(
         content,
-        stringOrDefault(response.headers.get('content-type') ?? undefined, ''),
+        stringOrDefault(
+          fetched.response.headers.get('content-type') ?? undefined,
+          '',
+        ),
       );
 
       return {
@@ -173,50 +191,64 @@ class DirectWebFetchToolInvocation extends BaseToolInvocation<
     };
   }
 
-  private async fetchResponse(signal: AbortSignal) {
+  private async fetchResponse(
+    overallSignal: AbortSignal,
+  ): Promise<FetchedResponse> {
     return retryWithBackoff(
       async () => {
-        const resp = await fetch(this.params.url, {
-          signal,
-          headers: {
-            'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            Accept: ACCEPT_HEADERS[this.params.format],
-            'Accept-Language': 'en-US,en;q=0.9',
-          },
-        } as RequestInit);
+        const attemptController = new AbortController();
+        const onOverallAbort = (): void => attemptController.abort();
+        overallSignal.addEventListener('abort', onOverallAbort, { once: true });
 
-        if (!resp.ok) {
-          const error = new Error(
-            `Request failed with status code: ${resp.status}`,
-          ) as Error & { status: number };
-          error.status = resp.status;
-          throw error;
+        try {
+          if (overallSignal.aborted) attemptController.abort();
+
+          const resp = await fetch(this.params.url, {
+            signal: attemptController.signal,
+            headers: {
+              'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              Accept: ACCEPT_HEADERS[this.params.format],
+              'Accept-Language': 'en-US,en;q=0.9',
+            },
+          } as RequestInit);
+
+          const cancelRequest = (): void => attemptController.abort();
+
+          if (!resp.ok) {
+            disposeHttpResponseBody(resp, cancelRequest);
+            const error = new Error(
+              `Request failed with status code: ${resp.status}`,
+            ) as Error & { status: number };
+            error.status = resp.status;
+            throw error;
+          }
+
+          return { response: resp, cancelRequest };
+        } finally {
+          overallSignal.removeEventListener('abort', onOverallAbort);
         }
-
-        return resp;
       },
       {
         maxAttempts: 3,
         initialDelayMs: 500,
-        signal,
+        signal: overallSignal,
       },
     );
   }
 
   private async readBoundedResponse(
     response: Awaited<ReturnType<typeof fetch>>,
-  ): Promise<ArrayBuffer> {
-    const contentLength = response.headers.get('content-length');
-    if (contentLength && parseInt(contentLength, 10) > MAX_RESPONSE_SIZE) {
-      throw new Error('Response too large (exceeds 5MB limit)');
-    }
-
-    const arrayBuffer = await response.arrayBuffer();
-    if (arrayBuffer.byteLength > MAX_RESPONSE_SIZE) {
-      throw new Error('Response too large (exceeds 5MB limit)');
-    }
-    return arrayBuffer;
+    signal: AbortSignal,
+    cancelRequest: () => void,
+  ): Promise<string> {
+    const body = await acquireBoundedHttpBody(
+      response,
+      FETCH_BYTE_BUDGET,
+      signal,
+      cancelRequest,
+    );
+    return body.text;
   }
 
   private convertContent(content: string, contentType: string): string {

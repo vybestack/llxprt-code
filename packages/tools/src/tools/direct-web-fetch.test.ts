@@ -5,14 +5,20 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { Readable } from 'node:stream';
 import type { DirectWebFetchToolParams } from './direct-web-fetch.js';
 import { DirectWebFetchTool } from './direct-web-fetch.js';
+import { ToolErrorType } from '../types/tool-error.js';
 import type { IToolHost, ToolResult as _ToolResult } from '../index.js';
 
 const { mockedFetch } = { mockedFetch: vi.fn() };
 void vi.mock('node-fetch', () => ({
   default: mockedFetch,
 }));
+
+function mockBody(text: string): Readable {
+  return Readable.from([Buffer.from(text)]);
+}
 
 describe('DirectWebFetchTool', () => {
   let config: IToolHost;
@@ -82,7 +88,7 @@ describe('DirectWebFetchTool', () => {
           return null;
         },
       },
-      arrayBuffer: () => Promise.resolve(Buffer.from(htmlContent)),
+      body: mockBody(htmlContent),
     });
 
     const result = await invocation.execute(new AbortController().signal);
@@ -117,7 +123,7 @@ describe('DirectWebFetchTool', () => {
           return null;
         },
       },
-      arrayBuffer: () => Promise.resolve(Buffer.from(htmlContent)),
+      body: mockBody(htmlContent),
     });
 
     const result = await invocation.execute(new AbortController().signal);
@@ -182,7 +188,33 @@ describe('DirectWebFetchTool', () => {
     const result = await invocation.execute(new AbortController().signal);
 
     expect(result.error).toBeDefined();
-    expect(result.error?.message).toContain('Response too large');
+    expect(result.error?.message).toMatch(/exceeds/i);
+  });
+
+  it('returns FETCH_ERROR when the body exceeds the size limit and does not retry body acquisition', async () => {
+    const params: DirectWebFetchToolParams = {
+      url: 'https://example.com/overflow',
+      format: 'text',
+    };
+    const invocation = tool.build(params);
+
+    mockedFetch.mockResolvedValue({
+      ok: true,
+      headers: {
+        get: (key: string) => {
+          if (key === 'content-length') return '9999999';
+          return null;
+        },
+      },
+      body: mockBody('x'.repeat(100)),
+    });
+
+    const result = await invocation.execute(new AbortController().signal);
+
+    expect(result.error?.type).toBe(ToolErrorType.FETCH_ERROR);
+    expect(result.error?.message).toMatch(/exceeds/i);
+    // Body overflow happens after a successful fetch — no retry is triggered.
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
   });
 
   describe('retry behavior', () => {
@@ -213,7 +245,7 @@ describe('DirectWebFetchTool', () => {
               return null;
             },
           },
-          arrayBuffer: () => Promise.resolve(Buffer.from(htmlContent)),
+          body: mockBody(htmlContent),
         };
       });
 
@@ -279,7 +311,7 @@ describe('DirectWebFetchTool', () => {
               return null;
             },
           },
-          arrayBuffer: () => Promise.resolve(Buffer.from(htmlContent)),
+          body: mockBody(htmlContent),
         };
       });
 
@@ -330,7 +362,7 @@ describe('DirectWebFetchTool', () => {
               resolve({
                 ok: true,
                 headers: { get: () => null },
-                arrayBuffer: () => Promise.resolve(Buffer.from('data')),
+                body: mockBody('data'),
               });
             }, 5000);
             signal?.addEventListener('abort', () => {
@@ -348,6 +380,174 @@ describe('DirectWebFetchTool', () => {
       expect(result.error?.message).toMatch(/abort|timeout/i);
       expect(mockedFetch.mock.calls.length).toBeGreaterThan(0);
       expect(mockedFetch.mock.calls.length).toBeLessThan(10);
+    });
+  });
+
+  describe('non-success response body disposal', () => {
+    it('destroys the 4xx response body without reading it', async () => {
+      const params: DirectWebFetchToolParams = {
+        url: 'https://example.com/notfound',
+        format: 'text',
+      };
+      const invocation = tool.build(params);
+
+      const errorBody = mockBody('404 Not Found Body');
+      mockedFetch.mockResolvedValue({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+        headers: { get: () => null },
+        body: errorBody,
+      });
+
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(mockedFetch).toHaveBeenCalledTimes(1);
+      expect(result.error?.message).toContain('404');
+      expect((errorBody as unknown as { destroyed: boolean }).destroyed).toBe(
+        true,
+      );
+    });
+
+    it('destroys the 5xx retryable body on each retry attempt', async () => {
+      const params: DirectWebFetchToolParams = {
+        url: 'https://example.com/server-error',
+        format: 'text',
+      };
+      const invocation = tool.build(params);
+
+      const firstErrorBody = mockBody('503 Error Body');
+      const successBody = mockBody('<html><body>OK</body></html>');
+      let attempt = 0;
+      mockedFetch.mockImplementation(async () => {
+        attempt++;
+        if (attempt === 1) {
+          return {
+            ok: false,
+            status: 503,
+            statusText: 'Service Unavailable',
+            headers: { get: () => null },
+            body: firstErrorBody,
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          headers: {
+            get: (key: string) => (key === 'content-type' ? 'text/html' : null),
+          },
+          body: successBody,
+        };
+      });
+
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(mockedFetch).toHaveBeenCalledTimes(2);
+      expect(result.error).toBeUndefined();
+      // The 503 error body must have been destroyed without being read.
+      expect(
+        (firstErrorBody as unknown as { destroyed: boolean }).destroyed,
+      ).toBe(true);
+    });
+
+    it('destroys every 5xx body when all retries are exhausted', async () => {
+      const params: DirectWebFetchToolParams = {
+        url: 'https://example.com/always-500',
+        format: 'text',
+      };
+      const invocation = tool.build(params);
+
+      const bodies: Readable[] = [];
+      mockedFetch.mockImplementation(async () => {
+        const body = mockBody('500 Server Error');
+        bodies.push(body);
+        return {
+          ok: false,
+          status: 500,
+          statusText: 'Internal Server Error',
+          headers: { get: () => null },
+          body,
+        };
+      });
+
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(mockedFetch.mock.calls.length).toBeGreaterThan(1);
+      expect(result.error).toBeDefined();
+      expect(result.error?.message).toContain('500');
+      // Every error response body must have been destroyed.
+      for (const body of bodies) {
+        expect((body as unknown as { destroyed: boolean }).destroyed).toBe(
+          true,
+        );
+      }
+    });
+  });
+
+  describe('observed-byte boundary (no Content-Length)', () => {
+    const FETCH_BUDGET = 5 * 1024 * 1024; // 5 MiB
+
+    /**
+     * Generate a stream that emits exactly `totalBytes` of 0x78 ('x') in
+     * 64 KiB chunks without materializing the entire buffer at once.
+     */
+    function sizedStream(totalBytes: number): Readable {
+      const chunkSize = Math.min(64 * 1024, totalBytes);
+      let sent = 0;
+      return new Readable({
+        read() {
+          if (sent >= totalBytes) {
+            this.push(null);
+            return;
+          }
+          const remaining = totalBytes - sent;
+          const size = Math.min(chunkSize, remaining);
+          this.push(Buffer.alloc(size, 0x78));
+          sent += size;
+        },
+      });
+    }
+
+    it('succeeds when observed bytes exactly equal the 5 MiB budget', async () => {
+      const params: DirectWebFetchToolParams = {
+        url: 'https://example.com/exact',
+        format: 'text',
+      };
+      const invocation = tool.build(params);
+
+      mockedFetch.mockResolvedValue({
+        ok: true,
+        headers: { get: () => null },
+        body: sizedStream(FETCH_BUDGET),
+      });
+
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(result.error).toBeUndefined();
+      const content =
+        typeof result.llmContent === 'string' ? result.llmContent : '';
+      expect(content.length).toBe(FETCH_BUDGET);
+    });
+
+    it('fails without body-acquisition retry when observed bytes are 5 MiB + 1', async () => {
+      const params: DirectWebFetchToolParams = {
+        url: 'https://example.com/overflow',
+        format: 'text',
+      };
+      const invocation = tool.build(params);
+
+      mockedFetch.mockResolvedValue({
+        ok: true,
+        headers: { get: () => null },
+        body: sizedStream(FETCH_BUDGET + 1),
+      });
+
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(result.error?.type).toBe(ToolErrorType.FETCH_ERROR);
+      expect(result.error?.message).toMatch(/exceeds/i);
+      // Body overflow is detected during acquisition — no retry is triggered.
+      expect(mockedFetch).toHaveBeenCalledTimes(1);
     });
   });
 });
