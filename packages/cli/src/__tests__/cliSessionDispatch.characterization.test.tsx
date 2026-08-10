@@ -167,6 +167,7 @@ function createMinimalConfig(options: {
     refreshAuth: vi.fn(async () => {}),
     setEphemeralSetting: vi.fn(),
     getEphemeralSetting: vi.fn(() => undefined),
+    getTelemetrySettings: () => ({ perf: { enabled: false, memory: false } }),
   };
 }
 

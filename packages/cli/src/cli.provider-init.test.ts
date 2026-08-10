@@ -265,6 +265,9 @@ describe('cli main provider initialization', () => {
 
       setTerminalBackground: vi.fn(),
       getPolicyEngine: vi.fn(() => null),
+      getTelemetrySettings: vi.fn(() => ({
+        perf: { enabled: false, memory: false },
+      })),
     } as unknown as Config;
 
     const { loadCliConfig } = await import('./config/config.js');
@@ -363,6 +366,9 @@ describe('cli main provider initialization', () => {
       getAgentClient,
       setTerminalBackground: vi.fn(),
       getPolicyEngine: vi.fn(() => null),
+      getTelemetrySettings: vi.fn(() => ({
+        perf: { enabled: false, memory: false },
+      })),
     } as unknown as Config;
 
     const resumeResult = makeResumeResult('restored user content');
@@ -495,6 +501,9 @@ describe('cli main provider initialization', () => {
       getAgentClient,
       setTerminalBackground: vi.fn(),
       getPolicyEngine: vi.fn(() => null),
+      getTelemetrySettings: vi.fn(() => ({
+        perf: { enabled: false, memory: false },
+      })),
     } as unknown as Config;
 
     const resumeResult = makeResumeResult('restored user content');

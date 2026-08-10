@@ -48,6 +48,7 @@ import type {
 import type { GitHubBrokerClient } from '@vybestack/llxprt-code-tools';
 import type { EventEmitter } from 'node:events';
 import { AppEvent, appEvents, type AppEvents } from '../utils/events.js';
+import type { PerfSnapshotCapability } from './commands/perfCommand.js';
 
 export interface RefreshMemoryResult {
   memoryContent: string;
@@ -432,6 +433,13 @@ export interface AppStateRuntime {
    */
   getGitHubBrokerClient(): GitHubBrokerClient | undefined;
   updateSystemInstructionIfInitialized(): void | Promise<void>;
+  /**
+   * Returns the owned perf snapshot capability for the bare `/perf` live view,
+   * or null when perf telemetry is not active. P12 wires this from the
+   * interactive perf runtime owner. Optional: callers without a perf owner
+   * (disabled/default-off) return null or omit this entirely.
+   */
+  getPerfSnapshotCapability?(): PerfSnapshotCapability | null;
 }
 
 /**
@@ -798,6 +806,7 @@ export type SlashCommandRuntime = CliUiRuntime;
  */
 export function buildSlashCommandRuntime(
   source: UiRuntimeBareSource,
+  perfSnapshotCapability?: PerfSnapshotCapability | null,
 ): CliUiRuntime {
   // Non-slice members must be destructured out and re-attached explicitly.
   // The spread below only flattens capability SLICE OBJECTS; a member whose
@@ -813,6 +822,9 @@ export function buildSlashCommandRuntime(
     ...Object.values(capabilities),
     { storage },
     getRunImageOperation !== undefined ? { getRunImageOperation } : {},
+    perfSnapshotCapability !== undefined && perfSnapshotCapability !== null
+      ? { getPerfSnapshotCapability: () => perfSnapshotCapability }
+      : {},
   );
 }
 

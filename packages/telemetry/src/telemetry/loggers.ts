@@ -74,6 +74,7 @@ import { isTelemetrySdkInitialized } from './sdk.js';
 import { uiTelemetryService, type UiEvent } from './uiTelemetry.js';
 import { safeJsonStringify } from '../utils/safeJsonStringify.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import { getPerfPhaseObserver } from '../perf/perfPhaseObserver.js';
 
 type Config = TelemetryConfig;
 type SessionConfig = Pick<TelemetryConfig, 'getSessionId'>;
@@ -212,6 +213,22 @@ export function logToolCall(
 ): void {
   if (process.env.VERBOSE === 'true') {
     debugLogger.error(`[TELEMETRY] logToolCall: ${event.function_name}`);
+  }
+
+  // Perf phase observer (P07): notify at the exact tool-completion boundary,
+  // BEFORE the SDK/export gate so SDK-disabled mode still notifies. Invoked
+  // directly (no try/catch) so internal errors propagate fail-fast (D8).
+  // Default-off: null observer short-circuits with no allocation.
+  const perfObserver = getPerfPhaseObserver();
+  if (perfObserver !== null) {
+    const boundaries = event.getPerfBoundaries();
+    perfObserver.onToolCallCompleted({
+      promptId: event.prompt_id,
+      callId: event.call_id,
+      startMs: boundaries.startMs,
+      endMs: boundaries.endMs,
+      durationMs: event.duration_ms,
+    });
   }
 
   // Local aggregation always runs, regardless of SDK/export state

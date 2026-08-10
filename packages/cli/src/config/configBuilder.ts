@@ -89,6 +89,7 @@ function buildTelemetryConfig(argv: CliArgs, settings: Settings) {
     enabled: argv.telemetry ?? telemetrySettings?.enabled,
     logPrompts: argv.telemetryLogPrompts ?? telemetrySettings?.logPrompts,
     outfile: argv.telemetryOutfile ?? telemetrySettings?.outfile,
+    perf: telemetrySettings?.perf,
     ...buildTelemetryRedactionConfig(telemetrySettings),
   };
 }

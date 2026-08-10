@@ -88,6 +88,26 @@
       "bun": "./src/telemetry/sessionMetricsAggregator.ts",
       "import": "./dist/src/telemetry/sessionMetricsAggregator.js"
     },
+    "./perf/index.js": {
+      "bun": "./src/perf/index.ts",
+      "import": "./dist/src/perf/index.js"
+    },
+    "./perf/perfRecords.js": {
+      "bun": "./src/perf/perfRecords.ts",
+      "import": "./dist/src/perf/perfRecords.js"
+    },
+    "./perf/perfPhaseObserver.js": {
+      "bun": "./src/perf/perfPhaseObserver.ts",
+      "import": "./dist/src/perf/perfPhaseObserver.js"
+    },
+    "./perf/perfSlopeBridge.js": {
+      "bun": "./src/perf/perfSlopeBridge.ts",
+      "import": "./dist/src/perf/perfSlopeBridge.js"
+    },
+    "./telemetry/intervalUnion.js": {
+      "bun": "./src/telemetry/intervalUnion.ts",
+      "import": "./dist/src/telemetry/intervalUnion.js"
+    },
     "./telemetry/tool-call-decision.js": {
       "bun": "./src/telemetry/tool-call-decision.ts",
       "import": "./dist/src/telemetry/tool-call-decision.js"

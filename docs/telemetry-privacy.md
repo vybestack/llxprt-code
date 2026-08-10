@@ -231,6 +231,69 @@ Leave `conversationLogPath` empty (or omit it) to use the default `<data>/conver
 - `redactEmails` (boolean): Redact email addresses (default: `true`)
 - `redactPersonalInfo` (boolean): Redact PII patterns (default: `true`)
 
+#### Client Performance Telemetry
+
+LLxprt can optionally collect **local client-side performance telemetry** —
+timing data for client phases (prepare, stream handling, Ink rendering, stdout
+writes, finalization), provider/tool activity intervals, and operation lifecycle
+metadata. This data is written to local JSONL files and is **never transmitted
+externally**.
+
+Both keys are **disabled by default**. To enable:
+
+```json
+{
+  "telemetry": {
+    "perf": {
+      "enabled": true,
+      "memory": true
+    }
+  }
+}
+```
+
+- `telemetry.perf.enabled` (boolean): Master switch for performance telemetry. Default: `false`. When `false`, no perf files are created, no observers are installed, and no memory ring is allocated.
+- `telemetry.perf.memory` (boolean): Include memory trend data (RSS, heap, external, array buffers) in perf records. Default: `false`. **Effective only when `enabled` is `true`** — memory is gated by the master switch. When perf is enabled but memory is off, operation records omit the memory columns entirely (absent, not zero-filled).
+
+`telemetry.perf` is an **object**, not a boolean. Setting it to `true` or `false`
+directly is invalid.
+
+When perf telemetry is enabled, data is persisted to local JSONL files and is
+**never transmitted externally**.
+
+- **Location**: the perf directory is `<global log dir>/perf`, where the global
+  log dir is `Storage.getGlobalLogDir()` (resolved from `LLXPRT_LOG_HOME`, then
+  `LLXPRT_CONFIG_HOME`, then the platform default — see
+  [Application Directories](./reference/application-directories.md)). Files are
+  named `perf-YYYYMMDD-<runUuid>.jsonl` (one per writer per UTC day).
+- **What is recorded**: each `operation` record carries identity/build fields
+  (`session_id`, `operation_id`, `runtime_id`, `project_hash`, `llxprt_version`,
+  `git_sha`, `runtime`, `platform`), the comparison dimensions (`provider`,
+  `model`, `render_mode`, terminal geometry), token counts
+  (`context_tokens`, `output_tokens`), direct client-phase timing
+  (`client_prepare_ms`, `stream_handler_ms`, `ink_render_ms`,
+  `stdout_write_sync_ms`, `client_finalize_ms`), provider/tool activity
+  intervals, the terminal `status`, and `concurrent_instances`. When
+  `telemetry.perf.memory` is on, `memory_sample` rows additionally carry RSS,
+  heap, external, and array-buffer bytes with `uptime_ms`. Prompt/response text
+  is **not** recorded.
+- **Retention**: an eventual bound of **64 MiB / 128 artifacts** (JSONL files +
+  claim files) is enforced oldest-first. A genuinely-live writer — today's UTC
+  day-key with an mtime within the maintenance window — is never evicted, and a
+  non-stale run claim survives while it is active; both still count toward the
+  caps. This lets a long-running process converge to the bounds by evicting its
+  own older files while its current file stays safe.
+- **Inspection and management** (interactive `/perf` subcommands):
+  - `/perf` — current-process snapshot (live samples, active operation) when
+    perf is active in this process; otherwise reports it is not active.
+  - `/perf inspect` — directory path, schema version, privacy/default-off
+    statement, file/record counts, and self-health (skipped/truncated lines,
+    last write error, evictions).
+  - `/perf report [--baseline <version|sha>]` — grouped p50 metrics by build
+    and comparison dimensions, with optional matched-dimension delta.
+  - `/perf delete` — removes old/stale perf artifacts (respecting live writers
+    and active claims).
+
 ### Environment Variables
 
 You can also control telemetry through environment variables:

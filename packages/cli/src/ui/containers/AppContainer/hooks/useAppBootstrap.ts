@@ -38,6 +38,7 @@ import { useSessionInitialization } from './useSessionInitialization.js';
 import { useTokenMetricsTracking } from './useTokenMetricsTracking.js';
 import { registerCleanup } from '../../../../utils/cleanup.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
+import type { MemoryTelemetryController } from '../../../hooks/memoryTrend/memoryTelemetry.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import type { HistoryItem } from '../../../types.js';
 import type {
@@ -62,6 +63,8 @@ export interface AppBootstrapProps {
   recordingIntegration?: RecordingIntegration;
   initialRecordingService?: SessionRecordingService;
   initialLockHandle?: LockHandle | null;
+  /** P12: optional memory telemetry controller (perf+memory enabled only). */
+  memoryController?: MemoryTelemetryController;
 }
 
 export interface AppBootstrapResult {
@@ -163,7 +166,7 @@ function useBootstrapHistory(props: AppBootstrapProps) {
     loadHistory,
     resumedHistory,
   });
-  useMemoryMonitor({ addItem });
+  useMemoryMonitor({ addItem, memoryController: props.memoryController });
   return {
     runtime,
     isFocused,

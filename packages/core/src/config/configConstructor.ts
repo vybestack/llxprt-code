@@ -315,11 +315,32 @@ function applyTelemetrySettings(
   config.usageStatisticsEnabled = params.usageStatisticsEnabled ?? true;
 }
 
-function resolveTelemetrySettings(
+/**
+ * Returns a shallow copy of `settings` with the nested perf sub-object
+ * defensively cloned, so mutating the result (or its perf) cannot reach the
+ * source. P09 copy policy: isolation by cloning on every ingress and egress —
+ * never by freezing. Used by resolveTelemetrySettings (constructor ingress),
+ * Config.updateTelemetrySettings (update ingress), and
+ * Config.getTelemetrySettings (egress).
+ */
+export function withClonedPerf(settings: TelemetrySettings): TelemetrySettings {
+  const { perf, ...rest } = settings;
+  return { ...rest, ...(perf ? { perf: { ...perf } } : {}) };
+}
+
+export function mergeTelemetrySettings(
+  current: TelemetrySettings,
+  update: Partial<TelemetrySettings>,
+): TelemetrySettings {
+  return withClonedPerf({ ...current, ...update });
+}
+
+export function resolveTelemetrySettings(
   telemetry: TelemetrySettings | undefined,
 ): TelemetrySettings {
-  return {
-    ...(telemetry ?? {}),
+  const { perf, ...rest } = telemetry ?? {};
+  return withClonedPerf({
+    ...rest,
     enabled: telemetry?.enabled ?? false,
     logPrompts: telemetry?.logPrompts ?? true,
     outfile: telemetry?.outfile,
@@ -330,7 +351,30 @@ function resolveTelemetrySettings(
     redactUrls: telemetry?.redactUrls ?? false,
     redactEmails: telemetry?.redactEmails ?? false,
     redactPersonalInfo: telemetry?.redactPersonalInfo ?? false,
-  };
+    ...(perf ? { perf } : {}),
+  });
+}
+
+/**
+ * Pure resolver for perf telemetry settings (D2).
+ *
+ * Returns the effective perf state from a TelemetrySettings object.
+ * Both fields default to false. When `enabled` is false, memory is
+ * forced to false regardless of its configured value (master gates memory).
+ *
+ * Does not mutate the input. Returns a fresh object so callers cannot
+ * affect subsequent resolutions by mutating the result.
+ */
+export function resolvePerfSettings(settings: TelemetrySettings | undefined): {
+  enabled: boolean;
+  memory: boolean;
+} {
+  const enabled = settings?.perf?.enabled ?? false;
+  const memory = settings?.perf?.memory ?? false;
+  if (!enabled) {
+    return { enabled: false, memory: false };
+  }
+  return { enabled: true, memory };
 }
 
 function applyFileFilteringSettings(

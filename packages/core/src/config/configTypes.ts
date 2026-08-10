@@ -114,6 +114,18 @@ export interface IntrospectionAgentSettings {
   enabled?: boolean;
 }
 
+/**
+ * Client-side performance telemetry settings (D2).
+ *
+ * The persisted shape is nested: `telemetry.perf.enabled` (master) and
+ * `telemetry.perf.memory`, both default false. `telemetry.perf` itself is
+ * an object, never a boolean. Memory is effective only when enabled is true.
+ */
+export interface PerfTelemetrySettings {
+  enabled?: boolean;
+  memory?: boolean;
+}
+
 export interface TelemetrySettings {
   enabled?: boolean;
   logPrompts?: boolean;
@@ -140,6 +152,7 @@ export interface TelemetrySettings {
   enableDataRetention?: boolean;
   conversationExpirationDays?: number;
   maxConversationsStored?: number;
+  perf?: PerfTelemetrySettings;
 }
 
 /**

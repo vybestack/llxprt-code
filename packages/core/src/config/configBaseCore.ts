@@ -67,6 +67,7 @@ import type { ToolRecord } from './toolRegistryFactory.js';
 import type { LspState } from './lspIntegration.js';
 import type { ApprovalMode, MCPServerConfig } from './configTypes.js';
 import type { ImageOperationRunner } from '../services/image/imageCapability.js';
+import { resolvePerfSettings } from './configConstructor.js';
 import {
   type AccessibilitySettings,
   type BugCommandSettings,
@@ -639,6 +640,21 @@ export abstract class ConfigBaseCore {
   }
   getTelemetryEnabled(): boolean {
     return this.telemetrySettings.enabled ?? false;
+  }
+  /**
+   * Effective perf telemetry master switch. Delegates to resolvePerfSettings
+   * so gating policy lives in exactly one place.
+   */
+  getTelemetryPerfEnabled(): boolean {
+    return resolvePerfSettings(this.telemetrySettings).enabled;
+  }
+  /**
+   * Effective perf memory flag. Master-gated: returns false when the perf
+   * master switch (getTelemetryPerfEnabled) is off, regardless of the stored
+   * memory value. Delegates to resolvePerfSettings.
+   */
+  getTelemetryPerfMemory(): boolean {
+    return resolvePerfSettings(this.telemetrySettings).memory;
   }
   getTelemetryLogPromptsEnabled(): boolean {
     return this.telemetrySettings.logPrompts ?? true;

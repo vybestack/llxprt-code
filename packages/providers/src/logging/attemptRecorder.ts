@@ -13,6 +13,7 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { logApiError } from '@vybestack/llxprt-code-core/telemetry/loggers.js';
 import { ApiErrorEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { getPerfPhaseObserver } from '@vybestack/llxprt-code-core/perf/perfPhaseObserver.js';
 import type { UsageStats } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   type ResponseTokenCounts,
@@ -99,7 +100,11 @@ export interface AttemptRecorderOptions {
  * - Stable nonempty attempt IDs provided by the lifecycle owner
  * - Monotonic timestamps (performance.now-based)
  * - No phantom attempt when an external owner is present
- * - Fail-open: listener/export errors never propagate into the stream path
+ * - Fail-open: emit/export errors (emitAttemptRecord, emitMetricsTelemetry,
+ *   logApiError) never propagate into the stream path. Perf phase observer
+ *   invocations are the exception: they propagate fail-fast per D8 so a
+ *   programming error in the observer is surfaced immediately rather than
+ *   silently corrupting telemetry.
  */
 export class AttemptRecorder implements AttemptLifecycleObserver {
   private readonly logger = new DebugLogger('llxprt:attempt:recorder');
@@ -152,6 +157,18 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
     });
     this.attemptOrder.push(attemptId);
     this.attemptCounter++;
+
+    // Perf phase observer (P07): notify at the exact attempt-start boundary.
+    // Default-off: null observer short-circuits. Invoked directly (no
+    // try/catch) so internal errors propagate fail-fast (D8).
+    const perfObserver = getPerfPhaseObserver();
+    if (perfObserver !== null) {
+      perfObserver.onProviderAttemptStart({
+        attemptId,
+        promptId: this.logicalRequestId,
+        startMs: requestStartMs,
+      });
+    }
   }
 
   /**
@@ -234,6 +251,27 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
     // Prune terminal attempts to prevent unbounded memory growth in
     // long-lived recorder instances.
     this.pruneTerminalAttempts();
+
+    // Perf phase observer (P07): notify at the exact attempt-end boundary.
+    // Invoked AFTER the try/catch above so an internal observer/programming
+    // error propagates fail-fast (D8) rather than being swallowed by the
+    // emitAttemptRecord catch. The observer fires before any SDK/export
+    // gate so SDK-disabled mode still notifies. Default-off: null observer
+    // short-circuits.
+    const perfObserver = getPerfPhaseObserver();
+    if (perfObserver !== null) {
+      const completionMs =
+        sanitizeTimestamp(info.completionMs) ?? performance.now();
+      perfObserver.onProviderAttemptEnd({
+        attemptId,
+        promptId: this.logicalRequestId,
+        startMs: attempt.requestStartMs,
+        endMs: completionMs,
+        status: info.status,
+        inputTokens: info.inputTokens,
+        outputTokens: info.outputTokens,
+      });
+    }
   }
 
   /** Maximum number of terminal attempts to retain before pruning. */

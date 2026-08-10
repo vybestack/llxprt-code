@@ -45,6 +45,24 @@ import {
 
 const logger = DebugLogger.getLogger('llxprt:cli:agent-event-stream');
 
+/**
+ * Package-private monotonic clock seam for default-off testing (P07). Defaults
+ * to `performance.now`; tests inject a counting clock to prove the
+ * absent-observer path performs NO timing work. NOT exported via the package
+ * barrel (index.ts) — tests deep-import it directly.
+ */
+let monotonicClock: () => number = () => performance.now();
+
+/**
+ * @internal Package-private test seam for the event-dispatch monotonic clock.
+ * NOT part of the package barrel/API; pass null to restore the default clock.
+ */
+export function __setMonotonicClockForTesting(
+  clock: (() => number) | null,
+): void {
+  monotonicClock = clock ?? (() => performance.now());
+}
+
 /** Routes a single public AgentEvent into React state. */
 export type AgentEventRouter = (
   event: AgentEvent,
@@ -80,6 +98,24 @@ export interface UseAgentEventStreamArgs {
   getPreferredEditor?: () => EditorType | undefined;
   onEditorOpen?: () => void;
   onEditorClose?: () => void;
+  /**
+   * Optional perf callback invoked DIRECTLY OUTSIDE the ordinary
+   * processAgentEvent try/catch for EACH observed AgentEvent, carrying the
+   * turn's AbortSignal so measurements route to the correct operation (not the
+   * "current active op" by position). This performs live phase tracking
+   * (tool-status → tool/approval states, provider-abort → API evidence) and
+   * accumulates stream_handler_ms.
+   *
+   * D8: because this is invoked OUTSIDE the generic catch-and-log boundary, a
+   * perf observer/programming error propagates and REJECTS the stream.
+   * Ordinary event-handler errors remain caught/logged so the stream
+   * continues. When undefined (perf disabled), this is a no-op.
+   */
+  onAgentEventObserved?: (
+    event: AgentEvent,
+    signal: AbortSignal,
+    syncHandlerMs: number,
+  ) => void;
 }
 
 export interface UseAgentEventStreamReturn {
@@ -289,8 +325,11 @@ function iterateAgentStream(
   return (async () => {
     const input = toAgentInput(message);
     const iterator = agent.stream(input, { signal, promptId });
-    for await (const event of iterator) {
-      if (signal.aborted) break;
+    const observer = args.onAgentEventObserved;
+    // Shared dispatch-with-catch: one bad event must not abort the entire
+    // stream. Extracted so both the observer-absent and observer-present
+    // branches use identical dispatch behavior.
+    const dispatchEvent = (event: AgentEvent): void => {
       try {
         args.processAgentEventRef.current?.(
           event,
@@ -300,6 +339,24 @@ function iterateAgentStream(
       } catch (error) {
         // One bad event must not abort the entire stream.
         logger.error('Error processing agent event:', error);
+      }
+    };
+    for await (const event of iterator) {
+      if (signal.aborted) break;
+      if (observer === undefined) {
+        // Default-off: no perf observer means NO timing calls and NO sample
+        // allocation. The ordinary handler dispatch/catch behavior is preserved
+        // so one bad event never aborts the stream.
+        dispatchEvent(event);
+      } else {
+        // Measure the synchronous dispatch, then invoke the observer OUTSIDE
+        // the generic catch-and-log boundary (D8: a perf-callback throw rejects
+        // the stream / fail-fast). Ordinary handler throws were already
+        // caught/logged inside dispatchEvent so the stream continues.
+        const handlerStart = monotonicClock();
+        dispatchEvent(event);
+        const handlerMs = monotonicClock() - handlerStart;
+        observer(event, signal, handlerMs);
       }
     }
   })();

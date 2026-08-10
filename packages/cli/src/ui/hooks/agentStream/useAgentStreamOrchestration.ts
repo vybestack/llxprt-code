@@ -39,6 +39,7 @@ import {
 } from './useAgentStreamLifecycle.js';
 import type { QueuedSubmission } from './types.js';
 import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
+import type { OperationLifecycleRegistry } from './operationLifecycle.js';
 
 export interface AgentStreamOrchestrationDeps {
   agent: Agent;
@@ -63,6 +64,12 @@ export interface AgentStreamOrchestrationDeps {
   recordingIntegration?: RecordingIntegration;
   runtimeMessageBus?: MessageBus;
   subagentManager?: UiSubagentManager;
+  /**
+   * Optional perf operation lifecycle registry (P06/P07). When undefined
+   * (perf disabled), no lifecycle instrumentation occurs. Supplied by P12
+   * integration wiring.
+   */
+  operationLifecycle?: OperationLifecycleRegistry;
 }
 
 export interface AgentStreamOrchestrationResult {
@@ -274,6 +281,7 @@ function useEventStreamForAgent(
   scheduler: ToolSchedulerState,
   processAgentEventRef: React.MutableRefObject<AgentEventRouter | null>,
 ) {
+  const lifecycle = args.operationLifecycle;
   return useAgentEventStream({
     agent: args.agent,
     addItem: args.addItem,
@@ -291,6 +299,15 @@ function useEventStreamForAgent(
     getPreferredEditor: args.getPreferredEditor,
     onEditorOpen: args.onEditorOpen,
     onEditorClose: args.onEditorClose,
+    // P07: perf event observation routed OUTSIDE the generic event-handler
+    // catch (D8: a perf callback throw rejects the stream). The turn's
+    // AbortSignal is passed through so measurements route to the correct op,
+    // never to "the current active op" by position. Wired only when a registry
+    // exists (perf enabled).
+    onAgentEventObserved: lifecycle
+      ? (event, signal, handlerMs) =>
+          lifecycle.observeAgentEvent(event, signal, handlerMs)
+      : undefined,
   });
 }
 
@@ -419,5 +436,6 @@ function buildSubmitQueryDeps({
     streamingState,
     runStreamRef,
     subagentManager: args.subagentManager,
+    operationLifecycle: args.operationLifecycle,
   };
 }
