@@ -1654,6 +1654,21 @@
         "outfile": {
           "type": "string",
           "description": "File path for writing telemetry output."
+        },
+        "perf": {
+          "type": "object",
+          "description": "Client-side performance telemetry (local-only, default off). When enabled, timing and resource data is written to local perf files. memory requires enabled to be true.",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Master switch for local client performance telemetry. Default false."
+            },
+            "memory": {
+              "type": "boolean",
+              "description": "Include memory trend data in perf records. Effective only when enabled is true. Default false."
+            }
+          }
         }
       }
     },

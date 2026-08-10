@@ -16,7 +16,7 @@ import { MessageType } from '../types.js';
 
 describe('useMemoryMonitor', () => {
   const addItem = vi.fn();
-  const memoryUsageSpy = vi.spyOn(process, 'memoryUsage');
+  const rssSpy = vi.spyOn(process.memoryUsage, 'rss');
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -28,18 +28,14 @@ describe('useMemoryMonitor', () => {
   });
 
   it('does not emit a warning when usage is below the threshold', () => {
-    memoryUsageSpy.mockReturnValue({
-      rss: MEMORY_WARNING_THRESHOLD_BYTES / 4,
-    } as NodeJS.MemoryUsage);
+    rssSpy.mockReturnValue(MEMORY_WARNING_THRESHOLD_BYTES / 4);
     renderHook(() => useMemoryMonitor({ addItem }));
     vi.advanceTimersByTime(MEMORY_CHECK_INTERVAL_MS * 2);
     expect(addItem).not.toHaveBeenCalled();
   });
 
   it('emits a warning once when usage exceeds the threshold', () => {
-    memoryUsageSpy.mockReturnValue({
-      rss: MEMORY_WARNING_THRESHOLD_BYTES * 1.2,
-    } as NodeJS.MemoryUsage);
+    rssSpy.mockReturnValue(MEMORY_WARNING_THRESHOLD_BYTES * 1.2);
 
     renderHook(() => useMemoryMonitor({ addItem }));
     vi.advanceTimersByTime(MEMORY_CHECK_INTERVAL_MS);

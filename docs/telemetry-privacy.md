@@ -231,6 +231,36 @@ Leave `conversationLogPath` empty (or omit it) to use the default `<data>/conver
 - `redactEmails` (boolean): Redact email addresses (default: `true`)
 - `redactPersonalInfo` (boolean): Redact PII patterns (default: `true`)
 
+#### Client Performance Telemetry
+
+LLxprt can optionally collect **local client-side performance telemetry** —
+timing data for client phases (prepare, stream handling, Ink rendering, stdout
+writes, finalization), provider/tool activity intervals, and operation lifecycle
+metadata. This data is written to local JSONL files and is **never transmitted
+externally**.
+
+Both keys are **disabled by default**. To enable:
+
+```json
+{
+  "telemetry": {
+    "perf": {
+      "enabled": true,
+      "memory": true
+    }
+  }
+}
+```
+
+- `telemetry.perf.enabled` (boolean): Master switch for performance telemetry. Default: `false`. When `false`, no perf files are created, no observers are installed, and no memory ring is allocated.
+- `telemetry.perf.memory` (boolean): Include memory trend data (RSS, heap, external, array buffers) in perf records. Default: `false`. **Effective only when `enabled` is `true`** — memory is gated by the master switch. When perf is enabled but memory is off, operation records omit the memory columns entirely (absent, not zero-filled).
+
+`telemetry.perf` is an **object**, not a boolean. Setting it to `true` or `false`
+directly is invalid.
+
+When perf telemetry is enabled, data is persisted to local files in the global
+log directory. No external transmission occurs.
+
 ### Environment Variables
 
 You can also control telemetry through environment variables:

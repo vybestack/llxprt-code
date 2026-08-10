@@ -143,6 +143,9 @@ describe('startInteractiveUI', () => {
     storage: {},
     getDebugMode: () => false,
     getTerminalBackground: () => undefined,
+    // Perf disabled: buildAndStartPerfOwner reads getTelemetrySettings() and
+    // returns null (no perf owner) without touching any other runtime seam.
+    getTelemetrySettings: () => ({ perf: { enabled: false } }),
   } as Config;
   const mockAgent = {
     dispose: vi.fn().mockResolvedValue(undefined),

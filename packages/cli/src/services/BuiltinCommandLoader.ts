@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { join } from 'node:path';
 import { isDevelopment } from '../utils/installationInfo.js';
 import type {
   SlashCommand,
@@ -69,6 +70,7 @@ import { todoCommand } from '../ui/commands/todoCommand.js';
 import { setupCommand } from '../ui/commands/setupCommand.js';
 import { tasksCommands } from '../ui/commands/tasksCommand.js';
 import { hooksCommand } from '../ui/commands/hooksCommand.js';
+import { createPerfCommand } from '../ui/commands/perfCommand.js';
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P21
  */
@@ -191,6 +193,12 @@ export class BuiltinCommandLoader implements ICommandLoader {
        * @plan PLAN-20260214-SESSIONBROWSER.P21
        */
       continueCommand,
+      createPerfCommand({
+        snapshotCapability: this.config?.getPerfSnapshotCapability?.() ?? null,
+        tokenUsageDir: this.config
+          ? join(this.config.getProjectTempDir(), 'token-usage')
+          : undefined,
+      }),
     ];
 
     return allDefinitions.filter((cmd): cmd is SlashCommand => cmd !== null);

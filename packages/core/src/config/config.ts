@@ -34,10 +34,7 @@ import {
   type SchedulerOptions,
 } from './schedulerSingleton.js';
 import { initializeLsp } from './lspIntegration.js';
-import {
-  applyConfigParams,
-  type ConfigConstructorTarget,
-} from './configConstructor.js';
+import * as configConstructor from './configConstructor.js';
 import { ConfigBase } from './configBase.js';
 import {
   buildNewContentGeneratorConfig,
@@ -125,7 +122,10 @@ export class Config extends ConfigBase {
 
   constructor(params: ConfigParameters) {
     super();
-    applyConfigParams(this as unknown as ConfigConstructorTarget, params);
+    configConstructor.applyConfigParams(
+      this as unknown as configConstructor.ConfigConstructorTarget,
+      params,
+    );
     this.syncModeDerivedPolicyRules(this.approvalMode);
     this.cachedEffectiveTrust = this.isTrustedFolder();
     this.liveTrustTransitionLifecycle = new LiveTrustTransitionLifecycle({
@@ -587,14 +587,14 @@ export class Config extends ConfigBase {
   }
 
   getTelemetrySettings(): TelemetrySettings {
-    return { ...this.telemetrySettings };
+    return configConstructor.withClonedPerf(this.telemetrySettings);
   }
 
   updateTelemetrySettings(settings: Partial<TelemetrySettings>): void {
-    this.telemetrySettings = {
-      ...this.telemetrySettings,
-      ...settings,
-    };
+    this.telemetrySettings = configConstructor.mergeTelemetrySettings(
+      this.telemetrySettings,
+      settings,
+    );
 
     // If we have a provider manager, update its config to trigger re-wrapping
     if (this.providerManager) {

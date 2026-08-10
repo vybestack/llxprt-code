@@ -36,6 +36,7 @@ import type { useStreamState } from './useStreamState.js';
 import type { AgentStreamOrchestrationDeps } from './useAgentStreamOrchestration.js';
 import { useAgentStreamOrchestration } from './useAgentStreamOrchestration.js';
 import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
+import type { OperationLifecycleRegistry } from './operationLifecycle.js';
 
 export const useAgentStream = (
   agent: Agent,
@@ -61,6 +62,7 @@ export const useAgentStream = (
   runtimeMessageBus?: MessageBus,
   subagentManager?: UiSubagentManager,
   removeItems?: RemoveHistoryItems,
+  operationLifecycle?: OperationLifecycleRegistry,
 ) => {
   const orchestration = useAgentStreamOrchestration({
     agent,
@@ -83,6 +85,7 @@ export const useAgentStream = (
     recordingIntegration,
     runtimeMessageBus,
     subagentManager,
+    operationLifecycle,
   } satisfies AgentStreamOrchestrationDeps);
 
   return useAgentStreamReturn(

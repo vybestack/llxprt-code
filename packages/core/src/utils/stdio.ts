@@ -6,6 +6,69 @@
 
 import { coreEvents } from './events.js';
 
+/**
+ * The Node stdout write signature, covering both overloads:
+ *   write(chunk, callback?) and write(chunk, encoding, callback?).
+ */
+type StdoutWriteArgs = Parameters<typeof process.stdout.write>;
+
+/**
+ * Second positional argument to stdout.write: either a BufferEncoding, a
+ * callback, or absent.
+ */
+type StdoutEncodingArg = StdoutWriteArgs[1];
+
+/**
+ * Observer invoked once per real stdout write, after the write returns.
+ * Internal observer/programming errors must propagate (D8) — this callback is
+ * never wrapped in try/catch. Only the filesystem writer fails open.
+ */
+export interface StdoutWriteObserver {
+  onWrite(encodedBytes: number, syncDurationMs: number): void;
+}
+
+/**
+ * Computes the number of encoded bytes for a write chunk:
+ * - Uint8Array (incl. Buffer): byteLength
+ * - string: Buffer.byteLength using the supplied encoding (defaults to UTF-8)
+ */
+function encodedByteLength(
+  chunk: Uint8Array | string,
+  encodingOrCallback: StdoutEncodingArg,
+): number {
+  if (typeof chunk === 'string') {
+    const encoding =
+      typeof encodingOrCallback === 'string' ? encodingOrCallback : undefined;
+    return Buffer.byteLength(chunk, encoding);
+  }
+  return chunk.byteLength;
+}
+
+/**
+ * Wraps an underlying stdout write with byte counting and synchronous-duration
+ * measurement. Exported from this module so behavioral tests can inject a
+ * deterministic underlying write to verify byte counting, backpressure,
+ * callback forwarding, and error propagation without touching the real
+ * process.stdout.
+ *
+ * The observer is called directly after the underlying write returns, with no
+ * try/catch — internal/programming errors fail fast (D8). If the underlying
+ * write throws synchronously, no observer sample is produced.
+ */
+export function createObservedStdoutWrite(
+  underlyingWrite: (...args: StdoutWriteArgs) => boolean,
+  observer: StdoutWriteObserver,
+): (...args: StdoutWriteArgs) => boolean {
+  return function observedStdoutWrite(...args: StdoutWriteArgs): boolean {
+    const encodedBytes = encodedByteLength(args[0], args[1]);
+    const start = performance.now();
+    const ok = underlyingWrite(...args);
+    const syncDurationMs = performance.now() - start;
+    observer.onWrite(encodedBytes, syncDurationMs);
+    return ok;
+  };
+}
+
 // Capture the original stdout and stderr write methods before any monkey patching occurs.
 const originalStdoutWrite = process.stdout.write.bind(process.stdout);
 const originalStderrWrite = process.stderr.write.bind(process.stderr);
@@ -108,7 +171,7 @@ export function patchStdio(): () => void {
  * Also adds error event handlers to prevent EPIPE crashes when output is piped
  * to a process that exits early.
  */
-export function createInkStdio() {
+export function createInkStdio(observer?: StdoutWriteObserver) {
   // Remove any existing handlers to avoid duplicates, then re-add.
   // Handlers are defined at module scope so the same references are used.
   process.stdout.removeListener('error', handleStdoutError);
@@ -117,10 +180,17 @@ export function createInkStdio() {
   process.stdout.on('error', handleStdoutError);
   process.stderr.on('error', handleStderrError);
 
+  // When no observer is present, the write delegate is writeToStdout itself —
+  // preserving the exact function identity and behaviour of today. When an
+  // observer is supplied, a single observed wrapper is created and reused.
+  const stdoutWrite = observer
+    ? createObservedStdoutWrite(writeToStdout, observer)
+    : writeToStdout;
+
   const inkStdout = new Proxy(process.stdout, {
     get(target, prop, receiver) {
       if (prop === 'write') {
-        return writeToStdout;
+        return stdoutWrite;
       }
       const value = Reflect.get(target, prop, receiver);
       if (typeof value === 'function') {

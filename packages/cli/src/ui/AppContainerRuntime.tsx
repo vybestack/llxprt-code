@@ -17,6 +17,8 @@ import type { SlashCommandRuntime, UiRuntime } from './cliUiRuntime.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
 import type { AppState, AppAction } from './reducers/appReducer.js';
+import type { OperationLifecycleRegistry } from './hooks/agentStream/operationLifecycle.js';
+import type { MemoryTelemetryController } from './hooks/memoryTrend/memoryTelemetry.js';
 import { UIStateProvider } from './contexts/UIStateContext.js';
 import { UIActionsProvider } from './contexts/UIActionsContext.js';
 import { DefaultAppLayout } from './layouts/DefaultAppLayout.js';
@@ -62,6 +64,10 @@ export interface AppContainerRuntimeProps {
   /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
   initialLockHandle?: LockHandle | null;
   suppressStartupWelcome?: boolean;
+  /** P12: optional perf operation lifecycle registry (perf enabled only). */
+  operationLifecycle?: OperationLifecycleRegistry;
+  /** P12: optional memory telemetry controller (perf+memory enabled only). */
+  memoryController?: MemoryTelemetryController;
 }
 
 type HookResults = {
@@ -456,15 +462,16 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     setLlxprtMdFileCount: bootstrap.setLlxprtMdFileCount,
     suppressStartupWelcome: props.suppressStartupWelcome,
   });
-  const input = useAppInput(
-    buildInputParams(
+  const input = useAppInput({
+    ...buildInputParams(
       bootstrap,
       dialogs,
       props.appState,
       props.appDispatch,
       props.slashCommandRuntime,
     ),
-  );
+    operationLifecycle: props.operationLifecycle,
+  });
   const layout = useAppLayout(buildLayoutParams(bootstrap, dialogs, input));
   useUnconfiguredProviderGuidance({
     hasActiveProvider:

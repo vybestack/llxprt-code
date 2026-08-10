@@ -100,6 +100,7 @@ export {
   type ModelBreakdown,
   type ApiAttemptRecord,
 } from './sessionMetricsAggregator.js';
+export { IntervalUnion } from './intervalUnion.js';
 export { ToolConfirmationOutcome } from '../internal/interfaces.js';
 export type {
   TelemetryConfig,

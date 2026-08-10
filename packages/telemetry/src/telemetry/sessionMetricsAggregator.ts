@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { IntervalUnion } from './intervalUnion.js';
+
 /**
  * Canonical session-level metrics aggregator.
  *
@@ -126,11 +128,6 @@ export interface SessionMetricsSnapshot {
   models: Record<string, ModelBreakdown>;
 }
 
-interface Interval {
-  start: number;
-  end: number;
-}
-
 interface CompactTimingSums {
   sumInputPlusOutput: number;
   sumDurationMs: number;
@@ -185,89 +182,6 @@ class DedupSet {
 
   clear(): void {
     this.entries.clear();
-  }
-}
-
-/**
- * Incrementally maintained, sorted, non-overlapping interval list.
- *
- * Each insertion is O(n) worst-case (binary-search position + neighbor
- * merge) — never a full O(n log n) re-sort. The union is kept exact for
- * the entire session lifetime: no intervals are evicted or merged across
- * gaps, so a late-arriving out-of-order interval that overlaps an earlier
- * one is always applied correctly. Gaps are never bridged.
- */
-class IntervalUnion {
-  private intervals: Interval[] = [];
-  private cachedDuration = 0;
-
-  add(start: number, end: number): void {
-    // Reject non-finite endpoints so NaN/Infinity cannot poison the union
-    if (!Number.isFinite(start) || !Number.isFinite(end)) return;
-    if (end <= start) return;
-    this.insertSorted({ start, end });
-    this.recomputeDuration();
-  }
-
-  get duration(): number {
-    return this.cachedDuration;
-  }
-
-  get count(): number {
-    return this.intervals.length;
-  }
-
-  get latestEnd(): number {
-    return this.intervals[this.intervals.length - 1]?.end ?? 0;
-  }
-
-  getMerged(): readonly Interval[] {
-    return this.intervals;
-  }
-
-  clear(): void {
-    this.intervals = [];
-    this.cachedDuration = 0;
-  }
-
-  private insertSorted(interval: Interval): void {
-    const list = this.intervals;
-    if (list.length === 0) {
-      list.push(interval);
-      return;
-    }
-
-    let lo = 0;
-    let hi = list.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if (list[mid].start < interval.start) {
-        lo = mid + 1;
-      } else {
-        hi = mid;
-      }
-    }
-
-    if (lo > 0 && list[lo - 1].end >= interval.start) {
-      lo--;
-      list[lo].end = Math.max(list[lo].end, interval.end);
-    } else {
-      list.splice(lo, 0, interval);
-    }
-
-    const i = lo + 1;
-    while (i < list.length && list[i].start <= list[lo].end) {
-      list[lo].end = Math.max(list[lo].end, list[i].end);
-      list.splice(i, 1);
-    }
-  }
-
-  private recomputeDuration(): void {
-    let total = 0;
-    for (const iv of this.intervals) {
-      total += iv.end - iv.start;
-    }
-    this.cachedDuration = total;
   }
 }
 
@@ -741,7 +655,7 @@ export class SessionMetricsAggregator {
   }
 
   private computeAgentActiveTimeMs(sessionCurrentMs: number): number {
-    const rawAgentActiveTimeMs = this.activeIntervals.duration;
+    const rawAgentActiveTimeMs = this.activeIntervals.durationMs();
     // When sessionStartMs is null (no positive timestamps recorded), we
     // cannot compute a meaningful wall-clock clamp. Return the raw union
     // duration to avoid artificially zeroing out activity time.

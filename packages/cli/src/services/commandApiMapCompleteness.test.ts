@@ -9,19 +9,35 @@
  * @requirement:REQ-021
  *
  * Command-map completeness test (#2203 / REQ-021). Every registered CLI slash
- * command (top-level and sub-command) must appear in COMMAND_API_MAP or be
- * excluded via the CONFIG_GATED_COMMANDS set (commands not loaded with null
- * config). This prevents future drift between the command registry and the
- * classification map.
+ * command (top-level and sub-command) must appear in the combined
+ * command→API map (the agents-canonical COMMAND_API_MAP plus CLI-owned
+ * extensions for commands with no agents/core surface) or be excluded via
+ * the CONFIG_GATED_COMMANDS set (commands not loaded with null config). This
+ * prevents future drift between the command registry and the classification
+ * map.
  *
- * The COMMAND_API_MAP classifies each command as runtime / subpath / cli-local
+ * The combined map classifies each command as runtime / subpath / cli-local
  * and is the canonical source of truth for the runtime-vs-app-service boundary.
+ * CLI-local commands that have no agents/core dependency (e.g. `/perf` and its
+ * subcommands) are owned in the CLI package via CLI_COMMAND_API_EXTENSIONS so
+ * the agents package stays agent-neutral.
  */
 
 import { describe, it, expect } from 'bun:test';
 import { COMMAND_API_MAP } from '@vybestack/llxprt-code-agents/app-service.js';
+import { CLI_COMMAND_API_EXTENSIONS } from './cliCommandApiMap.js';
 import type { SlashCommand } from '../ui/commands/types.js';
 import { BuiltinCommandLoader } from './BuiltinCommandLoader.js';
+
+/**
+ * The unified boundary map: the agents-canonical COMMAND_API_MAP augmented
+ * with CLI-owned extensions for commands that have no agents/core surface.
+ * Every completeness, orphan, and uniqueness check below validates this
+ * combined map so there is a single source of truth at the test boundary.
+ */
+const COMBINED_COMMAND_API_MAP: ReadonlyArray<
+  (typeof COMMAND_API_MAP)[number]
+> = [...COMMAND_API_MAP, ...CLI_COMMAND_API_EXTENSIONS];
 
 /**
  * Config-gated commands that are not loaded when config is null. These are
@@ -40,7 +56,7 @@ const CONFIG_GATED_COMMANDS: readonly string[] = [
 /**
  * Known subcommands of config-gated commands. These are not loaded by
  * BuiltinCommandLoader(null), so they are verified explicitly here to
- * ensure they have COMMAND_API_MAP entries.
+ * ensure they have map entries.
  */
 const GATED_SUBCOMMANDS: readonly string[] = [
   '/hooks list',
@@ -51,10 +67,10 @@ const GATED_SUBCOMMANDS: readonly string[] = [
 ];
 
 /**
- * Conceptual entries in COMMAND_API_MAP that do not correspond to literal slash
- * commands but are required by the boundary test (app-service functions invoked
- * via dialogs or internal actions, not via /command). These are intentionally
- * excluded from the reverse orphan check.
+ * Conceptual entries in the combined map that do not correspond to literal
+ * slash commands but are required by the boundary test (app-service functions
+ * invoked via dialogs or internal actions, not via /command). These are
+ * intentionally excluded from the reverse orphan check.
  */
 const CONCEPTUAL_COMMANDS: readonly string[] = [
   '/mcp add',
@@ -66,11 +82,13 @@ const CONCEPTUAL_COMMANDS: readonly string[] = [
 
 /**
  * Returns true when the given command path is covered by at least one entry in
- * COMMAND_API_MAP. A command is covered if there is an entry whose command
+ * the combined map. A command is covered if there is an entry whose command
  * field exactly matches the path.
  */
 function isCommandMapped(commandPath: string): boolean {
-  return COMMAND_API_MAP.some((entry) => entry.command === commandPath);
+  return COMBINED_COMMAND_API_MAP.some(
+    (entry) => entry.command === commandPath,
+  );
 }
 
 /**
@@ -112,14 +130,14 @@ describe('Command-map completeness (#2203 / REQ-021)', () => {
     expect(checkablePaths.length).toBeGreaterThan(0);
   });
 
-  it('every registered command has a COMMAND_API_MAP entry', () => {
+  it('every registered command has a combined-map entry', () => {
     const unmapped = checkablePaths.filter((p) => !isCommandMapped(p));
     expect(unmapped).toStrictEqual([]);
   });
 
-  it('no orphaned slash-command entries exist in COMMAND_API_MAP', () => {
-    const slashEntries = COMMAND_API_MAP.map((e) => e.command).filter((cmd) =>
-      cmd.startsWith('/'),
+  it('no orphaned slash-command entries exist in the combined map', () => {
+    const slashEntries = COMBINED_COMMAND_API_MAP.map((e) => e.command).filter(
+      (cmd) => cmd.startsWith('/'),
     );
     const knownPaths = new Set([
       ...checkablePaths,
@@ -131,14 +149,16 @@ describe('Command-map completeness (#2203 / REQ-021)', () => {
     expect(orphans).toStrictEqual([]);
   });
 
-  it('no two COMMAND_API_MAP entries share the same command string', () => {
-    const names = COMMAND_API_MAP.map((e) => e.command);
+  it('no two combined-map entries share the same command string', () => {
+    const names = COMBINED_COMMAND_API_MAP.map((e) => e.command);
     const duplicates = names.filter((name, idx) => names.indexOf(name) !== idx);
     expect(duplicates).toHaveLength(0);
   });
 
   it('every subpath entry targets the pinned specifier with a named export', () => {
-    const subpathEntries = COMMAND_API_MAP.filter((e) => e.kind === 'subpath');
+    const subpathEntries = COMBINED_COMMAND_API_MAP.filter(
+      (e) => e.kind === 'subpath',
+    );
     expect(subpathEntries.length).toBeGreaterThan(0);
     for (const entry of subpathEntries) {
       expect(entry.target).toBe('@vybestack/llxprt-code-agents/app-service.js');
@@ -147,12 +167,25 @@ describe('Command-map completeness (#2203 / REQ-021)', () => {
     }
   });
 
-  it('config-gated commands and their subcommands are tracked in COMMAND_API_MAP', () => {
+  it('config-gated commands and their subcommands are tracked in the combined map', () => {
     for (const gated of CONFIG_GATED_COMMANDS) {
       expect(isCommandMapped(gated)).toBe(true);
     }
     for (const sub of GATED_SUBCOMMANDS) {
       expect(isCommandMapped(sub)).toBe(true);
+    }
+  });
+
+  it('CLI extensions do not duplicate agents-map command strings', () => {
+    const agentsCommands = new Set(COMMAND_API_MAP.map((e) => e.command));
+    for (const ext of CLI_COMMAND_API_EXTENSIONS) {
+      expect(agentsCommands.has(ext.command)).toBe(false);
+    }
+  });
+
+  it('every CLI extension is classified cli-local', () => {
+    for (const ext of CLI_COMMAND_API_EXTENSIONS) {
+      expect(ext.kind).toBe('cli-local');
     }
   });
 });

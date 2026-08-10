@@ -10,6 +10,9 @@ export * from './src/debug/index.js';
 // Telemetry module
 export * from './src/telemetry/index.js';
 
+// Perf telemetry module (issue #3167)
+export * from './src/perf/index.js';
+
 // Utilities
 export { safeJsonStringify } from './src/utils/safeJsonStringify.js';
 export { LLXPRT_DIR } from './src/utils/paths.js';

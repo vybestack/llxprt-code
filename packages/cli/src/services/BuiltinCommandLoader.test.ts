@@ -127,6 +127,7 @@ describe('BuiltinCommandLoader', () => {
       getSkillManager: vi.fn().mockReturnValue({
         getAllSkills: vi.fn().mockReturnValue([]),
       }),
+      getProjectTempDir: () => '/tmp/llxprt-test-project',
     } as unknown as Config;
 
     restoreCommandMock.mockReturnValue({
@@ -247,6 +248,7 @@ describe('BuiltinCommandLoader profile', () => {
       getSkillManager: vi.fn().mockReturnValue({
         getAllSkills: vi.fn().mockReturnValue([]),
       }),
+      getProjectTempDir: () => '/tmp/llxprt-test-project',
     } as unknown as Config;
   });
 

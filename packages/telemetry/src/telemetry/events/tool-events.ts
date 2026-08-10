@@ -40,6 +40,8 @@ export class ToolCallEvent {
   start_ms?: number;
   /** Monotonic end timestamp (ms) for interval unioning */
   end_ms?: number;
+  #perfStartMs?: number;
+  #perfEndMs?: number;
 
   constructor(call: CompletedToolCallShape) {
     this['event.name'] = 'tool_call';
@@ -60,14 +62,11 @@ export class ToolCallEvent {
     this.agent_id = call.request.agentId ?? DEFAULT_AGENT_ID;
     this.call_id = call.request.callId;
 
-    // Preserve caller-supplied start/end timestamps when available; only
-    // derive from duration as a fallback so interval unioning works even
-    // when callers don't provide explicit monotonic timestamps.
-    const hasExplicitStartEnd =
-      call.startMs !== undefined && call.endMs !== undefined;
-    if (hasExplicitStartEnd) {
+    if (call.startMs !== undefined && call.endMs !== undefined) {
       this.start_ms = call.startMs;
       this.end_ms = call.endMs;
+      this.#perfStartMs = call.startMs;
+      this.#perfEndMs = call.endMs;
     } else if (call.durationMs !== undefined && call.durationMs > 0) {
       const endMs = performance.now();
       this.end_ms = endMs;
@@ -86,6 +85,16 @@ export class ToolCallEvent {
         };
       }
     }
+  }
+
+  /**
+   * Returns only caller-supplied monotonic boundaries for performance interval
+   * unioning. The public event fields retain their historical duration-based
+   * fallback for telemetry compatibility, but that estimate is not an honest
+   * overlap interval.
+   */
+  getPerfBoundaries(): { startMs?: number; endMs?: number } {
+    return { startMs: this.#perfStartMs, endMs: this.#perfEndMs };
   }
 }
 
