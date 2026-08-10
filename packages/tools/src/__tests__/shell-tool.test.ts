@@ -225,7 +225,7 @@ describe('Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', 
   });
 });
 
-describe('is_background managed job behavior @plan:issue1995', () => {
+describe('shell result contracts @plan:issue1995 @plan:issue3200', () => {
   beforeEach(() => {
     mockPlatform.mockReturnValue('darwin');
     mockTmpdir.mockReturnValue('/tmp');
@@ -295,6 +295,44 @@ describe('is_background managed job behavior @plan:issue1995', () => {
       }),
     };
   }
+
+  it('preserves acquisition truncation metadata in the model-facing result', async () => {
+    const outputTruncation = {
+      observedBytes: 2048,
+      retainedBytes: 1024,
+      omittedBytes: 1024,
+      truncated: true as const,
+      budgetBytes: 1024,
+    };
+    const baseHost = createFakeHostWithBackground(() => {
+      throw new Error('Foreground execution must not launch a background job');
+    });
+    const host: IShellToolHost = {
+      ...baseHost,
+      executeShellCommand: async () => ({
+        output: 'head\n[LLXPRT output truncated: 1,024 bytes omitted]\ntail',
+        pid: 123,
+        exitCode: 0,
+        signal: null,
+        error: null,
+        aborted: false,
+        outputTruncation,
+      }),
+    };
+
+    const result = await executeToolForBehavioralAssertion(
+      new ShellTool(
+        host,
+        createFakeMessageBus(ToolConfirmationOutcome.ProceedOnce),
+      ),
+      { command: 'printf bounded' },
+    );
+
+    expect(result.metadata?.['outputTruncation']).toStrictEqual(
+      outputTruncation,
+    );
+    expect(String(result.llmContent)).toContain('LLXPRT output truncated');
+  });
 
   it('is_background: true returns a deterministic job-shaped result with job id, command, and state (T14)', async () => {
     let launched: { command: string; cwd: string } | undefined;

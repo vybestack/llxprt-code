@@ -12,9 +12,14 @@ import {
 } from '@vybestack/llxprt-code-core';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 import { buildCommandToExecute } from '@vybestack/llxprt-code-tools';
+import {
+  createByteBudget,
+  DEFAULT_ACQUISITION_BUDGET_BYTES,
+} from '@vybestack/llxprt-code-tools/acquisition.js';
 
 import { Session } from './zedIntegration.js';
 import { TerminalManager } from './zed-terminal-manager.js';
+import { TERMINAL_DISCONTINUITY_NOTICE } from './terminalOutputDelta.js';
 import {
   buildFakeAgent,
   RecordingConnection,
@@ -47,6 +52,7 @@ function terminalManager(
   connection: RecordingConnection,
   sendUpdate: (update: acp.SessionUpdate) => Promise<void> = (update) =>
     connection.sessionUpdate({ sessionId: 'test-session-id', update }),
+  outputByteLimit?: number,
 ): TerminalManager {
   return new TerminalManager(
     'test-session-id',
@@ -54,6 +60,7 @@ function terminalManager(
     '/project',
     sendUpdate,
     new DebugLogger('llxprt:zed-terminal-test'),
+    createByteBudget(outputByteLimit ?? DEFAULT_ACQUISITION_BUDGET_BYTES),
   );
 }
 
@@ -137,6 +144,7 @@ describe('Zed terminal execution', () => {
         args: [...shell.argsPrefix, preparedEcho],
         cwd: '/project',
         sessionId: 'test-session-id',
+        outputByteLimit: DEFAULT_ACQUISITION_BUDGET_BYTES,
       },
     ]);
     expect(result).toMatchObject({ output: 'hello\n', exitCode: 0 });
@@ -457,5 +465,149 @@ describe('Zed terminal command correlation does not over-match', () => {
     expect(updates).not.toContainEqual(
       expect.objectContaining({ toolCallId: 'shell-no-match' }),
     );
+  });
+});
+
+describe('Zed terminal byte-budget enforcement (issue #3200 finding 4)', () => {
+  afterEach(async () => {
+    await Promise.allSettled(
+      createdSessions.splice(0).map((session) => session.dispose()),
+    );
+  });
+
+  it('fails fast and releases a hostile peer that exceeds the byte budget', async () => {
+    const connection = new RecordingConnection();
+    // Set terminal output far exceeding the small budget.
+    connection.setTerminalOutput('X'.repeat(100000));
+    const terminals = terminalManager(connection, undefined, 1024);
+
+    await expectRejection(
+      terminals.executeShellCommand(
+        preparedEcho,
+        '/project',
+        () => undefined,
+        new AbortController().signal,
+      ),
+      'exceeded output byte budget',
+    );
+
+    // The terminal must be killed and released (fail fast).
+    expect(connection.killCalls).toBeGreaterThanOrEqual(1);
+    expect(connection.releaseCalls).toBeGreaterThanOrEqual(1);
+  });
+
+  it('emits truthful quantifiable metadata and one notice when the peer evicts content', async () => {
+    // The peer first shows a large output, then evicts the head and reports a
+    // small disjoint tail with truncated=true. The manager must surface the
+    // quantifiable loss (observed > retained) as exact metadata and include one
+    // visible discontinuity notice in the returned output.
+    const connection = new RecordingConnection();
+    connection.delayTerminalExit();
+    const bigOutput = 'HEAD_MARKER' + 'X'.repeat(8000);
+    connection.setTerminalOutput(bigOutput);
+    let resolveBig: () => void = () => undefined;
+    const sawBig = new Promise<void>((resolve) => {
+      resolveBig = resolve;
+    });
+    const budget = 16384; // larger than bigOutput so it is not fail-fast killed
+    const streamedChunks: string[] = [];
+    const terminals = terminalManager(connection, undefined, budget);
+    const execution = terminals.executeShellCommand(
+      preparedEcho,
+      '/project',
+      (event) => {
+        if (event.type !== 'data' || typeof event.chunk !== 'string') {
+          return;
+        }
+        streamedChunks.push(event.chunk);
+        if (
+          event.chunk.includes('HEAD_MARKER') &&
+          !event.chunk.includes(TERMINAL_DISCONTINUITY_NOTICE)
+        ) {
+          resolveBig();
+        }
+      },
+      new AbortController().signal,
+    );
+    await connection.waitForTerminalProcessCreated();
+    // Wait until the first poll has delivered the big output, then simulate the
+    // peer evicting it to a small disjoint tail.
+    await sawBig;
+    connection.setTerminalOutput('TAIL_ONLY_ZZZ');
+    connection.setTerminalTruncated(true);
+    connection.resolveDelayedTerminalExit();
+    const result = await execution;
+
+    // Quantifiable loss: observed (the big peak) exceeds retained (the tail).
+    expect(result.outputTruncation).toBeDefined();
+    expect(result.outputTruncation?.truncated).toBe(true);
+    expect(result.outputTruncation?.omittedBytes).toBeGreaterThan(0);
+    expect(result.outputTruncation?.budgetBytes).toBe(budget);
+    // Exactly one durable discontinuity notice is streamed and retained.
+    expect(
+      streamedChunks.join('').split(TERMINAL_DISCONTINUITY_NOTICE).length - 1,
+    ).toBe(1);
+    expect(result.output.split(TERMINAL_DISCONTINUITY_NOTICE).length - 1).toBe(
+      1,
+    );
+    expect(result.output).toContain('TAIL_ONLY_ZZZ');
+  });
+
+  it('does not fabricate exact metadata when the peer reports truncated but no loss is observed', async () => {
+    // A peer that reports truncated=true but whose output never shrinks (we
+    // never observe an eviction) must NOT claim observed==retained with
+    // omittedBytes 0 as exact metadata — that would be a fabricated guarantee.
+    const connection = new RecordingConnection();
+    connection.setTerminalOutput('some output\n');
+    connection.setTerminalTruncated(true);
+    const terminals = terminalManager(connection, undefined, 4096);
+
+    const result = await terminals.executeShellCommand(
+      preparedEcho,
+      '/project',
+      () => undefined,
+      new AbortController().signal,
+    );
+
+    // No quantifiable loss was observed, so no exact-count metadata is emitted.
+    expect(result.outputTruncation).toBeUndefined();
+    expect(result.output).toBe('some output\n');
+  });
+
+  it('does not set truncation metadata when the peer is not truncated', async () => {
+    const connection = new RecordingConnection();
+    connection.setTerminalOutput('clean output\n');
+    const terminals = terminalManager(connection, undefined, 4096);
+
+    const result = await terminals.executeShellCommand(
+      preparedEcho,
+      '/project',
+      () => undefined,
+      new AbortController().signal,
+    );
+
+    expect(result.outputTruncation).toBeUndefined();
+  });
+
+  it('enforces the configured byte budget as the retention bound', async () => {
+    // Output exactly at the configured budget is retained fully (byte-accurate),
+    // confirming the configured budget — not a fixed character cap — governs
+    // retention. Combined with the fail-fast test above, retained state is
+    // always bounded by the configured budget.
+    const connection = new RecordingConnection();
+    const budget = 4096;
+    connection.setTerminalOutput('B'.repeat(budget));
+    const terminals = terminalManager(connection, undefined, budget);
+
+    const result = await terminals.executeShellCommand(
+      preparedEcho,
+      '/project',
+      () => undefined,
+      new AbortController().signal,
+    );
+
+    expect(Buffer.byteLength(result.output, 'utf8')).toBe(budget);
+    expect(result.exitCode).toBe(0);
+    expect(result.outputTruncation).toBeUndefined();
   });
 });

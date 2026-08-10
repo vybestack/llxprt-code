@@ -19,6 +19,10 @@ import {
   ptyInactivityAbortAction,
 } from './shellPtyLifecycle.js';
 import type { PtyImplementation } from '../utils/getPty.js';
+import {
+  BoundedCombinedCollector,
+  createByteBudget,
+} from '@vybestack/llxprt-code-tools/acquisition.js';
 
 const { Terminal } = headless;
 
@@ -74,9 +78,10 @@ function makeFakeState(inputs: FakeStateInputs): {
     inactivityAbortController,
     resetInactivityTimer: () => undefined,
     exitedGuard: createExitGuard(),
-    decoder: null,
     output: null,
-    outputChunks: [],
+    rawCollector: new BoundedCombinedCollector({
+      budget: createByteBudget(1024),
+    }),
     error: null,
     isStreamingRawContent: true,
     sniffedBytes: 0,
@@ -85,6 +90,11 @@ function makeFakeState(inputs: FakeStateInputs): {
     hasResolved: false,
     abortFinalizeTimeout: null,
     processingChain: Promise.resolve(),
+    pendingQueueBytes: 0,
+    pendingQueueItems: 0,
+    supportsBackpressure: true,
+    backpressurePaused: false,
+    queueOverflowed: false,
   } as unknown as PtyExecState;
 
   return { state, killSignals };

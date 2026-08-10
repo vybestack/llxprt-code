@@ -22,6 +22,10 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { Agent } from '@vybestack/llxprt-code-agents';
+import {
+  BoundedStreamCollector,
+  resolveByteBudgetFromSetting,
+} from '@vybestack/llxprt-code-tools/acquisition.js';
 import { type UseHistoryManagerReturn } from './useHistoryManager.js';
 import { SHELL_COMMAND_NAME } from '../constants.js';
 import { formatMemoryUsage } from '../utils/formatters.js';
@@ -67,6 +71,14 @@ interface ShellExecutionParams {
   terminalWidth: number | undefined;
   terminalHeight: number | undefined;
   resolve: (value: void | PromiseLike<void>) => void;
+}
+
+interface ShellEventState {
+  isBinaryStream: boolean;
+  binaryBytesReceived: number;
+  cumulativeStdout: string | AnsiOutput;
+  liveDisplayCollector: BoundedStreamCollector;
+  lastUpdateTime: number;
 }
 
 function addShellCommandToAgentHistory(
@@ -188,11 +200,7 @@ function applyResultDisplayUpdate(
 function processShellEvent(
   event: ShellOutputEvent,
   config: ShellCommandRuntime,
-  state: {
-    isBinaryStream: boolean;
-    binaryBytesReceived: number;
-    cumulativeStdout: string | AnsiOutput;
-  },
+  state: ShellEventState,
 ): boolean {
   if (event.type === 'data' && state.isBinaryStream) return false;
 
@@ -202,11 +210,8 @@ function processShellEvent(
       if (config.getShouldUseNodePtyShell()) {
         state.cumulativeStdout = event.chunk;
         shouldUpdate = true;
-      } else if (
-        typeof event.chunk === 'string' &&
-        typeof state.cumulativeStdout === 'string'
-      ) {
-        state.cumulativeStdout += event.chunk;
+      } else if (typeof event.chunk === 'string') {
+        state.liveDisplayCollector.append(Buffer.from(event.chunk, 'utf-8'));
         shouldUpdate = true;
       }
       break;
@@ -236,28 +241,26 @@ function createShellEventHandler(
     React.SetStateAction<HistoryItemWithoutId | null>
   >,
   setLastShellOutputTime: React.Dispatch<React.SetStateAction<number>>,
-  state: {
-    isBinaryStream: boolean;
-    binaryBytesReceived: number;
-    cumulativeStdout: string | AnsiOutput;
-    lastUpdateTime: number;
-  },
+  state: ShellEventState,
 ) {
   return (event: ShellOutputEvent) => {
     const shouldUpdate = processShellEvent(event, config, state);
     if (!shouldUpdate) return;
-
-    const currentDisplayOutput = computeDisplayOutput(
-      state.isBinaryStream,
-      state.binaryBytesReceived,
-      state.cumulativeStdout,
-    );
 
     const pastThrottle =
       Date.now() - state.lastUpdateTime > OUTPUT_UPDATE_INTERVAL_MS;
     const isPtyData =
       event.type === 'data' && config.getShouldUseNodePtyShell();
     if (!isPtyData && !pastThrottle) return;
+
+    if (event.type === 'data' && !isPtyData && !state.isBinaryStream) {
+      state.cumulativeStdout = state.liveDisplayCollector.getResult().text;
+    }
+    const currentDisplayOutput = computeDisplayOutput(
+      state.isBinaryStream,
+      state.binaryBytesReceived,
+      state.cumulativeStdout,
+    );
 
     setLastShellOutputTime(Date.now());
     applyResultDisplayUpdate(
@@ -471,15 +474,16 @@ function handleExecutionResult(
 }
 
 async function initiateShellExecution(params: ShellExecutionParams) {
-  const state: {
-    isBinaryStream: boolean;
-    binaryBytesReceived: number;
-    cumulativeStdout: string | AnsiOutput;
-    lastUpdateTime: number;
-  } = {
+  const shellExecutionConfig = params.config.getShellExecutionConfig();
+  const state: ShellEventState = {
     isBinaryStream: false,
     binaryBytesReceived: 0,
     cumulativeStdout: '',
+    liveDisplayCollector: new BoundedStreamCollector({
+      budget: resolveByteBudgetFromSetting(
+        shellExecutionConfig.outputRetentionMaxBytes,
+      ),
+    }),
     lastUpdateTime: -Infinity,
   };
 
@@ -504,7 +508,7 @@ async function initiateShellExecution(params: ShellExecutionParams) {
     params.abortSignal,
     params.config.getShouldUseNodePtyShell(),
     {
-      ...params.config.getShellExecutionConfig(),
+      ...shellExecutionConfig,
       terminalWidth: effectiveTerminalWidth,
       terminalHeight: effectiveTerminalHeight,
     },

@@ -687,6 +687,7 @@ const PRESERVED_PROFILE_EPHEMERALS = [
   'task-max-timeout-seconds',
   'shell-default-timeout-seconds',
   'shell-max-timeout-seconds',
+  'shell-output-retention-max-bytes',
 ];
 
 async function switchProviderForProfile(targetProviderName: string): Promise<{

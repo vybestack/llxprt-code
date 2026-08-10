@@ -22,6 +22,8 @@ import {
   buildCpExitResult,
   registerCpExitHandlers,
 } from './shellCpHelpers.js';
+import { resolveShellRetentionBudget } from './shellAcquisitionConfig.js';
+import { MAX_SNIFF_SIZE } from './shellOutputUtils.js';
 
 /** Create the child_process result promise with all event handlers. */
 export function createCpResultPromise(
@@ -30,10 +32,13 @@ export function createCpResultPromise(
   onOutputEvent: (event: ShellOutputEvent) => void,
   abortSignal: AbortSignal,
   inactivityTimeoutMs: number | undefined,
+  outputRetentionMaxBytes: number | undefined,
 ): Promise<ShellExecutionResult> {
   const exitedGuard = createExitGuard();
   const { reset: resetInactivityTimer, controller: inactivityAbortController } =
     makeInactivityTimer(inactivityTimeoutMs, exitedGuard);
+
+  const budget = resolveShellRetentionBudget(outputRetentionMaxBytes);
 
   const state: CpExecState = {
     child,
@@ -45,16 +50,12 @@ export function createCpResultPromise(
     exitedGuard,
     stdoutDecoder: null,
     stderrDecoder: null,
-    stdout: '',
-    stderr: '',
-    stdoutTruncated: false,
-    stderrTruncated: false,
-    outputChunks: [],
+    retentionBudget: budget,
+    rawCollector: null,
     error: null,
     isStreamingRawContent: true,
     sniffedBytes: 0,
-    sniffBuffer: Buffer.alloc(0),
-    totalBytesReceived: 0,
+    sniffBuffer: Buffer.alloc(MAX_SNIFF_SIZE),
     hasResolved: false,
     cleanedUp: false,
   };
@@ -72,8 +73,12 @@ export function createCpResultPromise(
       resolve(buildCpExitResult(state, code, signal, finalBuffer));
     };
 
-    child.stdout?.on('data', (data) => handleCpOutput(state, data, 'stdout'));
-    child.stderr?.on('data', (data) => handleCpOutput(state, data, 'stderr'));
+    child.stdout?.on('data', (data: Buffer) =>
+      handleCpOutput(state, data, 'stdout'),
+    );
+    child.stderr?.on('data', (data: Buffer) =>
+      handleCpOutput(state, data, 'stderr'),
+    );
     child.on('error', (err) => {
       state.error = err;
       handleExit(1, null);

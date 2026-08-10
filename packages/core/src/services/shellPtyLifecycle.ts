@@ -30,10 +30,52 @@ import {
   ptyRenderFn,
   registerPtyDataHandler,
 } from './shellPtyExecution.js';
+import { resolveShellRetentionBudget } from './shellAcquisitionConfig.js';
+import {
+  BoundedCombinedCollector,
+  type ByteBudget,
+} from '@vybestack/llxprt-code-tools/acquisition.js';
 const { Terminal } = headless;
 
-// We want to allow shell outputs that are close to the context window in size.
-export const SCROLLBACK_LIMIT = 600000;
+/**
+ * Default scrollback limit when no explicit scrollback is configured.
+ * This is intentionally bounded (Issue #3200); the old value of 600,000
+ * lines could retain hundreds of MB of terminal state.
+ */
+export const SCROLLBACK_LIMIT = 10000;
+
+/**
+ * Maximum scrollback lines. Even when an explicit scrollback is configured
+ * via settings, it is capped at this value to prevent unbounded terminal
+ * state growth (Issue #3200).
+ */
+const MAX_SCROLLBACK_LINES = 50000;
+
+/** Derive the effective xterm scrollback without exceeding the byte budget. */
+function deriveScrollbackFromBudget(
+  budget: ByteBudget,
+  cols: number,
+  configuredScrollback: number | undefined,
+): number {
+  const effectiveCols = Math.max(cols, 1);
+  const budgetLineLimit = Math.min(
+    Math.floor(budget.bytes / (effectiveCols * 8)),
+    MAX_SCROLLBACK_LINES,
+  );
+  const requested = Number.isFinite(configuredScrollback)
+    ? Math.max(Math.floor(configuredScrollback ?? 0), 0)
+    : SCROLLBACK_LIMIT;
+  return Math.min(requested, budgetLineLimit);
+}
+
+function createTerminalTrackingState(scrollback: number, rows: number) {
+  return {
+    terminalMaxBufferLines: scrollback + rows,
+    terminalScrollbackCapacity: scrollback,
+    terminalScrollbackAtCapacity: scrollback === 0,
+    terminalContentEvicted: false,
+  };
+}
 
 /** Clean up and resolve the active PTY entry from a map. */
 export function cleanupActivePtyEntry(
@@ -58,11 +100,21 @@ export function createPtyResultPromise(
   activePtys: Map<number, ActivePty>,
   lastActivePtyIdRef: { value: number | null },
 ): Promise<ShellExecutionResult> {
+  const budget = resolveShellRetentionBudget(
+    shellExecutionConfig.outputRetentionMaxBytes,
+  );
+
+  const effectiveScrollback = deriveScrollbackFromBudget(
+    budget,
+    cols,
+    shellExecutionConfig.scrollback,
+  );
+
   const headlessTerminal = new Terminal({
     allowProposedApi: true,
     cols,
     rows,
-    scrollback: shellExecutionConfig.scrollback ?? SCROLLBACK_LIMIT,
+    scrollback: effectiveScrollback,
   });
   headlessTerminal.scrollToTop();
 
@@ -92,9 +144,8 @@ export function createPtyResultPromise(
     inactivityAbortController,
     resetInactivityTimer,
     exitedGuard,
-    decoder: null,
     output: null,
-    outputChunks: [],
+    rawCollector: new BoundedCombinedCollector({ budget }),
     error: null,
     isStreamingRawContent: true,
     sniffedBytes: 0,
@@ -103,10 +154,22 @@ export function createPtyResultPromise(
     hasResolved: false,
     abortFinalizeTimeout: null,
     processingChain: Promise.resolve(),
+    pendingQueueBytes: 0,
+    pendingQueueItems: 0,
+    supportsBackpressure: ptyInfo.name !== 'bun-pty',
+    backpressurePaused: false,
+    queueOverflowed: false,
+    ...createTerminalTrackingState(effectiveScrollback, rows),
   };
 
   return new Promise<ShellExecutionResult>((resolve) => {
-    setupPtyEventHandlers(state, resolve, activePtys, lastActivePtyIdRef);
+    setupPtyEventHandlers(
+      state,
+      resolve,
+      activePtys,
+      lastActivePtyIdRef,
+      budget,
+    );
   });
 }
 
@@ -115,6 +178,7 @@ function setupPtyEventHandlers(
   resolve: (value: ShellExecutionResult) => void,
   activePtys: Map<number, ActivePty>,
   lastActivePtyIdRef: { value: number | null },
+  budget: ByteBudget,
 ): void {
   const resolveResult = makePtyResolveResult(
     state,
@@ -129,6 +193,14 @@ function setupPtyEventHandlers(
 
   state.activePtyEntry.onScrollDisposable = state.headlessTerminal.onScroll(
     () => {
+      const atCapacity =
+        state.terminalScrollbackCapacity === 0 ||
+        state.headlessTerminal.buffer.active.baseY >=
+          state.terminalScrollbackCapacity;
+      if (state.isWriting && state.terminalScrollbackAtCapacity && atCapacity) {
+        state.terminalContentEvicted = true;
+      }
+      state.terminalScrollbackAtCapacity = atCapacity;
       if (!state.isWriting) {
         render();
       }
@@ -138,7 +210,18 @@ function setupPtyEventHandlers(
   setupPtyInactivityHandler(state, resolveResult);
   const abortHandler = setupPtyAbortHandler(state, resolveResult);
 
-  registerPtyDataHandler(state, render);
+  registerPtyDataHandler(state, render, budget, (error) => {
+    if (state.hasResolved) {
+      return;
+    }
+    state.error = error;
+    if (!isKillablePid(state.ptyProcess.pid)) {
+      resolveResult(buildPtyResult(state, 1, null, false));
+      return;
+    }
+    void ptyAbortAction(state, resolveResult, false);
+  });
+
   registerPtyExitHandler(state, resolveResult, abortHandler);
 
   state.abortSignal.addEventListener('abort', abortHandler, { once: true });
@@ -152,6 +235,14 @@ function teardownPtyState(
   if (state.abortFinalizeTimeout) {
     clearTimeout(state.abortFinalizeTimeout);
     state.abortFinalizeTimeout = null;
+  }
+  if (state.backpressurePaused) {
+    try {
+      state.ptyProcess.resume();
+    } catch {
+      // PTY teardown below remains authoritative.
+    }
+    state.backpressurePaused = false;
   }
   cleanupActivePtyEntry(
     state,
@@ -283,6 +374,7 @@ function setupPtyAbortHandler(
 export async function ptyAbortAction(
   state: PtyExecState,
   resolveResult: (resultValue: ShellExecutionResult) => void,
+  aborted = true,
 ): Promise<void> {
   // A non-killable pid (0, negative, NaN, Infinity) must never reach
   // process.kill(-pid): pid 0 would signal the caller's own process group.
@@ -292,7 +384,7 @@ export async function ptyAbortAction(
   const pid = state.ptyProcess.pid;
   if (state.isWindows) {
     taskkillTree(pid);
-    resolveResult(buildPtyResult(state, 1, null, true));
+    resolveResult(buildPtyResult(state, 1, null, aborted));
     return;
   }
 
@@ -328,7 +420,7 @@ export async function ptyAbortAction(
   }
 
   state.abortFinalizeTimeout = setTimeout(() => {
-    resolveResult(buildPtyResult(state, 1, null, true));
+    resolveResult(buildPtyResult(state, 1, null, aborted));
   }, SIGKILL_TIMEOUT_MS);
 }
 

@@ -229,6 +229,10 @@ describe('ShellExecutionService', () => {
           }
           pty.onExit.mock.calls[0][0]({ exitCode: 0, signal: null });
         },
+        {
+          ...shellExecutionConfig,
+          outputRetentionMaxBytes: 8 * 1024 * 1024,
+        },
       );
 
       expect(result.exitCode).toBe(0);
@@ -270,7 +274,7 @@ describe('ShellExecutionService', () => {
       expect(result.output).toBe('value\nvalue2    ');
     });
 
-    it('should truncate output exceeding the scrollback limit', async () => {
+    it('should recover output evicted from scrollback within the retention budget', async () => {
       const scrollbackLimit = 100;
       const totalLines = 150;
       const lines = Array.from({ length: totalLines }, (_, i) => `line ${i}`);
@@ -287,17 +291,10 @@ describe('ShellExecutionService', () => {
 
       expect(result.exitCode).toBe(0);
 
-      const outputLines = result.output
-        .trim()
-        .split('\n')
-        .map((l) => l.trimEnd());
-
-      expect(outputLines.length).toBeLessThan(totalLines);
-      expect(outputLines[0]).not.toBe('line 0');
-
-      expect(outputLines[outputLines.length - 1]).toBe(
-        `line ${totalLines - 1}`,
-      );
+      expect(result.output).toContain('[Retained PTY output]');
+      expect(result.output).toContain('line 0');
+      expect(result.output).toContain(`line ${totalLines - 1}`);
+      expect(result.outputTruncation).toBeUndefined();
     });
 
     it('should call onPid with the process id', async () => {

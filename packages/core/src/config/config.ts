@@ -666,21 +666,21 @@ export class Config extends ConfigBase {
 
   getShellExecutionConfig(): ShellExecutionConfig {
     const ephemeralSettings = this.getEphemeralSettings();
-    const inactivityTimeoutSeconds =
-      (ephemeralSettings['shell-inactivity-timeout-seconds'] as
-        | number
-        | undefined) ?? 120; // Default 120 seconds
-    const inactivityTimeoutMs =
-      inactivityTimeoutSeconds === -1
-        ? undefined
-        : inactivityTimeoutSeconds * 1000;
+    const inactivitySeconds = Number(
+      ephemeralSettings['shell-inactivity-timeout-seconds'] ?? 120,
+    );
+
+    const rawLimit = ephemeralSettings['shell-output-retention-max-bytes'];
 
     return {
       terminalWidth: this.getPtyTerminalWidth(),
       terminalHeight: this.getPtyTerminalHeight(),
       showColor: this.getAllowPtyThemeOverride(),
       scrollback: this.getPtyScrollbackLimit(),
-      inactivityTimeoutMs,
+      inactivityTimeoutMs:
+        inactivitySeconds === -1 ? undefined : inactivitySeconds * 1000,
+      outputRetentionMaxBytes:
+        typeof rawLimit === 'number' ? rawLimit : undefined,
       isSandboxOrCI: !!this.getSandbox() || process.env.CI === 'true',
     };
   }

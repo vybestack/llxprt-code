@@ -188,6 +188,7 @@ export class RecordingConnection {
   releaseCalls = 0;
 
   private terminalOutput = '';
+  private terminalTruncated = false;
   private terminalExitDelayed = false;
   private terminalExitResolvers = new Map<string, Array<() => void>>();
   private terminalCreationWaiters = new Set<() => void>();
@@ -195,6 +196,10 @@ export class RecordingConnection {
 
   setTerminalOutput(output: string): void {
     this.terminalOutput = output;
+  }
+
+  setTerminalTruncated(truncated: boolean): void {
+    this.terminalTruncated = truncated;
   }
 
   delayTerminalExit(): void {
@@ -433,7 +438,7 @@ export class RecordingConnection {
       currentOutput: vi.fn(async () => ({
         output: this.terminalOutput,
         exitStatus: null,
-        truncated: false,
+        truncated: this.terminalTruncated,
       })),
       waitForExit: vi.fn(async () => {
         if (this.terminalExitDelayed) {

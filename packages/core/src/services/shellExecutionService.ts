@@ -127,6 +127,7 @@ export class ShellExecutionService {
         onOutputEvent,
         abortSignal,
         shellExecutionConfig.inactivityTimeoutMs,
+        shellExecutionConfig.outputRetentionMaxBytes,
       );
 
       return { pid: child.pid, result };

@@ -49,6 +49,7 @@ import {
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { AgenticLoopEvent, AgenticLoopOptions } from './types.js';
+import { AgenticEventQueue } from './agenticEventQueue.js';
 import {
   buildToolResponses,
   classifyCompletedTools,
@@ -83,64 +84,6 @@ function isTerminalStreamOutcome(type: AgentEventType): boolean {
     type === AgentEventType.UserCancelled ||
     type === AgentEventType.LoopDetected
   );
-}
-
-/**
- * A callback-to-generator bridge: scheduler callbacks push events into this
- * queue and `run` drains them. Resolves the tension between callback-driven
- * scheduler events and the generator-based loop body.
- */
-class EventQueue {
-  private readonly buffered: AgenticLoopEvent[] = [];
-  private resolveWait: (() => void) | null = null;
-  private closed = false;
-
-  push(event: AgenticLoopEvent): void {
-    if (this.closed) {
-      return;
-    }
-    this.buffered.push(event);
-    this.resolveWait?.();
-    this.resolveWait = null;
-  }
-
-  popBuffered(): AgenticLoopEvent | undefined {
-    return this.buffered.shift();
-  }
-
-  waitForNext(signal: AbortSignal): Promise<void> {
-    if (this.buffered.length > 0 || this.closed || signal.aborted) {
-      return Promise.resolve();
-    }
-    return new Promise<void>((resolve) => {
-      let settled = false;
-      const settle = () => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        signal.removeEventListener('abort', onAbort);
-        this.resolveWait = null;
-        resolve();
-      };
-      const onAbort = () => {
-        settle();
-      };
-      this.resolveWait = () => {
-        settle();
-      };
-      signal.addEventListener('abort', onAbort, { once: true });
-      if (signal.aborted) {
-        settle();
-      }
-    });
-  }
-
-  close(): void {
-    this.closed = true;
-    this.resolveWait?.();
-    this.resolveWait = null;
-  }
 }
 
 /** A mutable holder so promise callbacks can communicate state to the loop. */
@@ -557,7 +500,7 @@ export class AgenticLoop {
     requests: ToolCallRequestInfo[],
     signal: AbortSignal,
   ): AsyncGenerator<AgenticLoopEvent, TurnToolResult> {
-    const queue = new EventQueue();
+    const queue = new AgenticEventQueue();
     const sessionId = this.schedulerSessionId;
 
     const { resolveCompletion, completionPromise } =
@@ -617,6 +560,10 @@ export class AgenticLoop {
       }
 
       const completed = await Promise.race([completionTask, abortPromise]);
+      if (completed !== null && !signal.aborted) {
+        queue.flushOutputOmissionNotices();
+        yield* flushBuffered(queue);
+      }
       normalExit = completed !== null && !signal.aborted;
       return { completed };
     } finally {
@@ -648,7 +595,7 @@ export class AgenticLoop {
 
   private async createSchedulerWithCallbacks(
     sessionId: string,
-    queue: EventQueue,
+    queue: AgenticEventQueue,
     resolveCompletion: (calls: CompletedToolCall[]) => void,
     forwardingState: { active: boolean },
     markAcceptedUpdate: () => void,
@@ -706,7 +653,7 @@ export class AgenticLoop {
   private async *drainWhileRunning(
     completionTask: Promise<CompletedToolCall[] | null>,
     state: TurnState,
-    queue: EventQueue,
+    queue: AgenticEventQueue,
     signal: AbortSignal,
   ): AsyncGenerator<AgenticLoopEvent> {
     while (!state.completionSettled && !signal.aborted) {
@@ -756,7 +703,7 @@ export class AgenticLoop {
 }
 
 /** Yields all currently-buffered events without blocking. */
-function* flushBuffered(queue: EventQueue): Generator<AgenticLoopEvent> {
+function* flushBuffered(queue: AgenticEventQueue): Generator<AgenticLoopEvent> {
   let event = queue.popBuffered();
   while (event !== undefined) {
     yield event;

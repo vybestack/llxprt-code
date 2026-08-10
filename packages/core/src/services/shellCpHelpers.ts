@@ -15,8 +15,8 @@ import type {
 } from './shellExecutionTypes.js';
 import type { ExitGuard } from './shellExitGuard.js';
 import { stripAnsiIfPresent, MAX_SNIFF_SIZE } from './shellOutputUtils.js';
-
-export const MAX_CHILD_PROCESS_BUFFER_SIZE = 16 * 1024 * 1024; // 16MB
+import { BoundedCombinedCollector } from '@vybestack/llxprt-code-tools/acquisition.js';
+import type { ByteBudget } from '@vybestack/llxprt-code-tools/acquisition.js';
 
 /** State bag shared across child_process helper closures. */
 export interface CpExecState {
@@ -29,62 +29,48 @@ export interface CpExecState {
   exitedGuard: ExitGuard;
   stdoutDecoder: TextDecoder | null;
   stderrDecoder: TextDecoder | null;
-  stdout: string;
-  stderr: string;
-  stdoutTruncated: boolean;
-  stderrTruncated: boolean;
-  outputChunks: Buffer[];
+  retentionBudget: ByteBudget;
+  rawCollector: BoundedCombinedCollector | null;
   error: Error | null;
   isStreamingRawContent: boolean;
   sniffedBytes: number;
   sniffBuffer: Buffer;
-  totalBytesReceived: number;
   hasResolved: boolean;
   cleanedUp: boolean;
 }
 
-/** Append a decoded chunk to stdout or stderr with truncation tracking. */
-export function appendDecodedChunk(
-  currentBuffer: string,
-  strippedChunk: string,
-  maxSize: number,
-): { newBuffer: string; truncated: boolean } {
-  const chunkLength = strippedChunk.length;
-  const currentLength = currentBuffer.length;
-  const newTotalLength = currentLength + chunkLength;
-
-  if (newTotalLength <= maxSize) {
-    return { newBuffer: currentBuffer + strippedChunk, truncated: false };
+/** Create decoders and the bounded collector from the detected encoding. */
+export function ensureDecoders(
+  state: CpExecState,
+  data: Buffer,
+): BoundedCombinedCollector {
+  if (state.stdoutDecoder && state.stderrDecoder && state.rawCollector) {
+    return state.rawCollector;
   }
-
-  if (chunkLength >= maxSize) {
-    return {
-      newBuffer: strippedChunk.substring(chunkLength - maxSize),
-      truncated: true,
-    };
-  }
-
-  const charsToTrim = newTotalLength - maxSize;
-  const truncatedBuffer = currentBuffer.substring(charsToTrim);
-  return { newBuffer: truncatedBuffer + strippedChunk, truncated: true };
-}
-
-/** Create decoders for stdout/stderr from the first data chunk's encoding. */
-export function ensureDecoders(state: CpExecState, data: Buffer): void {
-  if (state.stdoutDecoder && state.stderrDecoder) {
-    return;
-  }
-  const encoding = getCachedEncodingForBuffer(data);
+  const detectedEncoding = getCachedEncodingForBuffer(data);
+  let encoding = detectedEncoding;
   try {
     state.stdoutDecoder = new TextDecoder(encoding);
     state.stderrDecoder = new TextDecoder(encoding);
   } catch {
-    state.stdoutDecoder = new TextDecoder('utf-8');
-    state.stderrDecoder = new TextDecoder('utf-8');
+    encoding = 'utf-8';
+    state.stdoutDecoder = new TextDecoder(encoding);
+    state.stderrDecoder = new TextDecoder(encoding);
   }
+  state.rawCollector = new BoundedCombinedCollector({
+    budget: state.retentionBudget,
+    encoding,
+  });
+  return state.rawCollector;
 }
 
-/** Sniff initial output for binary content detection. */
+/**
+ * Sniff initial output for binary content detection.
+ *
+ * Uses a fixed-capacity pre-allocated buffer (state.sniffBuffer is
+ * Buffer.alloc(MAX_SNIFF_SIZE) at init) and writes incrementally with
+ * Buffer.copy — O(1) per chunk, no quadratic concat (Issue #3200).
+ */
 function checkBinarySniff(state: CpExecState, data: Buffer): void {
   if (!state.isStreamingRawContent || state.sniffedBytes >= MAX_SNIFF_SIZE) {
     return;
@@ -93,14 +79,11 @@ function checkBinarySniff(state: CpExecState, data: Buffer): void {
   if (remaining <= 0) {
     return;
   }
-  const slice = data.subarray(0, remaining);
-  state.sniffBuffer =
-    state.sniffBuffer.length === 0
-      ? Buffer.from(slice)
-      : Buffer.concat([state.sniffBuffer, slice]);
-  state.sniffedBytes = state.sniffBuffer.length;
+  const writeLen = Math.min(data.length, remaining);
+  data.copy(state.sniffBuffer, state.sniffedBytes, 0, writeLen);
+  state.sniffedBytes += writeLen;
 
-  if (isBinary(state.sniffBuffer)) {
+  if (isBinary(state.sniffBuffer.subarray(0, state.sniffedBytes))) {
     state.isStreamingRawContent = false;
     state.onOutputEvent({ type: 'binary_detected' });
   }
@@ -113,10 +96,8 @@ export function handleCpOutput(
   stream: 'stdout' | 'stderr',
 ): void {
   state.resetInactivityTimer();
-  ensureDecoders(state, data);
-
-  state.totalBytesReceived += data.length;
-  state.outputChunks.push(data);
+  const rawCollector = ensureDecoders(state, data);
+  rawCollector.append(data, stream);
 
   checkBinarySniff(state, data);
 
@@ -125,56 +106,31 @@ export function handleCpOutput(
   const decodedChunk = decoder!.decode(data, { stream: true });
   const strippedChunk = stripAnsiIfPresent(decodedChunk);
 
-  if (stream === 'stdout') {
-    const { newBuffer, truncated } = appendDecodedChunk(
-      state.stdout,
-      strippedChunk,
-      MAX_CHILD_PROCESS_BUFFER_SIZE,
-    );
-    state.stdout = newBuffer;
-    if (truncated) {
-      state.stdoutTruncated = true;
-    }
-  } else {
-    const { newBuffer, truncated } = appendDecodedChunk(
-      state.stderr,
-      strippedChunk,
-      MAX_CHILD_PROCESS_BUFFER_SIZE,
-    );
-    state.stderr = newBuffer;
-    if (truncated) {
-      state.stderrTruncated = true;
-    }
-  }
-
   if (state.isStreamingRawContent) {
     state.onOutputEvent({ type: 'data', chunk: strippedChunk });
   } else {
     state.onOutputEvent({
       type: 'binary_progress',
-      bytesReceived: state.totalBytesReceived,
+      bytesReceived: rawCollector.observedByteCount,
     });
   }
 }
 
-function flushDecoder(
+function emitFinalDecodedChunk(
+  state: CpExecState,
   decoder: TextDecoder | null,
-  append: (text: string) => void,
 ): void {
-  if (!decoder) {
-    return;
-  }
-  const remaining = decoder.decode();
-  if (remaining) {
-    append(remaining);
+  const finalChunk = stripAnsiIfPresent(decoder?.decode() ?? '');
+  if (state.isStreamingRawContent && finalChunk !== '') {
+    state.onOutputEvent({ type: 'data', chunk: finalChunk });
   }
 }
 
-/** Clean up child_process listeners and flush remaining decoder bytes. */
+/** Clean up child_process listeners and materialize bounded raw output. */
 export function cleanupCpResources(
   state: CpExecState,
   abortHandler: () => void,
-): { stdout: string; stderr: string; finalBuffer: Buffer } {
+): { finalBuffer: Buffer } {
   state.exitedGuard.markExited();
   state.abortSignal.removeEventListener('abort', abortHandler);
 
@@ -187,15 +143,12 @@ export function cleanupCpResources(
     state.child.removeAllListeners('close');
   }
 
-  flushDecoder(state.stdoutDecoder, (text) => {
-    state.stdout += stripAnsiIfPresent(text);
-  });
-  flushDecoder(state.stderrDecoder, (text) => {
-    state.stderr += stripAnsiIfPresent(text);
-  });
+  emitFinalDecodedChunk(state, state.stdoutDecoder);
+  emitFinalDecodedChunk(state, state.stderrDecoder);
 
-  const finalBuffer = Buffer.concat(state.outputChunks);
-  return { stdout: state.stdout, stderr: state.stderr, finalBuffer };
+  const finalBuffer =
+    state.rawCollector?.getBoundedRawBuffer() ?? Buffer.alloc(0);
+  return { finalBuffer };
 }
 
 /** Build the ShellExecutionResult for a child_process exit. */
@@ -205,22 +158,26 @@ export function buildCpExitResult(
   signal: NodeJS.Signals | null,
   finalBuffer: Buffer,
 ): ShellExecutionResult {
-  const separator = state.stdout.endsWith('\n') ? '' : '\n';
-  let combinedOutput = state.stdout;
-  if (state.stderr) {
-    combinedOutput += (state.stdout !== '' ? separator : '') + state.stderr;
-  }
+  const rawResult = state.rawCollector?.getResult();
+  const rawMetadata = rawResult?.metadata;
 
-  if (state.stdoutTruncated || state.stderrTruncated) {
-    const truncationMessage = `\n[LLXPRT_CODE_WARNING: Output truncated. The buffer is limited to ${
-      MAX_CHILD_PROCESS_BUFFER_SIZE / (1024 * 1024)
-    }MB.]`;
-    combinedOutput += truncationMessage;
+  let combinedOutput = '';
+  if (rawResult?.metadata.truncated === true) {
+    combinedOutput = stripAnsiIfPresent(rawResult.text);
+  } else if (rawResult !== undefined) {
+    const stdout = stripAnsiIfPresent(rawResult.stdoutText);
+    const stderr = stripAnsiIfPresent(rawResult.stderrText);
+    const separator = stdout.endsWith('\n') ? '' : '\n';
+    combinedOutput = stdout;
+    if (stderr !== '') {
+      combinedOutput += (stdout !== '' ? separator : '') + stderr;
+    }
   }
 
   return {
     rawOutput: finalBuffer,
     output: combinedOutput.trim(),
+    outputTruncation: rawMetadata?.truncated === true ? rawMetadata : undefined,
     exitCode: code,
     signal: signal ? os.constants.signals[signal] : null,
     error: state.error,

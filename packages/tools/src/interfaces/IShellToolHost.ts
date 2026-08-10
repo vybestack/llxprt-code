@@ -10,6 +10,7 @@
  */
 
 import type { AnsiOutput } from '../utils/terminalSerializer.js';
+import type { TruncationMetadata } from '../acquisition/types.js';
 
 /**
  * Tools-owned interface for shell tool host dependencies.
@@ -41,6 +42,14 @@ export interface ShellExecutionResult {
   backgroundPIDs?: number[];
   /** Process group ID discovered for non-Windows shells. */
   pgid?: number | null;
+  /**
+   * Acquisition-time truncation metadata when output exceeded the retention
+   * byte budget. Present (with `truncated: true`) when the output was bounded
+   * during acquisition. The tools layer surfaces this so the model-facing
+   * result can carry a durable, accurate omission notice rather than a silent
+   * drop (issue #3200).
+   */
+  outputTruncation?: TruncationMetadata;
 }
 
 /** Result of command policy check. */

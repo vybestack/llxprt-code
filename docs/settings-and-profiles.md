@@ -189,6 +189,14 @@ These prevent a single tool call from flooding the context. This matters more th
 
 `tool-output-truncate-mode` controls what happens when a tool exceeds its limits. `warn` drops the output entirely and tells the model the results were too large — the model gets nothing back, just a message suggesting it narrow its query. `truncate` cuts the output to fit and silently includes what fits. `sample` picks evenly-spaced lines from the output to give a representative cross-section. `warn` is the default because it forces the model to be more surgical, which usually produces better results than shoveling truncated output into context.
 
+### Shell output acquisition
+
+| Setting                            | Description                                                                                                         | Default   |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------- | --------- |
+| `shell-output-retention-max-bytes` | Shell bytes retained in memory while a command runs; excess is represented by bounded head/tail output and metadata | `4194304` |
+
+This byte budget is enforced while output is acquired, before the separate model-facing token limiter. Commands continue to drain and complete after the budget fills. Values are clamped to a minimum of 1024 bytes and a hard maximum of 64 MiB; `-1` selects that finite hard maximum rather than disabling the bound.
+
 ### Timeouts
 
 | Setting                         | Description                                                 | Default         |
