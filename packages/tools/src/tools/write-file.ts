@@ -35,7 +35,7 @@ import {
   type ModifiableDeclarativeTool,
   type ModifyContext,
 } from './modifiable-tool.js';
-import { getSpecificMimeType } from '../utils/fileUtils.js';
+import { getSpecificMimeType, statFileSizeGate } from '../utils/fileUtils.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
 import { stringOrDefault } from '../utils/stringCoalescing.js';
@@ -177,6 +177,12 @@ class WriteFileToolInvocation extends BaseToolInvocation<
     }
 
     const filePath = this.getFilePath();
+    // Pre-read size gate: an oversized existing target must not be materialized
+    // for the preview diff. Defer to execute, which emits FILE_TOO_LARGE.
+    const sizeError = await statFileSizeGate(filePath);
+    if (sizeError) {
+      return false;
+    }
     const correctedContentResult = await getCorrectedFileContent(
       filePath,
       this.params.content,
@@ -229,6 +235,19 @@ class WriteFileToolInvocation extends BaseToolInvocation<
 
   async execute(_abortSignal: AbortSignal): Promise<ToolResult> {
     const filePath = this.getFilePath();
+
+    // Pre-read file-size gate: reject an oversized existing target before
+    // reading/copying it. New-file creation is unaffected (the gate returns
+    // null for a missing file).
+    const sizeError = await statFileSizeGate(filePath);
+    if (sizeError) {
+      return {
+        llmContent: sizeError.message,
+        returnDisplay: sizeError.message,
+        error: { message: sizeError.message, type: sizeError.type },
+      };
+    }
+
     const correctedContentResult = await getCorrectedFileContent(
       filePath,
       this.params.content,
@@ -521,6 +540,12 @@ export class WriteFileTool
           params.absolute_path,
           stringOrDefault(params.file_path, ''),
         );
+        // The modify seam must not materialize an oversized target into a
+        // temp editor file; reject before the read.
+        const sizeError = await statFileSizeGate(filePath);
+        if (sizeError) {
+          throw new Error(sizeError.message);
+        }
         const correctedContentResult = await getCorrectedFileContent(
           filePath,
           params.content,
@@ -533,6 +558,10 @@ export class WriteFileTool
           params.absolute_path,
           stringOrDefault(params.file_path, ''),
         );
+        const sizeError = await statFileSizeGate(filePath);
+        if (sizeError) {
+          throw new Error(sizeError.message);
+        }
         const correctedContentResult = await getCorrectedFileContent(
           filePath,
           params.content,

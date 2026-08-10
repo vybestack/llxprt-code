@@ -13,6 +13,7 @@ import type { IToolHost } from '../../interfaces/index.js';
 import type { ASTEditToolParams } from './types.js';
 import { ToolErrorType } from '../../types/tool-error.js';
 import { isNodeError } from '../../utils/errors.js';
+import { statFileSizeGate } from '../../utils/fileUtils.js';
 import { parse, LANGUAGE_MAP } from '../../utils/ast-grep-utils.js';
 import { applyReplacement } from './edit-helpers.js';
 import {
@@ -56,6 +57,23 @@ export async function calculateEdit(
   host: IToolHost,
   _abortSignal: AbortSignal,
 ): Promise<CalculatedEdit> {
+  // Pre-read file-size gate: reject an oversized existing target before any
+  // content read/parse/diff. New-file creation (ENOENT) is left unaffected.
+  const sizeError = await statFileSizeGate(params.file_path);
+  if (sizeError) {
+    return {
+      currentContent: null,
+      newContent: '',
+      occurrences: 0,
+      isNewFile: false,
+      error: {
+        display: sizeError.message,
+        raw: sizeError.message,
+        type: sizeError.type,
+      },
+    };
+  }
+
   // Normalize all string parameters to LF for consistent matching
   const normalizedOldString = params.old_string.replace(/\r\n/g, '\n');
   const normalizedNewString = params.new_string.replace(/\r\n/g, '\n');

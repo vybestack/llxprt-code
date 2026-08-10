@@ -39,6 +39,11 @@ import { APPLY_PATCH_TOOL } from '../types/tool-names.js';
 import { collectLspDiagnosticsBlock } from '../utils/lsp-diagnostics-helper.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
+import {
+  statFileSizeGate,
+  validateFileSizeBytes,
+  type FileSizeGateError,
+} from '../utils/fileUtils.js';
 import { stringOrDefault } from '../utils/stringCoalescing.js';
 import {
   createDefaultToolHost,
@@ -257,8 +262,24 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
       return false;
     }
 
+    // Pre-read size gate: an oversized existing target must not be materialized
+    // for the preview diff. Defer to execute, which emits FILE_TOO_LARGE.
+    const sizeError = await statFileSizeGate(filePath);
+    if (sizeError) {
+      return false;
+    }
+
     const { currentContent, fileExists } =
       await this.readCurrentContent(filePath);
+    // Validate authoritative host-returned content immediately after
+    // acquisition (host content may diverge from native stat).
+    const contentGate = validateFileSizeBytes(
+      filePath,
+      Buffer.byteLength(currentContent),
+    );
+    if (contentGate) {
+      return false;
+    }
     if (!fileExists && !isCreationPatch(patch)) return false;
 
     const applied = this.applyPatchToContent(currentContent, patch);
@@ -358,6 +379,20 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
   }
 
   /**
+   * Shared FILE_TOO_LARGE result for both the pre-read stat gate and the
+   * post-acquisition byte gate. Defers to the gate's authoritative message so
+   * the threshold/path stay aligned with the single validateFileSizeBytes
+   * source of truth, instead of duplicating a generic display string.
+   */
+  private toFileSizeGateResult(gate: FileSizeGateError): ToolResult {
+    return {
+      llmContent: gate.message,
+      returnDisplay: gate.message,
+      error: { message: gate.message, type: gate.type },
+    };
+  }
+
+  /**
    * Executes the apply_patch operation
    */
   override async execute(_signal: AbortSignal): Promise<ToolResult> {
@@ -388,9 +423,27 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
     );
     if (targetError) return targetError;
 
+    // 5b. Pre-read file-size gate: reject an oversized existing target before
+    // materializing content. Creation patches (missing target) are unaffected.
+    const sizeError = await statFileSizeGate(filePath);
+    if (sizeError) {
+      return this.toFileSizeGateResult(sizeError);
+    }
+
     // 6. Read current content.
     const { currentContent, fileExists } =
       await this.readCurrentContent(filePath);
+
+    // Validate authoritative host-returned content immediately after
+    // acquisition: a host file service may return bytes divergent from native
+    // stat, so the shared byte-size primitive rejects before diffing/backup.
+    const contentGate = validateFileSizeBytes(
+      filePath,
+      Buffer.byteLength(currentContent),
+    );
+    if (contentGate) {
+      return this.toFileSizeGateResult(contentGate);
+    }
 
     // 7. Missing file is not a context mismatch (AC6).
     if (!fileExists && !isCreationPatch(patch)) {

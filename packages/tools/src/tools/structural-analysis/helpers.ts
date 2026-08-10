@@ -58,6 +58,11 @@ export function getExtensionsForLanguage(lang: string | Lang): string[] {
 /**
  * Collects all files under `searchPath` that match the given language.
  * If `searchPath` is a single file, returns just that file.
+ *
+ * Kept for callers that still need the full materialized list (reverse-import
+ * discovery resolves against the whole workspace). Bounded traversal modes use
+ * {@link iterateFiles} instead so FastGlob never returns an unbounded array
+ * before slicing.
  */
 export async function getFiles(
   searchPath: string,
@@ -77,6 +82,38 @@ export async function getFiles(
       ignore: ['**/node_modules/**', '**/.git/**'],
     },
   );
+}
+
+/**
+ * Lazily yields files under `searchPath` matching `lang` using FastGlob's
+ * streaming API, so discovery is bounded at the source rather than collecting
+ * an unbounded path array before slicing. Honours the abort signal so a
+ * traversal can stop mid-discovery.
+ */
+export async function* iterateFiles(
+  searchPath: string,
+  lang: string | Lang,
+  signal: AbortSignal,
+): AsyncGenerator<string, void, unknown> {
+  const stat = await fs.stat(searchPath).catch(() => null);
+  if (stat !== null && stat.isFile() === true) {
+    yield searchPath;
+    return;
+  }
+  const extensions = getExtensionsForLanguage(lang);
+  const stream = FastGlob.stream(
+    extensions.map((ext) => `**/*.${ext}`),
+    {
+      cwd: searchPath,
+      absolute: true,
+      dot: false,
+      ignore: ['**/node_modules/**', '**/.git/**'],
+    },
+  );
+  for await (const entry of stream) {
+    if (signal.aborted) return;
+    yield String(entry);
+  }
 }
 
 /**

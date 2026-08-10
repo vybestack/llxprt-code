@@ -13,7 +13,49 @@ import type {
   ImportEntry,
   ResolvedLang,
 } from './types.js';
-import { getFiles, parseFile, makeRelative } from './helpers.js';
+import { iterateFiles, parseFile, makeRelative } from './helpers.js';
+import { type AnalysisBudget, BudgetTracker } from './budget.js';
+
+/** Inline dedup key for an import record (forward or reverse). */
+function importKey(entry: ImportEntry): string {
+  return JSON.stringify([entry.file, entry.line, entry.source, entry.kind]);
+}
+
+/**
+ * Retains one import record against the shared budget. Returns true when
+ * collection should continue (record retained, or already-seen duplicate that
+ * does not consume budget), false when the record budget is exhausted (caller
+ * must stop collecting for this traversal).
+ *
+ * Feeding retention inline — instead of accumulating an unbounded per-file
+ * ImportEntry[] before the tracker applies its cap — means record objects are
+ * never materialized beyond the budget plus the single one-over sentinel.
+ */
+type RetainImportFn = (entry: ImportEntry) => boolean;
+
+/**
+ * Builds a {@link RetainImportFn} bound to a shared tracker, dedup set, and
+ * output array. Forward and reverse collection each construct one so both
+ * phases share one total file/record accounting policy.
+ */
+function makeImportRetainer(
+  tracker: BudgetTracker,
+  seen: Set<string>,
+  out: ImportEntry[],
+): RetainImportFn {
+  return (entry: ImportEntry): boolean => {
+    const key = importKey(entry);
+    if (seen.has(key)) {
+      return true;
+    }
+    if (!tracker.tryRetainRecord()) {
+      return false;
+    }
+    seen.add(key);
+    out.push(entry);
+    return true;
+  };
+}
 
 /**
  * Strips surrounding single or double quotes from a module specifier.
@@ -101,13 +143,15 @@ function namedImportsAreAllType(clauseChildren: SgNode[]): boolean {
  * inspecting its children, rather than running overlapping literal patterns.
  *
  * A statement can produce BOTH a `default` and a `named` record (e.g.
- * `import def, { named } from '...'`).
+ * `import def, { named } from '...'`). Each candidate record is fed to
+ * `retain` inline; if the budget is exhausted, this returns false so the
+ * caller stops collecting.
  */
 function classifyImportStatement(
   stmt: SgNode,
   relPath: string,
-  imports: ImportEntry[],
-): void {
+  retain: RetainImportFn,
+): boolean {
   const children = stmt.children();
   const line = stmt.range().start.line + 1;
   const source = resolveImportSource(stmt);
@@ -116,79 +160,93 @@ function classifyImportStatement(
     (c: SgNode) => String(c.kind()) === 'type',
   );
   if (hasTypeKeyword) {
-    if (source !== null) {
-      imports.push({ file: relPath, line, source, kind: 'type' });
+    if (
+      source !== null &&
+      !retain({ file: relPath, line, source, kind: 'type' })
+    ) {
+      return false;
     }
-    return;
+    return true;
   }
 
   const requireClause = children.find(
     (c: SgNode) => String(c.kind()) === 'import_require_clause',
   );
   if (requireClause !== undefined) {
-    if (source !== null) {
-      imports.push({ file: relPath, line, source, kind: 'require' });
+    if (
+      source !== null &&
+      !retain({ file: relPath, line, source, kind: 'require' })
+    ) {
+      return false;
     }
-    return;
+    return true;
   }
 
   const clause = children.find(
     (c: SgNode) => String(c.kind()) === 'import_clause',
   );
   if (!clause) {
-    if (source !== null) {
-      imports.push({ file: relPath, line, source, kind: 'side-effect' });
+    if (
+      source !== null &&
+      !retain({ file: relPath, line, source, kind: 'side-effect' })
+    ) {
+      return false;
     }
-    return;
+    return true;
   }
 
   // A record asserting a dependency on '' is worse than no record at all.
   if (source === null) {
-    return;
+    return true;
   }
 
   const clauseChildren = clause.children();
-  if (clauseChildren.some((c: SgNode) => String(c.kind()) === 'identifier')) {
-    imports.push({ file: relPath, line, source, kind: 'default' });
+  if (
+    clauseChildren.some((c: SgNode) => String(c.kind()) === 'identifier') &&
+    !retain({ file: relPath, line, source, kind: 'default' })
+  ) {
+    return false;
   }
   if (
     clauseChildren.some((c: SgNode) => String(c.kind()) === 'named_imports')
   ) {
-    if (namedImportsAreAllType(clauseChildren)) {
-      imports.push({ file: relPath, line, source, kind: 'type' });
-    } else {
-      imports.push({ file: relPath, line, source, kind: 'named' });
-    }
+    const kind = namedImportsAreAllType(clauseChildren) ? 'type' : 'named';
+    if (!retain({ file: relPath, line, source, kind })) return false;
   }
   if (
-    clauseChildren.some((c: SgNode) => String(c.kind()) === 'namespace_import')
+    clauseChildren.some(
+      (c: SgNode) => String(c.kind()) === 'namespace_import',
+    ) &&
+    !retain({ file: relPath, line, source, kind: 'namespace' })
   ) {
-    imports.push({ file: relPath, line, source, kind: 'namespace' });
+    return false;
   }
+  return true;
 }
 
 function collectStaticImports(
   parsed: ParsedFile,
   relPath: string,
-  imports: ImportEntry[],
-): void {
+  retain: RetainImportFn,
+): boolean {
   try {
     const statements = parsed.root.findAll({
       rule: { kind: 'import_statement' },
     } as NapiConfig);
     for (const stmt of statements) {
-      classifyImportStatement(stmt, relPath, imports);
+      if (!classifyImportStatement(stmt, relPath, retain)) return false;
     }
   } catch {
     /* skip */
   }
+  return true;
 }
 
 function collectDynamicAndReexports(
   parsed: ParsedFile,
   relPath: string,
-  imports: ImportEntry[],
-): void {
+  retain: RetainImportFn,
+): boolean {
   try {
     const dynamic = parsed.root.findAll({
       rule: {
@@ -197,12 +255,16 @@ function collectDynamicAndReexports(
       },
     } as NapiConfig);
     for (const m of dynamic) {
-      imports.push({
-        file: relPath,
-        line: m.range().start.line + 1,
-        source: m.text(),
-        kind: 'dynamic',
-      });
+      if (
+        !retain({
+          file: relPath,
+          line: m.range().start.line + 1,
+          source: m.text(),
+          kind: 'dynamic',
+        })
+      ) {
+        return false;
+      }
     }
   } catch {
     /* skip */
@@ -216,54 +278,66 @@ function collectDynamicAndReexports(
       },
     } as NapiConfig);
     for (const m of reexports) {
-      if (m.text().includes('from')) {
-        imports.push({
+      if (
+        m.text().includes('from') &&
+        !retain({
           file: relPath,
           line: m.range().start.line + 1,
           source: m.text().substring(0, 200),
           kind: 'reexport',
-        });
+        })
+      ) {
+        return false;
       }
     }
   } catch {
     /* skip */
   }
+  return true;
 }
 
-function collectFileImports(
+/**
+ * Collects all import records from a single parsed file, retaining each inline
+ * against the shared budget. Returns false if the budget was exhausted
+ * mid-file (caller stops traversing).
+ */
+function collectFileImportsBounded(
   parsed: ParsedFile,
   relPath: string,
-  imports: ImportEntry[],
-): void {
-  collectStaticImports(parsed, relPath, imports);
-  collectDynamicAndReexports(parsed, relPath, imports);
+  retain: RetainImportFn,
+): boolean {
+  if (!collectStaticImports(parsed, relPath, retain)) return false;
+  return collectDynamicAndReexports(parsed, relPath, retain);
 }
 
 function collectImportMatches(
   parsed: ParsedFile,
   relPath: string,
   targetBasename: string,
-): ImportEntry[] {
-  const imports: ImportEntry[] = [];
+  retain: RetainImportFn,
+): boolean {
   try {
     const allImports = parsed.root.findAll({
       rule: { kind: 'import_statement' },
     } as NapiConfig);
     for (const m of allImports) {
       const text = m.text();
-      if (text.includes(targetBasename)) {
-        imports.push({
+      if (
+        text.includes(targetBasename) &&
+        !retain({
           file: relPath,
           line: m.range().start.line + 1,
           source: text.substring(0, 200),
           kind: 'import',
-        });
+        })
+      ) {
+        return false;
       }
     }
   } catch {
     /* skip */
   }
-  return imports;
+  return true;
 }
 
 /**
@@ -280,8 +354,10 @@ function shouldCheckReverseImport(
 }
 
 /**
- * Parses a file and returns its reverse-import matches, or null if the file
- * should be skipped (unparseable, is the target, or doesn't reference it).
+ * Parses a file and feeds its reverse-import matches inline to `retain`, or
+ * returns true (continue) if the file should be skipped (unparseable, is the
+ * target, or doesn't reference it). Returns false only when the budget was
+ * exhausted mid-file.
  */
 async function tryCollectReverseImportsForFile(
   file: string,
@@ -289,10 +365,11 @@ async function tryCollectReverseImportsForFile(
   targetRel: string,
   targetBasename: string,
   workspaceRoot: string,
-): Promise<ImportEntry[] | null> {
+  retain: RetainImportFn,
+): Promise<boolean> {
   const parsed = await parseFile(file, lang);
   if (!parsed) {
-    return null;
+    return true;
   }
   const relPath = makeRelative(file, workspaceRoot);
   if (
@@ -303,56 +380,73 @@ async function tryCollectReverseImportsForFile(
       targetBasename,
     )
   ) {
-    return null;
+    return true;
   }
-  return collectImportMatches(parsed, relPath, targetBasename);
-}
-
-async function findReverseImports(
-  searchPath: string,
-  workspaceRoot: string,
-  lang: ResolvedLang,
-  signal: AbortSignal,
-): Promise<ImportEntry[]> {
-  const reverseImports: ImportEntry[] = [];
-  const allFiles = await getFiles(workspaceRoot, lang);
-  const targetRel = makeRelative(searchPath, workspaceRoot);
-  const targetBasename = path.basename(searchPath).replace(/\.\w+$/, '');
-
-  for (const file of allFiles) {
-    if (signal.aborted) {
-      break;
-    }
-    const matches = await tryCollectReverseImportsForFile(
-      file,
-      lang,
-      targetRel,
-      targetBasename,
-      workspaceRoot,
-    );
-    if (matches) {
-      reverseImports.push(...matches);
-    }
-  }
-  return reverseImports;
+  return collectImportMatches(parsed, relPath, targetBasename, retain);
 }
 
 /**
- * Parses a file and collects its imports, or returns null if unparseable.
+ * Bounded reverse-import collection. Iterates the whole workspace lazily and
+ * shares the caller's {@link BudgetTracker} so forward + reverse records stay
+ * under one total file/record accounting policy. Reverse records are retained
+ * inline (no unbounded per-file aggregate).
  */
-async function tryCollectImportsForFile(
-  file: string,
-  lang: ResolvedLang,
+async function collectReverseImportsBounded(
+  searchPath: string,
   workspaceRoot: string,
-): Promise<ImportEntry[] | null> {
-  const parsed = await parseFile(file, lang);
-  if (!parsed) {
-    return null;
+  lang: ResolvedLang,
+  tracker: BudgetTracker,
+  seen: Set<string>,
+  out: ImportEntry[],
+): Promise<void> {
+  const targetRel = makeRelative(searchPath, workspaceRoot);
+  const targetBasename = path.basename(searchPath).replace(/\.\w+$/, '');
+  const retain = makeImportRetainer(tracker, seen, out);
+
+  for await (const file of iterateFiles(workspaceRoot, lang, tracker.signal)) {
+    if (!tracker.shouldVisitMoreFiles()) return;
+    tracker.filesVisited++;
+    if (
+      !(await tryCollectReverseImportsForFile(
+        file,
+        lang,
+        targetRel,
+        targetBasename,
+        workspaceRoot,
+        retain,
+      ))
+    ) {
+      return;
+    }
   }
-  const relPath = makeRelative(file, workspaceRoot);
-  const imports: ImportEntry[] = [];
-  collectFileImports(parsed, relPath, imports);
-  return imports;
+}
+
+/**
+ * Builds the final {@link AnalysisResult} with bounded summary metadata.
+ */
+function buildDependenciesResult(
+  imports: ImportEntry[],
+  reverseImports: ImportEntry[] | undefined,
+  reverse: boolean,
+  tracker: BudgetTracker,
+  budget: AnalysisBudget,
+): AnalysisResult {
+  return {
+    mode: 'dependencies',
+    truncated: tracker.truncated,
+    partial: tracker.truncated,
+    partialReason: tracker.partialReason,
+    fileBudget: budget.fileBudget,
+    recordBudget: budget.recordBudget,
+    filesVisited: tracker.filesVisited,
+    recordsRetained: tracker.recordsRetained,
+    recordsObserved: tracker.recordsObserved,
+    countInexact: tracker.countInexact,
+    results: {
+      imports,
+      reverseImports: reverse ? reverseImports : undefined,
+    },
+  };
 }
 
 export async function executeDependencies(
@@ -361,50 +455,70 @@ export async function executeDependencies(
   workspaceRoot: string,
   reverse: boolean,
   signal: AbortSignal,
+  budget: AnalysisBudget,
 ): Promise<AnalysisResult> {
-  const files = await getFiles(searchPath, lang);
+  const tracker = new BudgetTracker(budget, signal);
   const imports: ImportEntry[] = [];
+  const seen = new Set<string>();
 
-  for (const file of files) {
-    if (signal.aborted) {
-      break;
-    }
-    const fileImports = await tryCollectImportsForFile(
-      file,
-      lang,
+  await collectForwardImportsBounded(
+    searchPath,
+    workspaceRoot,
+    lang,
+    tracker,
+    seen,
+    imports,
+  );
+
+  let reverseImports: ImportEntry[] | undefined;
+  if (reverse) {
+    reverseImports = [];
+    await collectReverseImportsBounded(
+      searchPath,
       workspaceRoot,
+      lang,
+      tracker,
+      seen,
+      reverseImports,
     );
-    if (fileImports) {
-      imports.push(...fileImports);
-    }
   }
 
-  const reverseImports = reverse
-    ? await findReverseImports(searchPath, workspaceRoot, lang, signal)
-    : [];
+  // A signal that was already aborted (or aborted during a gap between file
+  // yields) must never read as a falsely complete result.
+  if (signal.aborted) {
+    tracker.markAborted();
+  }
 
-  return {
-    mode: 'dependencies',
-    truncated: false,
-    results: {
-      imports: deduplicateForwardImports(imports),
-      reverseImports: reverse ? reverseImports : undefined,
-    },
-  };
+  return buildDependenciesResult(
+    imports,
+    reverseImports,
+    reverse,
+    tracker,
+    budget,
+  );
 }
 
 /**
- * Deduplicates the forward import list by (file, line, source, kind) so no
- * tuple is emitted more than once.
+ * Bounded forward-import collection. Iterates the search root lazily and
+ * retains each import inline against the shared budget (no unbounded per-file
+ * ImportEntry[] aggregate). Deduplication happens inside the retainer so
+ * retained output never exceeds the record budget.
  */
-function deduplicateForwardImports(imports: ImportEntry[]): ImportEntry[] {
-  const seen = new Set<string>();
-  const result: ImportEntry[] = [];
-  for (const imp of imports) {
-    const key = JSON.stringify([imp.file, imp.line, imp.source, imp.kind]);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push(imp);
+async function collectForwardImportsBounded(
+  searchPath: string,
+  workspaceRoot: string,
+  lang: ResolvedLang,
+  tracker: BudgetTracker,
+  seen: Set<string>,
+  imports: ImportEntry[],
+): Promise<void> {
+  const retain = makeImportRetainer(tracker, seen, imports);
+  for await (const file of iterateFiles(searchPath, lang, tracker.signal)) {
+    if (!tracker.shouldVisitMoreFiles()) return;
+    tracker.filesVisited++;
+    const parsed = await parseFile(file, lang);
+    if (!parsed) continue;
+    const relPath = makeRelative(file, workspaceRoot);
+    if (!collectFileImportsBounded(parsed, relPath, retain)) return;
   }
-  return result;
 }
