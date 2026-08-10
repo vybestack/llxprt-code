@@ -16,6 +16,11 @@
       "bun": "./index.ts",
       "import": "./dist/index.js"
     },
+    "./recording/janitor/index.js": {
+      "types": "./dist/src/recording/janitor/index.d.ts",
+      "bun": "./src/recording/janitor/index.ts",
+      "import": "./dist/src/recording/janitor/index.js"
+    },
     "./auth-factories.js": {
       "types": "./dist/src/auth-factories.d.ts",
       "bun": "./src/auth-factories.ts",

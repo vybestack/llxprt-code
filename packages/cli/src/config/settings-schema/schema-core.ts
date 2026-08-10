@@ -322,7 +322,60 @@ export const CORE_SETTINGS_SCHEMA = {
     category: 'General',
     requiresRestart: false,
     default: undefined as SessionRetentionSettings | undefined,
-    description: 'Settings for automatic session cleanup.',
+    description:
+      'Settings for automatic session cleanup. Cleanup is enabled by default with a machine-wide 4 GiB aggregate size budget.',
+    properties: {
+      enabled: {
+        type: 'boolean',
+        label: 'Enabled',
+        category: 'General',
+        requiresRestart: false,
+        default: true,
+        description:
+          'Enable automatic session cleanup. Set to false to disable all janitorial mutations.',
+        showInDialog: true,
+      },
+      maxTotalSizeMB: {
+        type: 'number',
+        label: 'Max Total Size (MiB)',
+        category: 'General',
+        requiresRestart: false,
+        default: 4096,
+        description:
+          'Machine-wide aggregate size limit for all session recordings and cold archives, in MiB (see the default property).',
+        showInDialog: true,
+      },
+      maxAge: {
+        type: 'string',
+        label: 'Max Age',
+        category: 'General',
+        requiresRestart: false,
+        default: undefined,
+        description:
+          'Maximum age of sessions to keep (e.g. "30d", "7d", "24h"). No default age limit.',
+        showInDialog: true,
+      },
+      maxCount: {
+        type: 'number',
+        label: 'Max Count',
+        category: 'General',
+        requiresRestart: false,
+        default: undefined,
+        description:
+          'Maximum number of sessions to keep (most recent). No default count limit.',
+        showInDialog: true,
+      },
+      minRetention: {
+        type: 'string',
+        label: 'Min Retention',
+        category: 'General',
+        requiresRestart: false,
+        default: '1d',
+        description:
+          'Minimum retention period (safety floor, defaults to "1d").',
+        showInDialog: true,
+      },
+    },
   },
   output: {
     type: 'object',

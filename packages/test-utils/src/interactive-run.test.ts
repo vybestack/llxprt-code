@@ -345,6 +345,7 @@ describe('InteractiveRun quota guard integration', () => {
         keepAliveScript(quotaSignal),
         true,
       );
+      await run.expectText('HTTP 429 Too Many Requests', 5000);
 
       // Buffer the quota signal before testing expectExit's timeout-path scan.
       await run.expectText(quotaSignal, 5000);
