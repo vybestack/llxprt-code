@@ -119,19 +119,22 @@ describe('PerfRetention claim lifecycle (AC-7, D3)', () => {
     await retention.dispose();
   });
 
-  it('start() creates the claim with 0600 permissions', async () => {
-    const retention = new PerfRetention({
-      dir,
-      runUuid: '00000000-0000-4000-8000-000000000001',
-    });
-    await retention.start();
+  it.skipIf(process.platform === 'win32')(
+    'start() creates the claim with 0600 permissions',
+    async () => {
+      const retention = new PerfRetention({
+        dir,
+        runUuid: '00000000-0000-4000-8000-000000000001',
+      });
+      await retention.start();
 
-    const stat = fs.statSync(
-      path.join(dir, '00000000-0000-4000-8000-000000000001.claim'),
-    );
-    expect(stat.mode & 0o777).toBe(0o600);
-    await retention.dispose();
-  });
+      const stat = fs.statSync(
+        path.join(dir, '00000000-0000-4000-8000-000000000001.claim'),
+      );
+      expect(stat.mode & 0o777).toBe(0o600);
+      await retention.dispose();
+    },
+  );
 
   it('start() creates only the claim — no perf JSONL', async () => {
     const retention = new PerfRetention({

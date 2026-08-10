@@ -305,6 +305,46 @@ describe('PerfSink UTC midnight roll (AC-1)', () => {
       'perf-20260808-00000000-0000-4000-8000-000000000007.jsonl',
     ]);
   });
+
+  it('a record whose UTC day moves backwards re-adopts the earlier-day file without losing records', async () => {
+    const sink = new PerfSink({
+      dir,
+      runUuid: '00000000-0000-4000-8000-0000000000bd',
+    });
+
+    // day 1 → day 2 (forward roll) → day 1 again (backward roll).
+    await sink.write(
+      operationRecord({
+        ts: '2026-08-08T12:00:00.000Z',
+        operation_id: 'sess-abc#agentic-loop#d1a',
+      }),
+    );
+    await sink.write(
+      operationRecord({
+        ts: '2026-08-09T12:00:00.000Z',
+        operation_id: 'sess-abc#agentic-loop#d2',
+      }),
+    );
+    await sink.write(
+      operationRecord({
+        ts: '2026-08-08T13:00:00.000Z',
+        operation_id: 'sess-abc#agentic-loop#d1b',
+      }),
+    );
+    await sink.dispose();
+
+    const files = fs.readdirSync(dir).sort();
+    expect(files).toEqual([
+      'perf-20260808-00000000-0000-4000-8000-0000000000bd.jsonl',
+      'perf-20260809-00000000-0000-4000-8000-0000000000bd.jsonl',
+    ]);
+
+    // Both day-1 records survive — the backward-day record was not lost.
+    const day1 = await readPerfRecords(path.join(dir, files[0]));
+    expect(day1.counts.parsed).toBe(2);
+    const day2 = await readPerfRecords(path.join(dir, files[1]));
+    expect(day2.counts.parsed).toBe(1);
+  });
 });
 
 // ---------------------------------------------------------------------------

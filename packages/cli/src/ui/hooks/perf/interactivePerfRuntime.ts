@@ -200,7 +200,7 @@ export function resolveRuntimeVersion(): string {
   if (bunGlobal !== undefined) {
     return `bun-${bunGlobal.version}`;
   }
-  return `node-${process.version}`;
+  return `node-${process.version.replace(/^v/, '')}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -298,12 +298,14 @@ export function createInteractivePerfRuntime(
       await sink.start();
       registry.installObservers();
     } catch (startupError) {
-      throw await rollbackStartup(
+      const rolledBack = await rollbackStartup(
         startupError,
         registry,
         memoryController,
         sink,
       );
+      disposed = true;
+      throw rolledBack;
     }
   };
 

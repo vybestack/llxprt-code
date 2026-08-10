@@ -77,6 +77,7 @@ export interface LifecycleDeps {
       ) => Promise<void>)
     | null
   >;
+  pendingResponse: PendingResponseBuffer;
   setIsRespondingCalls: boolean[];
 }
 
@@ -89,6 +90,8 @@ export function createLifecycleDeps(
       options?.abortControllerRef ??
       ({ current: null as AbortController | null } as never),
     runStreamRef: options?.runStreamRef ?? ({ current: null } as never),
+    pendingResponse:
+      options?.pendingResponse ?? new PendingResponseBuffer(undefined),
     setIsRespondingCalls,
   };
 }
@@ -108,7 +111,7 @@ export function buildLifecycleHookDeps(
     onAuthError: vi.fn(),
     sanitizeContent: (text: string) => ({ text, blocked: false }),
     flushPendingHistoryItem: vi.fn(),
-    pendingResponse: new PendingResponseBuffer(undefined),
+    pendingResponse: deps.pendingResponse,
     pendingHistoryItemRef: {
       current: null,
     } as React.MutableRefObject<HistoryItemWithoutId | null>,

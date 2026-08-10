@@ -18,8 +18,6 @@
  * validate a single unified boundary map with uniqueness and orphan checks.
  */
 
-import type { CommandApiMapping } from '@vybestack/llxprt-code-agents/app-service.js';
-
 /**
  * CLI-local command-API entries for commands that have no agents/core surface.
  * These are `cli-local`: pure UI/telemetry operations with no live Agent method
@@ -29,7 +27,7 @@ import type { CommandApiMapping } from '@vybestack/llxprt-code-agents/app-servic
  * process snapshots. They never invoke an Agent method or mutate durable
  * app-service state, so they are CLI-local — not runtime, not subpath.
  */
-export const CLI_COMMAND_API_EXTENSIONS: readonly CommandApiMapping[] = [
+export const CLI_COMMAND_API_EXTENSIONS = [
   {
     command: '/perf',
     kind: 'cli-local',
@@ -54,4 +52,4 @@ export const CLI_COMMAND_API_EXTENSIONS: readonly CommandApiMapping[] = [
     target: 'perf delete (UI)',
     note: 'Delete perf data files; CLI-local telemetry file operation',
   },
-];
+] as const;

@@ -144,8 +144,10 @@ describe('PerfRetention one coarse interval (AC-7, D3)', () => {
 describe('PerfRetention maybeMaintain rate-limiting', () => {
   it('runs maintain on first call', async () => {
     const now = Date.now();
-    writePerfFile('perf-20260101-old.jsonl', 3);
-    setMtime('perf-20260101-old.jsonl', now - 86_400_000);
+    const evictableName =
+      'perf-20260101-11111111-1111-4111-8111-111111111118.jsonl';
+    writePerfFile(evictableName, 3);
+    setMtime(evictableName, now - 86_400_000);
 
     const retention = new PerfRetention({
       dir,
@@ -156,34 +158,36 @@ describe('PerfRetention maybeMaintain rate-limiting', () => {
     });
     await retention.maybeMaintain(now);
 
-    expect(fs.existsSync(path.join(dir, 'perf-20260101-old.jsonl'))).toBe(
-      false,
-    );
+    expect(fs.existsSync(path.join(dir, evictableName))).toBe(false);
   });
 
   it('skips when called within the maintenance interval', async () => {
     const now = Date.now();
+    const evictableName =
+      'perf-20260101-11111111-1111-4111-8111-111111111119.jsonl';
     const retention = new PerfRetention({
       dir,
-      runUuid: 'after',
+      runUuid: '00000000-0000-4000-8000-000000000019',
       maxFiles: 1,
       maxBytes: 1,
       maintenanceIntervalMs: 60_000,
+      onDiagnostic: () => {},
     });
 
     await retention.maybeMaintain(now);
 
-    writePerfFile('perf-20260101-after.jsonl', 3);
-    setMtime('perf-20260101-after.jsonl', now - 86_400_000);
+    writePerfFile(evictableName, 3);
+    setMtime(evictableName, now - 86_400_000);
     await retention.maybeMaintain(now + 1_000);
 
-    expect(fs.existsSync(path.join(dir, 'perf-20260101-after.jsonl'))).toBe(
-      true,
-    );
+    expect(fs.existsSync(path.join(dir, evictableName))).toBe(true);
+    expect(retention.evictionCount).toBe(0);
   });
 
   it('runs again after the maintenance interval elapses', async () => {
     const now = Date.now();
+    const evictableName =
+      'perf-20260101-11111111-1111-4111-8111-11111111111a.jsonl';
     const retention = new PerfRetention({
       dir,
       runUuid: '00000000-0000-4000-8000-00000000001a',
@@ -194,12 +198,10 @@ describe('PerfRetention maybeMaintain rate-limiting', () => {
     });
     await retention.maybeMaintain(now);
 
-    writePerfFile('perf-20260101-after.jsonl', 3);
-    setMtime('perf-20260101-after.jsonl', now - 86_400_000);
+    writePerfFile(evictableName, 3);
+    setMtime(evictableName, now - 86_400_000);
 
     await retention.maybeMaintain(now + 61_000);
-    expect(fs.existsSync(path.join(dir, 'perf-20260101-after.jsonl'))).toBe(
-      false,
-    );
+    expect(fs.existsSync(path.join(dir, evictableName))).toBe(false);
   });
 });

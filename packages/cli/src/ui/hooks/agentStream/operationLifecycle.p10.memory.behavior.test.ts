@@ -97,14 +97,15 @@ async function readOpRecords(
 
 describe('P10 operation record memory columns (AC-10)', () => {
   it('memory ON: operation record includes all four memory columns', async () => {
+    const runUuid = crypto.randomUUID();
     const retention = new PerfRetention({
       dir,
-      runUuid: crypto.randomUUID(),
+      runUuid,
       maintenanceIntervalMs: 60_000,
     });
     const sink = new PerfSink({
       dir,
-      runUuid: crypto.randomUUID(),
+      runUuid,
       retention,
     });
     await sink.start();
@@ -132,14 +133,15 @@ describe('P10 operation record memory columns (AC-10)', () => {
   });
 
   it('memory OFF (no sampler): operation record omits all four columns', async () => {
+    const runUuid = crypto.randomUUID();
     const retention = new PerfRetention({
       dir,
-      runUuid: crypto.randomUUID(),
+      runUuid,
       maintenanceIntervalMs: 60_000,
     });
     const sink = new PerfSink({
       dir,
-      runUuid: crypto.randomUUID(),
+      runUuid,
       retention,
     });
     await sink.start();
@@ -163,14 +165,15 @@ describe('P10 operation record memory columns (AC-10)', () => {
 
   it('memory ON: markOperationEnd is called at finalisation', async () => {
     let mono = 10_000;
+    const runUuid = crypto.randomUUID();
     const retention = new PerfRetention({
       dir,
-      runUuid: crypto.randomUUID(),
+      runUuid,
       maintenanceIntervalMs: 60_000,
     });
     const sink = new PerfSink({
       dir,
-      runUuid: crypto.randomUUID(),
+      runUuid,
       retention,
     });
     await sink.start();
@@ -206,14 +209,15 @@ describe('P10 operation record memory columns (AC-10)', () => {
   });
 
   it('no slope key in persisted operation record', async () => {
+    const runUuid = crypto.randomUUID();
     const retention = new PerfRetention({
       dir,
-      runUuid: crypto.randomUUID(),
+      runUuid,
       maintenanceIntervalMs: 60_000,
     });
     const sink = new PerfSink({
       dir,
-      runUuid: crypto.randomUUID(),
+      runUuid,
       retention,
     });
     await sink.start();

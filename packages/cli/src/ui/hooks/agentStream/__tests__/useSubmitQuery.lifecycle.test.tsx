@@ -455,4 +455,36 @@ describe('useSubmitQuery — operation lifecycle integration (AC-3, AC-4)', () =
       'sess-1#agentic-loop#uuid-display-throw',
     );
   });
+
+  it('finalises once and clears responding state when post-begin setup throws', async () => {
+    const setupError = new Error('committed-segment setup failed');
+    const runStream = vi.fn().mockResolvedValue(undefined);
+    const deps = createLifecycleDeps({
+      runStreamRef: { current: runStream } as never,
+    });
+    vi.spyOn(deps.pendingResponse, 'beginCommittedSegments').mockImplementation(
+      () => {
+        throw setupError;
+      },
+    );
+
+    const { result } = renderUseSubmitQuery(deps);
+
+    await act(async () => {
+      await expect(
+        result.current.submitQuery(
+          'hello world',
+          undefined,
+          'sess-1#agentic-loop#uuid-post-begin',
+        ),
+      ).rejects.toBe(setupError);
+    });
+
+    const records = await drainAndRead();
+    expect(records).toHaveLength(1);
+    expect(records[0].status).toBe('error');
+    expect(records[0].operation_id).toBe('sess-1#agentic-loop#uuid-post-begin');
+    expect(deps.setIsRespondingCalls).toEqual([true, false]);
+    expect(runStream).not.toHaveBeenCalled();
+  });
 });

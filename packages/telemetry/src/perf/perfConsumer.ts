@@ -63,6 +63,51 @@ function hasErrnoCode(err: unknown, code: string): boolean {
   return err instanceof Error && (err as NodeJS.ErrnoException).code === code;
 }
 
+type PerfRecordStreamFactory = (
+  filePath: string,
+) => AsyncGenerator<PerfStreamEntry>;
+
+async function nextPerfEntry(
+  iterator: AsyncIterator<PerfStreamEntry>,
+): Promise<IteratorResult<PerfStreamEntry> | null> {
+  try {
+    return await iterator.next();
+  } catch (err) {
+    if (hasErrnoCode(err, 'ENOENT')) return null;
+    throw err;
+  }
+}
+
+/**
+ * Streams one perf file, skipping it if it was evicted between `stat` and
+ * `open` (or mid-read) by a concurrent retention sweep in another process.
+ * Only ENOENT — a genuinely external file disappearance — is tolerated; every
+ * other error propagates so the caller can surface it.
+ *
+ * @internal Exported only from this module for deterministic boundary tests.
+ */
+export async function* streamFileTolerant(
+  filePath: string,
+  streamRecords: PerfRecordStreamFactory = streamPerfRecords,
+): AsyncGenerator<PerfStreamEntry> {
+  const iterator = streamRecords(filePath)[Symbol.asyncIterator]();
+  let exhausted = false;
+  try {
+    for (;;) {
+      const next = await nextPerfEntry(iterator);
+      if (next === null || next.done === true) {
+        exhausted = true;
+        return;
+      }
+      yield next.value;
+    }
+  } finally {
+    if (!exhausted) {
+      await iterator.return(undefined);
+    }
+  }
+}
+
 /**
  * Extracts the run UUID from a perf JSONL filename, throwing on null.
  *
@@ -130,7 +175,7 @@ export async function* streamPerfDirectory(
 ): AsyncGenerator<PerfConsumerEntry> {
   for await (const file of listPerfFiles(dir)) {
     const runUuid = requireRunUuid(file.name);
-    for await (const entry of streamPerfRecords(file.path)) {
+    for await (const entry of streamFileTolerant(file.path)) {
       yield { entry, sourceFile: file.name, runUuid };
     }
   }
@@ -163,7 +208,7 @@ export async function consumePerfDirectory(
     files += 1;
     bytes += file.bytes;
     const runUuid = requireRunUuid(file.name);
-    for await (const entry of streamPerfRecords(file.path)) {
+    for await (const entry of streamFileTolerant(file.path)) {
       entries.push({ entry, sourceFile: file.name, runUuid });
       switch (entry.kind) {
         case 'ok':

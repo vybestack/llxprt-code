@@ -1,9 +1,18 @@
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { PerfSink, FaultInjectingPerfFilesystem } from './PerfSink.js';
-import { PerfRetention } from './retention.js';
+import {
+  PerfRetention,
+  FaultInjectingRetentionFilesystem,
+} from './retention.js';
 import type { PerfOperationRecord } from './perfRecords.js';
 import {
   PERF_SCHEMA_VERSION,
@@ -168,30 +177,31 @@ describe('PerfRetention self-health: evictionCount (P11)', () => {
   });
 
   it('evictionCount does not increment on failed unlinks (fail open)', async () => {
+    const diagnostics: string[] = [];
     const retention = new PerfRetention({
       dir,
       runUuid: '00000000-0000-4000-8000-0000000000cd',
+      fs: new FaultInjectingRetentionFilesystem({
+        failMethod: 'unlink',
+        code: 'EACCES',
+      }),
       maxFiles: 1,
+      maxBytes: 1,
+      onDiagnostic: (message) => diagnostics.push(message),
     });
 
-    await retention.start();
-
-    const oldName = 'perf-20250101-old.jsonl';
+    const oldName = 'perf-20250101-00000000-0000-4000-8000-0000000000ef.jsonl';
     await fs.writeFile(join(dir, oldName), '{"v":1}\n');
     const oldTime = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
     await fs.utimes(join(dir, oldName), oldTime, oldTime);
-
-    await fs.chmod(join(dir, oldName), 0o444);
-
-    await fs.chmod(dir, 0o555);
 
     const beforeCount = retention.evictionCount;
     await retention.maintain(Date.now());
 
     expect(retention.evictionCount).toBe(beforeCount);
-
-    await fs.chmod(dir, 0o755);
-    await fs.chmod(join(dir, oldName), 0o644);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toContain('EACCES');
+    expect((await fs.stat(join(dir, oldName))).isFile()).toBe(true);
 
     await retention.dispose();
   });

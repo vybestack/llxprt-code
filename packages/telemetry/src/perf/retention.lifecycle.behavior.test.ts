@@ -605,18 +605,20 @@ describe('PerfRetention serialization — maybeMaintain and tick never overlap',
     // until released. While blocked, maybeMaintain is called — it must chain
     // behind the tick rather than overlap.
     const gate = createDeferred<void>();
-    let gateReleased = false;
+    const readdirEntered = createDeferred<void>();
     let concurrentReaddirs = 0;
     let maxConcurrent = 0;
+    let readdirCount = 0;
     let utimesCount = 0;
 
     const gatedFs: PerfRetentionFilesystem = {
       ...realFilesystem(),
       async readdir(d: string): Promise<string[]> {
+        readdirCount += 1;
         concurrentReaddirs += 1;
         maxConcurrent = Math.max(maxConcurrent, concurrentReaddirs);
-        // Only the first readdir is gated; subsequent ones proceed.
-        if (!gateReleased) {
+        if (readdirCount === 1) {
+          readdirEntered.resolve();
           await gate.promise;
         }
         const result = await fsp.readdir(d);
@@ -635,27 +637,23 @@ describe('PerfRetention serialization — maybeMaintain and tick never overlap',
       runUuid: '00000000-0000-4000-8000-000000000040',
       fs: gatedFs,
       scheduler,
+      maintenanceIntervalMs: 1,
       maxFiles: 1,
       maxBytes: 1,
       onDiagnostic: () => {},
     });
     await retention.start();
 
-    // Fire the interval tick — it touches the claim (utimes #1), then
-    // maintain → readdir (blocks on the gate).
-    const tickPromise = scheduler.callback!().catch(() => {});
-    await new Promise((r) => setTimeout(r, 15));
+    const tickPromise = scheduler.callback!();
+    await readdirEntered.promise;
 
-    // While the tick's maintain is in progress (blocked), call maybeMaintain.
-    // It must serialize AFTER the tick — not overlap.
-    const maybePromise = retention.maybeMaintain(Date.now());
+    const maybePromise = retention.maybeMaintain(Date.now() + 10_000);
 
-    // Release the gate: the tick's maintain completes, then maybeMaintain's
-    // chained maintain runs.
-    gateReleased = true;
     gate.resolve();
     await tickPromise;
     await maybePromise;
+
+    expect(readdirCount).toBe(2);
 
     // No overlap: at most 1 concurrent readdir across both maintains.
     expect(maxConcurrent).toBe(1);

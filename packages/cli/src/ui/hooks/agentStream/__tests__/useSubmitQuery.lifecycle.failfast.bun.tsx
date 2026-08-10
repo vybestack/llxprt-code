@@ -589,4 +589,49 @@ describe('useSubmitQuery — D8 fail-fast + dual-failure AggregateError (AC-4, A
     await expect(failSink.dispose()).rejects.toThrow(INTERNAL_ERROR_MESSAGE);
     failCtx.bodyDisposed = true;
   });
+
+  it('AggregateError [setup error, finalisation error] when post-begin setup and finalise both fail', async () => {
+    const setupError = new Error('committed-segment setup failed');
+    const {
+      registry: failRegistry,
+      sink: failSink,
+      perfDir: failDir,
+    } = await createFailingRegistry();
+    failCtx = { sink: failSink, perfDir: failDir, bodyDisposed: false };
+
+    const runStream = vi.fn();
+    const deps = createLifecycleDeps({
+      runStreamRef: { current: runStream } as never,
+    });
+    vi.spyOn(deps.pendingResponse, 'beginCommittedSegments').mockImplementation(
+      () => {
+        throw setupError;
+      },
+    );
+
+    const { result } = renderWithRegistry(deps, failRegistry);
+    let caught: unknown = undefined;
+    await act(async () => {
+      try {
+        await result.current.submitQuery(
+          'hello world',
+          undefined,
+          'sess-1#agentic-loop#uuid-setup-aggr',
+        );
+      } catch (error) {
+        caught = error;
+      }
+    });
+
+    expect(caught).toBeInstanceOf(AggregateError);
+    const aggregate = caught as AggregateError;
+    expect(aggregate.errors).toHaveLength(2);
+    expect(aggregate.errors[0]).toBe(setupError);
+    expect((aggregate.errors[1] as Error).message).toBe(INTERNAL_ERROR_MESSAGE);
+    expect(deps.setIsRespondingCalls).toEqual([true, false]);
+    expect(runStream).not.toHaveBeenCalled();
+
+    await expect(failSink.dispose()).rejects.toThrow(INTERNAL_ERROR_MESSAGE);
+    failCtx.bodyDisposed = true;
+  });
 });

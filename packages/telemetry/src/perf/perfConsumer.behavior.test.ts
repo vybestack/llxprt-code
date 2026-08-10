@@ -8,8 +8,12 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { consumePerfDirectory, streamPerfDirectory } from './perfConsumer.js';
-import type { PerfOperationRecord } from './perfRecords.js';
+import {
+  consumePerfDirectory,
+  streamFileTolerant,
+  streamPerfDirectory,
+} from './perfConsumer.js';
+import type { PerfOperationRecord, PerfStreamEntry } from './perfRecords.js';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -290,5 +294,76 @@ describe('PerfConsumer (P11, AC-9)', () => {
     }
 
     expect(firstYield).toBe(true);
+  });
+
+  it('tolerates a file evicted (ENOENT) during streaming without aborting the directory', async () => {
+    const opA = makeOperation({ operation_id: 'op-a' });
+    const opB = makeOperation({ operation_id: 'op-b' });
+    const fileA = 'perf-20260101-aaaa.jsonl';
+    const fileB = 'perf-20260101-zzzz.jsonl';
+    await writeJsonl(dir, fileA, [JSON.stringify(opA)]);
+    await writeJsonl(dir, fileB, [JSON.stringify(opB)]);
+
+    const ids: string[] = [];
+    let evictedB = false;
+    for await (const entry of streamPerfDirectory(dir)) {
+      if (
+        entry.entry.kind === 'ok' &&
+        entry.entry.record.record_type === 'operation'
+      ) {
+        ids.push(entry.entry.record.operation_id);
+      }
+      if (!evictedB) {
+        await fs.rm(join(dir, fileB), { force: true });
+        evictedB = true;
+      }
+    }
+
+    expect(evictedB).toBe(true);
+    expect(ids).toEqual(['op-a']);
+  });
+
+  it('tolerates ENOENT when a statted file is deleted before stream open', async () => {
+    const filePath = join(dir, 'perf-20260101-open-race.jsonl');
+    await writeJsonl(dir, 'perf-20260101-open-race.jsonl', [
+      JSON.stringify(makeOperation()),
+    ]);
+    await fs.stat(filePath);
+
+    const iterator = streamFileTolerant(filePath);
+    await fs.rm(filePath);
+
+    expect((await iterator.next()).done).toBe(true);
+  });
+
+  it('propagates non-ENOENT stream errors', async () => {
+    const denied = Object.assign(new Error('permission denied'), {
+      code: 'EACCES',
+    });
+    async function* deniedStream(): AsyncGenerator<never> {
+      yield Promise.reject(denied);
+    }
+
+    await expect(
+      streamFileTolerant('unused', deniedStream).next(),
+    ).rejects.toBe(denied);
+  });
+
+  it('closes the underlying stream when its consumer stops early', async () => {
+    let closed = 0;
+    async function* source(): AsyncGenerator<PerfStreamEntry> {
+      try {
+        yield { kind: 'blank' };
+        yield { kind: 'blank' };
+      } finally {
+        closed += 1;
+      }
+    }
+
+    const stream = streamFileTolerant('unused', source);
+    expect((await stream.next()).done).toBe(false);
+    await stream.return(undefined);
+
+    expect(closed).toBe(1);
   });
 });

@@ -73,23 +73,16 @@ function setMtime(name: string, mtimeMs: number): void {
 describe('PerfRetention failed unlink — accounting intact (AC-7, D6)', () => {
   it('does NOT decrement file/byte count when unlink fails', async () => {
     const now = Date.now();
-    writePerfFile(
-      'perf-20260101-00000000-0000-4000-8000-000000000014.jsonl',
-      5,
-    );
-    setMtime(
-      'perf-20260101-00000000-0000-4000-8000-000000000014.jsonl',
-      now - 86_400_000,
-    );
-    writePerfFile(
-      'perf-20260102-00000000-0000-4000-8000-000000000014.jsonl',
-      5,
-    );
-    setMtime(
-      'perf-20260102-00000000-0000-4000-8000-000000000014.jsonl',
-      now - 43_200_000,
-    );
+    const firstName =
+      'perf-20260101-00000000-0000-4000-8000-0000000000ee.jsonl';
+    const secondName =
+      'perf-20260102-00000000-0000-4000-8000-0000000000ee.jsonl';
+    writePerfFile(firstName, 5);
+    setMtime(firstName, now - 86_400_000);
+    writePerfFile(secondName, 5);
+    setMtime(secondName, now - 43_200_000);
 
+    const diagnostics: string[] = [];
     const faultFs = new FaultInjectingRetentionFilesystem({
       failMethod: 'unlink',
       code: 'EACCES',
@@ -101,18 +94,15 @@ describe('PerfRetention failed unlink — accounting intact (AC-7, D6)', () => {
       fs: faultFs,
       maxFiles: 1,
       maxBytes: 10_000_000,
-      onDiagnostic: () => {},
+      onDiagnostic: (m) => diagnostics.push(m),
     });
     await retention.maintain(now);
 
-    expect(
-      fs.existsSync(
-        path.join(
-          dir,
-          'perf-20260101-00000000-0000-4000-8000-000000000014.jsonl',
-        ),
-      ),
-    ).toBe(true);
+    expect(retention.evictionCount).toBe(0);
+    expect(diagnostics.length).toBeGreaterThanOrEqual(1);
+    expect(diagnostics[0]).toContain('EACCES');
+    expect(fs.existsSync(path.join(dir, firstName))).toBe(true);
+    expect(fs.existsSync(path.join(dir, secondName))).toBe(true);
   });
 
   it('diagnostics are rate-limited for repeated unlink failures', async () => {

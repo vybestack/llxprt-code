@@ -359,7 +359,9 @@ describe('assembleReport — direct join composition (D1)', () => {
       expect(report.groups[0].p50['context_tokens']).toBe(42);
       expect(report.groups[0].p50['output_tokens']).toBe(7);
     } finally {
-      await fs.rm(perfDir, { recursive: true, force: true });
+      if (perfDir !== '') {
+        await fs.rm(perfDir, { recursive: true, force: true });
+      }
       await fs.rm(tokenDir, { recursive: true, force: true });
     }
   });

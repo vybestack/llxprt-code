@@ -136,6 +136,30 @@ export async function finaliseOnceAfterBegin(
   throw originalError;
 }
 
+async function finaliseTurnStartFailure(
+  cbd: SubmitQueryCallbackDeps,
+  turn: TurnInit,
+  error: unknown,
+): Promise<never> {
+  const errors: unknown[] = [error];
+  if (isCurrentTurn(cbd, turn.abortSignal)) {
+    try {
+      cbd.setIsResponding(false);
+    } catch (resetError) {
+      errors.push(resetError);
+    }
+  }
+  try {
+    await finaliseOperation(cbd.operationLifecycle, turn.abortSignal, 'error');
+  } catch (finaliseError) {
+    errors.push(finaliseError);
+  }
+  if (errors.length > 1) {
+    throw new AggregateError(errors, 'Turn start failed (with cleanup error)');
+  }
+  throw error;
+}
+
 /**
  * Handles a provider stream error for the user (observeTurnFailed +
  * handleSubmissionError) only when this turn still owns the controller.
@@ -363,10 +387,14 @@ export async function runSubmitQueryCore(
   const queryToSend = await prepareAndCheckProceed(cbd, query, turn);
   if (queryToSend === null) return;
 
-  cbd.setIsResponding(true);
-  cbd.setInitError(null);
-  observeTurnStarted();
-  cbd.pendingResponse.beginCommittedSegments();
+  try {
+    cbd.setIsResponding(true);
+    cbd.setInitError(null);
+    observeTurnStarted();
+    cbd.pendingResponse.beginCommittedSegments();
+  } catch (error) {
+    await finaliseTurnStartFailure(cbd, turn, error);
+  }
 
   await streamAndFinalise(cbd, queryToSend, turn);
 }

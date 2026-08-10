@@ -153,8 +153,8 @@ describe('InteractivePerfRuntime.start — startup rollback (Item 2)', () => {
     expect(files.some((f) => f.endsWith('.claim'))).toBe(false);
     expect(files.some((f) => f.endsWith('.jsonl'))).toBe(false);
 
-    // dispose should be a no-op (already rolled back / not started).
-    await runtime!.dispose();
+    await expect(runtime!.dispose()).resolves.toBeUndefined();
+    await expect(runtime!.dispose()).resolves.toBeUndefined();
   });
 
   it('rolls back and rejects on observer-install conflict (owner B)', async () => {
@@ -216,8 +216,8 @@ describe('InteractivePerfRuntime.start — startup rollback (Item 2)', () => {
     expect(getInteractiveRenderObserver()).toBe(null);
     expect(getPerfPhaseObserver()).toBe(null);
 
-    // B's dispose is a no-op (already rolled back).
-    await ownerB!.dispose();
+    await expect(ownerB!.dispose()).resolves.toBeUndefined();
+    await expect(ownerB!.dispose()).resolves.toBeUndefined();
 
     // No B claim leaked.
     const finalFiles = fs.readdirSync(dir);

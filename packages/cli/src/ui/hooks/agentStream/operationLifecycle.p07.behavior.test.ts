@@ -40,20 +40,38 @@ import {
 // ---------------------------------------------------------------------------
 
 let dir: string;
+const startedSinks = new Set<PerfSink>();
 
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'op-p07-'));
-  // Reset all module-level observers for deterministic isolation.
+  startedSinks.clear();
   setPerfPhaseObserver(null);
   setInteractiveRenderObserver(null);
   setInteractiveStdoutObserver(null);
 });
 
-afterEach(() => {
+afterEach(async () => {
+  const errors: unknown[] = [];
+  for (const sink of startedSinks) {
+    try {
+      await sink.dispose();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  startedSinks.clear();
   setPerfPhaseObserver(null);
   setInteractiveRenderObserver(null);
   setInteractiveStdoutObserver(null);
-  fs.rmSync(dir, { recursive: true, force: true });
+  try {
+    fs.rmSync(dir, { recursive: true, force: true });
+  } catch (error) {
+    errors.push(error);
+  }
+  if (errors.length === 1) throw errors[0];
+  if (errors.length > 1) {
+    throw new AggregateError(errors, 'P07 test cleanup failed');
+  }
 });
 
 function fixtureIdentity(
@@ -110,6 +128,7 @@ async function createStartedRegistry(
     retention,
   });
   await sink.start();
+  startedSinks.add(sink);
   const registry = new OperationLifecycleRegistry({
     identityProvider: fixtureProvider(),
     sink,
@@ -121,6 +140,7 @@ async function createStartedRegistry(
   const readRecords = async (): Promise<PerfOperationRecord[]> => {
     await registry.drain();
     await sink.dispose();
+    startedSinks.delete(sink);
     const files = fs.readdirSync(dir).filter((f) => f.endsWith('.jsonl'));
     const records: PerfOperationRecord[] = [];
     for (const file of files) {
@@ -796,19 +816,16 @@ describe('P07 superseded queue behavior', () => {
     });
     registry.installObservers();
 
-    const controller1 = new AbortController();
-    const controller2 = new AbortController();
-    registry.begin(controller1.signal, 'sess#agentic-loop#uuid1');
-    // begin() for a new op triggers the superseded sweep, which queues a
-    // write for op1 as 'superseded'. The void queueWrite promise must NOT
-    // become an unhandled rejection at the process level.
-    registry.begin(controller2.signal, 'sess#agentic-loop#uuid2');
+    try {
+      const controller1 = new AbortController();
+      const controller2 = new AbortController();
+      registry.begin(controller1.signal, 'sess#agentic-loop#uuid1');
+      registry.begin(controller2.signal, 'sess#agentic-loop#uuid2');
 
-    // Give microtasks a chance to settle.
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    // drain() should reject (the chain is still rejected — fail-fast).
-    await expect(registry.drain()).rejects.toThrow('internal write error');
+      await expect(registry.dispose()).rejects.toThrow('internal write error');
+    } finally {
+      await retention.dispose();
+    }
   });
 });
 

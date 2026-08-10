@@ -192,6 +192,8 @@ export class PerfSink {
   private writeChain: Promise<void> = Promise.resolve();
   private lastDiagMs = 0;
   private disposed = false;
+  /** Paths this instance successfully created with an exclusive open. */
+  private readonly createdPaths = new Set<string>();
   // P11 self-health: the errno code of the latest filesystem write failure
   // in THIS process, or null if no write has failed. Narrow read-only state
   // for the inspect/report self-health surface — NOT persisted.
@@ -324,9 +326,24 @@ export class PerfSink {
 
     // Filesystem operations only — any error here is a filesystem error.
     await this.fsPort.ensureDir(this.sinkDir);
-    await this.fsPort.openExclusive(filePath, 0o600);
+    try {
+      await this.fsPort.openExclusive(filePath, 0o600);
+      this.createdPaths.add(filePath);
+    } catch (err) {
+      // Non-monotonic timestamps can revisit an earlier UTC-day file. Re-adopt
+      // only paths this sink previously created; preserve exclusive creation
+      // for every unknown path.
+      if (
+        !(err instanceof Error) ||
+        (err as NodeJS.ErrnoException).code !== 'EEXIST' ||
+        !this.createdPaths.has(filePath)
+      ) {
+        throw err;
+      }
+    }
 
-    // State advances ONLY after successful exclusive open.
+    // State advances ONLY after successful exclusive open (or re-adoption of
+    // a path this run already owns).
     this.currentPath = filePath;
     this.bytesSinceStat = 0;
     this.fileDayKey = dayKey;

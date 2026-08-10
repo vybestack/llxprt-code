@@ -649,11 +649,10 @@ function useSubmitQueryCallback(cbd: SubmitQueryCallbackDeps) {
           turnSignal,
         );
         current.operationLifecycle?.begin(turnSignal, turn.promptId);
-        // Once `begin` has succeeded, any throw before `runSubmitQueryCore`
-        // must finalise the operation exactly once as 'error' so the registry
-        // record is not leaked. `displayUserMessage` is the only fallible step
-        // here; if it throws, the original failure is preserved and, should
-        // finalisation also fail, both errors surface via AggregateError.
+        // Once `begin` has succeeded, any later setup failure must finalise the
+        // operation exactly once as 'error'. This caller owns display setup;
+        // runSubmitQueryCore owns its subsequent turn-start setup. Both preserve
+        // the original failure and aggregate a finalisation failure if needed.
         if (shouldDisplayUserMessage(turn.trimmedStr)) {
           try {
             current.displayUserMessage(

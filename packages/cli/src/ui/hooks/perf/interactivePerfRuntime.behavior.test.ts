@@ -20,6 +20,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   createInteractivePerfRuntime,
+  resolveRuntimeVersion,
   type InteractivePerfRuntimeOptions,
 } from './interactivePerfRuntime.js';
 import type { OperationIdentitySnapshot } from '../agentStream/operationLifecycle.js';
@@ -370,5 +371,15 @@ describe('interactivePerfRuntime — default-off zero side effects (AC-2)', () =
       makeOptions({ enabled: false }),
     );
     expect(runtime).toBe(null);
+  });
+});
+
+describe('resolveRuntimeVersion — canonical format (no leading v)', () => {
+  it('produces a runtime string without a leading v on the version segment', () => {
+    const value = resolveRuntimeVersion();
+    expect(value.startsWith('bun-') || value.startsWith('node-')).toBe(true);
+    const segment = value.split('-').slice(1).join('-');
+    expect(segment.length).toBeGreaterThan(0);
+    expect(segment.startsWith('v')).toBe(false);
   });
 });
