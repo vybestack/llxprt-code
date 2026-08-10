@@ -4,105 +4,92 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { expect, describe, it, vi } from 'bun:test';
+import { expect, describe, it, beforeAll, afterAll } from 'bun:test';
 
 /**
  * Tests for detectCommandSubstitution through the REGEX FALLBACK path.
  *
- * These tests mock shell-parser.js so isParserAvailable() returns false,
+ * The parser singleton is reset so isParserAvailable() returns false,
  * forcing detectCommandSubstitution to use detectCommandSubstitutionRegex.
+ * All cases exercise Bash syntax and pass 'bash' explicitly (#3181).
+ *
+ * resetParser/initializeParser are used instead of vi.mock to avoid
+ * cross-file mock leakage in bun:test.
  */
 
-// Hoisted mock: applies to all tests in this file.
+import { detectCommandSubstitution } from './shell-utils.js';
+import { resetParser, initializeParser } from './shell-parser.js';
 
-const realShellParserModule = { ...(await import('./shell-parser.js')) };
-void vi.mock('./shell-parser.js', () => ({
-  ...realShellParserModule,
-  isParserAvailable: () => false,
-  parseShellCommand: () => null,
-  extractCommandNames: () => [],
-  hasCommandSubstitution: () => false,
-  splitCommandsWithTree: () => [],
-  parseCommandDetails: () => null,
-}));
+/** Bash-specific substitution detection (#3181). */
+const detect = (cmd: string): boolean => detectCommandSubstitution(cmd, 'bash');
 
 describe('detectCommandSubstitution regex fallback', () => {
-  // Extended timeout: the first dynamic import after vi.doMock re-transforms
-  // the shell-utils module graph, which can exceed the default 5s timeout
-  // under coverage instrumentation. Subsequent imports hit the module cache.
-  it('should detect unterminated backtick substitution', async () => {
-    // BUG CASE: opening backtick without closing backtick
-    const { detectCommandSubstitution } = await import('./shell-utils.js');
-    expect(detectCommandSubstitution('echo `date')).toBe(true);
-  }, 15000);
-
-  it('should detect properly paired backtick substitution', async () => {
-    const { detectCommandSubstitution } = await import('./shell-utils.js');
-    expect(detectCommandSubstitution('echo `date`')).toBe(true);
+  beforeAll(() => {
+    resetParser();
   });
 
-  it('should detect backtick substitution inside double quotes', async () => {
-    const { detectCommandSubstitution } = await import('./shell-utils.js');
-    expect(detectCommandSubstitution('echo "`date`"')).toBe(true);
+  afterAll(async () => {
+    await initializeParser();
   });
 
-  it('should NOT detect backtick substitution inside single quotes', async () => {
-    const { detectCommandSubstitution } = await import('./shell-utils.js');
-    expect(detectCommandSubstitution("echo '`date`'")).toBe(false);
+  it('should detect unterminated backtick substitution', () => {
+    expect(detect('echo `date')).toBe(true);
   });
 
-  it('should NOT detect escaped backticks', async () => {
-    const { detectCommandSubstitution } = await import('./shell-utils.js');
-    expect(detectCommandSubstitution('echo \\`date\\`')).toBe(false);
+  it('should detect properly paired backtick substitution', () => {
+    expect(detect('echo `date`')).toBe(true);
   });
 
-  it('should detect unterminated $() substitution', async () => {
-    const { detectCommandSubstitution } = await import('./shell-utils.js');
-    expect(detectCommandSubstitution('echo $(date')).toBe(true);
+  it('should detect backtick substitution inside double quotes', () => {
+    expect(detect('echo "`date`"')).toBe(true);
   });
 
-  it('should detect $() substitution', async () => {
-    const { detectCommandSubstitution } = await import('./shell-utils.js');
-    expect(detectCommandSubstitution('echo $(date)')).toBe(true);
+  it('should NOT detect backtick substitution inside single quotes', () => {
+    expect(detect("echo '`date`'")).toBe(false);
   });
 
-  it('should detect <() process substitution', async () => {
-    const { detectCommandSubstitution } = await import('./shell-utils.js');
-    expect(detectCommandSubstitution('diff <(ls dir1) <(ls dir2)')).toBe(true);
+  it('should NOT detect escaped backticks', () => {
+    expect(detect('echo \\`date\\`')).toBe(false);
   });
 
-  it('should detect >() process substitution', async () => {
-    const { detectCommandSubstitution } = await import('./shell-utils.js');
-    expect(detectCommandSubstitution('tee >(wc -l)')).toBe(true);
+  it('should detect unterminated $() substitution', () => {
+    expect(detect('echo $(date')).toBe(true);
   });
 
-  it('should NOT detect substitution-like text in single quotes', async () => {
-    const { detectCommandSubstitution } = await import('./shell-utils.js');
-    expect(detectCommandSubstitution("echo '$(date)'")).toBe(false);
+  it('should detect $() substitution', () => {
+    expect(detect('echo $(date)')).toBe(true);
   });
 
-  it('should return false for simple commands with no substitution', async () => {
-    const { detectCommandSubstitution } = await import('./shell-utils.js');
-    expect(detectCommandSubstitution('ls -la /tmp')).toBe(false);
+  it('should detect <() process substitution', () => {
+    expect(detect('diff <(ls dir1) <(ls dir2)')).toBe(true);
   });
 
-  it('should detect $() inside double quotes', async () => {
-    const { detectCommandSubstitution } = await import('./shell-utils.js');
-    expect(detectCommandSubstitution('echo "Today is $(date)"')).toBe(true);
+  it('should detect >() process substitution', () => {
+    expect(detect('tee >(wc -l)')).toBe(true);
   });
 
-  it('should NOT detect <() inside double quotes (process sub is unquoted only)', async () => {
-    const { detectCommandSubstitution } = await import('./shell-utils.js');
-    expect(detectCommandSubstitution('echo "<(cmd)"')).toBe(false);
+  it('should NOT detect substitution-like text in single quotes', () => {
+    expect(detect("echo '$(date)'")).toBe(false);
   });
 
-  it('should flag $((1+2)) arithmetic expansion via regex (conservative fallback)', async () => {
+  it('should return false for simple commands with no substitution', () => {
+    expect(detect('ls -la /tmp')).toBe(false);
+  });
+
+  it('should detect $() inside double quotes', () => {
+    expect(detect('echo "Today is $(date)"')).toBe(true);
+  });
+
+  it('should NOT detect <() inside double quotes (process sub is unquoted only)', () => {
+    expect(detect('echo "<(cmd)"')).toBe(false);
+  });
+
+  it('should flag $((1+2)) arithmetic expansion via regex (conservative fallback)', () => {
     // The regex fallback sees '$(' and flags it as command substitution.
     // Tree-sitter correctly identifies $((...)) as arithmetic expansion (NOT
     // command substitution), so the two paths differ. The regex fallback is
     // intentionally more conservative — false positives are safer than false
     // negatives in a security-sensitive fallback.
-    const { detectCommandSubstitution } = await import('./shell-utils.js');
-    expect(detectCommandSubstitution('echo $((1+2))')).toBe(true);
+    expect(detect('echo $((1+2))')).toBe(true);
   });
 });

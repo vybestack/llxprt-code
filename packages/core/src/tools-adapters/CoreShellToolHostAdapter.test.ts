@@ -13,6 +13,7 @@ import { debugLogger } from '../utils/debugLogger.js';
 import type { ShellJob, ShellJobManager } from '../services/shellJobManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ShellTool, type IToolMessageBus } from '@vybestack/llxprt-code-tools';
+import { initializeParser, isParserAvailable } from '../utils/shell-parser.js';
 
 /**
  * Windows-only end-to-end coverage for the real background-job path that was
@@ -109,6 +110,15 @@ function extractJobId(llm: string): string {
   return match[1];
 }
 
+// Ensure the PowerShell grammar is loaded so ShellTool.build() validation
+// succeeds on Windows where the execution shell is PowerShell (#3181).
+// Only initialize on Windows to avoid loading parsers unnecessarily on
+// non-Windows CI runners.
+const pwshAvailable =
+  os.platform() === 'win32' &&
+  (await initializeParser()) &&
+  isParserAvailable('powershell');
+
 describe.skipIf(os.platform() !== 'win32')(
   'CoreShellToolHostAdapter -> real ShellJobManager (Windows end-to-end)',
   () => {
@@ -200,6 +210,125 @@ describe.skipIf(os.platform() !== 'win32')(
 
       const tail = adapter.tailBackgroundJob(jobId);
       expect(tail.output).toContain('via-shell-tool');
+    });
+  },
+);
+
+/**
+ * Finding 5 (#3181): Real adapter + ShellTool permission integration.
+ *
+ * These tests exercise the REAL CoreShellToolHostAdapter (not a fake host)
+ * through the REAL ShellTool.validateToolParamValues / build path. On Windows,
+ * getShellConfiguration().shell is 'powershell', so the adapter delegates to
+ * the real PowerShell parser. No parser/policy results are mocked.
+ *
+ * Coverage:
+ * (a) The exact issue #3181 reproduction command passes validation.
+ * (b) Malformed PowerShell is hard-denied by the real parser.
+ * (c) A blocklisted command nested in a script block is rejected.
+ * (d) isShellInvocationAllowlisted requires EVERY nested command to be allowed.
+ * (e) Dynamic/expression targets fail closed under a strict allowedTools set.
+ */
+describe.skipIf(os.platform() !== 'win32' || !pwshAvailable)(
+  'CoreShellToolHostAdapter -> ShellTool permission integration (#3181)',
+  () => {
+    function makePermissionConfig(
+      allowedTools: string[] = [],
+      excludeTools: string[] = [],
+    ): { config: Config; adapter: CoreShellToolHostAdapter } {
+      const config = new Config({
+        model: 'test-model',
+        question: 'test question',
+        embeddingModel: 'test-embedding',
+        targetDir: os.tmpdir(),
+        usageStatisticsEnabled: false,
+        sessionId: `perm-${Date.now()}-${++sessionIdCounter}`,
+        debugMode: false,
+        cwd: os.tmpdir(),
+        settingsService: new SettingsService(),
+        coreTools: allowedTools,
+        allowedTools,
+        excludeTools,
+      });
+      return { config, adapter: new CoreShellToolHostAdapter(config) };
+    }
+
+    it('(a) exact issue #3181 reproduction command passes adapter validation', () => {
+      const { adapter } = makePermissionConfig();
+      const issueCmd =
+        'git status --short --branch; git checkout main; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }';
+      const result = adapter.isCommandAllowed(issueCmd);
+      expect(result.allowed).toBe(true);
+    });
+
+    it('(a) ShellTool.build does not throw for the issue #3181 command', () => {
+      const { adapter } = makePermissionConfig();
+      const tool = new ShellTool(adapter);
+      expect(() =>
+        tool.build({
+          command:
+            'git status --short --branch; git checkout main; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }',
+        }),
+      ).not.toThrow();
+    });
+
+    it('(b) malformed PowerShell is hard-denied with PowerShell diagnostic', () => {
+      const { adapter } = makePermissionConfig();
+      const result = adapter.isCommandAllowed('Get-ChildItem |');
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toContain('tree-sitter-pwsh');
+    });
+
+    it('(b) ShellTool.build throws for malformed PowerShell', () => {
+      const { adapter } = makePermissionConfig();
+      const tool = new ShellTool(adapter);
+      expect(() => tool.build({ command: 'Get-ChildItem |' })).toThrow(
+        /tree-sitter-pwsh/,
+      );
+    });
+
+    it('(c) blocklisted command nested in script block is rejected', () => {
+      const { adapter } = makePermissionConfig([], ['ShellTool(rm)']);
+      const result = adapter.isCommandAllowed('ForEach-Object { rm -rf /tmp }');
+      expect(result.allowed).toBe(false);
+    });
+
+    it('(d) isShellInvocationAllowlisted requires all nested commands', () => {
+      const { adapter } = makePermissionConfig(['ShellTool(Get-Process)']);
+      // Get-Process is allowed but Where-Object is not
+      expect(
+        adapter.isShellInvocationAllowlisted(
+          'Get-Process | Where-Object { $_.Name -eq "x" }',
+        ),
+      ).toBe(false);
+    });
+
+    it('(d) isShellInvocationAllowlisted returns true when all nested commands are allowed', () => {
+      const { adapter } = makePermissionConfig([
+        'ShellTool(Get-Process)',
+        'ShellTool(Where-Object)',
+      ]);
+      expect(
+        adapter.isShellInvocationAllowlisted(
+          'Get-Process | Where-Object { $_.Name -eq "x" }',
+        ),
+      ).toBe(true);
+    });
+
+    it('(e) dynamic call target fails closed under strict allowedTools', () => {
+      const { adapter } = makePermissionConfig(['ShellTool(git)']);
+      const result = adapter.isCommandAllowed('& $cmd');
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toContain('dynamic or expression');
+    });
+
+    it('(e) .NET Process::Start fails closed under strict allowedTools', () => {
+      const { adapter } = makePermissionConfig(['ShellTool(git)']);
+      const result = adapter.isCommandAllowed(
+        '[System.Diagnostics.Process]::Start("cmd.exe")',
+      );
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toContain('dynamic or expression');
     });
   },
 );

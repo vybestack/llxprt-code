@@ -59,9 +59,12 @@ function permissionDecision(
   mode: 'none' | 'allowlist',
   coreTools: string[],
 ): { allAllowed: boolean; isHardDenial: boolean } {
+  // Pass 'bash' explicitly: these tests exercise Bash heredoc/substitution (#3181).
   const result = checkCommandPermissions(
     command,
     createConfig(mode, coreTools),
+    undefined,
+    'bash',
   );
   return {
     allAllowed: result.allAllowed,
@@ -79,26 +82,26 @@ describe.skipIf(!isParserAvailable())(
       UNQUOTED_DOLLAR_HEREDOC,
       ...MALFORMED_SUBSTITUTIONS,
     ])('detects executable substitution syntax in %j', (command) => {
-      expect(detectCommandSubstitution(command)).toBe(true);
+      expect(detectCommandSubstitution(command, 'bash')).toBe(true);
     });
 
     it.each([QUOTED_BACKTICK_HEREDOC, ...QUOTED_DELIMITER_HEREDOCS])(
       'treats quoted heredoc contents as literal in %j',
       (command) => {
-        expect(detectCommandSubstitution(command)).toBe(false);
+        expect(detectCommandSubstitution(command, 'bash')).toBe(false);
       },
     );
 
     it('detects paired backticks in an unquoted heredoc body', () => {
-      expect(detectCommandSubstitution(UNQUOTED_PAIRED_BACKTICK_HEREDOC)).toBe(
-        true,
-      );
+      expect(
+        detectCommandSubstitution(UNQUOTED_PAIRED_BACKTICK_HEREDOC, 'bash'),
+      ).toBe(true);
     });
 
     it('treats escaped backticks in an unquoted heredoc body as literal', () => {
-      expect(detectCommandSubstitution(UNQUOTED_ESCAPED_BACKTICK_HEREDOC)).toBe(
-        false,
-      );
+      expect(
+        detectCommandSubstitution(UNQUOTED_ESCAPED_BACKTICK_HEREDOC, 'bash'),
+      ).toBe(false);
     });
   },
 );

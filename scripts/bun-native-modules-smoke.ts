@@ -166,6 +166,40 @@ async function checkTreeSitter(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// 3b. web-tree-sitter + tree-sitter-pwsh WASM (#3181)
+// ---------------------------------------------------------------------------
+async function checkTreeSitterPowerShell(): Promise<void> {
+  try {
+    const { Parser, Language } = await import('web-tree-sitter');
+    await Parser.init();
+    const parser = new Parser();
+    const wasmPath = require.resolve(
+      'tree-sitter-pwsh/tree-sitter-powershell.wasm',
+    );
+    const wasmBytes = readFileSync(wasmPath);
+    const pwshLanguage = await Language.load(wasmBytes);
+    parser.setLanguage(pwshLanguage);
+    const tree = parser.parse('Get-Process | Where-Object { $_.Name -eq "x" }');
+    if (tree === null) {
+      throw new Error('parser returned null tree');
+    }
+    if (tree.rootNode.type !== 'program') {
+      throw new Error(
+        `expected root node type "program", got "${tree.rootNode.type}"`,
+      );
+    }
+    if (tree.rootNode.hasError) {
+      throw new Error(`PowerShell parse produced a syntax error tree`);
+    }
+    pass(
+      'web-tree-sitter + tree-sitter-pwsh WASM: parse PowerShell command (#3181)',
+    );
+  } catch (e) {
+    fail('web-tree-sitter + tree-sitter-pwsh WASM (#3181)', e);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 4. @lydell/node-pty (Windows ConPTY path; Windows-only)
 // ---------------------------------------------------------------------------
 const NODE_PTY_TIMEOUT_MS = 10000;
@@ -320,6 +354,7 @@ async function checkBunPty(): Promise<void> {
 await checkAstGrep();
 await checkKeyring();
 await checkTreeSitter();
+await checkTreeSitterPowerShell();
 await checkNodePty();
 await checkBunPty();
 
