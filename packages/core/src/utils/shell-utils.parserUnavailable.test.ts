@@ -4,22 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it, beforeAll, afterAll } from 'bun:test';
 import type { ShellPermissionConfig } from './shell-utils.js';
 
-const realShellParserModule = { ...(await import('./shell-parser.js')) };
-void vi.mock('./shell-parser.js', () => ({
-  ...realShellParserModule,
-  isParserAvailable: () => false,
-  parseShellCommand: () => null,
-  extractCommandNames: () => [],
-  hasCommandSubstitution: () => false,
-  splitCommandsWithTree: () => [],
-  parseCommandDetails: () => null,
-  hasPromptCommandTransform: () => false,
-}));
+/**
+ * Tests for permission decisions when the structural shell parser is
+ * unavailable, exercising the regex/split fallback path.
+ *
+ * resetParser/initializeParser are used instead of vi.mock to avoid
+ * cross-file mock leakage in bun:test (#3181).
+ */
 
-const { checkCommandPermissions } = await import('./shell-utils.js');
+import { checkCommandPermissions } from './shell-utils.js';
+import { resetParser, initializeParser } from './shell-parser.js';
 
 function createConfig(
   mode: 'none' | 'allowlist' | 'all',
@@ -38,9 +35,12 @@ function permissionDecision(
   mode: 'none' | 'allowlist' | 'all',
   coreTools: string[],
 ): { allAllowed: boolean; isHardDenial: boolean } {
+  // Pass 'bash' explicitly: these tests exercise Bash fallback behavior (#3181).
   const result = checkCommandPermissions(
     command,
     createConfig(mode, coreTools),
+    undefined,
+    'bash',
   );
   return {
     allAllowed: result.allAllowed,
@@ -51,6 +51,14 @@ function permissionDecision(
 const HARD_DENIAL = { allAllowed: false, isHardDenial: true };
 
 describe('permissions without the shell parser', () => {
+  beforeAll(() => {
+    resetParser();
+  });
+
+  afterAll(async () => {
+    await initializeParser();
+  });
+
   it.each(['none', 'allowlist'] as const)(
     'hard-denies LF multiline input in %s mode',
     (mode) => {

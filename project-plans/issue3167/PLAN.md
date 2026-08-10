@@ -14,9 +14,8 @@ Companion documents:
 - [`decision.html`](./decision.html) — plain-language explainer of the one open decision, with diagrams.
 - [`design.html`](./design.html) — full design detail, measured evidence, and the rejected approaches.
 Reproducible benchmarks: [`benchmarks/`](./benchmarks) — every number quoted in this plan comes from one of
-these scripts. They are stored with a `.mjs.txt` suffix so the repo-wide
-`no-new-js` guard (issue #2745), which forbids new tracked `.js`/`.mjs` files,
-stays green; drop the `.txt` to run one.
+these Bun/TypeScript scripts. Run them directly with `bun benchmarks/<name>.ts`; keeping them as TypeScript
+satisfies the repo-wide `no-new-js` guard (issue #2745), which forbids new tracked `.js`/`.mjs` files.
 
 ## Purpose
 
@@ -247,16 +246,16 @@ v25.2.1. These are primitive costs, **not** an end-to-end instrumentation budget
 
 | Fact                                       | Value                             | Script            |
 | ------------------------------------------ | --------------------------------- | ----------------- |
-| `performance.now()`                        | 25.1 ns / 26.6 ns                 | `perfprobe.mjs.txt`   |
-| counter increment                          | 1.97 ns / 5.05 ns                 | `perfprobe.mjs.txt`   |
-| `process.memoryUsage()` idle heap          | 0.42 us / 0.66 us                 | `perfprobe.mjs.txt`   |
+| `performance.now()`                        | 25.1 ns / 26.6 ns                 | `perfprobe.ts`   |
+| counter increment                          | 1.97 ns / 5.05 ns                 | `perfprobe.ts`   |
+| `process.memoryUsage()` idle heap          | 0.42 us / 0.66 us                 | `perfprobe.ts`   |
 | `process.memoryUsage()` 233 MB fragmented heap | 0.44 us / 0.65 us — **1.03x / 0.98x vs idle, so heap-size independent** | re-measured, see `specification.md` §8 |
-| a 33-field flat numeric record              | 688 B — **rejected schema, see below** | `recsize.mjs.txt`     |
-| gzip -6 on 2.29 MiB                        | 7.9x in 24 ms                     | `gziptest.mjs.txt`    |
-| concurrent `O_APPEND`, 8 writers, APFS     | 12,000/12,000 records, 0 torn     | `appendrace.mjs.txt`  |
-| shared file + private byte counter         | 49% of records destroyed          | `rotaterace.mjs.txt`  |
-| per-file counter, one writer per file      | 9,600/9,600, 0 over cap           | `perproc.mjs.txt`     |
-| archive overwritten by a late record       | 2,000 of 2,001 destroyed          | `boundary2.mjs.txt`   |
+| a 33-field flat numeric record              | 688 B — **rejected schema, see below** | `recsize.ts`     |
+| gzip -6 on 2.29 MiB                        | 7.9x in 24 ms                     | `gziptest.ts`    |
+| concurrent `O_APPEND`, 8 writers, APFS     | 12,000/12,000 records, 0 torn     | `appendrace.ts`  |
+| shared file + private byte counter         | 49% of records destroyed          | `rotaterace.ts`  |
+| per-file counter, one writer per file      | 9,600/9,600, 0 over cap           | `perproc.ts`     |
+| archive overwritten by a late record       | 2,000 of 2,001 destroyed          | `boundary2.ts`   |
 
 **The record-size and retention budgets are withdrawn too.** The 688 B figure prices the **rejected rev.2
 field set**, and it is the sole basis for the 64 MiB ceiling, the "~97,000 turns" figure and the "~5 weeks"
@@ -278,7 +277,7 @@ under streaming load, reporting p50/p95/p99 event-loop impact. No overhead claim
 Likewise the APFS append result establishes the tested filesystem only, and the final design does not depend
 on shared-file appends.
 
-### Runtime traps (verified, `perfprobe.mjs.txt`)
+### Runtime traps (verified, `perfprobe.ts`)
 
 | API                                      | Finding                                                   | Decision                    |
 | ---------------------------------------- | --------------------------------------------------------- | --------------------------- |

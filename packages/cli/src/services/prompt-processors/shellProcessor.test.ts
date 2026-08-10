@@ -126,6 +126,7 @@ describe('ShellProcessor', () => {
       'git status',
       expect.any(Object),
       context.session.sessionShellAllowlist,
+      expect.any(String),
     );
     expect(mockShellExecute).toHaveBeenCalledWith(
       'git status',
@@ -324,11 +325,13 @@ describe('ShellProcessor', () => {
       'cmd1',
       expect.any(Object),
       context.session.sessionShellAllowlist,
+      expect.any(String),
     );
     expect(mockCheckCommandPermissions).toHaveBeenCalledWith(
       'cmd2',
       expect.any(Object),
       context.session.sessionShellAllowlist,
+      expect.any(String),
     );
     expect(mockShellExecute).toHaveBeenCalledTimes(2);
     expect(result).toBe('Run output1 and output2');
@@ -358,6 +361,7 @@ describe('ShellProcessor', () => {
       expectedCommand,
       expect.any(Object),
       context.session.sessionShellAllowlist,
+      expect.any(String),
     );
     expect(mockShellExecute).toHaveBeenCalledWith(
       expectedCommand,
@@ -397,6 +401,7 @@ describe('ShellProcessor', () => {
         command,
         expect.any(Object),
         context.session.sessionShellAllowlist,
+        getShellConfiguration().shell,
       );
       expect(mockShellExecute).toHaveBeenCalledWith(
         command,
@@ -627,6 +632,7 @@ describe('ShellProcessor', () => {
         expectedResolvedCommand,
         expect.any(Object),
         context.session.sessionShellAllowlist,
+        getShellConfiguration().shell,
       );
     });
 

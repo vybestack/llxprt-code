@@ -1,3 +1,3 @@
 [test]
-preload = ["./bun-preload.ts"]
+preload = ["./bun-preload.ts", "../../scripts/tests/browser-launch-guard.ts"]
 timeout = 30000

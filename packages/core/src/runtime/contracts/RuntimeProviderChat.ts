@@ -68,7 +68,10 @@ export type RuntimeUserMemoryInput = string | RuntimeUserMemoryProfileProvider;
  * invoke it when it is not overriding the model.
  */
 export interface RuntimeSystemPromptAssembler {
-  assemble(model: string): Promise<string>;
+  assemble(request: {
+    provider: string | undefined;
+    model: string;
+  }): Promise<string>;
 }
 
 export interface RuntimeGenerateChatOptions {

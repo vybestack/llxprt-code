@@ -312,6 +312,7 @@ export class LoadBalancingProvider implements IProvider {
     // actually transmits.
     const targetOptions = await optionsWithSelectedModelPrompt(
       options,
+      subProfile.providerName,
       resolveSubProfileModel(subProfile),
     );
     const resolvedOptions = this.buildDelegateResolvedOptions(

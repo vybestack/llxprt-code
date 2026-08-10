@@ -98,7 +98,7 @@ describe('Tool Key Storage Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', 
     it('returns the names from the fixture', () => {
       const names = getSupportedToolNames();
       // Primary assertion: observable collection content matches fixture
-      expect(names).toEqual(SUPPORTED_TOOL_NAMES_FIXTURE);
+      expect(names).toEqual([...SUPPORTED_TOOL_NAMES_FIXTURE]);
     });
 
     it('returns array containing exa', () => {
@@ -206,7 +206,10 @@ describe('Tool Key Storage Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', 
       // Also verify fixture match
       const fixtureEntry = MASK_KEY_FIXTURES.find((f) => f.input === testKey);
       expect(fixtureEntry).toBeDefined();
-      expect(storageMasked).toBe(fixtureEntry?.output);
+      if (fixtureEntry === undefined) {
+        throw new Error(`no mask fixture for key ${testKey}`);
+      }
+      expect(storageMasked).toBe(fixtureEntry.output);
     });
   });
 

@@ -12,7 +12,14 @@ import {
   type StdoutWriteObserver,
 } from './stdio.js';
 
-type StdoutWriteArgs = Parameters<typeof process.stdout.write>;
+type StdoutWriteCallback = (err?: NodeJS.ErrnoException | null) => void;
+type StdoutWriteArgs =
+  | [chunk: Uint8Array | string, callback?: StdoutWriteCallback]
+  | [
+      chunk: Uint8Array | string,
+      encoding?: BufferEncoding,
+      callback?: StdoutWriteCallback,
+    ];
 
 const noopUnderlying = (..._args: StdoutWriteArgs): boolean => true;
 

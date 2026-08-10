@@ -502,8 +502,12 @@ describe('PolicyEngine', () => {
       expect(rules).toHaveLength(1);
       expect(rules[0].toolName).toBe('edit');
 
-      // Modifying returned array should not affect engine
-      rules.push({ toolName: 'shell', decision: PolicyDecision.DENY });
+      const newRule = {
+        toolName: 'shell',
+        decision: PolicyDecision.DENY,
+      };
+      Reflect.apply(Array.prototype.push, rules, [newRule]);
+      expect(rules).toHaveLength(2);
       expect(engine.getRules()).toHaveLength(1);
     });
   });

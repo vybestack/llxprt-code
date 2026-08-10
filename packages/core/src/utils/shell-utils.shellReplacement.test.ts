@@ -6,8 +6,8 @@
 
 import { describe, it, expect, beforeEach, beforeAll } from 'bun:test';
 import {
-  detectCommandSubstitution,
-  checkCommandPermissions,
+  detectCommandSubstitution as detectCommandSubstitutionImpl,
+  checkCommandPermissions as checkCommandPermissionsImpl,
 } from './shell-utils.js';
 import { Config } from '../config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -18,6 +18,16 @@ import {
 } from './shell-parser.js';
 
 await initializeShellParsers();
+
+// All cases in this file exercise Bash substitution syntax; pass 'bash'
+// explicitly so tests are platform-independent (#3181).
+const detectCommandSubstitution = (cmd: string): boolean =>
+  detectCommandSubstitutionImpl(cmd, 'bash');
+const checkCommandPermissions = (
+  cmd: string,
+  cfg: Config,
+): ReturnType<typeof checkCommandPermissionsImpl> =>
+  checkCommandPermissionsImpl(cmd, cfg, undefined, 'bash');
 
 describe('Shell replacement settings', () => {
   let config: Config;

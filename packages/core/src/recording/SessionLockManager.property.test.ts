@@ -798,4 +798,77 @@ describe('PID reuse protection @requirement:REQ-CON-005 @plan:PLAN-20260211-SESS
       }
     },
   );
+
+  // -------------------------------------------------------------------------
+  // Missing/malformed timestamp must not make a live-PID lock immortal
+  // (OCR finding 2/12).  A valid/alive PID with missing/malformed timestamp
+  // must fall back to the mtime-based 48-hour bound.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Write a lock file whose payload has an alive PID but a missing or
+   * malformed timestamp, then optionally back-date the file's mtime.
+   */
+  async function writeLockWithBadTimestamp(
+    lockPath: string,
+    payload: Record<string, unknown>,
+    ageMs = 0,
+  ): Promise<void> {
+    await fs.mkdir(path.dirname(lockPath), { recursive: true });
+    await fs.writeFile(lockPath, JSON.stringify(payload), 'utf-8');
+    if (ageMs > 0) {
+      const old = new Date(Date.now() - ageMs);
+      await fs.utimes(lockPath, old, old);
+    }
+  }
+
+  const FORTY_NINE_HOURS = 49 * 60 * 60 * 1000;
+
+  itProp(
+    'checkStaleWithPidReuse falls back to age bound for alive PID with missing timestamp older than 48h',
+    async () => {
+      const sessionId = 'bad-ts-missing-old';
+      const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
+      // Alive PID, NO timestamp field.
+      await writeLockWithBadTimestamp(
+        lockPath,
+        { pid: process.pid, sessionId },
+        FORTY_NINE_HOURS,
+      );
+
+      const stale = await SessionLockManager.checkStaleWithPidReuse(lockPath);
+      expect(stale).toBe(true);
+    },
+  );
+
+  itProp(
+    'checkStaleWithPidReuse does not flag a recent alive-PID lock with missing timestamp as stale',
+    async () => {
+      const sessionId = 'bad-ts-missing-recent';
+      const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
+      await writeLockWithBadTimestamp(lockPath, {
+        pid: process.pid,
+        sessionId,
+      });
+
+      const stale = await SessionLockManager.checkStaleWithPidReuse(lockPath);
+      expect(stale).toBe(false);
+    },
+  );
+
+  itProp(
+    'checkStaleWithPidReuse falls back to age bound for alive PID with malformed timestamp older than 48h',
+    async () => {
+      const sessionId = 'bad-ts-malformed-old';
+      const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
+      await writeLockWithBadTimestamp(
+        lockPath,
+        { pid: process.pid, timestamp: 'not-a-date', sessionId },
+        FORTY_NINE_HOURS,
+      );
+
+      const stale = await SessionLockManager.checkStaleWithPidReuse(lockPath);
+      expect(stale).toBe(true);
+    },
+  );
 });

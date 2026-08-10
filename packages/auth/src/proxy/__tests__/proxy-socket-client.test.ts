@@ -53,6 +53,13 @@ function destroyServerSockets(srv: net.Server): void {
   }
 }
 
+function initialized<T>(value: T | undefined, resourceName: string): T {
+  if (value === undefined) {
+    throw new Error(`${resourceName} was not initialized`);
+  }
+  return value;
+}
+
 /**
  * Creates a temporary IPC endpoint for testing.
  */
@@ -356,7 +363,9 @@ describe('ProxySocketClient', () => {
       },
     );
 
-    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+    await new Promise<void>((resolve) =>
+      initialized(server, 'server').listen(socketPath, resolve),
+    );
 
     client = new ProxySocketClient(socketPath);
     await client.ensureConnected();
@@ -376,7 +385,9 @@ describe('ProxySocketClient', () => {
   it('an idle connected client does not keep the process alive', async () => {
     server = createAutoReplyServer(socketPath);
     trackServerSockets(server);
-    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+    await new Promise<void>((resolve) =>
+      initialized(server, 'server').listen(socketPath, resolve),
+    );
 
     const { code, signal, stderr } = await runIdleExitSubprocess(
       PROXY_SOCKET_CLIENT_URL,
@@ -398,7 +409,7 @@ describe('ProxySocketClient', () => {
    */
   it('rejects handshake on version mismatch', async () => {
     server = net.createServer((socket) => {
-      trackServerSockets(server);
+      trackServerSockets(initialized(server, 'server'));
       const decoder = new FrameDecoder();
       socket.on('data', (chunk) => {
         const frames = decoder.feed(chunk);
@@ -414,7 +425,9 @@ describe('ProxySocketClient', () => {
       });
     });
 
-    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+    await new Promise<void>((resolve) =>
+      initialized(server, 'server').listen(socketPath, resolve),
+    );
 
     client = new ProxySocketClient(socketPath);
     await expect(client.ensureConnected()).rejects.toThrow(/version/i);
@@ -428,7 +441,7 @@ describe('ProxySocketClient', () => {
     const receivedIds = new Set<string>();
 
     server = net.createServer((socket) => {
-      trackServerSockets(server);
+      trackServerSockets(initialized(server, 'server'));
       const decoder = new FrameDecoder();
       socket.on('data', (chunk) => {
         const frames = decoder.feed(chunk);
@@ -444,7 +457,9 @@ describe('ProxySocketClient', () => {
       });
     });
 
-    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+    await new Promise<void>((resolve) =>
+      initialized(server, 'server').listen(socketPath, resolve),
+    );
 
     client = new ProxySocketClient(socketPath);
 
@@ -467,7 +482,7 @@ describe('ProxySocketClient', () => {
    */
   it('rejects request after 30s timeout', async () => {
     server = net.createServer((socket) => {
-      trackServerSockets(server);
+      trackServerSockets(initialized(server, 'server'));
       const decoder = new FrameDecoder();
       socket.on('data', (chunk) => {
         const frames = decoder.feed(chunk);
@@ -481,7 +496,9 @@ describe('ProxySocketClient', () => {
       });
     });
 
-    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+    await new Promise<void>((resolve) =>
+      initialized(server, 'server').listen(socketPath, resolve),
+    );
 
     client = new ProxySocketClient(socketPath);
     await client.ensureConnected();
@@ -505,7 +522,9 @@ describe('ProxySocketClient', () => {
   it('triggers gracefulClose after idle timeout', async () => {
     server = createAutoReplyServer(socketPath);
     trackServerSockets(server);
-    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+    await new Promise<void>((resolve) =>
+      initialized(server, 'server').listen(socketPath, resolve),
+    );
 
     client = new ProxySocketClient(socketPath);
     await client.ensureConnected();
@@ -531,7 +550,7 @@ describe('ProxySocketClient', () => {
    */
   it('surfaces "Credential proxy connection lost" on connection error', async () => {
     server = net.createServer((socket) => {
-      trackServerSockets(server);
+      trackServerSockets(initialized(server, 'server'));
       const decoder = new FrameDecoder();
       socket.on('data', (chunk) => {
         const frames = decoder.feed(chunk);
@@ -546,7 +565,9 @@ describe('ProxySocketClient', () => {
       });
     });
 
-    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+    await new Promise<void>((resolve) =>
+      initialized(server, 'server').listen(socketPath, resolve),
+    );
 
     client = new ProxySocketClient(socketPath);
     await client.ensureConnected();
@@ -598,7 +619,7 @@ describe('ProxySocketClient', () => {
     };
 
     server = net.createServer((socket) => {
-      trackServerSockets(server);
+      trackServerSockets(initialized(server, 'server'));
       const decoder = new FrameDecoder();
       const pendingResponses: Array<{ id: string; op: string }> = [];
 
@@ -610,7 +631,9 @@ describe('ProxySocketClient', () => {
       });
     });
 
-    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+    await new Promise<void>((resolve) =>
+      initialized(server, 'server').listen(socketPath, resolve),
+    );
 
     client = new ProxySocketClient(socketPath);
 
@@ -634,7 +657,7 @@ describe('ProxySocketClient', () => {
     let handshakeCount = 0;
 
     server = net.createServer((socket) => {
-      trackServerSockets(server);
+      trackServerSockets(initialized(server, 'server'));
       const decoder = new FrameDecoder();
       socket.on('data', (chunk) => {
         const frames = decoder.feed(chunk);
@@ -650,7 +673,9 @@ describe('ProxySocketClient', () => {
       });
     });
 
-    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+    await new Promise<void>((resolve) =>
+      initialized(server, 'server').listen(socketPath, resolve),
+    );
 
     client = new ProxySocketClient(socketPath);
     await client.ensureConnected();
@@ -675,7 +700,7 @@ describe('ProxySocketClient', () => {
    */
   it('rejects pending requests when close() is called', async () => {
     server = net.createServer((socket) => {
-      trackServerSockets(server);
+      trackServerSockets(initialized(server, 'server'));
       const decoder = new FrameDecoder();
       socket.on('data', (chunk) => {
         const frames = decoder.feed(chunk);
@@ -689,7 +714,9 @@ describe('ProxySocketClient', () => {
       });
     });
 
-    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+    await new Promise<void>((resolve) =>
+      initialized(server, 'server').listen(socketPath, resolve),
+    );
 
     client = new ProxySocketClient(socketPath);
     await client.ensureConnected();
@@ -710,13 +737,15 @@ describe('ProxySocketClient', () => {
   it('gracefulClose ends socket without rejecting (no pending requests)', async () => {
     server = createAutoReplyServer(socketPath);
     trackServerSockets(server);
-    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+    await new Promise<void>((resolve) =>
+      initialized(server, 'server').listen(socketPath, resolve),
+    );
 
     client = new ProxySocketClient(socketPath);
     await client.ensureConnected();
 
     // No pending requests — graceful close should not throw
-    expect(() => client.gracefulClose()).not.toThrow();
+    expect(() => initialized(client, 'client').gracefulClose()).not.toThrow();
   });
 
   // ─── Capability Token ──────────────────────────────────────────────────────
@@ -796,7 +825,7 @@ describe('ProxySocketClient', () => {
    */
   it('rejects all concurrently pending requests promptly on transport loss, then reconnects', async () => {
     server = net.createServer((socket) => {
-      trackServerSockets(server);
+      trackServerSockets(initialized(server, 'server'));
       const decoder = new FrameDecoder();
       let requestCount = 0;
       socket.on('data', (chunk) => {
@@ -815,13 +844,15 @@ describe('ProxySocketClient', () => {
       });
     });
 
-    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+    await new Promise<void>((resolve) =>
+      initialized(server, 'server').listen(socketPath, resolve),
+    );
 
     client = new ProxySocketClient(socketPath);
     await client.ensureConnected();
 
     const requests = Array.from({ length: 3 }, (_, i) =>
-      client.request(`concurrent-${i}`, {}),
+      initialized(client, 'client').request(`concurrent-${i}`, {}),
     );
 
     const timers: Array<ReturnType<typeof setTimeout>> = [];
@@ -842,12 +873,16 @@ describe('ProxySocketClient', () => {
       for (const timer of timers) clearTimeout(timer);
     }
 
-    destroyServerSockets(server);
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    destroyServerSockets(initialized(server, 'server'));
+    await new Promise<void>((resolve) =>
+      initialized(server, 'server').close(() => resolve()),
+    );
 
     server = createAutoReplyServer(socketPath);
     trackServerSockets(server);
-    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+    await new Promise<void>((resolve) =>
+      initialized(server, 'server').listen(socketPath, resolve),
+    );
 
     const response = await client.request('after-reconnect', { ok: true });
     expect(response.ok).toBe(true);

@@ -50,6 +50,7 @@ import {
 } from './toolGovernance.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { resolvePromptMemory } from './promptMemoryPolicy.js';
 import {
   EmojiFilter,
   type EmojiFilterMode,
@@ -772,21 +773,23 @@ export async function createChatObject(
     combinedDeclarations,
     config,
     personaPrompt,
+    runtimeContext.state.provider,
     logger,
   );
 
   // Per-turn assembler: reuses the EXISTING buildSystemInstruction with the
-  // provider-resolved model, preserving subagent interactionMode and persona
-  // ordering (issue #3136).
+  // request-scoped provider and model, preserving subagent interactionMode
+  // and persona ordering (issue #3136, #3176).
   const systemPromptAssembler: SystemPromptAssembler = {
-    assemble: (turnModel: string) =>
+    assemble: (request: { provider: string | undefined; model: string }) =>
       buildSystemInstruction(
         environmentContextLoader,
         runtimeContext,
-        { ...modelConfig, model: turnModel },
+        { ...modelConfig, model: request.model },
         combinedDeclarations,
         config,
         personaPrompt,
+        request.provider,
         logger,
       ),
   };
@@ -810,6 +813,7 @@ async function buildSystemInstruction(
   combinedDeclarations: ToolDeclaration[],
   config: Config,
   personaPrompt: string,
+  provider: string | undefined,
   logger: { debug: (fn: () => string) => void },
 ): Promise<string> {
   const envParts = await environmentContextLoader(runtimeContext);
@@ -826,27 +830,18 @@ async function buildSystemInstruction(
     ),
   );
 
-  const mcpInstructions = config.getMcpInstructions();
-  // Issue #3136: a subagent's user/core memory previously reached the model
-  // only because the provider layer rebuilt its own core prompt. Supply both
-  // here so collapsing to a single assembler cannot strip subagent memory.
-  // Passing coreMemory skips the two-file .LLXPRT_SYSTEM disk read that
-  // getCoreSystemPromptAsync performs when it is undefined — but only when JIT
-  // context is enabled, since Config.getCoreMemory() returns undefined
-  // otherwise and the read happens anyway.
-  //
-  // This differs from ChatSessionFactory, which branches on
-  // isJitContextEnabled(): with JIT on it uses getGlobalMemory() and appends
-  // getJitMemoryForPath(), and with JIT off it uses getUserMemory() like this
-  // site does. So the two agree only when JIT is off. With JIT on, subagents
-  // miss JIT subdirectory memory, and because getUserMemory() then also folds in
-  // environment memory (which already carries the MCP block) they can receive
-  // MCP instructions twice. See issue #3162 findings D2 and D4.
+  // Memory sourcing is shared with the main-agent builder (ChatSessionFactory)
+  // via resolvePromptMemory so subagents get the same JIT policy: under JIT,
+  // global memory plus the working directory's JIT subdirectory memory, with
+  // MCP instructions carried only through their dedicated option (issue #3173).
+  const { userMemory, coreMemory, mcpInstructions } =
+    await resolvePromptMemory(config);
   const coreSystemPrompt: unknown = await getCoreSystemPromptAsync({
-    userMemory: config.getUserMemory(),
-    coreMemory: config.getCoreMemory(),
+    userMemory,
+    coreMemory,
     mcpInstructions,
     model: modelConfig.model,
+    provider,
     tools: toolNames,
     includeSubagentDelegation: false,
     interactionMode: 'subagent',

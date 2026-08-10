@@ -23,6 +23,7 @@
 import { describe, it, expect } from 'bun:test';
 import { TodoPauseTool, TodoReadTool, TodoWriteTool } from '../index.js';
 import type { ITodoService, TodoStore } from '../interfaces/index.js';
+import type { Todo } from '../types/todo-schemas.js';
 import type { ToolContext } from '../types/tool-context.js';
 import { todoEvents, type TodoUpdateEvent } from '../tools/todo-events.js';
 import { executeToolForBehavioralAssertion } from './red-test-helpers.js';
@@ -31,14 +32,12 @@ import { executeToolForBehavioralAssertion } from './red-test-helpers.js';
  * Fake ITodoService with controllable todo state.
  * Infrastructure fake — returns real todo items for observable assertions.
  */
-function createFakeTodoService(
-  initialTodos: Array<Record<string, unknown>> = [],
-): ITodoService {
+function createFakeTodoService(initialTodos: Todo[] = []): ITodoService {
   let todos = [...initialTodos];
 
   const store: TodoStore = {
     getTodos: () => todos,
-    setTodos: (newTodos: Array<Record<string, unknown>>) => {
+    setTodos: (newTodos: Todo[]) => {
       todos = [...newTodos];
     },
   };
@@ -50,13 +49,10 @@ function createFakeTodoService(
       getReminderForStateChange: () => 'reminder text',
     }),
     getContextTracker: () => ({
-      setActiveTodo: (id: string) => {
-        // Track active todo
+      setActiveTodo: (id: string | null) => {
         void id;
       },
-      clearActiveTodo: () => {
-        // Clear active todo tracking
-      },
+      clearActiveTodo: () => {},
     }),
     getDefaultAgentId: () => 'test-agent',
   };
@@ -196,10 +192,10 @@ describe('Todo Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', (
   describe('ITodoService ToolContext propagation', () => {
     it('passes session and agent context to store and tracker services', async () => {
       const contexts: ToolContext[] = [];
-      let activeTodo: string | null = null;
-      let todos: Array<Record<string, unknown>> = [];
+      const activeTodoRef: { value: string | null } = { value: null };
+      let todos: Todo[] = [];
       const store: TodoStore = {
-        getTodos: () => todos as never[],
+        getTodos: () => todos,
         setTodos: (newTodos) => {
           todos = [...newTodos];
         },
@@ -220,7 +216,7 @@ describe('Todo Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', (
           }
           return {
             setActiveTodo: (id) => {
-              activeTodo = id;
+              activeTodoRef.value = id;
             },
           };
         },
@@ -258,14 +254,14 @@ describe('Todo Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', (
         ]),
       );
       expect(contexts.length).toBeGreaterThanOrEqual(4);
-      expect(activeTodo).toBe('active');
+      expect(activeTodoRef.value).toBe('active');
     });
 
     it('emits persisted todo replacements independently of presentation mode', async () => {
-      let todos: Array<Record<string, unknown>> = [];
+      let todos: Todo[] = [];
       const events: TodoUpdateEvent[] = [];
       const store: TodoStore = {
-        getTodos: () => todos as never[],
+        getTodos: () => todos,
         setTodos: (newTodos) => {
           todos = [...newTodos];
         },

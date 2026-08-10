@@ -33,6 +33,7 @@ import { isThinkingSupported } from './clientHelpers.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { TodoContinuationService } from './TodoContinuationService.js';
+import { resolvePromptMemory } from './promptMemoryPolicy.js';
 
 /**
  * Assembles ephemeral settings into an immutable snapshot for the runtime.
@@ -111,26 +112,22 @@ export function buildSettingsSnapshot(
  * Builds the full system instruction: env context, core memory, JIT memory,
  * user memory, MCP instructions, subagent delegation.
  *
- * This is the FULL path used by startChat — differs from the lightweight path
- * in clientLlmUtilities which skips env context, core memory, and JIT memory.
+ * Memory sourcing is shared with the subagent builder via
+ * {@link resolvePromptMemory} so both execution contexts apply the same JIT
+ * policy (issue #3173). This is the FULL path used by startChat — it differs
+ * from the lightweight path in clientLlmUtilities, which skips env context and
+ * JIT memory; both paths pass core memory.
  */
 export async function buildSystemInstruction(
   config: Config,
   enabledToolNames: string[],
   envParts: Array<{ text?: string }>,
+  provider: string | undefined,
   model: string,
 ): Promise<string> {
-  let userMemory = config.isJitContextEnabled()
-    ? config.getGlobalMemory()
-    : config.getUserMemory();
-  const coreMemory = config.getCoreMemory();
+  const { userMemory, coreMemory, mcpInstructions } =
+    await resolvePromptMemory(config);
 
-  const jitMemory = await config.getJitMemoryForPath(config.getWorkingDir());
-  if (jitMemory) {
-    userMemory = userMemory ? `${userMemory}\n\n${jitMemory}` : jitMemory;
-  }
-
-  const mcpInstructions = config.getMcpInstructions();
   const includeSubagentDelegation =
     await shouldIncludeSubagentDelegationForConfig(config, enabledToolNames);
   const interactionMode = config.isInteractive()
@@ -142,6 +139,7 @@ export async function buildSystemInstruction(
     coreMemory,
     mcpInstructions,
     model,
+    provider,
     tools: enabledToolNames,
     includeSubagentDelegation,
     interactionMode,
@@ -334,6 +332,24 @@ async function buildChatFromRuntime(
 }
 
 /**
+ * Applies the config's tokenizer factory to a history service, if available.
+ */
+function applyTokenizerFactory(
+  config: Config,
+  historyService: HistoryService,
+): void {
+  const getTokenizerFactory = (config as Config & Record<string, unknown>)[
+    'getTokenizerFactory'
+  ];
+  if (typeof getTokenizerFactory === 'function') {
+    const tokenizerFactory = getTokenizerFactory.call(config);
+    if (tokenizerFactory) {
+      historyService.setTokenizerFactory(tokenizerFactory);
+    }
+  }
+}
+
+/**
  * Stateful factory: creates a ChatSession session.
  * Reuses stored HistoryService when available, creates a new one otherwise.
  * Configures thinking, loads the agent runtime, builds tool declarations.
@@ -365,15 +381,7 @@ export async function createChatSession(
     createHistoryService,
   );
 
-  const getTokenizerFactory = (config as Config & Record<string, unknown>)[
-    'getTokenizerFactory'
-  ];
-  if (typeof getTokenizerFactory === 'function') {
-    const tokenizerFactory = getTokenizerFactory.call(config);
-    if (tokenizerFactory) {
-      historyService.setTokenizerFactory(tokenizerFactory);
-    }
-  }
+  applyTokenizerFactory(config, historyService);
 
   const enabledToolNames = getEnabledToolNamesForPrompt(config);
   const envParts = await getEnvironmentContext(config);
@@ -385,16 +393,25 @@ export async function createChatSession(
     config,
     enabledToolNames,
     envParts,
+    runtimeState.provider,
     model,
   );
 
-  // Per-turn assembler: reuses the EXISTING buildSystemInstruction with a
-  // model sourced from the provider at request time (issue #3136). This
-  // keeps coreMemory explicit (already passed inside buildSystemInstruction)
-  // so no two-file disk read happens per turn.
+  // Per-turn assembler: reuses the EXISTING buildSystemInstruction with the
+  // provider and model sourced from the runtime at request time (issue #3136,
+  // #3176). This keeps coreMemory explicit (already passed inside
+  // buildSystemInstruction) so no two-file disk read happens per turn, and
+  // threads the request-scoped provider so template resolution stays coherent
+  // with the model at every boundary including load-balancer rerender.
   const systemPromptAssembler: SystemPromptAssembler = {
-    assemble: (turnModel: string) =>
-      buildSystemInstruction(config, enabledToolNames, envParts, turnModel),
+    assemble: (request: { provider: string | undefined; model: string }) =>
+      buildSystemInstruction(
+        config,
+        enabledToolNames,
+        envParts,
+        request.provider,
+        request.model,
+      ),
   };
 
   historyService.setActiveTokenizationTarget(model, runtimeState.provider);

@@ -9,7 +9,7 @@ import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { isValidEnvelope } from './envelope.js';
-import { SecureStore, SecureStoreError } from './secure-store.js';
+import { SecureStore } from './secure-store.js';
 
 const MACHINE_SECRET = Buffer.alloc(32, 0x21);
 
@@ -121,9 +121,9 @@ describe('SecureStore encrypted-file fallback', () => {
       fallbackPolicy: 'deny',
     });
 
-    await expect(store.set('should-fail', 'value')).rejects.toMatchObject<
-      Partial<SecureStoreError>
-    >({ code: 'UNAVAILABLE' });
+    await expect(store.set('should-fail', 'value')).rejects.toMatchObject({
+      code: 'UNAVAILABLE',
+    });
     // No fallback file should be written — only the lock directory may exist.
     const entries = await fs.readdir(tempDir);
     expect(entries.filter((e) => e.endsWith('.enc'))).toHaveLength(0);

@@ -141,21 +141,17 @@ export interface IProvider {
   getDefaultModel(): string;
   /**
    * Declares WHERE this provider can accept the assembled system prompt for
-   * the given request (issue #3136).
+   * the given request (issue #3136/#3172).
    *
-   * This is a declaration, not a decision: it is intended to be consumed by the
-   * shared placement policy in `utils/systemPromptPlacement.ts` so that
-   * providers do not re-derive placement from transport details.
+   * This is a declaration, not a decision: it is consumed by the shared
+   * placement policy in `utils/systemPromptPlacement.ts` so that providers do
+   * not re-derive placement from transport details. Callers resolve runtime
+   * auth-token providers first and pass the resolved token string so placement
+   * and transport share one credential fact.
    *
    * Omitting it means `system-field`. Anthropic returns `context-prefix` when
-   * OAuth is active, because its `system` field may carry only the Claude Code
-   * string and the real prompt must go at the top of the context instead.
-   *
-   * NOT YET WIRED (issue #3162 finding D1): no production code calls this. The
-   * live Anthropic decision is still made from a local `isOAuth` flag in
-   * `anthropic/AnthropicRequestPreparation.ts`. This method and the transport
-   * flag also use different OAuth predicates, so they can disagree; reconcile
-   * them before making this the source of truth.
+   * the resolved token is OAuth, because its `system` field may carry only the
+   * Claude Code string and the real prompt must go at the top of the context.
    */
   getSystemPromptPlacement?(
     options: GenerateChatOptions,

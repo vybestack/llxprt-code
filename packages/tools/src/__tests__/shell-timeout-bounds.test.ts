@@ -29,7 +29,7 @@ import type { ToolResult } from '../index.js';
 
 interface FakeHostOptions {
   /** Configured maximum (ceiling) reported by getTimeoutConfig. */
-  max: number | undefined;
+  max: number;
   /** Configured default reported by getTimeoutConfig. */
   defaultSeconds: number;
   /** 'complete' resolves immediately; 'hang' resolves only on abort. */

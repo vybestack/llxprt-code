@@ -21,6 +21,9 @@ configures Bun's install behavior:
 ```toml
 [install]
 linker = "hoisted"
+
+[test]
+preload = ["./scripts/tests/browser-launch-guard.ts"]
 ```
 
 ### Why `linker = "hoisted"`
@@ -35,6 +38,18 @@ isolated linker) during S1. Bun's hoisting is not byte-for-byte identical to
 npm's algorithm, but using the hoisted layout removes the large class of
 "works under npm but not bun" (or vice-versa) surprises caused by an isolated
 layout.
+
+### Why the browser-launch guard is preloaded
+
+Bun module mocks are process-wide and do not replace dependencies already held
+by a cached module. Root and workspace-local `bun test` invocations therefore
+preload a test marker, and the repository's test runners set the same marker
+before spawning their Bun test processes. The marker also propagates to
+subprocesses. Browser-launching production code fails closed when either
+`LLXPRT_RUNNING_TESTS` is exactly `true` or `NODE_ENV` is exactly `test`. A test
+that intentionally needs to exercise the operating system's real browser
+launcher must opt in explicitly. The only accepted opt-in is the exact,
+case-sensitive value `LLXPRT_ALLOW_BROWSER_LAUNCH_IN_TESTS=true`.
 
 ## .bun-version
 
@@ -84,6 +99,12 @@ trusted. These are the 16 entries in `trustedDependencies`:
   When it was still a dependency it did not need trust: its platform binary was
   delivered by the separate `@esbuild/<platform>` package, which Bun installs
   directly without running a script.
+- **`tree-sitter-pwsh`** — the shell validator loads only the package's
+  published `tree-sitter-powershell.wasm` with `web-tree-sitter`. Its install
+  script prepares the native Node binding, which the validator never imports
+  and which is deliberately runtime-gated out under Node because loading the
+  PowerShell grammar there is unstable. The published WASM does not require the
+  lifecycle script, so granting install-time trust would add unnecessary risk.
 - **`node-pty`** — not trusted because the runtime prefers `@lydell/node-pty`
   (see `packages/core/src/utils/getPty.ts`), whose native binary is supplied by
   the prebuilt `@lydell/node-pty-*` platform packages. `node-pty` is the

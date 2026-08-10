@@ -219,9 +219,26 @@ export interface CoreSystemPromptOptions {
 
   model?: string;
   tools?: string[];
+  /**
+   * Caller-supplied, request-scoped provider identity for template resolution
+   * (issue #3176, finding D5). Request runtimes and routers pass the concrete
+   * provider that will execute the request so `provider` and `model` remain
+   * coherent. When omitted, `resolveProvider`
+   * falls back to the ambient runtime settings service — the legacy path
+   * that is request-scoped only by accident.
+   */
   provider?: string;
   includeSubagentDelegation?: boolean;
+  /**
+   * Settings-resolved (NOT caller-supplied). When omitted,
+   * `resolveAsyncSubagentSettings` reads the global and profile subagent
+   * settings from the runtime settings service. Callers should not pass
+   * these directly.
+   */
   asyncSubagentsEnabled?: boolean;
+  /**
+   * Settings-resolved (NOT caller-supplied). See `asyncSubagentsEnabled`.
+   */
   profileAsyncEnabled?: boolean;
   interactionMode?: 'interactive' | 'non-interactive' | 'subagent';
 }

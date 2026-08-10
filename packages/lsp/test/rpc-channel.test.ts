@@ -12,7 +12,7 @@ import {
   RequestType,
   StreamMessageReader,
   StreamMessageWriter,
-} from 'vscode-jsonrpc';
+} from 'vscode-jsonrpc/node.js';
 import { PassThrough } from 'node:stream';
 
 import { setupRpcChannel } from '../src/channels/rpc-channel.js';

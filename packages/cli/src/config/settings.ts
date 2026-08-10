@@ -112,7 +112,7 @@ export interface AccessibilitySettings {
 }
 
 export interface SessionRetentionSettings {
-  /** Enable automatic session cleanup */
+  /** Enable automatic session cleanup (default-on when unset). */
   enabled?: boolean;
 
   /** Maximum age of sessions to keep (e.g., "30d", "7d", "24h", "1w") */
@@ -123,6 +123,9 @@ export interface SessionRetentionSettings {
 
   /** Minimum retention period (safety limit, defaults to "1d") */
   minRetention?: string;
+
+  /** Machine-wide aggregate size limit in MiB (defaults to 4096 = 4 GiB). */
+  maxTotalSizeMB?: number;
 }
 
 export interface SettingsError {

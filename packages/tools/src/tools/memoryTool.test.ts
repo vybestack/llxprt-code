@@ -20,6 +20,7 @@ import {
   getCurrentLlxprtMdFilename,
   getAllLlxprtMdFilenames,
   DEFAULT_CONTEXT_FILENAME,
+  type SaveMemoryParams,
 } from './memoryTool.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -157,7 +158,7 @@ describe('MemoryTool', () => {
           recursive: true,
         },
       );
-      expect(mockFsAdapter.writeFile).toHaveBeenCalledOnce();
+      expect(mockFsAdapter.writeFile).toHaveBeenCalledTimes(1);
       const writeFileCall = mockFsAdapter.writeFile.mock.calls[0];
       expect(writeFileCall[0]).toBe(testFilePath);
       const expectedContent = `${MEMORY_SECTION_HEADER}\n- ${fact}\n`;
@@ -180,7 +181,7 @@ describe('MemoryTool', () => {
       const fact = 'New fact 2';
       await MemoryTool.performAddMemoryEntry(fact, testFilePath, mockFsAdapter);
 
-      expect(mockFsAdapter.writeFile).toHaveBeenCalledOnce();
+      expect(mockFsAdapter.writeFile).toHaveBeenCalledTimes(1);
       const writeFileCall = mockFsAdapter.writeFile.mock.calls[0];
       const expectedContent = `Some preamble.\n\n${MEMORY_SECTION_HEADER}\n- Existing fact 1\n- ${fact}\n`;
       expect(writeFileCall[1]).toBe(expectedContent);
@@ -192,7 +193,7 @@ describe('MemoryTool', () => {
       const fact = 'First fact in section';
       await MemoryTool.performAddMemoryEntry(fact, testFilePath, mockFsAdapter);
 
-      expect(mockFsAdapter.writeFile).toHaveBeenCalledOnce();
+      expect(mockFsAdapter.writeFile).toHaveBeenCalledTimes(1);
       const writeFileCall = mockFsAdapter.writeFile.mock.calls[0];
       const expectedContent = `Some preamble.\n\n${MEMORY_SECTION_HEADER}\n- ${fact}\n`;
       expect(writeFileCall[1]).toBe(expectedContent);
@@ -204,7 +205,7 @@ describe('MemoryTool', () => {
       const fact = 'Fact 2';
       await MemoryTool.performAddMemoryEntry(fact, testFilePath, mockFsAdapter);
 
-      expect(mockFsAdapter.writeFile).toHaveBeenCalledOnce();
+      expect(mockFsAdapter.writeFile).toHaveBeenCalledTimes(1);
       const writeFileCall = mockFsAdapter.writeFile.mock.calls[0];
       // Note: The implementation ensures a single newline at the end if content exists.
       const expectedContent = `${MEMORY_SECTION_HEADER}\n- Fact 1\n- ${fact}\n\n## Another Section\nSome other text.\n`;
@@ -362,21 +363,20 @@ describe('MemoryTool', () => {
         throw new Error('Expected result to be a confirmation, not false');
       }
 
-      // Assert type and cast to non-false value
-      type _EditConfirmation = Exclude<typeof result, false>;
-      const editResult = result;
-      expect(editResult.type).toBe('edit');
+      if (result.type !== 'edit') {
+        throw new Error('Expected edit confirmation type');
+      }
 
       const expectedPath = path.join('~', '.llxprt', 'LLXPRT.md');
-      expect(editResult.title).toBe(`Confirm Memory Save: ${expectedPath}`);
-      expect(editResult.fileName).toContain(path.join(tempHomeDir, '.llxprt'));
-      expect(editResult.fileName).toContain('LLXPRT.md');
-      expect(editResult.fileDiff).toContain('Index: LLXPRT.md');
-      expect(editResult.fileDiff).toContain('+## LLxprt Code Added Memories');
-      expect(editResult.fileDiff).toContain('+- Test fact');
-      expect(editResult.originalContent).toBe('');
-      expect(editResult.newContent).toContain('## LLxprt Code Added Memories');
-      expect(editResult.newContent).toContain('- Test fact');
+      expect(result.title).toBe(`Confirm Memory Save: ${expectedPath}`);
+      expect(result.fileName).toContain(path.join(tempHomeDir, '.llxprt'));
+      expect(result.fileName).toContain('LLXPRT.md');
+      expect(result.fileDiff).toContain('Index: LLXPRT.md');
+      expect(result.fileDiff).toContain('+## LLxprt Code Added Memories');
+      expect(result.fileDiff).toContain('+- Test fact');
+      expect(result.originalContent).toBe('');
+      expect(result.newContent).toContain('## LLxprt Code Added Memories');
+      expect(result.newContent).toContain('- Test fact');
     });
 
     it('should return false when memory file is already allowlisted', async () => {
@@ -419,12 +419,12 @@ describe('MemoryTool', () => {
         throw new Error('Expected result to be a confirmation, not false');
       }
 
-      type _EditResult = Exclude<typeof result, false>;
-      const editResult = result;
-      expect(editResult.type).toBe('edit');
+      if (result.type !== 'edit') {
+        throw new Error('Expected edit confirmation type');
+      }
 
       // Simulate the onConfirm callback
-      await editResult.onConfirm(ToolConfirmationOutcome.ProceedAlways);
+      await result.onConfirm(ToolConfirmationOutcome.ProceedAlways);
 
       // Check that the memory file was added to the allowlist
       expect(
@@ -455,12 +455,12 @@ describe('MemoryTool', () => {
         throw new Error('Expected result to be a confirmation, not false');
       }
 
-      type _EditResult2 = Exclude<typeof result, false>;
-      const editResult = result;
-      expect(editResult.type).toBe('edit');
+      if (result.type !== 'edit') {
+        throw new Error('Expected edit confirmation type');
+      }
 
       // Simulate the onConfirm callback with different outcomes
-      await editResult.onConfirm(ToolConfirmationOutcome.ProceedOnce);
+      await result.onConfirm(ToolConfirmationOutcome.ProceedOnce);
       const allowlist = (
         invocation.constructor as unknown as {
           allowlist: Set<string>;
@@ -468,7 +468,7 @@ describe('MemoryTool', () => {
       ).allowlist;
       expect(allowlist.has(memoryFilePath)).toBe(false);
 
-      await editResult.onConfirm(ToolConfirmationOutcome.Cancel);
+      await result.onConfirm(ToolConfirmationOutcome.Cancel);
       expect(allowlist.has(memoryFilePath)).toBe(false);
     });
 
@@ -493,17 +493,17 @@ describe('MemoryTool', () => {
         throw new Error('Expected result to be a confirmation, not false');
       }
 
-      type _EditResult3 = Exclude<typeof result, false>;
-      const editResult = result;
-      expect(editResult.type).toBe('edit');
+      if (result.type !== 'edit') {
+        throw new Error('Expected edit confirmation type');
+      }
 
       const expectedPath = path.join('~', '.llxprt', 'LLXPRT.md');
-      expect(editResult.title).toBe(`Confirm Memory Save: ${expectedPath}`);
-      expect(editResult.fileDiff).toContain('Index: LLXPRT.md');
-      expect(editResult.fileDiff).toContain('+- New fact');
-      expect(editResult.originalContent).toBe(existingContent);
-      expect(editResult.newContent).toContain('- Old fact');
-      expect(editResult.newContent).toContain('- New fact');
+      expect(result.title).toBe(`Confirm Memory Save: ${expectedPath}`);
+      expect(result.fileDiff).toContain('Index: LLXPRT.md');
+      expect(result.fileDiff).toContain('+- New fact');
+      expect(result.originalContent).toBe(existingContent);
+      expect(result.newContent).toContain('- Old fact');
+      expect(result.newContent).toContain('- New fact');
     });
   });
 
@@ -539,10 +539,8 @@ describe('MemoryTool', () => {
         fact: 'Project-specific fact',
         scope: 'project' as const,
       };
-      const invocation = memoryTool.build(params);
-
-      // Mock the working directory
-      invocation.setWorkingDir(mockWorkingDir);
+      const projectTool = createMemoryTool(() => mockWorkingDir);
+      const invocation = projectTool.build(params);
 
       await invocation.execute(mockAbortSignal);
 
@@ -567,8 +565,8 @@ describe('MemoryTool', () => {
         .mockResolvedValue(undefined);
 
       const params = { fact: 'Project fact by default' };
-      const invocation = memoryTool.build(params);
-      invocation.setWorkingDir(mockWorkingDir);
+      const projectTool = createMemoryTool(() => mockWorkingDir);
+      const invocation = projectTool.build(params);
 
       await invocation.execute(mockAbortSignal);
 
@@ -617,7 +615,10 @@ describe('MemoryTool', () => {
         .spyOn(MemoryTool, 'performAddMemoryEntry')
         .mockResolvedValue(undefined);
 
-      const params = { fact: 'Project fact without workdir', scope: 'project' };
+      const params: SaveMemoryParams = {
+        fact: 'Project fact without workdir',
+        scope: 'project',
+      };
       const invocation = memoryTool.build(params);
 
       await invocation.execute(mockAbortSignal);
@@ -640,15 +641,19 @@ describe('MemoryTool', () => {
     it('should show correct file path in confirmation for project scope', async () => {
       (fs.readFile as Mock<typeof fs.readFile>).mockResolvedValue('');
 
-      const params = { fact: 'Test fact', scope: 'project' };
-      const invocation = memoryTool.build(params);
-      invocation.setWorkingDir(mockWorkingDir);
+      const params: SaveMemoryParams = { fact: 'Test fact', scope: 'project' };
+      const projectTool = createMemoryTool(() => mockWorkingDir);
+      const invocation = projectTool.build(params);
 
       const result = await invocation.shouldConfirmExecute(mockAbortSignal);
 
       expect(result).not.toBe(false);
       if (result === false) {
         throw new Error('Expected confirmation details');
+      }
+
+      if (result.type !== 'edit') {
+        throw new Error('Expected edit confirmation type');
       }
 
       // Normalize paths for cross-platform compatibility (Windows uses backslashes)
@@ -688,35 +693,54 @@ describe('MemoryTool', () => {
       ).toThrow(/core memory scopes/i);
     });
 
-    it('should resolve core.global file path to .LLXPRT_SYSTEM in global dir', () => {
+    it('should resolve core.global file path to .LLXPRT_SYSTEM in global dir', async () => {
       mockSettingsService.getSetting.mockReturnValue(true);
       (fs.readFile as Mock<typeof fs.readFile>).mockResolvedValue('');
 
-      const params = {
+      const params: SaveMemoryParams = {
         fact: 'Test core directive',
-        scope: 'core.global' as const,
+        scope: 'core.global',
       };
       const invocation = coreMemoryTool.build(params);
-      const filePath = invocation.getMemoryFilePath();
-      expect(filePath).toContain('.llxprt');
-      expect(filePath).toContain('.LLXPRT_SYSTEM');
+      const result = await invocation.shouldConfirmExecute(mockAbortSignal);
+
+      expect(result).not.toBe(false);
+      if (result === false) {
+        throw new Error('Expected confirmation details');
+      }
+      if (result.type !== 'edit') {
+        throw new Error('Expected edit confirmation type');
+      }
+
+      const normalizedFileName = result.fileName.replace(/\\/g, '/');
+      expect(normalizedFileName).toContain(tempHomeDir.replace(/\\/g, '/'));
+      expect(normalizedFileName).toContain('.llxprt');
+      expect(normalizedFileName).toContain('.LLXPRT_SYSTEM');
     });
 
-    it('should resolve core.project file path to .LLXPRT_SYSTEM in project dir', () => {
+    it('should resolve core.project file path to .LLXPRT_SYSTEM in project dir', async () => {
       mockSettingsService.getSetting.mockReturnValue(true);
       (fs.readFile as Mock<typeof fs.readFile>).mockResolvedValue('');
 
-      const params = {
+      const params: SaveMemoryParams = {
         fact: 'Test core directive',
-        scope: 'core.project' as const,
+        scope: 'core.project',
       };
       const invocation = coreMemoryTool.build(params);
-      const filePath = invocation.getMemoryFilePath();
-      // Normalize paths for cross-platform compatibility
-      const normalizedPath = filePath.replace(/\\/g, '/');
-      expect(normalizedPath).toContain(mockWorkingDir.replace(/\\/g, '/'));
-      expect(normalizedPath).toContain('.llxprt');
-      expect(normalizedPath).toContain('.LLXPRT_SYSTEM');
+      const result = await invocation.shouldConfirmExecute(mockAbortSignal);
+
+      expect(result).not.toBe(false);
+      if (result === false) {
+        throw new Error('Expected confirmation details');
+      }
+      if (result.type !== 'edit') {
+        throw new Error('Expected edit confirmation type');
+      }
+
+      const normalizedFileName = result.fileName.replace(/\\/g, '/');
+      expect(normalizedFileName).toContain(mockWorkingDir.replace(/\\/g, '/'));
+      expect(normalizedFileName).toContain('.llxprt');
+      expect(normalizedFileName).toContain('.LLXPRT_SYSTEM');
     });
   });
 });

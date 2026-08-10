@@ -929,20 +929,23 @@ jobs:
   # critical path is max(shard) rather than sum(all workspaces). The shard map
   # lives in scripts/test-shards.ts and is enforced by
   # scripts/check-test-shards.ts (run below and via `lint:test-shards`). Each
-  # shard is a matrix leg; the `scripts` shard runs the root script harness
-  # instead of workspace tests. The selector emits ubuntu-only rows (issue
-  # #2876); macOS coverage moved to the nightly workflow.
+  # logical shard expands into one or more physical matrix rows (issue #3185:
+  # cli splits into 1of3/2of3/3of3; other shards carry 1of1); the `scripts`
+  # shard runs the root script harness instead of workspace tests. All physical
+  # rows are ubuntu-only (issue #2876); macOS coverage moved to the nightly
+  # workflow.
   #
   # Issue #2709: the matrix is now dynamic — shard_selector outputs a JSON
-  # matrix of only the shards that can observe the PR's changed files. When
-  # shard_selector fails or is skipped, the `if` condition prevents test_shard
-  # from running entirely, and the `test` aggregator converts that into a
-  # failure (see test job). When the selector succeeds but selects zero
-  # shards (has_tests=false), the matrix is empty and no legs run; the
-  # `test` aggregator treats that as success (the selector explicitly said
-  # there are no tests to run).
+  # matrix of physical partition rows expanded from only the logical shards
+  # that can observe the PR's changed files (issue #3185 expands cli into
+  # 1of3/2of3/3of3). When shard_selector fails or is skipped, the `if`
+  # condition prevents test_shard from running entirely, and the `test`
+  # aggregator converts that into a failure (see test job). When the selector
+  # succeeds but selects zero shards (has_tests=false), the matrix is empty
+  # and no legs run; the `test` aggregator treats that as success (the
+  # selector explicitly said there are no tests to run).
   test_shard:
-    name: 'Test (${{ matrix.os }}) [${{ matrix.shard }}]'
+    name: 'Test (${{ matrix.os }}) [${{ matrix.shard }} ${{ matrix.partition }}]'
     runs-on: '${{ matrix.os }}'
     # The cli shard is the longest (~12 min pre-cost-reduction); cap so a
     # hung shard fails instead of occupying a runner for the 6h default.
@@ -1055,6 +1058,10 @@ jobs:
           NO_COLOR: true
           # Ensure OAuth tests are skipped in CI (they require browser interaction)
           CI: true
+          # Issue #3185: partition identity consumed by the CLI runner
+          # (packages/cli/run-bun-tests.ts). The selector expands cli into
+          # 1of3/2of3/3of3; other shards carry 1of1 and are unaffected.
+          LLXPRT_CLI_TEST_PARTITION: ${{ matrix.partition }}
         # The orchestrator expands --shard to the shard's workspaces (or runs
         # npm run test:scripts for the scripts shard). Each workspace's tests
         # run under whichever runner its own `test` script selects — Bun-native
@@ -1082,8 +1089,9 @@ jobs:
         run: npm run test:shell
 
       - name: 'Smoke test CLI entry (launcher -> Bun -> TypeScript, no Node)'
-        # The CLI entry is exercised by the cli shard's tests; keep a direct
-        # smoke on the cli shard only to avoid per-leg duplication.
+        # The CLI entry is exercised by the cli shard's tests. This step
+        # retains the logical-shard condition (matrix.shard == 'cli'), so it
+        # runs once in each CLI partition leg (1of3, 2of3, 3of3).
         if: matrix.shard == 'cli'
         run: './packages/cli/bin/llxprt --version'
 
@@ -1098,7 +1106,7 @@ jobs:
           ${{ always() && matrix.shard != 'scripts' && (github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: 'dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2' # ratchet:dorny/test-reporter@v3
         with:
-          name: 'Test Results [${{ matrix.shard }}] (Node ${{ matrix.node-version }}, ${{ matrix.os }})'
+          name: 'Test Results [${{ matrix.shard }} ${{ matrix.partition }}] (Node ${{ matrix.node-version }}, ${{ matrix.os }})'
           path: 'packages/*/junit.xml'
           reporter: 'java-junit'
           fail-on-error: 'false'
@@ -1108,7 +1116,7 @@ jobs:
           ${{ always() && matrix.shard != 'scripts' && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) }}
         uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
         with:
-          name: 'test-results-fork-${{ matrix.shard }}-${{ matrix.node-version }}-${{ matrix.os }}'
+          name: 'test-results-fork-${{ matrix.shard }}-${{ matrix.partition }}-${{ matrix.node-version }}-${{ matrix.os }}'
           path: 'packages/*/junit.xml'
 
   #
@@ -1482,6 +1490,12 @@ jobs:
   codeql:
     name: 'CodeQL'
     runs-on: 'ubuntu-latest'
+    # Issue #3187: bound CodeQL's pull-request runner time so candidate runs can
+    # satisfy the umbrella's under-ten-minute verdict target (#2702). Measured
+    # full push scans routinely take 70–79 minutes, so all non-PR events retain
+    # the 360-minute allowance. A timeout remains a non-success conclusion;
+    # candidate CI measures the end-to-end verdict.
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 9 || 360 }}
     needs:
       - 'skip_check'
     if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
@@ -1492,6 +1506,8 @@ jobs:
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: 'Initialize CodeQL'
         uses: 'github/codeql-action/init@bce182f857edf1feab116e9795a3393d21977282' # ratchet:github/codeql-action/init@v4

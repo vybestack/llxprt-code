@@ -179,7 +179,7 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
 
   it('sendMessage: renders the fresh provider model after a mid-session /model change', async () => {
     const assembler: SystemPromptAssembler = {
-      assemble: async (model) => `[model=${model}]`,
+      assemble: async ({ model }) => `[model=${model}]`,
     };
     const fx = buildFixture(assembler, 'old-model');
 
@@ -205,7 +205,7 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
 
   it('sendMessage: recomputes base token offset when the assembled prompt changes', async () => {
     const assembler: SystemPromptAssembler = {
-      assemble: async (model) => `Prompt for model ${model}.`,
+      assemble: async ({ model }) => `Prompt for model ${model}.`,
     };
     const fx = buildFixture(assembler, 'short');
 
@@ -229,7 +229,7 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
 
   it('sendMessageStream: renders the fresh provider model after a mid-session /model change', async () => {
     const assembler: SystemPromptAssembler = {
-      assemble: async (model) => `[stream model=${model}]`,
+      assemble: async ({ model }) => `[stream model=${model}]`,
     };
     const fx = buildFixture(assembler, 'old-stream-model');
 
@@ -262,7 +262,7 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
 
   it('generateDirectMessage: renders the fresh provider model after a mid-session /model change', async () => {
     const assembler: SystemPromptAssembler = {
-      assemble: async (model) => `[direct model=${model}]`,
+      assemble: async ({ model }) => `[direct model=${model}]`,
     };
     const fx = buildFixture(assembler, 'old-direct-model');
 
@@ -292,7 +292,7 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
 
     const fx = buildFixture(
       {
-        assemble: async (model: string) => {
+        assemble: async ({ model }) => {
           const id = ++turn;
           events.push(`resolve:start:${id}`);
           // Yield inside assembly to widen the interleaving window.
@@ -427,7 +427,7 @@ describe('router re-render port (issue #3157)', () => {
 
   it('sendMessage: carries the assembler port so a router can re-render for its selected model', async () => {
     const assembler: SystemPromptAssembler = {
-      assemble: async (model) => `[model=${model}]`,
+      assemble: async ({ model }) => `[model=${model}]`,
     };
     const fx = buildFixture(assembler, 'turn-model');
 
@@ -440,7 +440,10 @@ describe('router re-render port (issue #3157)', () => {
       throw new Error('expected systemPromptAssembler on provider options');
     }
     // A router re-renders for the model IT selected.
-    const routerRendered = await port.assemble('router-picked-model');
+    const routerRendered = await port.assemble({
+      provider: 'stub',
+      model: 'router-picked-model',
+    });
     expect(routerRendered).toBe('[model=router-picked-model]');
     // The turn assembly still names the turn model (one assembly per turn).
     expect(fx.capturedCalls[0].systemInstruction).toBe('[model=turn-model]');
@@ -450,7 +453,7 @@ describe('router re-render port (issue #3157)', () => {
 
   it('sendMessageStream: carries the assembler port so a router can re-render for its selected model', async () => {
     const assembler: SystemPromptAssembler = {
-      assemble: async (model) => `[stream model=${model}]`,
+      assemble: async ({ model }) => `[stream model=${model}]`,
     };
     const fx = buildFixture(assembler, 'turn-stream-model');
 
@@ -464,7 +467,10 @@ describe('router re-render port (issue #3157)', () => {
     if (port === undefined) {
       throw new Error('expected systemPromptAssembler on provider options');
     }
-    const routerRendered = await port.assemble('router-picked-model');
+    const routerRendered = await port.assemble({
+      provider: 'stub',
+      model: 'router-picked-model',
+    });
     expect(routerRendered).toBe('[stream model=router-picked-model]');
     expect(fx.capturedCalls[0].systemInstruction).toBe(
       '[stream model=turn-stream-model]',
@@ -475,7 +481,7 @@ describe('router re-render port (issue #3157)', () => {
 
   it('generateDirectMessage: carries the assembler port so a router can re-render for its selected model', async () => {
     const assembler: SystemPromptAssembler = {
-      assemble: async (model) => `[direct model=${model}]`,
+      assemble: async ({ model }) => `[direct model=${model}]`,
     };
     const fx = buildFixture(assembler, 'turn-direct-model');
 
@@ -486,7 +492,10 @@ describe('router re-render port (issue #3157)', () => {
     if (port === undefined) {
       throw new Error('expected systemPromptAssembler on provider options');
     }
-    const routerRendered = await port.assemble('router-picked-model');
+    const routerRendered = await port.assemble({
+      provider: 'stub',
+      model: 'router-picked-model',
+    });
     expect(routerRendered).toBe('[direct model=router-picked-model]');
     expect(fx.capturedCalls[0].systemInstruction).toBe(
       '[direct model=turn-direct-model]',

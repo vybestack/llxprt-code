@@ -126,7 +126,7 @@ function raiseMissing(message: string): never {
 }
 
 describe('quota-selected workflow credentials', () => {
-  it('maps Linux and macOS E2E quota outputs into validation and test steps', () => {
+  it('maps Linux E2E quota outputs into validation and test steps', () => {
     const workflow = readWorkflow('e2e.yml');
     expect(workflow.permissions).toEqual({
       actions: 'read',
@@ -136,11 +136,8 @@ describe('quota-selected workflow credentials', () => {
     const jobs = workflow.jobs;
     if (!jobs) throw new Error('e2e.yml must define jobs');
     const e2eLinux = jobs.e2e_linux;
-    const e2eMac = jobs.e2e_mac;
-    if (!e2eLinux || !e2eMac)
-      throw new Error('e2e.yml must define e2e_linux and e2e_mac');
+    if (!e2eLinux) throw new Error('e2e.yml must define e2e_linux');
     expect(hasSecret(e2eLinux.env ?? {})).toBe(false);
-    expect(hasSecret(e2eMac.env ?? {})).toBe(false);
     const cases: Array<{
       steps: WorkflowStep[];
       quotaName: string;
@@ -154,13 +151,6 @@ describe('quota-selected workflow credentials', () => {
         quotaId: 'quota',
         validationName: 'Validate E2E provider environment (Linux)',
         testName: 'Run E2E tests',
-      },
-      {
-        steps: jobSteps(workflowJobOptional(workflow, 'e2e_mac')),
-        quotaName: 'Check API quota and select optimal key (macOS)',
-        quotaId: 'quota_macos',
-        validationName: 'Validate E2E provider environment (macOS)',
-        testName: 'Run E2E tests (non-Windows)',
       },
     ];
 

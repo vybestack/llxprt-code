@@ -228,9 +228,29 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 
 #### `sessionRetention`
 
-- **`sessionRetention`** (object):
-  - **Description:** Settings for automatic session cleanup.
+- **`sessionRetention.enabled`** (boolean):
+  - **Description:** Enable automatic session cleanup. Set to false to disable all janitorial mutations.
+  - **Default:** `true`
+  - **Requires restart:** No
+
+- **`sessionRetention.maxTotalSizeMB`** (number):
+  - **Description:** Machine-wide aggregate size limit for all session recordings and cold archives, in MiB. Defaults to 4096 (4 GiB).
+  - **Default:** `4096`
+  - **Requires restart:** No
+
+- **`sessionRetention.maxAge`** (string):
+  - **Description:** Maximum age of sessions to keep (e.g. "30d", "7d", "24h"). No default age limit.
   - **Default:** `undefined`
+  - **Requires restart:** No
+
+- **`sessionRetention.maxCount`** (number):
+  - **Description:** Maximum number of sessions to keep (most recent). No default count limit.
+  - **Default:** `undefined`
+  - **Requires restart:** No
+
+- **`sessionRetention.minRetention`** (string):
+  - **Description:** Minimum retention period (safety floor, defaults to "1d").
+  - **Default:** `"1d"`
   - **Requires restart:** No
 
 #### `output`

@@ -18,14 +18,12 @@
  * The intended contract is that providers DECLARE a capability
  * (`IProvider.getSystemPromptPlacement`) and this module DECIDES and formats.
  *
- * Only the FORMATTING half is live. `formatContextPrefix` below is the sole
- * producer of the context-prefix wrapper and is called by the Anthropic OAuth
- * path. The DECIDING half is not wired: `resolveSystemPromptPlacement` has no
- * production caller, nor does `IProvider.getSystemPromptPlacement`, and the
- * live Anthropic decision is still made from a local `isOAuth` flag in
- * `anthropic/AnthropicRequestPreparation.ts`. See issue #3162 finding D1,
- * which also records that the declaration and the transport flag use different
- * OAuth predicates and can disagree.
+ * Both halves are live. `formatContextPrefix` below is the sole producer of
+ * the context-prefix wrapper and is called by the Anthropic OAuth path.
+ * `resolveSystemPromptPlacement` is the DECIDING half: the live Anthropic
+ * request path declares placement from the RESOLVED token, passes it through
+ * this resolver, and branches system-context construction on the result rather
+ * than on a local `isOAuth` flag (issue #3172).
  */
 
 /**
@@ -64,16 +62,25 @@ export function formatContextPrefix(systemPrompt: string): string {
  * Decide placement from a provider's declared capability.
  *
  * `declaredPlacement` is what the provider states about the request it is
- * about to make. Anthropic declares `context-prefix` when OAuth is active and
- * `system-field` otherwise; every other provider declares `system-field`.
- * Callers must not re-derive this from transport details.
- *
- * NOT YET WIRED: no production caller (issue #3162 finding D1).
+ * about to make. Anthropic declares `context-prefix` when the resolved token
+ * is OAuth and `system-field` otherwise; every other provider declares
+ * `system-field`. Callers must not re-derive this from transport details.
  */
 export function resolveSystemPromptPlacement(
-  declaredPlacement: SystemPromptPlacement | undefined,
+  declaredPlacement: unknown,
 ): SystemPromptPlacement {
-  return declaredPlacement ?? 'system-field';
+  if (declaredPlacement === undefined) {
+    return 'system-field';
+  }
+  if (
+    declaredPlacement === 'system-field' ||
+    declaredPlacement === 'context-prefix'
+  ) {
+    return declaredPlacement;
+  }
+  throw new Error(
+    `SystemPromptPlacementError: unsupported placement declaration ${String(declaredPlacement)}.`,
+  );
 }
 
 /**

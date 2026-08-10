@@ -6,17 +6,35 @@
 
 import { coreEvents } from './events.js';
 
+type StdioWriteChunk = Uint8Array | string;
+type StdioWriteCallback = (err?: NodeJS.ErrnoException | null) => void;
+
 /**
  * The Node stdout write signature, covering both overloads:
  *   write(chunk, callback?) and write(chunk, encoding, callback?).
  */
-type StdoutWriteArgs = Parameters<typeof process.stdout.write>;
+interface StdoutWrite {
+  (chunk: StdioWriteChunk, callback?: StdioWriteCallback): boolean;
+  (
+    chunk: StdioWriteChunk,
+    encoding?: BufferEncoding,
+    callback?: StdioWriteCallback,
+  ): boolean;
+}
+
+type StdoutWriteArgs =
+  | [chunk: StdioWriteChunk, callback?: StdioWriteCallback]
+  | [
+      chunk: StdioWriteChunk,
+      encoding?: BufferEncoding,
+      callback?: StdioWriteCallback,
+    ];
 
 /**
  * Second positional argument to stdout.write: either a BufferEncoding, a
  * callback, or absent.
  */
-type StdoutEncodingArg = StdoutWriteArgs[1];
+type StdoutEncodingArg = BufferEncoding | StdioWriteCallback | undefined;
 
 /**
  * Observer invoked once per real stdout write, after the write returns.
@@ -56,17 +74,17 @@ function encodedByteLength(
  * write throws synchronously, no observer sample is produced.
  */
 export function createObservedStdoutWrite(
-  underlyingWrite: (...args: StdoutWriteArgs) => boolean,
+  underlyingWrite: StdoutWrite,
   observer: StdoutWriteObserver,
-): (...args: StdoutWriteArgs) => boolean {
+): StdoutWrite {
   return function observedStdoutWrite(...args: StdoutWriteArgs): boolean {
     const encodedBytes = encodedByteLength(args[0], args[1]);
     const start = performance.now();
-    const ok = underlyingWrite(...args);
+    const ok = Reflect.apply(underlyingWrite, undefined, args) as boolean;
     const syncDurationMs = performance.now() - start;
     observer.onWrite(encodedBytes, syncDurationMs);
     return ok;
-  };
+  } as StdoutWrite;
 }
 
 // Capture the original stdout and stderr write methods before any monkey patching occurs.
@@ -100,9 +118,16 @@ const handleStderrError = (err: NodeJS.ErrnoException) => {
  * Writes to the real stdout, bypassing any monkey patching on process.stdout.write.
  */
 export function writeToStdout(
-  ...args: Parameters<typeof process.stdout.write>
-): boolean {
-  return originalStdoutWrite(...args);
+  chunk: StdioWriteChunk,
+  callback?: StdioWriteCallback,
+): boolean;
+export function writeToStdout(
+  chunk: StdioWriteChunk,
+  encoding?: BufferEncoding,
+  callback?: StdioWriteCallback,
+): boolean;
+export function writeToStdout(...args: StdoutWriteArgs): boolean {
+  return Reflect.apply(originalStdoutWrite, undefined, args) as boolean;
 }
 
 /**

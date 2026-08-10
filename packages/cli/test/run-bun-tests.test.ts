@@ -20,7 +20,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import {
   discoverTestFiles,
   escapeXml,
@@ -29,10 +29,13 @@ import {
   isTestFile,
   fileTimeoutForFile,
   parseCaseCounts,
+  parsePartitionIdentity,
+  selectPartition,
   stripAnsi,
   timeoutForFile,
   toPathArgument,
 } from '../run-bun-tests.js';
+import type { PartitionIdentity } from '../run-bun-tests.js';
 
 describe('isTestFile', () => {
   it('selects every test and spec extension the workspace uses', () => {
@@ -398,5 +401,338 @@ describe('failureExcerpt', () => {
     const output = `${truncatedWarning}${nl}${padding}${nl}${assertion}${nl}${summary}${nl}`;
     const excerpt = failureExcerpt(output, 600);
     expect(excerpt).toContain(assertion);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Partition selection (issue #3185): split the CLI test suite into parallel
+// CI legs via LLXPRT_CLI_TEST_PARTITION. These tests pin the parsing contract
+// and the mathematical properties of round-robin selection so a partition can
+// never silently drop, duplicate, or reorder files.
+// ---------------------------------------------------------------------------
+
+/** Wraps parsePartitionIdentity to satisfy the type checker without `!`. */
+function requirePartition(id: string): PartitionIdentity {
+  const parsed = parsePartitionIdentity(id);
+  if (parsed === null) {
+    throw new Error(`expected non-null partition for '${id}'`);
+  }
+  return parsed;
+}
+
+describe('parsePartitionIdentity', () => {
+  it('returns null for an absent identity (no partition)', () => {
+    expect(parsePartitionIdentity(undefined)).toBeNull();
+  });
+
+  it('returns null for an empty identity', () => {
+    expect(parsePartitionIdentity('')).toBeNull();
+  });
+
+  it('returns null for a whitespace-only identity', () => {
+    expect(parsePartitionIdentity('   ')).toBeNull();
+  });
+
+  it('parses 1of1 as identity selection', () => {
+    expect(parsePartitionIdentity('1of1')).toEqual({ index: 1, count: 1 });
+  });
+
+  it('parses 1of3', () => {
+    expect(parsePartitionIdentity('1of3')).toEqual({ index: 1, count: 3 });
+  });
+
+  it('parses 2of3', () => {
+    expect(parsePartitionIdentity('2of3')).toEqual({ index: 2, count: 3 });
+  });
+
+  it('parses 3of3', () => {
+    expect(parsePartitionIdentity('3of3')).toEqual({ index: 3, count: 3 });
+  });
+
+  it('rejects surrounding spaces around an otherwise canonical identity', () => {
+    expect(() => parsePartitionIdentity(' 1of3 ')).toThrow(
+      /LLXPRT_CLI_TEST_PARTITION/,
+    );
+  });
+
+  it('rejects a trailing newline after an otherwise canonical identity', () => {
+    expect(() => parsePartitionIdentity('1of3\n')).toThrow(
+      /LLXPRT_CLI_TEST_PARTITION/,
+    );
+  });
+
+  it('rejects a leading tab before an otherwise canonical identity', () => {
+    expect(() => parsePartitionIdentity('\t1of3')).toThrow(
+      /LLXPRT_CLI_TEST_PARTITION/,
+    );
+  });
+
+  it('fails on a bare number', () => {
+    expect(() => parsePartitionIdentity('2')).toThrow(
+      /LLXPRT_CLI_TEST_PARTITION/,
+    );
+  });
+
+  it('fails on arbitrary text', () => {
+    expect(() => parsePartitionIdentity('abc')).toThrow(
+      /LLXPRT_CLI_TEST_PARTITION/,
+    );
+  });
+
+  it('fails on a zero index', () => {
+    expect(() => parsePartitionIdentity('0of3')).toThrow(
+      /LLXPRT_CLI_TEST_PARTITION/,
+    );
+  });
+
+  it('fails on a zero count', () => {
+    expect(() => parsePartitionIdentity('1of0')).toThrow(
+      /LLXPRT_CLI_TEST_PARTITION/,
+    );
+  });
+
+  it('fails when index exceeds count', () => {
+    expect(() => parsePartitionIdentity('4of3')).toThrow(
+      /LLXPRT_CLI_TEST_PARTITION/,
+    );
+  });
+
+  it('fails on a negative index', () => {
+    expect(() => parsePartitionIdentity('-1of3')).toThrow(
+      /LLXPRT_CLI_TEST_PARTITION/,
+    );
+  });
+
+  it('fails on a fractional value', () => {
+    expect(() => parsePartitionIdentity('1.5of3')).toThrow(
+      /LLXPRT_CLI_TEST_PARTITION/,
+    );
+  });
+
+  it('fails on leading zeros (noncanonical)', () => {
+    expect(() => parsePartitionIdentity('01of3')).toThrow(
+      /LLXPRT_CLI_TEST_PARTITION/,
+    );
+  });
+
+  it('fails on an unsafe integer (precision loss)', () => {
+    // MAX_SAFE_INTEGER + 2 — parseInt loses precision so the round-trip check
+    // must reject it.
+    expect(() => parsePartitionIdentity('9007199254740993of3')).toThrow(
+      /LLXPRT_CLI_TEST_PARTITION/,
+    );
+  });
+
+  it('fails on the first non-safe integer that round-trips (2^53)', () => {
+    // 2^53 = MAX_SAFE_INTEGER + 1 round-trips through String(parseInt(...))
+    // without precision loss, so a round-trip check wrongly accepts it.
+    // Number.isSafeInteger(9007199254740992) is false — it must be rejected.
+    expect(() =>
+      parsePartitionIdentity('9007199254740992of9007199254740992'),
+    ).toThrow(/LLXPRT_CLI_TEST_PARTITION/);
+  });
+});
+
+describe('selectPartition', () => {
+  const FILES = Array.from({ length: 10 }, (_, i) => `src/file${i}.test.ts`);
+
+  it('returns all files when there is no partition (null)', () => {
+    expect(selectPartition(FILES, null)).toEqual(FILES);
+  });
+
+  it('returns all files for 1of1 (identity selection)', () => {
+    expect(selectPartition(FILES, requirePartition('1of1'))).toEqual(FILES);
+  });
+
+  it('selects a deterministic round-robin partition for 2of3', () => {
+    // positions 1, 4, 7 → indices where i % 3 === 1
+    expect(selectPartition(FILES, requirePartition('2of3'))).toEqual([
+      'src/file1.test.ts',
+      'src/file4.test.ts',
+      'src/file7.test.ts',
+    ]);
+  });
+
+  it('selects a deterministic round-robin partition for 1of3', () => {
+    expect(selectPartition(FILES, requirePartition('1of3'))).toEqual([
+      'src/file0.test.ts',
+      'src/file3.test.ts',
+      'src/file6.test.ts',
+      'src/file9.test.ts',
+    ]);
+  });
+
+  it('selects a deterministic round-robin partition for 3of3', () => {
+    expect(selectPartition(FILES, requirePartition('3of3'))).toEqual([
+      'src/file2.test.ts',
+      'src/file5.test.ts',
+      'src/file8.test.ts',
+    ]);
+  });
+
+  it('produces the same result on repeated calls (deterministic)', () => {
+    const identity = requirePartition('2of3');
+    expect(selectPartition(FILES, identity)).toEqual(
+      selectPartition(FILES, identity),
+    );
+  });
+
+  it('preserves the relative order of the sorted input', () => {
+    const sorted = [...FILES].sort();
+    for (const id of ['1of3', '2of3', '3of3']) {
+      const selected = selectPartition(sorted, requirePartition(id));
+      const positions = selected.map((f) => sorted.indexOf(f));
+      const sortedPositions = [...positions].sort((a, b) => a - b);
+      expect(positions).toEqual(sortedPositions);
+    }
+  });
+
+  it('is exhaustive: the union of all partitions equals the full list', () => {
+    const sorted = [...FILES].sort();
+    const p1 = selectPartition(sorted, requirePartition('1of3'));
+    const p2 = selectPartition(sorted, requirePartition('2of3'));
+    const p3 = selectPartition(sorted, requirePartition('3of3'));
+    expect([...p1, ...p2, ...p3].sort()).toEqual(sorted);
+  });
+
+  it('is pairwise disjoint: no file appears in two partitions', () => {
+    const sorted = [...FILES].sort();
+    const sets = ['1of3', '2of3', '3of3'].map(
+      (id) => new Set(selectPartition(sorted, requirePartition(id))),
+    );
+    for (let a = 0; a < sets.length; a++) {
+      for (let b = a + 1; b < sets.length; b++) {
+        for (const file of sets[a]) {
+          expect(sets[b].has(file)).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('is balanced: partition sizes differ by at most one', () => {
+    const sorted = [...FILES].sort();
+    const sizes = ['1of3', '2of3', '3of3'].map(
+      (id) => selectPartition(sorted, requirePartition(id)).length,
+    );
+    expect(Math.max(...sizes) - Math.min(...sizes)).toBeLessThanOrEqual(1);
+  });
+
+  it('never introduces a path that the input did not contain', () => {
+    const sorted = [...FILES].sort();
+    for (const id of ['1of3', '2of3', '3of3']) {
+      const selected = selectPartition(sorted, requirePartition(id));
+      for (const file of selected) {
+        expect(sorted).toContain(file);
+      }
+    }
+  });
+
+  it('fails fast when a well-formed identity selects zero files', () => {
+    const tiny = ['src/a.test.ts', 'src/b.test.ts'];
+    // 3of3 on 2 files: no index i in {0,1} satisfies i % 3 === 2.
+    expect(() => selectPartition(tiny, requirePartition('3of3'))).toThrow(
+      /LLXPRT_CLI_TEST_PARTITION/,
+    );
+  });
+});
+
+describe('discoverTestFiles ignores LLXPRT_CLI_TEST_PARTITION', () => {
+  it('returns the complete inventory even while the env var is set', () => {
+    const root = mkdtempSync(join(tmpdir(), 'cli-runner-partition-env-'));
+    try {
+      mkdirSync(join(root, 'src'), { recursive: true });
+      for (let i = 0; i < 5; i++) {
+        writeFileSync(join(root, 'src', `f${i}.test.ts`), '');
+      }
+
+      const saved = process.env.LLXPRT_CLI_TEST_PARTITION;
+      process.env.LLXPRT_CLI_TEST_PARTITION = '2of3';
+      try {
+        expect(discoverTestFiles(root)).toHaveLength(5);
+      } finally {
+        if (saved === undefined) {
+          delete process.env.LLXPRT_CLI_TEST_PARTITION;
+        } else {
+          process.env.LLXPRT_CLI_TEST_PARTITION = saved;
+        }
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('partition placement over the real discovered inventory', () => {
+  it('adding a test fixture places it in exactly one partition', () => {
+    const root = mkdtempSync(join(tmpdir(), 'cli-runner-partition-add-'));
+    try {
+      mkdirSync(join(root, 'src'), { recursive: true });
+      for (let i = 0; i < 9; i++) {
+        const name = `file${String(i).padStart(2, '0')}.test.ts`;
+        writeFileSync(join(root, 'src', name), '');
+      }
+      // Add a fixture that sorts between existing files.
+      writeFileSync(join(root, 'src', 'file04b.test.ts'), '');
+
+      const discovered = discoverTestFiles(root);
+      expect(discovered).toContain('src/file04b.test.ts');
+
+      const partitions = ['1of3', '2of3', '3of3'].map((id) =>
+        selectPartition(discovered, requirePartition(id)),
+      );
+      let appearances = 0;
+      for (const partition of partitions) {
+        if (partition.includes('src/file04b.test.ts')) {
+          appearances++;
+        }
+      }
+      expect(appearances).toBe(1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('three partitions over the real packages/cli inventory (issue #3185)', () => {
+  it('are exhaustive, pairwise disjoint, order-preserving, and balanced', () => {
+    const cliRoot = resolve(import.meta.dir, '..');
+    const discovered = discoverTestFiles(cliRoot);
+    expect(discovered.length).toBeGreaterThan(0);
+
+    const partitions = ['1of3', '2of3', '3of3'].map((id) =>
+      selectPartition(discovered, requirePartition(id)),
+    );
+
+    // Pairwise disjoint: no file appears in two partitions.
+    const sets = partitions.map((p) => new Set(p));
+    for (let a = 0; a < sets.length; a++) {
+      for (let b = a + 1; b < sets.length; b++) {
+        for (const file of sets[a]) {
+          expect(sets[b].has(file)).toBe(false);
+        }
+      }
+    }
+
+    // Exhaustive: the sorted union of all partitions equals the real inventory.
+    expect(
+      [...partitions[0], ...partitions[1], ...partitions[2]].sort(),
+    ).toEqual([...discovered].sort());
+
+    // Order-preserving: each partition's elements appear in the same relative
+    // order as in the discovered inventory.
+    for (const partition of partitions) {
+      const positions = partition.map((f) => discovered.indexOf(f));
+      const sortedPositions = [...positions].sort((x, y) => x - y);
+      expect(positions).toEqual(sortedPositions);
+    }
+
+    // Balanced: partition sizes differ by at most one.
+    const sizes = partitions.map((p) => p.length);
+    expect(Math.max(...sizes) - Math.min(...sizes)).toBeLessThanOrEqual(1);
+
+    // Evidence of the current inventory size (count-agnostic, not hard-coded).
+    expect(partitions.reduce((sum, p) => sum + p.length, 0)).toBe(
+      discovered.length,
+    );
   });
 });

@@ -1,0 +1,23 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/auth.tsbuildinfo",
+    "lib": ["ES2023"],
+    "composite": true,
+    "types": ["node", "bun-types/test"],
+    "baseUrl": ".",
+    "paths": {
+      "@vybestack/llxprt-code-auth": ["./index.ts"]
+    }
+  },
+  "include": ["../../bun-test-corrections.d.ts", "index.ts", "src/**/*.ts"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx"
+  ]
+}

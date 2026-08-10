@@ -280,10 +280,10 @@ describe('Adapter registration and provider injection', () => {
       const settings = createInMemorySettingsService();
 
       // Track which provider name the OAuthManager receives
-      let receivedProvider: string | null = null;
+      const receivedProviders: string[] = [];
       const trackingManager: OAuthManager = {
         getToken: async (provider: string) => {
-          receivedProvider = provider;
+          receivedProviders.push(provider);
           return `tracked-${provider}-token`;
         },
         isAuthenticated: async () => true,
@@ -318,7 +318,7 @@ describe('Adapter registration and provider injection', () => {
       });
       expect(result).toBe('tracked-brand-new-provider-token');
       // The resolver passed the config's provider name — not a hardcoded one
-      expect(receivedProvider).toBe('brand-new-provider');
+      expect(receivedProviders).toStrictEqual(['brand-new-provider']);
     });
 
     it('resolver works with any arbitrary string as provider name', async () => {

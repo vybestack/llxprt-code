@@ -7,8 +7,8 @@ import {
   createLspClient,
   LspRequestTimeoutError,
   DEFAULT_REQUEST_TIMEOUT_MS,
-} from '../src/service/lsp-client';
-import type { LspServerConfig } from '../src/types';
+} from '../src/service/lsp-client.js';
+import type { LspServerConfig } from '../src/types.js';
 
 const WORKSPACE_ROOT = path.resolve('/workspace');
 const WORKSPACE_URI = pathToFileURL(WORKSPACE_ROOT).toString();

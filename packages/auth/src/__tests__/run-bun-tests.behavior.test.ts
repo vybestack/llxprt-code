@@ -5,7 +5,8 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   formatFailureReason,
   generateJUnit,
@@ -107,13 +108,14 @@ describe('auth run-bun-tests failure reason formatting', () => {
 });
 
 const isWindows = process.platform === 'win32';
+const testDirectory = dirname(fileURLToPath(import.meta.url));
 
 describe('auth run-bun-tests real child signal propagation', () => {
   it.skipIf(isWindows)(
     'carries a real SIGTERM child exit into the result and JUnit failure text',
     async () => {
       const fixturePath = join(
-        import.meta.dir,
+        testDirectory,
         '../../test-fixtures/self-sigterm.fixture.ts',
       );
       const result = await runTestFile(fixturePath);

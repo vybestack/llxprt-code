@@ -11,6 +11,7 @@ import {
   getShellConfiguration,
   ShellExecutionService,
   type ShellPermissionConfig,
+  type ShellType,
 } from '@vybestack/llxprt-code-core';
 
 import type { CommandContext } from '../../ui/commands/types.js';
@@ -95,7 +96,12 @@ export class ShellProcessor implements IPromptProcessor {
       injections,
       userArgsEscaped,
     );
-    this.checkPermissions(resolvedInjections, config, sessionShellAllowlist);
+    this.checkPermissions(
+      resolvedInjections,
+      config,
+      sessionShellAllowlist,
+      shell,
+    );
 
     return this.executeInjections(
       prompt,
@@ -125,6 +131,7 @@ export class ShellProcessor implements IPromptProcessor {
     resolvedInjections: ShellInjection[],
     config: ShellProcessorRuntime,
     sessionShellAllowlist: Set<string>,
+    shell: ShellType,
   ): void {
     const commandsToConfirm = new Set<string>();
     for (const injection of resolvedInjections) {
@@ -132,7 +139,7 @@ export class ShellProcessor implements IPromptProcessor {
       if (!command) continue;
 
       const { allAllowed, disallowedCommands, blockReason, isHardDenial } =
-        checkCommandPermissions(command, config, sessionShellAllowlist);
+        checkCommandPermissions(command, config, sessionShellAllowlist, shell);
 
       if (allAllowed !== true) {
         if (isHardDenial === true) {

@@ -113,7 +113,6 @@ function e2eContext({
 describe('E2E mergeability gate wiring (.github/workflows/e2e.yml)', () => {
   let parsed: Record<string, unknown>;
   let linuxJob: Record<string, unknown> | undefined;
-  let macJob: Record<string, unknown> | undefined;
   let gateJob: Record<string, unknown> | undefined;
   let docFilterJob: Record<string, unknown> | undefined;
 
@@ -122,7 +121,6 @@ describe('E2E mergeability gate wiring (.github/workflows/e2e.yml)', () => {
     parsed = wf.parsed;
     const jobs = wf.jobs;
     linuxJob = asRecord(jobs?.e2e_linux ?? undefined);
-    macJob = asRecord(jobs?.e2e_mac ?? undefined);
     gateJob = asRecord(jobs?.['mergeability-gate'] ?? undefined);
     docFilterJob = asRecord(jobs?.e2e_doc_change_filter ?? undefined);
   });
@@ -166,32 +164,27 @@ describe('E2E mergeability gate wiring (.github/workflows/e2e.yml)', () => {
       name: 'push with intentionally skipped gate',
       eventName: 'push',
       linux: true,
-      mac: false,
     },
     {
       name: 'merge group with intentionally skipped gate',
       eventName: 'merge_group',
       linux: true,
-      mac: true,
     },
     {
       name: 'manual dispatch with intentionally skipped gate',
       eventName: 'workflow_dispatch',
       linux: true,
-      mac: true,
     },
     {
       name: 'internal pull request with intentionally skipped gate',
       eventName: 'pull_request',
       linux: true,
-      mac: true,
     },
     {
       name: 'fork pull request in native context',
       eventName: 'pull_request',
       headRepository: 'fork/repo',
       linux: false,
-      mac: false,
     },
     {
       name: 'approved fork target event remains blocked after a successful gate',
@@ -202,7 +195,6 @@ describe('E2E mergeability gate wiring (.github/workflows/e2e.yml)', () => {
       gateResult: 'success',
       shouldRun: 'true',
       linux: false,
-      mac: false,
     },
     {
       name: 'approved internal target event',
@@ -213,7 +205,6 @@ describe('E2E mergeability gate wiring (.github/workflows/e2e.yml)', () => {
       gateResult: 'success',
       shouldRun: 'true',
       linux: true,
-      mac: true,
     },
     {
       name: 'approved target event with false gate',
@@ -224,7 +215,6 @@ describe('E2E mergeability gate wiring (.github/workflows/e2e.yml)', () => {
       gateResult: 'success',
       shouldRun: 'false',
       linux: false,
-      mac: false,
     },
     {
       name: 'approved target event with failed gate',
@@ -235,7 +225,6 @@ describe('E2E mergeability gate wiring (.github/workflows/e2e.yml)', () => {
       gateResult: 'failure',
       shouldRun: 'true',
       linux: false,
-      mac: false,
     },
     {
       name: 'approved target event with skipped gate',
@@ -245,7 +234,6 @@ describe('E2E mergeability gate wiring (.github/workflows/e2e.yml)', () => {
       label: 'maintainer:e2e:ok',
       gateResult: 'skipped',
       linux: false,
-      mac: false,
     },
     {
       name: 'unapproved target label',
@@ -255,7 +243,6 @@ describe('E2E mergeability gate wiring (.github/workflows/e2e.yml)', () => {
       label: 'other',
       gateResult: 'skipped',
       linux: false,
-      mac: false,
     },
     {
       name: 'fork synchronize cannot reuse a persistent approval label',
@@ -264,49 +251,42 @@ describe('E2E mergeability gate wiring (.github/workflows/e2e.yml)', () => {
       action: 'synchronize',
       gateResult: 'skipped',
       linux: false,
-      mac: false,
     },
     {
       name: 'failed duplicate check',
       eventName: 'merge_group',
       skipResult: 'failure',
       linux: false,
-      mac: false,
     },
     {
       name: 'duplicate content',
       eventName: 'merge_group',
       shouldSkip: 'true',
       linux: false,
-      mac: false,
     },
     {
-      name: 'failed doc filter',
+      name: 'failed doc filter fails closed to running E2E',
       eventName: 'merge_group',
       docResult: 'failure',
-      linux: false,
-      mac: false,
+      linux: true,
     },
     {
       name: 'documentation-only change',
       eventName: 'merge_group',
       docsOnly: 'true',
       linux: false,
-      mac: false,
     },
     {
       name: 'native event with failed gate',
       eventName: 'merge_group',
       gateResult: 'failure',
       linux: false,
-      mac: false,
     },
     {
       name: 'cancelled workflow',
       eventName: 'merge_group',
       cancelled: true,
       linux: false,
-      mac: false,
     },
   ];
 
@@ -317,9 +297,6 @@ describe('E2E mergeability gate wiring (.github/workflows/e2e.yml)', () => {
       expect(
         Boolean(evaluateE2ECondition(asString(linuxJob?.if), context)),
       ).toBe(scenario.linux);
-      expect(Boolean(evaluateE2ECondition(asString(macJob?.if), context))).toBe(
-        scenario.mac,
-      );
     });
   }
 
@@ -334,7 +311,6 @@ describe('E2E mergeability gate wiring (.github/workflows/e2e.yml)', () => {
     expect(internalScenario).toMatchObject({
       headRepository: 'vybestack/llxprt-code',
       linux: true,
-      mac: true,
     });
     for (const scenario of targetScenarios) {
       expect(
@@ -347,7 +323,7 @@ describe('E2E mergeability gate wiring (.github/workflows/e2e.yml)', () => {
     }
   });
 
-  it('requires the exact dependency conjunctions for both E2E jobs', () => {
+  it('requires the exact dependency conjunctions for the Linux E2E job', () => {
     const requiredFragments = [
       "needs.skip_check.result == 'success'",
       "needs.e2e_doc_change_filter.result == 'success'",
@@ -356,32 +332,26 @@ describe('E2E mergeability gate wiring (.github/workflows/e2e.yml)', () => {
       'github.event.pull_request.head.repo.full_name == github.repository',
       "needs.mergeability-gate.result == 'skipped'",
     ];
-    for (const job of [linuxJob, macJob]) {
-      const needs = asStringArray(job?.needs);
-      expect(needs).toEqual([
-        'e2e_doc_change_filter',
-        'skip_check',
-        'mergeability-gate',
-      ]);
-      const predicate = normalize(asOptionalString(job?.if));
-      for (const fragment of requiredFragments) {
-        expect(predicate).toContain(normalize(fragment));
-      }
-      expect(predicate).not.toContain(
-        normalize("needs.mergeability-gate.outputs.should-run != 'false'"),
-      );
+    const needs = asStringArray(linuxJob?.needs);
+    expect(needs).toEqual([
+      'e2e_doc_change_filter',
+      'skip_check',
+      'mergeability-gate',
+    ]);
+    const predicate = normalize(asOptionalString(linuxJob?.if));
+    for (const fragment of requiredFragments) {
+      expect(predicate).toContain(normalize(fragment));
     }
+    expect(predicate).not.toContain(
+      normalize("needs.mergeability-gate.outputs.should-run != 'false'"),
+    );
   });
 
-  it('bounds Linux/macOS jobs while preserving concurrency, matrix, and continue-on-error', () => {
+  it('bounds the Linux job while preserving concurrency and matrix', () => {
     expect(linuxJob?.['timeout-minutes']).toBe(60);
-    expect(macJob?.['timeout-minutes']).toBe(60);
     const linuxConcurrency = asOptionalRecord(linuxJob?.concurrency);
-    const macConcurrency = asOptionalRecord(macJob?.concurrency);
     expect(linuxConcurrency?.['cancel-in-progress']).toBe(true);
-    expect(macConcurrency?.['cancel-in-progress']).toBe(true);
     expect(linuxConcurrency?.group).toContain('${{ matrix.sandbox }}');
-    expect(macJob?.['continue-on-error']).toBe(true);
     const linuxStrategy = asOptionalRecord(linuxJob?.strategy);
     const linuxMatrix = asOptionalRecord(linuxStrategy?.matrix);
     expect(linuxMatrix?.sandbox).toContain('sandbox:none');

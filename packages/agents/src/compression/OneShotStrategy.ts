@@ -336,6 +336,8 @@ export class OneShotStrategy implements CompressionStrategy {
           resolvedOptions,
           invocation,
           fallbackModel: context.runtimeState.model,
+          runtimeState: context.runtimeState,
+          provider,
           source: 'OneShotStrategy.callProvider',
         }),
       );

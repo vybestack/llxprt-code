@@ -25,6 +25,13 @@ import type {
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { DebugLogger } from '../debug/DebugLogger.js';
+import { isBunRuntime } from './runtime.js';
+import {
+  collectPwshCommandDetailsFromTree,
+  hasPwshCommandSubstitution,
+  splitPwshCommandsWithTree,
+} from './powershell-ast.js';
+import { buildPwshCommandParseResult } from './powershell-parse-result.js';
 
 const require = createRequire(import.meta.url);
 const debugLogger = new DebugLogger('llxprt:shell-parser');
@@ -140,6 +147,24 @@ async function resolveBashWasmBytes(): Promise<Uint8Array> {
   return new Uint8Array(readFileSync(wasmPath));
 }
 
+/**
+ * Resolve the PowerShell grammar WASM bytes from `tree-sitter-pwsh`.
+ */
+async function resolvePwshWasmBytes(): Promise<Uint8Array> {
+  let wasmPath: string;
+  try {
+    wasmPath = require.resolve('tree-sitter-pwsh/tree-sitter-powershell.wasm');
+  } catch (error) {
+    throw new Error(
+      'Could not resolve the tree-sitter-pwsh grammar WASM ' +
+        '(tree-sitter-pwsh/tree-sitter-powershell.wasm). Ensure the ' +
+        '`tree-sitter-pwsh` dependency is installed.',
+      { cause: error },
+    );
+  }
+  return new Uint8Array(readFileSync(wasmPath));
+}
+
 // Type definitions for tree-sitter query results
 interface QueryCapture {
   name: string;
@@ -151,10 +176,38 @@ interface QueryMatch {
   captures: QueryCapture[];
 }
 
+/**
+ * Identifies which grammar language to use for parsing.
+ */
+export type ParserLanguage = 'bash' | 'powershell';
+
 let parser: ParserType | null = null;
 let bashLanguage: Language | null = null;
+let pwshParser: ParserType | null = null;
+let pwshLanguage: Language | null = null;
 let initializationPromise: Promise<boolean> | null = null;
 let initializationError: Error | null = null;
+
+/**
+ * Monotonic generation counter for race-safe initialization. Each
+ * `resetParser()` call increments this value. An in-flight initialization
+ * captures the generation at start and only publishes its results if the
+ * generation has not changed, preventing a stale promise from overwriting a
+ * newer reset or re-initialization (#3181).
+ */
+let generation = 0;
+
+/**
+ * Delete a web-tree-sitter Parser object if the runtime exposes `delete()`.
+ * The `Language` type has no `delete()` method in web-tree-sitter 0.25.x; only
+ * `Parser` and `Query` expose explicit disposal. Trees remain the caller's
+ * responsibility.
+ */
+function safeDeleteParser(p: ParserType | null): void {
+  if (p !== null && typeof p.delete === 'function') {
+    p.delete();
+  }
+}
 
 /**
  * Get the initialization error, if any.
@@ -174,11 +227,18 @@ export function initializeParser(): Promise<boolean> {
     return initializationPromise;
   }
 
-  initializationPromise = performParserInitialization();
+  const initGeneration = generation;
+  initializationPromise = performParserInitialization(initGeneration);
   return initializationPromise;
 }
 
-async function performParserInitialization(): Promise<boolean> {
+async function performParserInitialization(
+  initGeneration: number,
+): Promise<boolean> {
+  // Declare local parsers outside the try so the outer catch can dispose
+  // them if an error occurs after allocation but before publication (#3181).
+  let localParser: ParserType | null = null;
+  let localPwshParser: ParserType | null = null;
   try {
     const TreeSitter = (await import('web-tree-sitter')) as TreeSitterModule;
     const parserCandidate = TreeSitter.Parser;
@@ -190,7 +250,6 @@ async function performParserInitialization(): Promise<boolean> {
     ) as (new () => ParserType) & { init(): Promise<void> };
 
     await Parser.init();
-    parser = new Parser();
 
     const LanguageLoader = resolveTreeSitterLanguage(
       TreeSitter.Language,
@@ -202,25 +261,112 @@ async function performParserInitialization(): Promise<boolean> {
       );
     }
 
-    const wasmBytes = await resolveBashWasmBytes();
-    bashLanguage = await LanguageLoader.load(wasmBytes);
-    parser.setLanguage(bashLanguage);
+    // Load the Bash grammar (required for all paths) into local variables.
+    const bashWasmBytes = await resolveBashWasmBytes();
+    const localBashLanguage = await LanguageLoader.load(bashWasmBytes);
+    localParser = new Parser();
+    localParser.setLanguage(localBashLanguage);
+
+    // PowerShell grammar loads only under Bun: the tree-sitter-pwsh WASM
+    // causes a V8 Zone OOM crash at shutdown under Node 24. Under Node,
+    // PowerShell validation fails closed with a truthful diagnostic (#3181).
+    let localPwshLanguage: Language | null = null;
+    if (isBunRuntime()) {
+      try {
+        const pwshWasmBytes = await resolvePwshWasmBytes();
+        localPwshLanguage = await LanguageLoader.load(pwshWasmBytes);
+        localPwshParser = new Parser();
+        localPwshParser.setLanguage(localPwshLanguage);
+      } catch (pwshError) {
+        safeDeleteParser(localPwshParser);
+        localPwshParser = null;
+        localPwshLanguage = null;
+        debugLogger.warn(
+          'PowerShell grammar initialization failed; PowerShell ' +
+            'validation will fail closed:',
+          pwshError,
+        );
+      }
+    }
+
+    // If resetParser() was called mid-init, do not publish over newer state.
+    if (initGeneration !== generation) {
+      safeDeleteParser(localParser);
+      safeDeleteParser(localPwshParser);
+      return false;
+    }
+
+    // Publish resources to module-level state.
+    parser = localParser;
+    bashLanguage = localBashLanguage;
+    pwshParser = localPwshParser;
+    pwshLanguage = localPwshLanguage;
 
     return true;
   } catch (error) {
-    initializationError =
-      error instanceof Error ? error : new Error(String(error));
-    parser = null;
-    bashLanguage = null;
+    safeDeleteParser(localParser);
+    safeDeleteParser(localPwshParser);
+    if (initGeneration === generation) {
+      initializationError =
+        error instanceof Error ? error : new Error(String(error));
+      parser = pwshParser = null;
+      bashLanguage = pwshLanguage = null;
+    }
     return false;
   }
 }
 
 /**
- * Check if the tree-sitter parser is available.
+ * Check if the parser is available for the given language.
  */
-export function isParserAvailable(): boolean {
+export function isParserAvailable(language: ParserLanguage = 'bash'): boolean {
+  if (language === 'powershell') {
+    return pwshParser !== null && pwshLanguage !== null;
+  }
   return parser !== null && bashLanguage !== null;
+}
+
+/**
+ * Shared parse-with-timeout logic for Bash and PowerShell parsers.
+ * A cancelled parse leaves the parser in a resume state; reset so the next
+ * parse starts fresh (#3181).
+ */
+function parseWithTimeout(
+  activeParser: ParserType,
+  command: string,
+  timeoutMicros: number,
+  label: string,
+  logCatchErrors: boolean,
+): Tree | null {
+  const deadline = performance.now() + timeoutMicros / 1000;
+  const parseState = { timedOut: false };
+
+  try {
+    const tree = activeParser.parse(command, null, {
+      progressCallback: () => {
+        if (performance.now() > deadline) {
+          parseState.timedOut = true;
+          return true;
+        }
+        return undefined;
+      },
+    });
+
+    if (parseState.timedOut) {
+      debugLogger.error(
+        `${label} command parsing timed out for command:`,
+        command,
+      );
+      activeParser.reset();
+      return null;
+    }
+    return tree;
+  } catch (error) {
+    if (logCatchErrors) {
+      debugLogger.error(`${label} parse threw (command text omitted):`, error);
+    }
+    return null;
+  }
 }
 
 /**
@@ -236,33 +382,68 @@ export function parseShellCommand(
   if (!parser || !command.trim()) {
     return null;
   }
+  return parseWithTimeout(parser, command, timeoutMicros, 'Bash', false);
+}
 
-  const deadline = performance.now() + timeoutMicros / 1000;
-  const parseState = { timedOut: false };
+/**
+ * Parse using the grammar for the specified language.
+ */
+export function parseShellCommandForLanguage(
+  command: string,
+  language: ParserLanguage = 'bash',
+  timeoutMicros: number = PARSE_TIMEOUT_MICROS,
+): Tree | null {
+  if (language === 'powershell') {
+    return parsePwshCommand(command, timeoutMicros);
+  }
+  return parseShellCommand(command, timeoutMicros);
+}
 
-  try {
-    const tree = parser.parse(command, null, {
-      progressCallback: () => {
-        if (performance.now() > deadline) {
-          parseState.timedOut = true;
-          return true;
-        }
-        return undefined;
-      },
-    });
-
-    if (parseState.timedOut) {
-      debugLogger.error('Bash command parsing timed out for command:', command);
-      // A cancelled parse leaves the parser in a resume state; reset so the
-      // next parse starts fresh rather than resuming the cancelled command.
-      parser.reset();
-      return null;
-    }
-
-    return tree;
-  } catch {
+function parsePwshCommand(command: string, timeoutMicros: number): Tree | null {
+  if (!pwshParser || !command.trim()) {
     return null;
   }
+  return parseWithTimeout(
+    pwshParser,
+    command,
+    timeoutMicros,
+    'PowerShell',
+    true,
+  );
+}
+
+/**
+ * Extract command names for the given language.  PowerShell excludes
+ * dynamic/expression targets (no resolvable name).
+ */
+export function extractCommandNamesForLanguage(
+  tree: Tree,
+  language: ParserLanguage = 'bash',
+): string[] {
+  if (language === 'powershell') {
+    return collectPwshCommandDetailsFromTree(
+      tree,
+      tree.rootNode.text,
+      parseCommandDetailsForLanguage,
+    )
+      .filter((d) => d.nameKind !== 'dynamic' && d.nameKind !== 'expression')
+      .map((d) => d.name);
+  }
+  return extractCommandNames(tree);
+}
+
+/**
+ * Check for command substitution.  PowerShell `$()` is substitution;
+ * backticks are escapes, not substitution.
+ */
+export function hasCommandSubstitutionForLanguage(
+  tree: Tree,
+  language: ParserLanguage = 'bash',
+): boolean {
+  if (language === 'powershell') {
+    return hasPwshCommandSubstitution(tree.rootNode);
+  }
+  return hasCommandSubstitution(tree);
 }
 
 /**
@@ -309,18 +490,32 @@ function collectCommandNamesFromCaptures(
 
 /**
  * Parsed command detail containing the command name and full text.
+ * `nameKind` distinguishes static (resolvable), dynamic (unresolvable
+ * target), and expression (.NET invocation) targets.  Bash details are
+ * always `static`.
  */
 export interface ParsedCommandDetail {
   name: string;
   text: string;
+  /**
+   * Canonical text used for policy matching (blocklist/allowlist). This is the
+   * command text normalized to the executable basename/root so that policy
+   * matching does not require broad patterns like `ShellTool(&)`. For example,
+   * `& 'C:/tools/my-tool.exe' --safe` has canonicalText
+   * `my-tool.exe --safe`. When absent, callers should fall back to `text`.
+   */
+  canonicalText?: string;
+  nameKind?: 'static' | 'dynamic' | 'expression';
 }
 
 /**
- * Result of parsing command details.
+ * Result of parsing command details.  `hasError` reflects parser/syntax
+ * validity only; policy enforcement is the caller's responsibility.
  */
 export interface CommandParseResult {
   details: ParsedCommandDetail[];
   hasError: boolean;
+  errorReason?: string;
 }
 
 type SourceRange = {
@@ -811,13 +1006,21 @@ function extractCommands(
 }
 
 /**
- * Reset the parser state (primarily for testing).
+ * Reset the parser state. Increments the generation counter so any in-flight
+ * initialization recognizes it is stale and will not publish. Deletes the
+ * current Bash and PowerShell Parser objects to free WASM resources. Language
+ * objects have no delete() method in web-tree-sitter 0.25.x. Trees remain the
+ * caller's responsibility (primarily for testing).
  */
 export function resetParser(): void {
+  generation += 1;
+  safeDeleteParser(parser);
+  safeDeleteParser(pwshParser);
   parser = null;
+  pwshParser = null;
   bashLanguage = null;
-  initializationPromise = null;
-  initializationError = null;
+  pwshLanguage = null;
+  initializationPromise = initializationError = null;
 }
 
 function isNode(node: Node | null): node is Node {
@@ -871,10 +1074,6 @@ export function detectTrailingBackgroundOperator(
     return { promoted: false, command };
   }
 
-  if (root.childCount === 0) {
-    return { promoted: false, command };
-  }
-
   const lastChild = root.child(root.childCount - 1);
   if (lastChild === null || lastChild.type !== '&') {
     return { promoted: false, command };
@@ -890,4 +1089,54 @@ export function detectTrailingBackgroundOperator(
   }
 
   return { promoted: true, command: stripped };
+}
+
+// ---------------------------------------------------------------------------
+// PowerShell-specific parsing (#3181)
+// ---------------------------------------------------------------------------
+
+export function parseCommandDetailsForLanguage(
+  command: string,
+  language: ParserLanguage = 'bash',
+): CommandParseResult | null {
+  return language === 'powershell'
+    ? parsePwshCommandDetails(command)
+    : parseCommandDetails(command);
+}
+
+/**
+ * Split commands using the grammar for the specified language.
+ */
+export function splitCommandsWithTreeForLanguage(
+  tree: Tree,
+  language: ParserLanguage = 'bash',
+  options?: SplitCommandsTreeOptions,
+): string[] {
+  if (language === 'powershell') {
+    return splitPwshCommandsWithTree(tree, options);
+  }
+  return splitCommandsWithTree(tree, options);
+}
+
+/**
+ * Parse PowerShell source and extract all command details with security-aware
+ * classification of static, dynamic, and expression targets. Mirrors the Bash
+ * path's try/catch so an unexpected tree-sitter internal error fails closed
+ * (returns null = parser-unavailable) rather than propagating (#3181 OCR
+ * Finding 7).
+ */
+function parsePwshCommandDetails(command: string): CommandParseResult | null {
+  if (pwshParser === null || pwshLanguage === null) {
+    return null;
+  }
+  try {
+    return buildPwshCommandParseResult(
+      parsePwshCommand(command, PARSE_TIMEOUT_MICROS),
+      command,
+      parseCommandDetailsForLanguage,
+    );
+  } catch (error) {
+    debugLogger.error('PowerShell parse threw (command text omitted):', error);
+    return null;
+  }
 }

@@ -9,7 +9,7 @@ import {
   type Diagnostic,
   type LspConfig,
   type RawLspDiagnostic,
-} from '../src/service/diagnostics';
+} from '../src/service/diagnostics.js';
 
 function normalizeWithoutStubThrows(
   rawDiagnostics: readonly RawLspDiagnostic[],

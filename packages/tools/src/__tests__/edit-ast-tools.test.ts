@@ -72,7 +72,24 @@ describe('Edit / Apply-Patch / AST Tool Group Behavioral Tests @plan:PLAN-202606
       setApprovalMode: () => {},
       isInteractive: () => false,
       hasFeatureFlag: () => false,
+      getFileService: () => ({
+        shouldGitIgnoreFile: () => false,
+        shouldLlxprtIgnoreFile: () => false,
+        shouldIgnoreFile: () => false,
+        filterFiles: (paths: string[]) => paths,
+      }),
+      getFileFilteringOptions: () => ({
+        respectGitIgnore: true,
+        respectLlxprtIgnore: true,
+      }),
+      getFileExclusions: () => [],
+      getReadManyFilesExclusions: () => [],
+      getFileFilteringRespectLlxprtIgnore: () => true,
+      getLlxprtIgnoreFilePath: () => null,
+      recordFileRead: () => {},
+      getLlxprtIgnorePatterns: () => [],
       getEphemeralSettings: () => ({}),
+      getDebugMode: () => false,
     };
   }
   async function executeDeclarativeToolForBehavioralAssertion(

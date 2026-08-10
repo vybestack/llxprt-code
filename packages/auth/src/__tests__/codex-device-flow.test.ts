@@ -268,7 +268,7 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
 
     // Mock the token endpoint to use test server
     const originalFetch = global.fetch;
-    global.fetch = vi.fn((input: RequestInfo | URL) => {
+    const redirectingFetch: typeof fetch = (input) => {
       const url = input.toString();
       if (url.includes('auth.openai.com/oauth/token')) {
         return originalFetch(`http://localhost:${serverPort}/oauth/token`, {
@@ -283,7 +283,8 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
         });
       }
       return originalFetch(input);
-    }) as typeof fetch;
+    };
+    global.fetch = vi.fn(redirectingFetch);
 
     // This should use Zod validation internally - no type assertions
     const token = await deviceFlow.exchangeCodeForToken(
@@ -310,7 +311,6 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
    */
   it(
     'should refresh token using refresh grant type with Zod validation',
-    { timeout: 10000 },
     async () => {
       const refreshToken = 'old-refresh-token';
       const mockTokenResponse = {
@@ -339,7 +339,7 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
       });
 
       const originalFetch = global.fetch;
-      global.fetch = vi.fn((input: RequestInfo | URL) => {
+      const redirectingFetch: typeof fetch = (input) => {
         const url = input.toString();
         if (url.includes('auth.openai.com/oauth/token')) {
           return originalFetch(`http://localhost:${serverPort}/oauth/token`, {
@@ -352,7 +352,8 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
           });
         }
         return originalFetch(input);
-      }) as typeof fetch;
+      };
+      global.fetch = vi.fn(redirectingFetch);
 
       const newToken = await deviceFlow.refreshToken(refreshToken);
 
@@ -364,6 +365,7 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
 
       global.fetch = originalFetch;
     },
+    { timeout: 10000 },
   );
 
   // NOTE: Token expiry buffer test removed per dev-docs/RULES.md
@@ -401,9 +403,9 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
     deviceFlow.buildAuthorizationUrl(redirectUri, testState);
 
     const originalFetch = global.fetch;
-    global.fetch = vi.fn(() =>
-      fetch(`http://localhost:${serverPort}/oauth/token`),
-    ) as typeof fetch;
+    const redirectingFetch: typeof fetch = () =>
+      originalFetch(`http://localhost:${serverPort}/oauth/token`);
+    global.fetch = vi.fn(redirectingFetch);
 
     // Should throw error because id_token is required to extract account_id
     await expect(

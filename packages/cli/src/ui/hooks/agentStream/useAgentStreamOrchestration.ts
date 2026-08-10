@@ -409,6 +409,7 @@ function buildSubmitQueryDeps({
     drainSuppressedRef: st.drainSuppressedRef,
     queuedSubmissionsRef: st.queuedSubmissionsRef,
     enqueueSubmission: st.enqueueSubmission,
+    enqueueSubmissionFirst: st.enqueueSubmissionFirst,
     requeueSubmission: st.requeueSubmission,
     dequeueSubmission: st.dequeueSubmission,
     clearSubmissions: st.clearSubmissions,

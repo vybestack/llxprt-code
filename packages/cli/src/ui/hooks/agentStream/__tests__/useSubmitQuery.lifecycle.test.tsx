@@ -319,6 +319,7 @@ describe('useSubmitQuery — operation lifecycle integration (AC-3, AC-4)', () =
       queuedSubmissionsRef: { current: [] },
       drainSuppressedRef: { current: false },
       enqueueSubmission: vi.fn(),
+      enqueueSubmissionFirst: vi.fn(),
       requeueSubmission: vi.fn(),
       dequeueSubmission: vi.fn(),
       clearSubmissions: vi.fn(),

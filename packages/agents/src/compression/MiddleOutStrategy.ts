@@ -458,6 +458,8 @@ export class MiddleOutStrategy implements CompressionStrategy {
           resolvedOptions,
           invocation,
           fallbackModel: context.runtimeState.model,
+          runtimeState: context.runtimeState,
+          provider,
           source: 'MiddleOutStrategy.callProvider',
         }),
       );

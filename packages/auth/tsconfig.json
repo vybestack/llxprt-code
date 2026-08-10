@@ -4,13 +4,19 @@
     "outDir": "dist",
     "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/auth.tsbuildinfo",
     "lib": ["ES2023"],
-    "composite": true,
+    "composite": false,
     "types": ["node", "bun-types/test", "bun-types/test-globals"],
     "baseUrl": ".",
     "paths": {
       "@vybestack/llxprt-code-auth": ["./index.ts"]
     }
   },
-  "include": ["../../bun-test-corrections.d.ts", "index.ts", "src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
+  "include": [
+    "../../bun-test-corrections.d.ts",
+    "index.ts",
+    "src/**/*.ts",
+    "run-bun-tests.ts",
+    "../../scripts/lib/bun-test-policy.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
 }

@@ -21,6 +21,7 @@ import {
   getFileMtime,
 } from './test-helpers.js';
 import { ASTEditTool } from '../../ast-edit.js';
+import { ToolErrorType } from '../../../types/tool-error.js';
 
 describe('ast_edit preview phase: non-existent file path', () => {
   const ctx = useTempDir();
@@ -36,7 +37,7 @@ describe('ast_edit preview phase: non-existent file path', () => {
     });
 
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('file_not_found');
+    expect(result.error?.type).toBe(ToolErrorType.FILE_NOT_FOUND);
     expect(String(result.llmContent)).toContain('File not found');
     expect(String(result.llmContent)).not.toContain('LLXPRT EDIT PREVIEW');
   });
@@ -71,7 +72,7 @@ describe('ast_edit preview phase: occurrence count reporting', () => {
       new_string: 'const y = 2;',
     });
 
-    expect(result.error?.type).toBe('edit_no_occurrence_found');
+    expect(result.error?.type).toBe(ToolErrorType.EDIT_NO_OCCURRENCE_FOUND);
     expect(String(result.llmContent)).toContain('0 occurrences');
   });
 });

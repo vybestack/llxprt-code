@@ -85,6 +85,7 @@ function makeMockProvider(
   usage: UsageStats | null = MOCK_USAGE,
 ): IProvider {
   return {
+    name: 'usage-test-provider',
     generateChatCompletion: () => {
       async function* gen(): AsyncGenerator<IContent> {
         // Emit summary text chunk
@@ -396,6 +397,7 @@ describe('CompressionResultMetadata — usage field type (Issue #1211)', () => {
     };
 
     const provider: IProvider = {
+      name: 'usage-stream-test-provider',
       generateChatCompletion: () => {
         async function* gen(): AsyncGenerator<IContent> {
           // First chunk: text with early usage

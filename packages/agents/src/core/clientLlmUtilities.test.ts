@@ -44,8 +44,12 @@ const EMBEDDING_MODEL = 'embedding-model';
 function makeConfig(overrides: Partial<Config> = {}): Config {
   return {
     getUserMemory: vi.fn().mockReturnValue(USER_MEMORY),
+    getCoreMemory: vi.fn().mockReturnValue(undefined),
     getMcpInstructions: vi.fn().mockReturnValue(undefined),
     isInteractive: vi.fn().mockReturnValue(true),
+    getSettingsService: vi.fn().mockReturnValue({
+      get: vi.fn().mockReturnValue(undefined),
+    }),
     ...overrides,
   } as unknown as Config;
 }
@@ -119,7 +123,7 @@ describe('generateJson', () => {
     expect(result).toStrictEqual({ key: 'value' });
   });
 
-  it('uses lightweight system prompt (getCoreSystemPromptAsync, no env context)', async () => {
+  it('uses the request provider in the lightweight system prompt', async () => {
     const contents = [
       {
         speaker: 'human',
@@ -137,12 +141,14 @@ describe('generateJson', () => {
       TEST_MODEL,
       {},
       SESSION_ID,
+      'request-provider',
     );
 
     expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
       expect.objectContaining({
         userMemory: USER_MEMORY,
         model: TEST_MODEL,
+        provider: 'request-provider',
       }),
     );
   });
@@ -357,5 +363,110 @@ describe('generateEmbedding', () => {
       text: ['text1', 'text2'],
       model: EMBEDDING_MODEL,
     });
+  });
+});
+
+/**
+ * Issue #3176, finding D7 — the auxiliary (lightweight) prompt path must pass
+ * `coreMemory: config.getCoreMemory()` so the per-call `.LLXPRT_SYSTEM` disk
+ * read does not fire when core memory is available in memory.
+ *
+ * These tests use a mock that faithfully simulates the real
+ * `getCoreSystemPromptAsync` core-memory channel: when `coreMemory` is a
+ * non-empty string it echoes it; when it is `undefined` it returns a sentinel
+ * representing the disk fallback. The assertion is on the system instruction
+ * CONTENT delivered to the LLM client — not on mock-call bookkeeping.
+ */
+describe('buildLightweightSystemPrompt core memory (issue #3176, D7)', () => {
+  const DISK_FALLBACK_SENTINEL = 'DISK_FALLBACK_FIRED';
+  let contentGenerator: ContentGenerator;
+  let baseLlmClient: BaseLLMClient;
+  const abortSignal = new AbortController().signal;
+
+  beforeEach(() => {
+    contentGenerator = makeContentGenerator();
+    baseLlmClient = makeBaseLlmClient();
+    vi.clearAllMocks();
+    (
+      getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
+    ).mockImplementation(async (userMemoryOrOptions) => {
+      const coreMemory =
+        typeof userMemoryOrOptions === 'object'
+          ? userMemoryOrOptions.coreMemory
+          : undefined;
+      if (typeof coreMemory === 'string' && coreMemory.trim()) {
+        return coreMemory;
+      }
+      return DISK_FALLBACK_SENTINEL;
+    });
+  });
+
+  function captureSystemInstruction(): string {
+    const callArgs = (
+      baseLlmClient.generateJson as Mock<typeof baseLlmClient.generateJson>
+    ).mock.calls[0]?.[0] as { systemInstruction?: string } | undefined;
+    return callArgs?.systemInstruction ?? '';
+  }
+
+  // T6
+  it('passes in-memory core memory and avoids the disk fallback (D7)', async () => {
+    const IN_MEMORY = 'IN_MEMORY_CORE_SENTINEL';
+    const configWithMemory = makeConfig({
+      getCoreMemory: vi.fn().mockReturnValue(IN_MEMORY),
+    });
+
+    await generateJson(
+      configWithMemory,
+      contentGenerator,
+      baseLlmClient,
+      [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'hello' }],
+        } as IContent,
+      ],
+      {},
+      abortSignal,
+      TEST_MODEL,
+      {},
+      SESSION_ID,
+    );
+
+    const sysInstr = captureSystemInstruction();
+    // The in-memory value reached the model …
+    expect(sysInstr).toContain(IN_MEMORY);
+    // … and the disk fallback did NOT fire.
+    expect(sysInstr).not.toContain(DISK_FALLBACK_SENTINEL);
+    // The config's getCoreMemory was the source, proving the wiring.
+    expect(configWithMemory.getCoreMemory).toHaveBeenCalled();
+  });
+
+  // T7
+  it('delivers the full core-memory content to the model (no suppression)', async () => {
+    const CORE_CONTENT = 'FULL_CORE_MEMORY_BODY';
+    const configWithMemory = makeConfig({
+      getCoreMemory: vi.fn().mockReturnValue(CORE_CONTENT),
+    });
+
+    await generateJson(
+      configWithMemory,
+      contentGenerator,
+      baseLlmClient,
+      [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'hello' }],
+        } as IContent,
+      ],
+      {},
+      abortSignal,
+      TEST_MODEL,
+      {},
+      SESSION_ID,
+    );
+
+    // The content must be the actual in-memory value, not an empty string
+    // (passing '' would suppress it — the issue explicitly forbids that).
+    expect(captureSystemInstruction()).toBe(CORE_CONTENT);
   });
 });

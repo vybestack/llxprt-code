@@ -8,9 +8,10 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { writeFileSync, mkdirSync, rmSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import type { IToolHost } from '../../../interfaces/index.js';
-import { ASTEditTool } from '../../ast-edit.js';
+import { createFakeToolHost } from './test-helpers.js';
+import { ASTEditTool, type ASTEditToolParams } from '../../ast-edit.js';
 import type { ToolResult } from '../../tools.js';
+import { ToolErrorType } from '../../../types/tool-error.js';
 
 function createTempDir(prefix = 'llxprt-ast-preview-test-'): {
   dir: string;
@@ -33,21 +34,9 @@ function createTempDir(prefix = 'llxprt-ast-preview-test-'): {
   };
 }
 
-function createFakeToolHost(targetDir: string): IToolHost {
-  return {
-    getTargetDir: () => targetDir,
-    getWorkspaceRoots: () => [targetDir],
-    getApprovalMode: () => 'auto',
-    setApprovalMode: () => {},
-    isInteractive: () => false,
-    hasFeatureFlag: () => false,
-    getEphemeralSettings: () => ({}),
-  };
-}
-
 async function executePreview(
   tool: ASTEditTool,
-  params: Record<string, unknown>,
+  params: ASTEditToolParams,
 ): Promise<ToolResult> {
   return tool.build(params).execute(new AbortController().signal);
 }
@@ -80,7 +69,7 @@ describe('ASTEditTool preview phase validation (issue #1755)', () => {
     });
 
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('edit_no_occurrence_found');
+    expect(result.error?.type).toBe(ToolErrorType.EDIT_NO_OCCURRENCE_FOUND);
     expect(String(result.llmContent)).toContain('0 occurrences');
     expect(String(result.llmContent)).not.toContain('LLXPRT EDIT PREVIEW');
     expect(String(result.llmContent)).not.toContain(
@@ -141,7 +130,7 @@ describe('ASTEditTool preview phase validation (issue #1755)', () => {
     });
 
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('edit_no_occurrence_found');
+    expect(result.error?.type).toBe(ToolErrorType.EDIT_NO_OCCURRENCE_FOUND);
     expect(readFileSync(filePath, 'utf-8')).toBe(originalContent);
   });
 
@@ -302,7 +291,7 @@ describe('ASTEditTool pre-existing vs newly-introduced error categorization (iss
       .execute(new AbortController().signal);
 
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('ast_syntax_error');
+    expect(result.error?.type).toBe(ToolErrorType.AST_SYNTAX_ERROR);
     const content = String(result.llmContent);
     expect(content).not.toContain('Successfully applied edit');
     expect(content).not.toContain('Successfully created file');

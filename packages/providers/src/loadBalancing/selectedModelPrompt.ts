@@ -19,6 +19,7 @@ import type { GenerateChatOptions } from '../IProvider.js';
  */
 export async function optionsWithSelectedModelPrompt(
   options: GenerateChatOptions,
+  selectedProvider: string,
   selectedModel: string,
 ): Promise<GenerateChatOptions> {
   if (selectedModel.trim() === '') {
@@ -37,6 +38,9 @@ export async function optionsWithSelectedModelPrompt(
     // re-renders an existing prompt but never originates one.
     return options;
   }
-  const systemInstruction = await assembler.assemble(selectedModel);
+  const systemInstruction = await assembler.assemble({
+    provider: selectedProvider,
+    model: selectedModel,
+  });
   return { ...options, systemInstruction };
 }

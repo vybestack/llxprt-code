@@ -55,6 +55,7 @@ import {
 } from './executor-tool-dispatch.js';
 import { callModelAndConsumeStream } from './executor-stream-processor.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { resolveProviderForSystemPrompt } from '../core/systemPromptProvider.js';
 
 /**
  * Provider-neutral generation config shape.
@@ -930,6 +931,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       coreMemory: this.runtimeContext.getCoreMemory(),
       mcpInstructions: this.runtimeContext.getMcpInstructions(),
       model: this.definition.modelConfig.model,
+      provider: resolveProviderForSystemPrompt(this.runtimeContext),
       // Derive from the FINAL declaration list, not toolConfig.tools, so the
       // auto-injected complete_task tool is described in the prompt. Otherwise
       // the prompt's tool list disagrees with what the model can actually call

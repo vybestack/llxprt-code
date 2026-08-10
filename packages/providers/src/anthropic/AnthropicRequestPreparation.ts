@@ -34,7 +34,10 @@ import {
   isAnthropicOAuthBaseURL,
   ANTHROPIC_DEFAULT_BASE_URL,
 } from './AnthropicEndpointUtils.js';
-import { formatContextPrefix } from '../utils/systemPromptPlacement.js';
+import {
+  formatContextPrefix,
+  type SystemPromptPlacement,
+} from '../utils/systemPromptPlacement.js';
 
 /**
  * Request preparation context returned to caller
@@ -60,6 +63,7 @@ export interface PrepareRequestParams {
   tools: ProviderToolset | undefined;
   options: NormalizedGenerateChatOptions;
   isOAuth: boolean;
+  placement: SystemPromptPlacement;
   providerName: string;
   config: Config | undefined;
   getMaxTokensForModel: (model: string) => number;
@@ -270,14 +274,24 @@ function resolveRequestSettings(
   };
 }
 
-async function buildOAuthSystemContext(params: {
+/**
+ * Placement-only message selection (issue #3172). Positions the assembled
+ * instruction at the top of the context when placement is `context-prefix`.
+ *
+ * This helper has NO reason to reference the resolved auth classification:
+ * placement (WHERE the prompt goes) is independent of transport auth. The
+ * vendor system field is determined separately by buildSystemField.
+ */
+function placeSystemInstruction(params: {
+  placement: SystemPromptPlacement;
   anthropicMessages: readonly AnthropicMessage[];
   wantCaching: boolean;
   ttl: '5m' | '1h';
   cacheLogger: { debug: (fn: () => string) => void };
   systemInstruction: string | undefined;
-}): Promise<SystemContextResult> {
+}): AnthropicMessage[] {
   const {
+    placement,
     anthropicMessages,
     wantCaching,
     ttl,
@@ -287,87 +301,141 @@ async function buildOAuthSystemContext(params: {
 
   const messages = [...anthropicMessages];
 
-  // Issue #3136: the agent layer owns system-prompt assembly. The provider
-  // transports options.systemInstruction verbatim — it never rebuilds a core
-  // prompt or merges two prompts.
-  const systemMessage = systemInstruction ?? '';
-
-  if (systemMessage) {
-    // Issue #3136: Anthropic under OAuth declares `context-prefix` placement —
-    // its `system` field may carry ONLY the Claude Code string, so the real
-    // prompt is unshifted to the TOP OF THE CONTEXT (never inside history).
-    // The wrapper format is owned by the shared placement policy so this
-    // provider does not re-derive it.
-    const contextPrefixText = formatContextPrefix(systemMessage);
-
-    if (wantCaching) {
-      messages.unshift({
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: contextPrefixText,
-            cache_control: { type: 'ephemeral', ttl },
-          } as {
-            type: 'text';
-            text: string;
-            cache_control: { type: 'ephemeral'; ttl: '5m' | '1h' };
-          },
-        ],
-      });
-      cacheLogger.debug(() => 'Added cache_control to OAuth system message');
-    } else {
-      messages.unshift({
-        role: 'user',
-        content: contextPrefixText,
-      });
-    }
+  if (placement !== 'context-prefix') {
+    return messages;
   }
 
-  const oauthSystemField = buildAnthropicSystemPrompt({
+  const systemMessage = systemInstruction ?? '';
+  if (systemMessage === '') {
+    return messages;
+  }
+
+  // Issue #3136: Anthropic under OAuth declares `context-prefix` placement —
+  // its `system` field may carry ONLY the Claude Code string, so the real
+  // prompt is unshifted to the TOP OF THE CONTEXT (never inside history).
+  // The wrapper format is owned by the shared placement policy so this
+  // provider does not re-derive it.
+  const contextPrefixText = formatContextPrefix(systemMessage);
+
+  if (wantCaching) {
+    messages.unshift({
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text: contextPrefixText,
+          cache_control: { type: 'ephemeral', ttl },
+        } as {
+          type: 'text';
+          text: string;
+          cache_control: { type: 'ephemeral'; ttl: '5m' | '1h' };
+        },
+      ],
+    });
+    cacheLogger.debug(
+      () => 'Added cache_control to context-prefixed system instruction',
+    );
+  } else {
+    messages.unshift({
+      role: 'user',
+      content: contextPrefixText,
+    });
+  }
+
+  return messages;
+}
+
+/**
+ * Build the vendor system field for context-prefix placement (issue #3172).
+ * The field carries the Claude Code string when the resolved token is OAuth and
+ * remains absent for non-OAuth transports using context-prefix placement.
+ */
+function buildContextPrefixSystemField(
+  isOAuth: boolean,
+  wantCaching: boolean,
+  ttl: '5m' | '1h',
+): SystemContextResult['systemField'] {
+  if (!isOAuth) {
+    return undefined;
+  }
+  return buildAnthropicSystemPrompt({
     isOAuth: true,
     wantCaching,
     ttl,
   });
-
-  return { systemField: oauthSystemField, messages };
 }
 
-async function buildNonOAuthSystemContext(params: {
-  anthropicMessages: readonly AnthropicMessage[];
+function buildSystemField(params: {
+  placement: SystemPromptPlacement;
+  isOAuth: boolean;
   wantCaching: boolean;
   ttl: '5m' | '1h';
   systemInstruction: string | undefined;
-}): Promise<SystemContextResult> {
-  const { anthropicMessages, wantCaching, ttl, systemInstruction } = params;
+}): SystemContextResult['systemField'] {
+  const { placement, wantCaching, ttl, systemInstruction } = params;
 
-  // Issue #3136: the agent layer owns system-prompt assembly. The provider
-  // transports options.systemInstruction verbatim into the `system` field.
-  const systemFieldValue = buildAnthropicSystemPrompt({
-    corePromptText: systemInstruction ?? '',
-    isOAuth: false,
-    wantCaching,
-    ttl,
-  });
+  if (placement === 'system-field') {
+    return buildAnthropicSystemPrompt({
+      corePromptText: systemInstruction ?? '',
+      isOAuth: false,
+      wantCaching,
+      ttl,
+    });
+  }
 
-  return { systemField: systemFieldValue, messages: [...anthropicMessages] };
+  return buildContextPrefixSystemField(params.isOAuth, wantCaching, ttl);
+}
+
+function assertPlacementCompatibleWithAuth(
+  isOAuth: boolean,
+  placement: SystemPromptPlacement,
+): void {
+  if (isOAuth && placement !== 'context-prefix') {
+    throw new Error(
+      `SystemPromptPlacementError: OAuth requires context-prefix placement but placement is ${placement} (issue #3172).`,
+    );
+  }
 }
 
 /**
- * Build system context with OAuth or regular system field
+ * Build system context (issue #3172). Placement controls WHERE the assembled
+ * instruction goes; the resolved auth classification independently controls
+ * the vendor-required system field. Fail fast for the impossible
+ * OAuth/system-field combination rather than dropping or misplacing bytes.
  */
-async function buildSystemContext(params: {
+function buildSystemContext(params: {
+  placement: SystemPromptPlacement;
   isOAuth: boolean;
   anthropicMessages: readonly AnthropicMessage[];
   wantCaching: boolean;
   ttl: '5m' | '1h';
   cacheLogger: { debug: (fn: () => string) => void };
   systemInstruction: string | undefined;
-}): Promise<SystemContextResult> {
-  if (params.isOAuth) {
-    return buildOAuthSystemContext(params);
-  }
-  return buildNonOAuthSystemContext(params);
+}): SystemContextResult {
+  // OAuth requires context-prefix placement: the system field must carry ONLY
+  // the Claude Code string, so the assembled prompt must go at the top of the
+  // context. OAuth + system-field is impossible and must fail fast rather than
+  // drop or misplace prompt bytes.
+  assertPlacementCompatibleWithAuth(params.isOAuth, params.placement);
+
+  const messages = placeSystemInstruction({
+    placement: params.placement,
+    anthropicMessages: params.anthropicMessages,
+    wantCaching: params.wantCaching,
+    ttl: params.ttl,
+    cacheLogger: params.cacheLogger,
+    systemInstruction: params.systemInstruction,
+  });
+
+  const systemField = buildSystemField({
+    placement: params.placement,
+    isOAuth: params.isOAuth,
+    wantCaching: params.wantCaching,
+    ttl: params.ttl,
+    systemInstruction: params.systemInstruction,
+  });
+
+  return { systemField, messages };
 }
 
 function mapEffortLevel(
@@ -499,7 +567,6 @@ function convertMessagesAndTools(params: {
   const {
     content,
     tools,
-    isOAuth,
     reasoningSettings,
     config,
     currentModel,
@@ -510,7 +577,7 @@ function convertMessagesAndTools(params: {
 
   // Convert IContent to Anthropic API format
   const anthropicMessages = convertToAnthropicMessages(content, {
-    isOAuth,
+    isOAuth: params.isOAuth,
     stripFromContext: reasoningSettings.stripFromContext,
     includeInContext: reasoningSettings.includeInContext,
     reasoningEnabled: reasoningSettings.reasoningEnabled as boolean,
@@ -522,7 +589,7 @@ function convertMessagesAndTools(params: {
   });
 
   // Convert tools to Anthropic format and stabilize ordering
-  let anthropicTools = convertToolsToAnthropic(tools, isOAuth);
+  let anthropicTools = convertToolsToAnthropic(tools, params.isOAuth);
 
   if (anthropicTools && anthropicTools.length > 0) {
     anthropicTools = [...anthropicTools]
@@ -734,7 +801,8 @@ export async function prepareAnthropicRequest(
     );
   }
 
-  const systemContext = await buildSystemContext({
+  const systemContext = buildSystemContext({
+    placement: params.placement,
     isOAuth: params.isOAuth,
     anthropicMessages,
     wantCaching: effectiveWantCaching,

@@ -240,10 +240,45 @@
     },
     "sessionRetention": {
       "title": "Session Retention",
-      "description": "Settings for automatic session cleanup.",
-      "markdownDescription": "Settings for automatic session cleanup.\n\n- Category: `General`\n- Requires restart: `no`",
+      "description": "Settings for automatic session cleanup. Cleanup is enabled by default with a machine-wide 4 GiB aggregate size budget.",
+      "markdownDescription": "Settings for automatic session cleanup. Cleanup is enabled by default with a machine-wide 4 GiB aggregate size budget.\n\n- Category: `General`\n- Requires restart: `no`",
       "type": "object",
-      "additionalProperties": true
+      "properties": {
+        "enabled": {
+          "title": "Enabled",
+          "description": "Enable automatic session cleanup. Set to false to disable all janitorial mutations.",
+          "markdownDescription": "Enable automatic session cleanup. Set to false to disable all janitorial mutations.\n\n- Category: `General`\n- Requires restart: `no`\n- Default: `true`",
+          "default": true,
+          "type": "boolean"
+        },
+        "maxTotalSizeMB": {
+          "title": "Max Total Size (MiB)",
+          "description": "Machine-wide aggregate size limit for all session recordings and cold archives, in MiB. Defaults to 4096 (4 GiB).",
+          "markdownDescription": "Machine-wide aggregate size limit for all session recordings and cold archives, in MiB. Defaults to 4096 (4 GiB).\n\n- Category: `General`\n- Requires restart: `no`\n- Default: `4096`",
+          "default": 4096,
+          "type": "number"
+        },
+        "maxAge": {
+          "title": "Max Age",
+          "description": "Maximum age of sessions to keep (e.g. \"30d\", \"7d\", \"24h\"). No default age limit.",
+          "markdownDescription": "Maximum age of sessions to keep (e.g. \"30d\", \"7d\", \"24h\"). No default age limit.\n\n- Category: `General`\n- Requires restart: `no`",
+          "type": "string"
+        },
+        "maxCount": {
+          "title": "Max Count",
+          "description": "Maximum number of sessions to keep (most recent). No default count limit.",
+          "markdownDescription": "Maximum number of sessions to keep (most recent). No default count limit.\n\n- Category: `General`\n- Requires restart: `no`",
+          "type": "number"
+        },
+        "minRetention": {
+          "title": "Min Retention",
+          "description": "Minimum retention period (safety floor, defaults to \"1d\").",
+          "markdownDescription": "Minimum retention period (safety floor, defaults to \"1d\").\n\n- Category: `General`\n- Requires restart: `no`\n- Default: `1d`",
+          "default": "1d",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
     },
     "output": {
       "title": "Output",

@@ -16,6 +16,7 @@ import {
   executePreview,
 } from './test-helpers.js';
 import { ASTEditTool } from '../../ast-edit.js';
+import { ToolErrorType } from '../../../types/tool-error.js';
 
 describe('ast_edit edge cases: empty old_string on existing file', () => {
   const ctx = useTempDir();
@@ -33,7 +34,7 @@ describe('ast_edit edge cases: empty old_string on existing file', () => {
     });
 
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('edit_no_occurrence_found');
+    expect(result.error?.type).toBe(ToolErrorType.EDIT_NO_OCCURRENCE_FOUND);
     expect(readFileSync(filePath, 'utf-8')).toBe(originalContent);
   });
 });
@@ -54,7 +55,7 @@ describe('ast_edit edge cases: old_string equals new_string', () => {
     });
 
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('edit_no_change');
+    expect(result.error?.type).toBe(ToolErrorType.EDIT_NO_CHANGE);
     expect(readFileSync(filePath, 'utf-8')).toBe(originalContent);
   });
 
@@ -71,7 +72,7 @@ describe('ast_edit edge cases: old_string equals new_string', () => {
     });
 
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('edit_no_change');
+    expect(result.error?.type).toBe(ToolErrorType.EDIT_NO_CHANGE);
     expect(result.llmContent).toBeDefined();
     expect(String(result.llmContent)).not.toContain('LLXPRT EDIT PREVIEW');
   });
@@ -142,7 +143,7 @@ describe('ast_edit edge cases: whitespace-only differences from file content', (
     });
 
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('edit_no_occurrence_found');
+    expect(result.error?.type).toBe(ToolErrorType.EDIT_NO_OCCURRENCE_FOUND);
     expect(readFileSync(filePath, 'utf-8')).toBe(originalContent);
   });
 
@@ -159,7 +160,7 @@ describe('ast_edit edge cases: whitespace-only differences from file content', (
     });
 
     expect(result.error).toBeDefined();
-    expect(result.error?.type).toBe('edit_no_occurrence_found');
+    expect(result.error?.type).toBe(ToolErrorType.EDIT_NO_OCCURRENCE_FOUND);
     expect(readFileSync(filePath, 'utf-8')).toBe(originalContent);
   });
 });

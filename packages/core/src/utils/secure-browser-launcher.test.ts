@@ -5,26 +5,27 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
-// IMPORTANT: Must import mock setup BEFORE importing the source module.
-// Bun's mock.module only applies if registered before the source module loads.
-import { secureBrowserMocks } from './secure-browser-launcher-mock-setup.js';
+import * as realNodeChildProcessModule from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as nodePath from 'node:path';
 import {
-  openBrowserSecurely,
-  shouldLaunchBrowser,
-} from './secure-browser-launcher.js';
+  createBrowserLauncher,
+  type BrowserLauncherDependencies,
+} from './secure-browser-launcher-internal.js';
 
-const realNodeChildProcessModule = { ...(await import('node:child_process')) };
-
-const mockExecFile = secureBrowserMocks.execFile;
-const mockStat = secureBrowserMocks.stat;
-const mockPlatform = secureBrowserMocks.platform;
+const mockExecFile = vi.fn<BrowserLauncherDependencies['execute']>();
+const mockStat = vi.fn<BrowserLauncherDependencies['stat']>();
+const mockPlatform = vi.fn<BrowserLauncherDependencies['platform']>();
+const { openBrowserSecurely, shouldLaunchBrowser } = createBrowserLauncher({
+  execute: mockExecFile,
+  stat: mockStat,
+  platform: mockPlatform,
+  isBrowserLaunchDisabledDuringTests: () => false,
+});
 
 describe('secure-browser-launcher', () => {
-  let originalPlatform: PropertyDescriptor | undefined;
   let originalProgramFiles: string | undefined;
 
   beforeEach(() => {
@@ -32,14 +33,10 @@ describe('secure-browser-launcher', () => {
     mockExecFile.mockResolvedValue({ stdout: '', stderr: '' });
     mockStat.mockRejectedValue(new Error('ENOENT'));
     mockPlatform.mockReturnValue(process.platform);
-    originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
     originalProgramFiles = process.env.PROGRAMFILES;
   });
 
   afterEach(() => {
-    if (originalPlatform) {
-      Object.defineProperty(process, 'platform', originalPlatform);
-    }
     // Restore PROGRAMFILES so a test that sets it cannot leak into siblings.
     if (originalProgramFiles === undefined) {
       delete process.env.PROGRAMFILES;
@@ -48,12 +45,7 @@ describe('secure-browser-launcher', () => {
     }
   });
 
-  function setPlatform(platform: string) {
-    Object.defineProperty(process, 'platform', {
-      value: platform,
-      configurable: true,
-    });
-    // Bun's os.platform() caches the value; use the mock to override.
+  function setPlatform(platform: NodeJS.Platform) {
     mockPlatform.mockReturnValue(platform);
   }
 
@@ -66,6 +58,188 @@ describe('secure-browser-launcher', () => {
       );
     }
   }
+
+  interface BrowserGuardProbeResult {
+    readonly error?: string;
+    readonly executions: number;
+    readonly shouldLaunch: boolean;
+  }
+
+  function runBrowserGuardProbe(
+    environment: Readonly<Record<string, string | undefined>>,
+    replacementEnvironment?: Readonly<Record<string, string>>,
+  ): BrowserGuardProbeResult {
+    const childEnvironment = { ...process.env };
+    for (const [name, value] of Object.entries(environment)) {
+      if (value === undefined) {
+        delete childEnvironment[name];
+      } else {
+        childEnvironment[name] = value;
+      }
+    }
+
+    const launcherModule = new URL(
+      './secure-browser-launcher-internal.ts',
+      import.meta.url,
+    ).href;
+    const replaceEnvironment = replacementEnvironment
+      ? `process.env = ${JSON.stringify(replacementEnvironment)};`
+      : '';
+    const probe = `
+      import {
+        createBrowserLauncher,
+        isBrowserLaunchDisabledDuringTests,
+      } from ${JSON.stringify(launcherModule)};
+
+      ${replaceEnvironment}
+      let executions = 0;
+      const launcher = createBrowserLauncher({
+        execute: async () => { executions += 1; },
+        platform: () => 'darwin',
+        stat: async () => ({ isFile: () => false }),
+        isBrowserLaunchDisabledDuringTests,
+      });
+
+      let error;
+      try {
+        await launcher.openBrowserSecurely('https://example.com');
+      } catch (cause) {
+        error = cause instanceof Error ? cause.message : String(cause);
+      }
+      process.stdout.write(JSON.stringify({
+        error,
+        executions,
+        shouldLaunch: launcher.shouldLaunchBrowser(),
+      }));
+    `;
+    const result = realNodeChildProcessModule.spawnSync(
+      process.execPath,
+      ['--eval', probe],
+      { encoding: 'utf8', env: childEnvironment, timeout: 60_000 },
+    );
+    if (result.status !== 0) {
+      throw new Error(
+        `Browser guard probe failed (status=${String(result.status)}, signal=${String(result.signal)}, error=${result.error?.message ?? 'none'}): ${result.stderr}`,
+      );
+    }
+    return JSON.parse(result.stdout) as BrowserGuardProbeResult;
+  }
+
+  describe('test guard policy', () => {
+    it('blocks execution when the explicit test marker is set without opt-in', () => {
+      const result = runBrowserGuardProbe({
+        LLXPRT_RUNNING_TESTS: 'true',
+        LLXPRT_ALLOW_BROWSER_LAUNCH_IN_TESTS: undefined,
+        NODE_ENV: 'production',
+      });
+
+      expect(result.executions).toBe(0);
+      expect(result.shouldLaunch).toBe(false);
+      expect(result.error).toContain('Browser launch is disabled during tests');
+    });
+
+    it('permits fake execution when the exact opt-in is true', () => {
+      const result = runBrowserGuardProbe({
+        LLXPRT_RUNNING_TESTS: 'true',
+        LLXPRT_ALLOW_BROWSER_LAUNCH_IN_TESTS: 'true',
+        NODE_ENV: 'production',
+      });
+
+      expect(result.executions).toBe(1);
+      expect(result.error).toBeUndefined();
+    });
+
+    it.each(['1', 'TRUE', 'yes', ' false', 'true '])(
+      'blocks execution when the opt-in is non-exact (%s)',
+      (nonExactValue: string) => {
+        const result = runBrowserGuardProbe({
+          LLXPRT_RUNNING_TESTS: 'true',
+          LLXPRT_ALLOW_BROWSER_LAUNCH_IN_TESTS: nonExactValue,
+          NODE_ENV: 'production',
+        });
+
+        expect(result.executions).toBe(0);
+        expect(result.error).toContain(
+          'Browser launch is disabled during tests',
+        );
+      },
+    );
+
+    it('blocks when NODE_ENV=test without the explicit test marker', () => {
+      const result = runBrowserGuardProbe({
+        LLXPRT_RUNNING_TESTS: undefined,
+        LLXPRT_ALLOW_BROWSER_LAUNCH_IN_TESTS: undefined,
+        NODE_ENV: 'test',
+      });
+
+      expect(result.executions).toBe(0);
+      expect(result.error).toContain('Browser launch is disabled during tests');
+    });
+
+    const replacementEnvironmentCases: Array<{
+      signal: string;
+      replacementEnvironment: Readonly<Record<string, string>>;
+    }> = [
+      {
+        signal: 'the explicit test marker',
+        replacementEnvironment: {
+          LLXPRT_RUNNING_TESTS: 'true',
+          NODE_ENV: 'production',
+        },
+      },
+      {
+        signal: 'NODE_ENV=test',
+        replacementEnvironment: {
+          NODE_ENV: 'test',
+        },
+      },
+    ];
+
+    it.each(replacementEnvironmentCases)(
+      'blocks after the imported launcher sees process.env replaced with $signal',
+      ({ replacementEnvironment }) => {
+        const result = runBrowserGuardProbe(
+          {
+            LLXPRT_RUNNING_TESTS: undefined,
+            LLXPRT_ALLOW_BROWSER_LAUNCH_IN_TESTS: undefined,
+            NODE_ENV: 'production',
+          },
+          replacementEnvironment,
+        );
+
+        expect(result.executions).toBe(0);
+        expect(result.shouldLaunch).toBe(false);
+        expect(result.error).toContain(
+          'Browser launch is disabled during tests',
+        );
+      },
+    );
+
+    it('honors the exact opt-in after process.env is replaced', () => {
+      const result = runBrowserGuardProbe(
+        { NODE_ENV: 'production' },
+        {
+          LLXPRT_RUNNING_TESTS: 'true',
+          LLXPRT_ALLOW_BROWSER_LAUNCH_IN_TESTS: 'true',
+          NODE_ENV: 'production',
+        },
+      );
+
+      expect(result.executions).toBe(1);
+      expect(result.error).toBeUndefined();
+    });
+
+    it('preserves production behavior when no test signal is present', () => {
+      const result = runBrowserGuardProbe({
+        LLXPRT_RUNNING_TESTS: undefined,
+        LLXPRT_ALLOW_BROWSER_LAUNCH_IN_TESTS: undefined,
+        NODE_ENV: 'production',
+      });
+
+      expect(result.executions).toBe(1);
+      expect(result.error).toBeUndefined();
+    });
+  });
 
   describe('URL validation', () => {
     it('should allow valid HTTP URLs', async () => {
@@ -340,6 +514,12 @@ describe('secure-browser-launcher', () => {
     it('returns false in CI even without forceManual', () => {
       setPlatform('darwin');
       process.env.CI = 'true';
+      expect(shouldLaunchBrowser()).toBe(false);
+    });
+
+    it('returns false in a noninteractive Debian environment', () => {
+      setPlatform('darwin');
+      process.env.DEBIAN_FRONTEND = 'noninteractive';
       expect(shouldLaunchBrowser()).toBe(false);
     });
   });

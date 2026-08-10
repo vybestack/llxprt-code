@@ -218,10 +218,10 @@ describe('AuthDialog', () => {
     // whose outcome depends on machine load.
     await waitFor(() => {
       expect(mockToggleOAuthEnabled).toHaveBeenCalledWith('claudecode');
+      expect(lastFrame()).toContain('[ON]');
     });
     expect(mockAuthenticate).not.toHaveBeenCalled();
     expect(onSelect).not.toHaveBeenCalled();
-    expect(lastFrame()).toContain('[ON]');
     unmount();
   });
 

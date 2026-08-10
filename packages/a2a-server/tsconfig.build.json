@@ -1,0 +1,24 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "bun"]
+  },
+  "include": [
+    "index.ts",
+    "src/**/*.ts",
+    "src/**/*.json",
+    "../mcp/index.ts",
+    "../mcp/src/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/**/*.test.ts",
+    "src/**/*.spec.ts",
+    "src/**/__tests__/**",
+    "../mcp/src/**/*.test.ts",
+    "../mcp/src/**/*.spec.ts",
+    "../mcp/src/**/__tests__/**"
+  ],
+  "references": [{ "path": "../core/tsconfig.build.json" }]
+}

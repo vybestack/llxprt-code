@@ -29,6 +29,7 @@
  *   --dry-run             List files that would be run without executing them
  */
 
+import './tests/browser-launch-guard.js';
 import {
   statSync,
   writeFileSync,

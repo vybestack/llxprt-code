@@ -260,6 +260,7 @@ function renderUseSubmitQuery(opts: {
     queuedSubmissionsRef: { current: [] },
     drainSuppressedRef: { current: false },
     enqueueSubmission: vi.fn(),
+    enqueueSubmissionFirst: vi.fn(),
     requeueSubmission: vi.fn(),
     dequeueSubmission: vi.fn(),
     clearSubmissions: vi.fn(),

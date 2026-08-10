@@ -22,9 +22,9 @@ import {
   deriveOperationId,
   joinKeyFromPromptId,
   parsePerfRecord,
-  PerfRecordSchema,
+  PerfOperationRecordSchema,
 } from './perfRecords.js';
-import type { PerfRecord } from './perfRecords.js';
+import type { PerfOperationRecord } from './perfRecords.js';
 
 // ---------------------------------------------------------------------------
 // A single perf operation record (no child-id arrays — D1)
@@ -123,8 +123,8 @@ describe('read-time join — N continuation rows → 1 perf operation (D1)', () 
 
   it('joins every continuation token row to the single perf operation', () => {
     // Build the join index the way the report does: operation_id → perf record.
-    const perfRecord = PerfRecordSchema.parse(PERF_OPERATION_RECORD);
-    const perfByOperationId = new Map<string, PerfRecord>([
+    const perfRecord = PerfOperationRecordSchema.parse(PERF_OPERATION_RECORD);
+    const perfByOperationId = new Map<string, PerfOperationRecord>([
       [perfRecord.operation_id, perfRecord],
     ]);
 
@@ -143,7 +143,8 @@ describe('read-time join — N continuation rows → 1 perf operation (D1)', () 
     const uniqueJoined = new Set(joinedOperations);
     expect(uniqueJoined.size).toBe(1);
     const [sole] = uniqueJoined;
-    expect(sole?.operation_id).toBe(INITIAL_PROMPT_ID);
+    if (sole === undefined) throw new Error('expected one joined operation');
+    expect(sole.operation_id).toBe(INITIAL_PROMPT_ID);
 
     // And no child id was copied into the perf record.
     expect('prompt_ids' in sole).toBe(false);
