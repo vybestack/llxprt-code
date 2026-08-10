@@ -9,6 +9,8 @@
  */
 export type StreamSource = 'stdout' | 'stderr';
 
+const byteBudgetBrand: unique symbol = Symbol('ByteBudget');
+
 /**
  * Immutable, validated byte budget for output acquisition.
  *
@@ -17,7 +19,19 @@ export type StreamSource = 'stdout' | 'stderr';
  */
 export interface ByteBudget {
   readonly bytes: number;
-  readonly __brand: unique symbol;
+  readonly [byteBudgetBrand]: true;
+}
+
+/** @internal Construct the nominal value used by the validating factory. */
+export function createBrandedByteBudget(bytes: number): ByteBudget {
+  const budget = { bytes } as ByteBudget;
+  Object.defineProperty(budget, byteBudgetBrand, {
+    value: true,
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
+  return budget;
 }
 
 /**
@@ -61,10 +75,14 @@ export interface AcquisitionResult {
 
 /**
  * Result for a combined stream (stdout + stderr with provenance).
+ *
+ * `text`, `headText`, and `tailText` preserve the arrival order of the
+ * retained combined stream. The per-source fields project those same retained
+ * slices without content from the other stream.
  */
 export interface CombinedAcquisitionResult extends AcquisitionResult {
-  /** stdout-only decoded text. */
+  /** Retained stdout content, without the omission notice or stderr content. */
   readonly stdoutText: string;
-  /** stderr-only decoded text. */
+  /** Retained stderr content, without the omission notice or stdout content. */
   readonly stderrText: string;
 }

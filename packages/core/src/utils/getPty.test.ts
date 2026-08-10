@@ -50,7 +50,11 @@ describe('getPty', () => {
         loadFallback: () => Promise.resolve(fallbackModule),
       });
 
-      expect(pty).toStrictEqual({ module: fallbackModule, name: 'node-pty' });
+      expect(pty).toStrictEqual({
+        module: fallbackModule,
+        name: 'node-pty',
+        supportsBackpressure: true,
+      });
     });
 
     it('uses @lydell/node-pty when the primary backend loads', async () => {
@@ -64,6 +68,7 @@ describe('getPty', () => {
       expect(pty).toStrictEqual({
         module: primaryModule,
         name: 'lydell-node-pty',
+        supportsBackpressure: true,
       });
     });
   });
@@ -74,6 +79,7 @@ describe('getPty', () => {
       async () => {
         const pty = requirePty(await getPty(), 'bun-pty');
         expect(pty.name).toBe('bun-pty');
+        expect(pty.supportsBackpressure).toBe(false);
         expect(typeof pty.module.spawn).toBe('function');
       },
     );

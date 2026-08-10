@@ -377,15 +377,21 @@ function processPtyChunk(
         state.headlessTerminal.buffer.active.length >=
         state.terminalMaxBufferLines;
       state.headlessTerminal.write(data, () => {
-        if (
-          wasAtCap &&
-          state.headlessTerminal.buffer.active.length >=
-            state.terminalMaxBufferLines
-        ) {
-          state.terminalContentEvicted = true;
+        try {
+          if (
+            wasAtCap &&
+            state.headlessTerminal.buffer.active.length >=
+              state.terminalMaxBufferLines
+          ) {
+            state.terminalContentEvicted = true;
+          }
+          render();
+        } catch (error) {
+          fail(error);
+          return;
+        } finally {
+          state.isWriting = false;
         }
-        render();
-        state.isWriting = false;
         finish();
       });
     } catch (error) {

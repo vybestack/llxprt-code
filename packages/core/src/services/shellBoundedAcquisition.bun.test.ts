@@ -37,10 +37,11 @@ import { ShellExecutionService } from './shellExecutionService.js';
  * Cross-platform producer script. Written to a temp file so the command
  * avoids shell-quoting issues across bash/zsh/PowerShell/cmd.exe.
  *
- * Usage: node producer.mjs <size> <stream> <mode>
- *   size:   number of bytes to write
- *   stream: "stdout" | "stderr" | "both"
- *   mode:   "ascii" | "multibyte" | "tiny"
+ * Usage: node producer.mjs <size> <stream> <mode> <exit-code>
+ *   size:      number of bytes to write
+ *   stream:    "stdout" | "stderr" | "both"
+ *   mode:      "ascii" | "multibyte" | "tiny"
+ *   exit-code: optional process exit code (defaults to zero)
  */
 let producerDir = '';
 let producerScript = '';
@@ -49,6 +50,7 @@ const PRODUCER_CODE = `
 const size = parseInt(process.argv[2] || '1024', 10);
 const stream = process.argv[3] || 'stdout';
 const mode = process.argv[4] || 'ascii';
+process.exitCode = parseInt(process.argv[5] || '0', 10);
 
 if (mode === 'tiny') {
   // Write single bytes in a loop (many tiny chunks).
@@ -101,8 +103,9 @@ function producerCommand(
   size: number,
   stream: 'stdout' | 'stderr' | 'both' = 'stdout',
   mode: 'ascii' | 'multibyte' | 'tiny' = 'ascii',
+  exitCode = 0,
 ): string {
-  return `"${process.execPath}" "${producerScript}" ${size} ${stream} ${mode}`;
+  return `"${process.execPath}" "${producerScript}" ${size} ${stream} ${mode} ${exitCode}`;
 }
 
 /**
@@ -175,11 +178,12 @@ describe('Shell bounded acquisition - child_process path (cross-platform)', () =
   });
 
   it('does not bound output when it fits within the budget', async () => {
-    const result = await executeAndCollect('echo "hello world"', {
-      outputRetentionMaxBytes: 65536,
-    });
+    const result = await executeAndCollect(
+      producerCommand(11, 'stdout', 'ascii'),
+      { outputRetentionMaxBytes: 65536 },
+    );
 
-    expect(result.output).toContain('hello world');
+    expect(result.output).toBe('A'.repeat(11));
     expect(result.output).not.toMatch(/truncat/i);
   });
 
@@ -225,10 +229,10 @@ describe('Shell bounded acquisition - child_process path (cross-platform)', () =
   });
 
   it('preserves exit status of a failing command despite bounded output', async () => {
-    const cmd = `${producerCommand(524288, 'stdout', 'ascii')}; exit 42`;
-    const result = await executeAndCollect(cmd, {
-      outputRetentionMaxBytes: 4096,
-    });
+    const result = await executeAndCollect(
+      producerCommand(524288, 'stdout', 'ascii', 42),
+      { outputRetentionMaxBytes: 4096 },
+    );
 
     expect(result.exitCode).toBe(42);
   });

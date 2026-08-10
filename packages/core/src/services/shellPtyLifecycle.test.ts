@@ -73,7 +73,11 @@ function makeFakeState(inputs: FakeStateInputs): {
     abortSignal: new AbortController().signal,
     onOutputEvent: () => undefined,
     shellExecutionConfig: {} as ShellExecutionConfig,
-    ptyInfo: { name: 'node-pty', module: {} } as NonNullable<PtyImplementation>,
+    ptyInfo: {
+      name: 'node-pty',
+      module: {},
+      supportsBackpressure: true,
+    } as NonNullable<PtyImplementation>,
     supportsProcessGroupKill: inputs.supportsProcessGroupKill,
     inactivityAbortController,
     resetInactivityTimer: () => undefined,

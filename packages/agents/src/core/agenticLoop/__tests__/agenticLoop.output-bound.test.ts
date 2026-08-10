@@ -5,6 +5,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { DEFAULT_ACQUISITION_BUDGET_BYTES } from '@vybestack/llxprt-code-tools/acquisition.js';
 import { clearAllSchedulers } from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
@@ -22,7 +23,8 @@ import {
   toolCallRequestEvent,
 } from './agenticLoop-test-helpers.js';
 
-const LIVE_CHUNK_COUNT = 2_000;
+const LIVE_CHUNK_COUNT = 600;
+const LIVE_CHUNK = 'x'.repeat(8192);
 
 describe('AgenticLoop live-output acquisition bound', () => {
   beforeEach(() => {
@@ -45,7 +47,7 @@ describe('AgenticLoop live-output acquisition bound', () => {
         updateOutput?: (update: LiveOutputUpdate) => void,
       ) => {
         for (let index = 0; index < LIVE_CHUNK_COUNT; index += 1) {
-          updateOutput?.({ mode: 'append', data: 'x' });
+          updateOutput?.({ mode: 'append', data: LIVE_CHUNK });
         }
         return { llmContent: 'done', returnDisplay: 'done' };
       },
@@ -85,10 +87,21 @@ describe('AgenticLoop live-output acquisition bound', () => {
         event.chunk.includes('LLXPRT live tool output omitted'),
     );
 
+    const retainedDataBytes = outputEvents
+      .filter(
+        (event) => !event.chunk.includes('LLXPRT live tool output omitted'),
+      )
+      .reduce((total, event) => total + Buffer.byteLength(event.chunk), 0);
+
+    expect(Buffer.byteLength(LIVE_CHUNK) * LIVE_CHUNK_COUNT).toBeGreaterThan(
+      DEFAULT_ACQUISITION_BUDGET_BYTES,
+    );
+    expect(retainedDataBytes).toBeLessThanOrEqual(
+      DEFAULT_ACQUISITION_BUDGET_BYTES,
+    );
     expect(outputEvents.length).toBeLessThan(LIVE_CHUNK_COUNT);
     expect(notices).toHaveLength(1);
     expect(notices[0]?.callId).toBe('call-verbose');
-    expect(noticeIndex).toBeGreaterThanOrEqual(0);
     expect(completionIndex).toBeGreaterThan(noticeIndex);
   });
 });

@@ -51,6 +51,13 @@ export const SCROLLBACK_LIMIT = 10000;
  */
 const MAX_SCROLLBACK_LINES = 50000;
 
+/**
+ * Conservative retained-memory estimate per terminal cell. A cell needs more
+ * than its visible code point once xterm attributes and JavaScript storage are
+ * included, so scrollback is coupled to the byte budget with this multiplier.
+ */
+const ESTIMATED_BYTES_PER_TERMINAL_CELL = 8;
+
 /** Derive the effective xterm scrollback without exceeding the byte budget. */
 function deriveScrollbackFromBudget(
   budget: ByteBudget,
@@ -59,7 +66,9 @@ function deriveScrollbackFromBudget(
 ): number {
   const effectiveCols = Math.max(cols, 1);
   const budgetLineLimit = Math.min(
-    Math.floor(budget.bytes / (effectiveCols * 8)),
+    Math.floor(
+      budget.bytes / (effectiveCols * ESTIMATED_BYTES_PER_TERMINAL_CELL),
+    ),
     MAX_SCROLLBACK_LINES,
   );
   const requested = Number.isFinite(configuredScrollback)
@@ -156,7 +165,7 @@ export function createPtyResultPromise(
     processingChain: Promise.resolve(),
     pendingQueueBytes: 0,
     pendingQueueItems: 0,
-    supportsBackpressure: ptyInfo.name !== 'bun-pty',
+    supportsBackpressure: ptyInfo.supportsBackpressure,
     backpressurePaused: false,
     queueOverflowed: false,
     ...createTerminalTrackingState(effectiveScrollback, rows),

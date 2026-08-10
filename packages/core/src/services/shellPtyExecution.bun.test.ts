@@ -71,7 +71,11 @@ function createFakePtyState(supportsBackpressure: boolean): FakePtyHarness {
     abortSignal: new AbortController().signal,
     onOutputEvent: () => undefined,
     shellExecutionConfig: {},
-    ptyInfo: { name: 'node-pty', module: {} },
+    ptyInfo: {
+      name: 'node-pty',
+      module: {},
+      supportsBackpressure: true,
+    },
     supportsProcessGroupKill: true,
     inactivityAbortController,
     resetInactivityTimer: () => undefined,
@@ -133,6 +137,28 @@ describe('PTY bounded processing queue', () => {
     expect(harness.state.pendingQueueBytes).toBe(0);
     expect(overflows).toHaveLength(0);
     expect(harness.state.error).toBeNull();
+  });
+
+  it('finalizes queue accounting when terminal rendering throws', async () => {
+    const harness = createFakePtyState(true);
+    registerPtyDataHandler(
+      harness.state,
+      () => {
+        throw new Error('render failed');
+      },
+      createByteBudget(1024),
+      () => {
+        throw new Error('Unexpected PTY queue overflow');
+      },
+    );
+
+    harness.emitData('output');
+    await harness.state.processingChain;
+
+    expect(harness.state.error?.message).toBe('render failed');
+    expect(harness.state.isWriting).toBe(false);
+    expect(harness.state.pendingQueueItems).toBe(0);
+    expect(harness.state.pendingQueueBytes).toBe(0);
   });
 
   it('fails fast when tiny chunks exceed the hard item bound', async () => {

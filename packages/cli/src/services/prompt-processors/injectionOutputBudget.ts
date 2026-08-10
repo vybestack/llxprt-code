@@ -163,6 +163,7 @@ export class StreamingInjectionBuilder {
         if (hasTail) {
           // Boundary output: its remainder survived in the tail. Emit the
           // notice between the retained head and tail of this one output.
+          enteredTail = true;
           emitNotice();
           parts.push(out.tailText);
         }

@@ -331,22 +331,46 @@ export class AgenticEventQueue {
       };
     }
 
-    this.omittedOutputBytes.clear();
-    this.aggregateOmission = null;
-    for (const notice of notices) {
-      this.enqueueOmissionNotice(
+    const preparedNotices = notices.map((notice) =>
+      this.prepareOmissionNotice(
         notice.callId,
         notice.omittedBytes,
         notice.aggregatesCalls,
+      ),
+    );
+    const preparedBytes = preparedNotices.reduce(
+      (total, notice) => total + notice.chunkBytes,
+      0,
+    );
+    if (
+      this.bufferedEventCount + preparedNotices.length >
+        this.maxBufferedEvents ||
+      this.bufferedOutputBytes + preparedBytes > this.maxBufferedOutputBytes
+    ) {
+      throw new Error(
+        'Agentic output omission notices exceeded their reservation',
       );
+    }
+
+    // Preparation and capacity checks above are the only failure points. Clear
+    // accounting before the now-infallible enqueue loop so an internal enqueue
+    // regression cannot cause the same omission to be reported twice.
+    this.omittedOutputBytes.clear();
+    this.aggregateOmission = null;
+    for (const notice of preparedNotices) {
+      this.enqueue(notice.event);
+      this.bufferedOutputBytes += notice.chunkBytes;
     }
   }
 
-  private enqueueOmissionNotice(
+  private prepareOmissionNotice(
     callId: string,
     omittedBytes: number,
     aggregatesCalls: boolean,
-  ): void {
+  ): {
+    event: Extract<AgenticLoopEvent, { kind: 'tool_output' }>;
+    chunkBytes: number;
+  } {
     const scope = aggregatesCalls ? ' across additional tool calls' : '';
     const chunk = `[${LIVE_OUTPUT_OMISSION_NOTICE}: ${omittedBytes.toLocaleString('en-US')} bytes${scope}]`;
     const chunkBytes = Buffer.byteLength(chunk, 'utf8');
@@ -355,8 +379,7 @@ export class AgenticEventQueue {
         'Agentic output omission notice exceeded its reservation',
       );
     }
-    this.enqueue({ kind: 'tool_output', callId, chunk });
-    this.bufferedOutputBytes += chunkBytes;
+    return { event: { kind: 'tool_output', callId, chunk }, chunkBytes };
   }
 
   private enqueue(event: AgenticLoopEvent): void {

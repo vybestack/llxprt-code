@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ByteBudget } from './types.js';
+import { createBrandedByteBudget, type ByteBudget } from './types.js';
 
 /**
  * Default immutable hard ceiling for one acquisition collector.
@@ -71,8 +71,7 @@ export function createByteBudget(
     effectiveHardMax,
   );
 
-  const budget: ByteBudget = { bytes: clamped } as ByteBudget;
-  return Object.freeze(budget);
+  return Object.freeze(createBrandedByteBudget(clamped));
 }
 
 /** Create a default {@link ByteBudget}. */

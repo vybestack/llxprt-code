@@ -246,7 +246,7 @@ describe('StreamingInjectionBuilder - bounded retained state (issue #3200 findin
     expect(result).not.toContain('\uFFFD');
   });
 
-  it('resolves the budget from the configured acquisition setting', () => {
+  it('honors the validated acquisition budget supplied by the caller', () => {
     // The builder accepts any validated ByteBudget; production code resolves it
     // from config via resolveByteBudgetFromSetting. Verify a configured budget
     // is honored exactly.

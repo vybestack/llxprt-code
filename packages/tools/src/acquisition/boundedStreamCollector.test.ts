@@ -455,17 +455,18 @@ describe('BoundedStreamCollector - no replacement chars at omission boundary', (
     expect(result.text).not.toContain('\uFFFD');
   });
 
-  it('preserves complete multibyte chars that fit entirely in head or tail', () => {
-    const budget = createByteBudget(100);
+  it('preserves complete multibyte characters in truncated head and tail', () => {
+    const budget = createByteBudget(1024);
     const collector = new BoundedStreamCollector({ budget });
 
-    // Small output that fits entirely - no truncation.
-    collector.append(Buffer.from('hello world', 'utf-8'));
+    collector.append(Buffer.from('世'.repeat(500), 'utf-8'));
 
     const result = collector.getResult();
-    expect(result.metadata.truncated).toBe(false);
-    expect(result.text).toBe('hello world');
-    expect(result.text).not.toContain('\uFFFD');
+    expect(result.metadata.truncated).toBe(true);
+    expect(result.headText.length).toBeGreaterThan(0);
+    expect(result.tailText.length).toBeGreaterThan(0);
+    expect(result.headText).not.toContain('\uFFFD');
+    expect(result.tailText).not.toContain('\uFFFD');
   });
 
   it('preserves complete multibyte chars in non-truncated output', () => {

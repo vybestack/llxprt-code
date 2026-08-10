@@ -49,7 +49,7 @@ export function completeUtf8SuffixStart(buffer: Buffer): number {
   return start;
 }
 
-/** Returns a copied prefix that does not end in an incomplete UTF-8 sequence. */
+/** Returns a complete prefix, copying only when an incomplete suffix is trimmed. */
 export function trimIncompleteTrailingUtf8(buffer: Buffer): Buffer {
   const length = completeUtf8PrefixLength(buffer);
   return length === buffer.length
@@ -57,7 +57,7 @@ export function trimIncompleteTrailingUtf8(buffer: Buffer): Buffer {
     : Buffer.from(buffer.subarray(0, length));
 }
 
-/** Returns a copied suffix that does not start inside a UTF-8 sequence. */
+/** Returns a complete suffix, copying only when an incomplete prefix is skipped. */
 export function skipIncompleteLeadingUtf8(buffer: Buffer): Buffer {
   const start = completeUtf8SuffixStart(buffer);
   return start === 0 ? buffer : Buffer.from(buffer.subarray(start));

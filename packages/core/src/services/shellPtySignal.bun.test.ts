@@ -46,6 +46,7 @@ await mock.module('../utils/getPty.js', () => ({
   getPty: async () => ({
     module: { spawn: () => fakePty },
     name: 'mock-pty',
+    supportsBackpressure: true,
   }),
 }));
 
@@ -73,6 +74,23 @@ function buildFakePty(): FakePty {
   pty.emitExit = (exit: FakePtyExit) => exitHandler(exit);
   return pty;
 }
+function waitForResult<T>(result: Promise<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error('Timed out waiting for PTY exit result'));
+    }, 2000);
+    void result.then(
+      (value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timeout);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      },
+    );
+  });
+}
 
 /** Drives the PTY path to completion with the given onExit payload. */
 async function executeAndExit(
@@ -90,7 +108,7 @@ async function executeAndExit(
   // Let the spawn + handler registration settle before firing exit.
   await new Promise((resolve) => setImmediate(resolve));
   fakePty.emitExit(payload);
-  const result = await handle.result;
+  const result = await waitForResult(handle.result);
   return { exitCode: result.exitCode, signal: result.signal };
 }
 

@@ -87,6 +87,7 @@ describe('ShellExecutionService', () => {
     mockGetPty.mockResolvedValue({
       module: { spawn: mockPtySpawn },
       name: 'mock-pty',
+      supportsBackpressure: true,
     });
 
     onOutputEventMock = vi.fn();

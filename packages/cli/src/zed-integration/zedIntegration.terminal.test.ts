@@ -64,6 +64,27 @@ function terminalManager(
   );
 }
 
+function waitForTestSignal(
+  signal: Promise<void>,
+  description: string,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error(`Timed out waiting for ${description}`));
+    }, 2000);
+    void signal.then(
+      () => {
+        clearTimeout(timeout);
+        resolve();
+      },
+      (error: unknown) => {
+        clearTimeout(timeout);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      },
+    );
+  });
+}
+
 function shellToolCallEvent(toolCallId: string, command: string): AgentEvent {
   return {
     type: 'tool-call',
@@ -186,7 +207,7 @@ describe('Zed terminal execution', () => {
     );
 
     await connection.waitForTerminalProcessCreated();
-    await sawOutput;
+    await waitForTestSignal(sawOutput, 'recovered terminal output');
     connection.resolveDelayedTerminalExit();
     const result = await execution;
 
@@ -568,7 +589,7 @@ describe('Zed terminal byte-budget enforcement (issue #3200 finding 4)', () => {
     await connection.waitForTerminalProcessCreated();
     // Wait until the first poll has delivered the big output, then simulate the
     // peer evicting it to a small disjoint tail.
-    await sawBig;
+    await waitForTestSignal(sawBig, 'initial bounded terminal snapshot');
     connection.setTerminalOutput('TAIL_ONLY_ZZZ');
     connection.setTerminalTruncated(true);
     connection.resolveDelayedTerminalExit();
@@ -634,7 +655,13 @@ describe('Zed terminal byte-budget enforcement (issue #3200 finding 4)', () => {
     // always bounded by the configured budget.
     const connection = new RecordingConnection();
     const budget = 4096;
-    connection.setTerminalOutput('B'.repeat(budget));
+    const multibyteUnit = '世';
+    const unitBytes = Buffer.byteLength(multibyteUnit, 'utf8');
+    const output =
+      multibyteUnit.repeat(Math.floor(budget / unitBytes)) +
+      'B'.repeat(budget % unitBytes);
+    expect(Buffer.byteLength(output, 'utf8')).toBe(budget);
+    connection.setTerminalOutput(output);
     const terminals = terminalManager(connection, undefined, budget);
 
     const result = await terminals.executeShellCommand(
