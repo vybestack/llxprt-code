@@ -93,6 +93,14 @@ Prevent tools from flooding the context. Applied to all tools via the batch sche
 
 Built-in visual-model aliases provide conservative advisory defaults: Claude Opus/Sonnet use `1568`/`1568`/`1229312`; OpenAI `gpt-*` uses `2048`/`2048`/`1572864`; Kimi uses `4096`/`2160`/`8847360` (long edge/short edge/pixels). These are useful-resolution targets, not universal provider hard limits. Explicit profile values take precedence over model defaults. When no limit is configured, image reads retain legacy byte-for-byte behavior. Setting `image-resize.enabled false` disables all automatic limits for the profile. For one `read_file` call, pass `skip_image_resize: true` to return the original image; `read_many_files` has no per-call opt-out.
 
+## Shell Output Acquisition
+
+| Setting                            | Type   | Default   | Profile | Description                                                                                                                                                                   |
+| ---------------------------------- | ------ | --------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `shell-output-retention-max-bytes` | number | `4194304` | yes     | Maximum shell-output bytes retained during command execution. Excess output keeps draining but is retained as bounded head/tail data. `-1` selects the finite 64 MiB ceiling. |
+
+This acquisition-time byte bound protects process memory before model-facing token truncation runs. Values below 1024 bytes are raised to 1024, and values above 64 MiB are clamped to the hard ceiling.
+
 ## Timeouts
 
 Prevent commands and tasks from hanging indefinitely. In seconds (not milliseconds, despite older docs).

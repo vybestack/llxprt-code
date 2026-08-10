@@ -66,6 +66,11 @@
       "bun": "./src/utils/timeoutResolution.ts",
       "import": "./dist/src/utils/timeoutResolution.js"
     },
+    "./acquisition.js": {
+      "types": "./dist/src/acquisition/index.d.ts",
+      "bun": "./src/acquisition/index.ts",
+      "import": "./dist/src/acquisition/index.js"
+    },
     "./textDelta.js": {
       "types": "./dist/src/utils/textDelta.d.ts",
       "bun": "./src/utils/textDelta.ts",

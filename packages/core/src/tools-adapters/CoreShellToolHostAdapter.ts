@@ -165,6 +165,7 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
       error: result.error,
       aborted: result.aborted,
       pid: result.pid,
+      outputTruncation: result.outputTruncation,
     };
   }
 

@@ -49,6 +49,7 @@ import {
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { AgenticLoopEvent, AgenticLoopOptions } from './types.js';
+import { AgenticEventQueue } from './agenticEventQueue.js';
 import {
   buildToolResponses,
   classifyCompletedTools,
@@ -85,64 +86,6 @@ function isTerminalStreamOutcome(type: AgentEventType): boolean {
   );
 }
 
-/**
- * A callback-to-generator bridge: scheduler callbacks push events into this
- * queue and `run` drains them. Resolves the tension between callback-driven
- * scheduler events and the generator-based loop body.
- */
-class EventQueue {
-  private readonly buffered: AgenticLoopEvent[] = [];
-  private resolveWait: (() => void) | null = null;
-  private closed = false;
-
-  push(event: AgenticLoopEvent): void {
-    if (this.closed) {
-      return;
-    }
-    this.buffered.push(event);
-    this.resolveWait?.();
-    this.resolveWait = null;
-  }
-
-  popBuffered(): AgenticLoopEvent | undefined {
-    return this.buffered.shift();
-  }
-
-  waitForNext(signal: AbortSignal): Promise<void> {
-    if (this.buffered.length > 0 || this.closed || signal.aborted) {
-      return Promise.resolve();
-    }
-    return new Promise<void>((resolve) => {
-      let settled = false;
-      const settle = () => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        signal.removeEventListener('abort', onAbort);
-        this.resolveWait = null;
-        resolve();
-      };
-      const onAbort = () => {
-        settle();
-      };
-      this.resolveWait = () => {
-        settle();
-      };
-      signal.addEventListener('abort', onAbort, { once: true });
-      if (signal.aborted) {
-        settle();
-      }
-    });
-  }
-
-  close(): void {
-    this.closed = true;
-    this.resolveWait?.();
-    this.resolveWait = null;
-  }
-}
-
 /** A mutable holder so promise callbacks can communicate state to the loop. */
 interface TurnState {
   completionSettled: boolean;
@@ -171,18 +114,26 @@ interface TurnRunResult {
  */
 function createCompletionController(): {
   resolveCompletion: (calls: CompletedToolCall[]) => void;
+  rejectCompletion: (error: unknown) => void;
   completionPromise: Promise<CompletedToolCall[]>;
 } {
   let resolver: ((calls: CompletedToolCall[]) => void) | null = null;
-  let resolved = false;
+  let rejecter: ((error: unknown) => void) | null = null;
+  let settled = false;
   return {
     resolveCompletion(calls: CompletedToolCall[]) {
-      if (resolved) return;
-      resolved = true;
+      if (settled) return;
+      settled = true;
       resolver?.(calls);
     },
-    completionPromise: new Promise<CompletedToolCall[]>((resolve) => {
+    rejectCompletion(error: unknown) {
+      if (settled) return;
+      settled = true;
+      rejecter?.(error);
+    },
+    completionPromise: new Promise<CompletedToolCall[]>((resolve, reject) => {
       resolver = resolve;
+      rejecter = reject;
     }),
   };
 }
@@ -557,10 +508,10 @@ export class AgenticLoop {
     requests: ToolCallRequestInfo[],
     signal: AbortSignal,
   ): AsyncGenerator<AgenticLoopEvent, TurnToolResult> {
-    const queue = new EventQueue();
+    const queue = new AgenticEventQueue();
     const sessionId = this.schedulerSessionId;
 
-    const { resolveCompletion, completionPromise } =
+    const { resolveCompletion, rejectCompletion, completionPromise } =
       createCompletionController();
 
     let acceptedToolUpdateSeen = false;
@@ -570,6 +521,7 @@ export class AgenticLoop {
       sessionId,
       queue,
       resolveCompletion,
+      rejectCompletion,
       forwardingState,
       () => {
         acceptedToolUpdateSeen = true;
@@ -617,6 +569,10 @@ export class AgenticLoop {
       }
 
       const completed = await Promise.race([completionTask, abortPromise]);
+      if (completed !== null && !signal.aborted) {
+        queue.flushOutputOmissionNotices();
+        yield* flushBuffered(queue);
+      }
       normalExit = completed !== null && !signal.aborted;
       return { completed };
     } finally {
@@ -648,12 +604,29 @@ export class AgenticLoop {
 
   private async createSchedulerWithCallbacks(
     sessionId: string,
-    queue: EventQueue,
+    queue: AgenticEventQueue,
     resolveCompletion: (calls: CompletedToolCall[]) => void,
+    rejectCompletion: (error: unknown) => void,
     forwardingState: { active: boolean },
     markAcceptedUpdate: () => void,
   ): Promise<ToolSchedulerContract> {
     const display = this.displayCallbacks;
+    const pushQueueEvent = (event: AgenticLoopEvent): boolean => {
+      try {
+        queue.push(event);
+        return true;
+      } catch (error) {
+        forwardingState.active = false;
+        logger.debug(
+          () =>
+            `agentic event queue rejected a scheduler event: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+        );
+        rejectCompletion(error);
+        return false;
+      }
+    };
 
     return this.config.getOrCreateScheduler(
       sessionId,
@@ -662,8 +635,15 @@ export class AgenticLoop {
           if (!forwardingState.active) {
             return;
           }
-          if (update.mode === 'append') {
-            queue.push({ kind: 'tool_output', callId, chunk: update.data });
+          if (
+            update.mode === 'append' &&
+            !pushQueueEvent({
+              kind: 'tool_output',
+              callId,
+              chunk: update.data,
+            })
+          ) {
+            return;
           }
           display?.outputUpdateHandler?.(callId, update);
         },
@@ -674,18 +654,26 @@ export class AgenticLoop {
           if (toolCalls.length > 0) {
             markAcceptedUpdate();
           }
-          queue.push({ kind: 'tool_update', toolCalls });
-          if (toolCalls.some((tc) => tc.status === 'awaiting_approval')) {
-            queue.push({ kind: 'awaiting_approval', toolCalls });
+          if (!pushQueueEvent({ kind: 'tool_update', toolCalls })) {
+            return;
+          }
+          if (
+            toolCalls.some((tc) => tc.status === 'awaiting_approval') &&
+            !pushQueueEvent({ kind: 'awaiting_approval', toolCalls })
+          ) {
+            return;
           }
           display?.onToolCallsUpdate?.(toolCalls);
         },
         onAllToolCallsComplete: async (completed) => {
-          if (forwardingState.active) {
-            queue.push({ kind: 'tool_update', toolCalls: [] });
-            display?.onToolCallsUpdate?.([]);
+          try {
+            if (forwardingState.active) {
+              pushQueueEvent({ kind: 'tool_update', toolCalls: [] });
+              display?.onToolCallsUpdate?.([]);
+            }
+          } finally {
+            resolveCompletion(completed);
           }
-          resolveCompletion(completed);
         },
         getPreferredEditor: display?.getPreferredEditor ?? (() => undefined),
         onEditorOpen: display?.onEditorOpen ?? (() => {}),
@@ -706,7 +694,7 @@ export class AgenticLoop {
   private async *drainWhileRunning(
     completionTask: Promise<CompletedToolCall[] | null>,
     state: TurnState,
-    queue: EventQueue,
+    queue: AgenticEventQueue,
     signal: AbortSignal,
   ): AsyncGenerator<AgenticLoopEvent> {
     while (!state.completionSettled && !signal.aborted) {
@@ -756,7 +744,7 @@ export class AgenticLoop {
 }
 
 /** Yields all currently-buffered events without blocking. */
-function* flushBuffered(queue: EventQueue): Generator<AgenticLoopEvent> {
+function* flushBuffered(queue: AgenticEventQueue): Generator<AgenticLoopEvent> {
   let event = queue.popBuffered();
   while (event !== undefined) {
     yield event;

@@ -28,6 +28,7 @@ export interface PtyModule {
 export type PtyImplementation = {
   module: PtyModule;
   name: PtyExecutionMethod;
+  supportsBackpressure: boolean;
 } | null;
 
 /**
@@ -55,11 +56,11 @@ export async function loadNodePty(
 ): Promise<PtyImplementation> {
   try {
     const module = await loaders.loadPrimary();
-    return { module, name: 'lydell-node-pty' };
+    return { module, name: 'lydell-node-pty', supportsBackpressure: true };
   } catch {
     try {
       const module = await loaders.loadFallback();
-      return { module, name: 'node-pty' };
+      return { module, name: 'node-pty', supportsBackpressure: true };
     } catch {
       return null;
     }
@@ -83,6 +84,7 @@ export const getPty = async (
         spawn: (file, args, options) => createBunPty(file, args, options),
       },
       name: 'bun-pty',
+      supportsBackpressure: false,
     };
   }
 

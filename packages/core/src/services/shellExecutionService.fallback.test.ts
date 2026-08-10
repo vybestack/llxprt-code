@@ -18,7 +18,10 @@ import {
 import EventEmitter from 'events';
 import type { Readable } from 'stream';
 import { type ChildProcess } from 'child_process';
-import type { ShellOutputEvent } from './shellExecutionService.js';
+import type {
+  ShellExecutionConfig,
+  ShellOutputEvent,
+} from './shellExecutionService.js';
 import { ShellExecutionService } from './shellExecutionService.js';
 
 // Hoisted Mocks
@@ -107,7 +110,7 @@ describe('ShellExecutionService child_process fallback', () => {
   });
 
   // Default shell execution config for tests
-  const defaultShellConfig = {
+  const defaultShellConfig: ShellExecutionConfig = {
     showColor: false,
     scrollback: 600000,
     terminalWidth: 80,
@@ -119,6 +122,7 @@ describe('ShellExecutionService child_process fallback', () => {
     command: string,
     simulation: (cp: typeof mockChildProcess, ac: AbortController) => void,
     shouldUseNodePty = true,
+    shellConfig = defaultShellConfig,
   ) => {
     const abortController = new AbortController();
     const handle = await ShellExecutionService.execute(
@@ -127,7 +131,7 @@ describe('ShellExecutionService child_process fallback', () => {
       onOutputEventMock,
       abortController.signal,
       shouldUseNodePty,
-      defaultShellConfig,
+      shellConfig,
     );
 
     await new Promise((resolve) => setImmediate(resolve));
@@ -202,6 +206,19 @@ describe('ShellExecutionService child_process fallback', () => {
       expect(result.output).toBe('你好');
     });
 
+    it('emits decoder flush output for an incomplete final sequence', async () => {
+      const { result } = await simulateExecution('partial-output', (cp) => {
+        cp.stdout?.emit('data', Buffer.from([0xe2, 0x82]));
+        cp.emit('exit', 0, null);
+      });
+
+      expect(result.output).toBe('\uFFFD');
+      expect(onOutputEventMock).toHaveBeenCalledWith({
+        type: 'data',
+        chunk: '\uFFFD',
+      });
+    });
+
     it('should handle commands with no output', async () => {
       const { result } = await simulateExecution('touch file', (cp) => {
         cp.emit('exit', 0, null);
@@ -211,35 +228,35 @@ describe('ShellExecutionService child_process fallback', () => {
       expect(onOutputEventMock).not.toHaveBeenCalled();
     });
 
-    it('should truncate stdout using a sliding window and show a warning', async () => {
-      const MAX_SIZE = 16 * 1024 * 1024;
-      const chunk1 = 'a'.repeat(MAX_SIZE / 2 - 5);
-      const chunk2 = 'b'.repeat(MAX_SIZE / 2 - 5);
-      const chunk3 = 'c'.repeat(20);
+    it('bounds retained stdout with one accurate omission notice', async () => {
+      const retentionBytes = 1024;
+      const firstChunk = 'a'.repeat(retentionBytes);
+      const finalMarker = 'FINAL_MARKER';
 
-      const { result } = await simulateExecution('large-output', (cp) => {
-        cp.stdout?.emit('data', Buffer.from(chunk1));
-        cp.stdout?.emit('data', Buffer.from(chunk2));
-        cp.stdout?.emit('data', Buffer.from(chunk3));
-        cp.emit('exit', 0, null);
+      const { result } = await simulateExecution(
+        'large-output',
+        (cp) => {
+          cp.stdout?.emit('data', Buffer.from(firstChunk));
+          cp.stdout?.emit('data', Buffer.from('b'.repeat(retentionBytes)));
+          cp.stdout?.emit('data', Buffer.from(finalMarker));
+          cp.emit('exit', 0, null);
+        },
+        true,
+        { ...defaultShellConfig, outputRetentionMaxBytes: retentionBytes },
+      );
+
+      expect(result.rawOutput.length).toBeLessThanOrEqual(retentionBytes);
+      expect(result.output.startsWith('a'.repeat(20))).toBe(true);
+      expect(result.output.endsWith(finalMarker)).toBe(true);
+      expect(result.output.match(/LLXPRT output truncated/g)).toHaveLength(1);
+      expect(result.outputTruncation).toEqual({
+        observedBytes: retentionBytes * 2 + finalMarker.length,
+        retainedBytes: retentionBytes,
+        omittedBytes: retentionBytes + finalMarker.length,
+        truncated: true,
+        budgetBytes: retentionBytes,
       });
-
-      const truncationMessage =
-        '[LLXPRT_CODE_WARNING: Output truncated. The buffer is limited to 16MB.]';
-      expect(result.output).toContain(truncationMessage);
-
-      const outputWithoutMessage = result.output
-        .substring(0, result.output.indexOf(truncationMessage))
-        .trimEnd();
-
-      expect(outputWithoutMessage.length).toBe(MAX_SIZE);
-
-      const expectedStart = (chunk1 + chunk2 + chunk3).slice(-MAX_SIZE);
-      expect(
-        outputWithoutMessage.startsWith(expectedStart.substring(0, 10)),
-      ).toBe(true);
-      expect(outputWithoutMessage.endsWith('c'.repeat(20))).toBe(true);
-    }, 20000);
+    });
   });
 
   describe('Failed Execution', () => {
@@ -464,6 +481,45 @@ describe('ShellExecutionService child_process fallback', () => {
           windowsHide: true,
         }),
       );
+    });
+
+    it('decodes PowerShell CLIXML stderr on Windows', async () => {
+      mockPlatform.mockReturnValue('win32');
+      stubProcessPlatform('win32');
+      const clixml =
+        '#< CLIXML\r\n<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04"><S S="Error">kaboom_x000D__x000A_</S></Objs>';
+
+      const { result } = await simulateExecution('Write-Error kaboom', (cp) => {
+        cp.stderr?.emit('data', Buffer.from(clixml));
+        cp.emit('exit', 1, null);
+      });
+
+      expect(result.output).toBe('kaboom');
+      expect(result.output).not.toContain('#< CLIXML');
+    });
+
+    it('decodes retained CLIXML and reports truncation once', async () => {
+      mockPlatform.mockReturnValue('win32');
+      stubProcessPlatform('win32');
+      const clixml =
+        '#< CLIXML\r\n<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04"><S S="Error">kaboom_x000D__x000A_</S></Objs>';
+
+      const { result } = await simulateExecution(
+        'Write-Error kaboom',
+        (cp) => {
+          cp.stdout?.emit('data', Buffer.from('x'.repeat(1600)));
+          cp.stderr?.emit('data', Buffer.from(clixml));
+          cp.emit('exit', 1, null);
+        },
+        true,
+        { ...defaultShellConfig, outputRetentionMaxBytes: 1024 },
+      );
+
+      expect(result.output).toContain('kaboom');
+      expect(result.output).not.toContain('#< CLIXML');
+      expect(result.output.match(/LLXPRT output truncated/g)).toHaveLength(1);
+      expect(result.outputTruncation?.truncated).toBe(true);
+      expect(result.outputTruncation?.retainedBytes).toBe(1024);
     });
 
     it('should use bash and detached process group on Linux', async () => {

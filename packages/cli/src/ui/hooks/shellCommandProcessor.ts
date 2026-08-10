@@ -22,6 +22,11 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { Agent } from '@vybestack/llxprt-code-agents';
+import {
+  BoundedStreamCollector,
+  createByteBudget,
+  resolveByteBudgetFromSetting,
+} from '@vybestack/llxprt-code-tools/acquisition.js';
 import { type UseHistoryManagerReturn } from './useHistoryManager.js';
 import { SHELL_COMMAND_NAME } from '../constants.js';
 import { formatMemoryUsage } from '../utils/formatters.js';
@@ -40,6 +45,7 @@ type ShellCommandRuntime = ShellState & SessionIdentity;
 // Throttle interval for PTY output updates to avoid excessive re-renders.
 // Using 100ms provides smooth visual updates without overwhelming React.
 export const OUTPUT_UPDATE_INTERVAL_MS = 100;
+const LIVE_DISPLAY_MAX_BYTES = 512 * 1024;
 const MAX_OUTPUT_LENGTH = 10000;
 
 interface ShellExecutionParams {
@@ -67,6 +73,15 @@ interface ShellExecutionParams {
   terminalWidth: number | undefined;
   terminalHeight: number | undefined;
   resolve: (value: void | PromiseLike<void>) => void;
+}
+
+interface ShellEventState {
+  isBinaryStream: boolean;
+  binaryBytesReceived: number;
+  cumulativeStdout: string | AnsiOutput;
+  liveDisplayCollector: BoundedStreamCollector;
+  lastMaterializedLiveBytes: number;
+  lastUpdateTime: number;
 }
 
 function addShellCommandToAgentHistory(
@@ -188,11 +203,7 @@ function applyResultDisplayUpdate(
 function processShellEvent(
   event: ShellOutputEvent,
   config: ShellCommandRuntime,
-  state: {
-    isBinaryStream: boolean;
-    binaryBytesReceived: number;
-    cumulativeStdout: string | AnsiOutput;
-  },
+  state: ShellEventState,
 ): boolean {
   if (event.type === 'data' && state.isBinaryStream) return false;
 
@@ -202,11 +213,8 @@ function processShellEvent(
       if (config.getShouldUseNodePtyShell()) {
         state.cumulativeStdout = event.chunk;
         shouldUpdate = true;
-      } else if (
-        typeof event.chunk === 'string' &&
-        typeof state.cumulativeStdout === 'string'
-      ) {
-        state.cumulativeStdout += event.chunk;
+      } else if (typeof event.chunk === 'string') {
+        state.liveDisplayCollector.append(Buffer.from(event.chunk, 'utf-8'));
         shouldUpdate = true;
       }
       break;
@@ -236,28 +244,34 @@ function createShellEventHandler(
     React.SetStateAction<HistoryItemWithoutId | null>
   >,
   setLastShellOutputTime: React.Dispatch<React.SetStateAction<number>>,
-  state: {
-    isBinaryStream: boolean;
-    binaryBytesReceived: number;
-    cumulativeStdout: string | AnsiOutput;
-    lastUpdateTime: number;
-  },
+  state: ShellEventState,
 ) {
   return (event: ShellOutputEvent) => {
     const shouldUpdate = processShellEvent(event, config, state);
     if (!shouldUpdate) return;
-
-    const currentDisplayOutput = computeDisplayOutput(
-      state.isBinaryStream,
-      state.binaryBytesReceived,
-      state.cumulativeStdout,
-    );
 
     const pastThrottle =
       Date.now() - state.lastUpdateTime > OUTPUT_UPDATE_INTERVAL_MS;
     const isPtyData =
       event.type === 'data' && config.getShouldUseNodePtyShell();
     if (!isPtyData && !pastThrottle) return;
+
+    if (
+      event.type === 'data' &&
+      !isPtyData &&
+      !state.isBinaryStream &&
+      state.liveDisplayCollector.observedByteCount !==
+        state.lastMaterializedLiveBytes
+    ) {
+      state.cumulativeStdout = state.liveDisplayCollector.getResult().text;
+      state.lastMaterializedLiveBytes =
+        state.liveDisplayCollector.observedByteCount;
+    }
+    const currentDisplayOutput = computeDisplayOutput(
+      state.isBinaryStream,
+      state.binaryBytesReceived,
+      state.cumulativeStdout,
+    );
 
     setLastShellOutputTime(Date.now());
     applyResultDisplayUpdate(
@@ -471,15 +485,21 @@ function handleExecutionResult(
 }
 
 async function initiateShellExecution(params: ShellExecutionParams) {
-  const state: {
-    isBinaryStream: boolean;
-    binaryBytesReceived: number;
-    cumulativeStdout: string | AnsiOutput;
-    lastUpdateTime: number;
-  } = {
+  const shellExecutionConfig = params.config.getShellExecutionConfig();
+  const outputBudget = resolveByteBudgetFromSetting(
+    shellExecutionConfig.outputRetentionMaxBytes,
+  );
+  const liveDisplayBudget = createByteBudget(
+    Math.min(outputBudget.bytes, LIVE_DISPLAY_MAX_BYTES),
+  );
+  const state: ShellEventState = {
     isBinaryStream: false,
     binaryBytesReceived: 0,
     cumulativeStdout: '',
+    liveDisplayCollector: new BoundedStreamCollector({
+      budget: liveDisplayBudget,
+    }),
+    lastMaterializedLiveBytes: 0,
     lastUpdateTime: -Infinity,
   };
 
@@ -504,7 +524,7 @@ async function initiateShellExecution(params: ShellExecutionParams) {
     params.abortSignal,
     params.config.getShouldUseNodePtyShell(),
     {
-      ...params.config.getShellExecutionConfig(),
+      ...shellExecutionConfig,
       terminalWidth: effectiveTerminalWidth,
       terminalHeight: effectiveTerminalHeight,
     },

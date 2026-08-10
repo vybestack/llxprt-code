@@ -135,6 +135,18 @@ describe('Config - Ephemeral Settings', () => {
     });
   });
 
+  describe('shell acquisition setting', () => {
+    it('preserves an absent retention limit for downstream default resolution', () => {
+      expect(
+        config.getShellExecutionConfig().outputRetentionMaxBytes,
+      ).toBeUndefined();
+
+      config.setEphemeralSetting('shell-output-retention-max-bytes', -1);
+
+      expect(config.getShellExecutionConfig().outputRetentionMaxBytes).toBe(-1);
+    });
+  });
+
   describe('ephemeral settings persistence', () => {
     it('should persist ephemeral setting values across get/set operations', () => {
       // Given multiple ephemeral settings

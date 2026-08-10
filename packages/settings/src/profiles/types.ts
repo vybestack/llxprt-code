@@ -104,6 +104,7 @@ export interface EphemeralSettings {
   'shell-default-timeout-seconds'?: number;
   'shell-max-timeout-seconds'?: number;
   'shell-inactivity-timeout-seconds'?: number;
+  'shell-output-retention-max-bytes'?: number;
   tpm_threshold?: number;
   timeout_ms?: number;
   circuit_breaker_enabled?: boolean;

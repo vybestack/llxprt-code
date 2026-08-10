@@ -25,6 +25,8 @@ import {
   SHELL_INJECTION_TRIGGER,
   SHORTHAND_ARGS_PLACEHOLDER,
 } from './types.js';
+import { StreamingInjectionBuilder } from './injectionOutputBudget.js';
+import { resolveByteBudgetFromSetting } from '@vybestack/llxprt-code-tools/acquisition.js';
 
 type ShellProcessorRuntime = ShellPermissionConfig &
   ApprovalState &
@@ -167,18 +169,28 @@ export class ShellProcessor implements IPromptProcessor {
     config: ShellProcessorRuntime,
     userArgsRaw: string,
   ): Promise<string> {
-    let processedPrompt = '';
+    // Resolve the aggregate injection-output budget from the configured shell
+    // acquisition setting so prompt injection is bounded by the same finite
+    // policy as direct shell execution (issue #3200 finding 2). The streaming
+    // builder retains at most one global output budget across all injections
+    // and never holds all command outputs simultaneously.
+    const builder = new StreamingInjectionBuilder(
+      resolveByteBudgetFromSetting(
+        config.getShellExecutionConfig().outputRetentionMaxBytes,
+      ),
+    );
     let lastIndex = 0;
 
     for (const injection of resolvedInjections) {
-      // Append the text segment BEFORE the injection, substituting {{args}} with RAW input.
+      // Literal text BEFORE this injection, substituting {{args}} with RAW input.
       const segment = prompt.substring(lastIndex, injection.startIndex);
-      processedPrompt += segment.replaceAll(
-        SHORTHAND_ARGS_PLACEHOLDER,
-        userArgsRaw,
+      builder.appendLiteral(
+        segment.replaceAll(SHORTHAND_ARGS_PLACEHOLDER, userArgsRaw),
       );
 
-      // Execute the resolved command (which already has ESCAPED input).
+      // Execute the resolved command (which already has ESCAPED input) so side
+      // effects always run, then feed the output to the streaming builder so
+      // the full output is reduced to a bounded head/tail immediately.
       if (injection.resolvedCommand) {
         const { result } = await ShellExecutionService.execute(
           injection.resolvedCommand,
@@ -198,33 +210,35 @@ export class ShellProcessor implements IPromptProcessor {
           );
         }
 
-        // Append the output, making stderr explicit for the model.
-        processedPrompt += executionResult.output;
-
-        // Append a status message if the command did not succeed.
+        // Build the status suffix preserving exit/signal/abort semantics.
+        let statusSuffix = '';
         if (executionResult.aborted) {
-          processedPrompt += `\n[Shell command '${injection.resolvedCommand}' aborted]`;
+          statusSuffix = `\n[Shell command '${injection.resolvedCommand}' aborted]`;
         } else if (
           executionResult.exitCode !== 0 &&
           executionResult.exitCode !== null
         ) {
-          processedPrompt += `\n[Shell command '${injection.resolvedCommand}' exited with code ${executionResult.exitCode}]`;
+          statusSuffix = `\n[Shell command '${injection.resolvedCommand}' exited with code ${executionResult.exitCode}]`;
         } else if (executionResult.signal !== null) {
-          processedPrompt += `\n[Shell command '${injection.resolvedCommand}' terminated by signal ${executionResult.signal}]`;
+          statusSuffix = `\n[Shell command '${injection.resolvedCommand}' terminated by signal ${executionResult.signal}]`;
         }
+
+        builder.appendOutput(executionResult.output, statusSuffix);
       }
 
       lastIndex = injection.endIndex;
     }
 
-    // Append the remaining text AFTER the last injection, substituting {{args}} with RAW input.
+    // Remaining literal text AFTER the last injection.
     const finalSegment = prompt.substring(lastIndex);
-    processedPrompt += finalSegment.replaceAll(
-      SHORTHAND_ARGS_PLACEHOLDER,
-      userArgsRaw,
+    builder.appendLiteral(
+      finalSegment.replaceAll(SHORTHAND_ARGS_PLACEHOLDER, userArgsRaw),
     );
 
-    return processedPrompt;
+    // Build the final prompt with bounded aggregate output: every command has
+    // already executed for side effects, the aggregate output bytes are bounded
+    // with one accurate omission notice, and each status appears exactly once.
+    return builder.build();
   }
 
   /**

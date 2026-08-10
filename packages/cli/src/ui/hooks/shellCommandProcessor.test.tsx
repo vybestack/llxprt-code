@@ -379,6 +379,95 @@ describe('useShellCommandProcessor', () => {
       );
     });
 
+    it('bounds direct-shell live output while preserving its head and tail', async () => {
+      mockConfig.getShellExecutionConfig = () => ({
+        showColor: false,
+        scrollback: 600000,
+        terminalWidth: 80,
+        terminalHeight: 24,
+        outputRetentionMaxBytes: 1024,
+      });
+      const { result } = renderProcessorHook();
+      await act(async () => {
+        result.current.handleShellCommand(
+          'stream',
+          new AbortController().signal,
+        );
+        await Promise.resolve();
+        await advanceTimersByTimeAsync(1);
+      });
+
+      act(() => {
+        mockShellOutputCallback({ type: 'data', chunk: 'H'.repeat(800) });
+      });
+      await act(async () => {
+        await advanceTimersByTimeAsync(OUTPUT_UPDATE_INTERVAL_MS + 1);
+      });
+      act(() => {
+        mockShellOutputCallback({ type: 'data', chunk: 'T'.repeat(800) });
+      });
+
+      const display =
+        pendingHistoryItemState?.type === 'tool_group'
+          ? pendingHistoryItemState.tools[0].resultDisplay
+          : undefined;
+      expect(typeof display).toBe('string');
+      expect(display).toStartWith('H'.repeat(512));
+      expect(
+        typeof display === 'string'
+          ? display.match(/LLXPRT output truncated/g)
+          : [],
+      ).toHaveLength(1);
+      expect(display).toContain('576 bytes omitted');
+      expect(display).toEndWith('T'.repeat(512));
+    });
+
+    it('caps live display below a larger shell retention budget', async () => {
+      mockConfig.getShellExecutionConfig = () => ({
+        showColor: false,
+        scrollback: 600000,
+        terminalWidth: 80,
+        terminalHeight: 24,
+        outputRetentionMaxBytes: 4 * 1024 * 1024,
+      });
+      const { result } = renderProcessorHook();
+      await act(async () => {
+        result.current.handleShellCommand(
+          'stream',
+          new AbortController().signal,
+        );
+        await Promise.resolve();
+        await advanceTimersByTimeAsync(1);
+      });
+
+      act(() => {
+        mockShellOutputCallback({ type: 'data', chunk: 'H'.repeat(300_000) });
+      });
+      await act(async () => {
+        await advanceTimersByTimeAsync(OUTPUT_UPDATE_INTERVAL_MS + 1);
+      });
+      act(() => {
+        mockShellOutputCallback({ type: 'data', chunk: 'T'.repeat(300_000) });
+      });
+
+      const display =
+        pendingHistoryItemState?.type === 'tool_group'
+          ? pendingHistoryItemState.tools[0].resultDisplay
+          : undefined;
+      expect(typeof display).toBe('string');
+      expect(display).toStartWith('H'.repeat(256 * 1024));
+      expect(mockShellExecutionService).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(String),
+        expect.any(Function),
+        expect.any(Object),
+        false,
+        expect.objectContaining({ outputRetentionMaxBytes: 4 * 1024 * 1024 }),
+      );
+      expect(display).toContain('75,712 bytes omitted');
+      expect(display).toEndWith('T'.repeat(256 * 1024));
+    });
+
     it('should show binary progress messages correctly', async () => {
       const { result } = renderProcessorHook();
       await act(async () => {

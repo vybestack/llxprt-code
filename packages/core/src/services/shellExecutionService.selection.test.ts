@@ -417,6 +417,7 @@ describe('ShellExecutionService execution method selection', () => {
     mockGetPty.mockResolvedValue({
       module: { spawn: mockPtySpawn },
       name: 'mock-pty',
+      supportsBackpressure: true,
     });
 
     // Mock for child_process
@@ -545,6 +546,7 @@ describe('ShellExecutionService environment sanitization wiring', () => {
     mockGetPty.mockResolvedValue({
       module: { spawn: mockPtySpawn },
       name: 'mock-pty',
+      supportsBackpressure: true,
     });
 
     // Mock for child_process

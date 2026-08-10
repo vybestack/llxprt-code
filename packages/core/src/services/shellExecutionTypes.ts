@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { TruncationMetadata } from '@vybestack/llxprt-code-tools/acquisition.js';
 import type { AnsiOutput } from '../utils/terminalSerializer.js';
 import type { EnvironmentSanitizationConfig } from './environmentSanitization.js';
 
@@ -15,6 +16,8 @@ export interface ShellExecutionResult {
   rawOutput: Buffer;
   /** The combined, decoded output as a string. */
   output: string;
+  /** Acquisition-time truncation details when output exceeded retention. */
+  outputTruncation?: TruncationMetadata;
   /** The process exit code, or null if terminated by a signal. */
   exitCode: number | null;
   /** The signal that terminated the process, if any. */
@@ -49,6 +52,13 @@ export interface ShellExecutionConfig {
   inactivityTimeoutMs?: number;
   isSandboxOrCI?: boolean;
   sanitizationConfig?: EnvironmentSanitizationConfig;
+  /**
+   * Maximum bytes of output retained during acquisition (child_process and
+   * PTY paths). Must be a finite positive number. When unset, callers should
+   * apply the shared finite default acquisition policy. Separate from
+   * model-facing token limits.
+   */
+  outputRetentionMaxBytes?: number;
 }
 
 export type ShellOutputEvent =

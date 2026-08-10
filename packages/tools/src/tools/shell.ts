@@ -454,6 +454,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
         llmPayload,
         displayWithFilter,
         executionError,
+        result.outputTruncation,
       );
 
       // Append the durable clamp notice AFTER summarization and token
@@ -470,18 +471,23 @@ export class ShellToolInvocation extends BaseToolInvocation<
     executionError:
       | { error: { message: string; type: ToolErrorType } }
       | Record<string, never>,
+    outputTruncation: ShellExecutionResult['outputTruncation'],
   ): StringContentToolResult {
     const limitedResult = this.host.limitOutputTokens(llmPayload);
+    const metadata =
+      outputTruncation === undefined ? {} : { metadata: { outputTruncation } };
     if (limitedResult.wasTruncated) {
       return {
         llmContent: `${limitedResult.content}\n\n(output exceeded token limit)`,
         returnDisplay,
+        ...metadata,
         ...executionError,
       };
     }
     return {
       llmContent: limitedResult.content,
       returnDisplay,
+      ...metadata,
       ...executionError,
     };
   }

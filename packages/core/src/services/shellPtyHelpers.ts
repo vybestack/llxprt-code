@@ -115,6 +115,10 @@ export function cleanupPtyEntryByPid(
 export function getFullBufferText(terminal: Terminal): string {
   const buffer = terminal.buffer.active;
   const lines: string[] = [];
+  // Accumulate wrapped-line segments in a temporary array and join once per
+  // logical line, avoiding O(n²) repeated string concatenation for long
+  // wrapped lines (Issue #3200 finding 3).
+  let wrapGroup: string[] = [];
   for (let i = 0; i < buffer.length; i++) {
     const line = buffer.getLine(i);
     if (!line) {
@@ -130,11 +134,17 @@ export function getFullBufferText(terminal: Terminal): string {
 
     const lineContent = line.translateToString(trimRight);
 
-    if (line.isWrapped && lines.length > 0) {
-      lines[lines.length - 1] += lineContent;
+    if (line.isWrapped) {
+      wrapGroup.push(lineContent);
     } else {
-      lines.push(lineContent);
+      if (wrapGroup.length > 0) {
+        lines.push(wrapGroup.join(''));
+      }
+      wrapGroup = [lineContent];
     }
+  }
+  if (wrapGroup.length > 0) {
+    lines.push(wrapGroup.join(''));
   }
 
   while (lines.length > 0 && lines[lines.length - 1] === '') {

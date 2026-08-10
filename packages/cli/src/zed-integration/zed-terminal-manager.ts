@@ -16,9 +16,17 @@ import type {
   ShellExecutionResult,
   ShellOutputEvent,
 } from '@vybestack/llxprt-code-tools';
+import type {
+  ByteBudget,
+  TruncationMetadata,
+} from '@vybestack/llxprt-code-tools/acquisition.js';
+import {
+  computeBoundedDelta,
+  boundSnapshotBytes,
+  TERMINAL_DISCONTINUITY_NOTICE,
+} from './terminalOutputDelta.js';
 
 const OUTPUT_POLL_INTERVAL_MS = 100;
-const APPROXIMATE_BYTES_PER_TOKEN = 4;
 const KILL_GRACE_PERIOD_MS = 5000;
 
 type SendUpdateFn = (update: acp.SessionUpdate) => Promise<void>;
@@ -36,6 +44,23 @@ interface ActiveTerminal {
   toolCallId: string | undefined;
 }
 
+interface TerminalWaitState {
+  exit: acp.WaitForTerminalExitResponse | undefined;
+  exitError: unknown;
+  previousOutput: string;
+  killed: boolean;
+  killDeadline: number;
+  evictionNoticeEmitted: boolean;
+  maxObservedBytes: number;
+}
+
+function terminalWaitDone(state: TerminalWaitState): boolean {
+  return (
+    state.exit !== undefined ||
+    state.exitError !== undefined ||
+    (state.killed && Date.now() >= state.killDeadline)
+  );
+}
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -50,7 +75,8 @@ export class TerminalManager {
     private readonly targetDir: string,
     private readonly sendUpdate: SendUpdateFn,
     private readonly logger: DebugLogger,
-    private readonly maxOutputTokens?: number,
+    /** Validated byte budget resolved at the ACP integration boundary. */
+    private readonly outputBudget: ByteBudget,
   ) {}
 
   static isShellToolCall(
@@ -121,11 +147,7 @@ export class TerminalManager {
       args: [...shell.argsPrefix, command],
       cwd,
       sessionId: this.sessionId,
-      ...(this.maxOutputTokens === undefined
-        ? {}
-        : {
-            outputByteLimit: this.maxOutputTokens * APPROXIMATE_BYTES_PER_TOKEN,
-          }),
+      outputByteLimit: this.outputBudget.bytes,
     });
     const active: ActiveTerminal = {
       handle,
@@ -189,101 +211,199 @@ export class TerminalManager {
     onOutput: (event: ShellOutputEvent) => void,
     signal: AbortSignal,
   ): Promise<ShellExecutionResult> {
-    let exit: acp.WaitForTerminalExitResponse | undefined;
-    let exitError: unknown;
-    const exitPromise = active.handle
-      .waitForExit()
-      .then((result) => {
-        exit = result;
-      })
-      .catch((error: unknown) => {
-        exitError = error;
-      });
-    let previousOutput = '';
-    let killed = false;
-    let killDeadline = 0;
-    let done = false;
-    while (!done) {
-      if (signal.aborted && !killed) {
-        killed = true;
-        killDeadline = Date.now() + KILL_GRACE_PERIOD_MS;
-        await this.kill(active);
-      }
-      done =
-        exit !== undefined ||
-        exitError !== undefined ||
-        (killed && Date.now() >= killDeadline);
-      if (!done) {
-        const pollDelay = delay(OUTPUT_POLL_INTERVAL_MS);
-        try {
-          await Promise.race([exitPromise, pollDelay.promise]);
-        } finally {
-          pollDelay.cancel();
-        }
-        let current: acp.TerminalOutputResponse;
-        try {
-          current = await active.handle.currentOutput();
-        } catch (error) {
-          this.logger.debug(
-            () => `Terminal output poll failed: ${errorMessage(error)}`,
-          );
-          throw error;
-        }
-        const chunk = outputDelta(
-          previousOutput,
-          current.output,
-          current.truncated,
-        );
-        if (chunk !== '') {
-          onOutput({ type: 'data', chunk });
-        }
-        previousOutput = current.output;
+    const state: TerminalWaitState = {
+      exit: undefined,
+      exitError: undefined,
+      previousOutput: '',
+      killed: false,
+      killDeadline: 0,
+      evictionNoticeEmitted: false,
+      maxObservedBytes: 0,
+    };
+    const exitPromise = this.observeTerminalExit(active, state);
+    while (!terminalWaitDone(state)) {
+      await this.applyAbort(active, state, signal);
+      if (!terminalWaitDone(state)) {
+        await this.pollTerminal(active, state, onOutput, exitPromise);
       }
     }
-    if (exitError === undefined) {
-      previousOutput = await this.pollFinalOutput(
-        active,
-        previousOutput,
-        onOutput,
+    const finalEviction = await this.finishTerminalOutput(
+      active,
+      state,
+      onOutput,
+    );
+    return this.buildTerminalResult(state, finalEviction, signal);
+  }
+
+  private async observeTerminalExit(
+    active: ActiveTerminal,
+    state: TerminalWaitState,
+  ): Promise<void> {
+    try {
+      state.exit = await active.handle.waitForExit();
+    } catch (error) {
+      state.exitError = error;
+    }
+  }
+
+  private async applyAbort(
+    active: ActiveTerminal,
+    state: TerminalWaitState,
+    signal: AbortSignal,
+  ): Promise<void> {
+    if (!signal.aborted || state.killed) {
+      return;
+    }
+    state.killed = true;
+    state.killDeadline = Date.now() + KILL_GRACE_PERIOD_MS;
+    await this.kill(active);
+  }
+
+  private async pollTerminal(
+    active: ActiveTerminal,
+    state: TerminalWaitState,
+    onOutput: (event: ShellOutputEvent) => void,
+    exitPromise: Promise<void>,
+  ): Promise<void> {
+    const pollDelay = delay(OUTPUT_POLL_INTERVAL_MS);
+    try {
+      // Exit only short-circuits this polling delay. finishTerminalOutput() still
+      // performs the authoritative final output poll after the wait resolves.
+      await Promise.race([exitPromise, pollDelay.promise]);
+    } finally {
+      pollDelay.cancel();
+    }
+    let current: acp.TerminalOutputResponse;
+    try {
+      current = await active.handle.currentOutput();
+    } catch (error) {
+      this.logger.debug(
+        () => `Terminal output poll failed: ${errorMessage(error)}`,
+      );
+      return;
+    }
+    this.applyTerminalSnapshot(state, current, onOutput);
+  }
+
+  private applyTerminalSnapshot(
+    state: TerminalWaitState,
+    current: acp.TerminalOutputResponse,
+    onOutput: (event: ShellOutputEvent) => void,
+  ): void {
+    const observedNow = Buffer.byteLength(current.output, 'utf8');
+    if (observedNow > this.outputBudget.bytes) {
+      throw new Error(
+        `Terminal peer exceeded output byte budget (${this.outputBudget.bytes} bytes)`,
       );
     }
-    if (exitError !== undefined) {
-      throw exitError;
+    state.maxObservedBytes = Math.max(state.maxObservedBytes, observedNow);
+    const { delta, discontinuity } = computeBoundedDelta(
+      state.previousOutput,
+      current.output,
+      current.truncated,
+    );
+    let streamedDelta = delta;
+    if (discontinuity) {
+      const deltaContainsNotice = streamedDelta.startsWith(
+        TERMINAL_DISCONTINUITY_NOTICE,
+      );
+      if (!state.evictionNoticeEmitted) {
+        if (!deltaContainsNotice) {
+          onOutput({ type: 'data', chunk: TERMINAL_DISCONTINUITY_NOTICE });
+        }
+        state.evictionNoticeEmitted = true;
+      } else if (deltaContainsNotice) {
+        streamedDelta = streamedDelta.slice(
+          TERMINAL_DISCONTINUITY_NOTICE.length,
+        );
+      }
     }
+    if (streamedDelta !== '') {
+      onOutput({ type: 'data', chunk: streamedDelta });
+    }
+    state.previousOutput = boundSnapshotBytes(
+      current.output,
+      this.outputBudget.bytes,
+    );
+  }
+
+  private async finishTerminalOutput(
+    active: ActiveTerminal,
+    state: TerminalWaitState,
+    onOutput: (event: ShellOutputEvent) => void,
+  ): Promise<boolean> {
+    let finalEviction = state.evictionNoticeEmitted;
+    if (state.exitError === undefined) {
+      const finalPollEviction = await this.pollFinalOutput(
+        active,
+        state,
+        onOutput,
+      );
+      finalEviction ||= finalPollEviction;
+    }
+    if (state.exitError !== undefined) {
+      throw state.exitError;
+    }
+    return finalEviction;
+  }
+
+  private buildTerminalResult(
+    state: TerminalWaitState,
+    finalEviction: boolean,
+    signal: AbortSignal,
+  ): ShellExecutionResult {
+    const retainedBytes = Buffer.byteLength(state.previousOutput, 'utf8');
+    const omittedBytes = Math.max(0, state.maxObservedBytes - retainedBytes);
+    const output =
+      finalEviction &&
+      !state.previousOutput.startsWith(TERMINAL_DISCONTINUITY_NOTICE)
+        ? TERMINAL_DISCONTINUITY_NOTICE + state.previousOutput
+        : state.previousOutput;
+    const outputTruncation: TruncationMetadata | undefined =
+      omittedBytes > 0
+        ? {
+            observedBytes: state.maxObservedBytes,
+            retainedBytes,
+            omittedBytes,
+            omittedBytesExact: false,
+            truncated: true,
+            budgetBytes: this.outputBudget.bytes,
+          }
+        : undefined;
     return {
-      output: previousOutput,
-      exitCode: exit?.exitCode ?? null,
-      signal: exit?.signal ?? null,
+      output,
+      exitCode: state.exit?.exitCode ?? null,
+      signal: state.exit?.signal ?? null,
       error: null,
       aborted: signal.aborted,
       pid: undefined,
+      outputTruncation,
     };
   }
 
   private async pollFinalOutput(
     active: ActiveTerminal,
-    previousOutput: string,
+    state: TerminalWaitState,
     onOutput: (event: ShellOutputEvent) => void,
-  ): Promise<string> {
+  ): Promise<boolean> {
+    let final: acp.TerminalOutputResponse | undefined;
     try {
-      const final = await withTimeout(
+      final = await withTimeout(
         active.handle.currentOutput(),
         OUTPUT_POLL_INTERVAL_MS * 5,
       );
-      if (final === undefined) {
-        return previousOutput;
-      }
-      const chunk = outputDelta(previousOutput, final.output, final.truncated);
-      if (chunk !== '') {
-        onOutput({ type: 'data', chunk });
-      }
-      return final.output;
     } catch (error) {
       this.logger.debug(
         () => `Terminal post-exit output poll failed: ${errorMessage(error)}`,
       );
-      return previousOutput;
+      return false;
     }
+    if (final === undefined) {
+      return false;
+    }
+    const hadEviction = state.evictionNoticeEmitted;
+    this.applyTerminalSnapshot(state, final, onOutput);
+    return !hadEviction && state.evictionNoticeEmitted;
   }
 
   private async killAndRelease(active: ActiveTerminal): Promise<void> {
@@ -454,29 +574,6 @@ function abortedResult(): ShellExecutionResult {
     aborted: true,
     pid: undefined,
   };
-}
-
-function outputDelta(
-  previous: string,
-  current: string,
-  truncated: boolean,
-): string {
-  if (current.startsWith(previous)) {
-    return current.slice(previous.length);
-  }
-  if (!truncated) {
-    return current;
-  }
-  for (
-    let overlap = Math.min(previous.length, current.length);
-    overlap > 0;
-    overlap--
-  ) {
-    if (previous.endsWith(current.slice(0, overlap))) {
-      return current.slice(overlap);
-    }
-  }
-  return current;
 }
 
 async function withTimeout<T>(
