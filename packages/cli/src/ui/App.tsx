@@ -15,6 +15,8 @@ import type {
 import type { SlashCommandRuntime, UiRuntime } from './cliUiRuntime.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
+import type { OperationLifecycleRegistry } from './hooks/agentStream/operationLifecycle.js';
+import type { MemoryTelemetryController } from './hooks/memoryTrend/memoryTelemetry.js';
 import { KeypressProvider } from './contexts/KeypressContext.js';
 import { MouseProvider } from './contexts/MouseContext.js';
 import { SessionStatsProvider } from './contexts/SessionContext.js';
@@ -51,6 +53,10 @@ interface AppProps {
   /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
   initialLockHandle?: LockHandle | null;
   suppressStartupWelcome?: boolean;
+  /** P12: optional perf operation lifecycle registry (perf enabled only). */
+  operationLifecycle?: OperationLifecycleRegistry;
+  /** P12: optional memory telemetry controller (perf+memory enabled only). */
+  memoryController?: MemoryTelemetryController;
 }
 
 /**

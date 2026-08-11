@@ -80,9 +80,9 @@ void vi.mock('./ui/utils/terminalCapabilityManager.js', () => ({
 
 void vi.mock('./config/config.js', () => ({
   loadCliConfig: vi.fn().mockResolvedValue({
-    getSandbox: vi.fn(() => false),
-    getQuestion: vi.fn(() => ''),
-    getProvider: vi.fn(() => undefined),
+    getSandbox: () => false,
+    getQuestion: () => '',
+    getProvider: () => undefined,
   } as unknown as Config),
 }));
 
@@ -503,10 +503,7 @@ describe('cli.tsx main function', () => {
       getIdeClient: vi.fn(() => null),
       getListExtensions: vi.fn(() => false),
       getOutputFormat: vi.fn(() => OutputFormat.TEXT),
-      getToolRegistryInfo: vi.fn(() => ({
-        registered: [],
-        unregistered: [],
-      })),
+      getToolRegistryInfo: vi.fn(() => ({ registered: [], unregistered: [] })),
       getSandbox: vi.fn(() => false),
       getModel: vi.fn(() => 'gemini-2.5-pro'),
       getProjectRoot: vi.fn(() => '/tmp/project'),
@@ -527,6 +524,9 @@ describe('cli.tsx main function', () => {
       setTerminalBackground: vi.fn(),
       getTerminalBackground: vi.fn(() => undefined),
       getPolicyEngine: vi.fn(() => null),
+      getTelemetrySettings: vi.fn(() => ({
+        perf: { enabled: false, memory: false },
+      })),
     } as unknown as Config;
 
     const loadSettingsMock = loadSettings as Mock<typeof loadSettings>;
@@ -590,7 +590,9 @@ describe('cli.tsx main function', () => {
       quiet: undefined,
     });
 
-    const renderMock = vi.fn().mockReturnValue({ unmount: vi.fn() });
+    const renderMock = vi
+      .fn()
+      .mockReturnValue({ clear: vi.fn(), unmount: vi.fn() });
     __setRenderForTesting(renderMock);
 
     const originalIsTTY = process.stdin.isTTY;
@@ -665,10 +667,7 @@ describe('cli.tsx main function', () => {
       getIdeClient: vi.fn(() => null),
       getListExtensions: vi.fn(() => false),
       getOutputFormat: vi.fn(() => OutputFormat.TEXT),
-      getToolRegistryInfo: vi.fn(() => ({
-        registered: [],
-        unregistered: [],
-      })),
+      getToolRegistryInfo: vi.fn(() => ({ registered: [], unregistered: [] })),
       getSandbox: vi.fn(() => false),
       getModel: vi.fn(() => 'gemini-2.5-pro'),
       getProjectRoot: vi.fn(() => '/tmp/project'),
@@ -689,6 +688,9 @@ describe('cli.tsx main function', () => {
       setTerminalBackground: vi.fn(),
       getTerminalBackground: vi.fn(() => undefined),
       getPolicyEngine: vi.fn(() => null),
+      getTelemetrySettings: vi.fn(() => ({
+        perf: { enabled: false, memory: false },
+      })),
     } as unknown as Config;
 
     const loadSettingsMock = loadSettings as Mock<typeof loadSettings>;

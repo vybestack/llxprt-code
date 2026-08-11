@@ -232,6 +232,10 @@
       "bun": "./src/telemetry/sdk.ts",
       "import": "./dist/src/telemetry/sdk.js"
     },
+    "./perf/perfPhaseObserver.js": {
+      "bun": "./src/perf/perfPhaseObserver.ts",
+      "import": "./dist/src/perf/perfPhaseObserver.js"
+    },
     "./telemetry/constants.js": {
       "bun": "./src/telemetry/constants.ts",
       "import": "./dist/src/telemetry/constants.js"

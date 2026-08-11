@@ -7,6 +7,7 @@
 import type React from 'react';
 import { useCallback, useMemo, useRef } from 'react';
 import { useAgentStream } from '../../../hooks/agentStream/index.js';
+import type { OperationLifecycleRegistry } from '../../../hooks/agentStream/operationLifecycle.js';
 import { useAutoAcceptIndicator } from '../../../hooks/useAutoAcceptIndicator.js';
 import { useLoadingIndicator } from '../../../hooks/useLoadingIndicator.js';
 import { useSlashCommandProcessor } from '../../../hooks/slashCommandProcessor.js';
@@ -100,6 +101,8 @@ export interface AppInputParams {
   // Direct
   appState: AppState;
   appDispatch: React.Dispatch<AppAction>;
+  /** P12: optional perf operation lifecycle registry (perf enabled only). */
+  operationLifecycle?: OperationLifecycleRegistry;
 }
 
 function useInputCoreCallbacks(p: AppInputParams) {
@@ -354,6 +357,7 @@ function useInputStreamSetup(
     runtimeMessageBus,
     p.subagentManager,
     removeItems,
+    p.operationLifecycle,
   );
   return { ...bufferSetup, agentStreamResult };
 }

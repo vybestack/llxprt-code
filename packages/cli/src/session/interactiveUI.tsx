@@ -23,22 +23,44 @@ import {
   type IContent,
   type LockHandle,
   type MessageBus,
+  type TelemetrySettings,
   writeToStdout,
 } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { getCliVersion } from '../utils/version.js';
-import { enableMouseEvents } from '../ui/utils/mouse.js';
+import { enableMouseEvents, disableMouseEvents } from '../ui/utils/mouse.js';
 import { restoreTerminalProtocolsSync } from '../ui/utils/terminalProtocolCleanup.js';
 import { checkForUpdates } from '../ui/utils/updateCheck.js';
 import { handleAutoUpdate } from '../utils/handleAutoUpdate.js';
 import { SettingsContext } from '../ui/contexts/SettingsContext.js';
 import { inkRenderOptions } from '../ui/inkRenderOptions.js';
+import {
+  resolvePerfSettings,
+  getProjectHash,
+} from '@vybestack/llxprt-code-core';
+import {
+  createInteractivePerfRuntime,
+  createIdentityProviderFromGetters,
+  resolveRenderMode,
+  resolveRuntimeVersion,
+  resolvePlatformArch,
+} from '../ui/hooks/perf/interactivePerfRuntime.js';
+import type { InteractivePerfRuntime } from '../ui/hooks/perf/interactivePerfRuntime.js';
+import { getGitCommitInfo } from '../utils/gitCommitInfo.js';
 import { isMouseEventsEnabled } from '../ui/mouseEventsEnabled.js';
 import { computeTerminalTitle } from '../utils/windowTitle.js';
 import { StreamingState } from '../ui/types.js';
 import { registerCleanup, registerSyncCleanup } from '../utils/cleanup.js';
 import { appendInteractiveUiDebug } from './debugLog.js';
 import { mouseEventsExitHandler } from './terminalCleanup.js';
+import {
+  cleanupInstanceAndOwner,
+  rollbackInteractiveFailure,
+  type InteractiveInstanceCapability,
+  type InteractiveOwnerCapability,
+  type InteractiveMouseTeardown,
+  type InteractiveTerminalRestore,
+} from './interactiveUiLifecycle.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   buildUiRuntimeFromSource,
@@ -56,7 +78,7 @@ import {
  * repeated calls simply update this reference — the single registered
  * callback always tears down whichever instance is current.
  */
-let latestInstance: ReturnType<typeof render> | undefined;
+let latestInstance: InteractiveInstanceCapability | undefined;
 
 /**
  * Idempotent flag so the cleanup callback is registered at most once per
@@ -94,6 +116,14 @@ function handleError(error: Error, errorInfo: ErrorInfo) {
 }
 
 /**
+ * Module-level reference to the latest interactive perf runtime owner.
+ * Mirrors the latestInstance pattern: startInteractiveUI may be called more
+ * than once in a long-lived process, so we track the latest owner and dispose
+ * it in the single registered cleanup callback.
+ */
+let latestPerfOwner: InteractiveOwnerCapability | null = null;
+
+/**
  * Module-level guard ensuring the title-reset exit listener is registered at
  * most once per process. setWindowTitle is called on every interactive
  * session; without this guard, each call appends a duplicate process.on('exit')
@@ -107,12 +137,28 @@ function resetTitleExitHandler() {
 
 export function __resetInteractiveUIStateForTesting() {
   latestInstance = undefined;
+  latestPerfOwner = null;
   cleanupRegistered = false;
   titleResetExitListenerRegistered = false;
   syncCleanupRegistered = false;
   process.off('exit', resetTitleExitHandler);
   process.off('exit', mouseEventsExitHandler);
   process.off('exit', restoreTerminalProtocolsSync);
+}
+
+/**
+ * Narrow test-only seam to install a tracked latest instance and perf owner so
+ * a behavior test can drive the ACTUAL exported
+ * {@link replacePreviousInstanceAndOwner} against real tracked state. Does not
+ * reset state without cleanup in production paths — only tests call this to
+ * stage ownership before invoking the real replacement routine.
+ */
+export function __setTrackedInstanceAndOwnerForTesting(
+  instance: InteractiveInstanceCapability | undefined,
+  owner: InteractiveOwnerCapability | null,
+): void {
+  latestInstance = instance;
+  latestPerfOwner = owner;
 }
 
 export function setWindowTitle(title: string, settings: LoadedSettings) {
@@ -139,9 +185,169 @@ export function setWindowTitle(title: string, settings: LoadedSettings) {
 }
 
 /**
- * @plan:PLAN-20260211-SESSIONRECORDING.P26
- * @pseudocode recording-integration.md lines 115-132
+ * Narrow Pick-style config capability for {@link buildAndStartPerfOwner}.
+ * Exposes only the methods the composition reads so a Bun behavior test can
+ * call the real composition function with a minimal instrumented config.
  */
+export interface PerfOwnerConfigCapability {
+  getTelemetrySettings(): TelemetrySettings;
+  getSessionId(): string;
+  getProjectRoot(): string;
+  getScreenReader(): boolean;
+}
+
+/**
+ * Narrow Pick-style agent capability for {@link buildAndStartPerfOwner}.
+ * Exposes only the methods the composition reads so a Bun behavior test can
+ * instrument provider/model/runtimeId getters and prove they are read fresh
+ * at each operation boundary.
+ */
+export interface PerfOwnerAgentCapability {
+  getRuntimeId(): string;
+  getProvider(): string;
+  getModel(): string;
+}
+
+/**
+ * P12: Constructs and starts the interactive perf runtime owner from real
+ * runtime/config/build APIs. Returns null when perf is disabled (before any
+ * construction — zero side effects). Extracted from startInteractiveUI to
+ * keep the composition function within the max-lines-per-function limit.
+ *
+ * Accepts a narrow Pick-style capability so a Bun behavior test can call the
+ * real composition function with perf disabled and instrument every
+ * identity/hash/provider/model/timing/memory/timer-related seam.
+ */
+export async function buildAndStartPerfOwner(
+  config: PerfOwnerConfigCapability,
+  agent: PerfOwnerAgentCapability,
+  settings: LoadedSettings,
+  version: string,
+): Promise<InteractivePerfRuntime | null> {
+  const perfSettings = resolvePerfSettings(config.getTelemetrySettings());
+  if (!perfSettings.enabled) return null;
+  const owner = createInteractivePerfRuntime({
+    enabled: true,
+    memoryEnabled: perfSettings.memory,
+    identityProvider: createIdentityProviderFromGetters(
+      {
+        sessionId: config.getSessionId(),
+        runtimeId: agent.getRuntimeId(),
+        projectHash: getProjectHash(config.getProjectRoot()),
+        cliVersion: version,
+        gitSha: getGitCommitInfo(),
+        runtime: resolveRuntimeVersion(),
+        platform: resolvePlatformArch(),
+      },
+      {
+        provider: () => agent.getProvider(),
+        model: () => agent.getModel(),
+        terminalCols: () => extractTerminalCols(process.stdout),
+        terminalRows: () => extractTerminalRows(process.stdout),
+        renderMode: () =>
+          resolveRenderMode(
+            config.getScreenReader(),
+            settings.merged.ui.useAlternateBuffer === true &&
+              !config.getScreenReader(),
+            settings.merged.ui.useAlternateBuffer === true &&
+              !config.getScreenReader() &&
+              settings.merged.ui.incrementalRendering !== false,
+          ),
+      },
+    ),
+  });
+  if (owner === null) {
+    throw new Error(
+      'buildAndStartPerfOwner: createInteractivePerfRuntime returned null ' +
+        'despite enabled=true (impossible state)',
+    );
+  }
+  await owner.start();
+  return owner;
+}
+
+/**
+ * Reads stdout columns safely. process.stdout.columns is typed as `number`
+ * but can be undefined when stdout is not a TTY; the optional-property
+ * parameter type avoids an unnecessary-condition lint without a type assertion.
+ */
+function extractTerminalCols(stream: { columns?: number }): number {
+  return stream.columns ?? 0;
+}
+
+function extractTerminalRows(stream: { rows?: number }): number {
+  return stream.rows ?? 0;
+}
+
+/**
+ * Builds the root JSX element tree for Ink render. Extracted from
+ * startInteractiveUI to keep the composition function within the
+ * max-lines-per-function limit.
+ */
+function buildRenderElement(
+  uiRuntime: ReturnType<typeof buildUiRuntimeFromSource>,
+  slashCommandRuntime: ReturnType<typeof buildSlashCommandRuntime>,
+  agent: Agent,
+  settings: LoadedSettings,
+  startupWarnings: string[],
+  version: string,
+  runtimeMessageBus: MessageBus | undefined,
+  recordingIntegration: RecordingIntegration | undefined,
+  resumedHistory: IContent[] | undefined,
+  initialRecordingService: SessionRecordingService | undefined,
+  initialLockHandle: LockHandle | null | undefined,
+  suppressStartupWelcome: boolean | undefined,
+  perfOwner: InteractivePerfRuntime | null,
+): React.ReactElement {
+  return (
+    <React.StrictMode>
+      <ErrorBoundary onError={handleError}>
+        <SettingsContext.Provider value={settings}>
+          <AppWrapper
+            uiRuntime={uiRuntime}
+            slashCommandRuntime={slashCommandRuntime}
+            agent={agent}
+            settings={settings}
+            runtimeMessageBus={runtimeMessageBus}
+            startupWarnings={startupWarnings}
+            version={version}
+            terminalBackgroundColor={uiRuntime.shell.getTerminalBackground()}
+            recordingIntegration={recordingIntegration}
+            resumedHistory={resumedHistory}
+            initialRecordingService={initialRecordingService}
+            initialLockHandle={initialLockHandle}
+            suppressStartupWelcome={suppressStartupWelcome}
+            operationLifecycle={perfOwner?.registry}
+            memoryController={perfOwner?.memoryController ?? undefined}
+          />
+        </SettingsContext.Provider>
+      </ErrorBoundary>
+    </React.StrictMode>
+  );
+}
+
+/**
+ * Enables mouse events and registers terminal-protocol exit handlers.
+ * Idempotent across repeated startInteractiveUI calls. Extracted to keep
+ * startInteractiveUI within the max-lines-per-function limit.
+ */
+function setupTerminalExitHandlers(
+  renderOptions: ReturnType<typeof inkRenderOptions>,
+  settings: LoadedSettings,
+): void {
+  const mouseEventsEnabled = isMouseEventsEnabled(renderOptions, settings);
+  if (mouseEventsEnabled) {
+    enableMouseEvents();
+    // mouseEventsExitHandler is module-level; process.off+on keeps exactly one
+    // listener across repeated calls. process.on('exit') avoids deadlocking on
+    // waitUntilExit during runExitCleanup (fixes #959).
+    process.off('exit', mouseEventsExitHandler);
+    process.on('exit', mouseEventsExitHandler);
+  }
+  process.off('exit', restoreTerminalProtocolsSync);
+  process.on('exit', restoreTerminalProtocolsSync);
+}
+
 export async function startInteractiveUI(
   config: Config,
   agent: Agent,
@@ -162,99 +368,236 @@ export async function startInteractiveUI(
   );
   setWindowTitle(basename(workspaceRoot), settings);
 
-  const renderOptions = inkRenderOptions(config, settings);
-  const uiRuntime = buildUiRuntimeFromSource(config);
-  const slashCommandRuntime = buildSlashCommandRuntime(config);
-  appendInteractiveUiDebug(
-    `renderOptions alternateBuffer=${String(renderOptions.alternateBuffer)} incrementalRendering=${String(renderOptions.incrementalRendering)} stdoutColumns=${String(renderOptions.stdout?.columns)} stdoutRows=${String(renderOptions.stdout?.rows)}`,
+  // Deterministic pre-start replacement: tear down any previous instance and
+  // perf owner BEFORE constructing/starting a new owner. This prevents
+  // observer-conflict: a new owner's installObservers() must not collide with
+  // a previous owner's still-installed observers.
+  await replacePreviousInstanceAndOwner();
+
+  const perfOwner = await buildAndStartPerfOwner(
+    config,
+    agent,
+    settings,
+    version,
   );
-  const mouseEventsEnabled = isMouseEventsEnabled(renderOptions, settings);
-  if (mouseEventsEnabled) {
-    enableMouseEvents();
-    // Register the mouse-events teardown idempotently. startInteractiveUI may
-    // be called more than once in a long-lived process (e.g. tests); a bare
-    // process.on('exit', ...) with an inline arrow would accumulate a new
-    // listener (and a fresh closure) on every call. mouseEventsExitHandler is
-    // module-level, so process.off removes the exact prior registration (a
-    // no-op on the first call) and process.on re-adds the single listener.
-    // process.on('exit') is used instead of registerCleanup because
-    // registerCleanup includes instance.waitUntilExit() which would deadlock
-    // on quit. The 'exit' event fires synchronously during process.exit()
-    // (fixes #959).
-    process.off('exit', mouseEventsExitHandler);
-    process.on('exit', mouseEventsExitHandler);
-  }
 
-  // Register the exit listener idempotently: startInteractiveUI may be called
-  // more than once in a long-lived process (e.g. tests), and a bare
-  // process.on('exit', ...) would accumulate duplicate listeners that each
-  // re-run the (idempotent) terminal-protocol restoration. process.off first
-  // (a no-op when not yet registered) keeps registration to exactly one
-  // listener across calls while preserving the registerSyncCleanup path.
-  process.off('exit', restoreTerminalProtocolsSync);
-  process.on('exit', restoreTerminalProtocolsSync);
-
-  let instance: ReturnType<typeof render>;
-  try {
-    instance = render(
-      <React.StrictMode>
-        <ErrorBoundary onError={handleError}>
-          <SettingsContext.Provider value={settings}>
-            <AppWrapper
-              uiRuntime={uiRuntime}
-              slashCommandRuntime={slashCommandRuntime}
-              agent={agent}
-              settings={settings}
-              runtimeMessageBus={runtimeMessageBus}
-              startupWarnings={startupWarnings}
-              version={version}
-              terminalBackgroundColor={uiRuntime.shell.getTerminalBackground()}
-              recordingIntegration={recordingIntegration}
-              resumedHistory={resumedHistory}
-              initialRecordingService={initialRecordingService}
-              initialLockHandle={initialLockHandle}
-              suppressStartupWelcome={suppressStartupWelcome}
-            />
-          </SettingsContext.Provider>
-        </ErrorBoundary>
-      </React.StrictMode>,
-      renderOptions,
-    );
-  } catch (error) {
-    if (mouseEventsEnabled) {
-      mouseEventsExitHandler();
-      process.off('exit', mouseEventsExitHandler);
-    }
-    restoreTerminalProtocolsSync();
-    process.off('exit', restoreTerminalProtocolsSync);
-    throw error;
-  }
-  appendInteractiveUiDebug('render returned');
-
-  // Also register the synchronous restoration for the runExitCleanup() path
-  // (non-interactive sessions call runExitCleanup before process.exit, where
-  // process 'exit' listeners have not yet fired). registerSyncCleanup appends
-  // to a module-level array without dedup, so guard with syncCleanupRegistered
-  // to avoid accumulating duplicate entries across repeated startInteractiveUI
-  // calls (e.g. tests). restoreTerminalProtocolsSync is idempotent (guarded
-  // by isTTY + writes only disable sequences), so running it both here and via
-  // process.on('exit') is harmless.
-  if (!syncCleanupRegistered) {
-    syncCleanupRegistered = true;
-    registerSyncCleanup(restoreTerminalProtocolsSync);
-  }
-
-  setupInstanceLifecycle(instance, settings, {
-    projectRoot: config.getProjectRoot(),
-    debugMode: config.getDebugMode(),
+  return commitInteractiveStartup({
+    config,
+    agent,
+    settings,
+    perfOwner,
+    version,
+    startupWarnings,
+    runtimeMessageBus,
+    recordingIntegration,
+    resumedHistory,
+    initialRecordingService,
+    initialLockHandle,
+    suppressStartupWelcome,
   });
 }
 
-function setupInstanceLifecycle(
-  instance: ReturnType<typeof render>,
+/**
+ * Builds the mouse/terminal teardown capabilities for a rollback path. Mouse
+ * disable uses the raw disableMouseEvents (not the swallowing exit handler) so
+ * a failure surfaces rather than being silently swallowed. Shared by the
+ * render-failure and setup-failure rollback paths.
+ */
+function buildTerminalRollbackCapabilities(mouseEventsEnabled: boolean): {
+  mouse: InteractiveMouseTeardown | null;
+  restore: InteractiveTerminalRestore;
+} {
+  const mouse: InteractiveMouseTeardown | null = mouseEventsEnabled
+    ? {
+        disable: disableMouseEvents,
+        removeListener: () => process.off('exit', mouseEventsExitHandler),
+      }
+    : null;
+  const restore: InteractiveTerminalRestore = {
+    restore: restoreTerminalProtocolsSync,
+    removeListener: () => process.off('exit', restoreTerminalProtocolsSync),
+  };
+  return { mouse, restore };
+}
+
+/**
+ * Injectable startup stage ports. Each port defaults to the real production
+ * function; tests override individual stages to inject failures at meaningful
+ * pre-render boundaries without mock-theater reimplementation. Narrow
+ * package-private seam introduced for {@link commitInteractiveStartup}.
+ */
+export interface InteractiveStartupPorts {
+  readonly renderOptions: typeof inkRenderOptions;
+  readonly buildUiRuntime: typeof buildUiRuntimeFromSource;
+  readonly buildSlashRuntime: typeof buildSlashCommandRuntime;
+  readonly debugAppend: (line: string) => void;
+  readonly setupTerminal: typeof setupTerminalExitHandlers;
+  readonly isMouseEnabled: typeof isMouseEventsEnabled;
+  readonly render: (
+    node: React.ReactElement,
+    options: ReturnType<typeof inkRenderOptions>,
+  ) => InteractiveInstanceCapability;
+  readonly registerSync: typeof registerSyncCleanup;
+  readonly setupLifecycle: typeof setupInstanceLifecycle;
+}
+
+/**
+ * Default production ports. `render` wraps the module-level `render` variable
+ * (which `__setRenderForTesting` can override) so both the test seam and the
+ * explicit port override work.
+ */
+const defaultStartupPorts: InteractiveStartupPorts = {
+  renderOptions: inkRenderOptions,
+  buildUiRuntime: buildUiRuntimeFromSource,
+  buildSlashRuntime: buildSlashCommandRuntime,
+  debugAppend: appendInteractiveUiDebug,
+  setupTerminal: setupTerminalExitHandlers,
+  isMouseEnabled: isMouseEventsEnabled,
+  render: (node, options) => render(node, options),
+  registerSync: registerSyncCleanup,
+  setupLifecycle: setupInstanceLifecycle,
+};
+
+/**
+ * Transaction state tracking staged resources for rollback. `mouseStaged` is
+ * false until {@link setupTerminalExitHandlers} runs and mouse is confirmed
+ * enabled; stages before mouse activation must NOT falsely disable unstaged
+ * mouse. `instance` is undefined until render succeeds.
+ */
+interface StartupTransactionState {
+  readonly owner: InteractiveOwnerCapability | null;
+  mouseStaged: boolean;
+  instance: InteractiveInstanceCapability | undefined;
+}
+
+/**
+ * Arguments for {@link commitInteractiveStartup}. Every fallible stage after a
+ * perf owner successfully starts runs inside this one transaction.
+ */
+export interface CommitInteractiveStartupArgs {
+  readonly config: Config;
+  readonly agent: Agent;
+  readonly settings: LoadedSettings;
+  readonly perfOwner: InteractivePerfRuntime | null;
+  readonly version: string;
+  readonly startupWarnings: string[];
+  readonly ports?: Partial<InteractiveStartupPorts>;
+  readonly runtimeMessageBus?: MessageBus;
+  readonly recordingIntegration?: RecordingIntegration;
+  readonly resumedHistory?: IContent[];
+  readonly initialRecordingService?: SessionRecordingService;
+  readonly initialLockHandle?: LockHandle | null | undefined;
+  readonly suppressStartupWelcome?: boolean;
+}
+
+/**
+ * Runs every fallible stage after a perf owner successfully starts as ONE
+ * transaction: inkRenderOptions, buildUiRuntimeFromSource,
+ * buildSlashCommandRuntime, debug append, terminal/mouse staging, render,
+ * sync-cleanup registration, and setupInstanceLifecycle.
+ *
+ * On ANY failure the single transactional rollback: preserves the primary
+ * failure first, atomically clears tracked module refs (so no later global
+ * cleanup double-disposes), independently disposes the owner, clears/unmounts
+ * any produced instance, disables staged mouse state + removes the listener,
+ * and restores terminal protocols + removes the listener. Stages before mouse
+ * activation do NOT falsely disable unstaged mouse. Internal cleanup errors
+ * aggregate after the primary failure via {@link rollbackInteractiveFailure}.
+ *
+ * No nested/double rollback — one explicit try/catch with transaction state.
+ */
+export async function commitInteractiveStartup(
+  args: CommitInteractiveStartupArgs,
+): Promise<InteractiveInstanceCapability> {
+  const ports: InteractiveStartupPorts = {
+    ...defaultStartupPorts,
+    ...args.ports,
+  };
+  const state: StartupTransactionState = {
+    owner: args.perfOwner,
+    mouseStaged: false,
+    instance: undefined,
+  };
+
+  try {
+    const renderOptions = ports.renderOptions(args.config, args.settings);
+    const uiRuntime = ports.buildUiRuntime(args.config);
+    const slashCommandRuntime = ports.buildSlashRuntime(
+      args.config,
+      args.perfOwner?.snapshotCapability ?? null,
+    );
+    ports.debugAppend(
+      `renderOptions alternateBuffer=${String(renderOptions.alternateBuffer)} incrementalRendering=${String(renderOptions.incrementalRendering)} stdoutColumns=${String(renderOptions.stdout?.columns)} stdoutRows=${String(renderOptions.stdout?.rows)}`,
+    );
+    // Compute mouseStaged BEFORE setupTerminal so a terminal-setup failure
+    // correctly rolls back staged mouse. Stages before this point (render-
+    // options, runtime, slash-runtime, debug) leave mouseStaged=false so
+    // unstaged mouse is NOT falsely disabled.
+    state.mouseStaged = ports.isMouseEnabled(renderOptions, args.settings);
+    ports.setupTerminal(renderOptions, args.settings);
+
+    state.instance = ports.render(
+      buildRenderElement(
+        uiRuntime,
+        slashCommandRuntime,
+        args.agent,
+        args.settings,
+        args.startupWarnings,
+        args.version,
+        args.runtimeMessageBus,
+        args.recordingIntegration,
+        args.resumedHistory,
+        args.initialRecordingService,
+        args.initialLockHandle,
+        args.suppressStartupWelcome,
+        args.perfOwner,
+      ),
+      renderOptions,
+    );
+
+    // Sync-cleanup registration (guarded against duplicate registration).
+    if (!syncCleanupRegistered) {
+      ports.registerSync(restoreTerminalProtocolsSync);
+      syncCleanupRegistered = true;
+    }
+
+    await ports.setupLifecycle(
+      state.instance,
+      args.settings,
+      {
+        projectRoot: args.config.getProjectRoot(),
+        debugMode: args.config.getDebugMode(),
+      },
+      args.perfOwner,
+    );
+
+    return state.instance;
+  } catch (primaryError) {
+    // Single transactional rollback. Atomically clear tracked module refs so
+    // the registered global cleanup cannot double-dispose the same
+    // instance/owner. Then tear down staged instance/owner/mouse/terminal
+    // independently. The primary failure is preserved first; every cleanup
+    // error aggregates behind it. Stages before mouse activation leave
+    // mouseStaged=false so unstaged mouse is NOT falsely disabled.
+    captureAndClearTrackedInstanceAndOwner();
+    const { mouse, restore } = buildTerminalRollbackCapabilities(
+      state.mouseStaged,
+    );
+    return rollbackInteractiveFailure(primaryError, {
+      instance: state.instance,
+      owner: state.owner,
+      mouse,
+      restore,
+    });
+  }
+}
+
+async function setupInstanceLifecycle(
+  instance: InteractiveInstanceCapability,
   settings: LoadedSettings,
   runtimeScalars: { projectRoot: string; debugMode: boolean },
-): void {
+  perfOwner: InteractivePerfRuntime | null,
+): Promise<void> {
   checkForUpdates(settings)
     .then((info) => {
       handleAutoUpdate(info, settings, runtimeScalars.projectRoot);
@@ -266,23 +609,59 @@ function setupInstanceLifecycle(
       }
     });
 
-  // Track the latest instance so the single registered cleanup callback tears
-  // down whichever instance is current (not a stale closure from an earlier
-  // call). The callback is registered at most once per process.
+  // Prior instance/owner cleanup has ALREADY been done by
+  // replacePreviousInstanceAndOwner() before buildAndStartPerfOwner(). Here
+  // we only track the new instance and register the cleanup callback.
+
   latestInstance = instance;
+  latestPerfOwner = perfOwner;
   if (!cleanupRegistered) {
     cleanupRegistered = true;
+    // Registered global cleanup uses the SAME capture+clear+dispose helper as
+    // replacePreviousInstanceAndOwner: capture and clear module refs BEFORE
+    // disposal so exactly-once is guaranteed even when disposal throws. If a
+    // replacement already captured+cleared, this callback finds empty slots
+    // and is a no-op; if this callback runs first, the replacement is a no-op.
     registerCleanup(async () => {
-      const current = latestInstance;
-      if (!current) {
-        return;
-      }
-      // Unmount immediately rather than awaiting waitUntilExit(). During
-      // shutdown (e.g. runExitCleanup from the non-interactive path), the Ink
-      // instance may never naturally exit, and awaiting it would deadlock
-      // runExitCleanup indefinitely, blocking process.exit.
-      current.clear();
-      current.unmount();
+      const { instance, owner } = captureAndClearTrackedInstanceAndOwner();
+      await cleanupInstanceAndOwner(instance, owner);
     });
   }
+}
+
+/**
+ * Atomically captures the currently tracked instance/owner and clears the
+ * module-level references. Used by the registered global cleanup,
+ * {@link replacePreviousInstanceAndOwner}, and the setup-failure transactional
+ * catch so all three paths share one exactly-once disposal point: the
+ * capture+clear happens before any disposal attempt, so even when disposal
+ * throws the slots are already empty and no second path can re-dispose the
+ * same instance/owner.
+ */
+function captureAndClearTrackedInstanceAndOwner(): {
+  instance: InteractiveInstanceCapability | undefined;
+  owner: InteractiveOwnerCapability | null;
+} {
+  const instance = latestInstance;
+  const owner = latestPerfOwner;
+  latestInstance = undefined;
+  latestPerfOwner = null;
+  return { instance, owner };
+}
+
+/**
+ * Deterministic pre-start replacement: tears down any previous interactive
+ * instance and perf owner BEFORE a new owner is constructed and started. This
+ * prevents observer-conflict: a new owner's installObservers() must not
+ * collide with a previous owner's still-installed observers.
+ *
+ * Delegates to {@link captureAndClearTrackedInstanceAndOwner} +
+ * {@link cleanupInstanceAndOwner} so clear, unmount, and dispose run
+ * independently and internal errors surface as one Error or AggregateError.
+ * Tracking is cleared BEFORE cleanup so the slots are reclaimable even when
+ * cleanup throws.
+ */
+export async function replacePreviousInstanceAndOwner(): Promise<void> {
+  const { instance, owner } = captureAndClearTrackedInstanceAndOwner();
+  await cleanupInstanceAndOwner(instance, owner);
 }
