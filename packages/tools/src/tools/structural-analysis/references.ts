@@ -6,25 +6,35 @@
 
 import type { NapiConfig } from '@ast-grep/napi';
 import type { ParsedFile, AnalysisResult, ResolvedLang } from './types.js';
-import { escapeRegex, getFiles, parseFile, makeRelative } from './helpers.js';
+import {
+  escapeRegex,
+  iterateFiles,
+  parseFile,
+  makeRelative,
+} from './helpers.js';
+import { type AnalysisBudget, BudgetTracker } from './budget.js';
 
 type AddResultFn = (
   category: string,
   file: string,
   line: number,
   text: string,
-) => void;
+) => boolean;
 
 function searchDirectCallReferences(
   parsed: ParsedFile,
   symbol: string,
   relPath: string,
   addResult: AddResultFn,
-): void {
+): boolean {
   try {
     const memberCalls = parsed.root.findAll(`$OBJ.${symbol}($$$ARGS)`);
     for (const m of memberCalls) {
-      addResult('Direct calls', relPath, m.range().start.line + 1, m.text());
+      if (
+        !addResult('Direct calls', relPath, m.range().start.line + 1, m.text())
+      ) {
+        return false;
+      }
     }
   } catch {
     /* skip */
@@ -33,11 +43,16 @@ function searchDirectCallReferences(
   try {
     const standaloneCalls = parsed.root.findAll(`${symbol}($$$ARGS)`);
     for (const m of standaloneCalls) {
-      addResult('Direct calls', relPath, m.range().start.line + 1, m.text());
+      if (
+        !addResult('Direct calls', relPath, m.range().start.line + 1, m.text())
+      ) {
+        return false;
+      }
     }
   } catch {
     /* skip */
   }
+  return true;
 }
 
 function searchInstantiationReferences(
@@ -45,11 +60,20 @@ function searchInstantiationReferences(
   symbol: string,
   relPath: string,
   addResult: AddResultFn,
-): void {
+): boolean {
   try {
     const news = parsed.root.findAll(`new ${symbol}($$$ARGS)`);
     for (const m of news) {
-      addResult('Instantiations', relPath, m.range().start.line + 1, m.text());
+      if (
+        !addResult(
+          'Instantiations',
+          relPath,
+          m.range().start.line + 1,
+          m.text(),
+        )
+      ) {
+        return false;
+      }
     }
   } catch {
     /* skip */
@@ -70,16 +94,21 @@ function searchInstantiationReferences(
       },
     } as NapiConfig);
     for (const m of instanceCalls) {
-      addResult(
-        'Instance method calls (heuristic)',
-        relPath,
-        m.range().start.line + 1,
-        m.text(),
-      );
+      if (
+        !addResult(
+          'Instance method calls (heuristic)',
+          relPath,
+          m.range().start.line + 1,
+          m.text(),
+        )
+      ) {
+        return false;
+      }
     }
   } catch {
     /* skip */
   }
+  return true;
 }
 
 function searchTypeAndHeritageReferences(
@@ -87,7 +116,7 @@ function searchTypeAndHeritageReferences(
   symbol: string,
   relPath: string,
   addResult: AddResultFn,
-): void {
+): boolean {
   try {
     const typeRefs = parsed.root.findAll({
       rule: {
@@ -99,12 +128,16 @@ function searchTypeAndHeritageReferences(
       },
     } as NapiConfig);
     for (const m of typeRefs) {
-      addResult(
-        'Type annotations',
-        relPath,
-        m.range().start.line + 1,
-        m.text(),
-      );
+      if (
+        !addResult(
+          'Type annotations',
+          relPath,
+          m.range().start.line + 1,
+          m.text(),
+        )
+      ) {
+        return false;
+      }
     }
   } catch {
     /* skip */
@@ -115,12 +148,16 @@ function searchTypeAndHeritageReferences(
       `class $NAME extends ${symbol} { $$$BODY }`,
     );
     for (const m of heritage) {
-      addResult(
-        'Extends/Implements',
-        relPath,
-        m.range().start.line + 1,
-        `class ${m.getMatch('NAME')?.text()} extends ${symbol}`,
-      );
+      if (
+        !addResult(
+          'Extends/Implements',
+          relPath,
+          m.range().start.line + 1,
+          `class ${m.getMatch('NAME')?.text()} extends ${symbol}`,
+        )
+      ) {
+        return false;
+      }
     }
   } catch {
     /* skip */
@@ -131,16 +168,21 @@ function searchTypeAndHeritageReferences(
       `class $NAME implements ${symbol} { $$$BODY }`,
     );
     for (const m of implHeritage) {
-      addResult(
-        'Extends/Implements',
-        relPath,
-        m.range().start.line + 1,
-        `class ${m.getMatch('NAME')?.text()} implements ${symbol}`,
-      );
+      if (
+        !addResult(
+          'Extends/Implements',
+          relPath,
+          m.range().start.line + 1,
+          `class ${m.getMatch('NAME')?.text()} implements ${symbol}`,
+        )
+      ) {
+        return false;
+      }
     }
   } catch {
     /* skip */
   }
+  return true;
 }
 
 function searchImportReferences(
@@ -148,7 +190,7 @@ function searchImportReferences(
   symbol: string,
   relPath: string,
   addResult: AddResultFn,
-): void {
+): boolean {
   try {
     const imports = parsed.root.findAll({
       rule: {
@@ -157,31 +199,43 @@ function searchImportReferences(
       },
     } as NapiConfig);
     for (const m of imports) {
-      addResult('Imports', relPath, m.range().start.line + 1, m.text());
+      if (!addResult('Imports', relPath, m.range().start.line + 1, m.text())) {
+        return false;
+      }
     }
   } catch {
     /* skip */
   }
+  return true;
 }
 
 /**
- * Processes all reference categories for a single parsed file.
+ * Processes all reference categories for a single parsed file. Propagates the
+ * first record-budget sentinel immediately: once one category observes the
+ * one-over record, remaining categories and nodes for this file are skipped.
  */
 function searchAllReferenceCategories(
   parsed: ParsedFile,
   symbol: string,
   relPath: string,
   addResult: AddResultFn,
-): void {
-  searchDirectCallReferences(parsed, symbol, relPath, addResult);
-  searchInstantiationReferences(parsed, symbol, relPath, addResult);
-  searchTypeAndHeritageReferences(parsed, symbol, relPath, addResult);
-  searchImportReferences(parsed, symbol, relPath, addResult);
+): boolean {
+  if (!searchDirectCallReferences(parsed, symbol, relPath, addResult)) {
+    return false;
+  }
+  if (!searchInstantiationReferences(parsed, symbol, relPath, addResult)) {
+    return false;
+  }
+  if (!searchTypeAndHeritageReferences(parsed, symbol, relPath, addResult)) {
+    return false;
+  }
+  return searchImportReferences(parsed, symbol, relPath, addResult);
 }
 
 /**
- * Parses a file and searches all reference categories, or returns null if
- * the file is unparseable.
+ * Parses a file and searches all reference categories. Returns false when the
+ * record-budget sentinel was hit (caller stops traversal); true otherwise
+ * (including when the file is unparseable and simply skipped).
  */
 async function trySearchReferencesForFile(
   file: string,
@@ -192,11 +246,10 @@ async function trySearchReferencesForFile(
 ): Promise<boolean> {
   const parsed = await parseFile(file, lang);
   if (!parsed) {
-    return false;
+    return true;
   }
   const relPath = makeRelative(file, workspaceRoot);
-  searchAllReferenceCategories(parsed, symbol, relPath, addResult);
-  return true;
+  return searchAllReferenceCategories(parsed, symbol, relPath, addResult);
 }
 
 export async function executeReferences(
@@ -205,8 +258,9 @@ export async function executeReferences(
   searchPath: string,
   workspaceRoot: string,
   signal: AbortSignal,
+  budget: AnalysisBudget,
 ): Promise<AnalysisResult> {
-  const files = await getFiles(searchPath, lang);
+  const tracker = new BudgetTracker(budget, signal);
   const categories: Record<
     string,
     Array<{ file: string; line: number; text: string }>
@@ -225,24 +279,37 @@ export async function executeReferences(
     file: string,
     line: number,
     text: string,
-  ): void => {
-    const key = `${category}:${file}:${line}`;
-    if (seen.has(key)) return;
-    seen.add(key);
+  ): boolean => {
+    const dedupKey = `${category}:${file}:${line}`;
+    if (seen.has(dedupKey)) return true;
+    // Global record cap across all categories — one shared accounting policy.
+    // Returns false once the budget is exhausted so category loops stop.
+    if (!tracker.tryRetainRecord()) return false;
+    seen.add(dedupKey);
     categories[category].push({ file, line, text: text.substring(0, 200) });
+    return true;
   };
 
-  for (const file of files) {
-    if (signal.aborted) {
-      break;
-    }
-    await trySearchReferencesForFile(
+  const processFile = async (file: string): Promise<boolean> => {
+    if (!tracker.shouldVisitMoreFiles()) return false;
+    tracker.filesVisited++;
+    // Propagate the record-budget sentinel: once addResult returns false for a
+    // file, stop visiting further files for this traversal.
+    return trySearchReferencesForFile(
       file,
       lang,
       workspaceRoot,
       symbol,
       addResult,
     );
+  };
+
+  for await (const file of iterateFiles(searchPath, lang, signal)) {
+    if (!(await processFile(file))) break;
+  }
+
+  if (signal.aborted) {
+    tracker.markAborted();
   }
 
   const counts: Record<string, number> = {};
@@ -253,7 +320,15 @@ export async function executeReferences(
   return {
     mode: 'references',
     symbol,
-    truncated: false,
+    truncated: tracker.truncated,
+    partial: tracker.truncated,
+    partialReason: tracker.partialReason,
+    fileBudget: budget.fileBudget,
+    recordBudget: budget.recordBudget,
+    filesVisited: tracker.filesVisited,
+    recordsRetained: tracker.recordsRetained,
+    recordsObserved: tracker.recordsObserved,
+    countInexact: tracker.countInexact,
     results: { categories, counts },
   };
 }

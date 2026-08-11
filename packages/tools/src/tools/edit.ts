@@ -64,6 +64,7 @@ import {
   resolveConstructorArguments,
   type EditErrorInfo,
 } from './edit-utils.js';
+import { statFileSizeGate, validateFileSizeBytes } from '../utils/fileUtils.js';
 
 export {
   applyReplacement,
@@ -119,6 +120,10 @@ export interface EditToolParams {
    */
   ai_proposed_content?: string;
 }
+function gateToEditError(gate: { message: string; type: ToolErrorType }) {
+  return { display: 'File too large.', raw: gate.message, type: gate.type };
+}
+
 interface CalculatedEdit {
   currentContent: string | null;
   newContent: string;
@@ -365,7 +370,12 @@ class EditToolInvocation extends BaseToolInvocation<
       | { display: string; raw: string; type: ToolErrorType }
       | undefined = undefined;
 
-    if (filteredParams.old_string === '' && !fileExists) {
+    // Host divergence: validate authoritative acquired content before diffing.
+    const size = currentContent ? Buffer.byteLength(currentContent) : 0;
+    const gate = validateFileSizeBytes(filePath, size);
+    if (gate) {
+      error = gateToEditError(gate);
+    } else if (filteredParams.old_string === '' && !fileExists) {
       isNewFile = true;
     } else if (!fileExists) {
       error = {
@@ -415,6 +425,25 @@ class EditToolInvocation extends BaseToolInvocation<
   }
 
   /**
+   * Pre-read file-size gate: reject an oversized existing target before any
+   * content read. Returns null when the target is within the limit or is a
+   * new file (statFileSizeGate returns null for a missing file).
+   */
+  private async checkFileSizeGate(
+    filePath: string,
+  ): Promise<CalculatedEdit | null> {
+    const sizeError = await statFileSizeGate(filePath);
+    if (!sizeError) return null;
+    return {
+      currentContent: null,
+      newContent: '',
+      occurrences: 0,
+      error: gateToEditError(sizeError),
+      isNewFile: false,
+    };
+  }
+
+  /**
    * Calculates the potential outcome of an edit operation.
    * @param params Parameters for the edit operation
    * @returns An object describing the potential edit outcome
@@ -424,6 +453,17 @@ class EditToolInvocation extends BaseToolInvocation<
     params: EditToolParams,
     _abortSignal: AbortSignal,
   ): Promise<CalculatedEdit> {
+    const filePath = stringOrDefault(
+      params.absolute_path,
+      stringOrDefault(params.file_path, ''),
+    );
+
+    // Pre-read file-size gate: reject an oversized existing target before any
+    // content read (new-file creation is unaffected — statFileSizeGate returns
+    // null for a missing file).
+    const sizeGateError = await this.checkFileSizeGate(filePath);
+    if (sizeGateError) return sizeGateError;
+
     // Apply emoji filtering to edit content
     // NOTE: old_string is NOT filtered because it needs to match existing content exactly
     // Only new_string is filtered to remove emojis from the replacement text
@@ -452,11 +492,6 @@ class EditToolInvocation extends BaseToolInvocation<
       new_string: newStringResult.filtered as string,
     };
     const expectedReplacements = filteredParams.expected_replacements ?? 1;
-
-    const filePath = stringOrDefault(
-      params.absolute_path,
-      stringOrDefault(params.file_path, ''),
-    );
 
     const {
       currentContent,

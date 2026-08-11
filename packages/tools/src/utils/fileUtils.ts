@@ -10,6 +10,7 @@ import { type ContentPartUnion } from '../types/wire-types.js';
 import mime from 'mime-types';
 import { ToolErrorType } from '../types/tool-error.js';
 import { debugLogger } from './debugLogger.js';
+import { isNodeError } from './errors.js';
 import {
   ImageResizeError,
   resizeImageIfNeeded,
@@ -19,7 +20,7 @@ import {
 // Constants for text file processing
 export const DEFAULT_MAX_LINES_TEXT_FILE = 2000;
 const MAX_LINE_LENGTH_TEXT_FILE = 2000;
-const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
+export const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
 
 // Default values for encoding and separator format
 export const DEFAULT_ENCODING: BufferEncoding = 'utf-8';
@@ -534,6 +535,73 @@ export function getImageSourceSizeLimit(
   return shouldResize ? MAX_FILE_SIZE_BYTES : outputLimit;
 }
 
+/**
+ * Shared pre-read file-size validation contract. Carries the existing
+ * FILE_TOO_LARGE message/type so every consumer (the read-content path and the
+ * pre-read stat gate) shares ONE threshold/message definition.
+ */
+export interface FileSizeGateError {
+  readonly message: string;
+  readonly type: ToolErrorType.FILE_TOO_LARGE;
+}
+
+/**
+ * The single file-size validation primitive. Returns a structured
+ * {@link FileSizeGateError} when `sizeBytes` exceeds the 20 MiB limit, or
+ * `null` when it is within the limit. Both the existing
+ * {@link processSingleFileContent} size gate and the pre-read stat helper
+ * delegate to this so the threshold and message cannot drift apart.
+ */
+export function validateFileSizeBytes(
+  filePath: string,
+  sizeBytes: number,
+): FileSizeGateError | null {
+  if (sizeBytes > MAX_FILE_SIZE_BYTES) {
+    const sizeInMB = sizeBytes / (1024 * 1024);
+    return {
+      message: `File size exceeds the 20MB limit: ${filePath} (${sizeInMB.toFixed(2)}MB)`,
+      type: ToolErrorType.FILE_TOO_LARGE,
+    };
+  }
+  return null;
+}
+
+/**
+ * Pre-read file-size gate shared by read and modification tools.
+ *
+ * Stats the target; if it exists and exceeds {@link MAX_FILE_SIZE_BYTES},
+ * returns a {@link FileSizeGateError} via the shared primitive. Returns `null`
+ * when the file does not exist (so new-file creation paths are unaffected) or
+ * is within the limit.
+ *
+ * This is the single reuse point for the pre-read size policy — every public
+ * target-read path calls this before materializing content.
+ */
+export async function statFileSizeGate(
+  filePath: string,
+): Promise<FileSizeGateError | null> {
+  let stats: fs.Stats;
+  try {
+    stats = await fs.promises.stat(filePath);
+  } catch (error: unknown) {
+    // ENOENT: missing file — let the caller's read path handle new-file
+    // creation. Any other stat failure (EACCES, EIO, ...) is unexpected and
+    // must fail fast so the caller surfaces the real error instead of
+    // silently bypassing the gate as if the file were missing.
+    if (isNodeError(error) && error.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+  // FILE_TOO_LARGE applies only to regular files; non-regular targets
+  // (directories, devices, sockets) fall through to their established
+  // directory/error handling rather than being misclassified as oversized.
+  if (!stats.isFile()) {
+    return null;
+  }
+  return validateFileSizeBytes(filePath, stats.size);
+}
+
 function validateFileAccess(filePath: string): ProcessedFileReadResult | null {
   if (!fs.existsSync(filePath)) {
     return {
@@ -567,16 +635,16 @@ function validateFileSize(
   filePath: string,
   stats: fs.Stats,
 ): ProcessedFileReadResult | null {
-  const fileSizeInMB = stats.size / (1024 * 1024);
-  if (stats.size > MAX_FILE_SIZE_BYTES) {
-    return {
-      llmContent: 'File size exceeds the 20MB limit.',
-      returnDisplay: 'File size exceeds the 20MB limit.',
-      error: `File size exceeds the 20MB limit: ${filePath} (${fileSizeInMB.toFixed(2)}MB)`,
-      errorType: ToolErrorType.FILE_TOO_LARGE,
-    };
+  const gate = validateFileSizeBytes(filePath, stats.size);
+  if (gate === null) {
+    return null;
   }
-  return null;
+  return {
+    llmContent: 'File size exceeds the 20MB limit.',
+    returnDisplay: 'File size exceeds the 20MB limit.',
+    error: gate.message,
+    errorType: gate.type,
+  };
 }
 
 function processBinaryFile(

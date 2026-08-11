@@ -27,7 +27,7 @@ import type {
   IToolMessageBus,
 } from '../interfaces/index.js';
 import { ToolErrorType } from '../types/tool-error.js';
-import { getSpecificMimeType } from '../utils/fileUtils.js';
+import { getSpecificMimeType, statFileSizeGate } from '../utils/fileUtils.js';
 import { DEFAULT_CREATE_PATCH_OPTIONS } from '../utils/diffOptions.js';
 import { collectLspDiagnosticsBlock } from '../utils/lsp-diagnostics-helper.js';
 import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
@@ -104,6 +104,12 @@ class DeleteLineRangeToolInvocation extends BaseToolInvocation<
     }
 
     const filePath = this.getFilePath();
+    // Pre-read size gate: an oversized existing target must not be materialized
+    // for the preview diff. Defer to execute, which emits FILE_TOO_LARGE.
+    const sizeError = await statFileSizeGate(filePath);
+    if (sizeError) {
+      return false;
+    }
     let originalContent: string;
     try {
       originalContent = await fs.readFile(filePath, 'utf8');
@@ -154,6 +160,14 @@ class DeleteLineRangeToolInvocation extends BaseToolInvocation<
 
   async execute(): Promise<ToolResult> {
     const filePath = this.getFilePath();
+    const sizeError = await statFileSizeGate(filePath);
+    if (sizeError) {
+      return {
+        llmContent: sizeError.message,
+        returnDisplay: sizeError.message,
+        error: { message: sizeError.message, type: sizeError.type },
+      };
+    }
     let content: string;
     try {
       content = await fs.readFile(filePath, 'utf8');

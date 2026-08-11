@@ -6,7 +6,8 @@
 
 import type { NapiConfig } from '@ast-grep/napi';
 import type { ParsedFile, AnalysisResult, ResolvedLang } from './types.js';
-import { getFiles, parseFile, makeRelative } from './helpers.js';
+import { iterateFiles, parseFile, makeRelative } from './helpers.js';
+import { type AnalysisBudget, BudgetTracker } from './budget.js';
 
 interface ExportEntry {
   file: string;
@@ -31,69 +32,85 @@ function classifyExportKind(text: string): string {
   return 'export';
 }
 
-/**
- * Parses a file and returns its export entries, or null if unparseable.
- */
-async function tryCollectExportsForFile(
-  file: string,
-  lang: ResolvedLang,
-  workspaceRoot: string,
-): Promise<ExportEntry[] | null> {
-  const parsed = await parseFile(file, lang);
-  if (!parsed) {
-    return null;
-  }
-  const relPath = makeRelative(file, workspaceRoot);
-  const exports: ExportEntry[] = [];
-  collectExportsFromFile(parsed, relPath, exports);
-  return exports;
-}
-
 export async function executeExports(
   searchPath: string,
   lang: ResolvedLang,
   workspaceRoot: string,
   signal: AbortSignal,
+  budget: AnalysisBudget,
 ): Promise<AnalysisResult> {
-  const files = await getFiles(searchPath, lang);
+  const tracker = new BudgetTracker(budget, signal);
   const exports: ExportEntry[] = [];
 
-  for (const file of files) {
-    if (signal.aborted) {
-      break;
-    }
-    const fileExports = await tryCollectExportsForFile(
-      file,
-      lang,
-      workspaceRoot,
-    );
-    if (fileExports) {
-      exports.push(...fileExports);
-    }
+  await collectExportsBounded(
+    searchPath,
+    workspaceRoot,
+    lang,
+    tracker,
+    exports,
+  );
+
+  if (signal.aborted) {
+    tracker.markAborted();
   }
 
   return {
     mode: 'exports',
-    truncated: false,
+    truncated: tracker.truncated,
+    partial: tracker.truncated,
+    partialReason: tracker.partialReason,
+    fileBudget: budget.fileBudget,
+    recordBudget: budget.recordBudget,
+    filesVisited: tracker.filesVisited,
+    recordsRetained: tracker.recordsRetained,
+    recordsObserved: tracker.recordsObserved,
+    countInexact: tracker.countInexact,
     results: exports,
   };
 }
 
 /**
- * Collects all export statements from a single parsed file.
+ * Bounded export collection. Iterates the search root lazily and retains at
+ * most the record budget across the complete result.
  */
-function collectExportsFromFile(
+async function collectExportsBounded(
+  searchPath: string,
+  workspaceRoot: string,
+  lang: ResolvedLang,
+  tracker: BudgetTracker,
+  exports: ExportEntry[],
+): Promise<void> {
+  for await (const file of iterateFiles(searchPath, lang, tracker.signal)) {
+    if (!tracker.shouldVisitMoreFiles()) return;
+    tracker.filesVisited++;
+    const parsed = await parseFile(file, lang);
+    if (!parsed) continue;
+    const relPath = makeRelative(file, workspaceRoot);
+    const fileExports = collectExportsRetained(parsed, relPath, tracker);
+    exports.push(...fileExports);
+  }
+}
+
+/**
+ * Collects export statements from a single parsed file, retaining only those
+ * that fit within the shared record budget. Each retained record is counted
+ * through {@link BudgetTracker.tryRetainRecord}; the first record beyond the
+ * budget is observed as a sentinel (proving partiality) and discarded.
+ */
+function collectExportsRetained(
   parsed: ParsedFile,
   relPath: string,
-  exports: ExportEntry[],
-): void {
+  tracker: BudgetTracker,
+): ExportEntry[] {
+  const retained: ExportEntry[] = [];
   try {
     const exportNodes = parsed.root.findAll({
       rule: { kind: 'export_statement' },
     } as NapiConfig);
     for (const m of exportNodes) {
+      if (!tracker.tryRetainRecord()) break;
       const text = m.text();
-      exports.push({
+      retained.push({
         file: relPath,
         line: m.range().start.line + 1,
         text: text.substring(0, 200),
@@ -103,4 +120,5 @@ function collectExportsFromFile(
   } catch {
     /* skip */
   }
+  return retained;
 }

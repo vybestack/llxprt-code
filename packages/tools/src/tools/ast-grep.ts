@@ -48,11 +48,19 @@ interface AstGrepMatch {
   metaVariables: Record<string, string>;
 }
 
-interface AstGrepResult {
+/** Mutable accumulator for bounded match collection. */
+interface MatchAccumulator {
   matches: AstGrepMatch[];
   truncated: boolean;
-  totalMatches?: number;
-  skippedFiles?: number;
+  partialReason: 'max-results' | 'aborted' | undefined;
+  sentinelObserved: boolean;
+  /**
+   * Number of candidate matches actually observed during traversal. Equals
+   * {@link matches} length for an exact, complete traversal; for a sentinel
+   * overflow it is retained+1 (the one-over node observed to prove partiality
+   * before stopping), so it is a lower bound when truncated.
+   */
+  observedCount: number;
 }
 
 class AstGrepToolInvocation extends BaseToolInvocation<
@@ -79,8 +87,8 @@ class AstGrepToolInvocation extends BaseToolInvocation<
   }
 
   async execute(signal: AbortSignal): Promise<ToolResult> {
-    const { pattern, rule, globs, maxResults } = this.params;
-    const limit = maxResults ?? DEFAULT_MAX_RESULTS;
+    const { pattern, rule, globs } = this.params;
+    const limit = this.resolveLimit(this.params.maxResults);
 
     const resolved = this.validateAndResolveParams();
     if (resolved instanceof Object && 'llmContent' in resolved) return resolved;
@@ -91,20 +99,44 @@ class AstGrepToolInvocation extends BaseToolInvocation<
     };
 
     try {
-      const { allMatches, skippedFiles } = await this.collectMatches(
-        searchPath,
-        isSingleFile,
-        resolvedLang,
+      const { matches, truncated, partialReason, skippedFiles, observedCount } =
+        await this.collectMatches(
+          searchPath,
+          isSingleFile,
+          resolvedLang,
+          pattern,
+          rule,
+          globs,
+          signal,
+          limit,
+        );
+      return this.formatSearchResults(
+        matches,
+        truncated,
+        partialReason,
+        skippedFiles,
+        observedCount,
         pattern,
-        rule,
-        globs,
-        signal,
       );
-      return this.formatSearchResults(allMatches, skippedFiles, limit, pattern);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return this.makeError(`Error searching: ${msg}`);
     }
+  }
+
+  /**
+   * Resolves `maxResults` to a finite, nonnegative integer acquisition limit.
+   *
+   * - `undefined` -> the documented default.
+   * - fractional -> floored (consistent with prior slice semantics).
+   * - zero / negative -> 0 (acquire nothing; a negative slice is empty).
+   * - nonfinite -> default (defensive: the JSON-Schema `type: number` already
+   *   rejects Infinity/NaN at validation, preserving the public contract).
+   */
+  private resolveLimit(maxResults: number | undefined): number {
+    const value = maxResults ?? DEFAULT_MAX_RESULTS;
+    if (!Number.isFinite(value)) return DEFAULT_MAX_RESULTS;
+    return Math.max(0, Math.floor(value));
   }
 
   private validateAndResolveParams():
@@ -178,112 +210,385 @@ class AstGrepToolInvocation extends BaseToolInvocation<
     searchPath: string,
     isSingleFile: boolean,
     resolvedLang: string | Lang,
-    pattern?: string,
-    rule?: Record<string, unknown>,
-    globs?: string[],
-    signal?: AbortSignal,
-  ): Promise<{ allMatches: AstGrepMatch[]; skippedFiles: number }> {
+    pattern: string | undefined,
+    rule: Record<string, unknown> | undefined,
+    globs: string[] | undefined,
+    signal: AbortSignal | undefined,
+    limit: number,
+  ): Promise<{
+    matches: AstGrepMatch[];
+    truncated: boolean;
+    partialReason: 'max-results' | 'aborted' | undefined;
+    skippedFiles: number;
+    observedCount: number;
+  }> {
     const targetDir = this.host.getTargetDir();
-    const allMatches: AstGrepMatch[] = [];
+    const acc: MatchAccumulator = {
+      matches: [],
+      truncated: false,
+      partialReason: undefined,
+      sentinelObserved: false,
+      observedCount: 0,
+    };
     let skippedFiles = 0;
+
+    // AbortSignal.aborted is a mutable property; reading it through a helper
+    // avoids TS narrowing it to `false` after the pre-abort check (the signal
+    // can become aborted during an awaited traversal step).
+    const isAborted = (): boolean => signal?.aborted === true;
+
+    // A pre-aborted signal must never read/parse a file or present a falsely
+    // complete result, for either a single-file or directory target. The
+    // directory path re-checks this after its async glob resolution; this
+    // top-level check closes the single-file gap and keeps both paths
+    // consistent.
+    if (isAborted()) {
+      acc.truncated = true;
+      acc.partialReason = 'aborted';
+      return {
+        matches: acc.matches,
+        truncated: acc.truncated,
+        partialReason: acc.partialReason,
+        skippedFiles,
+        observedCount: acc.observedCount,
+      };
+    }
 
     if (isSingleFile) {
       const content = await fs.readFile(searchPath, 'utf-8');
-      allMatches.push(
-        ...this.searchContent(
-          content,
-          resolvedLang,
-          searchPath,
-          targetDir,
-          pattern,
-          rule,
-        ),
+      this.searchContentBounded(
+        content,
+        resolvedLang,
+        searchPath,
+        targetDir,
+        acc,
+        limit,
+        pattern,
+        rule,
       );
     } else {
-      const extensions = this.getExtensionsForLanguage(resolvedLang);
-      let files = await FastGlob(
-        extensions.map((ext) => `**/*.${ext}`),
-        {
-          cwd: searchPath,
-          absolute: true,
-          dot: false,
-          ignore: ['**/node_modules/**', '**/.git/**'],
-        },
+      skippedFiles = await this.collectFromDirectory(
+        searchPath,
+        resolvedLang,
+        globs,
+        signal,
+        pattern,
+        rule,
+        targetDir,
+        acc,
+        limit,
       );
-      files = await this.applyGlobFilters(files, globs, searchPath);
-      for (const file of files) {
-        if (signal?.aborted === true) break;
-        try {
-          const content = await fs.readFile(file, 'utf-8');
-          allMatches.push(
-            ...this.searchContent(
-              content,
-              resolvedLang,
-              file,
-              targetDir,
-              pattern,
-              rule,
-            ),
-          );
-        } catch {
-          skippedFiles++;
+    }
+
+    // A signal that aborts during an awaited traversal step must never read as
+    // a falsely complete result.
+    if (isAborted() && !acc.truncated) {
+      acc.truncated = true;
+      acc.partialReason = 'aborted';
+    }
+
+    return {
+      matches: acc.matches,
+      truncated: acc.truncated,
+      partialReason: acc.partialReason,
+      skippedFiles,
+      observedCount: acc.observedCount,
+    };
+  }
+
+  /**
+   * Searches one file's content and accumulates matches INLINE against the
+   * retention limit. At most `limit` match records are ever materialized: once
+   * the limit is reached, the FIRST additional node is observed as a sentinel
+   * (proving truncation) but never turned into a record, and iteration stops.
+   * This avoids building an unbounded mapped match-record array before the
+   * limit is applied. The AST parser may still return its full node array —
+   * no unbounded match-record aggregate is created from it.
+   */
+  private searchContentBounded(
+    content: string,
+    language: string | Lang,
+    filePath: string,
+    workspaceRoot: string,
+    acc: MatchAccumulator,
+    limit: number,
+    pattern?: string,
+    rule?: Record<string, unknown>,
+  ): void {
+    const root = parse(language as Lang, content);
+    const sgRoot = root.root();
+    const relativePath = makeRelative(filePath, workspaceRoot);
+
+    let nodes: SgNode[];
+    if (pattern) {
+      nodes = sgRoot.findAll(pattern);
+    } else if (rule) {
+      nodes = sgRoot.findAll({ rule } as NapiConfig);
+    } else {
+      return;
+    }
+
+    for (const node of nodes) {
+      // Count every observed candidate so the metadata can distinguish an
+      // exact exhausted traversal (observed == retained) from a one-over
+      // sentinel (observed == retained + 1, a lower bound).
+      acc.observedCount++;
+      if (acc.matches.length < limit) {
+        acc.matches.push(this.materializeMatch(node, relativePath, pattern));
+        continue;
+      }
+      if (!acc.sentinelObserved) {
+        acc.sentinelObserved = true;
+        acc.truncated = true;
+        acc.partialReason = 'max-results';
+      }
+      return;
+    }
+  }
+
+  /**
+   * Materializes a single AST node into an {@link AstGrepMatch} record,
+   * including metavariable extraction (single `$NAME` and multi `$$$NAME`).
+   */
+  private materializeMatch(
+    node: SgNode,
+    relativePath: string,
+    pattern?: string,
+  ): AstGrepMatch {
+    const range = node.range();
+    const metaVariables: Record<string, string> = {};
+
+    if (pattern) {
+      const { single, multi } = this.extractMetaVarNames(pattern);
+      for (const name of single) {
+        const match = node.getMatch(name);
+        if (match) {
+          metaVariables[name] = match.text();
+        }
+      }
+      for (const name of multi) {
+        const matches = node.getMultipleMatches(name);
+        if (matches.length > 0) {
+          metaVariables[name] = matches.map((m: SgNode) => m.text()).join(', ');
         }
       }
     }
-    return { allMatches, skippedFiles };
+
+    return {
+      file: relativePath,
+      startLine: range.start.line + 1,
+      startCol: range.start.column,
+      endLine: range.end.line + 1,
+      endCol: range.end.column,
+      text: node.text(),
+      nodeKind: String(node.kind()),
+      metaVariables,
+    };
   }
 
-  private async applyGlobFilters(
-    files: string[],
+  /**
+   * Extracts single ($NAME) and multi ($$$NAME) metavariable names from an
+   * ast-grep pattern by scanning dollar-sign runs directly. A manual scan is
+   * used instead of a regex because a literal dollar in a JS regex requires an
+   * escaped dollar that is easily confused with the end-of-input anchor;
+   * scanning the runs guarantees the literal-dollar semantics for both $NAME
+   * and $$$NAME.
+   *
+   * A run of exactly one dollar followed by NAME is a single metavar; a run of
+   * three dollars followed by NAME is a multi metavar; other runs are not
+   * valid metavariables and are ignored.
+   */
+  private extractMetaVarNames(pattern: string): {
+    single: string[];
+    multi: string[];
+  } {
+    const isNameStart = (ch: string): boolean =>
+      (ch >= 'A' && ch <= 'Z') || ch === '_';
+    const isNamePart = (ch: string): boolean =>
+      isNameStart(ch) || (ch >= '0' && ch <= '9');
+
+    const single: string[] = [];
+    const multi: string[] = [];
+    for (let i = 0; i < pattern.length; i++) {
+      if (pattern[i] !== '$') continue;
+      let dollars = 0;
+      let j = i;
+      while (j < pattern.length && pattern[j] === '$') {
+        dollars++;
+        j++;
+      }
+      if (j < pattern.length && isNameStart(pattern[j])) {
+        let k = j;
+        while (k < pattern.length && isNamePart(pattern[k])) k++;
+        const name = pattern.slice(j, k);
+        if (dollars === 1) {
+          single.push(name);
+        } else if (dollars === 3) {
+          multi.push(name);
+        }
+        i = k - 1;
+      } else {
+        i = j - 1;
+      }
+    }
+    return { single, multi };
+  }
+
+  private async collectFromDirectory(
+    searchPath: string,
+    resolvedLang: string | Lang,
+    globs: string[] | undefined,
+    signal: AbortSignal | undefined,
+    pattern: string | undefined,
+    rule: Record<string, unknown> | undefined,
+    targetDir: string,
+    acc: MatchAccumulator,
+    limit: number,
+  ): Promise<number> {
+    // AbortSignal.aborted is a mutable property; reading it through a helper
+    // avoids TS narrowing it to `false` after the pre-abort check (the signal
+    // can become aborted during an awaited traversal step).
+    const isAborted = (): boolean => signal?.aborted === true;
+    // Pre-abort before discovery: a signal already aborted must never read as
+    // a falsely complete result, and must not materialize a file list.
+    if (isAborted()) {
+      if (!acc.truncated) {
+        acc.truncated = true;
+        acc.partialReason = 'aborted';
+      }
+      return 0;
+    }
+
+    const extensions = this.getExtensionsForLanguage(resolvedLang);
+    // Include/exclude sets are resolved via streaming so the only full
+    // path-array materialization is the user-provided glob subset (not every
+    // language file in the tree). Preserves FastGlob's glob/workspace
+    // semantics and source order.
+    const { includeSet, excludeSet } = await this.resolveGlobSets(
+      globs,
+      searchPath,
+    );
+    let skippedFiles = 0;
+
+    const stream = FastGlob.stream(
+      extensions.map((ext) => `**/*.${ext}`),
+      {
+        cwd: searchPath,
+        absolute: true,
+        dot: false,
+        ignore: ['**/node_modules/**', '**/.git/**'],
+      },
+    );
+
+    // Per-entry processing returns whether the traversal should continue
+    // (keeps the loop body to a single break/continue-free break).
+    const processEntry = async (entry: string): Promise<boolean> => {
+      if (acc.sentinelObserved || isAborted()) {
+        if (isAborted() && !acc.truncated) {
+          acc.truncated = true;
+          acc.partialReason = 'aborted';
+        }
+        return false;
+      }
+      const file = String(entry);
+      if (includeSet !== null && !includeSet.has(file)) return true;
+      if (excludeSet?.has(file) === true) return true;
+      try {
+        const content = await fs.readFile(file, 'utf-8');
+        this.searchContentBounded(
+          content,
+          resolvedLang,
+          file,
+          targetDir,
+          acc,
+          limit,
+          pattern,
+          rule,
+        );
+      } catch {
+        skippedFiles++;
+      }
+      return true;
+    };
+
+    for await (const entry of stream) {
+      if (!(await processEntry(String(entry)))) break;
+    }
+    return skippedFiles;
+  }
+
+  /**
+   * Resolves include/exclude glob sets lazily via FastGlob's streaming API so
+   * glob filtering does not materialize full path arrays for the primary
+   * language discovery. Returns null sets when no globs are supplied (the
+   * common case stays fully streaming).
+   */
+  private async resolveGlobSets(
     globs: string[] | undefined,
     searchPath: string,
-  ): Promise<string[]> {
-    if (!globs || globs.length === 0) return files;
+  ): Promise<{
+    includeSet: Set<string> | null;
+    excludeSet: Set<string> | null;
+  }> {
+    if (!globs || globs.length === 0) {
+      return { includeSet: null, excludeSet: null };
+    }
     const includePatterns = globs.filter((g) => !g.startsWith('!'));
     const excludePatterns = globs
       .filter((g) => g.startsWith('!'))
       .map((g) => g.slice(1));
 
+    let includeSet: Set<string> | null = null;
+    let excludeSet: Set<string> | null = null;
+
     if (includePatterns.length > 0) {
-      const includeSet = new Set(
-        await FastGlob(includePatterns, { cwd: searchPath, absolute: true }),
-      );
-      files = files.filter((f) => includeSet.has(f));
+      includeSet = new Set<string>();
+      for await (const f of FastGlob.stream(includePatterns, {
+        cwd: searchPath,
+        absolute: true,
+      })) {
+        includeSet.add(String(f));
+      }
     }
     if (excludePatterns.length > 0) {
-      const excludeSet = new Set(
-        await FastGlob(excludePatterns, { cwd: searchPath, absolute: true }),
-      );
-      files = files.filter((f) => !excludeSet.has(f));
+      excludeSet = new Set<string>();
+      for await (const f of FastGlob.stream(excludePatterns, {
+        cwd: searchPath,
+        absolute: true,
+      })) {
+        excludeSet.add(String(f));
+      }
     }
-    return files;
+    return { includeSet, excludeSet };
   }
 
   private formatSearchResults(
-    allMatches: AstGrepMatch[],
+    matches: AstGrepMatch[],
+    truncated: boolean,
+    partialReason: 'max-results' | 'aborted' | undefined,
     skippedFiles: number,
-    limit: number,
+    observedCount: number,
     pattern?: string,
   ): ToolResult {
-    const truncated = allMatches.length > limit;
-    const result: AstGrepResult = {
-      matches: allMatches.slice(0, limit),
-      truncated,
-      skippedFiles: skippedFiles > 0 ? skippedFiles : undefined,
-    };
-    if (truncated) {
-      result.totalMatches = allMatches.length;
-    }
-
-    const matchCount = result.matches.length;
+    const matchCount = matches.length;
     const searchDesc = pattern ? `pattern "${pattern}"` : 'rule query';
+    // A skipped (unreadable/unparseable) file means the count cannot be exact:
+    // there may be unobserved matches in files the tool never fully searched.
+    const inexact = truncated || skippedFiles > 0;
+
     let llmContent = `Found ${matchCount} AST match${matchCount !== 1 ? 'es' : ''} for ${searchDesc}`;
     if (truncated) {
-      llmContent += ` (showing ${matchCount} of ${result.totalMatches})`;
+      const note =
+        partialReason === 'aborted'
+          ? ' (aborted; more matches may exist)'
+          : ' (truncated; more matches exist)';
+      llmContent += note;
+    } else if (skippedFiles > 0) {
+      llmContent += ` (${skippedFiles} file${skippedFiles !== 1 ? 's' : ''} skipped; count is a lower bound)`;
     }
     llmContent += ':\n---\n';
 
-    for (const m of result.matches) {
+    for (const m of matches) {
       llmContent += `${m.file}:${m.startLine} [${m.nodeKind}] ${m.text}\n`;
       if (Object.keys(m.metaVariables).length > 0) {
         for (const [k, v] of Object.entries(m.metaVariables)) {
@@ -296,70 +601,21 @@ class AstGrepToolInvocation extends BaseToolInvocation<
     return {
       llmContent: llmContent.trim(),
       returnDisplay: displayMessage,
-      metadata: result as unknown as Record<string, unknown>,
+      // totalMatches is only the exact total when traversal completed fully
+      // AND no file was skipped; it is intentionally omitted after an early
+      // stop or skip so no consumer mistakes a lower bound for an exhaustive
+      // count.
+      metadata: {
+        matches,
+        truncated,
+        matchesRetained: matchCount,
+        // Lower bound on observed candidates (exact when complete).
+        matchesObserved: observedCount,
+        ...(inexact ? { countInexact: true } : { totalMatches: matchCount }),
+        ...(partialReason !== undefined ? { partialReason } : {}),
+        ...(skippedFiles > 0 ? { skippedFiles } : {}),
+      },
     };
-  }
-
-  private searchContent(
-    content: string,
-    language: string | Lang,
-    filePath: string,
-    workspaceRoot: string,
-    pattern?: string,
-    rule?: Record<string, unknown>,
-  ): AstGrepMatch[] {
-    const root = parse(language as Lang, content);
-    const sgRoot = root.root();
-    const relativePath = makeRelative(filePath, workspaceRoot);
-
-    let nodes: SgNode[];
-    if (pattern) {
-      nodes = sgRoot.findAll(pattern);
-    } else if (rule) {
-      nodes = sgRoot.findAll({ rule } as NapiConfig);
-    } else {
-      return [];
-    }
-
-    return nodes.map((node) => {
-      const range = node.range();
-      const metaVariables: Record<string, string> = {};
-
-      // Extract single metavariables ($NAME patterns, excluding $$$ multi-vars)
-      if (pattern) {
-        const metaVarNames =
-          pattern.match(/(?<!\$)\$(?!\$)([A-Z_][A-Z0-9_]*)/g) ?? [];
-        for (const raw of metaVarNames) {
-          const name = raw.slice(1); // remove $
-          const match = node.getMatch(name);
-          if (match) {
-            metaVariables[name] = match.text();
-          }
-        }
-        // Extract multi metavariables ($$$NAME patterns)
-        const multiVarNames = pattern.match(/\$\$\$([A-Z_][A-Z0-9_]*)/g) ?? [];
-        for (const raw of multiVarNames) {
-          const name = raw.slice(3); // remove $$$
-          const matches = node.getMultipleMatches(name);
-          if (matches.length > 0) {
-            metaVariables[name] = matches
-              .map((m: SgNode) => m.text())
-              .join(', ');
-          }
-        }
-      }
-
-      return {
-        file: relativePath,
-        startLine: range.start.line + 1,
-        startCol: range.start.column,
-        endLine: range.end.line + 1,
-        endCol: range.end.column,
-        text: node.text(),
-        nodeKind: String(node.kind()),
-        metaVariables,
-      };
-    });
   }
 
   private getExtensionsForLanguage(lang: string | Lang): string[] {

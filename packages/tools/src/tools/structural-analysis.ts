@@ -41,6 +41,10 @@ import { executeCallees } from './structural-analysis/callees.js';
 import { executeReferences } from './structural-analysis/references.js';
 import { executeDependencies } from './structural-analysis/dependencies.js';
 import { executeExports } from './structural-analysis/exports.js';
+import {
+  resolveAnalysisBudget,
+  type AnalysisBudget,
+} from './structural-analysis/budget.js';
 
 export type { StructuralAnalysisParams } from './structural-analysis/types.js';
 
@@ -53,6 +57,7 @@ interface ResolvedParams {
   depth: number;
   maxNodes: number;
   reverse: boolean;
+  budget: AnalysisBudget;
 }
 
 class StructuralAnalysisInvocation extends BaseToolInvocation<
@@ -82,10 +87,14 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
     const mode = analysisResult.mode;
     const symbol = analysisResult.symbol ? ` for ${analysisResult.symbol}` : '';
     const displayMessage = `${mode} analysis${symbol} complete${analysisResult.truncated ? ' (truncated)' : ''}`;
+    // metadata carries only bounded summary/truncation fields — the full
+    // results aggregate lives solely in llmContent (the JSON source of truth).
+    const { results: _results, ...summary } = analysisResult;
+    void _results;
     return {
       llmContent,
       returnDisplay: displayMessage,
-      metadata: analysisResult as unknown as Record<string, unknown>,
+      metadata: { ...summary },
     };
   }
 
@@ -150,6 +159,11 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
       depth: Math.min(depth ?? DEFAULT_DEPTH, MAX_DEPTH),
       maxNodes: maxNodes ?? DEFAULT_MAX_NODES,
       reverse: reverse === true,
+      budget: resolveAnalysisBudget(
+        this.host.getEphemeralSettings()['tool-output-max-items'] as
+          | number
+          | undefined,
+      ),
     };
   }
 
@@ -165,7 +179,6 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
       symbol,
       depth,
       maxNodes,
-      reverse,
     } = params;
 
     switch (mode as Mode) {
@@ -205,27 +218,43 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
           maxNodes,
           signal,
         );
-      case 'references':
-        return executeReferences(
-          symbol!,
-          resolvedLang,
-          searchPath,
-          targetDir,
-          signal,
-        );
-      case 'dependencies':
-        return executeDependencies(
-          searchPath,
-          resolvedLang,
-          targetDir,
-          reverse,
-          signal,
-        );
-      case 'exports':
-        return executeExports(searchPath, resolvedLang, targetDir, signal);
       default:
-        throw new Error(`Mode "${mode}" is not implemented.`);
+        return this.dispatchBoundedMode(mode as Mode, params, signal);
     }
+  }
+
+  /**
+   * Dispatch the bounded-acquisition modes (references/dependencies/exports)
+   * that carry finite file/record budgets.
+   */
+  private dispatchBoundedMode(
+    mode: Mode,
+    params: ResolvedParams,
+    signal: AbortSignal,
+  ): Promise<AnalysisResult> {
+    const { resolvedLang, searchPath, targetDir, symbol, reverse, budget } =
+      params;
+    if (mode === 'references') {
+      return executeReferences(
+        symbol!,
+        resolvedLang,
+        searchPath,
+        targetDir,
+        signal,
+        budget,
+      );
+    }
+    if (mode === 'dependencies') {
+      return executeDependencies(
+        searchPath,
+        resolvedLang,
+        targetDir,
+        reverse,
+        signal,
+        budget,
+      );
+    }
+    return executeExports(searchPath, resolvedLang, targetDir, signal, budget);
   }
 
   async execute(signal: AbortSignal): Promise<ToolResult> {

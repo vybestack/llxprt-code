@@ -13,6 +13,11 @@ import type { IToolHost } from '../../interfaces/index.js';
 import type { ASTEditToolParams } from './types.js';
 import { ToolErrorType } from '../../types/tool-error.js';
 import { isNodeError } from '../../utils/errors.js';
+import {
+  statFileSizeGate,
+  validateFileSizeBytes,
+  type FileSizeGateError,
+} from '../../utils/fileUtils.js';
 import { parse, LANGUAGE_MAP } from '../../utils/ast-grep-utils.js';
 import { applyReplacement } from './edit-helpers.js';
 import {
@@ -44,6 +49,24 @@ export interface CalculatedEdit {
 }
 
 /**
+ * Maps a shared {@link FileSizeGateError} (from the pre-read stat gate or the
+ * post-acquisition content gate) to a terminal {@link CalculatedEdit} result.
+ */
+function toSizeGateEdit(gate: FileSizeGateError): CalculatedEdit {
+  return {
+    currentContent: null,
+    newContent: '',
+    occurrences: 0,
+    isNewFile: false,
+    error: {
+      display: gate.message,
+      raw: gate.message,
+      type: gate.type,
+    },
+  };
+}
+
+/**
  * Calculates the edit to be applied, including validation and freshness checks.
  *
  * @param params - Edit parameters
@@ -56,11 +79,28 @@ export async function calculateEdit(
   host: IToolHost,
   _abortSignal: AbortSignal,
 ): Promise<CalculatedEdit> {
+  // Pre-read file-size gate: reject an oversized existing target before any
+  // content read/parse/diff. New-file creation (ENOENT) is left unaffected.
+  const sizeError = await statFileSizeGate(params.file_path);
+  if (sizeError) return toSizeGateEdit(sizeError);
+
   // Normalize all string parameters to LF for consistent matching
   const normalizedOldString = params.old_string.replace(/\r\n/g, '\n');
   const normalizedNewString = params.new_string.replace(/\r\n/g, '\n');
 
   const { currentContent, fileExists } = await readFileState(params, host);
+
+  // Validate authoritative host-returned content immediately after
+  // acquisition: a host file service may return bytes divergent from native
+  // stat, so the shared byte-size primitive rejects before syntax/diff/
+  // materialization.
+  if (currentContent !== null) {
+    const contentGate = validateFileSizeBytes(
+      params.file_path,
+      Buffer.byteLength(currentContent),
+    );
+    if (contentGate) return toSizeGateEdit(contentGate);
+  }
 
   // Freshness Check (moved before old_string validation to ensure it runs first)
   const currentMtime = await getFileLastModified(params.file_path);

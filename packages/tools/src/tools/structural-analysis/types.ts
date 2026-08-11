@@ -33,11 +33,34 @@ export interface StructuralAnalysisParams {
   reverse?: boolean;
 }
 
+/** Reason a bounded traversal stopped before exhausting the workspace. */
+export type PartialReason = 'file-budget' | 'record-budget' | 'aborted';
+
 export interface AnalysisResult {
   mode: string;
   symbol?: string;
   truncated: boolean;
   results: unknown;
+  /** True when traversal was stopped by a budget or abort (alias of truncated). */
+  partial?: boolean;
+  /** Why the traversal stopped early, if applicable. */
+  partialReason?: PartialReason;
+  /** Effective maximum number of files visited. */
+  fileBudget?: number;
+  /** Effective maximum number of records retained. */
+  recordBudget?: number;
+  /** Number of files actually visited (bounded by {@link fileBudget}). */
+  filesVisited?: number;
+  /** Number of records actually retained (bounded by {@link recordBudget}). */
+  recordsRetained?: number;
+  /**
+   * Total records observed during traversal (retained + one-over sentinel when
+   * present). Equals recordsRetained for an exact complete traversal; a lower
+   * bound (at least retained+1) when a sentinel proved partiality.
+   */
+  recordsObserved?: number;
+  /** True when retained/visited counts are lower bounds, not exhaustive totals. */
+  countInexact?: boolean;
 }
 
 /**

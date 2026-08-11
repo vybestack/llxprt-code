@@ -16,7 +16,11 @@ import {
 import { ToolErrorType } from '../../types/tool-error.js';
 import { makeRelative, shortenPath } from '../../utils/paths.js';
 import { isNodeError } from '../../utils/errors.js';
-import { countLines } from '../../utils/fileUtils.js';
+import {
+  countLines,
+  statFileSizeGate,
+  validateFileSizeBytes,
+} from '../../utils/fileUtils.js';
 import type { IToolHost } from '../../interfaces/index.js';
 import type { LiveOutputUpdate } from '../../utils/terminalSerializer.js';
 
@@ -57,12 +61,35 @@ export class ASTReadFileToolInvocation
     _setPidCallback?: (pid: number) => void,
   ): Promise<ToolResult> {
     try {
+      const sizeError = await statFileSizeGate(this.params.file_path);
+      if (sizeError) {
+        return {
+          llmContent: sizeError.message,
+          returnDisplay: sizeError.message,
+          error: { message: sizeError.message, type: sizeError.type },
+        };
+      }
       const fileSystemService = this.host.getFileSystemService?.() as
         | { readTextFile?: (filePath: string) => Promise<string> }
         | undefined;
       const content = fileSystemService?.readTextFile
         ? await fileSystemService.readTextFile(this.params.file_path)
         : await fs.promises.readFile(this.params.file_path, 'utf-8');
+
+      // Validate authoritative content immediately after acquisition: a host
+      // file service may return bytes divergent from native stat, so the same
+      // shared byte-size primitive is applied here before parsing/copying.
+      const contentGate = validateFileSizeBytes(
+        this.params.file_path,
+        Buffer.byteLength(content),
+      );
+      if (contentGate) {
+        return {
+          llmContent: contentGate.message,
+          returnDisplay: contentGate.message,
+          error: { message: contentGate.message, type: contentGate.type },
+        };
+      }
 
       const { selectedContent, startLine, endLine, totalLineCount } =
         this.computeLineRange(content);

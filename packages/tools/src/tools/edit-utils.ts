@@ -26,6 +26,7 @@ import type { EditToolParams } from './edit.js';
 import { fuzzyReplace } from '../utils/fuzzy-replacer.js';
 import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
 import { stringOrDefault } from '../utils/stringCoalescing.js';
+import { statFileSizeGate } from '../utils/fileUtils.js';
 
 /**
  * Computes the character offset for the start of a 1-based line number
@@ -601,6 +602,12 @@ export function createEditModifyContext(
     getFilePath: (params: EditToolParams) => resolveEditFilePath(params),
     getCurrentContent: async (params: EditToolParams): Promise<string> => {
       const filePath = resolveEditFilePath(params);
+      // The modify seam must not materialize an oversized target into a temp
+      // editor file; reject before the read.
+      const sizeError = await statFileSizeGate(filePath);
+      if (sizeError) {
+        throw new Error(sizeError.message);
+      }
       try {
         return await readTextFile(filePath);
       } catch (err) {
@@ -610,6 +617,10 @@ export function createEditModifyContext(
     },
     getProposedContent: async (params: EditToolParams): Promise<string> => {
       const filePath = resolveEditFilePath(params);
+      const sizeError = await statFileSizeGate(filePath);
+      if (sizeError) {
+        throw new Error(sizeError.message);
+      }
       try {
         const raw = await readTextFile(filePath);
         const currentContent = raw.replace(/\r\n/g, '\n');
