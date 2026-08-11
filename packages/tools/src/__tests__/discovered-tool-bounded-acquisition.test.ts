@@ -452,13 +452,15 @@ describe('DiscoveredTool stdin EPIPE during early child exit', () => {
 
       const result = await executeTool(tool, largeParams);
 
+      const content =
+        typeof result.llmContent === 'string' ? result.llmContent : '';
       expect(typeof result.llmContent).toBe('string');
-      expect(result.returnDisplay).toBe(result.llmContent);
+      expect(result.returnDisplay).toBe(content);
       if (result.error !== undefined) {
-        expect(result.error.message).toBe(result.llmContent);
-        expect(result.llmContent).toContain('Exit Code:');
+        expect(result.error.message).toBe(content);
+        expect(content).toContain('Exit Code:');
       } else {
-        expect(result.llmContent).toBe('');
+        expect(content).toBe('');
       }
     },
     { timeout: 15000 },
