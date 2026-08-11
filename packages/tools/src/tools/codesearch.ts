@@ -17,6 +17,11 @@ import type {
 } from '../interfaces/index.js';
 import { ToolErrorType } from '../types/tool-error.js';
 import { ensureJsonSafe } from '../utils/unicodeUtils.js';
+import { createDefaultByteBudget } from '../acquisition/index.js';
+import {
+  acquireBoundedHttpBody,
+  HttpBodyTooLargeError,
+} from '../utils/bounded-http-response.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -32,6 +37,8 @@ const API_CONFIG = {
     CONTEXT: '/mcp',
   },
 } as const;
+
+const SEARCH_BYTE_BUDGET = createDefaultByteBudget();
 
 const TOKEN_LIMITS = {
   DEFAULT: 5000,
@@ -156,6 +163,41 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
     return `${baseUrl}?${params.toString()}`;
   }
 
+  private async readResponseBody(
+    response: Awaited<ReturnType<typeof fetch>>,
+    signal: AbortSignal,
+    cancelRequest: () => void,
+  ): Promise<string> {
+    const body = await acquireBoundedHttpBody(
+      response,
+      SEARCH_BYTE_BUDGET,
+      signal,
+      cancelRequest,
+    );
+    return body.text;
+  }
+
+  /**
+   * Read a non-success response body. When the body exceeds the byte budget,
+   * the HTTP status is preserved in the thrown error message.
+   */
+  private async readErrorResponseBody(
+    response: Awaited<ReturnType<typeof fetch>>,
+    signal: AbortSignal,
+    cancelRequest: () => void,
+  ): Promise<string> {
+    try {
+      return await this.readResponseBody(response, signal, cancelRequest);
+    } catch (error) {
+      if (error instanceof HttpBodyTooLargeError) {
+        throw new Error(
+          `Code search error (${response.status}): ${error.message}`,
+        );
+      }
+      throw error;
+    }
+  }
+
   async execute(
     signal: AbortSignal,
     _updateOutput?: (update: LiveOutputUpdate) => void,
@@ -173,7 +215,13 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
       },
     };
 
+    const localController = new AbortController();
+    const onSignalAbort = (): void => localController.abort();
+    signal.addEventListener('abort', onSignalAbort, { once: true });
+
     try {
+      if (signal.aborted) localController.abort();
+
       const headers: Record<string, string> = {
         accept: 'application/json, text/event-stream',
         'content-type': 'application/json',
@@ -184,43 +232,26 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
         method: 'POST',
         headers,
         body: JSON.stringify(codeRequest),
-        signal,
+        signal: localController.signal,
       });
 
+      const cancelRequest = (): void => localController.abort();
+
       if (!response.ok) {
-        const errorText = await response.text();
+        const errorText = await this.readErrorResponseBody(
+          response,
+          signal,
+          cancelRequest,
+        );
         throw new Error(`Code search error (${response.status}): ${errorText}`);
       }
 
-      const responseText = await response.text();
-      const lines = responseText.split('\n');
-      for (const line of lines) {
-        const parsed = this.parseCodeResponseLine(line);
-        if (parsed === undefined) {
-          continue;
-        }
-        if (!parsed.ok) {
-          const safeErrorText = ensureJsonSafe(parsed.errorText);
-          return {
-            llmContent: `Code search failed: ${safeErrorText}`,
-            returnDisplay: `Code search failed: ${safeErrorText}`,
-            error: {
-              message: safeErrorText,
-              type: ToolErrorType.SEARCH_ERROR,
-            },
-          };
-        }
-        return {
-          llmContent: parsed.content,
-          returnDisplay: parsed.content,
-        };
-      }
-
-      return {
-        llmContent:
-          'No code snippets or documentation found. Please try a different query.',
-        returnDisplay: 'No results found.',
-      };
+      const responseText = await this.readResponseBody(
+        response,
+        signal,
+        cancelRequest,
+      );
+      return this.parseResponseResult(responseText);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -232,7 +263,39 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
           type: ToolErrorType.SEARCH_ERROR,
         },
       };
+    } finally {
+      signal.removeEventListener('abort', onSignalAbort);
     }
+  }
+
+  private parseResponseResult(responseText: string): ToolResult {
+    const lines = responseText.split('\n');
+    for (const line of lines) {
+      const parsed = this.parseCodeResponseLine(line);
+      if (parsed === undefined) {
+        continue;
+      }
+      if (!parsed.ok) {
+        const safeErrorText = ensureJsonSafe(parsed.errorText);
+        return {
+          llmContent: `Code search failed: ${safeErrorText}`,
+          returnDisplay: `Code search failed: ${safeErrorText}`,
+          error: {
+            message: safeErrorText,
+            type: ToolErrorType.SEARCH_ERROR,
+          },
+        };
+      }
+      return {
+        llmContent: parsed.content,
+        returnDisplay: parsed.content,
+      };
+    }
+    return {
+      llmContent:
+        'No code snippets or documentation found. Please try a different query.',
+      returnDisplay: 'No results found.',
+    };
   }
 
   private parseCodeResponseLine(line: string): ParsedCodeLine | undefined {

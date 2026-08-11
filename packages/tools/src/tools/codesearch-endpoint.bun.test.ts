@@ -15,6 +15,7 @@
  */
 
 import { mock, describe, it, expect, beforeEach, type Mock } from 'bun:test';
+import { Readable } from 'node:stream';
 
 /**
  * The fetch stub is the only thing standing in for the network. It captures
@@ -24,7 +25,8 @@ import { mock, describe, it, expect, beforeEach, type Mock } from 'bun:test';
 interface FetchResponse {
   ok: boolean;
   status?: number;
-  text: () => Promise<string>;
+  body: Readable;
+  headers: { get: (name: string) => string | null };
 }
 
 let queuedText = '';
@@ -36,7 +38,8 @@ const fetchStub: Mock<(url: string, init: unknown) => Promise<FetchResponse>> =
     async (_url: string, _init: unknown): Promise<FetchResponse> => ({
       ok: queuedOk,
       status: queuedStatus,
-      text: async () => queuedText,
+      body: Readable.from([Buffer.from(queuedText)]),
+      headers: { get: () => null },
     }),
   );
 

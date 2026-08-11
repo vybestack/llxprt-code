@@ -13,6 +13,11 @@ import fetch from 'node-fetch';
 import type { IToolKeyStorage, IToolMessageBus } from '../interfaces/index.js';
 import { ToolErrorType } from '../types/tool-error.js';
 import { ensureJsonSafe } from '../utils/unicodeUtils.js';
+import { createDefaultByteBudget } from '../acquisition/index.js';
+import {
+  acquireBoundedHttpBody,
+  HttpBodyTooLargeError,
+} from '../utils/bounded-http-response.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -29,6 +34,8 @@ const API_CONFIG = {
   },
   DEFAULT_NUM_RESULTS: 8,
 } as const;
+
+const SEARCH_BYTE_BUDGET = createDefaultByteBudget();
 
 interface McpSearchRequest {
   jsonrpc: string;
@@ -153,6 +160,32 @@ class ExaWebSearchToolInvocation extends BaseToolInvocation<
     return baseUrl;
   }
 
+  /**
+   * Read a non-success response body. When the body exceeds the byte budget,
+   * the HTTP status is preserved in the thrown error message.
+   */
+  private async readErrorResponseBody(
+    response: Awaited<ReturnType<typeof fetch>>,
+    signal: AbortSignal,
+    cancelRequest: () => void,
+  ): Promise<string> {
+    try {
+      return (
+        await acquireBoundedHttpBody(
+          response,
+          SEARCH_BYTE_BUDGET,
+          signal,
+          cancelRequest,
+        )
+      ).text;
+    } catch (error) {
+      if (error instanceof HttpBodyTooLargeError) {
+        throw new Error(`Search error (${response.status}): ${error.message}`);
+      }
+      throw error;
+    }
+  }
+
   async execute(
     signal: AbortSignal,
     _updateOutput?: (update: LiveOutputUpdate) => void,
@@ -178,7 +211,13 @@ class ExaWebSearchToolInvocation extends BaseToolInvocation<
       },
     };
 
+    const localController = new AbortController();
+    const onSignalAbort = (): void => localController.abort();
+    signal.addEventListener('abort', onSignalAbort, { once: true });
+
     try {
+      if (signal.aborted) localController.abort();
+
       const headers: Record<string, string> = {
         accept: 'application/json, text/event-stream',
         'content-type': 'application/json',
@@ -189,27 +228,27 @@ class ExaWebSearchToolInvocation extends BaseToolInvocation<
         method: 'POST',
         headers,
         body: JSON.stringify(searchRequest),
-        signal,
+        signal: localController.signal,
       });
 
+      const cancelRequest = (): void => localController.abort();
+
       if (!response.ok) {
-        const errorText = await response.text();
+        const errorText = await this.readErrorResponseBody(
+          response,
+          signal,
+          cancelRequest,
+        );
         throw new Error(`Search error (${response.status}): ${errorText}`);
       }
 
-      const responseText = await response.text();
-      const lines = responseText.split('\n');
-      for (const line of lines) {
-        const parsed = this.parseSearchResponseLine(line);
-        if (parsed !== undefined) {
-          return parsed;
-        }
-      }
-
-      return {
-        llmContent: 'No search results found. Please try a different query.',
-        returnDisplay: 'No results found.',
-      };
+      const responseBody = await acquireBoundedHttpBody(
+        response,
+        SEARCH_BYTE_BUDGET,
+        signal,
+        cancelRequest,
+      );
+      return this.parseSearchResult(responseBody.text);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -221,7 +260,23 @@ class ExaWebSearchToolInvocation extends BaseToolInvocation<
           type: ToolErrorType.WEB_SEARCH_FAILED,
         },
       };
+    } finally {
+      signal.removeEventListener('abort', onSignalAbort);
     }
+  }
+
+  private parseSearchResult(text: string): ToolResult {
+    const lines = text.split('\n');
+    for (const line of lines) {
+      const parsed = this.parseSearchResponseLine(line);
+      if (parsed !== undefined) {
+        return parsed;
+      }
+    }
+    return {
+      llmContent: 'No search results found. Please try a different query.',
+      returnDisplay: 'No results found.',
+    };
   }
 
   private parseSearchResponseLine(
