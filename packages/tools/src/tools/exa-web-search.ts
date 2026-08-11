@@ -14,7 +14,10 @@ import type { IToolKeyStorage, IToolMessageBus } from '../interfaces/index.js';
 import { ToolErrorType } from '../types/tool-error.js';
 import { ensureJsonSafe } from '../utils/unicodeUtils.js';
 import { createDefaultByteBudget } from '../acquisition/index.js';
-import { acquireBoundedHttpBody } from '../utils/bounded-http-response.js';
+import {
+  acquireBoundedHttpBody,
+  HttpBodyTooLargeError,
+} from '../utils/bounded-http-response.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -157,6 +160,32 @@ class ExaWebSearchToolInvocation extends BaseToolInvocation<
     return baseUrl;
   }
 
+  /**
+   * Read a non-success response body. When the body exceeds the byte budget,
+   * the HTTP status is preserved in the thrown error message.
+   */
+  private async readErrorResponseBody(
+    response: Awaited<ReturnType<typeof fetch>>,
+    signal: AbortSignal,
+    cancelRequest: () => void,
+  ): Promise<string> {
+    try {
+      return (
+        await acquireBoundedHttpBody(
+          response,
+          SEARCH_BYTE_BUDGET,
+          signal,
+          cancelRequest,
+        )
+      ).text;
+    } catch (error) {
+      if (error instanceof HttpBodyTooLargeError) {
+        throw new Error(`Search error (${response.status}): ${error.message}`);
+      }
+      throw error;
+    }
+  }
+
   async execute(
     signal: AbortSignal,
     _updateOutput?: (update: LiveOutputUpdate) => void,
@@ -205,13 +234,12 @@ class ExaWebSearchToolInvocation extends BaseToolInvocation<
       const cancelRequest = (): void => localController.abort();
 
       if (!response.ok) {
-        const errorBody = await acquireBoundedHttpBody(
+        const errorText = await this.readErrorResponseBody(
           response,
-          SEARCH_BYTE_BUDGET,
           signal,
           cancelRequest,
         );
-        throw new Error(`Search error (${response.status}): ${errorBody.text}`);
+        throw new Error(`Search error (${response.status}): ${errorText}`);
       }
 
       const responseBody = await acquireBoundedHttpBody(

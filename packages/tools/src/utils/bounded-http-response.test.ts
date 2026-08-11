@@ -404,10 +404,12 @@ describe('acquireBoundedHttpBody — real server-side cancellation', () => {
     server: http.Server;
     getState: () => { completed: boolean; canceled: boolean };
     getWriterDone: () => Promise<void>;
+    getSocketClosed: () => Promise<void>;
   }> {
     let completed = false;
     let canceled = false;
     let writerDone: Promise<void> | undefined;
+    let socketClosed: Promise<void> | undefined;
     const serverPromise = startServer((_req, res) => {
       const headers: Record<string, string> = {
         'content-type': 'text/plain',
@@ -416,8 +418,16 @@ describe('acquireBoundedHttpBody — real server-side cancellation', () => {
         headers['content-length'] = String(options.contentLength);
       }
       res.writeHead(200, headers);
-      res.socket?.on('close', () => {
-        canceled = !completed;
+
+      const socket = res.socket;
+      if (socket === null) {
+        throw new Error('Paced server response has no socket');
+      }
+      socketClosed = new Promise<void>((resolve) => {
+        socket.on('close', () => {
+          canceled = !completed;
+          resolve();
+        });
       });
 
       writerDone = trackWriter(
@@ -453,11 +463,18 @@ describe('acquireBoundedHttpBody — real server-side cancellation', () => {
         }
         return writerDone;
       },
+      getSocketClosed: () => {
+        if (socketClosed === undefined) {
+          throw new Error('Paced response socket did not start');
+        }
+        return socketClosed;
+      },
     }));
   }
 
   it('cancels the fetch request on observed overflow (no Content-Length)', async () => {
-    const { server, getState, getWriterDone } = await startPacedServer();
+    const { server, getState, getWriterDone, getSocketClosed } =
+      await startPacedServer();
 
     const controller = new AbortController();
     const response = await fetch(serverUrl(server), {
@@ -472,7 +489,7 @@ describe('acquireBoundedHttpBody — real server-side cancellation', () => {
         () => controller.abort(),
       ),
     ).rejects.toBeInstanceOf(HttpBodyTooLargeError);
-    await getWriterDone();
+    await Promise.all([getWriterDone(), getSocketClosed()]);
 
     const state = getState();
     expect(state.canceled).toBe(true);
@@ -480,9 +497,10 @@ describe('acquireBoundedHttpBody — real server-side cancellation', () => {
   });
 
   it('cancels the fetch request on valid over-limit Content-Length early rejection', async () => {
-    const { server, getState, getWriterDone } = await startPacedServer({
-      contentLength: 999999,
-    });
+    const { server, getState, getWriterDone, getSocketClosed } =
+      await startPacedServer({
+        contentLength: 999999,
+      });
 
     const controller = new AbortController();
     const response = await fetch(serverUrl(server), {
@@ -497,7 +515,7 @@ describe('acquireBoundedHttpBody — real server-side cancellation', () => {
         () => controller.abort(),
       ),
     ).rejects.toBeInstanceOf(HttpBodyTooLargeError);
-    await getWriterDone();
+    await Promise.all([getWriterDone(), getSocketClosed()]);
 
     const state = getState();
     expect(state.canceled).toBe(true);
@@ -505,7 +523,8 @@ describe('acquireBoundedHttpBody — real server-side cancellation', () => {
   });
 
   it('cancels the fetch request on mid-read external abort through node-fetch', async () => {
-    const { server, getState, getWriterDone } = await startPacedServer();
+    const { server, getState, getWriterDone, getSocketClosed } =
+      await startPacedServer();
 
     const controller = new AbortController();
     const response = await fetch(serverUrl(server), {
@@ -522,7 +541,7 @@ describe('acquireBoundedHttpBody — real server-side cancellation', () => {
     controller.abort();
 
     await expect(promise).rejects.toThrow(/abort/i);
-    await getWriterDone();
+    await Promise.all([getWriterDone(), getSocketClosed()]);
 
     const state = getState();
     expect(state.canceled).toBe(true);

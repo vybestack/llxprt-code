@@ -198,6 +198,7 @@ describe('DirectWebFetchTool', () => {
     };
     const invocation = tool.build(params);
 
+    const overflowBody = mockBody('x'.repeat(100));
     mockedFetch.mockResolvedValue({
       ok: true,
       headers: {
@@ -206,13 +207,14 @@ describe('DirectWebFetchTool', () => {
           return null;
         },
       },
-      body: mockBody('x'.repeat(100)),
+      body: overflowBody,
     });
 
     const result = await invocation.execute(new AbortController().signal);
 
     expect(result.error?.type).toBe(ToolErrorType.FETCH_ERROR);
     expect(result.error?.message).toMatch(/exceeds/i);
+    expect(overflowBody.destroyed).toBe(true);
     // Body overflow happens after a successful fetch — no retry is triggered.
     expect(mockedFetch).toHaveBeenCalledTimes(1);
   });

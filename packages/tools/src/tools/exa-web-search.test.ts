@@ -19,6 +19,13 @@ function mockBody(text: string): Readable {
   return Readable.from([Buffer.from(text)]);
 }
 
+function getFetchSignal(value: unknown): AbortSignal | undefined {
+  if (typeof value !== 'object' || value === null || !('signal' in value)) {
+    return undefined;
+  }
+  return value.signal instanceof AbortSignal ? value.signal : undefined;
+}
+
 describe('ExaWebSearchTool', () => {
   const keyStorage = { resolveKey: vi.fn() };
   let tool: ExaWebSearchTool;
@@ -128,12 +135,13 @@ describe('ExaWebSearchTool', () => {
 
   describe('body size limits', () => {
     it('returns WEB_SEARCH_FAILED when the success body exceeds the budget', async () => {
+      const successBody = mockBody('x'.repeat(100));
       mockedFetch.mockResolvedValue({
         ok: true,
         headers: {
           get: (key: string) => (key === 'content-length' ? '9999999' : null),
         },
-        body: mockBody('x'.repeat(100)),
+        body: successBody,
       });
 
       const result = await tool
@@ -142,16 +150,20 @@ describe('ExaWebSearchTool', () => {
 
       expect(result.error?.type).toBe(ToolErrorType.WEB_SEARCH_FAILED);
       expect(result.error?.message).toMatch(/exceeds/i);
+      const fetchSignal = getFetchSignal(mockedFetch.mock.calls[0][1]);
+      expect(fetchSignal?.aborted).toBe(true);
+      expect(successBody.destroyed).toBe(true);
     });
 
     it('returns WEB_SEARCH_FAILED when the error body exceeds the budget', async () => {
+      const errorBodyStream = mockBody('x'.repeat(100));
       mockedFetch.mockResolvedValue({
         ok: false,
         status: 500,
         headers: {
           get: (key: string) => (key === 'content-length' ? '9999999' : null),
         },
-        body: mockBody('x'.repeat(100)),
+        body: errorBodyStream,
       });
 
       const result = await tool
@@ -160,6 +172,10 @@ describe('ExaWebSearchTool', () => {
 
       expect(result.error?.type).toBe(ToolErrorType.WEB_SEARCH_FAILED);
       expect(result.error?.message).toMatch(/exceeds/i);
+      expect(result.error?.message).toContain('500');
+      const fetchSignal = getFetchSignal(mockedFetch.mock.calls[0][1]);
+      expect(fetchSignal?.aborted).toBe(true);
+      expect(errorBodyStream.destroyed).toBe(true);
     });
   });
 
@@ -182,10 +198,11 @@ describe('ExaWebSearchTool', () => {
     }
 
     it('returns WEB_SEARCH_FAILED when a no-Content-Length success body exceeds the budget via observed bytes', async () => {
+      const successBody = overflowStream();
       mockedFetch.mockResolvedValue({
         ok: true,
         headers: { get: () => null },
-        body: overflowStream(),
+        body: successBody,
       });
 
       const result = await tool
@@ -194,14 +211,18 @@ describe('ExaWebSearchTool', () => {
 
       expect(result.error?.type).toBe(ToolErrorType.WEB_SEARCH_FAILED);
       expect(result.error?.message).toMatch(/exceeds/i);
+      const fetchSignal = getFetchSignal(mockedFetch.mock.calls[0][1]);
+      expect(fetchSignal?.aborted).toBe(true);
+      expect(successBody.destroyed).toBe(true);
     });
 
     it('returns WEB_SEARCH_FAILED when a no-Content-Length error body exceeds the budget via observed bytes', async () => {
+      const errorBodyStream = overflowStream();
       mockedFetch.mockResolvedValue({
         ok: false,
         status: 500,
         headers: { get: () => null },
-        body: overflowStream(),
+        body: errorBodyStream,
       });
 
       const result = await tool
@@ -210,6 +231,10 @@ describe('ExaWebSearchTool', () => {
 
       expect(result.error?.type).toBe(ToolErrorType.WEB_SEARCH_FAILED);
       expect(result.error?.message).toMatch(/exceeds/i);
+      expect(result.error?.message).toContain('500');
+      const fetchSignal = getFetchSignal(mockedFetch.mock.calls[0][1]);
+      expect(fetchSignal?.aborted).toBe(true);
+      expect(errorBodyStream.destroyed).toBe(true);
     });
   });
 });

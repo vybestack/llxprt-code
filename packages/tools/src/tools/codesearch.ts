@@ -18,7 +18,10 @@ import type {
 import { ToolErrorType } from '../types/tool-error.js';
 import { ensureJsonSafe } from '../utils/unicodeUtils.js';
 import { createDefaultByteBudget } from '../acquisition/index.js';
-import { acquireBoundedHttpBody } from '../utils/bounded-http-response.js';
+import {
+  acquireBoundedHttpBody,
+  HttpBodyTooLargeError,
+} from '../utils/bounded-http-response.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -174,6 +177,27 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
     return body.text;
   }
 
+  /**
+   * Read a non-success response body. When the body exceeds the byte budget,
+   * the HTTP status is preserved in the thrown error message.
+   */
+  private async readErrorResponseBody(
+    response: Awaited<ReturnType<typeof fetch>>,
+    signal: AbortSignal,
+    cancelRequest: () => void,
+  ): Promise<string> {
+    try {
+      return await this.readResponseBody(response, signal, cancelRequest);
+    } catch (error) {
+      if (error instanceof HttpBodyTooLargeError) {
+        throw new Error(
+          `Code search error (${response.status}): ${error.message}`,
+        );
+      }
+      throw error;
+    }
+  }
+
   async execute(
     signal: AbortSignal,
     _updateOutput?: (update: LiveOutputUpdate) => void,
@@ -214,7 +238,7 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
       const cancelRequest = (): void => localController.abort();
 
       if (!response.ok) {
-        const errorText = await this.readResponseBody(
+        const errorText = await this.readErrorResponseBody(
           response,
           signal,
           cancelRequest,
