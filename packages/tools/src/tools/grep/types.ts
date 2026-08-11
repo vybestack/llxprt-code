@@ -1,4 +1,4 @@
-import type { SemanticBudget } from './search-strategies.js';
+import type { SemanticBudget } from './grepBudget.js';
 
 /**
  * Shared types and constants for the grep tool sub-modules.

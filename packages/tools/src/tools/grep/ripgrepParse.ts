@@ -5,6 +5,7 @@
  */
 
 import path from 'path';
+import type { CombinedAcquisitionResult } from '../../acquisition/index.js';
 import type { GrepMatch } from './types.js';
 
 export function parseRipgrepLine(
@@ -36,4 +37,16 @@ export function parseRipgrepLine(
     lineNumber,
     line: lineContent,
   };
+}
+
+export function formatRipgrepDiagnostic(
+  acquisition: CombinedAcquisitionResult,
+): string {
+  const stderr = acquisition.stderrText.trim();
+  if (acquisition.omissionNotice === null) {
+    return stderr;
+  }
+  return stderr.length === 0
+    ? acquisition.omissionNotice
+    : `${stderr}\n${acquisition.omissionNotice}`;
 }

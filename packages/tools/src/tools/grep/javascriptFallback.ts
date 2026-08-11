@@ -11,81 +11,43 @@ import { globStream } from 'glob';
 import { getErrorMessage, isNodeError } from '../../utils/errors.js';
 import { debugLogger } from '../../utils/debugLogger.js';
 import type { GrepMatch, SearchResults } from './types.js';
-
-function extractMatchesFromFile(
-  lines: string[],
-  fileAbsolutePath: string,
-  absolutePath: string,
-  regex: RegExp,
-  maxPerFile: number,
-  maxResults: number,
-  allMatches: GrepMatch[],
-  filesWithMatches: Set<string>,
-): number {
-  let matchesInFile = 0;
-  let totalFound = 0;
-
-  lines.forEach((line, index) => {
-    if (regex.test(line)) {
-      totalFound++;
-      if (matchesInFile < maxPerFile && allMatches.length < maxResults) {
-        allMatches.push({
-          filePath:
-            path.relative(absolutePath, fileAbsolutePath) ||
-            path.basename(fileAbsolutePath),
-          lineNumber: index + 1,
-          line,
-        });
-        matchesInFile++;
-        filesWithMatches.add(fileAbsolutePath);
-      }
-    }
-  });
-
-  return totalFound;
-}
-
-function shouldProcessFile(
-  allMatchesLength: number,
-  maxResults: number,
-  filesWithMatchesSize: number,
-  maxFiles: number,
-  isKnownFile: boolean,
-): boolean {
-  if (allMatchesLength >= maxResults) return false;
-  if (filesWithMatchesSize >= maxFiles && !isKnownFile) return false;
-  return true;
-}
+import {
+  type SemanticBudget,
+  type GrepLimits,
+  type GrepRetainState,
+  createGrepRetainState,
+  retainGrepMatch,
+} from './grepBudget.js';
 
 async function processFallbackFile(
+  state: GrepRetainState,
   filePath: string,
   absolutePath: string,
   regex: RegExp,
-  maxPerFile: number,
-  maxResults: number,
-  allMatches: GrepMatch[],
-  filesWithMatches: Set<string>,
-): Promise<number> {
+  limits: GrepLimits,
+): Promise<void> {
+  let content: string;
   try {
-    const content = await fsPromises.readFile(filePath, 'utf8');
-    const lines = content.split(/\r?\n/);
-    return extractMatchesFromFile(
-      lines,
-      filePath,
-      absolutePath,
-      regex,
-      maxPerFile,
-      maxResults,
-      allMatches,
-      filesWithMatches,
-    );
+    content = await fsPromises.readFile(filePath, 'utf8');
   } catch (readError: unknown) {
     if (!isNodeError(readError) || readError.code !== 'ENOENT') {
       debugLogger.debug(
         `GrepLogic: Could not read/process ${filePath}: ${getErrorMessage(readError)}`,
       );
     }
-    return 0;
+    return;
+  }
+  const lines = content.split(/\r?\n/);
+  for (let i = 0; i < lines.length && !state.earlyStopped; i++) {
+    if (regex.test(lines[i])) {
+      const match: GrepMatch = {
+        filePath:
+          path.relative(absolutePath, filePath) || path.basename(filePath),
+        lineNumber: i + 1,
+        line: lines[i],
+      };
+      retainGrepMatch(state, match, limits);
+    }
   }
 }
 
@@ -98,6 +60,7 @@ export async function javascriptGrepFallback(
   maxFiles: number,
   maxPerFile: number,
   fileExclusions: readonly string[],
+  semanticBudget: SemanticBudget,
 ): Promise<SearchResults> {
   const globPattern = include ?? '**/*';
   const filesStream = globStream(globPattern, {
@@ -110,43 +73,24 @@ export async function javascriptGrepFallback(
   });
 
   const regex = new RegExp(pattern, 'i');
-  const allMatches: GrepMatch[] = [];
-  const filesWithMatches = new Set<string>();
-  let totalFound = 0;
-  let filesLimitHit = false;
+  const limits: GrepLimits = { maxResults, maxFiles, maxPerFile };
+  const state = createGrepRetainState(semanticBudget);
 
   for await (const filePath of filesStream) {
-    if (
-      !shouldProcessFile(
-        allMatches.length,
-        maxResults,
-        filesWithMatches.size,
-        maxFiles,
-        filesWithMatches.has(filePath),
-      )
-    ) {
-      if (filesWithMatches.size >= maxFiles) filesLimitHit = true;
-      break;
-    }
-    totalFound += await processFallbackFile(
-      filePath,
-      absolutePath,
-      regex,
-      maxPerFile,
-      maxResults,
-      allMatches,
-      filesWithMatches,
-    );
+    if (state.earlyStopped) break;
+    await processFallbackFile(state, filePath, absolutePath, regex, limits);
   }
 
-  const incomplete = filesLimitHit;
+  const incomplete = state.earlyStopped || state.budgetExhausted;
   const totalFoundValue =
-    incomplete || totalFound <= allMatches.length ? undefined : totalFound;
+    incomplete || state.observedCount <= state.usableCount
+      ? undefined
+      : state.observedCount;
   return {
-    results: allMatches,
-    wasLimited: totalFound > allMatches.length || filesLimitHit,
+    results: state.matches,
+    wasLimited: state.observedCount > state.usableCount || incomplete,
     totalFound: totalFoundValue,
     incomplete,
-    observedCount: totalFound,
+    observedCount: state.observedCount,
   };
 }

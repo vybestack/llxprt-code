@@ -32,7 +32,10 @@ import { makeRelative, shortenPath } from '../utils/paths.js';
 import { stringOrDefault } from '../utils/stringCoalescing.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { getRipgrepPath } from '../utils/ripgrepPathResolver.js';
-import { parseRipgrepLine } from './grep/ripgrepParse.js';
+import {
+  formatRipgrepDiagnostic,
+  parseRipgrepLine,
+} from './grep/ripgrepParse.js';
 export { parseRipgrepLine };
 import {
   resolveTextSearchTarget,
@@ -46,12 +49,12 @@ const DEFAULT_TOTAL_MAX_MATCHES = 20000;
 const MATCH_OVERHEAD_BYTES = 256;
 const HARD_RETAINED_MATCH_CAP = 100_000;
 
-interface RipgrepSemanticBudget {
+export interface RipgrepSemanticBudget {
   remainingBytes: number;
   remainingObjects: number;
 }
 
-function createAggregateSemanticBudget(): RipgrepSemanticBudget {
+export function createAggregateSemanticBudget(): RipgrepSemanticBudget {
   return {
     remainingBytes: DEFAULT_ACQUISITION_BUDGET_BYTES,
     remainingObjects: HARD_RETAINED_MATCH_CAP,
@@ -153,7 +156,7 @@ interface GrepMatch {
  * Acquisition state for a ripgrep subprocess. Uses record-at-a-time line
  * consumption and bounded semantic retention.
  */
-interface RipgrepAcquisitionState {
+export interface RipgrepAcquisitionState {
   collector: BoundedCombinedCollector;
   framer: BoundedLineFramer;
   matches: GrepMatch[];
@@ -165,7 +168,7 @@ interface RipgrepAcquisitionState {
   terminated: boolean;
 }
 
-function createRipgrepAcquisitionState(
+export function createRipgrepAcquisitionState(
   semanticBudget: RipgrepSemanticBudget,
 ): RipgrepAcquisitionState {
   return {
@@ -223,7 +226,7 @@ function tryRetainRipgrepMatch(
  * bounded line record-at-a-time via callback. Returns true if early stop
  * or budget exhaustion was triggered.
  */
-function processRipgrepStdoutChunk(
+export function processRipgrepStdoutChunk(
   state: RipgrepAcquisitionState,
   chunk: Buffer,
   basePath: string,
@@ -260,7 +263,7 @@ function flushRipgrepLines(
  * Resolve a ripgrep close event into a result or error. An unexpected signal
  * kill (code null with a non-intentional signal) is treated as genuine failure.
  */
-function resolveRipgrepClose(
+export function resolveRipgrepClose(
   code: number | null,
   signal: NodeJS.Signals | null,
   state: RipgrepAcquisitionState,
@@ -273,6 +276,7 @@ function resolveRipgrepClose(
     earlyStopped: boolean;
     budgetTruncated: boolean;
     lineDropped: boolean;
+    rawTruncated: boolean;
   };
   readonly error?: Error;
 } {
@@ -280,30 +284,33 @@ function resolveRipgrepClose(
     flushRipgrepLines(state, basePath, maxMatches);
   }
   const acquisition = state.collector.getResult();
+  const diagnostic = formatRipgrepDiagnostic(acquisition);
+  const diagnosticSuffix = diagnostic === '' ? '' : `: ${diagnostic}`;
   const result = {
     matches: state.matches,
     earlyStopped: state.earlyStopped,
-    budgetTruncated: acquisition.metadata.truncated || state.budgetExhausted,
+    budgetTruncated: state.budgetExhausted,
     lineDropped: state.framer.wasLineDropped,
+    rawTruncated: acquisition.metadata.truncated,
   };
   if (state.earlyStopped || aborted || state.terminated) {
     return { result };
   }
   if (signal !== null) {
     return {
-      error: new Error(`ripgrep was killed by signal ${signal}`),
+      error: new Error(
+        `ripgrep was killed by signal ${signal}${diagnosticSuffix}`,
+      ),
     };
   }
   if (code !== null && code !== 0 && code !== 1) {
     return {
-      error: new Error(
-        `ripgrep exited with code ${code}: ${acquisition.stderrText.trim()}`,
-      ),
+      error: new Error(`ripgrep exited with code ${code}${diagnosticSuffix}`),
     };
   }
   if (code === null) {
     return {
-      error: new Error('ripgrep closed unexpectedly'),
+      error: new Error(`ripgrep closed unexpectedly${diagnosticSuffix}`),
     };
   }
   return { result };
@@ -322,6 +329,7 @@ interface RipgrepSubprocessResult {
   earlyStopped: boolean;
   budgetTruncated: boolean;
   lineDropped: boolean;
+  rawTruncated: boolean;
 }
 
 /** Create a ripgrep AbortError recognised by upstream callers. */
@@ -545,6 +553,11 @@ File: ${resolved.basename}
       ) {
         wasTruncated = true;
       }
+      if (searchResult.rawTruncated && this.host.getDebugMode()) {
+        debugLogger.debug(
+          `[GrepTool] Raw acquisition truncated for root ${searchDir} (diagnostic only, parsed results unaffected)`,
+        );
+      }
 
       if (searchDirectories.length > 1) {
         const dirName = path.basename(searchDir);
@@ -720,6 +733,7 @@ File: ${resolved.basename}
     earlyStopped: boolean;
     budgetTruncated: boolean;
     lineDropped: boolean;
+    rawTruncated: boolean;
   }> {
     const {
       pattern,

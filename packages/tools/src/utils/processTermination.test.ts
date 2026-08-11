@@ -37,7 +37,7 @@ function waitForExit(child: ChildProcess): Promise<void> {
 }
 
 describe('terminateProcessTree - graceful exit', () => {
-  it(
+  it.skipIf(process.platform === 'win32')(
     'signals a running process and it exits gracefully',
     async () => {
       const child = spawnSleeper(30);
@@ -57,13 +57,16 @@ describe('terminateProcessTree - graceful exit', () => {
     { timeout: 10000 },
   );
 
-  it('returns no_target for an already-exited process', async () => {
-    const child = spawnSleeper(0);
-    await waitForExit(child);
+  it.skipIf(process.platform === 'win32')(
+    'returns no_target for an already-exited process',
+    async () => {
+      const child = spawnSleeper(0);
+      await waitForExit(child);
 
-    const result = await terminateProcessTree(child);
-    expect(result.outcome).toBe('no_target');
-  });
+      const result = await terminateProcessTree(child);
+      expect(result.outcome).toBe('no_target');
+    },
+  );
 
   it('returns no_target for a process with no pid', async () => {
     const fakeChild = {
@@ -253,7 +256,7 @@ describe('terminateProcessTree - direct child (no process group)', () => {
 });
 
 describe('terminateProcessTree - coalescing by ChildProcess identity', () => {
-  it(
+  it.skipIf(process.platform === 'win32')(
     'coalesces concurrent calls for the same child',
     async () => {
       const child = spawnSleeper(30);
@@ -278,7 +281,7 @@ describe('terminateProcessTree - coalescing by ChildProcess identity', () => {
     { timeout: 10000 },
   );
 
-  it(
+  it.skipIf(process.platform === 'win32')(
     'coalesces many concurrent calls for the same child',
     async () => {
       const child = spawnSleeper(30);
@@ -302,20 +305,23 @@ describe('terminateProcessTree - coalescing by ChildProcess identity', () => {
     { timeout: 10000 },
   );
 
-  it('returns no_target for a sequential call after first completion', async () => {
-    const child = spawnSleeper(2);
-    await new Promise((r) => setTimeout(r, 100));
+  it.skipIf(process.platform === 'win32')(
+    'returns no_target for a sequential call after first completion',
+    async () => {
+      const child = spawnSleeper(2);
+      await new Promise((r) => setTimeout(r, 100));
 
-    const result1 = await terminateProcessTree(child, {
-      gracePeriodMs: 3000,
-      ownsProcessGroup: true,
-    });
-    await waitForExit(child);
+      const result1 = await terminateProcessTree(child, {
+        gracePeriodMs: 3000,
+        ownsProcessGroup: true,
+      });
+      await waitForExit(child);
 
-    const result2 = await terminateProcessTree(child);
-    expect(result1.outcome).toBe('graceful');
-    expect(result2.outcome).toBe('no_target');
-  });
+      const result2 = await terminateProcessTree(child);
+      expect(result1.outcome).toBe('graceful');
+      expect(result2.outcome).toBe('no_target');
+    },
+  );
 });
 
 describe('terminateProcessTree - exported constants', () => {
@@ -381,6 +387,15 @@ describe('terminateWindowsTree - platform-independent outcome tests', () => {
       postKillWaitMs: 500,
     });
     expect(result.outcome).toBe('failure');
+  });
+
+  it('reports no_target when taskkill exits 128 (target not found)', async () => {
+    const fakeSpawn: TaskkillSpawnFn = () => makeFakeChild({ closeCode: 128 });
+    const result = await terminateWindowsTree(12345, fakeSpawn, {
+      watchdogMs: 1000,
+      postKillWaitMs: 500,
+    });
+    expect(result.outcome).toBe('no_target');
   });
 
   it('reports failure when taskkill spawn throws', async () => {

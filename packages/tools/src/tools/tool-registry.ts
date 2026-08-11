@@ -185,16 +185,16 @@ Signal: Signal number or \`(none)\` if no signal was received.
     };
     signal.addEventListener('abort', abortHandler);
 
-    const { error, code, exitSignal } = await this.awaitProcessSettlement(
-      child,
-      collector,
-      params,
-    );
+    const { error, code, exitSignal, drainTimedOut } =
+      await this.awaitProcessSettlement(child, collector, params);
 
     signal.removeEventListener('abort', abortHandler);
 
     let terminationOutcome: ProcessTerminationResult['outcome'] | null = null;
-    if (child.exitCode === null && child.signalCode === null) {
+    if (
+      drainTimedOut ||
+      (child.exitCode === null && child.signalCode === null)
+    ) {
       terminationPromise ??= terminateProcessTree(child, {
         ownsProcessGroup: true,
       });
@@ -221,10 +221,12 @@ Signal: Signal number or \`(none)\` if no signal was received.
     error: Error | null;
     code: number | null;
     exitSignal: NodeJS.Signals | null;
+    drainTimedOut: boolean;
   }> {
     let error: Error | null = null;
     let code: number | null = null;
     let exitSignal: NodeJS.Signals | null = null;
+    let drainTimedOut = false;
 
     return new Promise((resolve) => {
       let settled = false;
@@ -240,7 +242,7 @@ Signal: Signal number or \`(none)\` if no signal was received.
         child.removeListener('error', onError);
         child.removeListener('exit', onExit);
         child.removeListener('close', onClose);
-        resolve({ error, code, exitSignal });
+        resolve({ error, code, exitSignal, drainTimedOut });
       };
 
       const onStdout = (data: Buffer) => collector.append(data, 'stdout');
@@ -255,7 +257,10 @@ Signal: Signal number or \`(none)\` if no signal was received.
         if (settled) return;
         code = c;
         exitSignal = s;
-        drainTimer = setTimeout(() => settle(), STREAM_DRAIN_TIMEOUT_MS);
+        drainTimer = setTimeout(() => {
+          drainTimedOut = true;
+          settle();
+        }, STREAM_DRAIN_TIMEOUT_MS);
       };
       const onClose = (c: number | null, s: NodeJS.Signals | null) => {
         code ??= c;

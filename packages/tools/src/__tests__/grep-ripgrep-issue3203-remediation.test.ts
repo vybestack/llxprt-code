@@ -5,16 +5,23 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { IToolHost } from '../interfaces/index.js';
+import {
+  type SemanticBudget,
+  createAggregateSemanticBudget,
+  createGrepRetainState,
+  retainGrepMatch,
+} from '../tools/grep/grepBudget.js';
 import { GrepTool, RipGrepTool } from '../index.js';
 import type { ToolResult } from '../index.js';
 import type { GrepToolParams } from '../tools/grep/types.js';
 import type { RipGrepToolParams } from '../tools/ripGrep.js';
 
+const itPosix = process.platform === 'win32' ? it.skip : it;
 function createTempDir(prefix = 'llxprt-grep-remediation-'): {
   dir: string;
   cleanup: () => void;
@@ -192,28 +199,40 @@ describe('Exact-limit evidence: producer at exactly the cap is exhaustive (item 
 });
 
 describe('Strategy budget rollback: failed strategy does not starve fallback (item 4)', () => {
-  it(
-    'git grep failure restores budget for system grep',
+  itPosix(
+    'restores the budget consumed by a failed git grep before system grep',
     async () => {
-      const { performGrepSearch, createAggregateSemanticBudget } = await import(
+      const { performGrepSearch } = await import(
         '../tools/grep/search-strategies.js'
       );
-      const tmp = createTempDir('llxprt-budget-rollback-');
+      const workspace = createTempDir('llxprt-budget-rollback-');
+      const fakeCommand = createTempDir('llxprt-fake-git-');
+      const originalPath = process.env.PATH;
       try {
-        initGitRepo(tmp.dir);
+        initGitRepo(workspace.dir);
         for (let i = 0; i < 10; i++) {
-          writeFileSync(join(tmp.dir, `f${i}.txt`), `match_line_${i}\n`);
+          writeFileSync(join(workspace.dir, `f${i}.txt`), `match_line_${i}\n`);
         }
-        gitAdd(tmp.dir);
+        gitAdd(workspace.dir);
 
-        const budget = createAggregateSemanticBudget();
-        const initialBytes = budget.remainingBytes;
-        const initialObjects = budget.remainingObjects;
+        const fakeOutput = join(fakeCommand.dir, 'output.txt');
+        const fakeGit = join(fakeCommand.dir, 'git');
+        writeFileSync(fakeOutput, `f0.txt:1:match_line_${'x'.repeat(3000)}\n`);
+        writeFileSync(
+          fakeGit,
+          `#!/bin/sh\nif [ "$1" = "--version" ]; then\n  echo "git version test"\n  exit 0\nfi\ncat ${JSON.stringify(fakeOutput)}\necho "forced failure" >&2\nexit 2\n`,
+        );
+        chmodSync(fakeGit, 0o755);
+        process.env.PATH = `${fakeCommand.dir}:${originalPath ?? ''}`;
 
+        const budget: SemanticBudget = {
+          remainingBytes: 4000,
+          remainingObjects: 100,
+        };
         const result = await performGrepSearch(
           {
             pattern: 'match_line',
-            path: tmp.dir,
+            path: workspace.dir,
             signal: new AbortController().signal,
             maxResults: 100,
             maxFiles: 100,
@@ -223,11 +242,18 @@ describe('Strategy budget rollback: failed strategy does not starve fallback (it
           ['node_modules'],
         );
 
-        expect(result.results.length).toBeGreaterThan(0);
-        expect(budget.remainingBytes).toBeLessThanOrEqual(initialBytes);
-        expect(budget.remainingObjects).toBeLessThanOrEqual(initialObjects);
+        expect(result.results).toHaveLength(10);
+        expect(result.incomplete).not.toBe(true);
+        expect(budget.remainingObjects).toBe(90);
+        expect(budget.remainingBytes).toBeGreaterThan(0);
       } finally {
-        tmp.cleanup();
+        if (originalPath === undefined) {
+          delete process.env.PATH;
+        } else {
+          process.env.PATH = originalPath;
+        }
+        fakeCommand.cleanup();
+        workspace.cleanup();
       }
     },
     { timeout: 15000 },
@@ -268,14 +294,16 @@ describe('JavaScript fallback maxFiles prompt stop (item 5)', () => {
         5,
         50,
         ['node_modules'],
+        createAggregateSemanticBudget(),
       );
 
-      expect(result.results.length).toBeLessThanOrEqual(5);
+      expect(result.results).toHaveLength(5);
+      expect(new Set(result.results.map((match) => match.filePath)).size).toBe(
+        5,
+      );
       expect(result.incomplete).toBe(true);
       expect(result.wasLimited).toBe(true);
-      expect(result.observedCount).toBeGreaterThanOrEqual(
-        result.results.length,
-      );
+      expect(result.observedCount).toBe(6);
     },
     { timeout: 15000 },
   );
@@ -300,10 +328,15 @@ describe('JavaScript fallback maxFiles prompt stop (item 5)', () => {
         3,
         50,
         ['node_modules'],
+        createAggregateSemanticBudget(),
       );
 
-      expect(result.results.length).toBeLessThanOrEqual(3);
+      expect(result.results).toHaveLength(3);
+      expect(new Set(result.results.map((match) => match.filePath)).size).toBe(
+        3,
+      );
       expect(result.incomplete).toBe(true);
+      expect(result.observedCount).toBe(4);
       expect(result.totalFound).toBeUndefined();
     },
     { timeout: 15000 },
@@ -344,4 +377,201 @@ describe('Ripgrep multi-root budget exhaustion stops further spawns (item 11)', 
     },
     { timeout: 30000 },
   );
+
+  describe('JavaScript fallback consumes shared SemanticBudget (finding 1)', () => {
+    let tempDir: string;
+    let cleanup: () => void;
+
+    beforeEach(() => {
+      const tmp = createTempDir();
+      tempDir = tmp.dir;
+      cleanup = tmp.cleanup;
+    });
+
+    afterEach(() => {
+      cleanup();
+    });
+
+    it(
+      'decrements semanticBudget.remainingBytes and remainingObjects after retaining matches',
+      async () => {
+        const { javascriptGrepFallback } = await import(
+          '../tools/grep/javascriptFallback.js'
+        );
+
+        writeFileSync(join(tempDir, 'f1.txt'), 'match alpha\nmatch beta\n');
+        writeFileSync(join(tempDir, 'f2.txt'), 'match gamma\n');
+
+        const budget = createAggregateSemanticBudget();
+        const initialBytes = budget.remainingBytes;
+        const initialObjects = budget.remainingObjects;
+
+        await javascriptGrepFallback(
+          'match',
+          tempDir,
+          undefined,
+          new AbortController().signal,
+          1000,
+          100,
+          50,
+          ['node_modules'],
+          budget,
+        );
+
+        expect(budget.remainingBytes).toBeLessThan(initialBytes);
+        expect(budget.remainingObjects).toBeLessThan(initialObjects);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'marks incomplete and stops when semantic byte budget is exhausted',
+      async () => {
+        const { javascriptGrepFallback } = await import(
+          '../tools/grep/javascriptFallback.js'
+        );
+
+        const longLine = 'Z'.repeat(10_000);
+        for (let i = 0; i < 50; i++) {
+          writeFileSync(join(tempDir, `f${i}.txt`), `match${longLine}\n`);
+        }
+
+        const tightBudget: SemanticBudget = {
+          remainingBytes: 50_000,
+          remainingObjects: 100_000,
+        };
+
+        const result = await javascriptGrepFallback(
+          'match',
+          tempDir,
+          undefined,
+          new AbortController().signal,
+          100_000,
+          100,
+          50,
+          ['node_modules'],
+          tightBudget,
+        );
+
+        expect(result.incomplete).toBe(true);
+        expect(result.results.length).toBeLessThan(50);
+        expect(tightBudget.remainingBytes).toBeLessThan(50_000);
+      },
+      { timeout: 15000 },
+    );
+  });
+
+  describe('JavaScript fallback maxResults early stop is proven-incomplete (finding 2)', () => {
+    let tempDir: string;
+    let cleanup: () => void;
+
+    beforeEach(() => {
+      const tmp = createTempDir();
+      tempDir = tmp.dir;
+      cleanup = tmp.cleanup;
+    });
+
+    afterEach(() => {
+      cleanup();
+    });
+
+    it(
+      'exactly maxResults matches is NOT incomplete (exact-cap evidence)',
+      async () => {
+        const { javascriptGrepFallback } = await import(
+          '../tools/grep/javascriptFallback.js'
+        );
+
+        for (let i = 0; i < 5; i++) {
+          writeFileSync(join(tempDir, `f${i}.txt`), `match_line_${i}\n`);
+        }
+
+        const result = await javascriptGrepFallback(
+          'match_line',
+          tempDir,
+          undefined,
+          new AbortController().signal,
+          5,
+          100,
+          50,
+          ['node_modules'],
+          createAggregateSemanticBudget(),
+        );
+
+        expect(result.results.length).toBe(5);
+        expect(result.incomplete).toBe(false);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'maxResults+1 matches IS incomplete (extra match proves omission)',
+      async () => {
+        const { javascriptGrepFallback } = await import(
+          '../tools/grep/javascriptFallback.js'
+        );
+
+        for (let i = 0; i < 6; i++) {
+          writeFileSync(join(tempDir, `f${i}.txt`), `match_line_${i}\n`);
+        }
+
+        const result = await javascriptGrepFallback(
+          'match_line',
+          tempDir,
+          undefined,
+          new AbortController().signal,
+          5,
+          100,
+          50,
+          ['node_modules'],
+          createAggregateSemanticBudget(),
+        );
+
+        expect(result.results.length).toBe(5);
+        expect(result.incomplete).toBe(true);
+      },
+      { timeout: 15000 },
+    );
+  });
+});
+
+describe('Grep exact-cap evidence with per-file limits', () => {
+  it('ignores unusable dominant-file matches until a later usable match proves omission', () => {
+    const state = createGrepRetainState(createAggregateSemanticBudget());
+    const limits = { maxResults: 2, maxFiles: 10, maxPerFile: 2 };
+
+    retainGrepMatch(
+      state,
+      { filePath: 'dominant.txt', lineNumber: 1, line: 'match 1' },
+      limits,
+    );
+    retainGrepMatch(
+      state,
+      { filePath: 'dominant.txt', lineNumber: 2, line: 'match 2' },
+      limits,
+    );
+    const dominantOverflowStopped = retainGrepMatch(
+      state,
+      { filePath: 'dominant.txt', lineNumber: 3, line: 'match 3' },
+      limits,
+    );
+
+    expect(dominantOverflowStopped).toBe(false);
+    expect(state.earlyStopped).toBe(false);
+    expect(state.matches).toHaveLength(2);
+
+    const laterUsableMatchStopped = retainGrepMatch(
+      state,
+      { filePath: 'later.txt', lineNumber: 1, line: 'match later' },
+      limits,
+    );
+
+    expect(laterUsableMatchStopped).toBe(true);
+    expect(state.earlyStopped).toBe(true);
+    expect(state.observedCount).toBe(4);
+    expect(state.matches.map((match) => match.line)).toEqual([
+      'match 1',
+      'match 2',
+    ]);
+  });
 });

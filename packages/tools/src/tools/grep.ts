@@ -37,8 +37,8 @@ import {
 import {
   performGrepSearch,
   performSingleFileSearch,
-  createAggregateSemanticBudget,
 } from './grep/search-strategies.js';
+import { createAggregateSemanticBudget } from './grep/grepBudget.js';
 
 export { type GrepToolParams } from './grep/types.js';
 

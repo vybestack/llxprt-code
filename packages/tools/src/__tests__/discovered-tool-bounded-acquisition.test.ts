@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   writeFileSync,
+  readFileSync,
   mkdirSync,
   rmSync,
   chmodSync,
@@ -496,4 +497,73 @@ describe('BoundedCombinedCollector deterministic single huge chunk', () => {
     expect(result.metadata.retainedBytes).toBe(1024);
     expect(result.stdoutText).toHaveLength(1024);
   });
+});
+
+function hasErrorCode(error: unknown, code: string): boolean {
+  return error instanceof Error && 'code' in error && error.code === code;
+}
+
+function killDescendantFromMarker(markerPath: string): void {
+  let descendantPid: number;
+  try {
+    descendantPid = Number.parseInt(
+      readFileSync(markerPath, 'utf8').trim(),
+      10,
+    );
+  } catch (error: unknown) {
+    if (hasErrorCode(error, 'ENOENT')) return;
+    throw error;
+  }
+  if (!Number.isSafeInteger(descendantPid) || descendantPid <= 0) return;
+  try {
+    process.kill(descendantPid, 'SIGKILL');
+  } catch (error: unknown) {
+    if (!hasErrorCode(error, 'ESRCH')) throw error;
+  }
+}
+
+describe('DiscoveredTool drain timeout terminates descendant group', () => {
+  let tempDir: string;
+  let markerPath: string;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const tmp = createTempDir();
+    tempDir = tmp.dir;
+    markerPath = join(tempDir, 'descendant.pid');
+    cleanup = tmp.cleanup;
+  });
+
+  afterEach(() => {
+    try {
+      killDescendantFromMarker(markerPath);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'kills a descendant holding inherited pipes after the leader exits',
+    async () => {
+      const script = createScript(
+        tempDir,
+        'leak.sh',
+        `#!/bin/sh\n(sleep 30) &\necho $! > "${markerPath}"\nexit 0`,
+      );
+      const tool = createDiscoveredTool(script);
+
+      await executeTool(tool);
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      const descendantPid = Number.parseInt(
+        readFileSync(markerPath, 'utf8').trim(),
+        10,
+      );
+      expect(descendantPid).toBeGreaterThan(0);
+
+      expect(() => process.kill(descendantPid, 0)).toThrow('ESRCH');
+    },
+    { timeout: 15000 },
+  );
 });

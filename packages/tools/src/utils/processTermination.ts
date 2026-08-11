@@ -276,7 +276,13 @@ export function terminateWindowsTree(
     };
 
     const onClose = (code: number | null) => {
-      resolveOnce(code === 0 ? 'graceful' : 'failure');
+      if (code === 0) {
+        resolveOnce('graceful');
+      } else if (code === 128) {
+        resolveOnce('no_target');
+      } else {
+        resolveOnce('failure');
+      }
     };
 
     const onError = () => {

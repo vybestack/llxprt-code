@@ -21,7 +21,6 @@ import { javascriptGrepFallback } from './javascriptFallback.js';
 import {
   BoundedCombinedCollector,
   createDefaultByteBudget,
-  DEFAULT_ACQUISITION_BUDGET_BYTES,
 } from '../../acquisition/index.js';
 import { BoundedLineFramer } from '../../utils/lineFramer.js';
 import { terminateProcessTree } from '../../utils/processTermination.js';
@@ -30,6 +29,14 @@ import {
   type SubprocessSettlement,
   type AbortHandlerRef,
 } from '../../utils/subprocessSettle.js';
+import {
+  type SemanticBudget,
+  type GrepLimits,
+  type GrepRetainState,
+  createAggregateSemanticBudget,
+  createGrepRetainState,
+  retainGrepMatch,
+} from './grepBudget.js';
 
 /**
  * Checks if a glob pattern contains brace expansion syntax that git grep doesn't support.
@@ -234,21 +241,6 @@ interface BoundedGrepSubprocessOptions {
   tolerateNonZeroExitWithoutStderr?: boolean;
 }
 
-export interface SemanticBudget {
-  remainingBytes: number;
-  remainingObjects: number;
-}
-
-export const MATCH_OVERHEAD_BYTES = 256;
-export const HARD_RETAINED_MATCH_CAP = 100_000;
-
-export function createAggregateSemanticBudget(): SemanticBudget {
-  return {
-    remainingBytes: DEFAULT_ACQUISITION_BUDGET_BYTES,
-    remainingObjects: HARD_RETAINED_MATCH_CAP,
-  };
-}
-
 function buildSearchResults(
   matches: GrepMatch[],
   observedCount: number,
@@ -271,25 +263,13 @@ function buildSearchResults(
   };
 }
 
-interface GrepLimits {
-  maxResults: number;
-  maxFiles: number;
-  maxPerFile: number;
-}
-
-interface GrepAcquisitionState {
+/**
+ * Acquisition state for a grep subprocess. Extends the shared bounded
+ * retention state with subprocess-specific collection/framing fields.
+ */
+interface GrepAcquisitionState extends GrepRetainState {
   collector: BoundedCombinedCollector;
   framer: BoundedLineFramer;
-  matches: GrepMatch[];
-  perFileCount: Map<string, number>;
-  filesSeen: Set<string>;
-  observedCount: number;
-  usableCount: number;
-  retainedBytes: number;
-  semanticBudget: SemanticBudget;
-  earlyStopped: boolean;
-  capReached: boolean;
-  budgetExhausted: boolean;
   terminated: boolean;
   readonly limits: GrepLimits;
 }
@@ -299,74 +279,14 @@ function createGrepAcquisitionState(
   semanticBudget: SemanticBudget,
 ): GrepAcquisitionState {
   return {
+    ...createGrepRetainState(semanticBudget),
     collector: new BoundedCombinedCollector({
       budget: createDefaultByteBudget(),
     }),
     framer: new BoundedLineFramer(),
-    matches: [],
-    perFileCount: new Map(),
-    filesSeen: new Set(),
-    observedCount: 0,
-    usableCount: 0,
-    retainedBytes: 0,
-    semanticBudget,
-    earlyStopped: false,
-    capReached: false,
-    budgetExhausted: false,
     terminated: false,
     limits,
   };
-}
-
-/**
- * Attempt to retain a parsed grep match in bounded semantic storage.
- *
- * Matches beyond {@link GrepLimits.maxPerFile} for a single file are counted
- * but NOT retained, preventing a dominant file from growing the matches array
- * without bound. Retained matches are also capped by an aggregate semantic
- * byte budget tied to the same acquisition budget.
- */
-function tryRetainGrepMatch(
-  state: GrepAcquisitionState,
-  match: GrepMatch,
-): void {
-  state.observedCount++;
-
-  if (state.capReached) {
-    state.earlyStopped = true;
-    return;
-  }
-
-  state.filesSeen.add(match.filePath);
-  const fc = (state.perFileCount.get(match.filePath) ?? 0) + 1;
-  state.perFileCount.set(match.filePath, fc);
-
-  if (fc <= state.limits.maxPerFile) {
-    const matchBytes =
-      Buffer.byteLength(match.line, 'utf8') +
-      Buffer.byteLength(match.filePath, 'utf8') +
-      MATCH_OVERHEAD_BYTES;
-    if (
-      state.semanticBudget.remainingBytes < matchBytes ||
-      state.semanticBudget.remainingObjects <= 0
-    ) {
-      state.budgetExhausted = true;
-      state.earlyStopped = true;
-      return;
-    }
-    state.matches.push(match);
-    state.retainedBytes += matchBytes;
-    state.semanticBudget.remainingBytes -= matchBytes;
-    state.semanticBudget.remainingObjects--;
-    state.usableCount++;
-  }
-
-  if (state.usableCount >= state.limits.maxResults) {
-    state.capReached = true;
-  }
-  if (state.filesSeen.size > state.limits.maxFiles) {
-    state.earlyStopped = true;
-  }
 }
 
 /**
@@ -386,7 +306,7 @@ function processGrepStdoutChunk(
     if (state.earlyStopped) return;
     const match = parseGrepLine(line, cwd);
     if (!match) return;
-    tryRetainGrepMatch(state, match);
+    retainGrepMatch(state, match, state.limits);
   });
 
   return state.earlyStopped;
@@ -398,7 +318,7 @@ function flushGrepLines(state: GrepAcquisitionState, cwd: string): void {
     if (state.earlyStopped) return;
     const match = parseGrepLine(line, cwd);
     if (!match) return;
-    tryRetainGrepMatch(state, match);
+    retainGrepMatch(state, match, state.limits);
   });
 }
 
@@ -891,6 +811,7 @@ export async function performGrepSearch(
       maxFiles,
       maxPerFile,
       fileExclusions,
+      semanticBudget,
     );
   } catch (error: unknown) {
     debugLogger.error(
