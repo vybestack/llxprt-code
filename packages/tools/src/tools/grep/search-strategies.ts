@@ -11,14 +11,25 @@
 
 import fsPromises from 'fs/promises';
 import path from 'path';
-import { EOL } from 'os';
 import { spawn } from 'child_process';
-import { globStream } from 'glob';
 
-import { getErrorMessage, isNodeError } from '../../utils/errors.js';
+import { getErrorMessage } from '../../utils/errors.js';
 import { isGitRepository } from '../../utils/gitUtils.js';
 import { debugLogger } from '../../utils/debugLogger.js';
 import type { GrepMatch, SearchResults, SearchOptions } from './types.js';
+import { javascriptGrepFallback } from './javascriptFallback.js';
+import {
+  BoundedCombinedCollector,
+  createDefaultByteBudget,
+  DEFAULT_ACQUISITION_BUDGET_BYTES,
+} from '../../acquisition/index.js';
+import { BoundedLineFramer } from '../../utils/lineFramer.js';
+import { terminateProcessTree } from '../../utils/processTermination.js';
+import {
+  createSettleFn,
+  type SubprocessSettlement,
+  type AbortHandlerRef,
+} from '../../utils/subprocessSettle.js';
 
 /**
  * Checks if a glob pattern contains brace expansion syntax that git grep doesn't support.
@@ -37,7 +48,13 @@ export function hasBraceExpansion(pattern: string): boolean {
 /**
  * Checks if a command is available in the system's PATH.
  */
-export function isCommandAvailable(command: string): Promise<boolean> {
+export function isCommandAvailable(
+  command: string,
+  abortSignal?: AbortSignal,
+): Promise<boolean> {
+  if (abortSignal?.aborted === true) {
+    return Promise.resolve(false);
+  }
   return new Promise((resolve) => {
     const checkCommand = process.platform === 'win32' ? 'where' : 'command';
     const checkArgs =
@@ -46,13 +63,23 @@ export function isCommandAvailable(command: string): Promise<boolean> {
       const child = spawn(checkCommand, checkArgs, {
         stdio: 'ignore',
         shell: true,
+        windowsHide: true,
       });
-      child.on('close', (code) => resolve(code === 0));
-      child.on('error', (err) => {
-        debugLogger.debug(
-          `[GrepTool] Failed to start process for '${command}':`,
-          err.message,
-        );
+      const onAbort = () => {
+        try {
+          child.kill('SIGKILL');
+        } catch {
+          /* best-effort */
+        }
+        resolve(false);
+      };
+      abortSignal?.addEventListener('abort', onAbort, { once: true });
+      child.on('close', (code) => {
+        abortSignal?.removeEventListener('abort', onAbort);
+        resolve(code === 0);
+      });
+      child.on('error', () => {
+        abortSignal?.removeEventListener('abort', onAbort);
         resolve(false);
       });
     } catch {
@@ -98,7 +125,7 @@ export function parseGrepOutput(output: string, basePath: string): GrepMatch[] {
   const results: GrepMatch[] = [];
   if (!output) return results;
 
-  const lines = output.split(EOL);
+  const lines = output.split(new RegExp('\\r?\\n'));
 
   for (const line of lines) {
     const match = parseGrepLine(line, basePath);
@@ -167,6 +194,379 @@ export function applyLimits(
     totalFound: totalFound > results.length ? totalFound : undefined,
   };
 }
+/**
+ * Error thrown when a search subprocess is aborted via its AbortSignal.
+ *
+ * Has `name = 'AbortError'` so upstream callers can recognise it. Must never
+ * be caught as a strategy-unavailable failure or trigger grep fallback.
+ */
+export class SearchAbortedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AbortError';
+  }
+}
+
+export class ProcessLifecycleError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ProcessLifecycleError';
+  }
+}
+
+function isLifecycleError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === 'AbortError' || error.name === 'ProcessLifecycleError')
+  );
+}
+
+interface BoundedGrepResult {
+  matches: GrepMatch[];
+  observedCount: number;
+  earlyStopped: boolean;
+  budgetTruncated: boolean;
+  lineDropped: boolean;
+}
+
+interface BoundedGrepSubprocessOptions {
+  filterStderr?: (text: string) => string;
+  tolerateNonZeroExitWithoutStderr?: boolean;
+}
+
+export interface SemanticBudget {
+  remainingBytes: number;
+  remainingObjects: number;
+}
+
+export const MATCH_OVERHEAD_BYTES = 256;
+export const HARD_RETAINED_MATCH_CAP = 100_000;
+
+export function createAggregateSemanticBudget(): SemanticBudget {
+  return {
+    remainingBytes: DEFAULT_ACQUISITION_BUDGET_BYTES,
+    remainingObjects: HARD_RETAINED_MATCH_CAP,
+  };
+}
+
+function buildSearchResults(
+  matches: GrepMatch[],
+  observedCount: number,
+  incomplete: boolean,
+  maxResults: number,
+  maxFiles: number,
+  maxPerFile: number,
+): SearchResults {
+  const limited = applyLimits(matches, maxResults, maxFiles, maxPerFile);
+  const wasLimited = limited.wasLimited === true || incomplete;
+  const totalFound = incomplete
+    ? undefined
+    : Math.max(observedCount, limited.results.length);
+  return {
+    results: limited.results,
+    wasLimited,
+    totalFound,
+    incomplete,
+    observedCount,
+  };
+}
+
+interface GrepLimits {
+  maxResults: number;
+  maxFiles: number;
+  maxPerFile: number;
+}
+
+interface GrepAcquisitionState {
+  collector: BoundedCombinedCollector;
+  framer: BoundedLineFramer;
+  matches: GrepMatch[];
+  perFileCount: Map<string, number>;
+  filesSeen: Set<string>;
+  observedCount: number;
+  usableCount: number;
+  retainedBytes: number;
+  semanticBudget: SemanticBudget;
+  earlyStopped: boolean;
+  capReached: boolean;
+  budgetExhausted: boolean;
+  terminated: boolean;
+  readonly limits: GrepLimits;
+}
+
+function createGrepAcquisitionState(
+  limits: GrepLimits,
+  semanticBudget: SemanticBudget,
+): GrepAcquisitionState {
+  return {
+    collector: new BoundedCombinedCollector({
+      budget: createDefaultByteBudget(),
+    }),
+    framer: new BoundedLineFramer(),
+    matches: [],
+    perFileCount: new Map(),
+    filesSeen: new Set(),
+    observedCount: 0,
+    usableCount: 0,
+    retainedBytes: 0,
+    semanticBudget,
+    earlyStopped: false,
+    capReached: false,
+    budgetExhausted: false,
+    terminated: false,
+    limits,
+  };
+}
+
+/**
+ * Attempt to retain a parsed grep match in bounded semantic storage.
+ *
+ * Matches beyond {@link GrepLimits.maxPerFile} for a single file are counted
+ * but NOT retained, preventing a dominant file from growing the matches array
+ * without bound. Retained matches are also capped by an aggregate semantic
+ * byte budget tied to the same acquisition budget.
+ */
+function tryRetainGrepMatch(
+  state: GrepAcquisitionState,
+  match: GrepMatch,
+): void {
+  state.observedCount++;
+
+  if (state.capReached) {
+    state.earlyStopped = true;
+    return;
+  }
+
+  state.filesSeen.add(match.filePath);
+  const fc = (state.perFileCount.get(match.filePath) ?? 0) + 1;
+  state.perFileCount.set(match.filePath, fc);
+
+  if (fc <= state.limits.maxPerFile) {
+    const matchBytes =
+      Buffer.byteLength(match.line, 'utf8') +
+      Buffer.byteLength(match.filePath, 'utf8') +
+      MATCH_OVERHEAD_BYTES;
+    if (
+      state.semanticBudget.remainingBytes < matchBytes ||
+      state.semanticBudget.remainingObjects <= 0
+    ) {
+      state.budgetExhausted = true;
+      state.earlyStopped = true;
+      return;
+    }
+    state.matches.push(match);
+    state.retainedBytes += matchBytes;
+    state.semanticBudget.remainingBytes -= matchBytes;
+    state.semanticBudget.remainingObjects--;
+    state.usableCount++;
+  }
+
+  if (state.usableCount >= state.limits.maxResults) {
+    state.capReached = true;
+  }
+  if (state.filesSeen.size > state.limits.maxFiles) {
+    state.earlyStopped = true;
+  }
+}
+
+/**
+ * Feed a stdout chunk into the collector and framer, consuming each complete
+ * bounded line record-at-a-time via callback. Returns true if early stop
+ * or budget exhaustion was triggered.
+ */
+function processGrepStdoutChunk(
+  state: GrepAcquisitionState,
+  chunk: Buffer,
+  cwd: string,
+): boolean {
+  state.collector.append(chunk, 'stdout');
+  if (state.terminated) return false;
+
+  state.framer.feedChunk(chunk, (line) => {
+    if (state.earlyStopped) return;
+    const match = parseGrepLine(line, cwd);
+    if (!match) return;
+    tryRetainGrepMatch(state, match);
+  });
+
+  return state.earlyStopped;
+}
+
+/** Flush remaining lines from the framer and retain bounded matches. */
+function flushGrepLines(state: GrepAcquisitionState, cwd: string): void {
+  state.framer.flushRemaining((line) => {
+    if (state.earlyStopped) return;
+    const match = parseGrepLine(line, cwd);
+    if (!match) return;
+    tryRetainGrepMatch(state, match);
+  });
+}
+
+/**
+ * Check the exit code and return an Error if the subprocess genuinely failed.
+ * Returns null for success, no-match (code 1), early stop, or abort.
+ * An unexpected signal kill (code null with a non-intentional signal) is
+ * treated as genuine failure, not successful exhaustive output.
+ */
+function checkGrepExitCode(
+  code: number | null,
+  signal: NodeJS.Signals | null,
+  earlyStopped: boolean,
+  aborted: boolean,
+  terminated: boolean,
+  stderrText: string,
+  command: string,
+  options: BoundedGrepSubprocessOptions | undefined,
+): Error | null {
+  if (earlyStopped || aborted || terminated) return null;
+  if (code === 0 || code === 1) return null;
+  if (signal !== null) {
+    return new Error(`${command} was killed by signal ${signal}`);
+  }
+  if (code !== null) {
+    if (
+      options?.tolerateNonZeroExitWithoutStderr === true &&
+      stderrText.length === 0
+    ) {
+      return null;
+    }
+    return new Error(`${command} exited with code ${code}: ${stderrText}`);
+  }
+  return new Error(`${command} closed unexpectedly`);
+}
+
+/** Resolution of a grep subprocess close event. */
+interface GrepCloseResolution {
+  readonly result?: BoundedGrepResult;
+  readonly error?: Error;
+}
+
+/** Resolve a grep subprocess close into a result or error. */
+function resolveGrepClose(
+  code: number | null,
+  signal: NodeJS.Signals | null,
+  state: GrepAcquisitionState,
+  aborted: boolean,
+  cwd: string,
+  command: string,
+  options: BoundedGrepSubprocessOptions | undefined,
+): GrepCloseResolution {
+  if (!state.terminated) {
+    flushGrepLines(state, cwd);
+  }
+  const rawStderr = state.collector.getStderrText().trim();
+  const stderrText = options?.filterStderr
+    ? options.filterStderr(rawStderr).trim()
+    : rawStderr;
+  const exitError = checkGrepExitCode(
+    code,
+    signal,
+    state.earlyStopped,
+    aborted,
+    state.terminated,
+    stderrText,
+    command,
+    options,
+  );
+  if (exitError !== null) {
+    return { error: exitError };
+  }
+  const acquisition = state.collector.getResult();
+  return {
+    result: {
+      matches: state.matches,
+      observedCount: state.observedCount,
+      earlyStopped: state.earlyStopped,
+      budgetTruncated: acquisition.metadata.truncated || state.budgetExhausted,
+      lineDropped: state.framer.wasLineDropped,
+    },
+  };
+}
+
+async function runBoundedGrepSubprocess(
+  command: string,
+  args: string[],
+  cwd: string,
+  abortSignal: AbortSignal,
+  maxResults: number,
+  maxFiles: number,
+  maxPerFile: number,
+  semanticBudget: SemanticBudget,
+  options?: BoundedGrepSubprocessOptions,
+): Promise<BoundedGrepResult> {
+  if (abortSignal.aborted) {
+    throw new SearchAbortedError(`${command} aborted`);
+  }
+  const limits: GrepLimits = { maxResults, maxFiles, maxPerFile };
+  const state = createGrepAcquisitionState(limits, semanticBudget);
+  return new Promise<BoundedGrepResult>((resolve, reject) => {
+    const settlement: SubprocessSettlement = {
+      settled: false,
+      terminationPromise: null,
+    };
+    const abortRef: AbortHandlerRef = { handler: () => {} };
+
+    const child = spawn(command, args, {
+      cwd,
+      windowsHide: true,
+      detached: process.platform !== 'win32',
+    });
+
+    const stopProcess = () => {
+      if (state.terminated) return;
+      state.terminated = true;
+      settlement.terminationPromise = terminateProcessTree(child, {
+        ownsProcessGroup: process.platform !== 'win32',
+      });
+    };
+
+    const settle = createSettleFn(
+      settlement,
+      abortSignal,
+      abortRef,
+      reject,
+      ProcessLifecycleError,
+      command,
+    );
+
+    abortRef.handler = () => {
+      stopProcess();
+      settle(() => reject(new SearchAbortedError(`${command} aborted`)));
+    };
+    abortSignal.addEventListener('abort', abortRef.handler);
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      if (processGrepStdoutChunk(state, chunk, cwd)) stopProcess();
+    });
+    child.stderr.on('data', (chunk: Buffer) =>
+      state.collector.append(chunk, 'stderr'),
+    );
+    child.on('error', (err: Error) => {
+      settle(() => {
+        reject(
+          abortSignal.aborted
+            ? new SearchAbortedError(`${command} aborted`)
+            : new Error(`Failed to start ${command}: ${err.message}`),
+        );
+      });
+    });
+    child.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
+      settle(() => {
+        const resolution = resolveGrepClose(
+          code,
+          signal,
+          state,
+          abortSignal.aborted,
+          cwd,
+          command,
+          options,
+        );
+        if (resolution.error !== undefined) reject(resolution.error);
+        else if (resolution.result !== undefined) resolve(resolution.result);
+      });
+    });
+  });
+}
 
 /**
  * Runs git grep as Strategy 1.
@@ -180,9 +580,14 @@ export async function tryGitGrep(
   maxFiles: number,
   maxPerFile: number,
   hasBracePattern: boolean,
+  semanticBudget: SemanticBudget,
 ): Promise<SearchResults | null> {
   const isGit = !hasBracePattern && isGitRepository(absolutePath);
-  const gitAvailable = isGit && (await isCommandAvailable('git'));
+  const gitAvailable = isGit && (await isCommandAvailable('git', abortSignal));
+
+  if (abortSignal.aborted) {
+    throw new SearchAbortedError('git grep aborted');
+  }
 
   if (!gitAvailable) return null;
 
@@ -192,42 +597,35 @@ export async function tryGitGrep(
   }
 
   try {
-    const output = await new Promise<string>((resolve, reject) => {
-      const child = spawn('git', gitArgs, {
-        cwd: absolutePath,
-        windowsHide: true,
-      });
-      const stdoutChunks: Buffer[] = [];
-      const stderrChunks: Buffer[] = [];
-
-      const abortHandler = () => {
-        if (!child.killed) {
-          child.kill('SIGTERM');
-        }
-        reject(new Error('git grep aborted'));
-      };
-      abortSignal.addEventListener('abort', abortHandler);
-
-      child.stdout.on('data', (chunk) => stdoutChunks.push(chunk));
-      child.stderr.on('data', (chunk) => stderrChunks.push(chunk));
-      child.on('error', (err) => {
-        abortSignal.removeEventListener('abort', abortHandler);
-        reject(new Error(`Failed to start git grep: ${err.message}`));
-      });
-      child.on('close', (code) => {
-        abortSignal.removeEventListener('abort', abortHandler);
-        const stdoutData = Buffer.concat(stdoutChunks).toString('utf8');
-        const stderrData = Buffer.concat(stderrChunks).toString('utf8');
-        if (code === 0) resolve(stdoutData);
-        else if (code === 1)
-          resolve(''); // No matches
-        else
-          reject(new Error(`git grep exited with code ${code}: ${stderrData}`));
-      });
-    });
-    const matches = parseGrepOutput(output, absolutePath);
-    return applyLimits(matches, maxResults, maxFiles, maxPerFile);
+    const {
+      matches,
+      observedCount,
+      earlyStopped,
+      budgetTruncated,
+      lineDropped,
+    } = await runBoundedGrepSubprocess(
+      'git',
+      gitArgs,
+      absolutePath,
+      abortSignal,
+      maxResults,
+      maxFiles,
+      maxPerFile,
+      semanticBudget,
+    );
+    const incomplete = earlyStopped || budgetTruncated || lineDropped;
+    return buildSearchResults(
+      matches,
+      observedCount,
+      incomplete,
+      maxResults,
+      maxFiles,
+      maxPerFile,
+    );
   } catch (gitError: unknown) {
+    if (isLifecycleError(gitError)) {
+      throw gitError;
+    }
     debugLogger.debug(
       `GrepLogic: git grep failed: ${getErrorMessage(
         gitError,
@@ -276,68 +674,19 @@ export function buildSystemGrepArgs(
 }
 
 /**
- * Sets up event handlers for a spawned grep child process.
+ * Filters system grep stderr, removing non-fatal noise like permission
+ * denied or "Is a directory" messages.
  */
-function setupSystemGrepHandlers(
-  child: ReturnType<typeof spawn>,
-  abortSignal: AbortSignal,
-  stdoutChunks: Buffer[],
-  stderrChunks: Buffer[],
-  resolve: (value: string) => void,
-  reject: (reason: Error) => void,
-): () => void {
-  const abortHandler = () => {
-    if (!child.killed) {
-      child.kill('SIGTERM');
-    }
-    cleanup();
-    reject(new Error('system grep aborted'));
-  };
-  abortSignal.addEventListener('abort', abortHandler);
-
-  const onData = (chunk: Buffer) => stdoutChunks.push(chunk);
-  const onStderr = (chunk: Buffer) => {
-    const stderrStr = chunk.toString();
-    if (
-      !stderrStr.includes('Permission denied') &&
-      !/grep:.*: Is a directory/i.test(stderrStr)
-    ) {
-      stderrChunks.push(chunk);
-    }
-  };
-  const onError = (err: Error) => {
-    cleanup();
-    reject(new Error(`Failed to start system grep: ${err.message}`));
-  };
-  const onClose = (code: number | null) => {
-    const stdoutData = Buffer.concat(stdoutChunks).toString('utf8');
-    const stderrData = Buffer.concat(stderrChunks).toString('utf8').trim();
-    cleanup();
-    if (code === 0) resolve(stdoutData);
-    else if (code === 1)
-      resolve(''); // No matches
-    else if (stderrData)
-      reject(new Error(`System grep exited with code ${code}: ${stderrData}`));
-    else resolve(''); // Exit code > 1 but no stderr, likely just suppressed errors
-  };
-
-  const cleanup = () => {
-    abortSignal.removeEventListener('abort', abortHandler);
-    child.stdout!.removeListener('data', onData);
-    child.stderr!.removeListener('data', onStderr);
-    child.removeListener('error', onError);
-    child.removeListener('close', onClose);
-    if (child.connected) {
-      child.disconnect();
-    }
-  };
-
-  child.stdout!.on('data', onData);
-  child.stderr!.on('data', onStderr);
-  child.on('error', onError);
-  child.on('close', onClose);
-
-  return cleanup;
+function filterSystemGrepStderr(text: string): string {
+  const crlf = new RegExp('\\r?\\n');
+  return text
+    .split(crlf)
+    .filter(
+      (line) =>
+        !line.includes('Permission denied') &&
+        !/grep:.*: Is a directory/i.test(line),
+    )
+    .join('\n');
 }
 
 /**
@@ -350,28 +699,42 @@ export async function trySystemGrep(
   maxResults: number,
   maxFiles: number,
   maxPerFile: number,
+  semanticBudget: SemanticBudget,
 ): Promise<SearchResults | null> {
   try {
-    const output = await new Promise<string>((resolve, reject) => {
-      const child = spawn('grep', grepArgs, {
-        cwd: absolutePath,
-        windowsHide: true,
-      });
-      const stdoutChunks: Buffer[] = [];
-      const stderrChunks: Buffer[] = [];
-
-      setupSystemGrepHandlers(
-        child,
-        abortSignal,
-        stdoutChunks,
-        stderrChunks,
-        resolve,
-        reject,
-      );
-    });
-    const matches = parseGrepOutput(output, absolutePath);
-    return applyLimits(matches, maxResults, maxFiles, maxPerFile);
+    const {
+      matches,
+      observedCount,
+      earlyStopped,
+      budgetTruncated,
+      lineDropped,
+    } = await runBoundedGrepSubprocess(
+      'grep',
+      grepArgs,
+      absolutePath,
+      abortSignal,
+      maxResults,
+      maxFiles,
+      maxPerFile,
+      semanticBudget,
+      {
+        filterStderr: filterSystemGrepStderr,
+        tolerateNonZeroExitWithoutStderr: true,
+      },
+    );
+    const incomplete = earlyStopped || budgetTruncated || lineDropped;
+    return buildSearchResults(
+      matches,
+      observedCount,
+      incomplete,
+      maxResults,
+      maxFiles,
+      maxPerFile,
+    );
   } catch (grepError: unknown) {
+    if (isLifecycleError(grepError)) {
+      throw grepError;
+    }
     debugLogger.debug(
       `GrepLogic: System grep failed: ${getErrorMessage(
         grepError,
@@ -379,168 +742,6 @@ export async function trySystemGrep(
     );
     return null;
   }
-}
-
-/**
- * Extracts matches from a single file's content lines.
- */
-function extractMatchesFromFile(
-  lines: string[],
-  fileAbsolutePath: string,
-  absolutePath: string,
-  regex: RegExp,
-  maxPerFile: number,
-  maxResults: number,
-  allMatches: GrepMatch[],
-  filesWithMatches: Set<string>,
-): number {
-  let matchesInFile = 0;
-  let totalFound = 0;
-
-  lines.forEach((line, index) => {
-    if (regex.test(line)) {
-      totalFound++;
-      if (matchesInFile < maxPerFile && allMatches.length < maxResults) {
-        allMatches.push({
-          filePath:
-            path.relative(absolutePath, fileAbsolutePath) ||
-            path.basename(fileAbsolutePath),
-          lineNumber: index + 1,
-          line,
-        });
-        matchesInFile++;
-        filesWithMatches.add(fileAbsolutePath);
-      }
-    }
-  });
-
-  return totalFound;
-}
-
-/**
- * Determines whether the JS fallback loop should continue to the next file.
- * Returns false if the results limit is reached (caller should stop the loop)
- * or if the file limit is reached for a new file.
- */
-function shouldProcessFile(
-  allMatchesLength: number,
-  maxResults: number,
-  filesWithMatchesSize: number,
-  maxFiles: number,
-  isKnownFile: boolean,
-): boolean {
-  if (allMatchesLength >= maxResults) {
-    return false;
-  }
-  if (filesWithMatchesSize >= maxFiles && !isKnownFile) {
-    return false;
-  }
-  return true;
-}
-
-/**
- * Processes a single file for matches during the JS fallback, accumulating
- * into the shared collections.
- */
-async function processFallbackFile(
-  filePath: string,
-  absolutePath: string,
-  regex: RegExp,
-  maxPerFile: number,
-  maxResults: number,
-  allMatches: GrepMatch[],
-  filesWithMatches: Set<string>,
-): Promise<number> {
-  const fileAbsolutePath = filePath;
-  try {
-    const content = await fsPromises.readFile(fileAbsolutePath, 'utf8');
-    const lines = content.split(/\r?\n/);
-
-    return extractMatchesFromFile(
-      lines,
-      fileAbsolutePath,
-      absolutePath,
-      regex,
-      maxPerFile,
-      maxResults,
-      allMatches,
-      filesWithMatches,
-    );
-  } catch (readError: unknown) {
-    // Ignore errors like permission denied or file gone during read
-    if (!isNodeError(readError) || readError.code !== 'ENOENT') {
-      debugLogger.debug(
-        `GrepLogic: Could not read/process ${fileAbsolutePath}: ${getErrorMessage(
-          readError,
-        )}`,
-      );
-    }
-    return 0;
-  }
-}
-
-/**
- * Pure JavaScript fallback for grep (Strategy 3).
- */
-export async function javascriptGrepFallback(
-  pattern: string,
-  absolutePath: string,
-  include: string | undefined,
-  abortSignal: AbortSignal,
-  maxResults: number,
-  maxFiles: number,
-  maxPerFile: number,
-  fileExclusions: readonly string[],
-): Promise<SearchResults> {
-  const globPattern = include ?? '**/*';
-  const ignorePatterns = [...fileExclusions];
-
-  const filesStream = globStream(globPattern, {
-    cwd: absolutePath,
-    dot: true,
-    ignore: ignorePatterns,
-    absolute: true,
-    nodir: true,
-    signal: abortSignal,
-  });
-
-  const regex = new RegExp(pattern, 'i');
-  const allMatches: GrepMatch[] = [];
-  const filesWithMatches = new Set<string>();
-  let totalFound = 0;
-
-  for await (const filePath of filesStream) {
-    if (
-      !shouldProcessFile(
-        allMatches.length,
-        maxResults,
-        filesWithMatches.size,
-        maxFiles,
-        filesWithMatches.has(filePath),
-      )
-    ) {
-      // Stop entirely if we've hit the results limit; otherwise just skip
-      if (allMatches.length >= maxResults) {
-        break;
-      }
-    } else {
-      totalFound += await processFallbackFile(
-        filePath,
-        absolutePath,
-        regex,
-        maxPerFile,
-        maxResults,
-        allMatches,
-        filesWithMatches,
-      );
-    }
-  }
-
-  return {
-    results: allMatches,
-    wasLimited: totalFound > allMatches.length,
-    totalFound: totalFound > allMatches.length ? totalFound : undefined,
-  };
 }
 
 /**
@@ -555,13 +756,11 @@ async function trySystemGrepStrategy(
   maxFiles: number,
   maxPerFile: number,
   fileExclusions: readonly string[],
+  semanticBudget: SemanticBudget,
 ): Promise<SearchResults | null> {
   debugLogger.debug(
     'GrepLogic: System grep is being considered as fallback strategy.',
   );
-
-  const grepAvailable = await isCommandAvailable('grep');
-  if (!grepAvailable) return null;
 
   const grepArgs = buildSystemGrepArgs(pattern, include, fileExclusions);
   return trySystemGrep(
@@ -571,6 +770,7 @@ async function trySystemGrepStrategy(
     maxResults,
     maxFiles,
     maxPerFile,
+    semanticBudget,
   );
 }
 
@@ -604,6 +804,24 @@ export async function performSingleFileSearch(
   return matches;
 }
 
+function snapshotBudget(budget: SemanticBudget): {
+  remainingBytes: number;
+  remainingObjects: number;
+} {
+  return {
+    remainingBytes: budget.remainingBytes,
+    remainingObjects: budget.remainingObjects,
+  };
+}
+
+function restoreBudget(
+  budget: SemanticBudget,
+  snapshot: { remainingBytes: number; remainingObjects: number },
+): void {
+  budget.remainingBytes = snapshot.remainingBytes;
+  budget.remainingObjects = snapshot.remainingObjects;
+}
+
 /**
  * Performs the actual search using the prioritized strategies:
  * git grep → system grep → JavaScript fallback.
@@ -619,16 +837,17 @@ export async function performGrepSearch(
     maxResults = 1000,
     maxFiles = 100,
     maxPerFile = 50,
+    semanticBudget = createAggregateSemanticBudget(),
   } = options;
   let strategyUsed = 'none';
 
   try {
-    // --- Strategy 1: git grep ---
     const hasBracePattern =
       typeof include === 'string' &&
       include.length > 0 &&
       hasBraceExpansion(include);
 
+    const gitSnapshot = snapshotBudget(semanticBudget);
     const gitResult = await tryGitGrep(
       pattern,
       absolutePath,
@@ -638,13 +857,13 @@ export async function performGrepSearch(
       maxFiles,
       maxPerFile,
       hasBracePattern,
+      semanticBudget,
     );
-    if (gitResult !== null) {
-      return gitResult;
-    }
+    if (gitResult !== null) return gitResult;
+    restoreBudget(semanticBudget, gitSnapshot);
 
-    // --- Strategy 2: System grep ---
     strategyUsed = 'system grep';
+    const sysSnapshot = snapshotBudget(semanticBudget);
     const sysResult = await trySystemGrepStrategy(
       pattern,
       absolutePath,
@@ -654,12 +873,11 @@ export async function performGrepSearch(
       maxFiles,
       maxPerFile,
       fileExclusions,
+      semanticBudget,
     );
-    if (sysResult !== null) {
-      return sysResult;
-    }
+    if (sysResult !== null) return sysResult;
+    restoreBudget(semanticBudget, sysSnapshot);
 
-    // --- Strategy 3: Pure JavaScript Fallback ---
     debugLogger.debug(
       'GrepLogic: Falling back to JavaScript grep implementation.',
     );
@@ -680,6 +898,6 @@ export async function performGrepSearch(
         error,
       )}`,
     );
-    throw error; // Re-throw
+    throw error;
   }
 }
