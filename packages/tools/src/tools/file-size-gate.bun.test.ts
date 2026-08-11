@@ -22,6 +22,7 @@ import {
   rmSync,
   statSync,
   existsSync,
+  chmodSync,
   promises as fsPromises,
 } from 'node:fs';
 import { join } from 'node:path';
@@ -674,6 +675,58 @@ describe('statFileSizeGate only gates regular files (item I)', () => {
 });
 
 /**
+ * statFileSizeGate must narrow its catch to ENOENT only. An unexpected stat
+ * failure (EACCES, EIO, ...) must fail fast (throw) rather than be masked as a
+ * missing file, which would let a real error silently bypass the gate
+ * (issue #3205 item M).
+ */
+describe('statFileSizeGate fails fast on unexpected stat errors (item M)', () => {
+  // chmod 000 on a parent directory denies search (execute) permission, so
+  // stat of a child file fails with EACCES on POSIX non-root. This produces a
+  // real non-ENOENT stat failure without a test-only production hook.
+  const supportsEaccesFixture =
+    process.platform !== 'win32' && process.getuid?.() !== 0;
+  let tempDir = '';
+  let lockedDir = '';
+
+  beforeEach(() => {
+    tempDir = join(
+      tmpdir(),
+      `llxprt-eacces-3205-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+    mkdirSync(tempDir, { recursive: true });
+    lockedDir = join(tempDir, 'locked');
+    mkdirSync(lockedDir, { recursive: true });
+    writeFileSync(join(lockedDir, 'inner.txt'), 'hello\n');
+  });
+
+  afterEach(() => {
+    if (supportsEaccesFixture && lockedDir !== '') {
+      try {
+        chmodSync(lockedDir, 0o755);
+      } catch {
+        // best effort: restore so cleanup can remove it
+      }
+    }
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it.skipIf(!supportsEaccesFixture)(
+    'throws (does not return null) for a stat EACCES failure',
+    async () => {
+      // Deny traversal into the directory -> stat of the child fails EACCES.
+      chmodSync(lockedDir, 0o000);
+      // A masked-as-missing return would be `null`; fail-fast must throw so the
+      // caller's invocation error handling can surface the real permission
+      // problem instead of silently bypassing the gate.
+      await expect(
+        statFileSizeGate(join(lockedDir, 'inner.txt')),
+      ).rejects.toThrow(/EACCES|permission/i);
+    },
+  );
+});
+
+/**
  * Host filesystem-service content must not bypass the size policy. A host may
  * return content divergent from native stat, so acquired host content is
  * validated immediately after acquisition (issue #3205 item E).
@@ -761,6 +814,25 @@ describe('host divergent-content size policy (item E)', () => {
       { file_path: p, old_string: 'TARGET', new_string: 'REPLACED' },
     );
     expect(isFileTooLarge(result)).toBe(true);
+  });
+
+  it('ast_edit rejects >20MiB host content for a small native target', async () => {
+    const p = join(tempDir, 'small.ts');
+    writeFileSync(p, 'const value = 1;\n');
+    const huge = 'x'.repeat(MAX_FILE_SIZE_BYTES + 1);
+    const result = await runTool(
+      new ASTEditTool(createDivergentHost(tempDir, huge)),
+      {
+        file_path: p,
+        old_string: 'const value = 1;',
+        new_string: 'const value = 2;',
+        force: true,
+      },
+    );
+    expect(isFileTooLarge(result)).toBe(true);
+    // The authoritative host content is rejected before materialization, so
+    // the (small) native target is left unchanged.
+    expect(statSync(p).size).toBe(Buffer.byteLength('const value = 1;\n'));
   });
 });
 

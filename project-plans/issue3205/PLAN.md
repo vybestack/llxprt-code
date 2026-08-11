@@ -85,3 +85,23 @@ Parent: #3202
 
 - DeepThinker reviewed the implementation against this accepted plan. Grounded findings about skipped-file partiality, authoritative host-returned size validation, dependency partiality, and boundary coverage were classified `In-scope-Fix` and remediated test-first. Parser/public redesign suggestions were classified `Reject` because they violate explicit non-goals. No `Blocker-Fix` or `Defer` item remains.
 - One local Open Code Review cycle selected 20 TypeScript files and emitted 10 findings. Seven grounded finding groups were classified `In-scope-Fix` and remediated; two behavior-changing suggestions were classified `Reject`; no finding was classified `Blocker-Fix` or `Defer`. OCR exhausted its own tool-round budget on `file-size-gate.bun.test.ts` and `structural-analysis/types.ts`; those files were independently covered by the 40-test file-size suite and full tools typecheck. The review-cycle ceiling precludes another local review.
+
+### PR-hosted review disposition
+
+- `In-scope-Fix`: authoritative host-returned AST-edit content was not size-validated immediately after acquisition. A RED host-divergence test proved that a small native target paired with over-20-MiB host content was accepted; the shared byte gate now rejects it before syntax/diff work.
+- `In-scope-Fix`: a pre-aborted single-file AST-grep invocation still read and parsed its target. A RED real-file test now proves the invocation returns no matches with `partialReason: "aborted"` before acquisition.
+- `In-scope-Fix`: structural record retention could increment accounting after the authoritative signal aborted. Focused RED tracker coverage now proves `tryRetainRecord()` stops without changing counts, and `markAborted()` only marks partiality when its signal is actually aborted.
+- `In-scope-Fix`: the shared native stat gate treated every stat failure as a missing target. Real permission-boundary coverage now proves only `ENOENT` returns `null`; unexpected native stat failures are rethrown.
+- `Reject`: proposals to add an absolute AST-grep `maxResults` schema ceiling, handle invalid infinite validated settings locally, split forward/reverse dependency budgets, raise the structural file ceiling, or change max-results/abort precedence conflict with the accepted public-contract and shared-budget design.
+- `Reject`: claims that early AST-grep termination makes observed `skippedFiles` inaccurate, that dependency duplicate behavior affects export sentinel accounting, or that apply-patch/write confirmation loses the execute-time size error are inconsistent with the implemented ownership and result contracts.
+- `Reject`: a redundant test guard, docstring-coverage churn, and the LLxprt walkthrough statement that committed behavioral tests were absent are optional, out of scope, or factually invalid. The committed suites were executed by the tools runner and CI.
+- Five findings were therefore classified `In-scope-Fix` and remediated test-first; twelve were classified `Reject`. No PR finding remains classified `Blocker-Fix` or `Defer`.
+
+### PR-remediation verification
+
+- Focused issue and tracker suites passed: 81 tests, 0 failures, 198 expectations. The file-size suite passed 42 tests, AST-grep passed 19, structural integration passed 16, and focused tracker coverage passed 4.
+- Full tools verification passed 94/94 isolated Bun test files. The AST-edit regression inventory passed 251 tests with 0 failures and 747 expectations.
+- `npm run format`, `npm run format:check`, `npm run typecheck`, `npm run build`, `npm run lint:eslint-guard`, strict zero-warning ESLint for all remediation-touched TypeScript files, and `git diff --check` passed on the remediation candidate.
+- The required `stepfun-37` smoke command passed and returned only a three-line haiku after the profile banner.
+- The initial PR candidate had already passed all test/lint/build/review checks except one Windows installed-command job whose fixed 10-minute global npm installation ended with `ETIMEDOUT` before issue-specific execution. The failed job was rerun; the authoritative post-remediation CI run is required before final readiness.
+- No package manifest, lockfile, workflow, `.llxprt` content, public tool parameter, setting/schema, suppression, ignore, lint downgrade, or complexity-threshold change was introduced.

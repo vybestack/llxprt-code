@@ -116,8 +116,18 @@ export class BudgetTracker {
    * the budget (caller retains it). Returns false when the record budget is
    * exhausted: the FIRST such call observes the one-over sentinel (setting
    * truncated/partialReason) and the record must NOT be retained.
+   *
+   * Also returns false without incrementing any counter when the signal has
+   * already aborted. An abort can be observed between the file-level check
+   * ({@link shouldVisitMoreFiles}) and record retention (after an async file
+   * parse), so the record loop must not inflate observed/retained counts once
+   * the authoritative signal is aborted.
    */
   tryRetainRecord(): boolean {
+    if (this.signal.aborted) {
+      this.markTruncated('aborted');
+      return false;
+    }
     this.recordsObserved++;
     if (this.recordsRetained < this.budget.recordBudget) {
       this.recordsRetained++;
@@ -130,9 +140,16 @@ export class BudgetTracker {
     return false;
   }
 
-  /** Mark the traversal aborted by the caller's signal. */
+  /**
+   * Mark the traversal aborted by the caller's signal. Respects the
+   * authoritative signal this tracker was constructed with: a no-op when the
+   * signal is not actually aborted, so a stray call cannot fabricate partial
+   * metadata.
+   */
   markAborted(): void {
-    this.markTruncated('aborted');
+    if (this.signal.aborted) {
+      this.markTruncated('aborted');
+    }
   }
 
   /** Whether counts are lower bounds rather than exhaustive totals. */

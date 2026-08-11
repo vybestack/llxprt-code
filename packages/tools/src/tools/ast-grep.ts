@@ -232,6 +232,28 @@ class AstGrepToolInvocation extends BaseToolInvocation<
     };
     let skippedFiles = 0;
 
+    // AbortSignal.aborted is a mutable property; reading it through a helper
+    // avoids TS narrowing it to `false` after the pre-abort check (the signal
+    // can become aborted during an awaited traversal step).
+    const isAborted = (): boolean => signal?.aborted === true;
+
+    // A pre-aborted signal must never read/parse a file or present a falsely
+    // complete result, for either a single-file or directory target. The
+    // directory path re-checks this after its async glob resolution; this
+    // top-level check closes the single-file gap and keeps both paths
+    // consistent.
+    if (isAborted()) {
+      acc.truncated = true;
+      acc.partialReason = 'aborted';
+      return {
+        matches: acc.matches,
+        truncated: acc.truncated,
+        partialReason: acc.partialReason,
+        skippedFiles,
+        observedCount: acc.observedCount,
+      };
+    }
+
     if (isSingleFile) {
       const content = await fs.readFile(searchPath, 'utf-8');
       this.searchContentBounded(
@@ -258,8 +280,9 @@ class AstGrepToolInvocation extends BaseToolInvocation<
       );
     }
 
-    // A pre-aborted signal must never read as a falsely complete result.
-    if (signal?.aborted === true && !acc.truncated) {
+    // A signal that aborts during an awaited traversal step must never read as
+    // a falsely complete result.
+    if (isAborted() && !acc.truncated) {
       acc.truncated = true;
       acc.partialReason = 'aborted';
     }

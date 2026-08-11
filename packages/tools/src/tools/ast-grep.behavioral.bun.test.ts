@@ -273,6 +273,31 @@ describe('ast_grep bounded acquisition (issue #3205)', () => {
     expect(meta.partialReason).toBe('aborted');
   });
 
+  it('a pre-aborted SINGLE-FILE request avoids read/parse work and returns no matches', async () => {
+    // A single-file target whose content holds many matches. A pre-aborted
+    // signal must short-circuit before reading/parsing: no match records are
+    // retained, and the result is an explicit partial with reason `aborted`.
+    const host = createToolHost(tempDir);
+    const controller = new AbortController();
+    controller.abort();
+    const result = await runGrep(
+      host,
+      {
+        pattern: '$OBJ.$F($$$ARGS)',
+        language: 'typescript',
+        path: join(tempDir, 'far-over.ts'),
+        maxResults: 5,
+      },
+      controller.signal,
+    );
+    const meta = metadataOf(result);
+    expect(meta.truncated).toBe(true);
+    expect(meta.partialReason).toBe('aborted');
+    // No matches materialized: the pre-aborted single-file path must not
+    // read/parse the file.
+    expect((meta.matches ?? []).length).toBe(0);
+  });
+
   it('aborts DURING a real large-directory traversal and returns a partial result', async () => {
     // 300 files × 2 matches = 600 matches. A real AbortController is raised
     // after invocation has begun, at the earliest deterministic macrotask

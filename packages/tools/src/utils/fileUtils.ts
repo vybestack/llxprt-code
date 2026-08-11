@@ -10,6 +10,7 @@ import { type ContentPartUnion } from '../types/wire-types.js';
 import mime from 'mime-types';
 import { ToolErrorType } from '../types/tool-error.js';
 import { debugLogger } from './debugLogger.js';
+import { isNodeError } from './errors.js';
 import {
   ImageResizeError,
   resizeImageIfNeeded,
@@ -582,9 +583,15 @@ export async function statFileSizeGate(
   let stats: fs.Stats;
   try {
     stats = await fs.promises.stat(filePath);
-  } catch {
-    // Missing/unstatable file: let the caller's read path handle ENOENT etc.
-    return null;
+  } catch (error: unknown) {
+    // ENOENT: missing file — let the caller's read path handle new-file
+    // creation. Any other stat failure (EACCES, EIO, ...) is unexpected and
+    // must fail fast so the caller surfaces the real error instead of
+    // silently bypassing the gate as if the file were missing.
+    if (isNodeError(error) && error.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
   }
   // FILE_TOO_LARGE applies only to regular files; non-regular targets
   // (directories, devices, sockets) fall through to their established
