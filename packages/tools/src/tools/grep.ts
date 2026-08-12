@@ -42,6 +42,7 @@ import { createAggregateSemanticBudget } from './grep/grepBudget.js';
 
 export { type GrepToolParams } from './grep/types.js';
 
+const MAX_RESULTS_DEFAULT = 1000;
 const MAX_RESULTS_HARD_CAP = 100_000;
 const MAX_FILES_HARD_CAP = 10_000;
 const MAX_PER_FILE_HARD_CAP = 10_000;
@@ -66,7 +67,24 @@ function validateFinitePositive(
   return Math.min(n, hardCap);
 }
 
-function validateGrepLimits(params: GrepToolParams): {
+function resolveEphemeralMaxResults(value: unknown): number {
+  if (value === undefined || value === null) return 0;
+  const n = typeof value === 'string' ? Number(value) : value;
+  if (
+    typeof n !== 'number' ||
+    !Number.isFinite(n) ||
+    n <= 0 ||
+    !Number.isInteger(n)
+  ) {
+    return 0;
+  }
+  return Math.min(n, MAX_RESULTS_HARD_CAP);
+}
+
+function validateGrepLimits(
+  params: GrepToolParams,
+  ephemeralMaxResults?: unknown,
+): {
   maxResults: number;
   maxFiles: number;
   maxPerFile: number;
@@ -92,8 +110,20 @@ function validateGrepLimits(params: GrepToolParams): {
     'timeout_ms',
     MAX_TIMEOUT_MS,
   );
+  const ephemeralMax =
+    ephemeralMaxResults !== undefined
+      ? resolveEphemeralMaxResults(ephemeralMaxResults)
+      : 0;
+  let fallbackMax: number;
+  if (maxResultsRaw !== 0) {
+    fallbackMax = maxResultsRaw;
+  } else if (ephemeralMax !== 0) {
+    fallbackMax = ephemeralMax;
+  } else {
+    fallbackMax = MAX_RESULTS_DEFAULT;
+  }
   return {
-    maxResults: maxResultsRaw !== 0 ? maxResultsRaw : 1000,
+    maxResults: fallbackMax,
     maxFiles: maxFilesRaw !== 0 ? maxFilesRaw : 100,
     maxPerFile: maxPerFileRaw !== 0 ? maxPerFileRaw : 50,
     timeoutMs: Math.min(
@@ -217,6 +247,7 @@ File: ${resolved.basename}
     for (const searchDir of searchDirectories) {
       if (allMatches.length >= maxResults) {
         wasLimited = true;
+        totalIsExact = false;
         break;
       }
 
@@ -615,8 +646,10 @@ File: ${resolved.basename}
   }
 
   async execute(signal: AbortSignal): Promise<ToolResult> {
+    const ephemeralSettings = this.host.getEphemeralSettings();
     const { maxResults, maxFiles, maxPerFile, timeoutMs } = validateGrepLimits(
       this.params,
+      ephemeralSettings['tool-output-max-items'],
     );
     const timeoutController = new AbortController();
     const timeoutId = setTimeout(() => timeoutController.abort(), timeoutMs);
@@ -751,7 +784,7 @@ export class GrepTool extends BaseDeclarativeTool<GrepToolParams, ToolResult> {
           },
           max_results: {
             description:
-              'Optional: Maximum number of total matches to return. Defaults to 1000. Must be a positive integer.',
+              'Optional: Maximum number of total matches to return. Defaults to the tool-output-max-items setting or 1000. Must be a positive integer.',
             type: 'number',
             minimum: 1,
             maximum: MAX_RESULTS_HARD_CAP,

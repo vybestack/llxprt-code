@@ -575,3 +575,146 @@ describe('Grep exact-cap evidence with per-file limits', () => {
     ]);
   });
 });
+
+describe('Exact-cap multi-root completeness: skipped roots mark incomplete (item 3)', () => {
+  let tempDir: string;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const tmp = createTempDir('llxprt-multicap-');
+    tempDir = tmp.dir;
+    cleanup = tmp.cleanup;
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it(
+    'grep: first root fills exact cap, later root skipped => incomplete/non-exact',
+    async () => {
+      const rootA = join(tempDir, 'rootA');
+      const rootB = join(tempDir, 'rootB');
+      mkdirSync(rootA, { recursive: true });
+      mkdirSync(rootB, { recursive: true });
+      for (let i = 0; i < 5; i++) {
+        writeFileSync(join(rootA, `f${i}.txt`), `capmatch_${i}\n`);
+      }
+      writeFileSync(join(rootB, 'extra.txt'), 'capmatch_extra\n');
+
+      const host: IToolHost = {
+        ...createToolHost(tempDir),
+        getWorkspaceRoots: () => [rootA, rootB],
+      };
+
+      const result = await executeGrep(host, {
+        pattern: 'capmatch',
+        max_results: 5,
+        max_files: 100,
+        max_per_file: 1,
+      });
+
+      const text =
+        typeof result.llmContent === 'string' ? result.llmContent : '';
+      // Root A filled the cap; root B was skipped => incomplete
+      expect(text).toMatch(/incomplete|showing.*may be/i);
+      expect(text).not.toMatch(/^Found 5 matches for pattern/m);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'grep: all roots fully exhausted at cap remains exact',
+    async () => {
+      const rootA = join(tempDir, 'rootA');
+      const rootB = join(tempDir, 'rootB');
+      mkdirSync(rootA, { recursive: true });
+      mkdirSync(rootB, { recursive: true });
+      // Root A: 2 matches, Root B: 3 matches, total = 5 = maxResults
+      writeFileSync(join(rootA, 'f1.txt'), 'exactmatch_1\n');
+      writeFileSync(join(rootA, 'f2.txt'), 'exactmatch_2\n');
+      writeFileSync(join(rootB, 'f3.txt'), 'exactmatch_3\n');
+      writeFileSync(join(rootB, 'f4.txt'), 'exactmatch_4\n');
+      writeFileSync(join(rootB, 'f5.txt'), 'exactmatch_5\n');
+
+      const host: IToolHost = {
+        ...createToolHost(tempDir),
+        getWorkspaceRoots: () => [rootA, rootB],
+      };
+
+      const result = await executeGrep(host, {
+        pattern: 'exactmatch',
+        max_results: 5,
+        max_files: 100,
+        max_per_file: 1,
+      });
+
+      const text =
+        typeof result.llmContent === 'string' ? result.llmContent : '';
+      // All 5 matches across both roots, no root skipped => exact
+      expect(text).not.toMatch(/incomplete|showing.*may be/i);
+      expect(text).toMatch(/^Found 5 matches for pattern/m);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'ripgrep: first root fills exact cap, later root skipped => incomplete',
+    async () => {
+      const rootA = join(tempDir, 'rootA');
+      const rootB = join(tempDir, 'rootB');
+      mkdirSync(rootA, { recursive: true });
+      mkdirSync(rootB, { recursive: true });
+
+      // Root A: exactly 20000 matches (fills the default cap)
+      const linesA: string[] = [];
+      for (let i = 0; i < 20000; i++) {
+        linesA.push(`rgcapmatch_${i}`);
+      }
+      writeFileSync(join(rootA, 'big.txt'), linesA.join('\n'));
+      // Root B: at least one match
+      writeFileSync(join(rootB, 'extra.txt'), 'rgcapmatch_extra\n');
+
+      const host: IToolHost = {
+        ...createToolHost(tempDir),
+        getWorkspaceRoots: () => [rootA, rootB],
+      };
+
+      const result = await executeRipgrep(host, {
+        pattern: 'rgcapmatch',
+      });
+
+      const text =
+        typeof result.llmContent === 'string' ? result.llmContent : '';
+      expect(text).toMatch(/incomplete|showing/i);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'ripgrep: all roots fully exhausted remains exact',
+    async () => {
+      const rootA = join(tempDir, 'rootA');
+      const rootB = join(tempDir, 'rootB');
+      mkdirSync(rootA, { recursive: true });
+      mkdirSync(rootB, { recursive: true });
+      writeFileSync(join(rootA, 'f1.txt'), 'rgexact_1\nrgexact_2\n');
+      writeFileSync(join(rootB, 'f2.txt'), 'rgexact_3\n');
+
+      const host: IToolHost = {
+        ...createToolHost(tempDir),
+        getWorkspaceRoots: () => [rootA, rootB],
+      };
+
+      const result = await executeRipgrep(host, {
+        pattern: 'rgexact',
+      });
+
+      const text =
+        typeof result.llmContent === 'string' ? result.llmContent : '';
+      expect(text).not.toMatch(/incomplete|showing/i);
+      expect(text).toMatch(/Found 3 matches/);
+    },
+    { timeout: 15000 },
+  );
+});

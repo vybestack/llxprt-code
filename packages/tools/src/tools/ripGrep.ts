@@ -19,7 +19,6 @@ import { SchemaValidator } from '../utils/schemaValidator.js';
 import {
   BoundedCombinedCollector,
   createDefaultByteBudget,
-  DEFAULT_ACQUISITION_BUDGET_BYTES,
 } from '../acquisition/index.js';
 import { BoundedLineFramer } from '../utils/lineFramer.js';
 import { terminateProcessTree } from '../utils/processTermination.js';
@@ -42,24 +41,18 @@ import {
   type ResolvedSearchTarget,
 } from '../utils/resolveTextSearchTarget.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import {
+  type SemanticBudget,
+  createAggregateSemanticBudget,
+  MATCH_OVERHEAD_BYTES,
+} from './grep/grepBudget.js';
+
+export type { SemanticBudget as RipgrepSemanticBudget } from './grep/grepBudget.js';
+export { createAggregateSemanticBudget } from './grep/grepBudget.js';
 
 export const ripGrepDebugLogger = debugLogger;
 
 const DEFAULT_TOTAL_MAX_MATCHES = 20000;
-const MATCH_OVERHEAD_BYTES = 256;
-const HARD_RETAINED_MATCH_CAP = 100_000;
-
-export interface RipgrepSemanticBudget {
-  remainingBytes: number;
-  remainingObjects: number;
-}
-
-export function createAggregateSemanticBudget(): RipgrepSemanticBudget {
-  return {
-    remainingBytes: DEFAULT_ACQUISITION_BUDGET_BYTES,
-    remainingObjects: HARD_RETAINED_MATCH_CAP,
-  };
-}
 
 /**
  * Parameters for the GrepTool
@@ -161,7 +154,7 @@ export interface RipgrepAcquisitionState {
   framer: BoundedLineFramer;
   matches: GrepMatch[];
   retainedBytes: number;
-  semanticBudget: RipgrepSemanticBudget;
+  semanticBudget: SemanticBudget;
   earlyStopped: boolean;
   capReached: boolean;
   budgetExhausted: boolean;
@@ -169,7 +162,7 @@ export interface RipgrepAcquisitionState {
 }
 
 export function createRipgrepAcquisitionState(
-  semanticBudget: RipgrepSemanticBudget,
+  semanticBudget: SemanticBudget,
 ): RipgrepAcquisitionState {
   return {
     collector: new BoundedCombinedCollector({
@@ -527,6 +520,7 @@ File: ${resolved.basename}
     }
 
     let stop = false;
+    let lastSearchedIndex = -1;
     for (let di = 0; di < searchDirectories.length && !stop; di++) {
       const searchDir = searchDirectories[di];
       const remaining = totalMaxMatches - allMatches.length;
@@ -535,6 +529,7 @@ File: ${resolved.basename}
         stop = true;
         continue;
       }
+      lastSearchedIndex = di;
 
       const searchResult = await this.performRipgrepSearch({
         pattern: this.params.pattern,
@@ -573,6 +568,11 @@ File: ${resolved.basename}
       }
       stop =
         allMatches.length >= totalMaxMatches || searchResult.budgetTruncated;
+    }
+
+    // Skipped roots imply incomplete even without an observed extra record.
+    if (lastSearchedIndex < searchDirectories.length - 1) {
+      wasTruncated = true;
     }
 
     return { matches: allMatches, wasTruncated };
@@ -704,7 +704,7 @@ File: ${resolved.basename}
     rgArgs: string[],
     signal: AbortSignal,
     maxMatches: number,
-    semanticBudget: RipgrepSemanticBudget,
+    semanticBudget: SemanticBudget,
   ): Promise<RipgrepSubprocessResult> {
     const resolvedRgPath = await getRipgrepPath();
     if (signal.aborted) throw ripgrepAbortError();
@@ -727,7 +727,7 @@ File: ${resolved.basename}
     signal: AbortSignal;
     ignoreOptions: RipgrepIgnoreOptions;
     maxMatches: number;
-    semanticBudget: RipgrepSemanticBudget;
+    semanticBudget: SemanticBudget;
   }): Promise<{
     matches: GrepMatch[];
     earlyStopped: boolean;

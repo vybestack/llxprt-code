@@ -96,10 +96,6 @@ export function isCommandAvailable(
 }
 
 /**
- * Parses the standard output of grep-like commands (git grep, system grep).
- * Expects format: filePath:lineNumber:lineContent
- */
-/**
  * Parses a single grep output line into a GrepMatch, or null if malformed.
  */
 function parseGrepLine(line: string, basePath: string): GrepMatch | null {
@@ -126,21 +122,6 @@ function parseGrepLine(line: string, basePath: string): GrepMatch | null {
     lineNumber,
     line: lineContent,
   };
-}
-
-export function parseGrepOutput(output: string, basePath: string): GrepMatch[] {
-  const results: GrepMatch[] = [];
-  if (!output) return results;
-
-  const lines = output.split(new RegExp('\\r?\\n'));
-
-  for (const line of lines) {
-    const match = parseGrepLine(line, basePath);
-    if (match) {
-      results.push(match);
-    }
-  }
-  return results;
 }
 
 /**
@@ -234,6 +215,7 @@ interface BoundedGrepResult {
   earlyStopped: boolean;
   budgetTruncated: boolean;
   lineDropped: boolean;
+  rawTruncated: boolean;
 }
 
 interface BoundedGrepSubprocessOptions {
@@ -289,12 +271,14 @@ function createGrepAcquisitionState(
   };
 }
 
+export { createGrepAcquisitionState };
+
 /**
  * Feed a stdout chunk into the collector and framer, consuming each complete
  * bounded line record-at-a-time via callback. Returns true if early stop
  * or budget exhaustion was triggered.
  */
-function processGrepStdoutChunk(
+export function processGrepStdoutChunk(
   state: GrepAcquisitionState,
   chunk: Buffer,
   cwd: string,
@@ -356,13 +340,13 @@ function checkGrepExitCode(
 }
 
 /** Resolution of a grep subprocess close event. */
-interface GrepCloseResolution {
+export interface GrepCloseResolution {
   readonly result?: BoundedGrepResult;
   readonly error?: Error;
 }
 
 /** Resolve a grep subprocess close into a result or error. */
-function resolveGrepClose(
+export function resolveGrepClose(
   code: number | null,
   signal: NodeJS.Signals | null,
   state: GrepAcquisitionState,
@@ -374,7 +358,8 @@ function resolveGrepClose(
   if (!state.terminated) {
     flushGrepLines(state, cwd);
   }
-  const rawStderr = state.collector.getStderrText().trim();
+  const acquisition = state.collector.getResult();
+  const rawStderr = acquisition.stderrText.trim();
   const stderrText = options?.filterStderr
     ? options.filterStderr(rawStderr).trim()
     : rawStderr;
@@ -389,16 +374,23 @@ function resolveGrepClose(
     options,
   );
   if (exitError !== null) {
+    const omissionNotice = acquisition.omissionNotice ?? '';
+    if (omissionNotice !== '') {
+      return {
+        error: new Error(`${exitError.message}
+${omissionNotice}`),
+      };
+    }
     return { error: exitError };
   }
-  const acquisition = state.collector.getResult();
   return {
     result: {
       matches: state.matches,
       observedCount: state.observedCount,
       earlyStopped: state.earlyStopped,
-      budgetTruncated: acquisition.metadata.truncated || state.budgetExhausted,
+      budgetTruncated: state.budgetExhausted,
       lineDropped: state.framer.wasLineDropped,
+      rawTruncated: acquisition.metadata.truncated,
     },
   };
 }
@@ -554,10 +546,6 @@ export async function tryGitGrep(
     return null;
   }
 }
-
-/**
- * Builds the grep args for system grep, including exclusion patterns.
- */
 export function buildSystemGrepArgs(
   pattern: string,
   include: string | undefined,

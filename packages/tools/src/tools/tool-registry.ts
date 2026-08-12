@@ -16,7 +16,7 @@ import {
 import { type ToolContext, isContextAwareTool } from '../types/tool-context.js';
 import type { IToolRegistryHost } from '../interfaces/IToolRegistryHost.js';
 import type { IToolMessageBus } from '../interfaces/IToolMessageBus.js';
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { parse } from 'shell-quote';
 import { ToolErrorType } from '../types/tool-error.js';
@@ -36,6 +36,7 @@ import {
 import {
   terminateProcessTree,
   type ProcessTerminationResult,
+  type ProcessTerminationOptions,
 } from '../utils/processTermination.js';
 
 const STREAM_DRAIN_TIMEOUT_MS = 2000;
@@ -145,7 +146,7 @@ Signal: Signal number or \`(none)\` if no signal was received.
       };
     }
     const callCommand = this.config.getToolCallCommand?.() ?? '';
-    const child = spawn(callCommand, [this.name], {
+    const child: ChildProcess = spawn(callCommand, [this.name], {
       windowsHide: true,
       detached: process.platform !== 'win32',
     });
@@ -162,8 +163,19 @@ Signal: Signal number or \`(none)\` if no signal was received.
     );
   }
 
+  /**
+   * Terminate a child process tree. Overridable for deterministic tests
+   * that need to simulate termination outcomes without real signals.
+   */
+  protected terminateChild(
+    child: ChildProcess,
+    options?: ProcessTerminationOptions,
+  ): Promise<ProcessTerminationResult> {
+    return terminateProcessTree(child, options);
+  }
+
   private async runChildProcess(
-    child: ReturnType<typeof spawn>,
+    child: ChildProcess,
     signal: AbortSignal,
     params: ToolParams,
   ): Promise<{
@@ -177,31 +189,18 @@ Signal: Signal number or \`(none)\` if no signal was received.
       budget: createDefaultByteBudget(),
     });
 
-    let terminationPromise: Promise<ProcessTerminationResult> | null = null;
-    const abortHandler = () => {
-      terminationPromise ??= terminateProcessTree(child, {
-        ownsProcessGroup: true,
-      });
-    };
-    signal.addEventListener('abort', abortHandler);
+    const { error, code, exitSignal, drainTimedOut, terminationOutcome } =
+      await this.awaitProcessSettlement(child, collector, params, signal);
 
-    const { error, code, exitSignal, drainTimedOut } =
-      await this.awaitProcessSettlement(child, collector, params);
-
-    signal.removeEventListener('abort', abortHandler);
-
-    let terminationOutcome: ProcessTerminationResult['outcome'] | null = null;
+    let outcome = terminationOutcome;
     if (
-      drainTimedOut ||
-      (child.exitCode === null && child.signalCode === null)
+      outcome === null &&
+      (drainTimedOut || (child.exitCode === null && child.signalCode === null))
     ) {
-      terminationPromise ??= terminateProcessTree(child, {
+      const result = await this.terminateChild(child, {
         ownsProcessGroup: true,
       });
-    }
-    if (terminationPromise !== null) {
-      const result = await terminationPromise;
-      terminationOutcome = result.outcome;
+      outcome = result.outcome;
     }
 
     return {
@@ -209,28 +208,46 @@ Signal: Signal number or \`(none)\` if no signal was received.
       error,
       code,
       exitSignal,
-      terminationOutcome,
+      terminationOutcome: outcome,
     };
   }
 
+  private writeParamsToStdin(
+    child: ChildProcess,
+    params: ToolParams,
+    onError: (err: Error) => void,
+  ): void {
+    if (child.stdin === null) return;
+    try {
+      child.stdin.write(JSON.stringify(params));
+      child.stdin.end();
+    } catch (e) {
+      onError(e instanceof Error ? e : new Error(String(e)));
+    }
+  }
+
   private awaitProcessSettlement(
-    child: ReturnType<typeof spawn>,
+    child: ChildProcess,
     collector: BoundedCombinedCollector,
     params: ToolParams,
+    signal: AbortSignal,
   ): Promise<{
     error: Error | null;
     code: number | null;
     exitSignal: NodeJS.Signals | null;
     drainTimedOut: boolean;
+    terminationOutcome: ProcessTerminationResult['outcome'] | null;
   }> {
     let error: Error | null = null;
     let code: number | null = null;
     let exitSignal: NodeJS.Signals | null = null;
     let drainTimedOut = false;
+    let terminationOutcome: ProcessTerminationResult['outcome'] | null = null;
 
     return new Promise((resolve) => {
       let settled = false;
       let drainTimer: ReturnType<typeof setTimeout> | null = null;
+      let terminationPromise: Promise<ProcessTerminationResult> | null = null;
 
       const settle = () => {
         if (settled) return;
@@ -238,11 +255,12 @@ Signal: Signal number or \`(none)\` if no signal was received.
         if (drainTimer !== null) clearTimeout(drainTimer);
         child.stdout?.removeListener('data', onStdout);
         child.stderr?.removeListener('data', onStderr);
-        child.stdin?.removeListener('error', onStdinError);
-        child.removeListener('error', onError);
+        child.stdin?.removeListener('error', captureFirstError);
+        child.removeListener('error', captureFirstError);
         child.removeListener('exit', onExit);
         child.removeListener('close', onClose);
-        resolve({ error, code, exitSignal, drainTimedOut });
+        signal.removeEventListener('abort', onAbort);
+        resolve({ error, code, exitSignal, drainTimedOut, terminationOutcome });
       };
 
       const onStdout = (data: Buffer) => collector.append(data, 'stdout');
@@ -251,8 +269,6 @@ Signal: Signal number or \`(none)\` if no signal was received.
         error ??= err;
         settle();
       };
-      const onStdinError = captureFirstError;
-      const onError = captureFirstError;
       const onExit = (c: number | null, s: NodeJS.Signals | null) => {
         if (settled) return;
         code = c;
@@ -267,22 +283,30 @@ Signal: Signal number or \`(none)\` if no signal was received.
         exitSignal ??= s;
         settle();
       };
+      const onAbort = () => {
+        terminationPromise ??= this.terminateChild(child, {
+          ownsProcessGroup: true,
+        });
+        void terminationPromise.then((result) => {
+          terminationOutcome = result.outcome;
+          if (
+            result.outcome === 'timeout' ||
+            result.outcome === 'failure' ||
+            result.outcome === 'no_target'
+          ) {
+            settle();
+          }
+        });
+      };
 
       child.stdout?.on('data', onStdout);
       child.stderr?.on('data', onStderr);
-      child.stdin?.on('error', onStdinError);
-      child.on('error', onError);
+      child.stdin?.on('error', captureFirstError);
+      child.on('error', captureFirstError);
       child.on('exit', onExit);
       child.on('close', onClose);
-
-      if (child.stdin !== null) {
-        try {
-          child.stdin.write(JSON.stringify(params));
-          child.stdin.end();
-        } catch (e) {
-          captureFirstError(e instanceof Error ? e : new Error(String(e)));
-        }
-      }
+      signal.addEventListener('abort', onAbort);
+      this.writeParamsToStdin(child, params, captureFirstError);
     });
   }
 

@@ -127,7 +127,24 @@ describe('findInPath Windows extension resolution', () => {
     }
   });
 
-  it('finds bare rg with normal PATHEXT when isWindows is true (bare always checked)', () => {
+  it('rg.EXE shadows bare rg when both exist with PATHEXT (isWindows=true)', () => {
+    const { dirs, cleanup } = makeTempDirs(1);
+    try {
+      const exeCandidate = join(dirs[0], 'rg.EXE');
+      const bareCandidate = join(dirs[0], 'rg');
+      writeFileSync(exeCandidate, 'real');
+      writeFileSync(bareCandidate, 'wrong');
+      process.env.PATH = dirs[0];
+      process.env.PATHEXT = ['.COM', '.EXE', '.BAT', '.CMD'].join(
+        pathDelimiter,
+      );
+      expect(findInPath('rg', true)).toBe(exeCandidate);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('bare rg found as last-resort fallback when PATHEXT is set but no extension matches', () => {
     const { dirs, cleanup } = makeTempDirs(1);
     try {
       const candidate = join(dirs[0], 'rg');
@@ -155,14 +172,58 @@ describe('findInPath Windows extension resolution', () => {
     }
   });
 
-  it('finds bare rg when PATHEXT is empty (fallback .EXE does not exist)', () => {
+  it('returns null when PATHEXT is empty and only bare rg exists (no .EXE fallback match)', () => {
     const { dirs, cleanup } = makeTempDirs(1);
     try {
       const candidate = join(dirs[0], 'rg');
       writeFileSync(candidate, 'fake');
       process.env.PATH = dirs[0];
       process.env.PATHEXT = '';
-      expect(findInPath('rg', true)).toBe(candidate);
+      expect(findInPath('rg', true)).toBeNull();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('PATHEXT order: .COM checked before .EXE', () => {
+    const { dirs, cleanup } = makeTempDirs(1);
+    try {
+      const comCandidate = join(dirs[0], 'rg.COM');
+      const exeCandidate = join(dirs[0], 'rg.EXE');
+      writeFileSync(comCandidate, 'first');
+      writeFileSync(exeCandidate, 'second');
+      process.env.PATH = dirs[0];
+      process.env.PATHEXT = ['.COM', '.EXE', '.BAT', '.CMD'].join(
+        pathDelimiter,
+      );
+      expect(findInPath('rg', true)).toBe(comCandidate);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('missing PATHEXT on Windows: only .EXE checked, bare rg not found', () => {
+    const { dirs, cleanup } = makeTempDirs(1);
+    try {
+      const bareCandidate = join(dirs[0], 'rg');
+      writeFileSync(bareCandidate, 'fake');
+      process.env.PATH = dirs[0];
+      delete process.env.PATHEXT;
+      expect(findInPath('rg', true)).toBeNull();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('case/duplicate normalization: deduplicates and uses first-seen extension', () => {
+    const { dirs, cleanup } = makeTempDirs(1);
+    try {
+      const candidate = join(dirs[0], 'rg.exe');
+      writeFileSync(candidate, 'fake');
+      process.env.PATH = dirs[0];
+      process.env.PATHEXT = ['.exe', '.EXE', '.Exe'].join(pathDelimiter);
+      const result = findInPath('rg', true);
+      expect(result).toBe(candidate);
     } finally {
       cleanup();
     }

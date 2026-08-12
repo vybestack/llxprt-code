@@ -202,7 +202,6 @@ export {
   isRipgrepAvailable,
   clearRipgrepAvailabilityCache,
   ensureWindowsShortcut,
-  findInPath,
 } from './utils/ripgrepPathResolver.js';
 export {
   TodoStatus,

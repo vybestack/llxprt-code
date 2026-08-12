@@ -97,9 +97,27 @@ function isExecutable(filePath: string, isWindows: boolean): boolean {
 export function findInPath(binName: string, isWindows: boolean): string | null {
   const pathEnv = process.env.PATH ?? '';
   const pathExt = process.env.PATHEXT ?? '';
-  const rawExts = pathExt
-    ? ['', ...pathExt.split(path.delimiter).filter((e) => e.length > 0)]
-    : ['', '.EXE'];
+
+  let rawExts: string[];
+  if (isWindows) {
+    if (pathExt) {
+      // Windows with PATHEXT: check PATHEXT candidates before bare fallback
+      // so a bare regular file does not shadow rg.EXE.
+      rawExts = [
+        ...pathExt.split(path.delimiter).filter((e) => e.length > 0),
+        '',
+      ];
+    } else {
+      // Windows without PATHEXT: .EXE fallback only.
+      rawExts = ['.EXE'];
+    }
+  } else {
+    // POSIX: bare first (unchanged execute-access semantics).
+    rawExts = pathExt
+      ? ['', ...pathExt.split(path.delimiter).filter((e) => e.length > 0)]
+      : ['', '.EXE'];
+  }
+
   const seen = new Set<string>();
   const exts: string[] = [];
   for (const ext of rawExts) {

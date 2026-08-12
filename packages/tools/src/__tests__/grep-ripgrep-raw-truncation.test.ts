@@ -18,6 +18,12 @@ import {
   processRipgrepStdoutChunk,
   createAggregateSemanticBudget,
 } from '../tools/ripGrep.js';
+import {
+  resolveGrepClose,
+  createGrepAcquisitionState,
+  processGrepStdoutChunk,
+} from '../tools/grep/search-strategies.js';
+import { createAggregateSemanticBudget as createGrepBudget } from '../tools/grep/grepBudget.js';
 
 function createTempDir(prefix = 'llxprt-raw-trunc-'): {
   dir: string;
@@ -204,4 +210,120 @@ describe('Multi-root continuation despite verbose stderr (finding 3)', () => {
     },
     { timeout: 15000 },
   );
+});
+
+describe('resolveGrepClose: raw collector truncation vs semantic budget', () => {
+  it('stderr-only overflow does NOT mark budgetTruncated (parsed results complete)', () => {
+    const basePath = '/test';
+    const budget = createGrepBudget();
+    const state = createGrepAcquisitionState(
+      { maxResults: 1000, maxFiles: 100, maxPerFile: 50 },
+      budget,
+    );
+
+    processGrepStdoutChunk(
+      state,
+      Buffer.from('file.txt:1:match content\n'),
+      basePath,
+    );
+
+    state.collector.append(Buffer.alloc(5 * 1024 * 1024, 0x45), 'stderr');
+
+    const outcome = resolveGrepClose(
+      0,
+      null,
+      state,
+      false,
+      basePath,
+      'grep',
+      undefined,
+    );
+
+    expect(outcome.error).toBeUndefined();
+    expect(outcome.result).toBeDefined();
+    expect(outcome.result!.budgetTruncated).toBe(false);
+    expect(outcome.result!.rawTruncated).toBe(true);
+    expect(outcome.result!.matches.length).toBe(1);
+  });
+
+  it('semantic budget exhaustion marks budgetTruncated (match data incomplete)', () => {
+    const basePath = '/test';
+    const budget = createGrepBudget();
+    budget.remainingBytes = 300;
+
+    const state = createGrepAcquisitionState(
+      { maxResults: 1000, maxFiles: 100, maxPerFile: 50 },
+      budget,
+    );
+
+    processGrepStdoutChunk(
+      state,
+      Buffer.from('file.txt:1:short\nfile.txt:2:another\nfile.txt:3:third\n'),
+      basePath,
+    );
+
+    const outcome = resolveGrepClose(
+      0,
+      null,
+      state,
+      false,
+      basePath,
+      'grep',
+      undefined,
+    );
+
+    expect(outcome.result).toBeDefined();
+    expect(outcome.result!.budgetTruncated).toBe(true);
+  });
+
+  it('stderr-only overflow with zero stdout matches is complete (no false incomplete)', () => {
+    const basePath = '/test';
+    const budget = createGrepBudget();
+    const state = createGrepAcquisitionState(
+      { maxResults: 1000, maxFiles: 100, maxPerFile: 50 },
+      budget,
+    );
+
+    state.collector.append(Buffer.alloc(5 * 1024 * 1024, 0x57), 'stderr');
+
+    const outcome = resolveGrepClose(
+      0,
+      null,
+      state,
+      false,
+      basePath,
+      'grep',
+      undefined,
+    );
+
+    expect(outcome.error).toBeUndefined();
+    expect(outcome.result).toBeDefined();
+    expect(outcome.result!.budgetTruncated).toBe(false);
+    expect(outcome.result!.rawTruncated).toBe(true);
+    expect(outcome.result!.matches.length).toBe(0);
+  });
+
+  it('labels omitted diagnostic bytes when a failing grep writes excessive stderr', () => {
+    const basePath = '/test';
+    const state = createGrepAcquisitionState(
+      { maxResults: 1000, maxFiles: 100, maxPerFile: 50 },
+      createGrepBudget(),
+    );
+
+    state.collector.append(Buffer.alloc(5 * 1024 * 1024, 0x45), 'stderr');
+
+    const outcome = resolveGrepClose(
+      2,
+      null,
+      state,
+      false,
+      basePath,
+      'grep',
+      undefined,
+    );
+
+    expect(outcome.result).toBeUndefined();
+    expect(outcome.error?.message).toContain('grep exited with code 2');
+    expect(outcome.error?.message).toContain('[LLXPRT output truncated:');
+  });
 });

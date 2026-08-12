@@ -15,11 +15,16 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import type { ChildProcess } from 'node:child_process';
 import { DiscoveredTool } from '../tools/tool-registry.js';
 import {
   BoundedCombinedCollector,
   createDefaultByteBudget,
 } from '../acquisition/index.js';
+import type {
+  ProcessTerminationResult,
+  ProcessTerminationOptions,
+} from '../utils/processTermination.js';
 import type { IToolRegistryHost, IToolMessageBus } from '../index.js';
 
 function createTempDir(prefix = 'llxprt-dt-test-'): {
@@ -522,6 +527,27 @@ function killDescendantFromMarker(markerPath: string): void {
   }
 }
 
+function killProcessGroupFromPidFile(pidFile: string): void {
+  let pid: number;
+  try {
+    pid = Number.parseInt(readFileSync(pidFile, 'utf8').trim(), 10);
+  } catch {
+    return;
+  }
+  if (!Number.isSafeInteger(pid) || pid <= 0) return;
+  try {
+    process.kill(-pid, 'SIGKILL');
+    return;
+  } catch (error: unknown) {
+    if (hasErrorCode(error, 'ESRCH')) return;
+  }
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch {
+    /* best-effort */
+  }
+}
+
 describe('DiscoveredTool drain timeout terminates descendant group', () => {
   let tempDir: string;
   let markerPath: string;
@@ -563,6 +589,119 @@ describe('DiscoveredTool drain timeout terminates descendant group', () => {
       expect(descendantPid).toBeGreaterThan(0);
 
       expect(() => process.kill(descendantPid, 0)).toThrow('ESRCH');
+    },
+    { timeout: 15000 },
+  );
+});
+
+describe('DiscoveredTool abort settlement with failed termination', () => {
+  let tempDir: string;
+  let pidFile: string;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const tmp = createTempDir();
+    tempDir = tmp.dir;
+    pidFile = join(tempDir, 'child.pid');
+    cleanup = tmp.cleanup;
+  });
+
+  afterEach(() => {
+    try {
+      killProcessGroupFromPidFile(pidFile);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'settles within a hard bound when termination fails and child never emits exit/close',
+    async () => {
+      const script = createScript(
+        tempDir,
+        'hang-forever.sh',
+        `#!/bin/sh\necho $$ > "${pidFile}"\nsleep 60\necho done`,
+      );
+
+      // Narrow injectable seam: override terminateChild to simulate a
+      // failed termination (timeout) WITHOUT actually killing the process.
+      // The child stays alive and never emits exit/close.
+      class TimeoutTerminatorTool extends DiscoveredTool {
+        protected override terminateChild(
+          _child: ChildProcess,
+          _options?: ProcessTerminationOptions,
+        ): Promise<ProcessTerminationResult> {
+          return Promise.resolve({ outcome: 'timeout' });
+        }
+      }
+
+      const tool = new TimeoutTerminatorTool(
+        createHost(script),
+        'discovered_tool_test',
+        'Test discovered tool',
+        { type: 'object', properties: {} },
+        noopMessageBus,
+      );
+      const controller = new AbortController();
+
+      const executePromise = tool.execute({}, controller.signal);
+      setTimeout(() => controller.abort(), 200);
+
+      const startTime = Date.now();
+      const result = await executePromise;
+      const elapsed = Date.now() - startTime;
+
+      // Must settle within a hard bound, not wait for sleep 60 or drain.
+      expect(elapsed).toBeLessThan(5000);
+
+      // Must truthfully surface the termination failure.
+      expect(result.error).toBeDefined();
+      const content =
+        typeof result.llmContent === 'string' ? result.llmContent : '';
+      expect(content).toContain('Termination: timeout');
+    },
+    { timeout: 15000 },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'settles within a hard bound when termination reports failure',
+    async () => {
+      const script = createScript(
+        tempDir,
+        'hang-forever2.sh',
+        `#!/bin/sh\necho $$ > "${pidFile}"\nsleep 60\necho done`,
+      );
+
+      class FailureTerminatorTool extends DiscoveredTool {
+        protected override terminateChild(
+          _child: ChildProcess,
+          _options?: ProcessTerminationOptions,
+        ): Promise<ProcessTerminationResult> {
+          return Promise.resolve({ outcome: 'failure' });
+        }
+      }
+
+      const tool = new FailureTerminatorTool(
+        createHost(script),
+        'discovered_tool_test',
+        'Test discovered tool',
+        { type: 'object', properties: {} },
+        noopMessageBus,
+      );
+      const controller = new AbortController();
+
+      const executePromise = tool.execute({}, controller.signal);
+      setTimeout(() => controller.abort(), 200);
+
+      const startTime = Date.now();
+      const result = await executePromise;
+      const elapsed = Date.now() - startTime;
+
+      expect(elapsed).toBeLessThan(5000);
+      expect(result.error).toBeDefined();
+      const content =
+        typeof result.llmContent === 'string' ? result.llmContent : '';
+      expect(content).toContain('Termination: failure');
     },
     { timeout: 15000 },
   );
