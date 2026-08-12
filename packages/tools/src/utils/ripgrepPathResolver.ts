@@ -79,16 +79,71 @@ async function tryPackagedRipgrep(): Promise<string | null> {
   return null;
 }
 
-async function trySystemRipgrep(isWindows: boolean): Promise<string | null> {
+function isExecutable(filePath: string, isWindows: boolean): boolean {
   try {
-    const { execSync } = await import('child_process');
-    const checkCmd = isWindows ? 'where rg' : 'which rg';
-    const systemPath = execSync(checkCmd, { encoding: 'utf8' }).trim();
-    if (fs.existsSync(systemPath)) {
-      return systemPath;
+    if (!fs.statSync(filePath).isFile()) {
+      return false;
     }
+    if (isWindows) {
+      return true;
+    }
+    fs.accessSync(filePath, fs.constants.X_OK);
+    return true;
   } catch {
-    // System ripgrep not found
+    return false;
+  }
+}
+
+export function findInPath(binName: string, isWindows: boolean): string | null {
+  const pathEnv = process.env.PATH ?? '';
+  const pathExt = process.env.PATHEXT ?? '';
+
+  let rawExts: string[];
+  if (isWindows) {
+    if (pathExt) {
+      // Windows with PATHEXT: check PATHEXT candidates before bare fallback
+      // so a bare regular file does not shadow rg.EXE.
+      rawExts = [
+        ...pathExt.split(path.delimiter).filter((e) => e.length > 0),
+        '',
+      ];
+    } else {
+      // Windows without PATHEXT: .EXE fallback only.
+      rawExts = ['.EXE'];
+    }
+  } else {
+    // POSIX: bare first (unchanged execute-access semantics).
+    rawExts = pathExt
+      ? ['', ...pathExt.split(path.delimiter).filter((e) => e.length > 0)]
+      : ['', '.EXE'];
+  }
+
+  const seen = new Set<string>();
+  const exts: string[] = [];
+  for (const ext of rawExts) {
+    const key = ext.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      exts.push(ext);
+    }
+  }
+  const dirs = pathEnv.split(path.delimiter);
+  for (const dir of dirs) {
+    if (!dir) continue;
+    for (const ext of exts) {
+      const candidate = path.join(dir, ext ? `${binName}${ext}` : binName);
+      if (isExecutable(candidate, isWindows)) {
+        return candidate;
+      }
+    }
+  }
+  return null;
+}
+
+async function trySystemRipgrep(isWindows: boolean): Promise<string | null> {
+  const found = findInPath('rg', isWindows);
+  if (found && isCompatibleRipgrepBinary(found)) {
+    return found;
   }
   return null;
 }

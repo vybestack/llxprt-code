@@ -16,7 +16,7 @@ import {
 import { type ToolContext, isContextAwareTool } from '../types/tool-context.js';
 import type { IToolRegistryHost } from '../interfaces/IToolRegistryHost.js';
 import type { IToolMessageBus } from '../interfaces/IToolMessageBus.js';
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { parse } from 'shell-quote';
 import { ToolErrorType } from '../types/tool-error.js';
@@ -28,6 +28,18 @@ import {
   isToolBlocked,
   type ToolGovernance,
 } from '../formatters/toolGovernanceUtils.js';
+import {
+  BoundedCombinedCollector,
+  createDefaultByteBudget,
+  type CombinedAcquisitionResult,
+} from '../acquisition/index.js';
+import {
+  terminateProcessTree,
+  type ProcessTerminationResult,
+  type ProcessTerminationOptions,
+} from '../utils/processTermination.js';
+
+const STREAM_DRAIN_TIMEOUT_MS = 2000;
 
 export const DISCOVERED_TOOL_PREFIX = 'discovered_tool_';
 
@@ -123,124 +135,229 @@ Signal: Signal number or \`(none)\` if no signal was received.
     signal: AbortSignal,
     _updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
+    if (signal.aborted) {
+      return {
+        llmContent: 'Tool execution was cancelled by user.',
+        returnDisplay: 'Cancelled',
+        error: {
+          message: 'Tool execution was cancelled by user.',
+          type: ToolErrorType.DISCOVERED_TOOL_EXECUTION_ERROR,
+        },
+      };
+    }
     const callCommand = this.config.getToolCallCommand?.() ?? '';
-    const child = spawn(callCommand, [this.name]);
-    child.stdin.write(JSON.stringify(params));
-    child.stdin.end();
+    const child: ChildProcess = spawn(callCommand, [this.name], {
+      windowsHide: true,
+      detached: process.platform !== 'win32',
+    });
 
-    const { stdout, stderr, error, code, exitSignal } =
-      await this.runChildProcess(child, signal);
+    const { acquisition, error, code, exitSignal, terminationOutcome } =
+      await this.runChildProcess(child, signal, params);
 
     return this.buildChildProcessResult(
-      stdout,
-      stderr,
+      acquisition,
       error,
       code,
       exitSignal,
+      terminationOutcome,
     );
   }
 
+  /**
+   * Terminate a child process tree. Overridable for deterministic tests
+   * that need to simulate termination outcomes without real signals.
+   */
+  protected terminateChild(
+    child: ChildProcess,
+    options?: ProcessTerminationOptions,
+  ): Promise<ProcessTerminationResult> {
+    return terminateProcessTree(child, options);
+  }
+
   private async runChildProcess(
-    child: ReturnType<typeof spawn>,
+    child: ChildProcess,
     signal: AbortSignal,
+    params: ToolParams,
   ): Promise<{
-    stdout: string;
-    stderr: string;
+    acquisition: CombinedAcquisitionResult;
     error: Error | null;
     code: number | null;
     exitSignal: NodeJS.Signals | null;
+    terminationOutcome: ProcessTerminationResult['outcome'] | null;
   }> {
-    let stdout = '';
-    let stderr = '';
+    const collector = new BoundedCombinedCollector({
+      budget: createDefaultByteBudget(),
+    });
+
+    const { error, code, exitSignal, drainTimedOut, terminationOutcome } =
+      await this.awaitProcessSettlement(child, collector, params, signal);
+
+    let outcome = terminationOutcome;
+    if (
+      outcome === null &&
+      (drainTimedOut || (child.exitCode === null && child.signalCode === null))
+    ) {
+      const result = await this.terminateChild(child, {
+        ownsProcessGroup: true,
+      });
+      outcome = result.outcome;
+    }
+
+    return {
+      acquisition: collector.getResult(),
+      error,
+      code,
+      exitSignal,
+      terminationOutcome: outcome,
+    };
+  }
+
+  private writeParamsToStdin(
+    child: ChildProcess,
+    params: ToolParams,
+    onError: (err: Error) => void,
+  ): void {
+    if (child.stdin === null) return;
+    try {
+      child.stdin.write(JSON.stringify(params));
+      child.stdin.end();
+    } catch (e) {
+      onError(e instanceof Error ? e : new Error(String(e)));
+    }
+  }
+
+  private awaitProcessSettlement(
+    child: ChildProcess,
+    collector: BoundedCombinedCollector,
+    params: ToolParams,
+    signal: AbortSignal,
+  ): Promise<{
+    error: Error | null;
+    code: number | null;
+    exitSignal: NodeJS.Signals | null;
+    drainTimedOut: boolean;
+    terminationOutcome: ProcessTerminationResult['outcome'] | null;
+  }> {
     let error: Error | null = null;
     let code: number | null = null;
     let exitSignal: NodeJS.Signals | null = null;
+    let drainTimedOut = false;
+    let terminationOutcome: ProcessTerminationResult['outcome'] | null = null;
 
-    const abortHandler = () => {
-      if (!child.killed) {
-        child.kill('SIGTERM');
-      }
-    };
-    signal.addEventListener('abort', abortHandler);
+    return new Promise((resolve) => {
+      let settled = false;
+      let drainTimer: ReturnType<typeof setTimeout> | null = null;
+      let terminationPromise: Promise<ProcessTerminationResult> | null = null;
 
-    try {
-      await new Promise<void>((resolve) => {
-        const onStdout = (data: Buffer) => {
-          stdout += data.toString();
-        };
+      const settle = () => {
+        if (settled) return;
+        settled = true;
+        if (drainTimer !== null) clearTimeout(drainTimer);
+        child.stdout?.removeListener('data', onStdout);
+        child.stderr?.removeListener('data', onStderr);
+        child.stdin?.removeListener('error', captureFirstError);
+        child.removeListener('error', captureFirstError);
+        child.removeListener('exit', onExit);
+        child.removeListener('close', onClose);
+        signal.removeEventListener('abort', onAbort);
+        resolve({ error, code, exitSignal, drainTimedOut, terminationOutcome });
+      };
 
-        const onStderr = (data: Buffer) => {
-          stderr += data.toString();
-        };
-
-        const onError = (err: Error) => {
-          error = err;
-        };
-
-        const onClose = (
-          _code: number | null,
-          _signal: NodeJS.Signals | null,
-        ) => {
-          code = _code;
-          exitSignal = _signal;
-          cleanup();
-          resolve();
-        };
-
-        const cleanup = () => {
-          child.stdout!.removeListener('data', onStdout);
-          child.stderr!.removeListener('data', onStderr);
-          child.removeListener('error', onError);
-          child.removeListener('close', onClose);
-          if (child.connected) {
-            child.disconnect();
+      const onStdout = (data: Buffer) => collector.append(data, 'stdout');
+      const onStderr = (data: Buffer) => collector.append(data, 'stderr');
+      const captureFirstError = (err: Error) => {
+        error ??= err;
+        settle();
+      };
+      const onExit = (c: number | null, s: NodeJS.Signals | null) => {
+        if (settled) return;
+        code = c;
+        exitSignal = s;
+        drainTimer = setTimeout(() => {
+          drainTimedOut = true;
+          settle();
+        }, STREAM_DRAIN_TIMEOUT_MS);
+      };
+      const onClose = (c: number | null, s: NodeJS.Signals | null) => {
+        code ??= c;
+        exitSignal ??= s;
+        settle();
+      };
+      const onAbort = () => {
+        terminationPromise ??= this.terminateChild(child, {
+          ownsProcessGroup: true,
+        });
+        void terminationPromise.then((result) => {
+          terminationOutcome = result.outcome;
+          if (
+            result.outcome === 'timeout' ||
+            result.outcome === 'failure' ||
+            result.outcome === 'no_target'
+          ) {
+            settle();
           }
-        };
+        });
+      };
 
-        child.stdout!.on('data', onStdout);
-        child.stderr!.on('data', onStderr);
-        child.on('error', onError);
-        child.on('close', onClose);
-      });
-    } finally {
-      signal.removeEventListener('abort', abortHandler);
-    }
-    return { stdout, stderr, error, code, exitSignal };
+      child.stdout?.on('data', onStdout);
+      child.stderr?.on('data', onStderr);
+      child.stdin?.on('error', captureFirstError);
+      child.on('error', captureFirstError);
+      child.on('exit', onExit);
+      child.on('close', onClose);
+      signal.addEventListener('abort', onAbort);
+      this.writeParamsToStdin(child, params, captureFirstError);
+    });
   }
 
   private buildChildProcessResult(
-    stdout: string,
-    stderr: string,
+    acquisition: CombinedAcquisitionResult,
     error: Error | null,
     code: number | null,
     exitSignal: NodeJS.Signals | null,
+    terminationOutcome: ProcessTerminationResult['outcome'] | null,
   ): ToolResult {
-    if (
-      error !== null ||
-      code !== 0 ||
-      exitSignal !== null ||
-      stderr.length > 0
-    ) {
+    const stdout = acquisition.stdoutText;
+    const stderr = acquisition.stderrText;
+    const truncated = acquisition.metadata.truncated;
+    const truncationNotice = acquisition.omissionNotice ?? '';
+
+    const terminationFailed =
+      terminationOutcome === 'timeout' || terminationOutcome === 'failure';
+    const isExecutionError =
+      error !== null || code !== 0 || exitSignal !== null;
+
+    if (isExecutionError || stderr.length > 0 || terminationFailed) {
+      const stdoutLine = `Stdout: ${stdout.length > 0 ? stdout : '(empty)'}`;
+      const stderrLine = `Stderr: ${stderr.length > 0 ? stderr : '(empty)'}`;
+      const terminationLine = terminationFailed
+        ? `\nTermination: ${terminationOutcome}`
+        : '';
+      const truncationLine = truncated ? `\n${truncationNotice}` : '';
       const llmContent = [
-        `Stdout: ${stdout.length > 0 ? stdout : '(empty)'}`,
-        `Stderr: ${stderr.length > 0 ? stderr : '(empty)'}`,
+        stdoutLine,
+        stderrLine,
         `Error: ${error ?? '(none)'}`,
         `Exit Code: ${code ?? '(none)'}`,
         `Signal: ${exitSignal ?? '(none)'}`,
       ].join('\n');
+
+      const fullContent = llmContent + terminationLine + truncationLine;
       return {
-        llmContent,
-        returnDisplay: llmContent,
+        llmContent: fullContent,
+        returnDisplay: fullContent,
         error: {
-          message: llmContent,
+          message: fullContent,
           type: ToolErrorType.DISCOVERED_TOOL_EXECUTION_ERROR,
         },
       };
     }
 
+    const llmContent = truncated ? `${stdout}\n\n${truncationNotice}` : stdout;
+
     return {
-      llmContent: stdout,
-      returnDisplay: stdout,
+      llmContent,
+      returnDisplay: llmContent,
     };
   }
 }

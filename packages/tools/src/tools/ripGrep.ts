@@ -6,9 +6,7 @@
 
 import fsPromises from 'fs/promises';
 import path from 'path';
-import { EOL } from 'os';
 import { spawn } from 'child_process';
-// import { rgPath } from '@lvce-editor/ripgrep'; // Now using getRipgrepPath() instead
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -18,15 +16,39 @@ import {
 } from './tools.js';
 import type { IToolHost, IToolMessageBus } from '../interfaces/index.js';
 import { SchemaValidator } from '../utils/schemaValidator.js';
+import {
+  BoundedCombinedCollector,
+  createDefaultByteBudget,
+} from '../acquisition/index.js';
+import { BoundedLineFramer } from '../utils/lineFramer.js';
+import { terminateProcessTree } from '../utils/processTermination.js';
+import {
+  createSettleFn,
+  type SubprocessSettlement,
+  type AbortHandlerRef,
+} from '../utils/subprocessSettle.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import { stringOrDefault } from '../utils/stringCoalescing.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { getRipgrepPath } from '../utils/ripgrepPathResolver.js';
 import {
+  formatRipgrepDiagnostic,
+  parseRipgrepLine,
+} from './grep/ripgrepParse.js';
+export { parseRipgrepLine };
+import {
   resolveTextSearchTarget,
   type ResolvedSearchTarget,
 } from '../utils/resolveTextSearchTarget.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import {
+  type SemanticBudget,
+  createAggregateSemanticBudget,
+  MATCH_OVERHEAD_BYTES,
+} from './grep/grepBudget.js';
+
+export type { SemanticBudget as RipgrepSemanticBudget } from './grep/grepBudget.js';
+export { createAggregateSemanticBudget } from './grep/grepBudget.js';
 
 export const ripGrepDebugLogger = debugLogger;
 
@@ -123,6 +145,267 @@ interface GrepMatch {
   line: string;
 }
 
+/**
+ * Acquisition state for a ripgrep subprocess. Uses record-at-a-time line
+ * consumption and bounded semantic retention.
+ */
+export interface RipgrepAcquisitionState {
+  collector: BoundedCombinedCollector;
+  framer: BoundedLineFramer;
+  matches: GrepMatch[];
+  retainedBytes: number;
+  semanticBudget: SemanticBudget;
+  earlyStopped: boolean;
+  capReached: boolean;
+  budgetExhausted: boolean;
+  terminated: boolean;
+}
+
+export function createRipgrepAcquisitionState(
+  semanticBudget: SemanticBudget,
+): RipgrepAcquisitionState {
+  return {
+    collector: new BoundedCombinedCollector({
+      budget: createDefaultByteBudget(),
+    }),
+    framer: new BoundedLineFramer(),
+    matches: [],
+    retainedBytes: 0,
+    semanticBudget,
+    earlyStopped: false,
+    capReached: false,
+    budgetExhausted: false,
+    terminated: false,
+  };
+}
+
+/**
+ * Attempt to retain a parsed ripgrep match in bounded semantic storage.
+ * Stops when the match count reaches maxMatches or the semantic byte budget
+ * is exhausted.
+ */
+function tryRetainRipgrepMatch(
+  state: RipgrepAcquisitionState,
+  match: GrepMatch,
+  maxMatches: number,
+): void {
+  if (state.capReached) {
+    state.earlyStopped = true;
+    return;
+  }
+  const matchBytes =
+    Buffer.byteLength(match.line, 'utf8') +
+    Buffer.byteLength(match.filePath, 'utf8') +
+    MATCH_OVERHEAD_BYTES;
+  if (
+    state.semanticBudget.remainingBytes < matchBytes ||
+    state.semanticBudget.remainingObjects <= 0
+  ) {
+    state.budgetExhausted = true;
+    state.earlyStopped = true;
+    return;
+  }
+  state.matches.push(match);
+  state.retainedBytes += matchBytes;
+  state.semanticBudget.remainingBytes -= matchBytes;
+  state.semanticBudget.remainingObjects--;
+  if (state.matches.length >= maxMatches) {
+    state.capReached = true;
+  }
+}
+
+/**
+ * Feed a stdout chunk into the collector and framer, consuming each complete
+ * bounded line record-at-a-time via callback. Returns true if early stop
+ * or budget exhaustion was triggered.
+ */
+export function processRipgrepStdoutChunk(
+  state: RipgrepAcquisitionState,
+  chunk: Buffer,
+  basePath: string,
+  maxMatches: number,
+): boolean {
+  state.collector.append(chunk, 'stdout');
+  if (state.terminated) return false;
+
+  state.framer.feedChunk(chunk, (line) => {
+    if (state.earlyStopped) return;
+    const match = parseRipgrepLine(line, basePath);
+    if (!match) return;
+    tryRetainRipgrepMatch(state, match, maxMatches);
+  });
+
+  return state.earlyStopped;
+}
+
+/** Flush remaining lines from the framer and retain bounded matches. */
+function flushRipgrepLines(
+  state: RipgrepAcquisitionState,
+  basePath: string,
+  maxMatches: number,
+): void {
+  state.framer.flushRemaining((line) => {
+    if (state.earlyStopped) return;
+    const match = parseRipgrepLine(line, basePath);
+    if (!match) return;
+    tryRetainRipgrepMatch(state, match, maxMatches);
+  });
+}
+
+/**
+ * Resolve a ripgrep close event into a result or error. An unexpected signal
+ * kill (code null with a non-intentional signal) is treated as genuine failure.
+ */
+export function resolveRipgrepClose(
+  code: number | null,
+  signal: NodeJS.Signals | null,
+  state: RipgrepAcquisitionState,
+  basePath: string,
+  maxMatches: number,
+  aborted: boolean,
+): {
+  readonly result?: {
+    matches: GrepMatch[];
+    earlyStopped: boolean;
+    budgetTruncated: boolean;
+    lineDropped: boolean;
+    rawTruncated: boolean;
+  };
+  readonly error?: Error;
+} {
+  if (!state.terminated) {
+    flushRipgrepLines(state, basePath, maxMatches);
+  }
+  const acquisition = state.collector.getResult();
+  const diagnostic = formatRipgrepDiagnostic(acquisition);
+  const diagnosticSuffix = diagnostic === '' ? '' : `: ${diagnostic}`;
+  const result = {
+    matches: state.matches,
+    earlyStopped: state.earlyStopped,
+    budgetTruncated: state.budgetExhausted,
+    lineDropped: state.framer.wasLineDropped,
+    rawTruncated: acquisition.metadata.truncated,
+  };
+  if (state.earlyStopped || aborted || state.terminated) {
+    return { result };
+  }
+  if (signal !== null) {
+    return {
+      error: new Error(
+        `ripgrep was killed by signal ${signal}${diagnosticSuffix}`,
+      ),
+    };
+  }
+  if (code !== null && code !== 0 && code !== 1) {
+    return {
+      error: new Error(`ripgrep exited with code ${code}${diagnosticSuffix}`),
+    };
+  }
+  if (code === null) {
+    return {
+      error: new Error(`ripgrep closed unexpectedly${diagnosticSuffix}`),
+    };
+  }
+  return { result };
+}
+
+/** Build the standard ripgrep spawn-failure error. */
+function ripgrepSpawnError(err: Error): Error {
+  return new Error(
+    `Failed to start ripgrep: ${err.message}. Please ensure @lvce-editor/ripgrep is properly installed.`,
+  );
+}
+
+/** Result of a ripgrep subprocess. */
+interface RipgrepSubprocessResult {
+  matches: GrepMatch[];
+  earlyStopped: boolean;
+  budgetTruncated: boolean;
+  lineDropped: boolean;
+  rawTruncated: boolean;
+}
+
+/** Create a ripgrep AbortError recognised by upstream callers. */
+function ripgrepAbortError(): Error {
+  const err = new Error('ripgrep aborted');
+  err.name = 'AbortError';
+  return err;
+}
+
+/** Spawn and manage a ripgrep child process with bounded acquisition. */
+function runRipgrepChild(
+  resolvedRgPath: string,
+  rgArgs: string[],
+  signal: AbortSignal,
+  state: RipgrepAcquisitionState,
+  basePath: string,
+  maxMatches: number,
+): Promise<RipgrepSubprocessResult> {
+  return new Promise((resolve, reject) => {
+    const settlement: SubprocessSettlement = {
+      settled: false,
+      terminationPromise: null,
+    };
+    const abortRef: AbortHandlerRef = { handler: () => {} };
+
+    const child = spawn(resolvedRgPath, rgArgs, {
+      windowsHide: true,
+      detached: process.platform !== 'win32',
+    });
+
+    const stopProcess = () => {
+      if (state.terminated) return;
+      state.terminated = true;
+      settlement.terminationPromise = terminateProcessTree(child, {
+        ownsProcessGroup: process.platform !== 'win32',
+      });
+    };
+
+    const settle = createSettleFn(
+      settlement,
+      signal,
+      abortRef,
+      reject,
+      Error,
+      'ripgrep',
+    );
+
+    abortRef.handler = () => {
+      stopProcess();
+      settle(() => reject(ripgrepAbortError()));
+    };
+    signal.addEventListener('abort', abortRef.handler);
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      if (processRipgrepStdoutChunk(state, chunk, basePath, maxMatches)) {
+        stopProcess();
+      }
+    });
+    child.stderr.on('data', (chunk: Buffer) => {
+      state.collector.append(chunk, 'stderr');
+    });
+    child.on('error', (err: Error) => {
+      settle(() => {
+        reject(signal.aborted ? ripgrepAbortError() : ripgrepSpawnError(err));
+      });
+    });
+    child.on('close', (code: number | null, sig: NodeJS.Signals | null) => {
+      settle(() => {
+        const outcome = resolveRipgrepClose(
+          code,
+          sig,
+          state,
+          basePath,
+          maxMatches,
+          signal.aborted,
+        );
+        if (outcome.error !== undefined) reject(outcome.error);
+        else if (outcome.result !== undefined) resolve(outcome.result);
+      });
+    });
+  });
+}
+
 class GrepToolInvocation extends BaseToolInvocation<
   RipGrepToolParams,
   ToolResult
@@ -213,7 +496,7 @@ File: ${resolved.basename}
   private collectDirectoryMatches(
     searchDirectories: readonly string[],
     signal: AbortSignal,
-  ): Promise<GrepMatch[]> {
+  ): Promise<{ matches: GrepMatch[]; wasTruncated: boolean }> {
     return this.collectDirectoryMatchesImpl(
       searchDirectories,
       signal,
@@ -227,38 +510,72 @@ File: ${resolved.basename}
     signal: AbortSignal,
     totalMaxMatches: number,
     ignoreOptions: RipgrepIgnoreOptions,
-  ): Promise<GrepMatch[]> {
+  ): Promise<{ matches: GrepMatch[]; wasTruncated: boolean }> {
     let allMatches: GrepMatch[] = [];
+    let wasTruncated = false;
+    const aggregateBudget = createAggregateSemanticBudget();
 
     if (this.host.getDebugMode()) {
       debugLogger.debug(`[GrepTool] Total result limit: ${totalMaxMatches}`);
     }
 
-    for (const searchDir of searchDirectories) {
+    let stop = false;
+    let lastSearchedIndex = -1;
+    for (let di = 0; di < searchDirectories.length && !stop; di++) {
+      const searchDir = searchDirectories[di];
+      const remaining = totalMaxMatches - allMatches.length;
+      if (remaining <= 0) {
+        allMatches = allMatches.slice(0, totalMaxMatches);
+        stop = true;
+        continue;
+      }
+      lastSearchedIndex = di;
+
       const searchResult = await this.performRipgrepSearch({
         pattern: this.params.pattern,
         path: searchDir,
         include: this.params.include,
         signal,
         ignoreOptions,
+        maxMatches: remaining,
+        semanticBudget: aggregateBudget,
       });
+
+      if (
+        searchResult.earlyStopped ||
+        searchResult.budgetTruncated ||
+        searchResult.lineDropped
+      ) {
+        wasTruncated = true;
+      }
+      if (searchResult.rawTruncated && this.host.getDebugMode()) {
+        debugLogger.debug(
+          `[GrepTool] Raw acquisition truncated for root ${searchDir} (diagnostic only, parsed results unaffected)`,
+        );
+      }
 
       if (searchDirectories.length > 1) {
         const dirName = path.basename(searchDir);
-        searchResult.forEach((match) => {
+        searchResult.matches.forEach((match) => {
           match.filePath = path.join(dirName, match.filePath);
         });
       }
 
-      allMatches = allMatches.concat(searchResult);
+      allMatches = allMatches.concat(searchResult.matches);
 
       if (allMatches.length >= totalMaxMatches) {
         allMatches = allMatches.slice(0, totalMaxMatches);
-        break;
       }
+      stop =
+        allMatches.length >= totalMaxMatches || searchResult.budgetTruncated;
     }
 
-    return allMatches;
+    // Skipped roots imply incomplete even without an observed extra record.
+    if (lastSearchedIndex < searchDirectories.length - 1) {
+      wasTruncated = true;
+    }
+
+    return { matches: allMatches, wasTruncated };
   }
 
   private buildSearchLocationDescription(
@@ -278,15 +595,25 @@ File: ${resolved.basename}
   private formatDirectoryResults(
     allMatches: GrepMatch[],
     searchLocationDescription: string,
+    dirWasTruncated: boolean,
   ): ToolResult {
-    const totalMaxMatches = DEFAULT_TOTAL_MAX_MATCHES;
+    const includeNote = this.params.include
+      ? ` (filter: "${this.params.include}")`
+      : '';
 
     if (allMatches.length === 0) {
-      const noMatchMsg = `No matches found for pattern "${this.params.pattern}" ${searchLocationDescription}${this.params.include ? ` (filter: "${this.params.include}")` : ''}.`;
+      if (dirWasTruncated) {
+        const msg = `No matches retained for pattern "${this.params.pattern}" ${searchLocationDescription}${includeNote}. Results may be incomplete.`;
+        return {
+          llmContent: msg,
+          returnDisplay: 'No matches shown (incomplete)',
+        };
+      }
+      const noMatchMsg = `No matches found for pattern "${this.params.pattern}" ${searchLocationDescription}${includeNote}.`;
       return { llmContent: noMatchMsg, returnDisplay: `No matches found` };
     }
 
-    const wasTruncated = allMatches.length >= totalMaxMatches;
+    const wasTruncated = dirWasTruncated;
 
     const matchesByFile = allMatches.reduce(
       (acc, match) => {
@@ -301,12 +628,16 @@ File: ${resolved.basename}
     );
 
     const matchCount = allMatches.length;
-    const matchTerm = matchCount === 1 ? 'match' : 'matches';
 
-    let llmContent = `Found ${matchCount} ${matchTerm} for pattern "${this.params.pattern}" ${searchLocationDescription}${this.params.include ? ` (filter: "${this.params.include}")` : ''}`;
-
+    let llmContent: string;
+    let displayMessage: string;
     if (wasTruncated) {
-      llmContent += ` (results limited to ${totalMaxMatches} matches for performance)`;
+      llmContent = `Showing ${matchCount} matches for pattern "${this.params.pattern}" ${searchLocationDescription}${includeNote} (results may be incomplete)`;
+      displayMessage = `Showing ${matchCount} matches (results may be incomplete)`;
+    } else {
+      const matchTerm = matchCount === 1 ? 'match' : 'matches';
+      llmContent = `Found ${matchCount} ${matchTerm} for pattern "${this.params.pattern}" ${searchLocationDescription}${includeNote}`;
+      displayMessage = `Found ${matchCount} ${matchTerm}`;
     }
 
     llmContent += `:\n---\n`;
@@ -318,11 +649,6 @@ File: ${resolved.basename}
         llmContent += `L${match.lineNumber}: ${trimmedLine}\n`;
       });
       llmContent += '---\n';
-    }
-
-    let displayMessage = `Found ${matchCount} ${matchTerm}`;
-    if (wasTruncated) {
-      displayMessage += ` (limited)`;
     }
 
     return {
@@ -350,10 +676,8 @@ File: ${resolved.basename}
         searchDirAbs,
         workspaceContext,
       );
-      const allMatches = await this.collectDirectoryMatches(
-        searchDirectories,
-        signal,
-      );
+      const { matches: allMatches, wasTruncated: dirWasTruncated } =
+        await this.collectDirectoryMatches(searchDirectories, signal);
 
       const searchLocationDescription = this.buildSearchLocationDescription(
         searchDirAbs,
@@ -361,7 +685,11 @@ File: ${resolved.basename}
         workspaceContext,
       );
 
-      return this.formatDirectoryResults(allMatches, searchLocationDescription);
+      return this.formatDirectoryResults(
+        allMatches,
+        searchLocationDescription,
+        dirWasTruncated,
+      );
     } catch (error) {
       debugLogger.warn(`Error during GrepLogic execution: ${error}`);
       const errorMessage = getErrorMessage(error);
@@ -372,69 +700,24 @@ File: ${resolved.basename}
     }
   }
 
-  private parseRipgrepOutput(output: string, basePath: string): GrepMatch[] {
-    const results: GrepMatch[] = [];
-    if (!output) return results;
-
-    const lines = output.split(EOL);
-
-    for (const line of lines) {
-      const match = parseRipgrepLine(line, basePath);
-      if (match) {
-        results.push(match);
-      }
-    }
-    return results;
-  }
-
   private async runRipgrepProcess(
     rgArgs: string[],
     signal: AbortSignal,
-  ): Promise<string> {
+    maxMatches: number,
+    semanticBudget: SemanticBudget,
+  ): Promise<RipgrepSubprocessResult> {
     const resolvedRgPath = await getRipgrepPath();
-
-    return new Promise<string>((resolve, reject) => {
-      const child = spawn(resolvedRgPath, rgArgs, {
-        windowsHide: true,
-      });
-
-      const stdoutChunks: Buffer[] = [];
-      const stderrChunks: Buffer[] = [];
-
-      const cleanup = () => {
-        if (signal.aborted) {
-          child.kill();
-        }
-      };
-
-      signal.addEventListener('abort', cleanup, { once: true });
-
-      child.stdout.on('data', (chunk) => stdoutChunks.push(chunk));
-      child.stderr.on('data', (chunk) => stderrChunks.push(chunk));
-
-      child.on('error', (err) => {
-        signal.removeEventListener('abort', cleanup);
-        reject(
-          new Error(
-            `Failed to start ripgrep: ${err.message}. Please ensure @lvce-editor/ripgrep is properly installed.`,
-          ),
-        );
-      });
-
-      child.on('close', (code) => {
-        signal.removeEventListener('abort', cleanup);
-        const stdoutData = Buffer.concat(stdoutChunks).toString('utf8');
-        const stderrData = Buffer.concat(stderrChunks).toString('utf8');
-
-        if (code === 0) {
-          resolve(stdoutData);
-        } else if (code === 1) {
-          resolve(''); // No matches found
-        } else {
-          reject(new Error(`ripgrep exited with code ${code}: ${stderrData}`));
-        }
-      });
-    });
+    if (signal.aborted) throw ripgrepAbortError();
+    const basePath = rgArgs[rgArgs.length - 1] ?? '';
+    const state = createRipgrepAcquisitionState(semanticBudget);
+    return runRipgrepChild(
+      resolvedRgPath,
+      rgArgs,
+      signal,
+      state,
+      basePath,
+      maxMatches,
+    );
   }
 
   private async performRipgrepSearch(options: {
@@ -443,13 +726,23 @@ File: ${resolved.basename}
     include?: string;
     signal: AbortSignal;
     ignoreOptions: RipgrepIgnoreOptions;
-  }): Promise<GrepMatch[]> {
+    maxMatches: number;
+    semanticBudget: SemanticBudget;
+  }): Promise<{
+    matches: GrepMatch[];
+    earlyStopped: boolean;
+    budgetTruncated: boolean;
+    lineDropped: boolean;
+    rawTruncated: boolean;
+  }> {
     const {
       pattern,
       path: absolutePath,
       include,
       signal,
       ignoreOptions,
+      maxMatches,
+      semanticBudget,
     } = options;
 
     const rgArgs = buildRipgrepArgs(
@@ -460,8 +753,12 @@ File: ${resolved.basename}
     );
 
     try {
-      const output = await this.runRipgrepProcess(rgArgs, signal);
-      return this.parseRipgrepOutput(output, absolutePath);
+      return await this.runRipgrepProcess(
+        rgArgs,
+        signal,
+        maxMatches,
+        semanticBudget,
+      );
     } catch (error: unknown) {
       debugLogger.debug(`GrepLogic: ripgrep failed: ${getErrorMessage(error)}`);
       throw error;
@@ -639,51 +936,4 @@ export class RipGrepTool extends BaseDeclarativeTool<
   ): Promise<ToolResult> {
     return this.build(params).execute(signal);
   }
-}
-
-/**
- * Parses a single ripgrep output line into a GrepMatch, or returns null
- * if the line is blank or malformed.
- */
-export function parseRipgrepLine(
-  line: string,
-  basePath: string,
-): GrepMatch | null {
-  if (!line.trim()) {
-    return null;
-  }
-
-  const nullSeparatorIndex = line.indexOf('\0');
-  const pathSeparatorIndex =
-    nullSeparatorIndex === -1 ? line.indexOf(':') : nullSeparatorIndex;
-  if (pathSeparatorIndex === -1) {
-    return null;
-  }
-
-  const lineNumberStartIndex = pathSeparatorIndex + 1;
-  const contentSeparatorIndex = line.indexOf(':', lineNumberStartIndex);
-  if (contentSeparatorIndex === -1) {
-    return null;
-  }
-
-  const filePathRaw = line.substring(0, pathSeparatorIndex);
-  const lineNumberStr = line.substring(
-    lineNumberStartIndex,
-    contentSeparatorIndex,
-  );
-  const lineContent = line.substring(contentSeparatorIndex + 1);
-
-  const lineNumber = parseInt(lineNumberStr, 10);
-  if (isNaN(lineNumber)) {
-    return null;
-  }
-
-  const absoluteFilePath = path.resolve(basePath, filePathRaw);
-  const relativeFilePath = path.relative(basePath, absoluteFilePath);
-
-  return {
-    filePath: relativeFilePath || path.basename(absoluteFilePath),
-    lineNumber,
-    line: lineContent,
-  };
 }

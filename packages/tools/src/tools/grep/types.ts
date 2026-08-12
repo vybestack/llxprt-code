@@ -1,3 +1,5 @@
+import type { SemanticBudget } from './grepBudget.js';
+
 /**
  * Shared types and constants for the grep tool sub-modules.
  */
@@ -18,6 +20,18 @@ export interface SearchResults {
   results: GrepMatch[];
   wasLimited?: boolean;
   totalFound?: number;
+  /**
+   * Explicitly marks the search as incomplete: the true result set is
+   * unknown because acquisition stopped early (budget, semantic byte cap,
+   * or dropped lines). When true, the output must never claim an exact total.
+   */
+  incomplete?: boolean;
+  /**
+   * Lower-bound count of all matches observed during acquisition, including
+   * those not retained due to per-file or aggregate limits. When incomplete
+   * is true, this is more accurate than results.length for aggregation.
+   */
+  observedCount?: number;
 }
 
 /**
@@ -31,6 +45,7 @@ export interface SearchOptions {
   maxResults?: number;
   maxFiles?: number;
   maxPerFile?: number;
+  semanticBudget?: SemanticBudget;
 }
 
 /**

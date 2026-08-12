@@ -38,8 +38,100 @@ import {
   performGrepSearch,
   performSingleFileSearch,
 } from './grep/search-strategies.js';
+import { createAggregateSemanticBudget } from './grep/grepBudget.js';
 
 export { type GrepToolParams } from './grep/types.js';
+
+const MAX_RESULTS_DEFAULT = 1000;
+const MAX_RESULTS_HARD_CAP = 100_000;
+const MAX_FILES_HARD_CAP = 10_000;
+const MAX_PER_FILE_HARD_CAP = 10_000;
+
+function validateFinitePositive(
+  value: unknown,
+  name: string,
+  hardCap: number,
+): number {
+  if (value === undefined || value === null) return 0;
+  const n = typeof value === 'string' ? Number(value) : value;
+  if (
+    typeof n !== 'number' ||
+    !Number.isFinite(n) ||
+    n <= 0 ||
+    !Number.isInteger(n)
+  ) {
+    throw new Error(
+      `${name} must be a finite positive integer, got: ${String(value)}`,
+    );
+  }
+  return Math.min(n, hardCap);
+}
+
+function resolveEphemeralMaxResults(value: unknown): number {
+  if (value === undefined || value === null) return 0;
+  const n = typeof value === 'string' ? Number(value) : value;
+  if (
+    typeof n !== 'number' ||
+    !Number.isFinite(n) ||
+    n <= 0 ||
+    !Number.isInteger(n)
+  ) {
+    return 0;
+  }
+  return Math.min(n, MAX_RESULTS_HARD_CAP);
+}
+
+function validateGrepLimits(
+  params: GrepToolParams,
+  ephemeralMaxResults?: unknown,
+): {
+  maxResults: number;
+  maxFiles: number;
+  maxPerFile: number;
+  timeoutMs: number;
+} {
+  const maxResultsRaw = validateFinitePositive(
+    params.max_results,
+    'max_results',
+    MAX_RESULTS_HARD_CAP,
+  );
+  const maxFilesRaw = validateFinitePositive(
+    params.max_files,
+    'max_files',
+    MAX_FILES_HARD_CAP,
+  );
+  const maxPerFileRaw = validateFinitePositive(
+    params.max_per_file,
+    'max_per_file',
+    MAX_PER_FILE_HARD_CAP,
+  );
+  const timeoutMsRaw = validateFinitePositive(
+    params.timeout_ms,
+    'timeout_ms',
+    MAX_TIMEOUT_MS,
+  );
+  const ephemeralMax =
+    ephemeralMaxResults !== undefined
+      ? resolveEphemeralMaxResults(ephemeralMaxResults)
+      : 0;
+  let fallbackMax: number;
+  if (maxResultsRaw !== 0) {
+    fallbackMax = maxResultsRaw;
+  } else if (ephemeralMax !== 0) {
+    fallbackMax = ephemeralMax;
+  } else {
+    fallbackMax = MAX_RESULTS_DEFAULT;
+  }
+  return {
+    maxResults: fallbackMax,
+    maxFiles: maxFilesRaw !== 0 ? maxFilesRaw : 100,
+    maxPerFile: maxPerFileRaw !== 0 ? maxPerFileRaw : 50,
+    timeoutMs: Math.min(
+      timeoutMsRaw !== 0 ? timeoutMsRaw : DEFAULT_TIMEOUT_MS,
+      MAX_TIMEOUT_MS,
+    ),
+  };
+}
 
 class GrepToolInvocation extends BaseToolInvocation<
   GrepToolParams,
@@ -141,15 +233,21 @@ File: ${resolved.basename}
   ): Promise<{
     allMatches: GrepMatch[];
     totalMatchesFound: number;
+    totalObservedCount: number;
     wasLimited: boolean;
+    totalIsExact: boolean;
   }> {
     let allMatches: GrepMatch[] = [];
     let totalMatchesFound = 0;
+    let totalObservedCount = 0;
     let wasLimited = false;
+    let totalIsExact = true;
+    const aggregateBudget = createAggregateSemanticBudget();
 
     for (const searchDir of searchDirectories) {
       if (allMatches.length >= maxResults) {
         wasLimited = true;
+        totalIsExact = false;
         break;
       }
 
@@ -162,12 +260,31 @@ File: ${resolved.basename}
           maxResults: maxResults - allMatches.length,
           maxFiles: maxFiles - filesWithMatches.size,
           maxPerFile,
+          semanticBudget: aggregateBudget,
         },
         this.fileExclusions,
       );
 
       if (matches.wasLimited === true) {
         wasLimited = true;
+      }
+
+      if (matches.incomplete === true) {
+        totalIsExact = false;
+      }
+
+      if (matches.observedCount !== undefined) {
+        totalObservedCount += matches.observedCount;
+      } else if (matches.totalFound !== undefined) {
+        totalObservedCount += matches.totalFound;
+      } else {
+        totalObservedCount += matches.results.length;
+      }
+
+      if (matches.totalFound !== undefined) {
+        totalMatchesFound += matches.totalFound;
+      } else if (matches.incomplete !== true) {
+        totalMatchesFound += matches.results.length;
       }
 
       if (searchDirectories.length > 1) {
@@ -180,12 +297,17 @@ File: ${resolved.basename}
       matches.results.forEach((match) => {
         filesWithMatches.add(match.filePath);
       });
-      totalMatchesFound += matches.totalFound ?? matches.results.length;
 
       allMatches = allMatches.concat(matches.results);
     }
 
-    return { allMatches, totalMatchesFound, wasLimited };
+    return {
+      allMatches,
+      totalMatchesFound,
+      totalObservedCount,
+      wasLimited,
+      totalIsExact,
+    };
   }
 
   /**
@@ -257,16 +379,25 @@ File: ${resolved.basename}
     totalMatchesFound: number,
     matchCount: number,
     wasLimited: boolean,
+    totalIsExact: boolean,
     searchLocationDescription: string,
   ): string {
     let llmContent = '';
-    if (wasLimited || totalMatchesFound > matchCount) {
-      llmContent = `Found ${totalMatchesFound} total matches, showing ${matchCount} for pattern "${this.params.pattern}" ${searchLocationDescription}${this.params.include ? ` (filter: "${this.params.include}")` : ''}:
+    const includeNote = this.params.include
+      ? ` (filter: "${this.params.include}")`
+      : '';
+    if (!totalIsExact) {
+      // Search was incomplete — do not claim an exact total.
+      llmContent = `Showing ${matchCount} matches for pattern "${this.params.pattern}" ${searchLocationDescription}${includeNote} (results may be incomplete):
+---
+`;
+    } else if (wasLimited || totalMatchesFound > matchCount) {
+      llmContent = `Found ${totalMatchesFound} total matches, showing ${matchCount} for pattern "${this.params.pattern}" ${searchLocationDescription}${includeNote}:
 ---
 `;
     } else {
       const matchTerm = matchCount === 1 ? 'match' : 'matches';
-      llmContent = `Found ${matchCount} ${matchTerm} for pattern "${this.params.pattern}" ${searchLocationDescription}${this.params.include ? ` (filter: "${this.params.include}")` : ''}:
+      llmContent = `Found ${matchCount} ${matchTerm} for pattern "${this.params.pattern}" ${searchLocationDescription}${includeNote}:
 ---
 `;
     }
@@ -296,7 +427,11 @@ File: ${resolved.basename}
     effectiveWasLimited: boolean,
     totalMatchesFound: number,
     matchCount: number,
+    totalIsExact: boolean,
   ): string {
+    if (!totalIsExact) {
+      return `Showing ${matchCount} matches (results may be incomplete)`;
+    }
     if (effectiveWasLimited || totalMatchesFound > matchCount) {
       return `Found ${totalMatchesFound} matches (showing ${matchCount})`;
     }
@@ -310,14 +445,26 @@ File: ${resolved.basename}
   private buildDirectorySearchResult(
     allMatches: GrepMatch[],
     totalMatchesFound: number,
+    totalObservedCount: number,
     wasLimited: boolean,
+    totalIsExact: boolean,
     filesWithMatches: Set<string>,
     searchLocationDescription: string,
     maxFiles: number,
     maxPerFile: number,
   ): ToolResult {
+    const includeNote = this.params.include
+      ? ` (filter: "${this.params.include}")`
+      : '';
     if (allMatches.length === 0) {
-      const noMatchMsg = `No matches found for pattern "${this.params.pattern}" ${searchLocationDescription}${this.params.include ? ` (filter: "${this.params.include}")` : ''}.`;
+      if (!totalIsExact) {
+        const msg = `No matches retained for pattern "${this.params.pattern}" ${searchLocationDescription}${includeNote}. Results may be incomplete.`;
+        return {
+          llmContent: msg,
+          returnDisplay: 'No matches shown (incomplete)',
+        };
+      }
+      const noMatchMsg = `No matches found for pattern "${this.params.pattern}" ${searchLocationDescription}${includeNote}.`;
       return { llmContent: noMatchMsg, returnDisplay: `No matches found` };
     }
 
@@ -341,6 +488,7 @@ File: ${resolved.basename}
       totalMatchesFound,
       matchCount,
       effectiveWasLimited,
+      totalIsExact,
       searchLocationDescription,
     );
 
@@ -363,6 +511,7 @@ File: ${resolved.basename}
       effectiveWasLimited,
       totalMatchesFound,
       matchCount,
+      totalIsExact,
     );
 
     return {
@@ -436,15 +585,10 @@ File: ${resolved.basename}
     workspaceContext: readonly string[],
     combinedSignal: AbortSignal,
     searchDirDisplay: string,
+    maxResults: number,
+    maxFiles: number,
+    maxPerFile: number,
   ): Promise<ToolResult> {
-    const ephemeralSettings = this.host.getEphemeralSettings();
-    const maxResults =
-      this.params.max_results ??
-      (ephemeralSettings['tool-output-max-items'] as number | undefined) ??
-      1000;
-    const maxFiles = this.params.max_files ?? 100;
-    const maxPerFile = this.params.max_per_file ?? 50;
-
     if (resolved.kind === 'file') {
       return this.executeSingleFileSearch(
         resolved as ResolvedSearchTarget & { kind: 'file' },
@@ -462,15 +606,20 @@ File: ${resolved.basename}
     }
 
     const filesWithMatches = new Set<string>();
-    const { allMatches, totalMatchesFound, wasLimited } =
-      await this.collectDirectoryMatches(
-        searchDirectories,
-        combinedSignal,
-        maxResults,
-        maxFiles,
-        maxPerFile,
-        filesWithMatches,
-      );
+    const {
+      allMatches,
+      totalMatchesFound,
+      totalObservedCount,
+      wasLimited,
+      totalIsExact,
+    } = await this.collectDirectoryMatches(
+      searchDirectories,
+      combinedSignal,
+      maxResults,
+      maxFiles,
+      maxPerFile,
+      filesWithMatches,
+    );
 
     let searchLocationDescription: string;
     if (resolved.kind === 'all-workspaces') {
@@ -486,7 +635,9 @@ File: ${resolved.basename}
     return this.buildDirectorySearchResult(
       allMatches,
       totalMatchesFound,
+      totalObservedCount,
       wasLimited,
+      totalIsExact,
       filesWithMatches,
       searchLocationDescription,
       maxFiles,
@@ -495,10 +646,10 @@ File: ${resolved.basename}
   }
 
   async execute(signal: AbortSignal): Promise<ToolResult> {
-    // Set up timeout handling
-    const timeoutMs = Math.min(
-      this.params.timeout_ms ?? DEFAULT_TIMEOUT_MS,
-      MAX_TIMEOUT_MS,
+    const ephemeralSettings = this.host.getEphemeralSettings();
+    const { maxResults, maxFiles, maxPerFile, timeoutMs } = validateGrepLimits(
+      this.params,
+      ephemeralSettings['tool-output-max-items'],
     );
     const timeoutController = new AbortController();
     const timeoutId = setTimeout(() => timeoutController.abort(), timeoutMs);
@@ -535,6 +686,9 @@ File: ${resolved.basename}
         workspaceContext,
         combinedSignal,
         searchDirDisplay,
+        maxResults,
+        maxFiles,
+        maxPerFile,
       );
     } catch (error) {
       return this.handleExecuteError(
@@ -630,23 +784,30 @@ export class GrepTool extends BaseDeclarativeTool<GrepToolParams, ToolResult> {
           },
           max_results: {
             description:
-              'Optional: Maximum number of total matches to return. Defaults to tool-output-max-items setting or 1000.',
+              'Optional: Maximum number of total matches to return. Defaults to the tool-output-max-items setting or 1000. Must be a positive integer.',
             type: 'number',
+            minimum: 1,
+            maximum: MAX_RESULTS_HARD_CAP,
           },
           max_files: {
             description:
-              'Optional: Maximum number of files to include in results. Defaults to 100.',
+              'Optional: Maximum number of files to include in results. Defaults to 100. Must be a positive integer.',
             type: 'number',
+            minimum: 1,
+            maximum: MAX_FILES_HARD_CAP,
           },
           max_per_file: {
             description:
-              'Optional: Maximum number of matches per file to return. Defaults to 50.',
+              'Optional: Maximum number of matches per file to return. Defaults to 50. Must be a positive integer.',
             type: 'number',
+            minimum: 1,
+            maximum: MAX_PER_FILE_HARD_CAP,
           },
           timeout_ms: {
-            description:
-              'Optional: Timeout in milliseconds (default: 60000ms = 1 minute, max: 300000ms = 5 minutes). If the operation times out, an error is returned with suggestions.',
+            description: `Optional: Timeout in milliseconds (default: ${DEFAULT_TIMEOUT_MS}ms, max: ${MAX_TIMEOUT_MS}ms). Must be a positive integer.`,
             type: 'number',
+            minimum: 1,
+            maximum: MAX_TIMEOUT_MS,
           },
         },
         required: ['pattern'],
@@ -674,6 +835,27 @@ export class GrepTool extends BaseDeclarativeTool<GrepToolParams, ToolResult> {
         );
       } catch (error) {
         return getErrorMessage(error);
+      }
+    }
+
+    for (const [value, name, hardCap] of [
+      [params.max_results, 'max_results', MAX_RESULTS_HARD_CAP],
+      [params.max_files, 'max_files', MAX_FILES_HARD_CAP],
+      [params.max_per_file, 'max_per_file', MAX_PER_FILE_HARD_CAP],
+      [params.timeout_ms, 'timeout_ms', MAX_TIMEOUT_MS],
+    ] as const) {
+      if (value === undefined) continue;
+      const n = typeof value === 'string' ? Number(value) : value;
+      if (
+        typeof n !== 'number' ||
+        !Number.isFinite(n) ||
+        n <= 0 ||
+        !Number.isInteger(n)
+      ) {
+        return `${name} must be a finite positive integer, got: ${String(value)}`;
+      }
+      if (n > hardCap) {
+        return `${name} ${n} exceeds hard maximum ${hardCap}`;
       }
     }
 
