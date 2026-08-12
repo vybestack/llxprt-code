@@ -168,6 +168,10 @@ describe('check-affected-test-shards — isValidDirectoryPrefix (issue #3212)', 
     expect(isValidDirectoryPrefix('packages\\cli\\')).toBe(false);
   });
 
+  it('rejects a prefix with duplicate separators', () => {
+    expect(isValidDirectoryPrefix('packages//cli/')).toBe(false);
+  });
+
   it('rejects a prefix with parent-directory traversal', () => {
     expect(isValidDirectoryPrefix('packages/../other/')).toBe(false);
   });
@@ -283,6 +287,10 @@ describe('check-affected-test-shards — isValidExactPath (issue #3212)', () => 
 
   it('rejects backslash separators', () => {
     expect(isValidExactPath('packages\\cli\\x.ts')).toBe(false);
+  });
+
+  it('rejects duplicate separators', () => {
+    expect(isValidExactPath('packages//cli/x.ts')).toBe(false);
   });
 
   it('rejects parent-directory traversal', () => {

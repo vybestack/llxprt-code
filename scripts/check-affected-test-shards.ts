@@ -402,9 +402,10 @@ export function isValidDirectoryPrefix(prefix: string): boolean {
   // Reject Windows drive-qualified forward-slash prefixes (e.g. "C:/..."),
   // honoring the documented "no Windows drive" contract.
   if (/^[a-z]:\//i.test(prefix)) return false;
-  return !prefix
-    .split('/')
-    .some((segment) => segment === '..' || segment === '.');
+  const segments = prefix.slice(0, -1).split('/');
+  return !segments.some(
+    (segment) => segment === '' || segment === '..' || segment === '.',
+  );
 }
 
 /**
@@ -427,7 +428,7 @@ export function isValidExactPath(path: string): boolean {
   if (/^[a-z]:\//i.test(path)) return false;
   return !path
     .split('/')
-    .some((segment) => segment === '..' || segment === '.');
+    .some((segment) => segment === '' || segment === '..' || segment === '.');
 }
 
 /**
