@@ -399,6 +399,9 @@ export function isValidCanonicalPrefix(prefix: string): boolean {
   if (!prefix.endsWith('/')) return false;
   if (prefix.startsWith('/')) return false;
   if (prefix.includes('\\')) return false;
+  // Reject Windows drive-qualified forward-slash prefixes (e.g. "C:/..."),
+  // honoring the documented "no Windows drive" contract.
+  if (/^[a-z]:\//i.test(prefix)) return false;
   return !prefix
     .split('/')
     .some((segment) => segment === '..' || segment === '.');
@@ -457,7 +460,17 @@ export function validatePathObservers(
         continue;
       }
       const dir = join(repoRoot, prefix);
-      if (!existsSync(dir) || !statSync(dir).isDirectory()) {
+      // The filesystem is external input: a single stat in a narrowly scoped
+      // try/catch covers missing, non-directory, and race conditions. Report
+      // any of those as drift rather than throwing.
+      let isDirectory = false;
+      try {
+        isDirectory = statSync(dir).isDirectory();
+      } catch {
+        // Missing path, a stat race, or a non-directory entry — all are
+        // reported below as path-observer-prefix-not-dir drift.
+      }
+      if (!isDirectory) {
         issues.push({
           kind: 'path-observer-prefix-not-dir',
           detail: `pathObservers[${i}] references pathPrefix '${prefix}' which is not an existing directory.`,
@@ -576,28 +589,41 @@ function formatIssue(issue: DriftIssue): string {
   return `  - [${issue.kind}] ${issue.detail}`;
 }
 
-function main(): void {
-  const rootIdx = process.argv.indexOf('--root');
-  let repoRoot = DEFAULT_REPO_ROOT;
-  if (rootIdx !== -1) {
-    const rootValue = process.argv[rootIdx + 1];
-    if (rootValue === undefined) {
-      console.error('error: --root requires a value');
-      process.exit(1);
-    }
-    repoRoot = resolve(rootValue);
-  }
+/**
+ * Recognized `--name value` CLI options. A value argument that is itself one
+ * of these tokens (e.g. `--root --data file`) is a missing-value error, not a
+ * path value.
+ */
+const RECOGNIZED_OPTIONS: ReadonlySet<string> = new Set(['--root', '--data']);
 
-  const dataIdx = process.argv.indexOf('--data');
-  let dataPath = DEFAULT_DATA_PATH;
-  if (dataIdx !== -1) {
-    const dataValue = process.argv[dataIdx + 1];
-    if (dataValue === undefined) {
-      console.error('error: --data requires a value');
-      process.exit(1);
-    }
-    dataPath = resolve(dataValue);
+/**
+ * Reads the value of a `--name value` option from `argv`, or returns
+ * `undefined` when the option is absent. Fail-fast: when the option is present
+ * but its value is missing or is itself another recognized option token,
+ * prints a clear error and exits nonzero.
+ */
+function readOptionValue(
+  name: string,
+  argv: readonly string[],
+): string | undefined {
+  const idx = argv.indexOf(name);
+  if (idx === -1) return undefined;
+  const value = argv[idx + 1];
+  if (value === undefined || RECOGNIZED_OPTIONS.has(value)) {
+    console.error(`error: ${name} requires a value`);
+    process.exit(1);
   }
+  return value;
+}
+
+function main(): void {
+  const rootValue = readOptionValue('--root', process.argv);
+  const repoRoot =
+    rootValue !== undefined ? resolve(rootValue) : DEFAULT_REPO_ROOT;
+
+  const dataValue = readOptionValue('--data', process.argv);
+  const dataPath =
+    dataValue !== undefined ? resolve(dataValue) : DEFAULT_DATA_PATH;
 
   console.log(
     `affected-test-shards drift guard: scanning ${repoRoot} against ${relative(repoRoot, dataPath)}`,

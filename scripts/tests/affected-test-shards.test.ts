@@ -104,8 +104,9 @@ function expectPathReasonKeywords(
 ): void {
   const pr = result.pathReasons.find((r) => r.path === path);
   expect(pr).toBeDefined();
+  const reasonLower = pr!.reason.toLowerCase();
   for (const kw of keywords) {
-    expect(pr!.reason.toLowerCase()).toContain(kw);
+    expect(reasonLower).toContain(kw.toLowerCase());
   }
 }
 
@@ -270,8 +271,8 @@ describe('affected-test-shards selector — observer rules', () => {
     expectPathReasonKeywords(
       result,
       'packages/cli/src/config/settingsSchema.ts',
-      'path-observer',
-      'scripts',
+      'Path-Observer',
+      'Scripts',
     );
   });
 

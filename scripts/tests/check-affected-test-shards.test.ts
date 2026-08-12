@@ -139,6 +139,10 @@ describe('check-affected-test-shards — isValidCanonicalPrefix (issue #3212)', 
   it('rejects a prefix with parent-directory traversal', () => {
     expect(isValidCanonicalPrefix('packages/../other/')).toBe(false);
   });
+
+  it('rejects a drive-qualified forward-slash prefix (Windows drive)', () => {
+    expect(isValidCanonicalPrefix('C:/packages/cli/')).toBe(false);
+  });
 });
 
 describe('check-affected-test-shards — validatePathObservers prefix contract (issue #3212)', () => {
@@ -168,6 +172,49 @@ describe('check-affected-test-shards — validatePathObservers prefix contract (
     });
     const issues = validatePathObservers(data, CANONICAL, REPO_ROOT);
     expect(issues).toEqual([]);
+  });
+
+  it('reports path-observer-prefix-not-dir for a prefix that does not exist on disk', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'checker-nonexistent-'));
+    try {
+      const data = makeData({
+        observingPackage: 'scripts',
+        selectShard: 'scripts',
+        reason: 'nonexistent prefix',
+        paths: [],
+        pathPrefixes: ['packages/cli/src/config/does-not-exist/'],
+      });
+      const issues = validatePathObservers(data, CANONICAL, dir);
+      const notDir = issues.filter(
+        (i) => i.kind === 'path-observer-prefix-not-dir',
+      );
+      expect(notDir.length).toBe(1);
+      expect(notDir[0].detail).toContain('does-not-exist');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reports path-observer-prefix-not-dir for a prefix pointing at an existing file', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'checker-nondir-'));
+    try {
+      writeFileSync(join(dir, 'afile'), 'x');
+      const data = makeData({
+        observingPackage: 'scripts',
+        selectShard: 'scripts',
+        reason: 'file prefix',
+        paths: [],
+        pathPrefixes: ['afile/'],
+      });
+      const issues = validatePathObservers(data, CANONICAL, dir);
+      const notDir = issues.filter(
+        (i) => i.kind === 'path-observer-prefix-not-dir',
+      );
+      expect(notDir.length).toBe(1);
+      expect(notDir[0].detail).toContain('afile');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -202,5 +249,17 @@ describe('check-affected-test-shards — fail-fast CLI parsing', () => {
     const { status, stderr } = runChecker(['--root']);
     expect(status).toBe(1);
     expect(stderr).toContain('--root requires a value');
+  });
+
+  it('exits nonzero when --root value is another recognized option', () => {
+    const { status, stderr } = runChecker(['--root', '--data', 'file.json']);
+    expect(status).toBe(1);
+    expect(stderr).toContain('--root requires a value');
+  });
+
+  it('exits nonzero when --data value is another recognized option', () => {
+    const { status, stderr } = runChecker(['--data', '--root', 'repo']);
+    expect(status).toBe(1);
+    expect(stderr).toContain('--data requires a value');
   });
 });
