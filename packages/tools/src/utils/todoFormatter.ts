@@ -15,7 +15,6 @@ export interface TodoFormatterOptions {
   header?: string;
   includeSummary?: boolean;
   maxToolCalls?: number;
-  getLiveToolCalls?: (todoId: string) => TodoToolCall[];
 }
 
 const STATUS_ICONS: Record<Todo['status'], string> = {
@@ -131,26 +130,6 @@ const formatTodoEntry = (todo: Todo): string => {
   return `${marker} ${todo.content}${statusText}${currentSuffix}`;
 };
 
-const mergeToolCalls = (
-  todo: Todo,
-  getLiveToolCalls?: (todoId: string) => TodoToolCall[],
-): TodoToolCall[] => {
-  const baseCalls = todo.toolCalls ?? [];
-  if (!getLiveToolCalls) {
-    return baseCalls;
-  }
-
-  const seen = new Set(baseCalls.map((call) => call.id));
-  const liveCalls = getLiveToolCalls(todo.id).filter((call) => {
-    if (seen.has(call.id)) {
-      return false;
-    }
-    seen.add(call.id);
-    return true;
-  });
-  return [...baseCalls, ...liveCalls];
-};
-
 /**
  * Produces a textual representation of todos that mirrors the information shown in the Ink Todo panel.
  */
@@ -184,8 +163,7 @@ export const formatTodoListForDisplay = (
       formatSubtasks(lines, todo.subtasks, maxToolCalls);
     }
 
-    const combinedToolCalls = mergeToolCalls(todo, options.getLiveToolCalls);
-    pushToolCalls(lines, combinedToolCalls, '  ', maxToolCalls);
+    pushToolCalls(lines, todo.toolCalls ?? [], '  ', maxToolCalls);
     lines.push('');
   }
 

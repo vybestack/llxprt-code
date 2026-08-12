@@ -37,6 +37,24 @@ export const TodoSchema = z.object({
 
 export const TodoArraySchema = z.array(TodoSchema);
 
+export const PersistedTodoToolCallSchema = TodoToolCallSchema.extend({
+  timestamp: z
+    .string()
+    .datetime()
+    .transform((timestamp) => new Date(timestamp)),
+});
+
+export const PersistedSubtaskSchema = SubtaskSchema.extend({
+  toolCalls: z.array(PersistedTodoToolCallSchema).optional(),
+});
+
+export const PersistedTodoSchema = TodoSchema.extend({
+  subtasks: z.array(PersistedSubtaskSchema).optional(),
+  toolCalls: z.array(PersistedTodoToolCallSchema).optional(),
+});
+
+export const PersistedTodoArraySchema = z.array(PersistedTodoSchema);
+
 export type TodoToolCall = z.infer<typeof TodoToolCallSchema>;
 export type Subtask = z.infer<typeof SubtaskSchema>;
 export type Todo = z.infer<typeof TodoSchema>;

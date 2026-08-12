@@ -9,7 +9,6 @@ import { render } from 'ink-testing-library';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { TodoPanel } from './TodoPanel.js';
 import { TodoContext } from '../contexts/TodoContext.js';
-import { ToolCallContext } from '../contexts/ToolCallContext.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import type { Todo } from '@vybestack/llxprt-code-core';
 import { testRegex } from '../../test-utils/regex.js';
@@ -34,14 +33,6 @@ const mockTodoContext = {
   removeTodo: vi.fn(),
   getInProgressTodo: vi.fn(),
   getTodos: vi.fn(),
-};
-
-const mockToolCallContext = {
-  getExecutingToolCalls: vi.fn(() => []),
-  subscribe: vi.fn(() => () => {}),
-  addToolCall: vi.fn(),
-  removeToolCall: vi.fn(),
-  clearToolCalls: vi.fn(),
 };
 
 const testTodos: Todo[] = [
@@ -86,9 +77,7 @@ describe('TodoPanel Responsive Behavior', () => {
     it('should show abbreviated task titles for standard width', () => {
       const { lastFrame } = render(
         <TodoContext.Provider value={mockTodoContext}>
-          <ToolCallContext.Provider value={mockToolCallContext}>
-            <TodoPanel width={100} />
-          </ToolCallContext.Provider>
+          <TodoPanel width={100} />
         </TodoContext.Provider>,
       );
 
@@ -127,9 +116,7 @@ describe('TodoPanel Responsive Behavior', () => {
     it('should show full task details for wide width', () => {
       const { lastFrame } = render(
         <TodoContext.Provider value={mockTodoContext}>
-          <ToolCallContext.Provider value={mockToolCallContext}>
-            <TodoPanel width={180} />
-          </ToolCallContext.Provider>
+          <TodoPanel width={180} />
         </TodoContext.Provider>,
       );
 
@@ -160,9 +147,7 @@ describe('TodoPanel Responsive Behavior', () => {
 
       const { lastFrame: narrowFrame } = render(
         <TodoContext.Provider value={mockTodoContext}>
-          <ToolCallContext.Provider value={mockToolCallContext}>
-            <TodoPanel width={80} />
-          </ToolCallContext.Provider>
+          <TodoPanel width={80} />
         </TodoContext.Provider>,
       );
 
@@ -176,9 +161,7 @@ describe('TodoPanel Responsive Behavior', () => {
 
       const { lastFrame: standardFrame } = render(
         <TodoContext.Provider value={mockTodoContext}>
-          <ToolCallContext.Provider value={mockToolCallContext}>
-            <TodoPanel width={120} />
-          </ToolCallContext.Provider>
+          <TodoPanel width={120} />
         </TodoContext.Provider>,
       );
 
@@ -195,9 +178,7 @@ describe('TodoPanel Responsive Behavior', () => {
 
       const { lastFrame, rerender } = render(
         <TodoContext.Provider value={mockTodoContext}>
-          <ToolCallContext.Provider value={mockToolCallContext}>
-            <TodoPanel width={60} />
-          </ToolCallContext.Provider>
+          <TodoPanel width={60} />
         </TodoContext.Provider>,
       );
 
@@ -205,9 +186,7 @@ describe('TodoPanel Responsive Behavior', () => {
       mockUseTerminalSize.mockReturnValue({ columns: 180, rows: 20 });
       rerender(
         <TodoContext.Provider value={mockTodoContext}>
-          <ToolCallContext.Provider value={mockToolCallContext}>
-            <TodoPanel width={180} />
-          </ToolCallContext.Provider>
+          <TodoPanel width={180} />
         </TodoContext.Provider>,
       );
 
@@ -235,9 +214,7 @@ describe('TodoPanel Responsive Behavior', () => {
 
       const { lastFrame } = render(
         <TodoContext.Provider value={mockTodoContext}>
-          <ToolCallContext.Provider value={mockToolCallContext}>
-            <TodoPanel width={100} />
-          </ToolCallContext.Provider>
+          <TodoPanel width={100} />
         </TodoContext.Provider>,
       );
 
@@ -289,9 +266,7 @@ describe('TodoPanel Responsive Behavior', () => {
 
         const { lastFrame } = render(
           <TodoContext.Provider value={mockTodoContext}>
-            <ToolCallContext.Provider value={mockToolCallContext}>
-              <TodoPanel width={width} />
-            </ToolCallContext.Provider>
+            <TodoPanel width={width} />
           </TodoContext.Provider>,
         );
 

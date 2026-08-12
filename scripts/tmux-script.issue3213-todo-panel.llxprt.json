@@ -1,0 +1,220 @@
+{
+  "tmux": {
+    "cols": 120,
+    "rows": 40,
+    "historyLimit": 100000,
+    "scrollbackLines": 20000,
+    "initialWaitMs": 8000
+  },
+  "startCommand": [
+    "env",
+    "CI=0",
+    "CONTINUOUS_INTEGRATION=0",
+    "NODE_OPTIONS=",
+    "LLXPRT_CODE_NO_RELAUNCH=true",
+    "LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION=true",
+    "LLXPRT_CODE_BUILTIN_COMMANDS_ONLY=true",
+    "LLXPRT_CODE_SUPPRESS_STATIC_HEADER=true",
+    "LLXPRT_CODE_WELCOME_CONFIG_PATH=scripts/fixtures/welcome-completed.json",
+    "LLXPRT_SYSTEM_SETTINGS_PATH=scripts/system-settings.interactive-ui.json",
+    "LLXPRT_FAKE_RESPONSES=scripts/fixtures/issue3213-todo-panel.responses.jsonl",
+    "bun",
+    "packages/cli/index.ts",
+    "--provider",
+    "fake",
+    "--model",
+    "fake-model"
+  ],
+  "yolo": true,
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 60000
+    },
+    { "type": "capture", "label": "00-startup", "scope": "screen" },
+
+    {
+      "type": "line",
+      "text": "/set todo-continuation false",
+      "submitKeys": []
+    },
+    { "type": "key", "key": "Enter" },
+    { "type": "wait", "ms": 250 },
+    { "type": "key", "key": "Enter" },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "Ephemeral setting 'todo-continuation' set to false",
+      "timeoutMs": 30000
+    },
+
+    {
+      "type": "line",
+      "text": "Use the todo_write tool to create this exact todo list with exactly these IDs and statuses: id 'read-readme', content 'Read README.md', status in_progress; id 'write-summary', content 'Write summary', status pending. Do not mark either task completed. Call todo_write once and then reply with only: READY.",
+      "submitKeys": ["Enter"]
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "esc to cancel",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 240000
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Todo Progress",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "regex": "→\\s+Read README\\.md",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "regex": "○\\s+Write summary",
+      "timeoutMs": 30000
+    },
+    { "type": "wait", "ms": 1000 },
+    {
+      "type": "capture",
+      "label": "01-after-todo-write-screen",
+      "scope": "screen"
+    },
+    {
+      "type": "capture",
+      "label": "01-after-todo-write-scrollback",
+      "scope": "scrollback"
+    },
+
+    {
+      "type": "line",
+      "text": "Use the todo_read tool to read the current todo list. Call todo_read once, do not update any status, and then reply with only: READ.",
+      "submitKeys": ["Enter"]
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "Todo list read (2 tasks).",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 240000
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "regex": "→\\s+Read README\\.md",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "regex": "○\\s+Write summary",
+      "timeoutMs": 30000
+    },
+    { "type": "wait", "ms": 1000 },
+    {
+      "type": "capture",
+      "label": "02-after-todo-read-screen",
+      "scope": "screen"
+    },
+    {
+      "type": "capture",
+      "label": "02-after-todo-read-scrollback",
+      "scope": "scrollback"
+    },
+
+    {
+      "type": "line",
+      "text": "Use the read_file tool to read README.md. Then reply with only the first non-empty line of that file. Do not change the todo list.",
+      "submitKeys": ["Enter"]
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "ReadFile README.md",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 240000
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "regex": "→\\s+Read README\\.md",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "regex": "○\\s+Write summary",
+      "timeoutMs": 30000
+    },
+    { "type": "wait", "ms": 1000 },
+    {
+      "type": "capture",
+      "label": "03-read-file-while-active-screen",
+      "scope": "screen"
+    },
+    {
+      "type": "capture",
+      "label": "03-read-file-while-active-scrollback",
+      "scope": "scrollback"
+    },
+
+    {
+      "type": "line",
+      "text": "Use todo_write once with the existing IDs: mark id 'read-readme' completed and id 'write-summary' in_progress. Do not mark 'write-summary' completed. Then reply with only: UPDATED.",
+      "submitKeys": ["Enter"]
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "regex": "\u2713\\s+Read README\\.md",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 240000
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "regex": "→\\s+Write summary",
+      "timeoutMs": 30000
+    },
+    { "type": "wait", "ms": 1000 },
+    {
+      "type": "capture",
+      "label": "04-after-status-update-screen",
+      "scope": "screen"
+    },
+    {
+      "type": "capture",
+      "label": "04-after-status-update-scrollback",
+      "scope": "scrollback"
+    },
+
+    { "type": "line", "text": "/quit", "submitKeys": ["Enter"] },
+    { "type": "waitForExit", "timeoutMs": 15000 }
+  ]
+}
