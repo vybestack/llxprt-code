@@ -50,6 +50,7 @@ const restoreSchema: CommandArgumentSchema = [
         return files
           .filter((file) => file.endsWith('.json'))
           .map((file) => file.replace(/\.json$/, ''))
+          .sort()
           .map((name) => ({
             value: name,
             description: checkpointSuggestionDescription,
@@ -187,7 +188,7 @@ async function restoreAction(
   try {
     await fs.mkdir(checkpointDir, { recursive: true });
     const files = await fs.readdir(checkpointDir);
-    const jsonFiles = files.filter((file) => file.endsWith('.json'));
+    const jsonFiles = files.filter((file) => file.endsWith('.json')).sort();
 
     if (!args) {
       return listCheckpoints(jsonFiles);
