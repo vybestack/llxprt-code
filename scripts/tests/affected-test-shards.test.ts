@@ -78,6 +78,7 @@ interface SelectorModule {
   selectAffectedShards: (params: {
     readonly event: string;
     readonly changedPaths: readonly string[];
+    readonly dataPath?: string;
   }) => SelectionResult;
   replayHistory: (params: {
     readonly count: number;
@@ -89,6 +90,23 @@ interface SelectorModule {
 
 async function loadSelector(): Promise<SelectorModule> {
   return await import(SELECTOR_PATH);
+}
+
+/**
+ * Asserts that a changed path's per-path reason in the selection result is
+ * present and contains all given keywords (case-insensitive). Extracted from
+ * duplicated assertion blocks in the path-observer tests (issue #3212).
+ */
+function expectPathReasonKeywords(
+  result: SelectionResult,
+  path: string,
+  ...keywords: readonly string[]
+): void {
+  const pr = result.pathReasons.find((r) => r.path === path);
+  expect(pr).toBeDefined();
+  for (const kw of keywords) {
+    expect(pr!.reason.toLowerCase()).toContain(kw);
+  }
 }
 
 const PR_EVENT = 'pull_request';
@@ -235,6 +253,59 @@ describe('affected-test-shards selector — observer rules', () => {
     });
     expect(result.selectedShards).toContain('cli');
     expect(result.selectedShards).toContain('rest');
+  });
+
+  it('selects scripts when the cli settings schema facade source changes (issue #3212)', async () => {
+    const { selectAffectedShards } = await loadSelector();
+    // scripts/tests/generate-settings-doc.test.ts reads the cli settings
+    // schema source without importing it, so a change to that source must run
+    // the scripts shard (its synchronization gate) in addition to the normal
+    // cli owner/observer coverage.
+    const result = selectAffectedShards({
+      event: PR_EVENT,
+      changedPaths: ['packages/cli/src/config/settingsSchema.ts'],
+    });
+    expect(result.selectedShards).toContain('cli');
+    expect(result.selectedShards).toContain('scripts');
+    expectPathReasonKeywords(
+      result,
+      'packages/cli/src/config/settingsSchema.ts',
+      'path-observer',
+      'scripts',
+    );
+  });
+
+  it('selects scripts when a settings-schema modular source changes (issue #3212)', async () => {
+    const { selectAffectedShards } = await loadSelector();
+    // The generated schema is assembled from modular sources under
+    // packages/cli/src/config/settings-schema/. A change to any of those
+    // sources can alter the generated artifacts, so it must also select the
+    // scripts shard via the same path-observer rule.
+    const result = selectAffectedShards({
+      event: PR_EVENT,
+      changedPaths: ['packages/cli/src/config/settings-schema/schema-core.ts'],
+    });
+    expect(result.selectedShards).toContain('cli');
+    expect(result.selectedShards).toContain('scripts');
+    expectPathReasonKeywords(
+      result,
+      'packages/cli/src/config/settings-schema/schema-core.ts',
+      'path-observer',
+      'scripts',
+    );
+  });
+
+  it('does NOT select scripts for an unrelated cli production file (issue #3212)', async () => {
+    const { selectAffectedShards } = await loadSelector();
+    // The path-observer rule is source-specific: a generic cli source file
+    // that the settings-doc test does not read must select only the normal
+    // cli owner + package-observer coverage, never scripts.
+    const result = selectAffectedShards({
+      event: PR_EVENT,
+      changedPaths: ['packages/cli/src/commands/chat.ts'],
+    });
+    expect(result.selectedShards).toContain('cli');
+    expect(result.selectedShards).not.toContain('scripts');
   });
 });
 

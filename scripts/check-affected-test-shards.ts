@@ -28,7 +28,7 @@
  * Exits 0 on success, 1 on any drift.
  */
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join, relative, resolve, dirname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -46,19 +46,28 @@ const PACKAGE_PREFIX = '@vybestack/llxprt-code-';
 const TEST_PATH_RE =
   /(__tests__|\.test\.|\.spec\.|\.bun\.ts$|\/tests\/|\/test-bun\/|\/integration-tests\/|\/test\/)/;
 
-interface ObserverRule {
+export interface ObserverRule {
   readonly observingPackage: string;
   readonly selectShard: string;
   readonly reason: string;
 }
 
-interface GraphData {
+export interface PathObserverRule {
+  readonly observingPackage: string;
+  readonly selectShard: string;
+  readonly reason: string;
+  readonly paths: readonly string[];
+  readonly pathPrefixes: readonly string[];
+}
+
+export interface GraphData {
   readonly packageToShard: Record<string, string>;
   readonly shardOrder: readonly string[];
   readonly shardTimingsSeconds: Record<string, number>;
   readonly importEdges: Record<string, readonly string[]>;
   readonly testOnlyEdges: Record<string, readonly string[]>;
   readonly observers: Record<string, readonly ObserverRule[]>;
+  readonly pathObservers: readonly PathObserverRule[];
   readonly sharedInputs: readonly string[];
 }
 
@@ -225,7 +234,7 @@ function extractAllEdges(repoRoot: string): {
   return { prodEdges, testOnlyEdges };
 }
 
-interface DriftIssue {
+export interface DriftIssue {
   readonly kind: string;
   readonly detail: string;
 }
@@ -296,7 +305,7 @@ function compareEdges(
 }
 
 /** Builds the canonical workspace → shard map from TEST_SHARDS. */
-function buildCanonicalShardMap(): Map<string, string> {
+export function buildCanonicalShardMap(): Map<string, string> {
   const map = new Map<string, string>();
   for (const shard of TEST_SHARDS) {
     if (shard.isScriptsShard) continue;
@@ -372,6 +381,90 @@ function validateShardConfig(
     }
   }
 
+  return issues;
+}
+
+/**
+ * Canonical directory-prefix contract for path-observer `pathPrefixes`:
+ *  - repo-relative (no leading separator, no Windows drive);
+ *  - forward-slash separated (no backslash);
+ *  - ends with a trailing '/' (a directory boundary, never a file);
+ *  - no '.' or '..' path segments (no up-level/self traversal).
+ *
+ * A prefix that violates this — most dangerously one missing its trailing
+ * slash — can overmatch sibling directories via textual prefix comparison, so
+ * it is rejected here rather than silently tolerated.
+ */
+export function isValidCanonicalPrefix(prefix: string): boolean {
+  if (!prefix.endsWith('/')) return false;
+  if (prefix.startsWith('/')) return false;
+  if (prefix.includes('\\')) return false;
+  return !prefix
+    .split('/')
+    .some((segment) => segment === '..' || segment === '.');
+}
+
+/**
+ * Validates path observer rules: each rule's observing identity must be a known
+ * package or shard (the scripts harness shard owns no workspace but runs
+ * tests), selectShard must be canonical, every exact path and directory prefix
+ * must exist on disk, and a rule needs at least one path or prefix to match.
+ * Directory prefixes must follow the canonical contract enforced by
+ * {@link isValidCanonicalPrefix}.
+ */
+export function validatePathObservers(
+  data: GraphData,
+  canonical: Map<string, string>,
+  repoRoot: string,
+): DriftIssue[] {
+  const issues: DriftIssue[] = [];
+  for (const [i, rule] of data.pathObservers.entries()) {
+    const observingIsKnown =
+      canonical.has(rule.observingPackage) ||
+      data.shardOrder.includes(rule.observingPackage);
+    if (!observingIsKnown) {
+      issues.push({
+        kind: 'path-observer-unknown-observer',
+        detail: `pathObservers[${i}] references observingPackage '${rule.observingPackage}' which is neither a declared workspace nor a shard name.`,
+      });
+    }
+    if (!data.shardOrder.includes(rule.selectShard)) {
+      issues.push({
+        kind: 'path-observer-unknown-shard',
+        detail: `pathObservers[${i}] references selectShard '${rule.selectShard}' which is not in shardOrder.`,
+      });
+    }
+    if (rule.paths.length === 0 && rule.pathPrefixes.length === 0) {
+      issues.push({
+        kind: 'path-observer-empty',
+        detail: `pathObservers[${i}] has no paths and no pathPrefixes, so it can never match.`,
+      });
+    }
+    for (const pathEntry of rule.paths) {
+      if (!existsSync(join(repoRoot, pathEntry))) {
+        issues.push({
+          kind: 'path-observer-path-not-found',
+          detail: `pathObservers[${i}] references exact path '${pathEntry}' which does not exist on disk.`,
+        });
+      }
+    }
+    for (const prefix of rule.pathPrefixes) {
+      if (!isValidCanonicalPrefix(prefix)) {
+        issues.push({
+          kind: 'path-observer-prefix-invalid',
+          detail: `pathObservers[${i}] pathPrefix '${prefix}' violates the canonical directory-prefix contract: it must be repo-relative, forward-slash separated, end with a trailing '/', and contain no '.'/'..' path segments.`,
+        });
+        continue;
+      }
+      const dir = join(repoRoot, prefix);
+      if (!existsSync(dir) || !statSync(dir).isDirectory()) {
+        issues.push({
+          kind: 'path-observer-prefix-not-dir',
+          detail: `pathObservers[${i}] references pathPrefix '${prefix}' which is not an existing directory.`,
+        });
+      }
+    }
+  }
   return issues;
 }
 
@@ -472,6 +565,7 @@ function checkGraph(
   const canonical = buildCanonicalShardMap();
   issues.push(...validateShardMap(data, canonical));
   issues.push(...validateShardConfig(data, canonical));
+  issues.push(...validatePathObservers(data, canonical, repoRoot));
   issues.push(...validateSharedInputs(data, repoRoot));
   issues.push(...validateReverseCompleteness(data, canonical));
 
@@ -483,15 +577,27 @@ function formatIssue(issue: DriftIssue): string {
 }
 
 function main(): void {
-  const rootArg = process.argv.find((a) => a === '--root');
+  const rootIdx = process.argv.indexOf('--root');
   let repoRoot = DEFAULT_REPO_ROOT;
-  if (rootArg !== undefined) {
-    const idx = process.argv.indexOf('--root');
-    if (idx + 1 < process.argv.length) {
-      repoRoot = resolve(process.argv[idx + 1]);
+  if (rootIdx !== -1) {
+    const rootValue = process.argv[rootIdx + 1];
+    if (rootValue === undefined) {
+      console.error('error: --root requires a value');
+      process.exit(1);
     }
+    repoRoot = resolve(rootValue);
   }
-  const dataPath = DEFAULT_DATA_PATH;
+
+  const dataIdx = process.argv.indexOf('--data');
+  let dataPath = DEFAULT_DATA_PATH;
+  if (dataIdx !== -1) {
+    const dataValue = process.argv[dataIdx + 1];
+    if (dataValue === undefined) {
+      console.error('error: --data requires a value');
+      process.exit(1);
+    }
+    dataPath = resolve(dataValue);
+  }
 
   console.log(
     `affected-test-shards drift guard: scanning ${repoRoot} against ${relative(repoRoot, dataPath)}`,
