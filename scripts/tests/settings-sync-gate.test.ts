@@ -18,7 +18,7 @@
  *  1. package.json exposes `lint:settings-sync` executing
  *     `bun ./scripts/generate-settings-doc.ts --check`.
  *  2. The `lint_javascript` job runs `lint:settings-sync` as an unconditional
- *     step (no path-filtering `if`) AFTER the declaration build.
+ *     step (no path-filtering `if`) BEFORE the declaration-only build.
  *
  * YAML is parsed with the established `parseWorkflowYaml` convention rather
  * than fragile raw-substring ordering.
@@ -84,7 +84,7 @@ describe('issue #3212 — settings-sync correctness gate', () => {
     ).toBe(1);
   });
 
-  it('runs lint:settings-sync after the declaration build step', () => {
+  it('runs lint:settings-sync before the declaration-only build step', () => {
     const steps = lintJavascriptSteps();
     const buildIndex = steps.findIndex((step) =>
       String(step.run ?? '').includes('npm run build:types'),
@@ -104,8 +104,8 @@ describe('issue #3212 — settings-sync correctness gate', () => {
 
     expect(
       syncIndex,
-      'lint:settings-sync must run after build:types',
-    ).toBeGreaterThan(buildIndex);
+      'lint:settings-sync must run before build:types replaces runtime output with declarations',
+    ).toBeLessThan(buildIndex);
   });
 
   it('runs lint:settings-sync unconditionally (no path-filtering gate)', () => {
