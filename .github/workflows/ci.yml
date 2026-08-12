@@ -450,6 +450,12 @@ jobs:
         run: |-
           npm run build:types
 
+      # Runs independently of test shard selection. Path observers only reduce
+      # test work; this guard provides the settings synchronization guarantee.
+      - name: 'Run settings docs/schema sync guard (#3212)'
+        run: |-
+          npm run lint:settings-sync
+
       - name: 'Run agents API-surface guard'
         run: |-
           npm run lint:agents-api-surface

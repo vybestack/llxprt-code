@@ -385,7 +385,7 @@ function validateShardConfig(
 }
 
 /**
- * Canonical directory-prefix contract for path-observer `pathPrefixes`:
+ * Directory-prefix contract for path-observer `pathPrefixes`:
  *  - repo-relative (no leading separator, no Windows drive);
  *  - forward-slash separated (no backslash);
  *  - ends with a trailing '/' (a directory boundary, never a file);
@@ -395,7 +395,7 @@ function validateShardConfig(
  * slash — can overmatch sibling directories via textual prefix comparison, so
  * it is rejected here rather than silently tolerated.
  */
-export function isValidCanonicalPrefix(prefix: string): boolean {
+export function isValidDirectoryPrefix(prefix: string): boolean {
   if (!prefix.endsWith('/')) return false;
   if (prefix.startsWith('/')) return false;
   if (prefix.includes('\\')) return false;
@@ -408,12 +408,37 @@ export function isValidCanonicalPrefix(prefix: string): boolean {
 }
 
 /**
+ * Repo-relative file-path contract for path-observer exact `paths`:
+ *  - nonempty;
+ *  - repo-relative (no leading separator, no Windows drive);
+ *  - forward-slash separated (no backslash);
+ *  - no trailing '/' (an exact path is a file, not a directory);
+ *  - no '.' or '..' path segments (no self/up-level traversal).
+ *
+ * A malformed exact path is rejected here, before any filesystem access, so
+ * the drift report distinguishes "invalid shape" from "valid shape but not a
+ * file on disk".
+ */
+export function isValidExactPath(path: string): boolean {
+  if (path.length === 0) return false;
+  if (path.endsWith('/')) return false;
+  if (path.startsWith('/')) return false;
+  if (path.includes('\\')) return false;
+  if (/^[a-z]:\//i.test(path)) return false;
+  return !path
+    .split('/')
+    .some((segment) => segment === '..' || segment === '.');
+}
+
+/**
  * Validates path observer rules: each rule's observing identity must be a known
  * package or shard (the scripts harness shard owns no workspace but runs
- * tests), selectShard must be canonical, every exact path and directory prefix
- * must exist on disk, and a rule needs at least one path or prefix to match.
- * Directory prefixes must follow the canonical contract enforced by
- * {@link isValidCanonicalPrefix}.
+ * tests), selectShard must be in shardOrder, every exact path must be a valid
+ * repo-relative file that exists on disk, every directory prefix must follow
+ * the directory-prefix contract and exist on disk, and a rule needs at least
+ * one path or prefix to match. Exact-path shape is validated by
+ * {@link isValidExactPath} and directory-prefix shape by
+ * {@link isValidDirectoryPrefix}.
  */
 export function validatePathObservers(
   data: GraphData,
@@ -444,18 +469,32 @@ export function validatePathObservers(
       });
     }
     for (const pathEntry of rule.paths) {
-      if (!existsSync(join(repoRoot, pathEntry))) {
+      if (!isValidExactPath(pathEntry)) {
         issues.push({
-          kind: 'path-observer-path-not-found',
-          detail: `pathObservers[${i}] references exact path '${pathEntry}' which does not exist on disk.`,
+          kind: 'path-observer-path-invalid',
+          detail: `pathObservers[${i}] exact path '${pathEntry}' violates the repo-relative file-path contract: it must be nonempty, repo-relative, forward-slash separated, have no trailing slash, and contain no '.'/'..' path segments.`,
+        });
+        continue;
+      }
+      const filePath = join(repoRoot, pathEntry);
+      let isFile = false;
+      try {
+        isFile = statSync(filePath).isFile();
+      } catch {
+        // Filesystem failures are reported below as observer drift.
+      }
+      if (!isFile) {
+        issues.push({
+          kind: 'path-observer-path-not-file',
+          detail: `pathObservers[${i}] references exact path '${pathEntry}' which is not an existing file.`,
         });
       }
     }
     for (const prefix of rule.pathPrefixes) {
-      if (!isValidCanonicalPrefix(prefix)) {
+      if (!isValidDirectoryPrefix(prefix)) {
         issues.push({
           kind: 'path-observer-prefix-invalid',
-          detail: `pathObservers[${i}] pathPrefix '${prefix}' violates the canonical directory-prefix contract: it must be repo-relative, forward-slash separated, end with a trailing '/', and contain no '.'/'..' path segments.`,
+          detail: `pathObservers[${i}] pathPrefix '${prefix}' violates the directory-prefix contract: it must be repo-relative, forward-slash separated, end with a trailing '/', and contain no '.'/'..' path segments.`,
         });
         continue;
       }
