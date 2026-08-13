@@ -162,7 +162,7 @@ async function estimateGpt56PromptWithEncoder(
     throw new ModelPromptEstimatorError(
       'asset-unavailable',
       createErrorContext(request),
-      'verify the local @dqbd/tiktoken o200k_base assets are installed and intact',
+      `verify the local @dqbd/tiktoken o200k_base assets are installed and intact; cause: ${formatCausalDetail(error)}`,
       { cause: error },
     );
   }

@@ -201,19 +201,21 @@ describe('fromConfig tokenizer readiness @requirement:REQ-3217-001 @requirement:
     }
   });
 
-  it('rejects with the causal preparation failure and removes the isolated runtime', async () => {
+  it('rejects with the causal preparation failure reached through authoritative post-activation state (not stale Config state) and removes the isolated runtime', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     const failure = new Error('mandatory tokenizer readiness failed causally');
     const runtimeId = 'from-config-rejected-tokenizer-readiness';
+    // Mutate the Config's provider field to stale state. The isolated runtime
+    // manager still has 'fake' active (authoritative). fromConfig must derive
+    // the readiness target from the manager, not from this stale Config field.
     built.config.setProvider('stale-config-provider');
+    let readinessTarget:
+      | { readonly provider: string; readonly model: string }
+      | undefined;
     built.config.setTokenizerFactory(
       createReadinessFactory(
         async (providerName, model) => {
-          if (providerName !== 'fake' || model !== 'fake-model') {
-            throw new Error(
-              `unexpected readiness target ${providerName}/${model ?? ''}`,
-            );
-          }
+          readinessTarget = { provider: providerName, model: model ?? '' };
           throw failure;
         },
         () => {
@@ -226,6 +228,14 @@ describe('fromConfig tokenizer readiness @requirement:REQ-3217-001 @requirement:
       await expect(
         fromConfig({ config: built.config, sessionId: runtimeId }),
       ).rejects.toBe(failure);
+      // Authoritative post-activation manager state ('fake'/'fake-model')
+      // reached readiness — NOT the stale Config provider
+      // ('stale-config-provider').
+      expect(readinessTarget).toEqual({
+        provider: 'fake',
+        model: 'fake-model',
+      });
+      expect(readinessTarget?.provider).not.toBe('stale-config-provider');
       expect(() =>
         runWithRuntimeScope({ runtimeId, metadata: {} }, () =>
           getCliRuntimeServices(),

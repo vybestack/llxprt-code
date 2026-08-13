@@ -77,6 +77,31 @@ export const DEFAULT_MODEL_PROMPT_ESTIMATOR_REGISTRATIONS = Object.freeze([
   GPT_56_PROMPT_ESTIMATOR_REGISTRATION,
 ]);
 
+/**
+ * Build the default estimator registration list bound to a composition-root
+ * encoder resolver.
+ *
+ * Every entry in {@link DEFAULT_MODEL_PROMPT_ESTIMATOR_REGISTRATIONS} is
+ * retained as-is except the GPT-5.6 entry, which is replaced with a
+ * resolver-bound version so readiness, runtime tokenization, and final
+ * prompt-envelope estimation share one encoder. This prevents future
+ * divergence: adding a new default registration to the frozen list
+ * automatically flows into every composition root that calls this helper,
+ * without touching the factory.
+ */
+export function createDefaultEstimatorRegistrations(
+  resolveEncoder: O200kBaseEncoderResolver,
+  baseRegistrations: readonly ModelPromptEstimatorRegistration[] = DEFAULT_MODEL_PROMPT_ESTIMATOR_REGISTRATIONS,
+): readonly ModelPromptEstimatorRegistration[] {
+  return Object.freeze(
+    baseRegistrations.map((registration) =>
+      registration.family === GPT_56_ESTIMATOR_FAMILY
+        ? createGpt56PromptEstimatorRegistration(resolveEncoder)
+        : registration,
+    ),
+  );
+}
+
 function findClaim(
   canonicalModel: string,
   registrations: readonly ModelPromptEstimatorRegistration[],

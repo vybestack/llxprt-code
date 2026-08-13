@@ -15,7 +15,7 @@ import {
   prepareGpt56RuntimeTokenizer,
 } from '../tokenizers/Gpt56O200kPromptEstimator.js';
 import {
-  createGpt56PromptEstimatorRegistration,
+  createDefaultEstimatorRegistrations,
   ModelPromptEstimatorRegistry,
 } from '../tokenizers/ModelPromptEstimatorRegistry.js';
 import { OpenAITokenizer } from '../tokenizers/OpenAITokenizer.js';
@@ -69,18 +69,44 @@ function matchesTokenizer(
   );
 }
 
+/**
+ * Construct the providers-backed runtime tokenizer factory.
+ *
+ * Readiness contract:
+ * - `prepareTokenizer` establishes **mandatory model readiness**. Every
+ *   bootstrap or composition consumer (CLI start-up, `fromConfig`, headless
+ *   runtime assembly) MUST `await` it for each active provider/model BEFORE
+ *   exposing `getTokenizer` or `estimatePrompt` to downstream callers. For
+ *   sanctioned GPT-5.6 models it eagerly loads and smoke-tests the o200k_base
+ *   encoder so that the first real counting call is never the first
+ *   initialization attempt. Preparation failures surface with full estimator
+ *   context and causal detail and are fatal to the bootstrap.
+ * - `getTokenizer` is **synchronous** and deliberately free of readiness
+ *   guards or retries. It shares the same resolver as `prepareTokenizer`, so
+ *   after preparation the encoder is already warm. Runtime token counting
+ *   reuses that resolved encoder directly. Because preparation belongs at the
+ *   bootstrap boundary, `getTokenizer` itself need not — and must not — assert
+ *   readiness or retry initialization; doing so would hide the real failure
+ *   point and add runtime cost to every counting call.
+ *
+ * @param loadModule Optional loader used to resolve the tiktoken module.
+ * Defaults to the process-wide shared loader. Tests inject a loader to
+ * isolate encoder initialization and inject failures.
+ */
 export function createRuntimeTokenizerFactory(
   loadModule: TiktokenModuleLoader = loadTiktokenModule,
 ): RuntimeTokenizerFactory {
   const openaiTokenizer = new OpenAITokenizer();
   const anthropicTokenizer = new AnthropicTokenizer();
   const resolveGpt56Encoder = createO200kBaseEncoderResolver(loadModule);
-  // Bind the GPT-5.6 estimator to this factory's encoder resolver so
-  // readiness, runtime tokenization, and final prompt-envelope estimation all
-  // observe the same encoder — including when a loader is injected. The
-  // production default resolver still delegates to the process-wide encoder.
+  // Bind the DEFAULT estimator registrations to this factory's encoder
+  // resolver so readiness, runtime tokenization, and final prompt-envelope
+  // estimation all observe the same encoder — including when a loader is
+  // injected. The helper replaces only the GPT-5.6 default entry and retains
+  // every other DEFAULT_MODEL_PROMPT_ESTIMATOR_REGISTRATIONS entry, so future
+  // defaults cannot diverge from this composition root.
   const estimatorRegistry = new ModelPromptEstimatorRegistry([
-    createGpt56PromptEstimatorRegistration(resolveGpt56Encoder),
+    ...createDefaultEstimatorRegistrations(resolveGpt56Encoder),
     ...OFFICIAL_PROMPT_ESTIMATOR_REGISTRATIONS,
     ...CLAUDE_5_PROMPT_ESTIMATOR_REGISTRATIONS,
   ]);
