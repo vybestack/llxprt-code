@@ -1395,6 +1395,19 @@ The following settings remain at the top level of the `settings.json` file.
     - **`enabled`** (boolean): Whether or not telemetry is enabled. Defaults to `false`.
     - **`logPrompts`** (boolean): Controls whether user prompt text is included in the `user_prompt` log event. Does not affect hook I/O logging (hook input/output is always included in `hook_call` events when telemetry is enabled).
     - **`outfile`** (string): Optional local file path for traces, metrics, and logs. Without it, telemetry is written to the console.
+    - **`perf`** (object): Client-side performance telemetry, written only to local perf files. Independent of `telemetry.enabled` — `perf.enabled` is its own master switch.
+      - **`enabled`** (boolean): Master switch for local performance telemetry. Defaults to `false`. When `false`, no perf files are created, no observers are installed, and no memory ring is allocated.
+      - **`memory`** (boolean): Records a memory sample (RSS and heap) every 60 seconds into a 120-sample ring, giving roughly two hours of in-session history. Surfaced by the `/perf` command. Defaults to `false`, and is effective **only** when `perf.enabled` is also `true`.
+      - **Note:** Performance telemetry starts only for interactive sessions; non-interactive runs do not initialize it.
+  - **Example — enabling the in-session memory trend:**
+    ```json
+    "telemetry": {
+      "perf": {
+        "enabled": true,
+        "memory": true
+      }
+    }
+    ```
   - **Example:**
     ```json
     "telemetry": {

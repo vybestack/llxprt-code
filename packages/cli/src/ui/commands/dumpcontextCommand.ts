@@ -16,6 +16,7 @@ import type {
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
+import { getHistoryServiceFromConfig as getHistoryService } from './historyServiceAccess.js';
 import type { CommandArgumentSchema } from './schema/types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import type { DumpMode } from '@vybestack/llxprt-code-providers';
@@ -23,27 +24,9 @@ import {
   buildProviderDumpBody,
   dumpRequestContext,
 } from '@vybestack/llxprt-code-providers';
-import type {
-  IContent,
-  ChronologyTraceEntry,
-} from '@vybestack/llxprt-code-core';
+import type { IContent } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import * as path from 'node:path';
-
-type HistoryService = {
-  getAll: () => unknown;
-  getChronologyTrace: () => readonly ChronologyTraceEntry[];
-};
-
-type AgentClientWithHistory = {
-  getHistoryService?: () => HistoryService | null;
-};
-
-type ConfigWithMaybeAgentClient = NonNullable<
-  CommandContext['services']['config']
-> & {
-  getAgentClient: () => AgentClientWithHistory | null | undefined;
-};
 
 type ProviderManagerWithActive = {
   getActiveProviderName?: () => string | undefined;
@@ -62,34 +45,6 @@ function isValidMode(mode: string): mode is DumpMode {
   return validModes.includes(mode as DumpMode);
 }
 
-function hasCallableGetAgentClient(
-  config: CommandContext['services']['config'],
-): config is ConfigWithMaybeAgentClient {
-  return typeof config?.getAgentClient === 'function';
-}
-
-function getHistoryService(
-  config: CommandContext['services']['config'],
-): HistoryService | null {
-  if (!hasCallableGetAgentClient(config)) {
-    return null;
-  }
-  // The declared type is non-null, but at runtime the agent client may be
-  // absent before a session starts. Re-type the result honestly so the nullish
-  // guard below is meaningful rather than a no-op.
-  const agentClient = config.getAgentClient() as
-    | AgentClientWithHistory
-    | null
-    | undefined;
-  if (
-    agentClient === null ||
-    agentClient === undefined ||
-    typeof agentClient.getHistoryService !== 'function'
-  ) {
-    return null;
-  }
-  return agentClient.getHistoryService();
-}
 
 function getProviderDumpMetadata(
   config: NonNullable<CommandContext['services']['config']>,
