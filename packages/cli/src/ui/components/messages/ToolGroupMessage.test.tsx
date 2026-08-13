@@ -17,7 +17,6 @@ import type {
   Todo,
 } from '@vybestack/llxprt-code-core';
 import { TodoContext } from '../../contexts/TodoContext.js';
-import { ToolCallContext } from '../../contexts/ToolCallContext.js';
 import { Colors } from '../../colors.js';
 
 // Mock child components to isolate ToolGroupMessage behavior
@@ -135,19 +134,13 @@ describe('<ToolGroupMessage />', () => {
       updateTodos: vi.fn(),
       refreshTodos: vi.fn(),
     };
-    const toolCallContextValue = {
-      getExecutingToolCalls: () => [],
-      subscribe: () => () => {},
-    };
 
     return render(
       <TodoContext.Provider value={todoContextValue}>
-        <ToolCallContext.Provider value={toolCallContextValue}>
-          {React.cloneElement(
-            component as React.ReactElement<{ showTodoPanel?: boolean }>,
-            { showTodoPanel },
-          )}
-        </ToolCallContext.Provider>
+        {React.cloneElement(
+          component as React.ReactElement<{ showTodoPanel?: boolean }>,
+          { showTodoPanel },
+        )}
       </TodoContext.Provider>,
     );
   };
@@ -485,6 +478,9 @@ describe('<ToolGroupMessage />', () => {
         'Implement role-based access control',
       );
       expect(todoWriteCall?.resultDisplay).toContain('Define role enum');
+      expect(todoWriteCall?.resultDisplay).toContain(
+        "read_file(path: 'src/app.ts')",
+      );
     });
 
     it('derives task counts even when todo context is empty', () => {
@@ -518,6 +514,30 @@ describe('<ToolGroupMessage />', () => {
       expect(todoWriteCall?.resultDisplay).toBe(
         '✦ Todo list updated (5 tasks).',
       );
+    });
+  });
+
+  describe('Ordinary tool visibility with an active todo', () => {
+    afterEach(() => {
+      mockToolMessage.mockClear();
+    });
+
+    it('renders an ordinary read_file call in the frame while a todo is in_progress', () => {
+      const readCall = createToolCall({
+        callId: 'read-1',
+        name: 'read_file',
+        description: 'Read README',
+        status: ToolCallStatus.Success,
+      });
+
+      const { lastFrame } = renderWithContexts(
+        <ToolGroupMessage {...baseProps} toolCalls={[readCall]} />,
+        { todos: [defaultTodo], showTodoPanel: true },
+      );
+
+      const frame = lastFrame();
+      expect(frame).toContain('read_file');
+      expect(frame).toContain('Read README');
     });
   });
 });

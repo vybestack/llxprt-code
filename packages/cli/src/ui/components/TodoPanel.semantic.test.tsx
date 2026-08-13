@@ -17,7 +17,6 @@ import {
 } from 'bun:test';
 import { TodoPanel } from './TodoPanel.js';
 import { TodoContext } from '../contexts/TodoContext.js';
-import { ToolCallContext } from '../contexts/ToolCallContext.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import type { Todo } from '@vybestack/llxprt-code-core';
 import { themeManager } from '../themes/theme-manager.js';
@@ -45,14 +44,6 @@ const mockTodoContext = {
   removeTodo: vi.fn(),
   getInProgressTodo: vi.fn(),
   getTodos: vi.fn(),
-};
-
-const mockToolCallContext = {
-  getExecutingToolCalls: vi.fn(() => []),
-  subscribe: vi.fn(() => () => {}),
-  addToolCall: vi.fn(),
-  removeToolCall: vi.fn(),
-  clearToolCalls: vi.fn(),
 };
 
 describe('TodoPanel Semantic Colors', () => {
@@ -83,9 +74,7 @@ describe('TodoPanel Semantic Colors', () => {
 
     const { lastFrame } = render(
       <TodoContext.Provider value={mockTodoContext}>
-        <ToolCallContext.Provider value={mockToolCallContext}>
-          <TodoPanel width={150} />
-        </ToolCallContext.Provider>
+        <TodoPanel width={150} />
       </TodoContext.Provider>,
     );
 
@@ -109,9 +98,7 @@ describe('TodoPanel Semantic Colors', () => {
 
     const { lastFrame } = render(
       <TodoContext.Provider value={mockTodoContext}>
-        <ToolCallContext.Provider value={mockToolCallContext}>
-          <TodoPanel width={150} />
-        </ToolCallContext.Provider>
+        <TodoPanel width={150} />
       </TodoContext.Provider>,
     );
 
@@ -130,9 +117,7 @@ describe('TodoPanel Semantic Colors', () => {
 
     const { lastFrame } = render(
       <TodoContext.Provider value={mockTodoContext}>
-        <ToolCallContext.Provider value={mockToolCallContext}>
-          <TodoPanel width={150} />
-        </ToolCallContext.Provider>
+        <TodoPanel width={150} />
       </TodoContext.Provider>,
     );
 
@@ -153,9 +138,7 @@ describe('TodoPanel Semantic Colors', () => {
     themeManager.setActiveTheme(DefaultDark.name);
     const { lastFrame: darkFrame } = render(
       <TodoContext.Provider value={mockTodoContext}>
-        <ToolCallContext.Provider value={mockToolCallContext}>
-          <TodoPanel width={150} />
-        </ToolCallContext.Provider>
+        <TodoPanel width={150} />
       </TodoContext.Provider>,
     );
 
@@ -166,9 +149,7 @@ describe('TodoPanel Semantic Colors', () => {
     themeManager.setActiveTheme(DefaultLight.name);
     const { lastFrame: lightFrame } = render(
       <TodoContext.Provider value={mockTodoContext}>
-        <ToolCallContext.Provider value={mockToolCallContext}>
-          <TodoPanel width={150} />
-        </ToolCallContext.Provider>
+        <TodoPanel width={150} />
       </TodoContext.Provider>,
     );
 
@@ -185,12 +166,60 @@ describe('TodoPanel Semantic Colors', () => {
 
     const { lastFrame } = render(
       <TodoContext.Provider value={mockTodoContext}>
-        <ToolCallContext.Provider value={mockToolCallContext}>
-          <TodoPanel width={150} />
-        </ToolCallContext.Provider>
+        <TodoPanel width={150} />
       </TodoContext.Provider>,
     );
 
     expect(lastFrame()).toBe('');
+  });
+
+  it('renders todo content with no tool-call provider in the tree', () => {
+    const todo: Todo = {
+      id: '1',
+      content: 'Standalone task',
+      status: 'in_progress',
+    };
+
+    const localTodoContext = {
+      ...mockTodoContext,
+      todos: [todo],
+    };
+
+    const { lastFrame } = render(
+      <TodoContext.Provider value={localTodoContext}>
+        <TodoPanel width={150} />
+      </TodoContext.Provider>,
+    );
+
+    const output = lastFrame();
+    expect(output).toContain('Todo Progress');
+    expect(output).toContain('Standalone task');
+  });
+
+  it('renders a collapsed summary with only TodoContext in the tree', () => {
+    const todos: Todo[] = [
+      { id: '1', content: 'Done step', status: 'completed' },
+      { id: '2', content: 'Active work', status: 'in_progress' },
+      { id: '3', content: 'Later step', status: 'pending' },
+    ];
+
+    const localTodoContext = {
+      ...mockTodoContext,
+      todos,
+    };
+
+    const { lastFrame } = render(
+      <TodoContext.Provider value={localTodoContext}>
+        <TodoPanel width={150} collapsed />
+      </TodoContext.Provider>,
+    );
+
+    const output = lastFrame();
+    expect(output).toContain('3 tasks');
+    expect(output).toContain('Active work');
+    expect(output).toContain('Ctrl+Q to expand');
+    expect(output).not.toContain('Todo Progress');
+    expect(output).not.toContain('Done step');
+    expect(output).not.toContain('Later step');
   });
 });
