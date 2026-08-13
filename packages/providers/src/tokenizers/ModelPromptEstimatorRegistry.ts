@@ -11,10 +11,12 @@ import type {
 import type { PromptEnvelopeProtocol } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { isSanctionedGpt56Model } from '../openai/openaiModelPolicy.js';
 import {
+  createGpt56PromptEstimator,
   estimateGpt56Prompt,
   GPT_56_ESTIMATOR_FAMILY,
 } from './Gpt56O200kPromptEstimator.js';
 import { ModelPromptEstimatorError } from './ModelPromptEstimatorError.js';
+import type { O200kBaseEncoderResolver } from './o200kBaseCounter.js';
 
 export interface ModelPromptEstimatorRegistration {
   readonly family: string;
@@ -51,6 +53,25 @@ export const GPT_56_PROMPT_ESTIMATOR_REGISTRATION: ModelPromptEstimatorRegistrat
       'use a sanctioned GPT-5.6 base, sol, terra, or luna alias with latest or a valid date snapshot',
     estimate: estimateGpt56Prompt,
   });
+
+/**
+ * Bind the GPT-5.6 estimator registration to a factory-owned encoder resolver.
+ *
+ * Claim, identity, protocol, and provider-applicability policy are identical
+ * to the process-wide {@link GPT_56_PROMPT_ESTIMATOR_REGISTRATION}; only the
+ * encoder resolution is rebound. A composition root that injects a loader
+ * uses this so its final prompt-envelope estimation shares one encoder with
+ * readiness and runtime tokenization instead of falling back to the
+ * process-wide encoder.
+ */
+export function createGpt56PromptEstimatorRegistration(
+  resolveEncoder: O200kBaseEncoderResolver,
+): ModelPromptEstimatorRegistration {
+  return Object.freeze({
+    ...GPT_56_PROMPT_ESTIMATOR_REGISTRATION,
+    estimate: createGpt56PromptEstimator(resolveEncoder),
+  });
+}
 
 export const DEFAULT_MODEL_PROMPT_ESTIMATOR_REGISTRATIONS = Object.freeze([
   GPT_56_PROMPT_ESTIMATOR_REGISTRATION,

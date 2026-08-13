@@ -61,6 +61,7 @@ export interface RuntimeTokenizerFactory {
   estimatePrompt(
     request: RuntimePromptEstimateRequest,
   ): Promise<RuntimePromptEstimateResult>;
+  prepareTokenizer?(providerName: string, model?: string): Promise<void>;
   claimsModel?(canonicalModel: string): boolean;
   getEstimatorFamily?(canonicalModel: string): string | undefined;
 }

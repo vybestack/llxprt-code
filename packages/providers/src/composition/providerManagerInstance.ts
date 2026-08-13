@@ -16,8 +16,6 @@ import {
   type RuntimeContentGeneratorFactory,
   type ContentGenerator,
   type RuntimeProviderManager,
-  type RuntimeTokenizer,
-  type RuntimeTokenizerFactory,
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
@@ -25,24 +23,7 @@ import { UNCONFIGURED_PROVIDER } from '@vybestack/llxprt-code-core/config/models
 import { ProviderManager } from '../ProviderManager.js';
 import { FakeProvider } from '../fake/FakeProvider.js';
 import { ProviderContentGenerator } from '../ProviderContentGenerator.js';
-import { OpenAITokenizer } from '../tokenizers/OpenAITokenizer.js';
-import { AnthropicTokenizer } from '../tokenizers/AnthropicTokenizer.js';
-import {
-  DEFAULT_MODEL_PROMPT_ESTIMATOR_REGISTRATIONS,
-  ModelPromptEstimatorRegistry,
-} from '../tokenizers/ModelPromptEstimatorRegistry.js';
-import {
-  CLAUDE_5_PROMPT_ESTIMATOR_REGISTRATIONS,
-  createClaudeRuntimeTokenizer,
-} from '../tokenizers/claude/claudePromptEstimator.js';
-import { createGpt56RuntimeTokenizer } from '../tokenizers/Gpt56O200kPromptEstimator.js';
-import { isSanctionedGpt56Model } from '../openai/openaiModelPolicy.js';
-import {
-  OFFICIAL_PROMPT_ESTIMATOR_REGISTRATIONS,
-  createOfficialRuntimeTokenizer,
-} from '../tokenizers/official/index.js';
-
-const logger = new DebugLogger('llxprt:provider:manager:instance');
+import { createRuntimeTokenizerFactory } from './runtimeTokenizerFactory.js';
 import { type IFileSystem, NodeFileSystem } from './IFileSystem.js';
 import stripJsonComments from 'strip-json-comments';
 import { Storage } from '@vybestack/llxprt-code-settings';
@@ -64,6 +45,9 @@ import {
 } from './aliasProviderFactory.js';
 
 export { bindOpenAIAliasIdentity } from './aliasProviderFactory.js';
+export { createRuntimeTokenizerFactory } from './runtimeTokenizerFactory.js';
+
+const logger = new DebugLogger('llxprt:provider:manager:instance');
 
 let fileSystemInstance: IFileSystem | null = null;
 let singletonManager: ProviderManager | null = null;
@@ -95,100 +79,6 @@ interface OpenAIRegistrationContext {
   oauthManager: OAuthManager;
   config?: Config;
   authOnlyEnabled?: boolean;
-}
-
-class RuntimeTokenizerAdapter implements RuntimeTokenizer {
-  constructor(
-    private readonly tokenizer: {
-      countTokens(text: string, model: string): Promise<number>;
-    },
-    private readonly model: string,
-  ) {}
-
-  async countTokens(content: unknown): Promise<number> {
-    const text =
-      typeof content === 'string' ? content : JSON.stringify(content);
-    return this.tokenizer.countTokens(text, this.model);
-  }
-}
-
-const ANTHROPIC_TOKENIZER_MATCHERS = ['anthropic', 'claude'] as const;
-const OPENAI_TOKENIZER_MATCHERS = [
-  'openai',
-  'codex',
-  'gpt',
-  'o1',
-  'o3',
-  'o4',
-  'deepseek',
-] as const;
-
-function matchesTokenizer(
-  providerKey: string,
-  modelKey: string,
-  matchers: readonly string[],
-): boolean {
-  return matchers.some(
-    (matcher) => providerKey.includes(matcher) || modelKey.includes(matcher),
-  );
-}
-
-function createRuntimeTokenizerFactory(): RuntimeTokenizerFactory {
-  const openaiTokenizer = new OpenAITokenizer();
-  const anthropicTokenizer = new AnthropicTokenizer();
-  const estimatorRegistry = new ModelPromptEstimatorRegistry([
-    ...DEFAULT_MODEL_PROMPT_ESTIMATOR_REGISTRATIONS,
-    ...OFFICIAL_PROMPT_ESTIMATOR_REGISTRATIONS,
-    ...CLAUDE_5_PROMPT_ESTIMATOR_REGISTRATIONS,
-  ]);
-
-  return {
-    claimsModel: (canonicalModel) =>
-      estimatorRegistry.claimsModel(canonicalModel),
-    getEstimatorFamily: (canonicalModel) =>
-      estimatorRegistry.getEstimatorFamily(canonicalModel),
-    estimatePrompt: (request) => estimatorRegistry.estimatePrompt(request),
-    getTokenizer(
-      providerName: string,
-      model?: string,
-    ): RuntimeTokenizer | undefined {
-      const resolvedModel = model ?? providerName;
-      if (isSanctionedGpt56Model(resolvedModel)) {
-        return createGpt56RuntimeTokenizer(providerName, resolvedModel);
-      }
-      const officialTokenizer = createOfficialRuntimeTokenizer(
-        providerName,
-        resolvedModel,
-      );
-      if (officialTokenizer !== undefined) {
-        return officialTokenizer;
-      }
-      const claudeTokenizer = createClaudeRuntimeTokenizer(
-        providerName,
-        resolvedModel,
-      );
-      if (claudeTokenizer !== undefined) {
-        return claudeTokenizer;
-      }
-      const providerKey = providerName.toLowerCase();
-      const modelKey = resolvedModel.toLowerCase();
-      if (
-        matchesTokenizer(providerKey, modelKey, ANTHROPIC_TOKENIZER_MATCHERS)
-      ) {
-        return new RuntimeTokenizerAdapter(
-          anthropicTokenizer,
-          model ?? providerName,
-        );
-      }
-      if (matchesTokenizer(providerKey, modelKey, OPENAI_TOKENIZER_MATCHERS)) {
-        return new RuntimeTokenizerAdapter(
-          openaiTokenizer,
-          model ?? providerName,
-        );
-      }
-      return undefined;
-    },
-  };
 }
 
 function createRuntimeContentGeneratorFactory(
@@ -224,7 +114,15 @@ export function configureProviderRuntimeFactories(
     );
   }
   const setTokenizerFactory = configWithFactories['setTokenizerFactory'];
-  if (typeof setTokenizerFactory === 'function') {
+  const getTokenizerFactory = configWithFactories['getTokenizerFactory'];
+  const existingTokenizerFactory =
+    typeof getTokenizerFactory === 'function'
+      ? getTokenizerFactory.call(config)
+      : undefined;
+  if (
+    typeof setTokenizerFactory === 'function' &&
+    existingTokenizerFactory === undefined
+  ) {
     setTokenizerFactory.call(config, createRuntimeTokenizerFactory());
   }
 }

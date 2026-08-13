@@ -12,10 +12,20 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import { ProviderContentGenerator } from '@vybestack/llxprt-code-providers';
 import { configureProviderRuntimeFactories } from '../composition/index.js';
+import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
+import { ModelPromptEstimatorError } from '../tokenizers/ModelPromptEstimatorError.js';
+import type { TiktokenModuleLoader } from '../tokenizers/o200kBaseCounter.js';
 import {
   activateIsolatedRuntimeContext,
   createIsolatedRuntimeContext,
 } from './runtimeSettings.js';
+
+async function captureRejection(operation: Promise<unknown>): Promise<unknown> {
+  return operation.then(
+    () => new Error('expected the operation to reject'),
+    (error: unknown) => error,
+  );
+}
 
 interface ConfigWithRuntimeFactories extends Config {
   getContentGeneratorFactory():
@@ -131,5 +141,232 @@ describe('configureProviderRuntimeFactories', () => {
       estimateRequest('claude-opus-5', 'zai'),
     );
     expect(proxied.family).toBe('legacy-unregistered');
+  });
+
+  it('preserves an explicitly injected tokenizer factory as the authoritative runtime factory', async () => {
+    const runtimeHandle = createIsolatedRuntimeContext({
+      runtimeId: 'provider-runtime-injected-tokenizer-factory',
+      workspaceDir: process.cwd(),
+      model: 'gpt-5.6-sol',
+      prepare: async () => {},
+    });
+    await activateIsolatedRuntimeContext(runtimeHandle, {
+      runtimeId: runtimeHandle.runtimeId,
+    });
+    const config = runtimeHandle.config as ConfigWithRuntimeFactories;
+    const injectedFactory = createRuntimeTokenizerFactory();
+    config.setTokenizerFactory(injectedFactory);
+
+    try {
+      configureProviderRuntimeFactories(config, runtimeHandle.providerManager);
+
+      expect(config.getTokenizerFactory()).toBe(injectedFactory);
+    } finally {
+      await runtimeHandle.cleanup();
+    }
+  });
+
+  it('prepares sanctioned GPT-5.6 readiness before exact runtime tokenization', async () => {
+    const factory = createRuntimeTokenizerFactory();
+    expect(factory.prepareTokenizer).toBeDefined();
+
+    await factory.prepareTokenizer?.('codex-alias', 'gpt-5.6-sol');
+    const tokenizer = factory.getTokenizer('codex-alias', 'gpt-5.6-sol');
+
+    expect(
+      await tokenizer?.countTokens(
+        'The quick brown fox jumps over the lazy dog.',
+      ),
+    ).toBe(10);
+  });
+
+  it('does not load the GPT-5.6 encoder while preparing another model', async () => {
+    const loaderFailure = new Error('GPT codec loader must remain unused');
+    const factory = createRuntimeTokenizerFactory(() =>
+      Promise.reject(loaderFailure),
+    );
+    expect(factory.prepareTokenizer).toBeDefined();
+
+    await expect(
+      factory.prepareTokenizer?.('openai', 'gpt-4.1'),
+    ).resolves.toBeUndefined();
+  });
+
+  it('shares one cold injected initialization across concurrent readiness and later tokenization', async () => {
+    let releaseLoader = (): void => {
+      throw new Error('loader gate initialized without a resolver');
+    };
+    const loaderGate = new Promise<void>((resolve) => {
+      releaseLoader = resolve;
+    });
+    let loadCount = 0;
+    const loadModule: TiktokenModuleLoader = async () => {
+      loadCount += 1;
+      await loaderGate;
+      return import('@dqbd/tiktoken');
+    };
+    const factory = createRuntimeTokenizerFactory(loadModule);
+    const prepareTokenizer = factory.prepareTokenizer;
+    if (prepareTokenizer === undefined) {
+      throw new Error('runtime tokenizer factory has no readiness operation');
+    }
+
+    const readiness = Promise.all([
+      prepareTokenizer('codex-a', 'gpt-5.6-sol'),
+      prepareTokenizer('codex-b', 'gpt-5.6-terra-latest'),
+    ]);
+    await Promise.resolve();
+    const coldLoadCount = loadCount;
+    releaseLoader();
+    await readiness;
+
+    const first = factory.getTokenizer('codex-a', 'gpt-5.6-sol');
+    const second = factory.getTokenizer('codex-b', 'gpt-5.6-terra-latest');
+    expect(
+      await Promise.all([
+        first?.countTokens('The quick brown fox jumps over the lazy dog.'),
+        second?.countTokens('The quick brown fox jumps over the lazy dog.'),
+      ]),
+    ).toEqual([10, 10]);
+    expect(coldLoadCount).toBe(1);
+    expect(loadCount).toBe(1);
+  });
+
+  it('shares one cold injected encoder across concurrent readiness, runtime counting, and final estimation', async () => {
+    // A count distinct from the real o200k_base BPE count of the probe
+    // ("The quick brown fox jumps over the lazy dog." => 10) so the assertion
+    // catches any estimator that bypasses the injected encoder.
+    const injectedCount = 23;
+    let releaseLoader = (): void => {
+      throw new Error('loader gate initialized without a resolver');
+    };
+    const loaderGate = new Promise<void>((resolve) => {
+      releaseLoader = resolve;
+    });
+    let loadCount = 0;
+    const loadModule: TiktokenModuleLoader = async () => {
+      loadCount += 1;
+      await loaderGate;
+      return {
+        get_encoding: () => ({
+          encode: () =>
+            Array.from({ length: injectedCount }, (_unused, index) => index),
+        }),
+      } as unknown as Awaited<ReturnType<TiktokenModuleLoader>>;
+    };
+    const factory = createRuntimeTokenizerFactory(loadModule);
+    const prepareTokenizer = factory.prepareTokenizer;
+    if (prepareTokenizer === undefined) {
+      throw new Error('runtime tokenizer factory has no readiness operation');
+    }
+    const estimateRequest = {
+      activeProvider: 'codex-a',
+      canonicalModel: 'gpt-5.6-sol',
+      protocol: 'openai-responses' as const,
+      wireMethod: 'responses/v1' as const,
+      finalizedProjection: {
+        kind: 'llxprt-provider-prompt-v3' as const,
+        protocol: 'openai-responses' as const,
+        promptText: 'The quick brown fox jumps over the lazy dog.',
+      },
+      projectionRevision: 3,
+      legacyEstimate: () => Promise.resolve(999),
+    };
+
+    const readiness = Promise.all([
+      prepareTokenizer('codex-a', 'gpt-5.6-sol'),
+      prepareTokenizer('codex-b', 'gpt-5.6-terra-latest'),
+    ]);
+    const runtimeCount = factory
+      .getTokenizer('codex-a', 'gpt-5.6-sol')
+      ?.countTokens('The quick brown fox jumps over the lazy dog.');
+    const finalEstimate = factory.estimatePrompt(estimateRequest);
+    await Promise.resolve();
+    const coldLoadCount = loadCount;
+    releaseLoader();
+    await readiness;
+
+    expect(coldLoadCount).toBe(1);
+    expect(await runtimeCount).toBe(injectedCount);
+    const result = await finalEstimate;
+    expect(result).toMatchObject({
+      count: injectedCount,
+      method: 'exact',
+      family: 'openai-gpt-5.6',
+    });
+    expect(result.estimatorVersion).toBe('gpt-5.6-o200k-v1');
+    expect(loadCount).toBe(1);
+  });
+
+  it('reports preparation failure with estimator context and causal details', async () => {
+    const loaderFailure = new Error('relocated codec initialization exploded');
+    const factory = createRuntimeTokenizerFactory(() =>
+      Promise.reject(loaderFailure),
+    );
+    expect(factory.prepareTokenizer).toBeDefined();
+
+    const error = await captureRejection(
+      factory.prepareTokenizer?.('codex-alias', 'gpt-5.6-sol') ??
+        Promise.resolve(),
+    );
+
+    expect(error).toBeInstanceOf(ModelPromptEstimatorError);
+    expect(error).toMatchObject({
+      code: 'asset-unavailable',
+      context: {
+        activeProvider: 'codex-alias',
+        canonicalModel: 'gpt-5.6-sol',
+        protocol: 'openai-responses',
+        family: 'openai-gpt-5.6',
+      },
+      cause: loaderFailure,
+    });
+    if (!(error instanceof Error)) {
+      throw new Error('expected preparation to reject with an Error');
+    }
+    expect(error.message).toContain('relocated codec initialization exploded');
+  });
+
+  it('reports readiness probe encode failure with exact context and cause identity', async () => {
+    const encodeFailure = new Error('readiness probe encode exploded');
+    const loadModule: TiktokenModuleLoader = async () => {
+      const tiktoken = await import('@dqbd/tiktoken');
+      return {
+        ...tiktoken,
+        get_encoding: (...args: Parameters<typeof tiktoken.get_encoding>) =>
+          new Proxy(tiktoken.get_encoding(...args), {
+            get(target, property, receiver) {
+              if (property === 'encode') {
+                return (): never => {
+                  throw encodeFailure;
+                };
+              }
+              return Reflect.get(target, property, receiver);
+            },
+          }),
+      };
+    };
+    const factory = createRuntimeTokenizerFactory(loadModule);
+
+    const error = await captureRejection(
+      factory.prepareTokenizer?.('codex-alias', 'gpt-5.6-sol') ??
+        Promise.resolve(),
+    );
+
+    expect(error).toBeInstanceOf(ModelPromptEstimatorError);
+    expect(error).toMatchObject({
+      code: 'tokenization-failed',
+      context: {
+        activeProvider: 'codex-alias',
+        canonicalModel: 'gpt-5.6-sol',
+        protocol: 'openai-responses',
+        family: 'openai-gpt-5.6',
+      },
+      cause: encodeFailure,
+    });
+    if (!(error instanceof Error)) {
+      throw new Error('expected preparation to reject with an Error');
+    }
+    expect(error.message).toContain('readiness probe encode exploded');
   });
 });

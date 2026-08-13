@@ -175,7 +175,7 @@ interface RuntimeActivationBindings {
 }
 
 interface RuntimeActivationState {
-  active: boolean;
+  cleanupRequired: boolean;
   currentRuntimeId: string;
   currentMetadata: Record<string, unknown>;
 }
@@ -378,6 +378,7 @@ function buildActivateClosure(
       ...baseMetadata,
       ...(activationOptions?.metadata ?? {}),
     };
+    state.cleanupRequired = true;
 
     const scope = {
       runtimeId: state.currentRuntimeId,
@@ -435,8 +436,6 @@ function buildActivateClosure(
       await Promise.resolve(
         bindings.linkProviderManager(config, providerManager),
       );
-
-      state.active = true;
     });
   };
 }
@@ -455,7 +454,7 @@ function buildCleanupClosure(
   options: IsolatedRuntimeContextOptions,
 ): () => Promise<void> {
   return async (): Promise<void> => {
-    if (!state.active && !options.onCleanup) {
+    if (!state.cleanupRequired && !options.onCleanup) {
       return;
     }
 
@@ -497,7 +496,7 @@ function buildCleanupClosure(
       }
     });
 
-    state.active = false;
+    state.cleanupRequired = false;
   };
 }
 
@@ -550,7 +549,7 @@ export function createIsolatedRuntimeContext(
     metadata: baseMetadata,
   });
   const activationState: RuntimeActivationState = {
-    active: false,
+    cleanupRequired: false,
     currentRuntimeId: runtimeId,
     currentMetadata: baseMetadata,
   };

@@ -28,6 +28,12 @@ import {
   type Agent,
   type AgentEvent,
 } from '@vybestack/llxprt-code-agents';
+import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core';
+import {
+  disposeCliRuntime,
+  getCliRuntimeServices,
+  runWithRuntimeScope,
+} from '@vybestack/llxprt-code-providers/runtime.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import {
   buildCliStyleConfig,
@@ -96,6 +102,141 @@ function captureRuntimeId(agent: Agent): unknown {
   const id = impl['runtimeId'];
   return typeof id === 'string' ? id : undefined;
 }
+
+function createSignal(): {
+  readonly promise: Promise<void>;
+  readonly resolve: () => void;
+} {
+  let resolvePromise = (): void => {
+    throw new Error('signal initialized without a resolver');
+  };
+  const promise = new Promise<void>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return { promise, resolve: () => resolvePromise() };
+}
+
+function createReadinessFactory(
+  prepareTokenizer: (providerName: string, model?: string) => Promise<void>,
+  countTokens: (providerName: string, model?: string) => number,
+): RuntimeTokenizerFactory {
+  return {
+    prepareTokenizer,
+    getTokenizer: (providerName, model) => ({
+      fallbackPolicy: 'deny',
+      countTokens: () => countTokens(providerName, model),
+    }),
+    estimatePrompt: async (request) => ({
+      count: await request.legacyEstimate(),
+      method: 'calibrated',
+      family: 'test-readiness',
+      estimatorVersion: 'test-readiness-v1',
+      assetRevision: 'none',
+      projectionRevision: request.projectionRevision,
+    }),
+  };
+}
+
+describe('fromConfig tokenizer readiness @requirement:REQ-3217-001 @requirement:REQ-3217-003', () => {
+  it('awaits post-activation provider/model preparation before returning a usable Agent', async () => {
+    const built = await buildCliStyleConfig('plain-text.jsonl');
+    const preparationStarted = createSignal();
+    const releasePreparation = createSignal();
+    const events: string[] = [];
+    let prepared = false;
+    const factory = createReadinessFactory(
+      async (providerName, model) => {
+        events.push(`prepare:${providerName}:${model ?? ''}`);
+        preparationStarted.resolve();
+        await releasePreparation.promise;
+        prepared = true;
+        events.push('prepared');
+      },
+      (providerName, model) => {
+        if (!prepared) {
+          throw new Error('tokenizer used before preparation completed');
+        }
+        events.push(`tokenize:${providerName}:${model ?? ''}`);
+        return 7;
+      },
+    );
+    built.config.setTokenizerFactory(factory);
+
+    try {
+      const pendingAgent = fromConfig({
+        config: built.config,
+        activation: {
+          provider: 'fake',
+          model: 'ready-model',
+          authMode: 'auto',
+        },
+      });
+      await preparationStarted.promise;
+      let completed = false;
+      const observedAgent = pendingAgent.then((agent) => {
+        completed = true;
+        return agent;
+      });
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(completed).toBe(false);
+
+      releasePreparation.resolve();
+      const agent = await observedAgent;
+      try {
+        expect(built.config.getTokenizerFactory()).toBe(factory);
+
+        const turnEvents = await drain(agent.stream('hello'));
+        expect(countType(turnEvents, 'done')).toBe(1);
+        expect(events[0]).toBe('prepare:fake:ready-model');
+        expect(events[1]).toBe('prepared');
+        expect(
+          events.some((event) => event === 'tokenize:fake:ready-model'),
+        ).toBe(true);
+      } finally {
+        await agent.dispose();
+      }
+    } finally {
+      releasePreparation.resolve();
+      await built.cleanup();
+    }
+  });
+
+  it('rejects with the causal preparation failure and removes the isolated runtime', async () => {
+    const built = await buildCliStyleConfig('plain-text.jsonl');
+    const failure = new Error('mandatory tokenizer readiness failed causally');
+    const runtimeId = 'from-config-rejected-tokenizer-readiness';
+    built.config.setProvider('stale-config-provider');
+    built.config.setTokenizerFactory(
+      createReadinessFactory(
+        async (providerName, model) => {
+          if (providerName !== 'fake' || model !== 'fake-model') {
+            throw new Error(
+              `unexpected readiness target ${providerName}/${model ?? ''}`,
+            );
+          }
+          throw failure;
+        },
+        () => {
+          throw new Error('unreachable tokenizer use');
+        },
+      ),
+    );
+
+    try {
+      await expect(
+        fromConfig({ config: built.config, sessionId: runtimeId }),
+      ).rejects.toBe(failure);
+      expect(() =>
+        runWithRuntimeScope({ runtimeId, metadata: {} }, () =>
+          getCliRuntimeServices(),
+        ),
+      ).toThrow(/runtime registration|runtime.*not/i);
+    } finally {
+      disposeCliRuntime(runtimeId);
+      await built.cleanup();
+    }
+  });
+});
 
 describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:REQ-001 @requirement:REQ-INT-001', () => {
   it('T1 fromConfig returns an Agent whose internalConfig(agent) === the SAME caller-supplied Config (identity) @requirement:REQ-001 @scenario:adoption @given:a real CLI-style Config @when:fromConfig({ config }) @then:internalConfig(agent) is the SAME Config instance', async () => {
