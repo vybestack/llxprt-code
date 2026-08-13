@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Checked-in package import graph, shard map, and observer rules for affected-test-shard selection (issue #2709). Validated by scripts/check-affected-test-shards.ts against real AST imports.",
+  "description": "Checked-in package import graph, shard map, package observer rules, and path observer rules (exact paths + directory prefixes) for affected-test-shard selection (issue #2709, #3212). Validated by scripts/check-affected-test-shards.ts against real AST imports and on-disk paths.",
   "packagePrefix": "@vybestack/llxprt-code-",
   "packageToShard": {
     "cli": "cli",
@@ -107,6 +107,15 @@
       }
     ]
   },
+  "pathObservers": [
+    {
+      "observingPackage": "scripts",
+      "selectShard": "scripts",
+      "reason": "scripts/tests/generate-settings-doc.test.ts reads the cli settings schema source without importing it",
+      "paths": ["packages/cli/src/config/settingsSchema.ts"],
+      "pathPrefixes": ["packages/cli/src/config/settings-schema/"]
+    }
+  ],
   "sharedInputs": [
     "package.json",
     "package-lock.json",

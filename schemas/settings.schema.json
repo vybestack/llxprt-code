@@ -253,8 +253,8 @@
         },
         "maxTotalSizeMB": {
           "title": "Max Total Size (MiB)",
-          "description": "Machine-wide aggregate size limit for all session recordings and cold archives, in MiB. Defaults to 4096 (4 GiB).",
-          "markdownDescription": "Machine-wide aggregate size limit for all session recordings and cold archives, in MiB. Defaults to 4096 (4 GiB).\n\n- Category: `General`\n- Requires restart: `no`\n- Default: `4096`",
+          "description": "Machine-wide aggregate size limit for all session recordings and cold archives, in MiB (see the default property).",
+          "markdownDescription": "Machine-wide aggregate size limit for all session recordings and cold archives, in MiB (see the default property).\n\n- Category: `General`\n- Requires restart: `no`\n- Default: `4096`",
           "default": 4096,
           "type": "number"
         },

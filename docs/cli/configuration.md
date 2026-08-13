@@ -234,7 +234,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Requires restart:** No
 
 - **`sessionRetention.maxTotalSizeMB`** (number):
-  - **Description:** Machine-wide aggregate size limit for all session recordings and cold archives, in MiB. Defaults to 4096 (4 GiB).
+  - **Description:** Machine-wide aggregate size limit for all session recordings and cold archives, in MiB (see the default property).
   - **Default:** `4096`
   - **Requires restart:** No
 

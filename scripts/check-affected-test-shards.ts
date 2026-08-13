@@ -28,7 +28,7 @@
  * Exits 0 on success, 1 on any drift.
  */
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join, relative, resolve, dirname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -46,19 +46,28 @@ const PACKAGE_PREFIX = '@vybestack/llxprt-code-';
 const TEST_PATH_RE =
   /(__tests__|\.test\.|\.spec\.|\.bun\.ts$|\/tests\/|\/test-bun\/|\/integration-tests\/|\/test\/)/;
 
-interface ObserverRule {
+export interface ObserverRule {
   readonly observingPackage: string;
   readonly selectShard: string;
   readonly reason: string;
 }
 
-interface GraphData {
+export interface PathObserverRule {
+  readonly observingPackage: string;
+  readonly selectShard: string;
+  readonly reason: string;
+  readonly paths: readonly string[];
+  readonly pathPrefixes: readonly string[];
+}
+
+export interface GraphData {
   readonly packageToShard: Record<string, string>;
   readonly shardOrder: readonly string[];
   readonly shardTimingsSeconds: Record<string, number>;
   readonly importEdges: Record<string, readonly string[]>;
   readonly testOnlyEdges: Record<string, readonly string[]>;
   readonly observers: Record<string, readonly ObserverRule[]>;
+  readonly pathObservers: readonly PathObserverRule[];
   readonly sharedInputs: readonly string[];
 }
 
@@ -225,7 +234,7 @@ function extractAllEdges(repoRoot: string): {
   return { prodEdges, testOnlyEdges };
 }
 
-interface DriftIssue {
+export interface DriftIssue {
   readonly kind: string;
   readonly detail: string;
 }
@@ -296,7 +305,7 @@ function compareEdges(
 }
 
 /** Builds the canonical workspace → shard map from TEST_SHARDS. */
-function buildCanonicalShardMap(): Map<string, string> {
+export function buildCanonicalShardMap(): Map<string, string> {
   const map = new Map<string, string>();
   for (const shard of TEST_SHARDS) {
     if (shard.isScriptsShard) continue;
@@ -372,6 +381,143 @@ function validateShardConfig(
     }
   }
 
+  return issues;
+}
+
+/**
+ * Directory-prefix contract for path-observer `pathPrefixes`:
+ *  - repo-relative (no leading separator, no Windows drive);
+ *  - forward-slash separated (no backslash);
+ *  - ends with a trailing '/' (a directory boundary, never a file);
+ *  - no '.' or '..' path segments (no up-level/self traversal).
+ *
+ * A prefix that violates this — most dangerously one missing its trailing
+ * slash — can overmatch sibling directories via textual prefix comparison, so
+ * it is rejected here rather than silently tolerated.
+ */
+export function isValidDirectoryPrefix(prefix: string): boolean {
+  if (!prefix.endsWith('/')) return false;
+  if (prefix.startsWith('/')) return false;
+  if (prefix.includes('\\')) return false;
+  // Reject Windows drive-qualified forward-slash prefixes (e.g. "C:/..."),
+  // honoring the documented "no Windows drive" contract.
+  if (/^[a-z]:\//i.test(prefix)) return false;
+  const segments = prefix.slice(0, -1).split('/');
+  return !segments.some(
+    (segment) => segment === '' || segment === '..' || segment === '.',
+  );
+}
+
+/**
+ * Repo-relative file-path contract for path-observer exact `paths`:
+ *  - nonempty;
+ *  - repo-relative (no leading separator, no Windows drive);
+ *  - forward-slash separated (no backslash);
+ *  - no trailing '/' (an exact path is a file, not a directory);
+ *  - no '.' or '..' path segments (no self/up-level traversal).
+ *
+ * A malformed exact path is rejected here, before any filesystem access, so
+ * the drift report distinguishes "invalid shape" from "valid shape but not a
+ * file on disk".
+ */
+export function isValidExactPath(path: string): boolean {
+  if (path.length === 0) return false;
+  if (path.endsWith('/')) return false;
+  if (path.startsWith('/')) return false;
+  if (path.includes('\\')) return false;
+  if (/^[a-z]:\//i.test(path)) return false;
+  return !path
+    .split('/')
+    .some((segment) => segment === '' || segment === '..' || segment === '.');
+}
+
+/**
+ * Validates path observer rules: each rule's observing identity must be a known
+ * package or shard (the scripts harness shard owns no workspace but runs
+ * tests), selectShard must be in shardOrder, every exact path must be a valid
+ * repo-relative file that exists on disk, every directory prefix must follow
+ * the directory-prefix contract and exist on disk, and a rule needs at least
+ * one path or prefix to match. Exact-path shape is validated by
+ * {@link isValidExactPath} and directory-prefix shape by
+ * {@link isValidDirectoryPrefix}.
+ */
+export function validatePathObservers(
+  data: GraphData,
+  canonical: Map<string, string>,
+  repoRoot: string,
+): DriftIssue[] {
+  const issues: DriftIssue[] = [];
+  for (const [i, rule] of data.pathObservers.entries()) {
+    const observingIsKnown =
+      canonical.has(rule.observingPackage) ||
+      data.shardOrder.includes(rule.observingPackage);
+    if (!observingIsKnown) {
+      issues.push({
+        kind: 'path-observer-unknown-observer',
+        detail: `pathObservers[${i}] references observingPackage '${rule.observingPackage}' which is neither a declared workspace nor a shard name.`,
+      });
+    }
+    if (!data.shardOrder.includes(rule.selectShard)) {
+      issues.push({
+        kind: 'path-observer-unknown-shard',
+        detail: `pathObservers[${i}] references selectShard '${rule.selectShard}' which is not in shardOrder.`,
+      });
+    }
+    if (rule.paths.length === 0 && rule.pathPrefixes.length === 0) {
+      issues.push({
+        kind: 'path-observer-empty',
+        detail: `pathObservers[${i}] has no paths and no pathPrefixes, so it can never match.`,
+      });
+    }
+    for (const pathEntry of rule.paths) {
+      if (!isValidExactPath(pathEntry)) {
+        issues.push({
+          kind: 'path-observer-path-invalid',
+          detail: `pathObservers[${i}] exact path '${pathEntry}' violates the repo-relative file-path contract: it must be nonempty, repo-relative, forward-slash separated, have no trailing slash, and contain no '.'/'..' path segments.`,
+        });
+        continue;
+      }
+      const filePath = join(repoRoot, pathEntry);
+      let isFile = false;
+      try {
+        isFile = statSync(filePath).isFile();
+      } catch {
+        // Filesystem failures are reported below as observer drift.
+      }
+      if (!isFile) {
+        issues.push({
+          kind: 'path-observer-path-not-file',
+          detail: `pathObservers[${i}] references exact path '${pathEntry}' which is not an existing file.`,
+        });
+      }
+    }
+    for (const prefix of rule.pathPrefixes) {
+      if (!isValidDirectoryPrefix(prefix)) {
+        issues.push({
+          kind: 'path-observer-prefix-invalid',
+          detail: `pathObservers[${i}] pathPrefix '${prefix}' violates the directory-prefix contract: it must be repo-relative, forward-slash separated, end with a trailing '/', and contain no '.'/'..' path segments.`,
+        });
+        continue;
+      }
+      const dir = join(repoRoot, prefix);
+      // The filesystem is external input: a single stat in a narrowly scoped
+      // try/catch covers missing, non-directory, and race conditions. Report
+      // any of those as drift rather than throwing.
+      let isDirectory = false;
+      try {
+        isDirectory = statSync(dir).isDirectory();
+      } catch {
+        // Missing path, a stat race, or a non-directory entry — all are
+        // reported below as path-observer-prefix-not-dir drift.
+      }
+      if (!isDirectory) {
+        issues.push({
+          kind: 'path-observer-prefix-not-dir',
+          detail: `pathObservers[${i}] references pathPrefix '${prefix}' which is not an existing directory.`,
+        });
+      }
+    }
+  }
   return issues;
 }
 
@@ -472,6 +618,7 @@ function checkGraph(
   const canonical = buildCanonicalShardMap();
   issues.push(...validateShardMap(data, canonical));
   issues.push(...validateShardConfig(data, canonical));
+  issues.push(...validatePathObservers(data, canonical, repoRoot));
   issues.push(...validateSharedInputs(data, repoRoot));
   issues.push(...validateReverseCompleteness(data, canonical));
 
@@ -482,16 +629,41 @@ function formatIssue(issue: DriftIssue): string {
   return `  - [${issue.kind}] ${issue.detail}`;
 }
 
-function main(): void {
-  const rootArg = process.argv.find((a) => a === '--root');
-  let repoRoot = DEFAULT_REPO_ROOT;
-  if (rootArg !== undefined) {
-    const idx = process.argv.indexOf('--root');
-    if (idx + 1 < process.argv.length) {
-      repoRoot = resolve(process.argv[idx + 1]);
-    }
+/**
+ * Recognized `--name value` CLI options. A value argument that is itself one
+ * of these tokens (e.g. `--root --data file`) is a missing-value error, not a
+ * path value.
+ */
+const RECOGNIZED_OPTIONS: ReadonlySet<string> = new Set(['--root', '--data']);
+
+/**
+ * Reads the value of a `--name value` option from `argv`, or returns
+ * `undefined` when the option is absent. Fail-fast: when the option is present
+ * but its value is missing or is itself another recognized option token,
+ * prints a clear error and exits nonzero.
+ */
+function readOptionValue(
+  name: string,
+  argv: readonly string[],
+): string | undefined {
+  const idx = argv.indexOf(name);
+  if (idx === -1) return undefined;
+  const value = argv[idx + 1];
+  if (value === undefined || RECOGNIZED_OPTIONS.has(value)) {
+    console.error(`error: ${name} requires a value`);
+    process.exit(1);
   }
-  const dataPath = DEFAULT_DATA_PATH;
+  return value;
+}
+
+function main(): void {
+  const rootValue = readOptionValue('--root', process.argv);
+  const repoRoot =
+    rootValue !== undefined ? resolve(rootValue) : DEFAULT_REPO_ROOT;
+
+  const dataValue = readOptionValue('--data', process.argv);
+  const dataPath =
+    dataValue !== undefined ? resolve(dataValue) : DEFAULT_DATA_PATH;
 
   console.log(
     `affected-test-shards drift guard: scanning ${repoRoot} against ${relative(repoRoot, dataPath)}`,
