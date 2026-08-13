@@ -20,6 +20,7 @@ import {
   loadTiktokenModule,
   O200K_BASE_ASSET_REVISION,
   type O200kBaseEncoder,
+  type O200kBaseEncoderResolver,
   type TiktokenModuleLoader,
 } from './o200kBaseCounter.js';
 
@@ -58,13 +59,25 @@ function readProjection(
   return projection;
 }
 
-function createErrorContext(request: RuntimePromptEstimateRequest) {
+function createGpt56ErrorContext(
+  activeProvider: string,
+  canonicalModel: string,
+  protocol: RuntimePromptEstimateRequest['protocol'] = 'openai-responses',
+) {
   return {
-    activeProvider: request.activeProvider,
-    canonicalModel: request.canonicalModel,
-    protocol: request.protocol,
+    activeProvider,
+    canonicalModel,
+    protocol,
     family: GPT_56_ESTIMATOR_FAMILY,
   };
+}
+
+function createErrorContext(request: RuntimePromptEstimateRequest) {
+  return createGpt56ErrorContext(
+    request.activeProvider,
+    request.canonicalModel,
+    request.protocol,
+  );
 }
 
 function countProjectionTokens(
@@ -78,19 +91,78 @@ function countProjectionTokens(
   );
 }
 
-export async function estimateGpt56Prompt(
+function formatCausalDetail(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+export async function prepareGpt56RuntimeTokenizer(
+  activeProvider: string,
+  canonicalModel: string,
+  resolveEncoder: O200kBaseEncoderResolver = () => getO200kBaseEncoder(),
+): Promise<void> {
+  let encoder: TiktokenEncoder;
+  try {
+    encoder = await resolveEncoder();
+  } catch (error) {
+    throw new ModelPromptEstimatorError(
+      'asset-unavailable',
+      createGpt56ErrorContext(activeProvider, canonicalModel),
+      `verify the local @dqbd/tiktoken o200k_base assets are installed and intact; cause: ${formatCausalDetail(error)}`,
+      { cause: error },
+    );
+  }
+
+  try {
+    countO200kBaseTokens(encoder, 'readiness');
+  } catch (error) {
+    throw new ModelPromptEstimatorError(
+      'tokenization-failed',
+      createGpt56ErrorContext(activeProvider, canonicalModel),
+      `verify the local @dqbd/tiktoken o200k_base encoder can encode ordinary text; cause: ${formatCausalDetail(error)}`,
+      { cause: error },
+    );
+  }
+}
+
+export function estimateGpt56Prompt(
   request: RuntimePromptEstimateRequest,
   loadModule: TiktokenModuleLoader = loadTiktokenModule,
+): Promise<RuntimePromptEstimateResult> {
+  return estimateGpt56PromptWithEncoder(request, () =>
+    getO200kBaseEncoder(loadModule),
+  );
+}
+
+/**
+ * Build a GPT-5.6 prompt estimator bound to a specific encoder resolver.
+ *
+ * The standalone {@link estimateGpt56Prompt} resolves the encoder from the
+ * caller-supplied loader or, when omitted, the process-wide shared encoder.
+ * A composition root that owns a factory-scoped resolver uses this so
+ * readiness, runtime tokenization, and final prompt-envelope estimation all
+ * share one encoder instance instead of diverging onto the process-wide one.
+ */
+export function createGpt56PromptEstimator(
+  resolveEncoder: O200kBaseEncoderResolver,
+): (
+  request: RuntimePromptEstimateRequest,
+) => Promise<RuntimePromptEstimateResult> {
+  return (request) => estimateGpt56PromptWithEncoder(request, resolveEncoder);
+}
+
+async function estimateGpt56PromptWithEncoder(
+  request: RuntimePromptEstimateRequest,
+  resolveEncoder: O200kBaseEncoderResolver,
 ): Promise<RuntimePromptEstimateResult> {
   const projection = readProjection(request);
   let encoder: TiktokenEncoder;
   try {
-    encoder = await getO200kBaseEncoder(loadModule);
+    encoder = await resolveEncoder();
   } catch (error) {
     throw new ModelPromptEstimatorError(
       'asset-unavailable',
       createErrorContext(request),
-      'verify the local @dqbd/tiktoken o200k_base assets are installed and intact',
+      `verify the local @dqbd/tiktoken o200k_base assets are installed and intact; cause: ${formatCausalDetail(error)}`,
       { cause: error },
     );
   }
@@ -140,6 +212,7 @@ function normalizeRuntimeTokenizerInput(
 export function createGpt56RuntimeTokenizer(
   activeProvider: string,
   canonicalModel: string,
+  resolveEncoder: O200kBaseEncoderResolver = () => getO200kBaseEncoder(),
 ): RuntimeTokenizer {
   return {
     fallbackPolicy: 'deny',
@@ -149,20 +222,23 @@ export function createGpt56RuntimeTokenizer(
         activeProvider,
         canonicalModel,
       );
-      const result = await estimateGpt56Prompt({
-        activeProvider,
-        canonicalModel,
-        protocol: 'openai-responses',
-        wireMethod: 'responses/v1',
-        finalizedProjection: {
-          kind: 'llxprt-provider-prompt-v3',
+      const result = await estimateGpt56PromptWithEncoder(
+        {
+          activeProvider,
+          canonicalModel,
           protocol: 'openai-responses',
-          promptText,
+          wireMethod: 'responses/v1',
+          finalizedProjection: {
+            kind: 'llxprt-provider-prompt-v3',
+            protocol: 'openai-responses',
+            promptText,
+          },
+          projectionRevision: PROJECTION_REVISION,
+          legacyEstimate: () =>
+            Promise.reject(new Error('unreachable legacy estimate')),
         },
-        projectionRevision: PROJECTION_REVISION,
-        legacyEstimate: () =>
-          Promise.reject(new Error('unreachable legacy estimate')),
-      });
+        resolveEncoder,
+      );
       return result.count;
     },
   };

@@ -51,6 +51,18 @@ export function getO200kBaseEncoder(
   return sharedEncoder;
 }
 
+export type O200kBaseEncoderResolver = () => Promise<O200kBaseEncoder>;
+
+export function createO200kBaseEncoderResolver(
+  loadModule: TiktokenModuleLoader = loadTiktokenModule,
+): O200kBaseEncoderResolver {
+  if (loadModule === loadTiktokenModule) {
+    return () => getO200kBaseEncoder();
+  }
+  let encoder: Promise<O200kBaseEncoder> | undefined;
+  return () => (encoder ??= getO200kBaseEncoder(loadModule));
+}
+
 /**
  * Count `text` as ordinary BPE text. Special-token-looking text is encoded as
  * its constituent bytes and can never be promoted to a control token.

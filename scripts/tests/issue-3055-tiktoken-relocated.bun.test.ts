@@ -7,12 +7,14 @@
 /**
  * Issue #3055 — automated form of the manual "hide the package" reproduction.
  *
- * Builds a fixture that imports `@dqbd/tiktoken` and encodes a string, using
- * the CLI bundle's external policy (`cliBundleConfig.external`). The built
- * fixture is resolved against a *temporary* `node_modules` tree that this test
- * creates and owns (a copy of the real `@dqbd/tiktoken` package), then the
- * bundle is relocated next to a *fresh* `node_modules`, the original build
- * tree is deleted, and the relocated bundle is executed.
+ * Builds a fixture that uses the production runtime tokenizer factory readiness
+ * API and exact GPT-5.6 tokenization under the CLI bundle's external policy
+ * (`cliBundleConfig.external`). The built fixture is resolved against a
+ * *temporary* `node_modules` tree that this test creates and owns (a copy of the
+ * real `@dqbd/tiktoken` package), then the bundle is relocated next to a *fresh*
+ * `node_modules`, the original build tree is deleted, and the relocated bundle
+ * is executed. After readiness, the fixture renames the runtime package tree
+ * before its first exact estimate to model concurrent package replacement.
  *
  * - On main, `cliBundleConfig.external` does NOT include `@dqbd/tiktoken`, so
  *   the fixture inlines it with a build-machine `__dirname`; relocated away
@@ -113,12 +115,19 @@ describe('issue #3055: tiktoken resolves from a relocated node_modules', () => {
     writeFileSync(
       entry,
       [
-        `import { get_encoding } from '@dqbd/tiktoken';`,
-        `import { writeFileSync } from 'node:fs';`,
-        `const encoder = get_encoding('o200k_base');`,
-        `const tokens = encoder.encode('hello world', [], []);`,
-        `writeFileSync(process.env.RESULT_FILE, String(tokens.length));`,
-        `encoder.free();`,
+        `import { renameSync, writeFileSync } from 'node:fs';`,
+        `import { createRuntimeTokenizerFactory } from ${JSON.stringify(join(repoRoot, 'packages/providers/src/composition/runtimeTokenizerFactory.ts'))};`,
+        `const factory = createRuntimeTokenizerFactory();`,
+        `await factory.prepareTokenizer?.('codex-alias', 'gpt-5.6-sol');`,
+        `const sourceTree = process.env.TIKTOKEN_SOURCE_DIR;`,
+        `if (!sourceTree) throw new Error('TIKTOKEN_SOURCE_DIR is required');`,
+        `renameSync(sourceTree, sourceTree + '.replaced');`,
+        `const tokenizer = factory.getTokenizer('codex-alias', 'gpt-5.6-sol');`,
+        `if (!tokenizer) throw new Error('GPT-5.6 tokenizer unavailable');`,
+        `const count = await tokenizer.countTokens('hello world');`,
+        `const resultFile = process.env.RESULT_FILE;`,
+        `if (!resultFile) throw new Error('RESULT_FILE is required');`,
+        `writeFileSync(resultFile, String(count));`,
         '',
       ].join('\n'),
     );
@@ -172,7 +181,11 @@ describe('issue #3055: tiktoken resolves from a relocated node_modules', () => {
       cwd: runDir,
       encoding: 'utf8',
       timeout: 60_000,
-      env: { ...process.env, RESULT_FILE: resultFile },
+      env: {
+        ...process.env,
+        RESULT_FILE: resultFile,
+        TIKTOKEN_SOURCE_DIR: join(runDir, 'node_modules', '@dqbd', 'tiktoken'),
+      },
     });
 
     expect(proc.error).toBeUndefined();

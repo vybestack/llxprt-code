@@ -97,50 +97,72 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
     },
   });
 
-  // @pseudocode line 29: activate so getCliRuntimeServices() resolves THESE.
-  await handle.activate();
+  try {
+    // @pseudocode line 29: activate so getCliRuntimeServices() resolves THESE.
+    await handle.activate();
 
-  // @pseudocode line 37-48 (createAgent.ts:178-180 mirror): derive managers.
-  const manager = handle.providerManager;
-  const oauthManager = resolveOAuthManager(config, handle);
-  const sharedSettingsService = handle.settingsService;
+    // @pseudocode line 37-48 (createAgent.ts:178-180 mirror): derive managers.
+    const manager = handle.providerManager;
+    const oauthManager = resolveOAuthManager(config, handle);
+    const sharedSettingsService = handle.settingsService;
 
-  // @plan:PLAN-20270110-ISSUE2378.P02 @requirement:REQ-2378-002
-  // Bind the settings runtime context to the adopted Config's SettingsService.
-  activateSettingsRuntimeContext(sharedSettingsService, runtimeId, {
-    config,
-    metadata: { source: 'fromConfig' },
-  });
+    // @plan:PLAN-20270110-ISSUE2378.P02 @requirement:REQ-2378-002
+    // Bind the settings runtime context to the adopted Config's SettingsService.
+    activateSettingsRuntimeContext(sharedSettingsService, runtimeId, {
+      config,
+      metadata: { source: 'fromConfig' },
+    });
 
-  // @pseudocode lines 31-35: initialize once or adopt the original result.
-  await config.ensureInitialized({ messageBus });
+    // @pseudocode lines 31-35: initialize once or adopt the original result.
+    await config.ensureInitialized({ messageBus });
 
-  // @plan:PLAN-20270104-ISSUE2374.P03 @requirement:REQ-001
-  await resolveActivation(config, options);
+    // @plan:PLAN-20270104-ISSUE2374.P03 @requirement:REQ-001
+    await resolveActivation(config, options);
 
-  // @pseudocode lines 37-48 (Mismatch 1): synthesize parsed + resolvedAuth.
-  const parsed = buildParsedConfig(config, options);
-  const resolvedAuth = { baseUrl: undefined };
+    // @pseudocode lines 37-48 (Mismatch 1): synthesize parsed + resolvedAuth.
+    const parsed = buildParsedConfig(config, options);
+    await config
+      .getTokenizerFactory()
+      ?.prepareTokenizer?.(parsed.provider, parsed.model);
+    const resolvedAuth = { baseUrl: undefined };
 
-  // @pseudocode lines 37-48: SHARED finalize (CRIT-4: single finalize path).
-  // The 17th positional arg 'caller' threads REQ-001.3 ownership so dispose()
-  // skips the caller-owned Config teardown.
-  return finalizeAgent(
-    parsed,
-    resolvedAuth,
-    config,
-    manager,
-    oauthManager,
-    sharedSettingsService,
-    runtimeId,
-    handle,
-    messageBus,
-    options.onApproval,
-    options.onOAuthPrompt,
-    options.editorCallbacks,
-    [],
-    'caller',
-  );
+    // @pseudocode lines 37-48: SHARED finalize (CRIT-4: single finalize path).
+    // The 17th positional arg 'caller' threads REQ-001.3 ownership so dispose()
+    // skips the caller-owned Config teardown.
+    return await finalizeAgent(
+      parsed,
+      resolvedAuth,
+      config,
+      manager,
+      oauthManager,
+      sharedSettingsService,
+      runtimeId,
+      handle,
+      messageBus,
+      options.onApproval,
+      options.onOAuthPrompt,
+      options.editorCallbacks,
+      [],
+      'caller',
+    );
+  } catch (primaryError) {
+    return cleanupFailedBootstrap(handle, primaryError);
+  }
+}
+
+async function cleanupFailedBootstrap(
+  handle: IsolatedRuntimeContextHandle,
+  primaryError: unknown,
+): Promise<never> {
+  try {
+    await handle.cleanup();
+  } catch (cleanupError) {
+    throw new AggregateError(
+      [primaryError, cleanupError],
+      'fromConfig bootstrap failed and isolated runtime cleanup also failed',
+    );
+  }
+  throw primaryError;
 }
 
 /**
@@ -194,19 +216,16 @@ async function resolveActivation(
 }
 
 /**
- * #2374 round-3 Fix 1: derive the provider from the POST-activation runtime
- * truth (manager active provider name), NOT config.getProvider(). When no
- * activation intent ran, config.getProvider() is the correct source.
+ * Derive the provider from the post-activation runtime truth, falling back to
+ * the Config only when the adopted manager has no active provider.
  */
 function buildParsedConfig(
   config: Config,
   options: FromConfigOptions,
 ): { provider: string; model: string; sessionId?: string } {
   const activeRuntimeProvider =
-    options.activation !== undefined
-      ? (config.getProviderManager()?.getActiveProviderName() ??
-        config.getProvider())
-      : config.getProvider();
+    config.getProviderManager()?.getActiveProviderName() ??
+    config.getProvider();
   return {
     provider: activeRuntimeProvider ?? '',
     model: config.getModel(),

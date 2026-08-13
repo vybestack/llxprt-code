@@ -14,8 +14,15 @@ import {
   GPT_56_ASSET_REVISION,
   GPT_56_ESTIMATOR_FAMILY,
 } from './Gpt56O200kPromptEstimator.js';
-import { ModelPromptEstimatorRegistry } from './ModelPromptEstimatorRegistry.js';
+import {
+  ModelPromptEstimatorRegistry,
+  createDefaultEstimatorRegistrations,
+  GPT_56_PROMPT_ESTIMATOR_REGISTRATION,
+  type ModelPromptEstimatorRegistration,
+} from './ModelPromptEstimatorRegistry.js';
 import { ModelPromptEstimatorError } from './ModelPromptEstimatorError.js';
+import type { O200kBaseEncoder } from './o200kBaseCounter.js';
+import type { PromptEnvelopeProtocol } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 
 /**
  * Runs `operation` expecting rejection and returns the rejection reason.
@@ -114,15 +121,18 @@ describe('GPT-5.6 o200k fixtures', () => {
     ['missing', new Error('Missing tiktoken_bg.wasm')],
     ['corrupt', new WebAssembly.CompileError('invalid wasm header')],
   ])(
-    'maps isolated %s codec initialization failures to asset-unavailable',
+    'maps isolated %s codec initialization failures to asset-unavailable with causal detail in the remediation message',
     async (_name, failure) => {
       const loadModule = () => Promise.reject(failure);
-      expect(
-        await captureRejection(estimateGpt56Prompt(request(), loadModule)),
-      ).toMatchObject({
+      const error = await captureRejection(
+        estimateGpt56Prompt(request(), loadModule),
+      );
+      expect(error).toMatchObject({
         code: 'asset-unavailable',
         cause: failure,
       });
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(failure.message);
     },
   );
 
@@ -249,5 +259,59 @@ describe('ModelPromptEstimatorRegistry', () => {
     expect(error).toBeInstanceOf(ModelPromptEstimatorError);
     expect(JSON.stringify(error)).not.toContain('secret prompt');
     expect(input.legacyEstimate).not.toHaveBeenCalled();
+  });
+});
+
+describe('createDefaultEstimatorRegistrations', () => {
+  const injectedCount = 42;
+
+  function resolveInjectedEncoder(): Promise<O200kBaseEncoder> {
+    return Promise.resolve({
+      encode: () =>
+        Array.from({ length: injectedCount }, (_unused, index) => index),
+    } as unknown as O200kBaseEncoder);
+  }
+
+  it('replaces the GPT-5.6 default registration with a resolver-bound estimator that counts through the injected encoder', async () => {
+    const registrations = createDefaultEstimatorRegistrations(
+      resolveInjectedEncoder,
+    );
+    const gpt56 = registrations.filter(
+      (registration) => registration.family === GPT_56_ESTIMATOR_FAMILY,
+    );
+    expect(gpt56).toHaveLength(1);
+    const result = await gpt56[0].estimate(request());
+    expect(result.count).toBe(injectedCount);
+  });
+
+  it('retains an additional non-GPT-5.6 default registration from the input list without duplicating GPT-5.6', () => {
+    const extraFamily = 'test-extra-default-family';
+    const extra: ModelPromptEstimatorRegistration = {
+      family: extraFamily,
+      claim: /^test-extra-default/,
+      matches: (model: string) => model.startsWith('test-extra-default'),
+      protocols: new Set<PromptEnvelopeProtocol>(['openai-responses']),
+      identityErrorHint: 'use a test-extra-default model',
+      estimate: async (estimateRequest) => ({
+        count: await estimateRequest.legacyEstimate(),
+        method: 'calibrated',
+        family: extraFamily,
+        estimatorVersion: 'test-extra-v1',
+        assetRevision: 'none',
+        projectionRevision: estimateRequest.projectionRevision,
+      }),
+    };
+    const registrations = createDefaultEstimatorRegistrations(
+      resolveInjectedEncoder,
+      [GPT_56_PROMPT_ESTIMATOR_REGISTRATION, extra],
+    );
+    expect(registrations).toHaveLength(2);
+    // The extra non-GPT-5.6 registration is retained by identity.
+    expect(registrations).toContain(extra);
+    // Exactly one GPT-5.6 entry — never duplicated.
+    const gpt56Count = registrations.filter(
+      (registration) => registration.family === GPT_56_ESTIMATOR_FAMILY,
+    ).length;
+    expect(gpt56Count).toBe(1);
   });
 });

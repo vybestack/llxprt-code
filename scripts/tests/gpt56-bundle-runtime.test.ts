@@ -82,7 +82,7 @@ await Bun.build({
   format: 'esm',
   plugins: [portableTiktokenPlugin],
   conditions: ['production'],
-  banner: "import { fileURLToPath } from 'node:url'; import { dirname } from 'node:path'; globalThis.__dirname = dirname(fileURLToPath(import.meta.url));",
+  banner: "import { fileURLToPath as __llxprtFileURLToPath } from 'node:url'; import { dirname as __llxprtDirname } from 'node:path'; globalThis.__dirname = __llxprtDirname(__llxprtFileURLToPath(import.meta.url));",
 });
 `,
   );
