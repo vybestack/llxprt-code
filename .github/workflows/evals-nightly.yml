@@ -198,7 +198,21 @@ jobs:
             CREATE_ARGS=(--repo "${GH_REPO}" --title "${ISSUE_TITLE}" --body-file "${BODY_FILE}")
             CREATE_ARGS+=("${LABEL_ARGS[@]}")
             CREATE_ARGS+=("${MILESTONE_ARGS[@]}")
-            retry_gh gh issue create "${CREATE_ARGS[@]}" || {
+            create_issue_once() {
+              local found=""
+              found="$(gh issue list \\
+                --repo "${GH_REPO}" \\
+                --search "\"${ISSUE_TITLE}\" in:title is:issue state:open" \\
+                --limit 30 \\
+                --json number,title \\
+                --jq "[.[] | select(.title == \"${ISSUE_TITLE}\") | .number] | .[0] // empty" 2>/dev/null)" || found=""
+              if [[ -n "${found}" ]]; then
+                echo "Issue #${found} already exists; skipping creation." >&2
+                return 0
+              fi
+              gh issue create "${CREATE_ARGS[@]}"
+            }
+            retry_gh create_issue_once || {
               echo "ERROR: Failed to create evals nightly failure issue" >&2
               exit 1
             }

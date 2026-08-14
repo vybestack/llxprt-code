@@ -41,7 +41,18 @@ function extractJsonResponse(
     .map(([value]) => String(value))
     .join('')
     .trim();
-  return JSON.parse(raw) as JsonResponse;
+  if (raw === '') {
+    throw new Error(
+      'Expected JSON output from processAgentStream but stdout was empty',
+    );
+  }
+  try {
+    return JSON.parse(raw) as JsonResponse;
+  } catch {
+    throw new Error(
+      `Expected valid JSON from processAgentStream but got: ${raw.slice(0, 200)}`,
+    );
+  }
 }
 
 describe('processAgentStream — JSON output mode (issue #3226)', () => {
