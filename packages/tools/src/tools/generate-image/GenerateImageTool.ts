@@ -14,6 +14,12 @@ import {
   type ToolResult,
   type LiveOutputUpdate,
 } from '../tools.js';
+import {
+  checkImageDimensionBudget,
+  formatImageBudgetDisplay,
+  formatImageBudgetError,
+  type ImageDimensionBudget,
+} from '../../utils/imageDimensionBudget.js';
 
 /**
  * Structural duplicate of the backend-neutral image contract.
@@ -115,6 +121,13 @@ export interface GenerateImageToolDependencies {
     readonly input_paths?: readonly string[];
     readonly signal?: AbortSignal;
   }) => Promise<ImageOperationRunnerResult>;
+
+  /**
+   * Resolves the active hard image dimension/pixel budget (issue #3216) from
+   * the host's ephemeral settings. Returning `undefined` disables the
+   * preflight; the tool itself contains no settings-resolution logic.
+   */
+  readonly getImageDimensionBudget?: () => ImageDimensionBudget | undefined;
 }
 
 const MAX_INPUT_IMAGES = 5;
@@ -276,6 +289,28 @@ class GenerateImageToolInvocation extends BaseToolInvocation<
   }
 
   private buildSuccessResult(result: ImageOperationRunnerResult): ToolResult {
+    // Hard image budget preflight (issue #3216): reject oversized generated
+    // bytes before they enter the returned content so the model gets an
+    // actionable error instead of a provider 400. The runner already persisted
+    // the file before returning; the budget only governs whether the bytes may
+    // enter model content/history, so the generated file is NEVER deleted —
+    // the error names its path and instructs the model to downscale/thumbnail
+    // before reading. This is a content-policy violation (the image exceeds
+    // the hard budget), not a read failure.
+    const budget = this.dependencies.getImageDimensionBudget?.();
+    if (budget !== undefined) {
+      const violation = checkImageDimensionBudget(result.media.data, budget);
+      if (violation !== undefined) {
+        const message =
+          formatImageBudgetError(violation, result.relativeOutputPath) +
+          ` The generated image was saved at ${result.absoluteOutputPath} but was omitted from model content/history because it exceeds the limit; downscale or thumbnail the saved file before reading it into the conversation.`;
+        return {
+          llmContent: message,
+          returnDisplay: formatImageBudgetDisplay(message),
+          error: { message, type: ToolErrorType.POLICY_VIOLATION },
+        };
+      }
+    }
     const operation = result.operation === 'generate' ? 'Generated' : 'Edited';
     const textPart = `${operation} image.
 Saved to: ${result.absoluteOutputPath}`;

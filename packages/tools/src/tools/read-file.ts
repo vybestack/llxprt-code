@@ -28,6 +28,7 @@ import { getGitLineChanges } from '../utils/gitLineChanges.js';
 import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
 import { stringOrDefault } from '../utils/stringCoalescing.js';
 import { resolveImageResizePolicy } from '../utils/imageResize.js';
+import { resolveImageDimensionBudget } from '../utils/imageDimensionBudget.js';
 import { ToolErrorType } from '../types/tool-error.js';
 
 /**
@@ -291,16 +292,20 @@ ${formattedContent}`;
       (ephemeralSettings['file-read-max-lines'] as number | undefined) ??
       DEFAULT_MAX_LINES_TEXT_FILE;
     let imageResizePolicy;
+    let imageBudget;
     try {
       imageResizePolicy = resolveImageResizePolicy(
         ephemeralSettings,
         this.params.skip_image_resize === true,
       );
+      imageBudget = resolveImageDimensionBudget(ephemeralSettings);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      // Combined label: this catch covers both image-resize policy and
+      // image-budget (dimension/pixel) configuration errors.
       return {
         llmContent: message,
-        returnDisplay: `## Image Resize Configuration Error\n\n${message}`,
+        returnDisplay: `## Image Configuration Error\n\n${message}`,
         error: { message, type: ToolErrorType.READ_CONTENT_FAILURE },
       };
     }
@@ -311,6 +316,7 @@ ${formattedContent}`;
       this.params.offset,
       effectiveLimit,
       imageResizePolicy,
+      imageBudget,
     );
 
     if (result.error) {

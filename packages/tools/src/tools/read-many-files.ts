@@ -18,26 +18,24 @@ import * as path from 'path';
 import { glob, escape as globEscape } from 'glob';
 import {
   createImageResizeToolResult,
-  detectFileType,
+  getImageBudgetToolResult,
   getImageResizeToolResult,
-  getImageSourceSizeLimit,
   getProcessedFileSkipReason,
-  isAssetExplicitlyRequested,
   type ProcessedFileReadResult,
   processSingleFileContent,
-  shouldResizeExplicitImage,
   DEFAULT_ENCODING,
   DEFAULT_MAX_LINES_TEXT_FILE,
   getSpecificMimeType,
 } from '../utils/fileUtils.js';
+import { runPreReadGates } from '../utils/fileBudgetChecks.js';
 import { type ContentPartUnion } from '../types/wire-types.js';
-import { stat } from 'fs/promises';
 import { ToolErrorType } from '../types/tool-error.js';
 import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
 import {
   resolveImageResizePolicy,
   type ImageResizePolicy,
 } from '../utils/imageResize.js';
+import { resolveImageDimensionBudget } from '../utils/imageDimensionBudget.js';
 import { estimateNonTextPartTokens } from '../utils/imageTokenEstimation.js';
 import {
   buildParameterSchema,
@@ -569,27 +567,23 @@ ${this.host.getTargetDir()}
     const relativePathForDisplay = path
       .relative(this.host.getTargetDir(), filePath)
       .replace(/\\/g, '/');
-    const resizeBeforeOutputLimit = await shouldResizeExplicitImage(
+    const imageBudget = resolveImageDimensionBudget(
+      this.host.getEphemeralSettings(),
+    );
+    const gate = await runPreReadGates(
       filePath,
       inputPatterns,
+      relativePathForDisplay,
+      skippedFiles,
+      limits.fileSizeLimit,
+      currentTokens,
+      imageBudget,
       imageResizePolicy !== undefined,
     );
-    if (
-      (await this.checkFileSize(
-        filePath,
-        relativePathForDisplay,
-        skippedFiles,
-        getImageSourceSizeLimit(resizeBeforeOutputLimit, limits.fileSizeLimit),
-      )) === 'skip' ||
-      (await this.checkAssetFile(
-        filePath,
-        relativePathForDisplay,
-        inputPatterns,
-        skippedFiles,
-      )) === 'skip'
-    ) {
+    if (gate.outcome === 'preflight-error') return gate.result;
+    if (gate.outcome === 'skip')
       return { done: false, totalTokens: currentTokens };
-    }
+    const { resizeBeforeOutputLimit } = gate;
 
     const fileReadResult = await processSingleFileContent(
       filePath,
@@ -597,20 +591,17 @@ ${this.host.getTargetDir()}
       undefined,
       maxLinesPerFile,
       imageResizePolicy,
+      imageBudget,
     );
-    const resizeError = getImageResizeToolResult(fileReadResult, currentTokens);
-    if (resizeError !== undefined) {
-      return resizeError;
-    }
-    const skipReason = getProcessedFileSkipReason(
+    const earlyResult = this.checkFileReadErrors(
       fileReadResult,
+      currentTokens,
       resizeBeforeOutputLimit,
+      relativePathForDisplay,
       limits.fileSizeLimit,
+      skippedFiles,
     );
-    if (skipReason !== undefined) {
-      skippedFiles.push({ path: relativePathForDisplay, reason: skipReason });
-      return { done: false, totalTokens: currentTokens };
-    }
+    if (earlyResult !== undefined) return earlyResult;
 
     const addResult = this.addFileContent(
       fileReadResult,
@@ -624,63 +615,40 @@ ${this.host.getTargetDir()}
       sortedFiles,
     );
 
-    if (addResult.action === 'stop') {
-      return { done: true, totalTokens: addResult.totalTokens };
+    // Record as processed only when content was added; a warn-mode 'stop'
+    // pushes only a skip reason, so it must not be recorded.
+    if (addResult.action !== 'stop') {
+      processedFilesRelativePaths.push(relativePathForDisplay);
+      this.recordReadMetric(filePath, fileReadResult.llmContent);
     }
-
-    processedFilesRelativePaths.push(relativePathForDisplay);
-    this.recordReadMetric(filePath, fileReadResult.llmContent);
-    if (addResult.action === 'stopAfterRecord') {
-      return { done: true, totalTokens: addResult.totalTokens };
-    }
-    return { done: false, totalTokens: addResult.totalTokens };
+    return addResult.action === 'stop' || addResult.action === 'stopAfterRecord'
+      ? { done: true, totalTokens: addResult.totalTokens }
+      : { done: false, totalTokens: addResult.totalTokens };
   }
-  private async checkFileSize(
-    filePath: string,
+
+  private checkFileReadErrors(
+    fileReadResult: ProcessedFileReadResult,
+    currentTokens: number,
+    shouldResize: boolean,
     relativePathForDisplay: string,
-    skippedFiles: Array<{ path: string; reason: string }>,
     fileSizeLimit: number,
-  ): Promise<'skip' | 'continue'> {
-    try {
-      const stats = await stat(filePath);
-      if (stats.size > fileSizeLimit) {
-        skippedFiles.push({
-          path: relativePathForDisplay,
-          reason: `file size (${Math.round(stats.size / 1024)}KB) exceeds limit (${Math.round(fileSizeLimit / 1024)}KB)`,
-        });
-        return 'skip';
-      }
-    } catch (error) {
-      skippedFiles.push({
-        path: relativePathForDisplay,
-        reason: `stat error: ${getErrorMessage(error)}`,
-      });
-      return 'skip';
-    }
-    return 'continue';
-  }
-
-  private async checkAssetFile(
-    filePath: string,
-    relativePathForDisplay: string,
-    inputPatterns: string[],
     skippedFiles: Array<{ path: string; reason: string }>,
-  ): Promise<'skip' | 'continue'> {
-    const fileType = await detectFileType(filePath);
-    if (
-      (fileType === 'image' || fileType === 'pdf' || fileType === 'audio') &&
-      !isAssetExplicitlyRequested(filePath, inputPatterns)
-    ) {
-      skippedFiles.push({
-        path: relativePathForDisplay,
-        reason:
-          'asset file (image/pdf/audio) was not explicitly requested by name or extension',
-      });
-      return 'skip';
+  ): ProcessSingleFileResult | undefined {
+    const errorResult =
+      getImageResizeToolResult(fileReadResult, currentTokens) ??
+      getImageBudgetToolResult(fileReadResult, currentTokens);
+    if (errorResult !== undefined) return errorResult;
+    const skipReason = getProcessedFileSkipReason(
+      fileReadResult,
+      shouldResize,
+      fileSizeLimit,
+    );
+    if (skipReason !== undefined) {
+      skippedFiles.push({ path: relativePathForDisplay, reason: skipReason });
+      return { done: false, totalTokens: currentTokens };
     }
-    return 'continue';
+    return undefined;
   }
-
   private addFileContent(
     fileReadResult: ProcessedFileReadResult,
     filePath: string,

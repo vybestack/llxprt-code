@@ -16,6 +16,12 @@ import {
   resizeImageIfNeeded,
   type ImageResizePolicy,
 } from './imageResize.js';
+import {
+  checkImageDimensionBudgetFromBuffer,
+  formatImageBudgetDisplay,
+  formatImageBudgetError,
+  type ImageDimensionBudget,
+} from './imageDimensionBudget.js';
 
 // Constants for text file processing
 export const DEFAULT_MAX_LINES_TEXT_FILE = 2000;
@@ -410,7 +416,7 @@ export interface ProcessedFileReadResult {
   returnDisplay: string;
   error?: string;
   errorType?: ToolErrorType;
-  errorKind?: 'image-resize';
+  errorKind?: 'image-resize' | 'image-budget';
   isTruncated?: boolean;
   originalLineCount?: number;
   linesShown?: [number, number];
@@ -485,6 +491,39 @@ export function getImageResizeToolResult(
 ): ReturnType<typeof createImageResizeToolResult> | undefined {
   return result.errorKind === 'image-resize' && result.error !== undefined
     ? createImageResizeToolResult(result.error, result.errorType, totalTokens)
+    : undefined;
+}
+
+export function createImageBudgetToolResult(
+  message: string,
+  type: ToolErrorType | undefined,
+  totalTokens: number,
+): {
+  done: true;
+  totalTokens: number;
+  error: {
+    llmContent: string;
+    returnDisplay: string;
+    error: { message: string; type: ToolErrorType | undefined };
+  };
+} {
+  return {
+    done: true,
+    totalTokens,
+    error: {
+      llmContent: message,
+      returnDisplay: formatImageBudgetDisplay(message),
+      error: { message, type },
+    },
+  };
+}
+
+export function getImageBudgetToolResult(
+  result: ProcessedFileReadResult,
+  totalTokens: number,
+): ReturnType<typeof createImageBudgetToolResult> | undefined {
+  return result.errorKind === 'image-budget' && result.error !== undefined
+    ? createImageBudgetToolResult(result.error, result.errorType, totalTokens)
     : undefined;
 }
 
@@ -731,6 +770,7 @@ async function processMediaFile(
   relativePathForDisplay: string,
   fileType: 'image' | 'pdf' | 'audio' | 'video',
   imageResizePolicy: ImageResizePolicy | undefined,
+  imageBudget: ImageDimensionBudget | undefined,
 ): Promise<ProcessedFileReadResult> {
   const contentBuffer = await fs.promises.readFile(filePath);
   const mimeTypeRaw = mime.lookup(filePath);
@@ -748,6 +788,29 @@ async function processMediaFile(
           imageResizePolicy,
         )
       : contentBuffer;
+
+  // Hard dimension/pixel preflight runs AFTER any explicit resize so an
+  // oversized image is rejected with an actionable tool error and its bytes
+  // never enter the returned content. Non-image media and unparseable images
+  // are left unchanged (no dimension is invented). The check parses the raw
+  // output buffer's bounded header prefix directly — the full payload is never
+  // base64-encoded just to inspect dimensions.
+  if (fileType === 'image' && imageBudget !== undefined) {
+    const violation = checkImageDimensionBudgetFromBuffer(
+      outputBuffer,
+      imageBudget,
+    );
+    if (violation !== undefined) {
+      const message = formatImageBudgetError(violation, displayName);
+      return {
+        llmContent: message,
+        returnDisplay: formatImageBudgetDisplay(message),
+        error: message,
+        errorType: ToolErrorType.READ_CONTENT_FAILURE,
+        errorKind: 'image-budget',
+      };
+    }
+  }
 
   return {
     llmContent: {
@@ -769,6 +832,7 @@ async function processFileByType(
   offset: number | undefined,
   limit: number | undefined,
   imageResizePolicy: ImageResizePolicy | undefined,
+  imageBudget: ImageDimensionBudget | undefined,
 ): Promise<ProcessedFileReadResult> {
   switch (fileType) {
     case 'binary':
@@ -786,6 +850,7 @@ async function processFileByType(
         relativePathForDisplay,
         fileType,
         imageResizePolicy,
+        imageBudget,
       );
     default:
       return processTextFile(filePath, relativePathForDisplay, offset, limit);
@@ -798,6 +863,7 @@ export async function processSingleFileContent(
   offset?: number,
   limit?: number,
   imageResizePolicy?: ImageResizePolicy,
+  imageBudget?: ImageDimensionBudget,
 ): Promise<ProcessedFileReadResult> {
   try {
     const accessError = validateFileAccess(filePath);
@@ -823,6 +889,7 @@ export async function processSingleFileContent(
       offset,
       limit,
       imageResizePolicy,
+      imageBudget,
     );
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
