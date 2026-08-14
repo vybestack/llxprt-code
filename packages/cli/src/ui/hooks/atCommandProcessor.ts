@@ -57,6 +57,20 @@ const isPowerShell = Boolean(
 // Track if we've shown the PowerShell tip
 let powershellTipShown = false;
 
+// The '+' alias only applies when '+' starts a token and is followed by a
+// character a path can actually begin with. Rewriting every '+' turned
+// ordinary prose ("Ctrl+Q") and box drawing ("+-----") into @-paths, and each
+// bogus path triggered a full recursive workspace crawl.
+const POWERSHELL_AT_ALIAS = /(^|\s)\+(?=[A-Za-z0-9_./\\~])/g;
+
+/**
+ * Applies the PowerShell-only '+' alias for '@'. Exported so the token rules
+ * can be exercised directly, independently of the host shell.
+ */
+export function applyPowerShellAtAlias(query: string): string {
+  return query.replace(POWERSHELL_AT_ALIAS, '$1@');
+}
+
 interface HandleAtCommandParams {
   query: string;
   config: AtCommandRuntime;
@@ -132,7 +146,7 @@ function parseAllAtCommands(query: string): AtCommandPart[] {
   // In PowerShell, also support '+' prefix as alternative to '@'
   // This avoids PowerShell's hashtable completion interference
   if (isPowerShell) {
-    query = query.replace(/\+(?=\S)/g, '@');
+    query = applyPowerShellAtAlias(query);
   }
 
   const parts: AtCommandPart[] = [];

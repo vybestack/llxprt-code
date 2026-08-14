@@ -311,6 +311,9 @@ class GlobToolInvocation extends BaseToolInvocation<
         return path.normalize(filePath);
       }
     };
+    // Resolve each entry exactly once. Doing it per lookup meant three
+    // realpathSync syscalls and three full copies of the path list for every
+    // matched file, which dominated cost on large result sets.
     const canonicalPaths = entries.map((entry) =>
       toCanonicalPath(entry.fullpath()),
     );
@@ -322,8 +325,8 @@ class GlobToolInvocation extends BaseToolInvocation<
         })
         .map((p) => toCanonicalPath(p)),
     );
-    const filteredEntries = entries.filter((entry) =>
-      filteredCanonicalPaths.has(toCanonicalPath(entry.fullpath())),
+    const filteredEntries = entries.filter((_entry, index) =>
+      filteredCanonicalPaths.has(canonicalPaths[index]),
     );
     return {
       filteredEntries,
