@@ -26,7 +26,7 @@ export interface ImageDimensionBudget {
 export interface ImageBudgetViolation {
   readonly width: number;
   readonly height: number;
-  readonly pixels: number;
+  readonly pixels: number | bigint;
   readonly maxDimension?: number;
   readonly maxPixels?: number;
   readonly exceededDimension: boolean;
@@ -41,7 +41,7 @@ function readPositiveInteger(
   if (value === undefined) {
     return undefined;
   }
-  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
     throw new Error(
       `Invalid image dimension budget: ${key} must be a positive integer`,
     );
@@ -106,7 +106,7 @@ export function checkImageDimensionBudgetFromBuffer(
   );
 }
 
-function formatNumber(value: number): string {
+function formatNumber(value: number | bigint): string {
   return value.toLocaleString('en-US');
 }
 
@@ -145,6 +145,20 @@ ${message}`;
 /** Bounded prefix size for file-based dimension parsing. */
 const IMAGE_HEADER_PREFIX_BYTES = 8192;
 
+/** Close a file without replacing an operation error with a secondary close error. */
+export async function closeFileHandlePreservingPrimaryError(
+  close: () => Promise<void>,
+  primaryError: unknown,
+): Promise<void> {
+  try {
+    await close();
+  } catch (closeError) {
+    if (primaryError === undefined) {
+      throw closeError;
+    }
+  }
+}
+
 /** Reads up to `maxBytes` from the start of a file for dimension parsing. */
 export type HeaderReader = (maxBytes: number) => Promise<Uint8Array>;
 
@@ -178,12 +192,16 @@ export async function readFileHeaderPrefix(
 ): Promise<Uint8Array> {
   const { promises: fsp } = await import('node:fs');
   const fh = await fsp.open(filePath, 'r');
+  let primaryError: unknown;
   try {
     const buf = Buffer.alloc(maxBytes);
     const { bytesRead } = await fh.read(buf, 0, maxBytes, 0);
     return new Uint8Array(buf.buffer, buf.byteOffset, bytesRead);
+  } catch (error) {
+    primaryError = error;
+    throw error;
   } finally {
-    await fh.close();
+    await closeFileHandlePreservingPrimaryError(() => fh.close(), primaryError);
   }
 }
 
@@ -220,6 +238,7 @@ async function checkJpegFileDimensionBudget(
 ): Promise<ImageBudgetViolation | undefined> {
   const { promises: fsp } = await import('node:fs');
   const fh = await fsp.open(filePath, 'r');
+  let primaryError: unknown;
   try {
     const sigBuf = Buffer.alloc(2);
     const { bytesRead } = await fh.read(sigBuf, 0, 2, 0);
@@ -238,8 +257,11 @@ async function checkJpegFileDimensionBudget(
       dimensions.height,
       budget,
     );
+  } catch (error) {
+    primaryError = error;
+    throw error;
   } finally {
-    await fh.close();
+    await closeFileHandlePreservingPrimaryError(() => fh.close(), primaryError);
   }
 }
 
@@ -251,12 +273,16 @@ function checkImageDimensionBudgetFromDimensions(
   height: number,
   budget: ImageDimensionBudget,
 ): ImageBudgetViolation | undefined {
-  const pixels = width * height;
+  const exactPixels = BigInt(width) * BigInt(height);
+  const pixels =
+    exactPixels <= BigInt(Number.MAX_SAFE_INTEGER)
+      ? Number(exactPixels)
+      : exactPixels;
   const exceededDimension =
     budget.maxDimension !== undefined &&
     (width > budget.maxDimension || height > budget.maxDimension);
   const exceededPixels =
-    budget.maxPixels !== undefined && pixels > budget.maxPixels;
+    budget.maxPixels !== undefined && exactPixels > BigInt(budget.maxPixels);
   if (!exceededDimension && !exceededPixels) return undefined;
   return {
     width,

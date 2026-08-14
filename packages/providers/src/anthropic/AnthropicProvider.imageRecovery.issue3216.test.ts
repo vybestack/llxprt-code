@@ -170,7 +170,12 @@ function make500MarkerError(): Error {
   );
 }
 
-function setupProvider(options: { withImageBudget?: boolean } = {}): {
+function setupProvider(
+  options: {
+    withImageBudget?: boolean;
+    maxImageDimension?: number;
+  } = {},
+): {
   provider: AnthropicProvider;
   runtimeContext: ProviderRuntimeContext;
   settingsService: SettingsService;
@@ -200,7 +205,7 @@ function setupProvider(options: { withImageBudget?: boolean } = {}): {
   // setEphemeralSetting). Writing it to the SettingsService guarantees the
   // proactive sanitizer in prepareAnthropicRequest sees it.
   if (options.withImageBudget === true) {
-    svc.set('max-image-dimension', 2000);
+    svc.set('max-image-dimension', options.maxImageDimension ?? 2000);
   }
   const ephemeralSettings: Record<string, unknown> = {
     ...svc.getAllGlobalSettings(),
@@ -327,6 +332,47 @@ describe('AnthropicProvider image recovery (@issue:3216)', () => {
     // The retry request must not contain the oversized image.
     const retryRequest = mockMessagesCreate.mock.calls[1][0];
     expect(JSON.stringify(retryRequest.messages)).not.toContain(big);
+  });
+
+  it('intersects a configured budget with the provider-reported recovery limit', async () => {
+    vi.clearAllMocks();
+    const image = await pngBase64(2200, 1000);
+    const { provider, runtimeContext, settingsService } = setupProvider({
+      withImageBudget: true,
+      maxImageDimension: 2500,
+    });
+    mockMessagesCreate
+      .mockRejectedValueOnce(make400ImageDimensionError())
+      .mockResolvedValueOnce(createMockStream('recovered'));
+
+    const messages: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'media',
+            mimeType: 'image/png',
+            data: image,
+            encoding: 'base64' as const,
+          },
+        ],
+      },
+    ];
+
+    const result = await consumeGenerator(
+      provider,
+      buildCallOptions(provider, runtimeContext, settingsService, messages),
+    );
+
+    expect(result.threw).toBe(false);
+    expect(mockMessagesCreate).toHaveBeenCalledTimes(2);
+    expect(
+      JSON.stringify(mockMessagesCreate.mock.calls[0][0].messages),
+    ).toContain(image);
+    const retryMessages = JSON.stringify(
+      mockMessagesCreate.mock.calls[1][0].messages,
+    );
+    expect(retryMessages).not.toContain(image);
   });
 
   it('does NOT retry for an unrelated 400 error', async () => {

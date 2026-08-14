@@ -21,6 +21,7 @@ import {
   checkImageDimensionBudgetFromBuffer,
   checkImageFileDimensionBudget,
   checkImageFileBudgetMessage,
+  closeFileHandlePreservingPrimaryError,
   formatImageBudgetError,
   formatImageBudgetDisplay,
   type ImageDimensionBudget,
@@ -99,6 +100,11 @@ describe('resolveImageDimensionBudget (@issue:3216)', () => {
     expect(() =>
       resolveImageDimensionBudget({ 'max-image-pixels': 'big' }),
     ).toThrow(/positive integer/);
+    expect(() =>
+      resolveImageDimensionBudget({
+        'max-image-pixels': Number.MAX_SAFE_INTEGER + 1,
+      }),
+    ).toThrow(/positive integer/);
   });
 });
 
@@ -148,6 +154,25 @@ describe('checkImageDimensionBudget (@issue:3216)', () => {
     expect(violation!.exceededPixels).toBe(true);
     expect(violation!.exceededDimension).toBe(false);
     expect(violation!.maxPixels).toBe(3_000_000);
+  });
+
+  it('uses exact pixel arithmetic for maximum-width PNG dimensions', () => {
+    const png = Buffer.alloc(24);
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(png, 0);
+    png.write('IHDR', 12, 'ascii');
+    png.writeUInt32BE(0xffffffff, 16);
+    png.writeUInt32BE(0xffffffff, 20);
+
+    const violation = checkImageDimensionBudgetFromBuffer(png, {
+      maxPixels: Number.MAX_SAFE_INTEGER,
+    });
+
+    expect(violation).toBeDefined();
+    expect(violation!.pixels).toBe(18_446_744_065_119_617_025n);
+    expect(violation!.exceededPixels).toBe(true);
+    expect(formatImageBudgetError(violation!)).toContain(
+      '18,446,744,065,119,617,025 total',
+    );
   });
 
   it('returns undefined for unparseable/non-image bytes (never invents dimensions)', () => {
@@ -531,5 +556,40 @@ describe('checkImageFileBudgetMessage file-path JPEG fallback (@issue:3216)', ()
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('closeFileHandlePreservingPrimaryError', () => {
+  it('preserves a primary read error when closing also fails', async () => {
+    const readError = new Error('EIO: read failure');
+    const closeError = new Error('EIO: close failure');
+
+    const operation = async (): Promise<void> => {
+      let primaryError: unknown;
+      try {
+        throw readError;
+      } catch (error) {
+        primaryError = error;
+        throw error;
+      } finally {
+        await closeFileHandlePreservingPrimaryError(
+          async () => Promise.reject(closeError),
+          primaryError,
+        );
+      }
+    };
+
+    await expect(operation()).rejects.toBe(readError);
+  });
+
+  it('propagates a close error when no primary operation failed', async () => {
+    const closeError = new Error('EIO: close failure');
+
+    await expect(
+      closeFileHandlePreservingPrimaryError(
+        async () => Promise.reject(closeError),
+        undefined,
+      ),
+    ).rejects.toBe(closeError);
   });
 });

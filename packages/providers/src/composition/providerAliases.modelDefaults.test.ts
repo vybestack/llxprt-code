@@ -655,18 +655,21 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
       'claude-sonnet-4-20250514',
       'claude-sonnet-5',
     ]) {
-      expect(computeMatchedDefaults(model, rules)).toMatchObject({
+      const defaults = computeMatchedDefaults(model, rules);
+      expect(defaults).toMatchObject({
         'image-resize.maxLongEdge': 1568,
         'image-resize.maxShortEdge': 1568,
         'image-resize.maxPixels': 1_229_312,
       });
+      expect(defaults['max-image-dimension']).toBeUndefined();
+      expect(defaults['max-image-pixels']).toBeUndefined();
     }
-    expectNoImageResizeDefaults(
-      computeMatchedDefaults('claude-haiku-4-5', rules),
-    );
-    expectNoImageResizeDefaults(
-      computeMatchedDefaults('claude-fable-5', rules),
-    );
+    for (const model of ['claude-haiku-4-5', 'claude-fable-5']) {
+      const defaults = computeMatchedDefaults(model, rules);
+      expectNoImageResizeDefaults(defaults);
+      expect(defaults['max-image-dimension']).toBeUndefined();
+      expect(defaults['max-image-pixels']).toBeUndefined();
+    }
   });
 
   it('claudecode applies max-image-dimension to Opus 5, Opus 4.8, and Sonnet 5 only @issue:3216', () => {
