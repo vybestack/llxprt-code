@@ -9,6 +9,7 @@ import type { GenerateChatOptions } from '../IProvider.js';
 import { RETRY_REQUEST_CONTEXT_KEY } from '../transportAttemptBudget.js';
 import {
   checkImageDimensionBudget,
+  resolveImageDimensionBudget,
   type ImageDimensionBudget,
 } from '@vybestack/llxprt-code-tools/utils/imageDimensionBudget.js';
 
@@ -222,16 +223,14 @@ function tryRecoverFromJsonString(
 
 /**
  * Resolve the active image dimension budget from Anthropic config ephemerals.
- * Re-exported here so the provider can derive the budget from its own
- * resolved settings without importing the tools utility path separately.
+ * Delegates to the shared tool-side resolver so both entry points fail fast on
+ * invalid configured values; profile-loaded modelDefaults ephemerals are not
+ * registry-validated.
  */
 export function resolveAnthropicImageBudget(
   ephemerals: Readonly<Record<string, unknown>>,
 ): ImageDimensionBudget | undefined {
-  const maxDimension = readPositiveInt(ephemerals, 'max-image-dimension');
-  const maxPixels = readPositiveInt(ephemerals, 'max-image-pixels');
-  if (maxDimension === undefined && maxPixels === undefined) return undefined;
-  return { maxDimension, maxPixels };
+  return resolveImageDimensionBudget(ephemerals);
 }
 
 /**
@@ -261,18 +260,6 @@ export function resolveRecoveryImageBudget(
     return undefined;
   }
   return { maxDimension, maxPixels: configured.maxPixels };
-}
-
-function readPositiveInt(
-  settings: Readonly<Record<string, unknown>>,
-  key: string,
-): number | undefined {
-  const value = settings[key];
-  if (value === undefined) return undefined;
-  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
-    return undefined;
-  }
-  return value;
 }
 
 /**

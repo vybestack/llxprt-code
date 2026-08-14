@@ -164,7 +164,6 @@ describe('processSingleFileContent image budget preflight (@issue:3216)', () => 
     expect(result.error).toBeDefined();
     expect(result.errorType).toBe(ToolErrorType.READ_CONTENT_FAILURE);
     expect(result.errorKind).toBe('image-budget');
-    // Error message is actionable.
     const message = String(result.llmContent);
     expect(message).toContain('3000');
     expect(/thumbnail|downscal|resize/i.test(message)).toBe(true);
@@ -210,7 +209,6 @@ describe('processSingleFileContent image budget preflight (@issue:3216)', () => 
     const dir = createTempDir();
     const file = await writePng(dir, 'resized.png', 3000, 3000);
     const budget: ImageDimensionBudget = { maxDimension: 2000 };
-    // Explicit resize policy that brings the image under the hard budget.
     const resizePolicy = {
       maxLongEdge: 1500,
       maxShortEdge: 1500,
@@ -249,8 +247,7 @@ describe('processSingleFileContent image budget preflight (@issue:3216)', () => 
 
   it('leaves non-image media unchanged (no dimension invented)', async () => {
     const dir = createTempDir();
-    // A real, well-formed PDF header followed by filler so detectFileType
-    // classifies it as 'pdf'.
+    // A real PDF header followed by filler so detectFileType classifies it.
     const pdfBytes = Buffer.concat([
       Buffer.from('%PDF-1.4\n'),
       Buffer.alloc(64, 0x20),
@@ -268,8 +265,7 @@ describe('processSingleFileContent image budget preflight (@issue:3216)', () => 
       budget,
     );
 
-    // PDFs are delivered as inline bytes; the dimension budget is not applied
-    // to non-image media.
+    // The dimension budget does not apply to non-image media.
     expect(result.error).toBeUndefined();
   });
 });
@@ -287,7 +283,6 @@ describe('read_file tool image budget preflight (@issue:3216)', () => {
     expect(result.error!.type).toBe(ToolErrorType.READ_CONTENT_FAILURE);
     expect(typeof result.llmContent).toBe('string');
     expect(result.llmContent).toContain('3000');
-    // No inline data escapes into history.
     expect(extractInlineDataData(result.llmContent)).toBeUndefined();
   });
 
@@ -330,7 +325,6 @@ describe('read_many_files tool image budget preflight (@issue:3216)', () => {
     const result = await tool.execute({ paths: ['ok.png'] });
 
     expect(result.error).toBeUndefined();
-    // The within-budget image must be present as inline base64 bytes.
     expect(Array.isArray(result.llmContent)).toBe(true);
     let foundInline = false;
     if (Array.isArray(result.llmContent)) {
@@ -391,13 +385,12 @@ describe('generate_image tool image budget preflight (@issue:3216)', () => {
       .execute(new AbortController().signal);
 
     expect(result.error).toBeDefined();
-    // A generated image that exceeds the budget is a content-policy violation,
-    // not a read failure (generation succeeded and the file was saved).
+    // A generated image exceeding the budget is a policy violation, not a
+    // read failure (generation succeeded and the file was saved).
     expect(result.error!.type).toBe(ToolErrorType.POLICY_VIOLATION);
     const llmContent = result.llmContent;
     expect(typeof llmContent).toBe('string');
     expect(String(llmContent)).toContain('3000');
-    // No image bytes escape into model history.
     expect(extractInlineDataData(result.llmContent)).toBeUndefined();
   });
 
@@ -421,19 +414,17 @@ describe('generate_image tool image budget preflight (@issue:3216)', () => {
 
     expect(result.error).toBeDefined();
     const message = String(result.llmContent);
-    // The error must name the saved path and state the omission explicitly.
     expect(message).toContain(outPath);
     expect(message.toLowerCase()).toContain('saved');
     expect(/omit|history|model content/i.test(message)).toBe(true);
-    // Downscale/thumbnail guidance is still present.
     expect(/thumbnail|downscal|resize/i.test(message)).toBe(true);
   });
 
   it('retains the generated file on disk and never deletes it (no silent unlink)', async () => {
     const dir = createTempDir();
     const outPath = join(dir, 'retained.png');
-    // The runner is the production authority that writes the file BEFORE the
-    // tool applies the post-hoc budget check. The stub mirrors that contract.
+    // The production runner writes the file BEFORE the tool applies the
+    // budget check; the stub mirrors that contract.
     const largeResult = await makeLargePngResult(
       3000,
       3000,
@@ -452,7 +443,7 @@ describe('generate_image tool image budget preflight (@issue:3216)', () => {
       .build({ prompt: 'a thing', output_path: 'retained.png' })
       .execute(new AbortController().signal);
 
-    // Budget violation surfaced, but the user's generated file is preserved.
+    // Budget violation surfaced; the generated file is preserved.
     expect(result.error).toBeDefined();
     expect(result.error!.type).toBe(ToolErrorType.POLICY_VIOLATION);
     expect(existsSync(outPath)).toBe(true);
@@ -482,11 +473,9 @@ describe('read_many_files H4: dimension check before size-skip gate (@issue:3216
     width: number,
     height: number,
   ): Promise<string> {
-    // Create a genuinely noisy (incompressible) PNG that exceeds 512KiB.
     const file = join(dir, name);
     const data = new Uint8Array(width * height * 4);
     for (let i = 0; i < data.length; i += 4) {
-      // Pseudo-random noise for incompressibility.
       data[i] = (i * 17 + 31) & 0xff;
       data[i + 1] = (i * 23 + 7) & 0xff;
       data[i + 2] = (i * 31 + 3) & 0xff;
@@ -503,8 +492,8 @@ describe('read_many_files H4: dimension check before size-skip gate (@issue:3216
 
   it('returns structured image-budget error for an oversized explicit image above 512KiB', async () => {
     const dir = createTempDir();
-    // 3000x3000 noisy PNG: dimensions exceed the 2000 budget AND the file is
-    // >512KiB so the generic size-skip gate would normally swallow it.
+    // 3000x3000 noisy PNG: exceeds the 2000 budget and >512KiB so the size
+    // gate would normally swallow it.
     await writeNoisyPng(dir, 'big.png', 3000, 3000);
     const tool = new ReadManyFilesTool(
       createHostWithBudget(dir, { 'max-image-dimension': 2000 }),
@@ -520,9 +509,8 @@ describe('read_many_files H4: dimension check before size-skip gate (@issue:3216
 
   it('returns overall error for mixed valid content plus later oversized image (no earlier bytes escape)', async () => {
     const dir = createTempDir();
-    // A valid text file plus an oversized image. The overall result must be
-    // an error (not a silent skip), and the text file must NOT escape as
-    // inline content.
+    // A valid text file plus an oversized image: the result must error rather
+    // than silently skip, and the text must not escape as inline content.
     writeFileSync(join(dir, 'notes.txt'), 'hello world');
     await writeNoisyPng(dir, 'big.png', 3000, 3000);
     const tool = new ReadManyFilesTool(
@@ -533,15 +521,14 @@ describe('read_many_files H4: dimension check before size-skip gate (@issue:3216
 
     expect(result.error).toBeDefined();
     expect(result.error!.type).toBe(ToolErrorType.READ_CONTENT_FAILURE);
-    // The error message is about the image dimension, not the text file.
     const message = String(result.llmContent);
     expect(message).toContain('3000');
   });
 
   it('large but within-dimension image follows existing item-size policy', async () => {
     const dir = createTempDir();
-    // 2000x2000 noisy PNG: within the 2000 dimension budget but >512KiB so
-    // it should be silently size-skipped, NOT produce a budget error.
+    // 2000x2000 noisy PNG: within the budget but >512KiB, so it should be
+    // silently size-skipped, not rejected.
     await writeNoisyPng(dir, 'large.png', 2000, 2000);
     const tool = new ReadManyFilesTool(
       createHostWithBudget(dir, { 'max-image-dimension': 2000 }),
@@ -549,8 +536,6 @@ describe('read_many_files H4: dimension check before size-skip gate (@issue:3216
 
     const result = await tool.execute({ paths: ['large.png'] });
 
-    // No image-budget error (dimensions are within budget); the file is
-    // size-skipped rather than rejected.
     const message = String(result.llmContent);
     expect(message).not.toContain('exceeds the configured maximum dimension');
   });
@@ -559,8 +544,8 @@ describe('read_many_files H4: dimension check before size-skip gate (@issue:3216
 describe('read_many_files token-overflow metric/path semantics (@issue:3216)', () => {
   it('does not record a file as processed when its content was skipped (warn stop)', async () => {
     const dir = createTempDir();
-    // a-small fits the token budget and is added; b-big overflows in warn
-    // mode and is skipped (action 'stop') WITHOUT adding content.
+    // a-small fits the budget; b-big overflows in warn mode and is skipped
+    // without adding content.
     writeFileSync(join(dir, 'a-small.txt'), 'hi');
     writeFileSync(join(dir, 'b-big.txt'), 'x'.repeat(5000));
 
@@ -577,8 +562,6 @@ describe('read_many_files token-overflow metric/path semantics (@issue:3216)', (
 
     const result = await tool.execute({ paths: ['a-small.txt', 'b-big.txt'] });
 
-    // b-big.txt was skipped due to the token limit, so it must NOT be listed
-    // as a processed file or recorded via the read metric.
     const display = String(result.returnDisplay);
     expect(display).toContain('a-small.txt');
     expect(display).not.toContain('b-big.txt');
@@ -603,11 +586,9 @@ describe('read_many_files token-overflow metric/path semantics (@issue:3216)', (
 
     const result = await tool.execute({ paths: ['a-big.txt'] });
 
-    // truncate mode records the (truncated) content before stopping.
     const display = String(result.returnDisplay);
     expect(display).toContain('a-big.txt');
     expect(recordedPaths.some((p) => p.endsWith('a-big.txt'))).toBe(true);
-    // Sanity: the truncated content was actually emitted.
     const llm = result.llmContent;
     if (!Array.isArray(llm)) {
       throw new Error('expected array llmContent in truncate mode');
@@ -616,5 +597,200 @@ describe('read_many_files token-overflow metric/path semantics (@issue:3216)', (
       .filter((part): part is string => typeof part === 'string')
       .join('');
     expect(joined).toContain('CONTENT TRUNCATED');
+  });
+});
+
+describe('read_many_files invalid image config produces structured error (@issue:3216)', () => {
+  it('returns a structured tool error for an invalid max-image-dimension setting (no unhandled rejection)', async () => {
+    const dir = createTempDir();
+    writeFileSync(join(dir, 'notes.txt'), 'hello world');
+    // An invalid hard-budget setting must surface as a structured tool error,
+    // not propagate as an unstructured unhandled rejection.
+    const tool = new ReadManyFilesTool(
+      createHostWithBudget(dir, { 'max-image-dimension': '2000' }),
+    );
+
+    const result = await tool.execute({ paths: ['notes.txt'] });
+
+    expect(result.error).toBeDefined();
+    expect(result.error!.type).toBe(ToolErrorType.READ_CONTENT_FAILURE);
+    const message = String(result.llmContent);
+    expect(message).toContain('positive integer');
+    // Either policy can fail, so config errors use the generic heading.
+    const display = String(result.returnDisplay);
+    expect(display).toContain('Image Configuration Error');
+  });
+
+  it('returns a structured tool error for an invalid max-image-pixels setting', async () => {
+    const dir = createTempDir();
+    writeFileSync(join(dir, 'notes.txt'), 'hello world');
+    const tool = new ReadManyFilesTool(
+      createHostWithBudget(dir, { 'max-image-pixels': 0 }),
+    );
+
+    const result = await tool.execute({ paths: ['notes.txt'] });
+
+    expect(result.error).toBeDefined();
+    expect(result.error!.type).toBe(ToolErrorType.READ_CONTENT_FAILURE);
+    const message = String(result.llmContent);
+    expect(message).toContain('positive integer');
+  });
+
+  it('does not leak file content when the image config is invalid', async () => {
+    const dir = createTempDir();
+    const secret = 'SECRET_FILE_CONTENT';
+    writeFileSync(join(dir, 'secret.txt'), secret);
+    const tool = new ReadManyFilesTool(
+      createHostWithBudget(dir, { 'max-image-dimension': -5 }),
+    );
+
+    const result = await tool.execute({ paths: ['secret.txt'] });
+
+    expect(result.error).toBeDefined();
+    // No file content escapes into the result — flatten all parts so the
+    // assertion is unconditional.
+    const llm = result.llmContent;
+    const parts = typeof llm === 'string' ? [llm] : llm;
+    const flattened = Array.isArray(parts)
+      ? parts
+          .filter((part): part is string => typeof part === 'string')
+          .join('')
+      : '';
+    expect(flattened).not.toContain(secret);
+  });
+});
+
+/**
+ * Build a raw JPEG buffer with an APP1 segment large enough to push SOF past
+ * the 8192-byte prefix, plus trailing APP segments so the file exceeds the
+ * 512KiB size gate. Uses real JPEG segment framing so the walker exercises
+ * actual semantics.
+ */
+function buildDelayedSofJpeg(
+  width: number,
+  height: number,
+  totalSize: number,
+): Buffer {
+  const parts: Buffer[] = [];
+  parts.push(Buffer.from([0xff, 0xd8]));
+  const delayLen = Buffer.alloc(2);
+  delayLen.writeUInt16BE(8_298 + 2, 0);
+  parts.push(Buffer.from([0xff, 0xe1]), delayLen, Buffer.alloc(8_298, 0x20));
+  const sofLen = Buffer.alloc(2);
+  sofLen.writeUInt16BE(17, 0);
+  const h = Buffer.alloc(2);
+  h.writeUInt16BE(height, 0);
+  const w = Buffer.alloc(2);
+  w.writeUInt16BE(width, 0);
+  parts.push(
+    Buffer.from([0xff, 0xc0]),
+    sofLen,
+    Buffer.from([0x08]),
+    h,
+    w,
+    Buffer.from([0x03]),
+    Buffer.from([0x01, 0x22, 0x00]),
+    Buffer.from([0x02, 0x11, 0x11]),
+    Buffer.from([0x03, 0x11, 0x11]),
+  );
+  // Trailing APP segments pad the file past the size gate; they sit after
+  // SOF so the walker still finds the frame quickly.
+  let currentSize = parts.reduce((sum, p) => sum + p.length, 0);
+  let segIndex = 0;
+  while (currentSize < totalSize) {
+    const remaining = totalSize - currentSize - 64; // room for SOS/EOI tail
+    const payload = Math.min(65_533, Math.max(2, remaining - 2));
+    if (payload < 2) break;
+    const padLen = Buffer.alloc(2);
+    padLen.writeUInt16BE(payload, 0);
+    const marker = 0xe0 | (2 + (segIndex % 14));
+    parts.push(
+      Buffer.from([0xff, marker]),
+      padLen,
+      Buffer.alloc(payload, 0x21),
+    );
+    currentSize += payload + 4;
+    segIndex++;
+  }
+  parts.push(
+    Buffer.from([
+      0xff, 0xda, 0x00, 0x0c, 0x03, 0x01, 0x00, 0x02, 0x11, 0x03, 0x11, 0x00,
+      0x3f, 0x00,
+    ]),
+  );
+  parts.push(Buffer.alloc(32, 0x80));
+  parts.push(Buffer.from([0xff, 0xd9]));
+  return Buffer.concat(parts);
+}
+
+describe('read_many_files JPEG delayed-SOF dimension preflight (@issue:3216)', () => {
+  it('returns the actionable dimension error for an oversized JPEG whose SOF sits past 8192 bytes, before generic size skip', async () => {
+    const dir = createTempDir();
+    // SOF at ~offset 8304 (> 8192), 3000x3000 (> 2000 budget), total > 512KiB
+    // so the size gate would normally swallow it.
+    const jpeg = buildDelayedSofJpeg(3_000, 3_000, 600_000);
+    expect(jpeg.length).toBeGreaterThan(524_288);
+    const file = join(dir, 'delayed-sof-big.jpg');
+    writeFileSync(file, jpeg);
+    const tool = new ReadManyFilesTool(
+      createHostWithBudget(dir, { 'max-image-dimension': 2000 }),
+    );
+
+    const result = await tool.execute({ paths: ['delayed-sof-big.jpg'] });
+
+    // The dimension error must fire, not the generic size skip.
+    expect(result.error).toBeDefined();
+    expect(result.error!.type).toBe(ToolErrorType.READ_CONTENT_FAILURE);
+    const message = String(result.llmContent);
+    expect(message).toContain('3000');
+    expect(/thumbnail|downscal|resize/i.test(message)).toBe(true);
+    expect(extractInlineDataData(result.llmContent)).toBeUndefined();
+  });
+
+  it('delivers a within-budget JPEG with delayed SOF as inline bytes', async () => {
+    const dir = createTempDir();
+    const jpeg = buildDelayedSofJpeg(1_800, 1_800, 20_000);
+    const file = join(dir, 'delayed-sof-ok.jpg');
+    writeFileSync(file, jpeg);
+    const tool = new ReadManyFilesTool(
+      createHostWithBudget(dir, { 'max-image-dimension': 2000 }),
+    );
+
+    const result = await tool.execute({ paths: ['delayed-sof-ok.jpg'] });
+
+    expect(result.error).toBeUndefined();
+    expect(Array.isArray(result.llmContent)).toBe(true);
+    let foundInline = false;
+    if (Array.isArray(result.llmContent)) {
+      for (const part of result.llmContent) {
+        if (typeof part !== 'string' && part.inlineData?.data !== undefined) {
+          foundInline = true;
+          break;
+        }
+      }
+    }
+    expect(foundInline).toBe(true);
+  });
+
+  it('scanner stays bounded on a malicious oversized metadata declaration (no hang)', async () => {
+    const dir = createTempDir();
+    // A JPEG whose first APP segment declares length 0xFFFF but the file ends
+    // almost immediately; the walker must return undefined without hanging.
+    const malicious = Buffer.concat([
+      Buffer.from([0xff, 0xd8]),
+      Buffer.from([0xff, 0xe1]),
+      Buffer.from([0xff, 0xff]),
+      Buffer.from([0x00]),
+    ]);
+    const file = join(dir, 'malicious.jpg');
+    writeFileSync(file, malicious);
+    const tool = new ReadManyFilesTool(
+      createHostWithBudget(dir, { 'max-image-dimension': 2000 }),
+    );
+
+    const result = await tool.execute({ paths: ['malicious.jpg'] });
+
+    // No parseable SOF, so no dimension error; execution must complete.
+    expect(result).toBeDefined();
   });
 });

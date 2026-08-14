@@ -7,30 +7,22 @@
 import {
   parseImageDimensions,
   parseImageDimensionsFromBase64,
+  parseJpegDimensionsFromReader,
+  type JpegSegmentReader,
 } from './imageDimensions.js';
 import { ToolErrorType } from '../types/tool-error.js';
 
 /**
- * A hard, provider/model-specific image output budget. When resolved from the
- * active ephemeral settings, every built-in image-producing tool rejects bytes
- * that exceed either boundary before they are handed to the model.
- *
- * `maxDimension` constrains BOTH the width and the height (the longest single
- * edge). `maxPixels` constrains the total decoded pixel count.
- *
- * Both are optional: an absent field imposes no constraint, and a fully absent
- * budget (undefined) disables the hard preflight entirely.
+ * Hard image output budget. `maxDimension` constrains both width and height;
+ * `maxPixels` constrains total decoded pixels. An absent field imposes no
+ * constraint; a fully absent budget disables the preflight.
  */
 export interface ImageDimensionBudget {
   readonly maxDimension?: number;
   readonly maxPixels?: number;
 }
 
-/**
- * A concrete budget violation discovered by {@link checkImageDimensionBudget}.
- * Carries the actual geometry and the boundary that was exceeded so the
- * model-facing error is fully actionable.
- */
+/** A budget violation carrying the actual geometry and exceeded boundary. */
 export interface ImageBudgetViolation {
   readonly width: number;
   readonly height: number;
@@ -59,10 +51,9 @@ function readPositiveInteger(
 
 /**
  * Resolve the active image dimension/pixel budget from ephemeral settings.
- *
- * Returns `undefined` when neither key is configured (no hard limit). Throws
- * immediately on a malformed value so a misconfiguration surfaces as a real
- * tool error instead of silently disabling the preflight.
+ * Returns `undefined` when neither key is configured. Throws on a malformed
+ * value so a misconfiguration surfaces as a tool error instead of silently
+ * disabling the preflight.
  */
 export function resolveImageDimensionBudget(
   settings: Readonly<Record<string, unknown>>,
@@ -76,13 +67,9 @@ export function resolveImageDimensionBudget(
 }
 
 /**
- * Check a base64 image payload against the active budget.
- *
- * Returns an {@link ImageBudgetViolation} when either the width/height exceeds
- * `maxDimension` or the total pixels exceed `maxPixels`. Returns `undefined`
- * when the image is within budget OR when the dimensions cannot be parsed from
- * the header (we never invent a dimension for an unparseable image; it retains
- * existing behavior).
+ * Check a base64 image payload against the active budget. Returns `undefined`
+ * when the image is within budget or its dimensions cannot be parsed from the
+ * header (no dimension is invented for an unparseable image).
  */
 export function checkImageDimensionBudget(
   base64: string,
@@ -100,17 +87,9 @@ export function checkImageDimensionBudget(
 }
 
 /**
- * Check raw image header bytes (a `Uint8Array`, e.g. a `Buffer`) against the
- * active budget WITHOUT first base64-encoding the full payload. Shares the
- * exact boundary logic with {@link checkImageDimensionBudget} via
- * {@link checkImageDimensionBudgetFromDimensions}, so both entry points have
- * identical boundary behavior; only the dimension source differs.
- *
- * Returns `undefined` when the image is within budget OR when the dimensions
- * cannot be parsed from the header (we never invent a dimension for an
- * unparseable image). Used by file-processing paths that already hold the raw
- * bytes so the complete buffer is never base64-encoded just to inspect
- * bounded dimensions.
+ * Check raw image header bytes against the active budget, sharing the boundary
+ * logic of {@link checkImageDimensionBudget}. Used by file-processing paths
+ * that already hold the raw bytes, avoiding a full base64 encode.
  */
 export function checkImageDimensionBudgetFromBuffer(
   bytes: Uint8Array,
@@ -131,11 +110,7 @@ function formatNumber(value: number): string {
   return value.toLocaleString('en-US');
 }
 
-/**
- * Build the model-facing error message for a budget violation. Includes the
- * actual dimensions, the exceeded boundary, the image identity, and a direct
- * instruction to create a thumbnail or downscale first.
- */
+/** Build the model-facing error message for a budget violation. */
 export function formatImageBudgetError(
   violation: ImageBudgetViolation,
   displayName?: string,
@@ -160,39 +135,23 @@ export function formatImageBudgetError(
   return parts.join('; ') + '.';
 }
 
-/**
- * Shared terminal display heading for image budget violations. Every
- * model-facing budget error site wraps its message with this so the user-facing
- * presentation cannot drift between tools.
- */
+/** Shared display heading wrapping a budget error message. */
 export function formatImageBudgetDisplay(message: string): string {
   return `## Image Dimension Limit
 
 ${message}`;
 }
 
-/**
- * Bounded prefix size for file-based dimension parsing. Covers PNG, GIF, WEBP
- * headers entirely and JPEG SOF markers in practice; deliberately small so
- * a multi-megabyte file is never read in full just to inspect dimensions.
- */
+/** Bounded prefix size for file-based dimension parsing. */
 const IMAGE_HEADER_PREFIX_BYTES = 8192;
 
-/**
- * Read a bounded prefix of a file for dimension parsing. Returns a Uint8Array
- * containing up to `maxBytes` from the start of the file.
- */
+/** Reads up to `maxBytes` from the start of a file for dimension parsing. */
 export type HeaderReader = (maxBytes: number) => Promise<Uint8Array>;
 
 /**
- * Check a file's image dimensions against the active budget by reading only a
- * bounded header prefix — never the full file. Returns a violation when the
- * image exceeds the budget, or `undefined` when the image is within budget, no
- * budget is active, or the dimensions cannot be parsed (non-image or corrupt).
- *
- * Used by read_many_files to check explicitly-requested images BEFORE the
- * generic per-item size-skip gate, so an oversized image receives an actionable
- * tool error instead of being silently skipped for file-size reasons.
+ * Check a file's dimensions against the budget by reading only a bounded
+ * header prefix. Returns `undefined` when the image is within budget, no
+ * budget is active, or dimensions cannot be parsed.
  */
 export async function checkImageFileDimensionBudget(
   readPrefix: HeaderReader,
@@ -229,11 +188,11 @@ export async function readFileHeaderPrefix(
 }
 
 /**
- * H4 preflight: check an explicitly-requested image file's dimensions against
- * the active budget by reading only a bounded header prefix, and return the
- * formatted, actionable error message when the image is oversized. Returns
- * `undefined` when the image is within budget, no budget is active, or the
- * dimensions cannot be parsed. The caller decides how to surface the message.
+ * Check a file's image dimensions against the active budget, reading only a
+ * bounded header prefix. When the fixed prefix cannot reach SOF in a JPEG,
+ * falls back to the bounded segment walker. Returns `undefined` when the
+ * image is within budget, no budget is active, or dimensions cannot be
+ * parsed. I/O errors from the file reads propagate.
  */
 export async function checkImageFileBudgetMessage(
   filePath: string,
@@ -241,12 +200,47 @@ export async function checkImageFileBudgetMessage(
   displayName?: string,
 ): Promise<string | undefined> {
   if (budget === undefined) return undefined;
-  const violation = await checkImageFileDimensionBudget(
+  let violation = await checkImageFileDimensionBudget(
     (maxBytes) => readFileHeaderPrefix(filePath, maxBytes),
     budget,
   );
+  violation ??= await checkJpegFileDimensionBudget(filePath, budget);
   if (violation === undefined) return undefined;
   return formatImageBudgetError(violation, displayName);
+}
+
+/**
+ * Locate SOF past the fixed prefix via the bounded segment walker, opening
+ * the file once for the whole scan. Only invoked when the file is actually a
+ * JPEG and the prefix parse returned no dimensions.
+ */
+async function checkJpegFileDimensionBudget(
+  filePath: string,
+  budget: ImageDimensionBudget,
+): Promise<ImageBudgetViolation | undefined> {
+  const { promises: fsp } = await import('node:fs');
+  const fh = await fsp.open(filePath, 'r');
+  try {
+    const sigBuf = Buffer.alloc(2);
+    const { bytesRead } = await fh.read(sigBuf, 0, 2, 0);
+    if (bytesRead < 2 || sigBuf[0] !== 0xff || sigBuf[1] !== 0xd8) {
+      return undefined;
+    }
+    const reader: JpegSegmentReader = async (offset, length) => {
+      const buf = Buffer.alloc(length);
+      const { bytesRead: n } = await fh.read(buf, 0, length, offset);
+      return new Uint8Array(buf.buffer, buf.byteOffset, n);
+    };
+    const dimensions = await parseJpegDimensionsFromReader(reader);
+    if (dimensions === undefined) return undefined;
+    return checkImageDimensionBudgetFromDimensions(
+      dimensions.width,
+      dimensions.height,
+      budget,
+    );
+  } finally {
+    await fh.close();
+  }
 }
 
 /**
@@ -275,11 +269,7 @@ function checkImageDimensionBudgetFromDimensions(
   };
 }
 
-/**
- * Complete H4 preflight result: an actionable error for read_many_files when an
- * explicitly-requested image file exceeds the budget. The caller wraps this
- * into its own tool-result type.
- */
+/** Actionable preflight error returned to read_many_files for an oversized image. */
 export interface ImageBudgetPreflightError {
   readonly message: string;
   readonly llmContent: string;
@@ -288,11 +278,9 @@ export interface ImageBudgetPreflightError {
 }
 
 /**
- * H4 preflight: check an explicitly-requested image file's dimensions BEFORE
- * the generic per-item size-skip gate in read_many_files. Reads only a bounded
- * header prefix. Returns an actionable error when the image is oversized, or
- * `undefined` when within budget, no budget, not an image, or not explicitly
- * requested.
+ * Check an explicitly-requested image file's dimensions before the generic
+ * size-skip gate in read_many_files. Returns an actionable error when the
+ * image is oversized, or `undefined` otherwise.
  */
 export async function checkImageBudgetPreflightForFile(
   filePath: string,

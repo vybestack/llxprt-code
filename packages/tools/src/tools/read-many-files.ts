@@ -17,7 +17,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { glob, escape as globEscape } from 'glob';
 import {
-  createImageResizeToolResult,
+  createImageConfigurationToolResult,
   getImageBudgetToolResult,
   getImageResizeToolResult,
   getProcessedFileSkipReason,
@@ -35,7 +35,10 @@ import {
   resolveImageResizePolicy,
   type ImageResizePolicy,
 } from '../utils/imageResize.js';
-import { resolveImageDimensionBudget } from '../utils/imageDimensionBudget.js';
+import {
+  resolveImageDimensionBudget,
+  type ImageDimensionBudget,
+} from '../utils/imageDimensionBudget.js';
 import { estimateNonTextPartTokens } from '../utils/imageTokenEstimation.js';
 import {
   buildParameterSchema,
@@ -517,11 +520,15 @@ ${this.host.getTargetDir()}
     limits: ReturnType<ReadManyFilesToolInvocation['resolveLimits']>,
   ): Promise<ProcessFilesResult> {
     const ephemeralSettings = this.host.getEphemeralSettings();
+    // Resolve both image policies once from one settings snapshot inside one
+    // guard so malformed settings surface as structured tool errors.
     let imageResizePolicy: ImageResizePolicy | undefined;
+    let imageBudget: ImageDimensionBudget | undefined;
     try {
       imageResizePolicy = resolveImageResizePolicy(ephemeralSettings);
+      imageBudget = resolveImageDimensionBudget(ephemeralSettings);
     } catch (error) {
-      return createImageResizeToolResult(
+      return createImageConfigurationToolResult(
         getErrorMessage(error),
         ToolErrorType.READ_CONTENT_FAILURE,
         0,
@@ -542,6 +549,7 @@ ${this.host.getTargetDir()}
         limits,
         totalTokens,
         imageResizePolicy,
+        imageBudget,
         maxLinesPerFile,
       );
       if (result.error !== undefined || result.done) {
@@ -562,14 +570,12 @@ ${this.host.getTargetDir()}
     limits: ReturnType<ReadManyFilesToolInvocation['resolveLimits']>,
     currentTokens: number,
     imageResizePolicy: ImageResizePolicy | undefined,
+    imageBudget: ImageDimensionBudget | undefined,
     maxLinesPerFile: number,
   ): Promise<ProcessSingleFileResult> {
     const relativePathForDisplay = path
       .relative(this.host.getTargetDir(), filePath)
       .replace(/\\/g, '/');
-    const imageBudget = resolveImageDimensionBudget(
-      this.host.getEphemeralSettings(),
-    );
     const gate = await runPreReadGates(
       filePath,
       inputPatterns,

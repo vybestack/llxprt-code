@@ -485,6 +485,30 @@ export function createImageResizeToolResult(
   };
 }
 
+export function createImageConfigurationToolResult(
+  message: string,
+  type: ToolErrorType | undefined,
+  totalTokens: number,
+): {
+  done: true;
+  totalTokens: number;
+  error: {
+    llmContent: string;
+    returnDisplay: string;
+    error: { message: string; type: ToolErrorType | undefined };
+  };
+} {
+  return {
+    done: true,
+    totalTokens,
+    error: {
+      llmContent: message,
+      returnDisplay: `## Image Configuration Error\n\n${message}`,
+      error: { message, type },
+    },
+  };
+}
+
 export function getImageResizeToolResult(
   result: ProcessedFileReadResult,
   totalTokens: number,
