@@ -21,7 +21,7 @@ import { createDefaultByteBudget } from '../acquisition/index.js';
 import {
   acquireBoundedHttpBody,
   HttpBodyTooLargeError,
-} from '../utils/bounded-http-response.js';
+} from '../acquisition/bounded-http-response.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,

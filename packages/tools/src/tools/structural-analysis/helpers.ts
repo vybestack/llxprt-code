@@ -8,7 +8,30 @@ import { promises as fs } from 'node:fs';
 import FastGlob from 'fast-glob';
 import type { SgNode } from '@ast-grep/napi';
 import { parse, LANGUAGE_MAP, type Lang } from '../../utils/ast-grep-utils.js';
-import type { ParsedFile, ResolvedLang } from './types.js';
+import { statFileSizeGate } from '../../utils/fileUtils.js';
+import type { ParseOmissionReason, ParsedFile, ResolvedLang } from './types.js';
+
+/**
+ * Bounded discriminated parse outcome for a single candidate file.
+ *
+ * - `{ ok: true, root, content }` — file parsed successfully.
+ * - `{ ok: false, reason }` — file was NOT parsed. `reason` distinguishes the
+ *   three omission kinds so each mode can count them and mark its result
+ *   inexact (a lower bound), and so oversized sources are never materialized.
+ */
+export type ParseOutcome =
+  | ({ ok: true } & ParsedFile)
+  | { ok: false; reason: ParseOmissionReason };
+
+/**
+ * Classify a thrown error during readFile/parse as a read error vs a parse
+ * error. Node filesystem errors carry an errno `code` (e.g. EACCES, EISDIR,
+ * ENOENT); AST parse errors throw plain Errors without one.
+ */
+function classifyReadOrParseError(err: unknown): ParseOmissionReason {
+  const code = (err as NodeJS.ErrnoException | null)?.code;
+  return typeof code === 'string' ? 'read-error' : 'parse-error';
+}
 
 const SPECIAL_REGEX_CHARS = new Set([
   '.',
@@ -117,18 +140,25 @@ export async function* iterateFiles(
 }
 
 /**
- * Parses a file and returns its root SgNode and raw content, or null on failure.
+ * Parses a file and returns a bounded discriminated outcome. An oversized
+ * source (over the shared pre-read size gate) is never read or materialized;
+ * read, stat, and parse failures carry their reason so callers can count
+ * omissions and mark the result inexact.
  */
 export async function parseFile(
   filePath: string,
   lang: string | Lang,
-): Promise<ParsedFile | null> {
+): Promise<ParseOutcome> {
   try {
+    const sizeError = await statFileSizeGate(filePath);
+    if (sizeError !== null) {
+      return { ok: false, reason: 'oversized' };
+    }
     const content = await fs.readFile(filePath, 'utf-8');
     const result = parse(lang as Lang, content);
-    return { root: result.root(), content };
-  } catch {
-    return null;
+    return { ok: true, root: result.root(), content };
+  } catch (err) {
+    return { ok: false, reason: classifyReadOrParseError(err) };
   }
 }
 
@@ -281,4 +311,4 @@ export function deduplicateCallRanges(
  */
 export { makeRelative } from '../../utils/paths.js';
 
-export type { ResolvedLang, ParsedFile };
+export type { ResolvedLang, ParsedFile, ParseOmissionReason };

@@ -28,7 +28,7 @@ export {
   DEFAULT_HEAD_FRACTION,
   createByteBudget,
   createDefaultByteBudget,
-  resolveByteBudgetFromSetting,
+  normalizeHardMax,
 } from './byteBudget.js';
 
 export {
@@ -44,3 +44,11 @@ export {
   trimIncompleteTrailingUtf8,
   skipIncompleteLeadingUtf8,
 } from './utf8Boundaries.js';
+
+export {
+  acquireBoundedHttpBody,
+  disposeHttpResponseBody,
+  HttpBodyTooLargeError,
+  type BoundedFetchResponse,
+  type BoundedHttpBody,
+} from './bounded-http-response.js';

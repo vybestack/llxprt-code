@@ -291,6 +291,7 @@ export {
 
 // Export Shell Execution Service
 export * from './services/shellExecutionService.js';
+export { resolveAcquisitionBudgetFromSetting } from './services/shellAcquisitionConfig.js';
 
 // Export base tool definitions
 export {

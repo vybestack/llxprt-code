@@ -9,8 +9,6 @@ import {
   BoundedStreamCollector,
   createByteBudget,
   ACQUISITION_HARD_MAX_BYTES,
-  resolveByteBudgetFromSetting,
-  DEFAULT_ACQUISITION_BUDGET_BYTES,
 } from './index.js';
 
 describe('ByteBudget', () => {
@@ -117,55 +115,6 @@ describe('ByteBudget - absolute hard-max invariants (issue #3200 finding 10)', (
       (budget as { bytes: number }).bytes = 999;
     }).toThrow('Attempted to assign to readonly property.');
     expect(budget.bytes).toBe(8192);
-  });
-
-  it('resolveByteBudgetFromSetting respects the absolute ceiling even with a custom hardMax', () => {
-    const budget = resolveByteBudgetFromSetting(-1, 999 * 1024 * 1024);
-    expect(budget.bytes).toBe(ACQUISITION_HARD_MAX_BYTES);
-  });
-
-  it('normalizes an invalid custom hard max before resolving -1', () => {
-    const budget = resolveByteBudgetFromSetting(-1, Infinity);
-    expect(budget.bytes).toBe(ACQUISITION_HARD_MAX_BYTES);
-  });
-
-  it('resolveByteBudgetFromSetting falls back to default for undefined', () => {
-    const budget = resolveByteBudgetFromSetting(undefined);
-    expect(budget.bytes).toBe(DEFAULT_ACQUISITION_BUDGET_BYTES);
-  });
-
-  it('resolveByteBudgetFromSetting falls back to default for invalid string', () => {
-    const budget = resolveByteBudgetFromSetting('not-a-number');
-    expect(budget.bytes).toBe(DEFAULT_ACQUISITION_BUDGET_BYTES);
-  });
-
-  it('resolveByteBudgetFromSetting falls back to default for nonnumeric disabled values', () => {
-    expect(resolveByteBudgetFromSetting(false).bytes).toBe(
-      DEFAULT_ACQUISITION_BUDGET_BYTES,
-    );
-    expect(resolveByteBudgetFromSetting('').bytes).toBe(
-      DEFAULT_ACQUISITION_BUDGET_BYTES,
-    );
-  });
-
-  it('resolveByteBudgetFromSetting parses valid string', () => {
-    const budget = resolveByteBudgetFromSetting('8388608');
-    expect(budget.bytes).toBe(8388608);
-  });
-
-  it('resolveByteBudgetFromSetting uses hard max for -1 (disabled)', () => {
-    const budget = resolveByteBudgetFromSetting(-1);
-    expect(budget.bytes).toBe(ACQUISITION_HARD_MAX_BYTES);
-  });
-
-  it('resolveByteBudgetFromSetting accepts a serialized -1', () => {
-    const budget = resolveByteBudgetFromSetting('-1');
-    expect(budget.bytes).toBe(ACQUISITION_HARD_MAX_BYTES);
-  });
-
-  it('resolveByteBudgetFromSetting clamps above hard max', () => {
-    const budget = resolveByteBudgetFromSetting(999_999_999);
-    expect(budget.bytes).toBe(ACQUISITION_HARD_MAX_BYTES);
   });
 });
 

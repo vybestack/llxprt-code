@@ -30,7 +30,7 @@ export type PromptSegment =
  * Default aggregate byte budget for all injection outputs combined when a
  * caller does not supply a resolved budget. Production callers resolve the
  * budget from the configured shell acquisition setting
- * (`outputRetentionMaxBytes`) via {@link resolveByteBudgetFromSetting}; this
+ * (`outputRetentionMaxBytes`) via {@link resolveAcquisitionBudgetFromSetting}; this
  * constant only provides a finite fallback for the segment-based convenience
  * wrapper.
  */

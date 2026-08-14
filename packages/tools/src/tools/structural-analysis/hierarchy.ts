@@ -5,7 +5,8 @@
  */
 
 import type { ParsedFile, AnalysisResult, ResolvedLang } from './types.js';
-import { getFiles, parseFile, makeRelative } from './helpers.js';
+import { iterateFiles, parseFile, makeRelative } from './helpers.js';
+import { type AnalysisBudget, BudgetTracker } from './budget.js';
 
 interface HierarchyNode {
   name: string;
@@ -88,62 +89,73 @@ function findSymbolChildren(
   }
 }
 
-/**
- * Processes a single file for hierarchy relationships, unless aborted.
- */
-async function processHierarchyFile(
-  file: string,
-  lang: ResolvedLang,
-  workspaceRoot: string,
-  symbol: string,
-  extendsParent: string[],
-  implementsInterfaces: string[],
-  extendedBy: HierarchyNode[],
-  implementedBy: HierarchyNode[],
-): Promise<void> {
-  const parsed = await parseFile(file, lang);
-  if (!parsed) {
-    return;
-  }
-
-  const relPath = makeRelative(file, workspaceRoot);
-  findSymbolParents(parsed, symbol, extendsParent, implementsInterfaces);
-  findSymbolChildren(parsed, symbol, relPath, extendedBy, implementedBy);
-}
-
 export async function executeHierarchy(
   symbol: string,
   lang: ResolvedLang,
   searchPath: string,
   workspaceRoot: string,
   signal: AbortSignal,
+  budget: AnalysisBudget,
 ): Promise<AnalysisResult> {
-  const files = await getFiles(searchPath, lang);
+  const tracker = new BudgetTracker(budget, signal);
   const extendsParent: string[] = [];
   const implementsInterfaces: string[] = [];
   const extendedBy: HierarchyNode[] = [];
   const implementedBy: HierarchyNode[] = [];
 
-  for (const file of files) {
-    if (signal.aborted) {
-      break;
+  for await (const file of iterateFiles(searchPath, lang, signal)) {
+    if (!tracker.shouldVisitMoreFiles()) break;
+    tracker.filesVisited++;
+
+    const outcome = await parseFile(file, lang);
+    if (!outcome.ok) {
+      tracker.recordFileOmission(outcome.reason);
+    } else {
+      const relPath = makeRelative(file, workspaceRoot);
+
+      const pendingParents: string[] = [];
+      const pendingIfaces: string[] = [];
+      const pendingExtendedBy: HierarchyNode[] = [];
+      const pendingImplBy: HierarchyNode[] = [];
+      findSymbolParents(outcome, symbol, pendingParents, pendingIfaces);
+      findSymbolChildren(
+        outcome,
+        symbol,
+        relPath,
+        pendingExtendedBy,
+        pendingImplBy,
+      );
+
+      // All four relationship lists (parents, interfaces, extendedBy,
+      // implementedBy) for the current file are routed through the shared
+      // record budget. Each list stops at its first omitted record; after the
+      // current file is drained, the outer traversal stops at the next file
+      // boundary so no relationship aggregate grows without bound.
+      drainIntoRecordBudget(tracker, pendingParents, extendsParent);
+      drainIntoRecordBudget(tracker, pendingIfaces, implementsInterfaces);
+      drainIntoRecordBudget(tracker, pendingExtendedBy, extendedBy);
+      drainIntoRecordBudget(tracker, pendingImplBy, implementedBy);
     }
-    await processHierarchyFile(
-      file,
-      lang,
-      workspaceRoot,
-      symbol,
-      extendsParent,
-      implementsInterfaces,
-      extendedBy,
-      implementedBy,
-    );
+  }
+
+  if (signal.aborted) {
+    tracker.markAborted();
   }
 
   return {
     mode: 'hierarchy',
     symbol,
-    truncated: false,
+    truncated: tracker.truncated,
+    partial: tracker.truncated,
+    partialReason: tracker.partialReason,
+    fileBudget: budget.fileBudget,
+    recordBudget: budget.recordBudget,
+    filesVisited: tracker.filesVisited,
+    recordsRetained: tracker.recordsRetained,
+    recordsObserved: tracker.recordsObserved,
+    oversizedFiles: tracker.oversizedFiles,
+    unparseableFiles: tracker.unparseableFiles,
+    countInexact: tracker.countInexact,
     results: {
       extends: extendsParent,
       implements: implementsInterfaces,
@@ -151,4 +163,20 @@ export async function executeHierarchy(
       implementedBy,
     },
   };
+}
+
+/**
+ * Drain a pending relationship list into its result sink through the shared
+ * record budget. Stops this list (without pushing the overflow) when the budget
+ * sentinel fires, so the result list never exceeds the budget.
+ */
+function drainIntoRecordBudget<T>(
+  tracker: BudgetTracker,
+  pending: readonly T[],
+  sink: T[],
+): void {
+  for (const item of pending) {
+    if (!tracker.tryRetainRecord()) return;
+    sink.push(item);
+  }
 }

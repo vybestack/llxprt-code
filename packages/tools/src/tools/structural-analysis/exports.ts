@@ -64,6 +64,8 @@ export async function executeExports(
     filesVisited: tracker.filesVisited,
     recordsRetained: tracker.recordsRetained,
     recordsObserved: tracker.recordsObserved,
+    oversizedFiles: tracker.oversizedFiles,
+    unparseableFiles: tracker.unparseableFiles,
     countInexact: tracker.countInexact,
     results: exports,
   };
@@ -83,10 +85,13 @@ async function collectExportsBounded(
   for await (const file of iterateFiles(searchPath, lang, tracker.signal)) {
     if (!tracker.shouldVisitMoreFiles()) return;
     tracker.filesVisited++;
-    const parsed = await parseFile(file, lang);
-    if (!parsed) continue;
+    const outcome = await parseFile(file, lang);
+    if (!outcome.ok) {
+      tracker.recordFileOmission(outcome.reason);
+      continue;
+    }
     const relPath = makeRelative(file, workspaceRoot);
-    const fileExports = collectExportsRetained(parsed, relPath, tracker);
+    const fileExports = collectExportsRetained(outcome, relPath, tracker);
     exports.push(...fileExports);
   }
 }

@@ -16,6 +16,8 @@ import {
   type ToolResult,
 } from './tools.js';
 import { makeRelative } from '../utils/paths.js';
+import { statFileSizeGate } from '../utils/fileUtils.js';
+import { isPathWithinWorkspace } from '../utils/pathValidation.js';
 import type { SgNode, NapiConfig } from '@ast-grep/napi';
 import type { Lang } from '../utils/ast-grep-utils.js';
 import {
@@ -27,6 +29,38 @@ import {
 import type { IToolHost, IToolMessageBus } from '../interfaces/index.js';
 
 const DEFAULT_MAX_RESULTS = 100;
+const MAX_RESULTS_HARD_CAP = 10_000;
+
+/**
+ * Default observed-file discovery budget when no `tool-output-max-items`
+ * setting is supplied. The primary directory traversal is hard-bounded so a
+ * broad search over a huge tree cannot read/parse unbounded files.
+ */
+const DEFAULT_MAX_OBSERVED_FILES = 1000;
+/** Absolute ceiling on the observed-file discovery budget. */
+const MAX_OBSERVED_FILES_HARD_CAP = 10_000;
+/**
+ * The discovery budget scales with the `tool-output-max-items` setting (a few
+ * files scanned per requested item, matching the structural-analysis
+ * convention), then is hard-clamped.
+ */
+const OBSERVED_FILES_PER_ITEM = 4;
+
+/** Resolve a finite, hard-clamped observed-file discovery budget. */
+function resolveObservedFileBudget(maxItemsSetting: unknown): number {
+  // Scaling applies only to a valid configured item count; absent/invalid
+  // settings yield the documented DEFAULT_MAX_OBSERVED_FILES (1000).
+  const configured =
+    typeof maxItemsSetting === 'number' &&
+    Number.isFinite(maxItemsSetting) &&
+    maxItemsSetting > 0
+      ? maxItemsSetting * OBSERVED_FILES_PER_ITEM
+      : DEFAULT_MAX_OBSERVED_FILES;
+  return Math.min(
+    Math.max(Math.floor(configured), 1),
+    MAX_OBSERVED_FILES_HARD_CAP,
+  );
+}
 
 export interface AstGrepToolParams {
   pattern?: string;
@@ -48,11 +82,14 @@ interface AstGrepMatch {
   metaVariables: Record<string, string>;
 }
 
+/** Partiality reason surfaced in ast-grep result metadata. */
+type AstGrepPartialReason = 'max-results' | 'aborted' | 'file-budget';
+
 /** Mutable accumulator for bounded match collection. */
 interface MatchAccumulator {
   matches: AstGrepMatch[];
   truncated: boolean;
-  partialReason: 'max-results' | 'aborted' | undefined;
+  partialReason: AstGrepPartialReason | undefined;
   sentinelObserved: boolean;
   /**
    * Number of candidate matches actually observed during traversal. Equals
@@ -61,6 +98,47 @@ interface MatchAccumulator {
    * before stopping), so it is a lower bound when truncated.
    */
   observedCount: number;
+  /**
+   * Number of files observed (read/attempted) during directory discovery.
+   * A lower bound when {@link discoveryTruncated} is true.
+   */
+  filesObserved: number;
+  /** Whether directory discovery hit the observed-file budget one-over. */
+  discoveryTruncated: boolean;
+}
+
+/**
+ * Aggregate outcome of one bounded match collection run: the retained
+ * matches plus the truncation/partiality metadata that must travel with
+ * them so a bounded result is never presented as exhaustive.
+ */
+interface CollectedMatches {
+  matches: AstGrepMatch[];
+  truncated: boolean;
+  partialReason: AstGrepPartialReason | undefined;
+  skippedFiles: number;
+  oversizedFiles: number;
+  observedCount: number;
+  filesObserved: number;
+  discoveryTruncated: boolean;
+}
+
+/** Snapshot an accumulator plus file-accounting counters into a result. */
+function buildCollectedMatches(
+  acc: MatchAccumulator,
+  skippedFiles: number,
+  oversizedFiles: number,
+): CollectedMatches {
+  return {
+    matches: acc.matches,
+    truncated: acc.truncated,
+    partialReason: acc.partialReason,
+    skippedFiles,
+    oversizedFiles,
+    observedCount: acc.observedCount,
+    filesObserved: acc.filesObserved,
+    discoveryTruncated: acc.discoveryTruncated,
+  };
 }
 
 class AstGrepToolInvocation extends BaseToolInvocation<
@@ -88,7 +166,6 @@ class AstGrepToolInvocation extends BaseToolInvocation<
 
   async execute(signal: AbortSignal): Promise<ToolResult> {
     const { pattern, rule, globs } = this.params;
-    const limit = this.resolveLimit(this.params.maxResults);
 
     const resolved = this.validateAndResolveParams();
     if (resolved instanceof Object && 'llmContent' in resolved) return resolved;
@@ -98,24 +175,46 @@ class AstGrepToolInvocation extends BaseToolInvocation<
       resolvedLang: string | Lang;
     };
 
+    let limit: number;
     try {
-      const { matches, truncated, partialReason, skippedFiles, observedCount } =
-        await this.collectMatches(
-          searchPath,
-          isSingleFile,
-          resolvedLang,
-          pattern,
-          rule,
-          globs,
-          signal,
-          limit,
-        );
+      limit = this.resolveLimit(this.params.maxResults);
+    } catch (err) {
+      return this.makeError(err instanceof Error ? err.message : String(err));
+    }
+
+    try {
+      const observedFileBudget = resolveObservedFileBudget(
+        this.host.getEphemeralSettings()['tool-output-max-items'],
+      );
+      const {
+        matches,
+        truncated,
+        partialReason,
+        skippedFiles,
+        oversizedFiles,
+        observedCount,
+        filesObserved,
+        discoveryTruncated,
+      } = await this.collectMatches(
+        searchPath,
+        isSingleFile,
+        resolvedLang,
+        pattern,
+        rule,
+        globs,
+        signal,
+        limit,
+        observedFileBudget,
+      );
       return this.formatSearchResults(
         matches,
         truncated,
         partialReason,
         skippedFiles,
+        oversizedFiles,
         observedCount,
+        filesObserved,
+        discoveryTruncated,
         pattern,
       );
     } catch (err) {
@@ -125,18 +224,32 @@ class AstGrepToolInvocation extends BaseToolInvocation<
   }
 
   /**
-   * Resolves `maxResults` to a finite, nonnegative integer acquisition limit.
+   * Resolves `maxResults` to a finite positive integer acquisition limit,
+   * hard-capped at {@link MAX_RESULTS_HARD_CAP}.
    *
    * - `undefined` -> the documented default.
-   * - fractional -> floored (consistent with prior slice semantics).
-   * - zero / negative -> 0 (acquire nothing; a negative slice is empty).
-   * - nonfinite -> default (defensive: the JSON-Schema `type: number` already
-   *   rejects Infinity/NaN at validation, preserving the public contract).
+   * - nonfinite / non-integer / non-positive -> validation error (thrown as
+   *   an Error consumed by the execute catch path).
+   * - above the hard cap -> validation error.
    */
   private resolveLimit(maxResults: number | undefined): number {
     const value = maxResults ?? DEFAULT_MAX_RESULTS;
-    if (!Number.isFinite(value)) return DEFAULT_MAX_RESULTS;
-    return Math.max(0, Math.floor(value));
+    if (
+      typeof value !== 'number' ||
+      !Number.isFinite(value) ||
+      !Number.isInteger(value) ||
+      value <= 0
+    ) {
+      throw new Error(
+        `maxResults must be a finite positive integer, got: ${String(maxResults)}`,
+      );
+    }
+    if (value > MAX_RESULTS_HARD_CAP) {
+      throw new Error(
+        `maxResults ${value} exceeds the hard maximum ${MAX_RESULTS_HARD_CAP}`,
+      );
+    }
+    return value;
   }
 
   private validateAndResolveParams():
@@ -215,13 +328,8 @@ class AstGrepToolInvocation extends BaseToolInvocation<
     globs: string[] | undefined,
     signal: AbortSignal | undefined,
     limit: number,
-  ): Promise<{
-    matches: AstGrepMatch[];
-    truncated: boolean;
-    partialReason: 'max-results' | 'aborted' | undefined;
-    skippedFiles: number;
-    observedCount: number;
-  }> {
+    observedFileBudget: number,
+  ): Promise<CollectedMatches> {
     const targetDir = this.host.getTargetDir();
     const acc: MatchAccumulator = {
       matches: [],
@@ -229,8 +337,11 @@ class AstGrepToolInvocation extends BaseToolInvocation<
       partialReason: undefined,
       sentinelObserved: false,
       observedCount: 0,
+      filesObserved: 0,
+      discoveryTruncated: false,
     };
     let skippedFiles = 0;
+    let oversizedFiles = 0;
 
     // AbortSignal.aborted is a mutable property; reading it through a helper
     // avoids TS narrowing it to `false` after the pre-abort check (the signal
@@ -245,16 +356,17 @@ class AstGrepToolInvocation extends BaseToolInvocation<
     if (isAborted()) {
       acc.truncated = true;
       acc.partialReason = 'aborted';
-      return {
-        matches: acc.matches,
-        truncated: acc.truncated,
-        partialReason: acc.partialReason,
-        skippedFiles,
-        observedCount: acc.observedCount,
-      };
+      return buildCollectedMatches(acc, skippedFiles, oversizedFiles);
     }
 
     if (isSingleFile) {
+      acc.filesObserved = 1;
+      // Shared pre-read file-size gate: an oversized file is never read or
+      // parsed, so the acquisition stays bounded regardless of file size.
+      const sizeError = await statFileSizeGate(searchPath);
+      if (sizeError !== null) {
+        throw new Error(sizeError.message);
+      }
       const content = await fs.readFile(searchPath, 'utf-8');
       this.searchContentBounded(
         content,
@@ -267,7 +379,7 @@ class AstGrepToolInvocation extends BaseToolInvocation<
         rule,
       );
     } else {
-      skippedFiles = await this.collectFromDirectory(
+      const dirOutcome = await this.collectFromDirectory(
         searchPath,
         resolvedLang,
         globs,
@@ -277,7 +389,10 @@ class AstGrepToolInvocation extends BaseToolInvocation<
         targetDir,
         acc,
         limit,
+        observedFileBudget,
       );
+      skippedFiles = dirOutcome.skippedFiles;
+      oversizedFiles = dirOutcome.oversizedFiles;
     }
 
     // A signal that aborts during an awaited traversal step must never read as
@@ -287,13 +402,7 @@ class AstGrepToolInvocation extends BaseToolInvocation<
       acc.partialReason = 'aborted';
     }
 
-    return {
-      matches: acc.matches,
-      truncated: acc.truncated,
-      partialReason: acc.partialReason,
-      skippedFiles,
-      observedCount: acc.observedCount,
-    };
+    return buildCollectedMatches(acc, skippedFiles, oversizedFiles);
   }
 
   /**
@@ -444,7 +553,8 @@ class AstGrepToolInvocation extends BaseToolInvocation<
     targetDir: string,
     acc: MatchAccumulator,
     limit: number,
-  ): Promise<number> {
+    observedFileBudget: number,
+  ): Promise<{ skippedFiles: number; oversizedFiles: number }> {
     // AbortSignal.aborted is a mutable property; reading it through a helper
     // avoids TS narrowing it to `false` after the pre-abort check (the signal
     // can become aborted during an awaited traversal step).
@@ -456,34 +566,30 @@ class AstGrepToolInvocation extends BaseToolInvocation<
         acc.truncated = true;
         acc.partialReason = 'aborted';
       }
-      return 0;
+      return { skippedFiles: 0, oversizedFiles: 0 };
     }
 
-    const extensions = this.getExtensionsForLanguage(resolvedLang);
-    // Include/exclude sets are resolved via streaming so the only full
-    // path-array materialization is the user-provided glob subset (not every
-    // language file in the tree). Preserves FastGlob's glob/workspace
-    // semantics and source order.
-    const { includeSet, excludeSet } = await this.resolveGlobSets(
-      globs,
-      searchPath,
-    );
-    let skippedFiles = 0;
+    const {
+      primaryPatterns,
+      ignorePatterns,
+      extensionSet,
+      acceptsAnyExtension,
+    } = this.resolveDirectoryScan(resolvedLang, globs);
 
-    const stream = FastGlob.stream(
-      extensions.map((ext) => `**/*.${ext}`),
-      {
-        cwd: searchPath,
-        absolute: true,
-        dot: false,
-        ignore: ['**/node_modules/**', '**/.git/**'],
-      },
-    );
+    let skippedFiles = 0;
+    let oversizedFiles = 0;
+
+    const stream = FastGlob.stream(primaryPatterns, {
+      cwd: searchPath,
+      absolute: true,
+      dot: false,
+      ignore: ['**/node_modules/**', '**/.git/**', ...ignorePatterns],
+    });
 
     // Per-entry processing returns whether the traversal should continue
     // (keeps the loop body to a single break/continue-free break).
     const processEntry = async (entry: string): Promise<boolean> => {
-      if (acc.sentinelObserved || isAborted()) {
+      if (acc.sentinelObserved || isAborted() || acc.discoveryTruncated) {
         if (isAborted() && !acc.truncated) {
           acc.truncated = true;
           acc.partialReason = 'aborted';
@@ -491,99 +597,205 @@ class AstGrepToolInvocation extends BaseToolInvocation<
         return false;
       }
       const file = String(entry);
-      if (includeSet !== null && !includeSet.has(file)) return true;
-      if (excludeSet?.has(file) === true) return true;
-      try {
-        const content = await fs.readFile(file, 'utf-8');
-        this.searchContentBounded(
-          content,
-          resolvedLang,
-          file,
-          targetDir,
-          acc,
-          limit,
-          pattern,
-          rule,
-        );
-      } catch {
-        skippedFiles++;
+      // Cheap per-entry language-extension filter (no materialized set). For a
+      // language-driven traversal this is a no-op; when include globs drive
+      // the primary patterns it constrains them to the requested language.
+      if (!acceptsAnyExtension) {
+        const ext = path.extname(file);
+        if (!extensionSet.has(ext)) return true;
       }
+      // Observed-file discovery budget with one-over sentinel: the first file
+      // beyond the budget is counted (proving partiality) but not searched,
+      // then traversal stops. Every observed file is charged even when no
+      // match is ever produced.
+      acc.filesObserved++;
+      if (acc.filesObserved > observedFileBudget) {
+        acc.discoveryTruncated = true;
+        acc.truncated = true;
+        acc.partialReason = 'file-budget';
+        return false;
+      }
+      // Include globs may be absolute or contain parent traversal. Resolve each
+      // discovered entry against the requested target before any stat or read;
+      // realpath-aware validation also blocks symlink escapes.
+      if (!isPathWithinWorkspace([targetDir], file)) {
+        skippedFiles++;
+        return true;
+      }
+      // Shared pre-read file-size gate and search, with per-entry accounting.
+      const outcome = await this.gateAndSearchDirectoryFile(
+        file,
+        resolvedLang,
+        targetDir,
+        acc,
+        limit,
+        pattern,
+        rule,
+      );
+      if (outcome === 'oversized') oversizedFiles++;
+      if (outcome === 'skipped') skippedFiles++;
       return true;
     };
 
     for await (const entry of stream) {
       if (!(await processEntry(String(entry)))) break;
     }
-    return skippedFiles;
+    return { skippedFiles, oversizedFiles };
   }
 
   /**
-   * Resolves include/exclude glob sets lazily via FastGlob's streaming API so
-   * glob filtering does not materialize full path arrays for the primary
-   * language discovery. Returns null sets when no globs are supplied (the
-   * common case stays fully streaming).
+   * Gate one directory file through the pre-read size check and search it
+   * when it fits. Returns the per-entry accounting outcome: 'oversized'
+   * (skipped for size), 'skipped' (stat error or read/parse failure), or
+   * 'searched'. A non-ENOENT stat error (EACCES, EIO, ELOOP) must not abort
+   * the whole traversal — it counts as skipped so traversal continues,
+   * matching how read errors are handled.
    */
-  private async resolveGlobSets(
+  private async gateAndSearchDirectoryFile(
+    file: string,
+    resolvedLang: string | Lang,
+    targetDir: string,
+    acc: MatchAccumulator,
+    limit: number,
+    pattern: string | undefined,
+    rule: Record<string, unknown> | undefined,
+  ): Promise<'oversized' | 'skipped' | 'searched'> {
+    try {
+      const sizeError = await statFileSizeGate(file);
+      if (sizeError !== null) {
+        return 'oversized';
+      }
+    } catch {
+      return 'skipped';
+    }
+    const searched = await this.searchSingleDirectoryFile(
+      file,
+      resolvedLang,
+      targetDir,
+      acc,
+      limit,
+      pattern,
+      rule,
+    );
+    return searched ? 'searched' : 'skipped';
+  }
+
+  /**
+   * Read one directory file and search its content within bounds. Returns
+   * false when the file cannot be read (counted as skipped by the caller).
+   */
+  private async searchSingleDirectoryFile(
+    file: string,
+    resolvedLang: string | Lang,
+    targetDir: string,
+    acc: MatchAccumulator,
+    limit: number,
+    pattern: string | undefined,
+    rule: Record<string, unknown> | undefined,
+  ): Promise<boolean> {
+    try {
+      const content = await fs.readFile(file, 'utf-8');
+      this.searchContentBounded(
+        content,
+        resolvedLang,
+        file,
+        targetDir,
+        acc,
+        limit,
+        pattern,
+        rule,
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Resolve the language extension filter AND the glob traversal patterns in
+   * one step, since both derive from the resolved language extensions. The
+   * extension filter is applied per-entry during the bounded traversal.
+   */
+  private resolveDirectoryScan(
+    resolvedLang: string | Lang,
     globs: string[] | undefined,
-    searchPath: string,
-  ): Promise<{
-    includeSet: Set<string> | null;
-    excludeSet: Set<string> | null;
-  }> {
+  ): {
+    primaryPatterns: string[];
+    ignorePatterns: string[];
+    extensionSet: Set<string>;
+    acceptsAnyExtension: boolean;
+  } {
+    const extensions = this.getExtensionsForLanguage(resolvedLang);
+    const { primaryPatterns, ignorePatterns } = this.resolveGlobTraversal(
+      globs,
+      extensions,
+    );
+    return {
+      primaryPatterns,
+      ignorePatterns,
+      acceptsAnyExtension: extensions.includes('*'),
+      extensionSet: new Set(
+        extensions.filter((ext) => ext !== '*').map((ext) => '.' + ext),
+      ),
+    };
+  }
+
+  /**
+   * Resolve the primary traversal patterns and ignore patterns from the
+   * user-supplied globs WITHOUT materializing path sets. Include globs (no `!`
+   * prefix) drive the primary pattern set; exclude globs (`!`-prefixed) are
+   * forwarded to FastGlob's `ignore` option. When no include globs are given,
+   * the language extensions drive the primary patterns.
+   */
+  private resolveGlobTraversal(
+    globs: string[] | undefined,
+    extensions: string[],
+  ): { primaryPatterns: string[]; ignorePatterns: string[] } {
+    const extensionPatterns = extensions.map((ext) => `**/*.${ext}`);
     if (!globs || globs.length === 0) {
-      return { includeSet: null, excludeSet: null };
+      return { primaryPatterns: extensionPatterns, ignorePatterns: [] };
     }
     const includePatterns = globs.filter((g) => !g.startsWith('!'));
     const excludePatterns = globs
       .filter((g) => g.startsWith('!'))
       .map((g) => g.slice(1));
-
-    let includeSet: Set<string> | null = null;
-    let excludeSet: Set<string> | null = null;
-
-    if (includePatterns.length > 0) {
-      includeSet = new Set<string>();
-      for await (const f of FastGlob.stream(includePatterns, {
-        cwd: searchPath,
-        absolute: true,
-      })) {
-        includeSet.add(String(f));
-      }
-    }
-    if (excludePatterns.length > 0) {
-      excludeSet = new Set<string>();
-      for await (const f of FastGlob.stream(excludePatterns, {
-        cwd: searchPath,
-        absolute: true,
-      })) {
-        excludeSet.add(String(f));
-      }
-    }
-    return { includeSet, excludeSet };
+    const primaryPatterns =
+      includePatterns.length > 0 ? includePatterns : extensionPatterns;
+    return { primaryPatterns, ignorePatterns: excludePatterns };
   }
 
   private formatSearchResults(
     matches: AstGrepMatch[],
     truncated: boolean,
-    partialReason: 'max-results' | 'aborted' | undefined,
+    partialReason: AstGrepPartialReason | undefined,
     skippedFiles: number,
+    oversizedFiles: number,
     observedCount: number,
+    filesObserved: number,
+    discoveryTruncated: boolean,
     pattern?: string,
   ): ToolResult {
     const matchCount = matches.length;
     const searchDesc = pattern ? `pattern "${pattern}"` : 'rule query';
-    // A skipped (unreadable/unparseable) file means the count cannot be exact:
-    // there may be unobserved matches in files the tool never fully searched.
-    const inexact = truncated || skippedFiles > 0;
+    // A skipped (unreadable/unparseable) or oversized file, or a discovery
+    // one-over, means the count cannot be exact: there may be unobserved
+    // matches in files the tool never reached.
+    const inexact = truncated || skippedFiles > 0 || oversizedFiles > 0;
 
     let llmContent = `Found ${matchCount} AST match${matchCount !== 1 ? 'es' : ''} for ${searchDesc}`;
     if (truncated) {
-      const note =
-        partialReason === 'aborted'
-          ? ' (aborted; more matches may exist)'
-          : ' (truncated; more matches exist)';
+      let note = ' (truncated; more matches may exist)';
+      if (partialReason === 'aborted') {
+        note = ' (aborted; more matches may exist)';
+      } else if (partialReason === 'file-budget') {
+        note = ' (file discovery truncated; more files may contain matches)';
+      }
       llmContent += note;
-    } else if (skippedFiles > 0) {
+    }
+    if (oversizedFiles > 0) {
+      llmContent += ` (${oversizedFiles} oversized file${oversizedFiles !== 1 ? 's' : ''} skipped)`;
+    }
+    if (!truncated && skippedFiles > 0) {
       llmContent += ` (${skippedFiles} file${skippedFiles !== 1 ? 's' : ''} skipped; count is a lower bound)`;
     }
     llmContent += ':\n---\n';
@@ -602,18 +814,22 @@ class AstGrepToolInvocation extends BaseToolInvocation<
       llmContent: llmContent.trim(),
       returnDisplay: displayMessage,
       // totalMatches is only the exact total when traversal completed fully
-      // AND no file was skipped; it is intentionally omitted after an early
-      // stop or skip so no consumer mistakes a lower bound for an exhaustive
-      // count.
+      // AND no file was skipped, oversized, or discovery-truncated; it is
+      // intentionally omitted otherwise so no consumer mistakes a lower bound
+      // for an exhaustive count.
       metadata: {
         matches,
         truncated,
         matchesRetained: matchCount,
         // Lower bound on observed candidates (exact when complete).
         matchesObserved: observedCount,
+        // Lower bound on observed files (exact when discovery not truncated).
+        filesObserved,
         ...(inexact ? { countInexact: true } : { totalMatches: matchCount }),
         ...(partialReason !== undefined ? { partialReason } : {}),
+        ...(discoveryTruncated ? { discoveryTruncated: true } : {}),
         ...(skippedFiles > 0 ? { skippedFiles } : {}),
+        ...(oversizedFiles > 0 ? { oversizedFiles } : {}),
       },
     };
   }

@@ -30,7 +30,7 @@ import { createByteBudget } from '../acquisition/index.js';
 import {
   acquireBoundedHttpBody,
   disposeHttpResponseBody,
-} from '../utils/bounded-http-response.js';
+} from '../acquisition/bounded-http-response.js';
 
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024; // 5MB
 const FETCH_BYTE_BUDGET = createByteBudget(MAX_RESPONSE_SIZE);

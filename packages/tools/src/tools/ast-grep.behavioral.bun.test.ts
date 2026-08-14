@@ -457,7 +457,7 @@ describe('ast_grep maxResults resolution (issue #3205)', () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('resolves a fractional maxResults by flooring (2.5 -> 2)', async () => {
+  it('rejects a fractional maxResults (hard validation)', async () => {
     const host = createToolHost(tempDir);
     const result = await runGrep(host, {
       pattern: '$OBJ.$F($$$ARGS)',
@@ -465,13 +465,11 @@ describe('ast_grep maxResults resolution (issue #3205)', () => {
       path: join(tempDir, 'six.ts'),
       maxResults: 2.5,
     });
-    const meta = metadataOf(result);
-    expect(meta.matches?.length).toBe(2);
-    expect(meta.truncated).toBe(true);
-    expect(meta.countInexact).toBe(true);
+    const text = String(result.llmContent);
+    expect(text).toMatch(/maxResults must be.*finite positive integer/i);
   });
 
-  it('resolves maxResults 0 to an empty, partial result', async () => {
+  it('rejects maxResults 0 (hard validation)', async () => {
     const host = createToolHost(tempDir);
     const result = await runGrep(host, {
       pattern: '$OBJ.$F($$$ARGS)',
@@ -479,13 +477,11 @@ describe('ast_grep maxResults resolution (issue #3205)', () => {
       path: join(tempDir, 'six.ts'),
       maxResults: 0,
     });
-    const meta = metadataOf(result);
-    expect(meta.matches?.length).toBe(0);
-    expect(meta.truncated).toBe(true);
-    expect(meta.countInexact).toBe(true);
+    const text = String(result.llmContent);
+    expect(text).toMatch(/maxResults must be.*finite positive integer/i);
   });
 
-  it('resolves a negative maxResults to 0 (acquire nothing)', async () => {
+  it('rejects a negative maxResults (hard validation)', async () => {
     const host = createToolHost(tempDir);
     const result = await runGrep(host, {
       pattern: '$OBJ.$F($$$ARGS)',
@@ -493,12 +489,8 @@ describe('ast_grep maxResults resolution (issue #3205)', () => {
       path: join(tempDir, 'six.ts'),
       maxResults: -3,
     });
-    const meta = metadataOf(result);
-    expect(meta.matches?.length).toBe(0);
-    // A negative limit resolves to 0 and behaves exactly like an explicit 0:
-    // the result is partial with an inexact (lower-bound) count.
-    expect(meta.truncated).toBe(true);
-    expect(meta.countInexact).toBe(true);
+    const text = String(result.llmContent);
+    expect(text).toMatch(/maxResults must be.*finite positive integer/i);
   });
 
   it('bounds a nonfinite maxResults (Infinity) to the finite default', async () => {

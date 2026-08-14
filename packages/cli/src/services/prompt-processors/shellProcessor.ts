@@ -26,7 +26,7 @@ import {
   SHORTHAND_ARGS_PLACEHOLDER,
 } from './types.js';
 import { StreamingInjectionBuilder } from './injectionOutputBudget.js';
-import { resolveByteBudgetFromSetting } from '@vybestack/llxprt-code-tools/acquisition.js';
+import { resolveAcquisitionBudgetFromSetting } from '@vybestack/llxprt-code-core';
 
 type ShellProcessorRuntime = ShellPermissionConfig &
   ApprovalState &
@@ -175,7 +175,7 @@ export class ShellProcessor implements IPromptProcessor {
     // builder retains at most one global output budget across all injections
     // and never holds all command outputs simultaneously.
     const builder = new StreamingInjectionBuilder(
-      resolveByteBudgetFromSetting(
+      resolveAcquisitionBudgetFromSetting(
         config.getShellExecutionConfig().outputRetentionMaxBytes,
       ),
     );

@@ -48,6 +48,24 @@ import {
 
 export type { StructuralAnalysisParams } from './structural-analysis/types.js';
 
+/**
+ * Normalize a caller-supplied maxNodes value to a finite positive integer.
+ * Zero, negative, NaN, or non-integer values fall back to the documented
+ * default rather than reaching the executors where an empty partial result
+ * would fire the one-over sentinel on the first candidate.
+ */
+function normalizeMaxNodes(value: number | undefined): number {
+  if (
+    typeof value !== 'number' ||
+    !Number.isFinite(value) ||
+    value <= 0 ||
+    !Number.isInteger(value)
+  ) {
+    return DEFAULT_MAX_NODES;
+  }
+  return value;
+}
+
 interface ResolvedParams {
   mode: string;
   resolvedLang: ResolvedLang;
@@ -157,7 +175,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
       targetDir,
       symbol,
       depth: Math.min(depth ?? DEFAULT_DEPTH, MAX_DEPTH),
-      maxNodes: maxNodes ?? DEFAULT_MAX_NODES,
+      maxNodes: normalizeMaxNodes(maxNodes),
       reverse: reverse === true,
       budget: resolveAnalysisBudget(
         this.host.getEphemeralSettings()['tool-output-max-items'] as
@@ -179,6 +197,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
       symbol,
       depth,
       maxNodes,
+      budget,
     } = params;
 
     switch (mode as Mode) {
@@ -189,6 +208,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
           searchPath,
           targetDir,
           signal,
+          budget,
         );
       case 'hierarchy':
         return executeHierarchy(
@@ -197,6 +217,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
           searchPath,
           targetDir,
           signal,
+          budget,
         );
       case 'callers':
         return executeCallers(
@@ -207,6 +228,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
           depth,
           maxNodes,
           signal,
+          budget,
         );
       case 'callees':
         return executeCallees(
@@ -217,6 +239,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
           depth,
           maxNodes,
           signal,
+          budget,
         );
       default:
         return this.dispatchBoundedMode(mode as Mode, params, signal);

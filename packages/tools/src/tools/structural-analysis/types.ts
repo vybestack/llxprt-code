@@ -34,7 +34,14 @@ export interface StructuralAnalysisParams {
 }
 
 /** Reason a bounded traversal stopped before exhausting the workspace. */
-export type PartialReason = 'file-budget' | 'record-budget' | 'aborted';
+export type PartialReason =
+  | 'file-budget'
+  | 'record-budget'
+  | 'max-nodes'
+  | 'aborted';
+
+/** Reason a single file could not be parsed into the analysis. */
+export type ParseOmissionReason = 'oversized' | 'read-error' | 'parse-error';
 
 export interface AnalysisResult {
   mode: string;
@@ -59,18 +66,30 @@ export interface AnalysisResult {
    * bound (at least retained+1) when a sentinel proved partiality.
    */
   recordsObserved?: number;
+  /**
+   * For callers/callees, the node-candidate count (direct/member/callee
+   * insertions attempted), bounded by the effective max-nodes limit. Equals
+   * {@link nodesRetained} for an exact complete traversal; at least
+   * retained+1 when the max-nodes sentinel proved partiality.
+   */
+  nodesObserved?: number;
+  /**
+   * Node candidates actually retained (accepted into the result) for
+   * callers/callees, bounded by the effective max-nodes limit.
+   */
+  nodesRetained?: number;
+  /**
+   * Number of candidate files skipped because they exceeded the pre-read size
+   * gate. Each makes the match count a lower bound (inexact).
+   */
+  oversizedFiles?: number;
+  /**
+   * Number of candidate files that could not be read or parsed. Each makes the
+   * match count a lower bound (inexact).
+   */
+  unparseableFiles?: number;
   /** True when retained/visited counts are lower bounds, not exhaustive totals. */
   countInexact?: boolean;
-}
-
-/**
- * Traversal context shared across recursive callers/callees analysis.
- */
-export interface TraversalContext {
-  nodesVisited: number;
-  maxNodes: number;
-  truncated: boolean;
-  signal: AbortSignal;
 }
 
 /**
