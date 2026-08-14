@@ -200,12 +200,7 @@ jobs:
             CREATE_ARGS+=("${MILESTONE_ARGS[@]}")
             create_issue_once() {
               local found=""
-              found="$(gh issue list \\
-                --repo "${GH_REPO}" \\
-                --search "\"${ISSUE_TITLE}\" in:title is:issue state:open" \\
-                --limit 30 \\
-                --json number,title \\
-                --jq "[.[] | select(.title == \"${ISSUE_TITLE}\") | .number] | .[0] // empty" 2>/dev/null)" || found=""
+              found="$(gh issue list --repo "${GH_REPO}" --search "\"${ISSUE_TITLE}\" in:title is:issue state:open" --limit 30 --json number,title --jq "[.[] | select(.title == \"${ISSUE_TITLE}\") | .number] | .[0] // empty" 2>/dev/null)" || found=""
               if [[ -n "${found}" ]]; then
                 echo "Issue #${found} already exists; skipping creation." >&2
                 return 0
