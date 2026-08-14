@@ -317,13 +317,13 @@ class GlobToolInvocation extends BaseToolInvocation<
     const canonicalPaths = entries.map((entry) =>
       toCanonicalPath(entry.fullpath()),
     );
+    // filterFiles returns a subset of the paths it was given, which are
+    // already canonical, so the survivors need no further resolution.
     const filteredCanonicalPaths = new Set(
-      fileDiscovery
-        .filterFiles(canonicalPaths, {
-          respectGitIgnore: fileFilteringOptions.respectGitIgnore,
-          respectLlxprtIgnore: fileFilteringOptions.respectLlxprtIgnore,
-        })
-        .map((p) => toCanonicalPath(p)),
+      fileDiscovery.filterFiles(canonicalPaths, {
+        respectGitIgnore: fileFilteringOptions.respectGitIgnore,
+        respectLlxprtIgnore: fileFilteringOptions.respectLlxprtIgnore,
+      }),
     );
     const filteredEntries = entries.filter((_entry, index) =>
       filteredCanonicalPaths.has(canonicalPaths[index]),
