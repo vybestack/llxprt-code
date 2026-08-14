@@ -558,6 +558,12 @@ function dispatchAgentEvent(
         state.thoughtBuffer,
         includeThinking,
       );
+      // Discard intermediate talk emitted before a tool call so only the
+      // final iteration's answer remains in responseText — the JSON-mode
+      // counterpart of quiet mode's quietTextBuffer discard (issue #728).
+      // Without this, models that state the answer before calling tools
+      // yield a duplicated response (issue #3226).
+      state.responseText = '';
       emitToolUse(event.call, context.streamFormatter);
       return;
     case 'tool-result':
