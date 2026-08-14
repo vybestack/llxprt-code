@@ -239,7 +239,11 @@ export function renewLease(
       return 'lost';
     }
     writeLease(runDir, { ...check.lease, heartbeatAt: deps.now() }, deps);
-    return 'renewed';
+    const after = checkLease(runDir, deps);
+    if (after.status !== 'active' || after.lease === undefined) {
+      return 'indeterminate';
+    }
+    return after.lease.owner === owner ? 'renewed' : 'lost';
   }
   if (check.status === 'missing') {
     // Our lease vanished (external deletion): re-publish it, but only keep

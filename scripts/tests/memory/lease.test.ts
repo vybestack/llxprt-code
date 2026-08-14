@@ -318,6 +318,37 @@ describe('renewLease — owner-safe heartbeats', () => {
     }
   });
 
+  it('rechecks ownership after publishing a heartbeat', () => {
+    const dir = tempDir();
+    try {
+      const t0 = 1_700_000_000_000;
+      const owner = 'pme-000111';
+      writeFileSync(
+        leasePath(dir),
+        JSON.stringify({ owner, pid: 111, heartbeatAt: t0 }),
+      );
+      const deps: LeaseDeps = {
+        ...clockDeps(t0 + 1, 111),
+        rename: (from, to) => {
+          defaultLeaseDeps.rename(from, to);
+          writeFileSync(
+            to,
+            JSON.stringify({
+              owner: 'pother-000222',
+              pid: 222,
+              heartbeatAt: t0 + 1,
+            }),
+          );
+        },
+      };
+
+      expect(renewLease(dir, owner, deps)).toBe('lost');
+      expect(checkLease(dir, clockDeps(t0 + 1)).lease?.pid).toBe(222);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('re-publishes a vanished lease and keeps ownership', () => {
     const dir = tempDir();
     try {
