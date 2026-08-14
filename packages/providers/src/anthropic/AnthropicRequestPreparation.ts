@@ -38,6 +38,10 @@ import {
   formatContextPrefix,
   type SystemPromptPlacement,
 } from '../utils/systemPromptPlacement.js';
+import {
+  sanitizeAnthropicContentImages,
+  resolveAnthropicImageBudget,
+} from './AnthropicImageSanitizer.js';
 
 /**
  * Request preparation context returned to caller
@@ -760,8 +764,23 @@ export async function prepareAnthropicRequest(
   );
 
   const configForMessages = params.config ?? params.options.runtime?.config;
+
+  // Issue #3216: proactively sanitize oversized image blocks from the neutral
+  // history before conversion, so known-invalid bytes never reach the wire.
+  // The budget is resolved from invocation ephemerals (the stateless per-call
+  // source of truth), NOT from config.getEphemeralSettings — the stateless
+  // contract guarantees config is never accessed for request overrides.
+  // sanitizeAnthropicContentImages already returns the contents unchanged
+  // (0 replacements) when the budget is undefined, so no fallback is needed.
+  const configEphemeralsForBudget: Readonly<Record<string, unknown>> =
+    params.options.invocation.ephemerals;
+  const sanitizedContent = sanitizeAnthropicContentImages(
+    params.content,
+    resolveAnthropicImageBudget(configEphemeralsForBudget),
+  );
+
   const { anthropicMessages, anthropicTools } = convertMessagesAndTools({
-    content: params.content,
+    content: sanitizedContent.contents,
     tools: params.tools,
     isOAuth: params.isOAuth,
     reasoningSettings,

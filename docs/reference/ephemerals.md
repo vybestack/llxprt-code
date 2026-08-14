@@ -93,6 +93,21 @@ Prevent tools from flooding the context. Applied to all tools via the batch sche
 
 Built-in visual-model aliases provide conservative advisory defaults: Claude Opus/Sonnet use `1568`/`1568`/`1229312`; OpenAI `gpt-*` uses `2048`/`2048`/`1572864`; Kimi uses `4096`/`2160`/`8847360` (long edge/short edge/pixels). These are useful-resolution targets, not universal provider hard limits. Explicit profile values take precedence over model defaults. When no limit is configured, image reads retain legacy byte-for-byte behavior. Setting `image-resize.enabled false` disables all automatic limits for the profile. For one `read_file` call, pass `skip_image_resize: true` to return the original image; `read_many_files` has no per-call opt-out.
 
+## Hard Image Dimension Budget
+
+In addition to advisory image resizing, `max-image-dimension` and `max-image-pixels` define **hard** limits that reject oversized image bytes with an actionable tool error before they reach the model. Unlike `image-resize.*` (which silently downscales), these settings cause `read_file`, `read_many_files`, and `generate_image` to return a structured error message instructing the model to create a smaller thumbnail. For `generate_image`, the budget check runs after the generated image is written to its `output_path`; an oversized result is reported as a `policy_violation` tool error (no inline bytes enter the conversation), but the saved file is retained and the error names its path so the model can downscale/thumbnail it before reading.
+
+Explicit `image-resize.*` resizing runs **first**; the hard check runs **after**, so a resized image within budget passes through normally. Only images whose post-resize dimensions still exceed the budget are rejected.
+
+| Setting               | Type   | Default | Profile | Description                                                                                                       |
+| --------------------- | ------ | ------- | ------- | ----------------------------------------------------------------------------------------------------------------- |
+| `max-image-dimension` | number | —       | yes     | Positive integer maximum for image width/height in pixels. Oversized images return a tool error instead of bytes. |
+| `max-image-pixels`    | number | —       | yes     | Positive integer maximum total decoded pixel count. Oversized images return a tool error instead of bytes.        |
+
+When neither key is set, no hard budget is enforced and image reads follow legacy/resize behavior. Both keys are independent: set one or both. Invalid values (zero, negatives, non-integers) are rejected by the settings registry.
+
+**claudecode alias defaults:** The claudecode OAuth alias applies `max-image-dimension: 2000` to `claude-opus-5`, `claude-opus-4-8`, and `claude-sonnet-5` only. These three models also do **not** receive implicit `image-resize.*` defaults (so a 3000-pixel image is hard-rejected, not silently downscaled). Older claudecode Opus/Sonnet models keep the advisory `1568`/`1568`/`1229312` resize defaults and no hard cap. Direct `anthropic` alias Opus/Sonnet models also keep the advisory resize defaults.
+
 ## Shell Output Acquisition
 
 | Setting                            | Type   | Default   | Profile | Description                                                                                                                                                                   |

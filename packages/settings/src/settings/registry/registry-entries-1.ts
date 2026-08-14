@@ -445,6 +445,36 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
       },
     }),
   ),
+  ...[
+    {
+      key: 'max-image-dimension',
+      description:
+        'Hard maximum image width/height in pixels before bytes are rejected (oversized images return a tool error instead of being sent)',
+    },
+    {
+      key: 'max-image-pixels',
+      description:
+        'Hard maximum total image pixels before bytes are rejected (oversized images return a tool error instead of being sent)',
+    },
+  ].map(
+    ({ key, description }): SettingSpec => ({
+      key,
+      category: 'model-behavior',
+      description,
+      type: 'number',
+      hint: 'positive integer pixels',
+      persistToProfile: true,
+      validate: (value: unknown): ValidationResult => {
+        if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+          return { success: true, value };
+        }
+        return {
+          success: false,
+          message: `${key} must be a positive integer`,
+        };
+      },
+    }),
+  ),
   {
     key: 'tool-output-max-tokens',
     category: 'cli-behavior',

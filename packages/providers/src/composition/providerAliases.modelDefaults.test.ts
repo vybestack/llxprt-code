@@ -642,35 +642,88 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
     expect(defaults['context-limit']).toBe(1000000);
   });
 
-  it.each(['anthropic', 'claudecode'])(
-    '%s applies image limits to Opus and Sonnet families only',
-    (alias) => {
-      const entry = loadProviderAliasEntries().find(
-        (candidate) =>
-          candidate.alias === alias && candidate.source === 'builtin',
-      );
-      expect(entry).toBeDefined();
-      const rules = entry?.config.modelDefaults ?? [];
-      for (const model of [
-        'claude-opus-4-5-20251101',
-        'claude-opus-5',
-        'claude-sonnet-4-20250514',
-        'claude-sonnet-5',
-      ]) {
-        expect(computeMatchedDefaults(model, rules)).toMatchObject({
-          'image-resize.maxLongEdge': 1568,
-          'image-resize.maxShortEdge': 1568,
-          'image-resize.maxPixels': 1_229_312,
-        });
-      }
-      expectNoImageResizeDefaults(
-        computeMatchedDefaults('claude-haiku-4-5', rules),
-      );
-      expectNoImageResizeDefaults(
-        computeMatchedDefaults('claude-fable-5', rules),
-      );
-    },
-  );
+  it('anthropic applies image-resize limits to Opus and Sonnet families only', () => {
+    const entry = loadProviderAliasEntries().find(
+      (candidate) =>
+        candidate.alias === 'anthropic' && candidate.source === 'builtin',
+    );
+    expect(entry).toBeDefined();
+    const rules = entry?.config.modelDefaults ?? [];
+    for (const model of [
+      'claude-opus-4-5-20251101',
+      'claude-opus-5',
+      'claude-sonnet-4-20250514',
+      'claude-sonnet-5',
+    ]) {
+      const defaults = computeMatchedDefaults(model, rules);
+      expect(defaults).toMatchObject({
+        'image-resize.maxLongEdge': 1568,
+        'image-resize.maxShortEdge': 1568,
+        'image-resize.maxPixels': 1_229_312,
+      });
+      expect(defaults['max-image-dimension']).toBeUndefined();
+      expect(defaults['max-image-pixels']).toBeUndefined();
+    }
+    for (const model of ['claude-haiku-4-5', 'claude-fable-5']) {
+      const defaults = computeMatchedDefaults(model, rules);
+      expectNoImageResizeDefaults(defaults);
+      expect(defaults['max-image-dimension']).toBeUndefined();
+      expect(defaults['max-image-pixels']).toBeUndefined();
+    }
+  });
+
+  it('claudecode applies max-image-dimension to Opus 5, Opus 4.8, and Sonnet 5 only @issue:3216', () => {
+    const entry = loadProviderAliasEntries().find(
+      (candidate) =>
+        candidate.alias === 'claudecode' && candidate.source === 'builtin',
+    );
+    expect(entry).toBeDefined();
+    const rules = entry?.config.modelDefaults ?? [];
+    for (const model of [
+      'claude-opus-5',
+      'claude-opus-4-8',
+      'claude-sonnet-5',
+    ]) {
+      expect(computeMatchedDefaults(model, rules)).toMatchObject({
+        'max-image-dimension': 2000,
+      });
+    }
+    // Older Opus/Sonnet generations DO get implicit resize defaults (M2),
+    // but do NOT get the hard image-dimension budget.
+    for (const model of [
+      'claude-opus-4-7',
+      'claude-opus-4-6',
+      'claude-opus-4-5-20251101',
+      'claude-sonnet-4-6',
+      'claude-sonnet-4-5-20250929',
+      'claude-sonnet-4-20250514',
+    ]) {
+      const defaults = computeMatchedDefaults(model, rules);
+      expect(defaults['image-resize.maxLongEdge']).toBe(1568);
+      expect(defaults['image-resize.maxShortEdge']).toBe(1568);
+      expect(defaults['image-resize.maxPixels']).toBe(1_229_312);
+      expect(defaults['max-image-dimension']).toBeUndefined();
+    }
+    // Haiku and Fable are NOT in the Opus/Sonnet family — no resize, no cap.
+    expectNoImageResizeDefaults(
+      computeMatchedDefaults('claude-haiku-4-5', rules),
+    );
+    expectNoImageResizeDefaults(
+      computeMatchedDefaults('claude-fable-5', rules),
+    );
+    // Target models get the hard cap but NOT implicit resize defaults.
+    for (const model of [
+      'claude-opus-5',
+      'claude-opus-4-8',
+      'claude-sonnet-5',
+    ]) {
+      const defaults = computeMatchedDefaults(model, rules);
+      expect(defaults['image-resize.maxLongEdge']).toBeUndefined();
+      expect(defaults['image-resize.maxShortEdge']).toBeUndefined();
+      expect(defaults['image-resize.maxPixels']).toBeUndefined();
+      expect(defaults['max-image-dimension']).toBe(2000);
+    }
+  });
 
   it.each(['openai', 'openai-responses', 'openai-vercel', 'codex'])(
     '%s applies image limits to every gpt- family model',

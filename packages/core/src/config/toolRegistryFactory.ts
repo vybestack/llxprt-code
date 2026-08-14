@@ -39,6 +39,7 @@ import {
   ShellTool,
   GenerateImageTool,
 } from '@vybestack/llxprt-code-tools';
+import { resolveImageDimensionBudget } from '@vybestack/llxprt-code-tools/utils/imageDimensionBudget.js';
 
 import { CoreToolHostAdapter } from '../tools-adapters/CoreToolHostAdapter.js';
 import { CoreIdeServiceAdapter } from '../tools-adapters/CoreIdeServiceAdapter.js';
@@ -482,6 +483,8 @@ function registerImageTool(
           resolveBackend: () => resolveBackendFromHost(host),
         },
       ),
+    getImageDimensionBudget: () =>
+      resolveImageDimensionBudget(config.getEphemeralSettings()),
   });
 }
 
