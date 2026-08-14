@@ -125,6 +125,12 @@ const INTERNAL_SETTINGS_KEYS = new Set([
   'activeProvider',
   'currentProfile',
   'tools',
+  // Hooks system configuration is llxprt-internal config, never a model
+  // parameter. Without this classification, separateSettings() falls through
+  // to the unknown-key pass-through and leaks the objects onto API request
+  // bodies, which backends reject (issue #3218).
+  'hooksConfig',
+  'hooks',
 ]);
 
 export function isInternalSettingKey(key: string): boolean {

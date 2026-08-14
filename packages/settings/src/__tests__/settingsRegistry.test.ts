@@ -295,6 +295,50 @@ describe('separateSettings — settings categorization', () => {
       expect(result.modelParams.temperature).toBe(0.5);
     });
   });
+
+  describe('hooks system config never leaks into modelParams @issue:3218', () => {
+    it('places hooksConfig in cliSettings, never modelParams', () => {
+      const result = separateSettings({
+        hooksConfig: { enabled: true, notifications: false },
+      });
+      expect(result.modelParams.hooksConfig).toBeUndefined();
+      expect(result.cliSettings.hooksConfig).toStrictEqual({
+        enabled: true,
+        notifications: false,
+      });
+    });
+
+    it('places hooks (event definitions) in cliSettings, never modelParams', () => {
+      const hooks = {
+        beforeModel: [{ command: 'echo hi', type: 'command' as const }],
+      };
+      const result = separateSettings({ hooks });
+      expect(result.modelParams.hooks).toBeUndefined();
+      expect(result.cliSettings.hooks).toStrictEqual(hooks);
+    });
+
+    it('does not leak hooksConfig into modelParams for the codex provider', () => {
+      const result = separateSettings(
+        {
+          hooksConfig: { enabled: true, disabled: [] },
+          temperature: 0.7,
+        },
+        'codex',
+      );
+      expect(result.modelParams.hooksConfig).toBeUndefined();
+      // Legitimate model params still pass through
+      expect(result.modelParams.temperature).toBe(0.7);
+    });
+
+    it('does not leak hooksConfig into modelParams for the openai provider', () => {
+      const result = separateSettings(
+        { hooksConfig: { enabled: false } },
+        'openai',
+      );
+      expect(result.modelParams.hooksConfig).toBeUndefined();
+      expect(result.modelBehavior.hooksConfig).toBeUndefined();
+    });
+  });
 });
 
 describe('validateSetting — validation', () => {
