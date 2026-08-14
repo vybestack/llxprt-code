@@ -15,6 +15,7 @@ import {
   createAggregateSemanticBudget,
   createGrepRetainState,
   retainGrepMatch,
+  DEFAULT_SOURCE_BUDGET_BYTES,
 } from '../tools/grep/grepBudget.js';
 import { GrepTool, RipGrepTool } from '../index.js';
 import type { ToolResult } from '../index.js';
@@ -228,6 +229,7 @@ describe('Strategy budget rollback: failed strategy does not starve fallback (it
         const budget: SemanticBudget = {
           remainingBytes: 4000,
           remainingObjects: 100,
+          sourceBytes: DEFAULT_SOURCE_BUDGET_BYTES,
         };
         const result = await performGrepSearch(
           {
@@ -439,6 +441,7 @@ describe('Ripgrep multi-root budget exhaustion stops further spawns (item 11)', 
         const tightBudget: SemanticBudget = {
           remainingBytes: 50_000,
           remainingObjects: 100_000,
+          sourceBytes: DEFAULT_SOURCE_BUDGET_BYTES,
         };
 
         const result = await javascriptGrepFallback(
@@ -456,6 +459,53 @@ describe('Ripgrep multi-root budget exhaustion stops further spawns (item 11)', 
         expect(result.incomplete).toBe(true);
         expect(result.results.length).toBeLessThan(50);
         expect(tightBudget.remainingBytes).toBeLessThan(50_000);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'charges source chunks against the aggregate sourceBytes across no-match files (not a fresh per-file budget)',
+      async () => {
+        const { javascriptGrepFallback } = await import(
+          '../tools/grep/javascriptFallback.js'
+        );
+
+        // 10 no-match files, 1000 bytes each. The tight source budget (3500)
+        // allows three full files; the fourth file's first chunk (1000)
+        // exceeds the remaining 500 bytes and must prove partiality against
+        // the SHARED aggregate budget — not a fresh per-file allowance.
+        for (let i = 0; i < 10; i++) {
+          writeFileSync(join(tempDir, `nomatch${i}.txt`), 'x'.repeat(1000));
+        }
+
+        const budget: SemanticBudget = {
+          remainingBytes: 1_000_000,
+          remainingObjects: 100_000,
+          sourceBytes: 3_500,
+        };
+
+        const result = await javascriptGrepFallback(
+          'definitely_no_such_match',
+          tempDir,
+          undefined,
+          new AbortController().signal,
+          1000,
+          100,
+          50,
+          ['node_modules'],
+          budget,
+        );
+
+        // Bounded: the aggregate budget was actually consumed across files
+        // (three files = 3000 charged, 500 remain) — multiple no-match files
+        // did NOT each receive a fresh budget.
+        expect(budget.sourceBytes).toBe(500);
+        // Truthful: the run is marked incomplete because the fourth file
+        // could not be fully observed.
+        expect(result.incomplete).toBe(true);
+        expect(result.wasLimited).toBe(true);
+        expect(result.results).toHaveLength(0);
+        expect(result.totalFound).toBeUndefined();
       },
       { timeout: 15000 },
     );
@@ -717,4 +767,141 @@ describe('Exact-cap multi-root completeness: skipped roots mark incomplete (item
     },
     { timeout: 15000 },
   );
+});
+
+describe('javascriptGrepFallback mid-file abort (issue #3202)', () => {
+  let tempDir: string;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const tmp = createTempDir('llxprt-fallback-abort-');
+    tempDir = tmp.dir;
+    cleanup = tmp.cleanup;
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it(
+    'rejects promptly on mid-file abort without reading the entire file',
+    async () => {
+      const { javascriptGrepFallback } = await import(
+        '../tools/grep/javascriptFallback.js'
+      );
+
+      // A large file with many matching lines so the read stream is still
+      // active when we abort.
+      const lines: string[] = [];
+      for (let i = 0; i < 50_000; i++) {
+        lines.push(`abort_match_${i}`);
+      }
+      writeFileSync(join(tempDir, 'big.txt'), lines.join('\n'));
+
+      const controller = new AbortController();
+      const promise = javascriptGrepFallback(
+        'abort_match',
+        tempDir,
+        undefined,
+        controller.signal,
+        100_000,
+        100,
+        100_000,
+        ['node_modules'],
+        createAggregateSemanticBudget(),
+      );
+
+      // Abort while the first file is still being streamed. The per-file
+      // read stream is destroyed promptly by the abort wiring, and the glob
+      // stream sees the aborted signal — the function must reject without
+      // hanging or reading the entire file to EOF.
+      controller.abort();
+      await expect(promise).rejects.toThrow(/abort/i);
+    },
+    { timeout: 15000 },
+  );
+});
+
+describe('grep directory partial metadata.outputTruncation consistency (issue #3202)', () => {
+  let tempDir: string;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const tmp = createTempDir();
+    tempDir = tmp.dir;
+    cleanup = tmp.cleanup;
+  });
+
+  afterEach(() => cleanup());
+
+  it('partial directory result (max_results+1) includes metadata.outputTruncation', async () => {
+    for (let i = 0; i < 6; i++) {
+      writeFileSync(join(tempDir, `f${i}.txt`), `match_line_${i}\n`);
+    }
+
+    const result = await executeGrep(createToolHost(tempDir), {
+      pattern: 'match_line',
+      max_results: 5,
+      max_files: 100,
+      max_per_file: 1,
+    });
+
+    expect(result.error).toBeUndefined();
+    // The directory partial path MUST carry metadata.outputTruncation.
+    expect(result.metadata).toBeDefined();
+    expect(result.metadata).toHaveProperty('outputTruncation');
+    expect(
+      (result.metadata as Record<string, unknown>).outputTruncation,
+    ).toEqual({ truncated: true });
+  });
+
+  it('exact directory result does NOT include metadata.outputTruncation', async () => {
+    for (let i = 0; i < 3; i++) {
+      writeFileSync(join(tempDir, `f${i}.txt`), `match_line_${i}\n`);
+    }
+
+    const result = await executeGrep(createToolHost(tempDir), {
+      pattern: 'match_line',
+      max_results: 100,
+      max_files: 100,
+      max_per_file: 10,
+    });
+
+    expect(result.error).toBeUndefined();
+    // An exact result should NOT carry outputTruncation metadata.
+    expect(result.metadata?.outputTruncation).toBeUndefined();
+  });
+});
+
+describe('grep singular wording on partial paths (issue #3202)', () => {
+  let tempDir: string;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const tmp = createTempDir();
+    tempDir = tmp.dir;
+    cleanup = tmp.cleanup;
+  });
+
+  afterEach(() => cleanup());
+
+  it('directory partial with 1 retained match uses singular "match" not "matches"', async () => {
+    // 2 matches across 2 files with max_results=1: only 1 is retained.
+    writeFileSync(join(tempDir, 'a.txt'), 'unique_line\n');
+    writeFileSync(join(tempDir, 'b.txt'), 'unique_line\n');
+
+    const result = await executeGrep(createToolHost(tempDir), {
+      pattern: 'unique_line',
+      max_results: 1,
+      max_files: 100,
+      max_per_file: 1,
+    });
+
+    const display = String(result.returnDisplay);
+
+    // The result is partial/incomplete (2 matches found, 1 retained).
+    // The display must use singular "match" when count is 1.
+    expect(display).toContain('Showing 1 match');
+    expect(display).not.toMatch(/Showing 1 matches/);
+  });
 });

@@ -9,24 +9,20 @@ import type { SgNode } from '@ast-grep/napi';
 import type { ParsedFile, AnalysisResult, ResolvedLang } from './types.js';
 import {
   escapeRegex,
-  getFiles,
+  iterateFiles,
   parseFile,
   makeRelative,
   extractCalleeName,
   deduplicateCallRanges,
   findFunctionContainer,
 } from './helpers.js';
+import { type AnalysisBudget, BudgetTracker } from './budget.js';
 
 interface CalleeRef {
   text: string;
   file: string;
   line: number;
   calleeNode?: SgNode;
-}
-
-interface CalleeCtx {
-  nodesVisited: number;
-  maxNodes: number;
 }
 
 export interface CalleeEntry {
@@ -42,15 +38,31 @@ async function findCalleesOfFile(
   sym: string,
   workspaceRoot: string,
   visited: Set<string>,
-  ctx: CalleeCtx,
-  signal: AbortSignal,
+  tracker: BudgetTracker,
+  effectiveMaxNodes: number,
 ): Promise<CalleeRef[]> {
-  if (signal.aborted || ctx.nodesVisited >= ctx.maxNodes) return [];
-  const parsed = await parseFile(file, lang);
-  if (!parsed) return [];
+  // The node budget is enforced per-candidate by tryAcceptNode inside
+  // collectCalleesFromContainer. We do NOT early-return on the exact node
+  // limit here so the one-over sentinel can be observed when callees are
+  // spread one-per-file across the workspace.
+  if (tracker.signal.aborted || tracker.truncated) {
+    return [];
+  }
+  const outcome = await parseFile(file, lang);
+  if (!outcome.ok) {
+    tracker.recordFileOmission(outcome.reason);
+    return [];
+  }
 
   const relPath = makeRelative(file, workspaceRoot);
-  return collectCalleeRefs(parsed, sym, relPath, visited, ctx);
+  return collectCalleeRefs(
+    outcome,
+    sym,
+    relPath,
+    visited,
+    tracker,
+    effectiveMaxNodes,
+  );
 }
 
 /**
@@ -63,11 +75,19 @@ function collectCalleeRefs(
   sym: string,
   relPath: string,
   visited: Set<string>,
-  ctx: CalleeCtx,
+  tracker: BudgetTracker,
+  effectiveMaxNodes: number,
 ): CalleeRef[] {
   const results: CalleeRef[] = [];
   for (const container of findNamedContainers(parsed, sym)) {
-    collectCalleesFromContainer(container, relPath, visited, ctx, results);
+    collectCalleesFromContainer(
+      container,
+      relPath,
+      visited,
+      tracker,
+      effectiveMaxNodes,
+      results,
+    );
   }
   return results;
 }
@@ -156,8 +176,8 @@ function findNamedContainers(parsed: ParsedFile, sym: string): SgNode[] {
  * Checks a single call-expression node and returns a CalleeRef if it belongs
  * directly to the target container (its nearest function-like container),
  * or null if it should be skipped (nested in a different function or already
- * visited). The maxNodes traversal limit is enforced upstream in
- * findCalleesOfFile, not in this function.
+ * visited). Node-budget acceptance happens in the caller loop (before
+ * insertion), not in this function.
  *
  * Extracted so the caller loop uses zero `continue` statements.
  */
@@ -167,7 +187,6 @@ function tryCollectCallee(
   containerEnd: number,
   relPath: string,
   visited: Set<string>,
-  ctx: CalleeCtx,
 ): CalleeRef | null {
   const nearest = findFunctionContainer(node);
   if (nearest === null) {
@@ -185,7 +204,6 @@ function tryCollectCallee(
     return null;
   }
   visited.add(key);
-  ctx.nodesVisited++;
   return {
     text: callText,
     file: relPath,
@@ -200,12 +218,17 @@ function tryCollectCallee(
  * is the target container are kept, so calls inside nested functions are not
  * misattributed to the outer container. Containers are compared by range
  * index (node identity is not reliable across ast-grep queries).
+ *
+ * Every callee insertion is accepted through the shared node budget
+ * ({@link BudgetTracker.tryAcceptNode}) BEFORE being pushed, so the
+ * node-candidate aggregate is hard-bounded with one-over semantics.
  */
 function collectCalleesFromContainer(
   containerNode: SgNode,
   relPath: string,
   visited: Set<string>,
-  ctx: CalleeCtx,
+  tracker: BudgetTracker,
+  effectiveMaxNodes: number,
   results: CalleeRef[],
 ): void {
   const callMatches = containerNode.findAll({
@@ -223,9 +246,9 @@ function collectCalleesFromContainer(
       containerEnd,
       relPath,
       visited,
-      ctx,
     );
     if (ref !== null) {
+      if (!tracker.tryAcceptNode(effectiveMaxNodes)) break;
       results.push(ref);
     }
   }
@@ -239,52 +262,89 @@ export async function executeCallees(
   depth: number,
   maxNodes: number,
   signal: AbortSignal,
+  budget: AnalysisBudget,
 ): Promise<AnalysisResult> {
-  const files = await getFiles(searchPath, lang);
+  const tracker = new BudgetTracker(budget, signal);
   const visited = new Set<string>();
-  let nodesVisited = 0;
-  let truncated = false;
+  // The node-candidate budget is the smaller of the requested maxNodes and
+  // the finite record budget, so callees traversal is always hard-bounded.
+  const effectiveMaxNodes = Math.min(maxNodes, budget.recordBudget);
 
   const findCalleesOf = async (
     sym: string,
     currentDepth: number,
   ): Promise<CalleeEntry[]> => {
-    if (currentDepth <= 0 || nodesVisited >= maxNodes || signal.aborted) {
-      if (nodesVisited >= maxNodes) truncated = true;
+    if (signal.aborted) {
+      tracker.markAborted();
+      return [];
+    }
+    // Exact-limit stays complete: reaching the node budget without observing
+    // an extra candidate does not mark the result partial. The per-candidate
+    // tryAcceptNode (inside collectCalleesFromContainer) observes the one-over
+    // sentinel; shouldVisitMoreFiles then stops file iteration.
+    if (currentDepth <= 0 || tracker.truncated) {
       return [];
     }
 
     const callees: CalleeEntry[] = [];
-    const ctx: CalleeCtx = { nodesVisited, maxNodes };
 
-    for (const file of files) {
+    for await (const file of iterateFiles(searchPath, lang, signal)) {
+      if (!tracker.shouldVisitMoreFiles()) break;
+      tracker.filesVisited++;
+
       const calleeResults = await findCalleesOfFile(
         file,
         lang,
         sym,
         workspaceRoot,
         visited,
-        ctx,
-        signal,
+        tracker,
+        effectiveMaxNodes,
       );
 
       for (const r of calleeResults) {
         callees.push(
-          await buildCalleeEntry(r, sym, currentDepth, ctx, findCalleesOf),
+          await buildCalleeEntry(
+            r,
+            sym,
+            currentDepth,
+            tracker,
+            effectiveMaxNodes,
+            findCalleesOf,
+          ),
         );
       }
     }
 
-    nodesVisited = ctx.nodesVisited;
     return callees;
   };
 
   const results = await findCalleesOf(symbol, depth);
 
+  if (signal.aborted) {
+    tracker.markAborted();
+  }
+
+  // For callers/callees the node-candidate budget IS the record budget
+  // (effectiveMaxNodes = min(maxNodes, recordBudget)), so the node counters
+  // are reported as the record counters too. recordBudget reflects the
+  // effective maximum, not the raw configured recordBudget.
   return {
     mode: 'callees',
     symbol,
-    truncated,
+    truncated: tracker.truncated,
+    partial: tracker.truncated,
+    partialReason: tracker.partialReason,
+    fileBudget: budget.fileBudget,
+    recordBudget: effectiveMaxNodes,
+    filesVisited: tracker.filesVisited,
+    recordsRetained: tracker.nodesRetained,
+    recordsObserved: tracker.nodesObserved,
+    nodesRetained: tracker.nodesRetained,
+    nodesObserved: tracker.nodesObserved,
+    oversizedFiles: tracker.oversizedFiles,
+    unparseableFiles: tracker.unparseableFiles,
+    countInexact: tracker.countInexact,
     results,
   };
 }
@@ -296,7 +356,8 @@ async function buildCalleeEntry(
   r: CalleeRef,
   sym: string,
   currentDepth: number,
-  ctx: CalleeCtx,
+  tracker: BudgetTracker,
+  effectiveMaxNodes: number,
   recurse: (sym: string, currentDepth: number) => Promise<CalleeEntry[]>,
 ): Promise<CalleeEntry> {
   const entry: CalleeEntry = {
@@ -305,9 +366,10 @@ async function buildCalleeEntry(
     line: r.line,
   };
   const calleeName = r.calleeNode ? extractCalleeName(r.calleeNode) : null;
+  const mayRecurse = currentDepth > 1 && !tracker.truncated;
   if (
-    currentDepth > 1 &&
-    ctx.nodesVisited < ctx.maxNodes &&
+    mayRecurse &&
+    tracker.nodesObserved < effectiveMaxNodes &&
     calleeName &&
     calleeName !== sym
   ) {

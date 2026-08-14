@@ -366,9 +366,11 @@ async function tryCollectReverseImportsForFile(
   targetBasename: string,
   workspaceRoot: string,
   retain: RetainImportFn,
+  tracker: BudgetTracker,
 ): Promise<boolean> {
-  const parsed = await parseFile(file, lang);
-  if (!parsed) {
+  const outcome = await parseFile(file, lang);
+  if (!outcome.ok) {
+    tracker.recordFileOmission(outcome.reason);
     return true;
   }
   const relPath = makeRelative(file, workspaceRoot);
@@ -376,13 +378,13 @@ async function tryCollectReverseImportsForFile(
     !shouldCheckReverseImport(
       relPath,
       targetRel,
-      parsed.content,
+      outcome.content,
       targetBasename,
     )
   ) {
     return true;
   }
-  return collectImportMatches(parsed, relPath, targetBasename, retain);
+  return collectImportMatches(outcome, relPath, targetBasename, retain);
 }
 
 /**
@@ -414,6 +416,7 @@ async function collectReverseImportsBounded(
         targetBasename,
         workspaceRoot,
         retain,
+        tracker,
       ))
     ) {
       return;
@@ -441,6 +444,8 @@ function buildDependenciesResult(
     filesVisited: tracker.filesVisited,
     recordsRetained: tracker.recordsRetained,
     recordsObserved: tracker.recordsObserved,
+    oversizedFiles: tracker.oversizedFiles,
+    unparseableFiles: tracker.unparseableFiles,
     countInexact: tracker.countInexact,
     results: {
       imports,
@@ -516,9 +521,12 @@ async function collectForwardImportsBounded(
   for await (const file of iterateFiles(searchPath, lang, tracker.signal)) {
     if (!tracker.shouldVisitMoreFiles()) return;
     tracker.filesVisited++;
-    const parsed = await parseFile(file, lang);
-    if (!parsed) continue;
+    const outcome = await parseFile(file, lang);
+    if (!outcome.ok) {
+      tracker.recordFileOmission(outcome.reason);
+      continue;
+    }
     const relPath = makeRelative(file, workspaceRoot);
-    if (!collectFileImportsBounded(parsed, relPath, retain)) return;
+    if (!collectFileImportsBounded(outcome, relPath, retain)) return;
   }
 }

@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ByteBudget, TruncationMetadata } from '../acquisition/index.js';
-import { BoundedStreamCollector } from '../acquisition/index.js';
+import type { ByteBudget, TruncationMetadata } from './types.js';
+import { BoundedStreamCollector } from './boundedStreamCollector.js';
 
 /** Minimal structural interface satisfied by a node-fetch Response. */
 export interface BoundedFetchResponse {
@@ -111,6 +111,7 @@ function streamBoundedBody(
       body.removeListener('data', onData);
       body.removeListener('end', onEnd);
       body.removeListener('error', onError);
+      body.removeListener('close', onClose);
       signal.removeEventListener('abort', onAbort);
     };
 
@@ -148,6 +149,20 @@ function streamBoundedBody(
       });
     };
 
+    /**
+     * 'close' without a prior 'end' means the body terminated prematurely —
+     * the complete bounded body cannot be known, so acquisition settles by
+     * rejecting. When 'end', 'error', or 'abort' settled first, this is a
+     * guarded no-op (single authoritative settlement).
+     */
+    const onClose = (): void => {
+      settle(() => {
+        cancelRequest();
+        destroyStream(body);
+        reject(new Error('Response body closed before end (incomplete body)'));
+      });
+    };
+
     const onAbort = (): void => {
       settle(() => {
         cancelRequest();
@@ -158,6 +173,7 @@ function streamBoundedBody(
 
     body.on('error', onError);
     body.on('end', onEnd);
+    body.on('close', onClose);
     body.on('data', onData);
     signal.addEventListener('abort', onAbort, { once: true });
 

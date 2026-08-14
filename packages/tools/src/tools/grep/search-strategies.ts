@@ -9,7 +9,6 @@
  * Extracted from grep.ts to keep the main file focused on the tool facade.
  */
 
-import fsPromises from 'fs/promises';
 import path from 'path';
 import { spawn } from 'child_process';
 
@@ -682,52 +681,29 @@ async function trySystemGrepStrategy(
   );
 }
 
-/**
- * Executes a single-file search and returns matches.
- */
-export async function performSingleFileSearch(
-  pattern: string,
-  filePath: string,
-  signal: AbortSignal,
-): Promise<GrepMatch[]> {
-  if (signal.aborted) {
-    return [];
-  }
-
-  const regex = new RegExp(pattern, 'i');
-  const content = await fsPromises.readFile(filePath, 'utf8');
-  const lines = content.split(/\r?\n/);
-  const matches: GrepMatch[] = [];
-
-  for (let i = 0; i < lines.length; i++) {
-    if (regex.test(lines[i])) {
-      matches.push({
-        filePath: path.basename(filePath),
-        lineNumber: i + 1,
-        line: lines[i],
-      });
-    }
-  }
-
-  return matches;
-}
-
 function snapshotBudget(budget: SemanticBudget): {
   remainingBytes: number;
   remainingObjects: number;
+  sourceBytes: number;
 } {
   return {
     remainingBytes: budget.remainingBytes,
     remainingObjects: budget.remainingObjects,
+    sourceBytes: budget.sourceBytes,
   };
 }
 
 function restoreBudget(
   budget: SemanticBudget,
-  snapshot: { remainingBytes: number; remainingObjects: number },
+  snapshot: {
+    remainingBytes: number;
+    remainingObjects: number;
+    sourceBytes: number;
+  },
 ): void {
   budget.remainingBytes = snapshot.remainingBytes;
   budget.remainingObjects = snapshot.remainingObjects;
+  budget.sourceBytes = snapshot.sourceBytes;
 }
 
 /**

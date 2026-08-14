@@ -34,10 +34,8 @@ import {
   type GrepMatch,
   type GrepToolParams,
 } from './grep/types.js';
-import {
-  performGrepSearch,
-  performSingleFileSearch,
-} from './grep/search-strategies.js';
+import { performGrepSearch } from './grep/search-strategies.js';
+import { performSingleFileSearch } from './grep/single-file-search.js';
 import { createAggregateSemanticBudget } from './grep/grepBudget.js';
 
 export { type GrepToolParams } from './grep/types.js';
@@ -171,11 +169,16 @@ class GrepToolInvocation extends BaseToolInvocation<
     resolved: ResolvedSearchTarget & { kind: 'file' },
     combinedSignal: AbortSignal,
     searchDirDisplay: string,
+    maxResults: number,
+    maxPerFile: number,
   ): Promise<ToolResult> {
+    // Pass the invocation's validated limits and a finite source-observation
+    // budget through to the streaming search — never the hardcoded defaults.
     const fileResult = await performSingleFileSearch(
       this.params.pattern,
       resolved.filePath,
       combinedSignal,
+      { maxResults, maxPerFile },
     );
 
     let includeNote = '';
@@ -184,17 +187,36 @@ class GrepToolInvocation extends BaseToolInvocation<
         '\nNote: include filter ignored because a specific file path was provided.';
     }
 
-    if (fileResult.length === 0) {
+    const matchCount = fileResult.matches.length;
+    const partial = fileResult.truncated || fileResult.sourcePartial;
+    const truncationMeta = partial
+      ? { outputTruncation: { truncated: true } }
+      : undefined;
+
+    if (matchCount === 0 && !partial) {
       const noMatchMsg = `No matches found for pattern "${this.params.pattern}" in file "${searchDirDisplay}".${includeNote}`;
       return { llmContent: noMatchMsg, returnDisplay: 'No matches found' };
     }
 
-    const matchTerm = fileResult.length === 1 ? 'match' : 'matches';
-    let llmContent = `Found ${fileResult.length} ${matchTerm} for pattern "${this.params.pattern}" in file "${searchDirDisplay}":${includeNote}
+    if (matchCount === 0 && partial) {
+      const msg = `No matches retained for pattern "${this.params.pattern}" in file "${searchDirDisplay}". Results may be incomplete.${includeNote}`;
+      return {
+        llmContent: msg,
+        returnDisplay: 'No matches shown (incomplete)',
+        metadata: truncationMeta,
+      };
+    }
+
+    const matchTerm = matchCount === 1 ? 'match' : 'matches';
+    const header = partial
+      ? `Showing ${matchCount} ${matchTerm} for pattern "${this.params.pattern}" in file "${searchDirDisplay}" (results may be incomplete):${includeNote}`
+      : `Found ${matchCount} ${matchTerm} for pattern "${this.params.pattern}" in file "${searchDirDisplay}":${includeNote}`;
+
+    let llmContent = `${header}
 ---
 File: ${resolved.basename}
 `;
-    for (const match of fileResult) {
+    for (const match of fileResult.matches) {
       llmContent += `L${match.lineNumber}: ${match.line.trim()}
 `;
     }
@@ -211,12 +233,16 @@ File: ${resolved.basename}
       return {
         llmContent: formatted.llmContent,
         returnDisplay: formatted.returnDisplay,
+        metadata: truncationMeta,
       };
     }
 
     return {
       llmContent: llmContent.trim(),
-      returnDisplay: `Found ${fileResult.length} ${matchTerm}`,
+      returnDisplay: partial
+        ? `Showing ${matchCount} ${matchTerm} (results may be incomplete)`
+        : `Found ${matchCount} ${matchTerm}`,
+      metadata: truncationMeta,
     };
   }
 
@@ -388,7 +414,8 @@ File: ${resolved.basename}
       : '';
     if (!totalIsExact) {
       // Search was incomplete — do not claim an exact total.
-      llmContent = `Showing ${matchCount} matches for pattern "${this.params.pattern}" ${searchLocationDescription}${includeNote} (results may be incomplete):
+      const matchTerm = matchCount === 1 ? 'match' : 'matches';
+      llmContent = `Showing ${matchCount} ${matchTerm} for pattern "${this.params.pattern}" ${searchLocationDescription}${includeNote} (results may be incomplete):
 ---
 `;
     } else if (wasLimited || totalMatchesFound > matchCount) {
@@ -430,7 +457,8 @@ File: ${resolved.basename}
     totalIsExact: boolean,
   ): string {
     if (!totalIsExact) {
-      return `Showing ${matchCount} matches (results may be incomplete)`;
+      const matchTerm = matchCount === 1 ? 'match' : 'matches';
+      return `Showing ${matchCount} ${matchTerm} (results may be incomplete)`;
     }
     if (effectiveWasLimited || totalMatchesFound > matchCount) {
       return `Found ${totalMatchesFound} matches (showing ${matchCount})`;
@@ -462,6 +490,7 @@ File: ${resolved.basename}
         return {
           llmContent: msg,
           returnDisplay: 'No matches shown (incomplete)',
+          metadata: { outputTruncation: { truncated: true } },
         };
       }
       const noMatchMsg = `No matches found for pattern "${this.params.pattern}" ${searchLocationDescription}${includeNote}.`;
@@ -504,6 +533,7 @@ File: ${resolved.basename}
       return {
         llmContent: formatted.llmContent,
         returnDisplay: formatted.returnDisplay,
+        metadata: { outputTruncation: { truncated: true } },
       };
     }
 
@@ -514,9 +544,13 @@ File: ${resolved.basename}
       totalIsExact,
     );
 
+    const partial = !totalIsExact || effectiveWasLimited;
     return {
       llmContent: llmContent.trim(),
       returnDisplay: displayCount,
+      ...(partial
+        ? { metadata: { outputTruncation: { truncated: true } } }
+        : {}),
     };
   }
 
@@ -594,6 +628,8 @@ File: ${resolved.basename}
         resolved as ResolvedSearchTarget & { kind: 'file' },
         combinedSignal,
         searchDirDisplay,
+        maxResults,
+        maxPerFile,
       );
     }
 

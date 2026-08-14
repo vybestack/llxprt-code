@@ -14,7 +14,7 @@ import {
   CoreToolRegistryHostAdapter,
 } from '@vybestack/llxprt-code-core';
 import { ShellTool, ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { resolveByteBudgetFromSetting } from '@vybestack/llxprt-code-tools/acquisition.js';
+import { resolveAcquisitionBudgetFromSetting } from '@vybestack/llxprt-code-core';
 import { AcpTerminalShellHost } from './acp-terminal-shell-host.js';
 import { TerminalManager } from './zed-terminal-manager.js';
 
@@ -33,7 +33,7 @@ export function buildZedTerminalSetup(
 ): ZedTerminalSetup {
   // ACP receives the same finite acquisition budget as local shell execution,
   // rather than approximating bytes from the model-facing token limit.
-  const outputBudget = resolveByteBudgetFromSetting(
+  const outputBudget = resolveAcquisitionBudgetFromSetting(
     config.getEphemeralSetting('shell-output-retention-max-bytes'),
   );
   const terminals = new TerminalManager(

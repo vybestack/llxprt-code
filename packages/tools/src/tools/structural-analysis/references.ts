@@ -243,13 +243,15 @@ async function trySearchReferencesForFile(
   workspaceRoot: string,
   symbol: string,
   addResult: AddResultFn,
+  tracker: BudgetTracker,
 ): Promise<boolean> {
-  const parsed = await parseFile(file, lang);
-  if (!parsed) {
+  const outcome = await parseFile(file, lang);
+  if (!outcome.ok) {
+    tracker.recordFileOmission(outcome.reason);
     return true;
   }
   const relPath = makeRelative(file, workspaceRoot);
-  return searchAllReferenceCategories(parsed, symbol, relPath, addResult);
+  return searchAllReferenceCategories(outcome, symbol, relPath, addResult);
 }
 
 export async function executeReferences(
@@ -301,6 +303,7 @@ export async function executeReferences(
       workspaceRoot,
       symbol,
       addResult,
+      tracker,
     );
   };
 
@@ -328,6 +331,8 @@ export async function executeReferences(
     filesVisited: tracker.filesVisited,
     recordsRetained: tracker.recordsRetained,
     recordsObserved: tracker.recordsObserved,
+    oversizedFiles: tracker.oversizedFiles,
+    unparseableFiles: tracker.unparseableFiles,
     countInexact: tracker.countInexact,
     results: { categories, counts },
   };
