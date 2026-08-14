@@ -8,6 +8,7 @@ import { useEffect } from 'react';
 import process from 'node:process';
 import { MessageType, type HistoryItemWithoutId } from '../types.js';
 import type { MemoryTelemetryController } from './memoryTrend/memoryTelemetry.js';
+import { sampleMemoryUsage } from './memoryTrend/jscMemorySampler.js';
 
 export const MEMORY_WARNING_THRESHOLD_BYTES = 7 * 1024 * 1024 * 1024; // 7GB
 export const MEMORY_CHECK_INTERVAL_MS = 60 * 1000; // 1 minute
@@ -34,7 +35,10 @@ const realPorts: MemoryMonitorPorts = {
   setInterval: (h, ms) => globalThis.setInterval(h, ms),
   clearInterval: (id) =>
     globalThis.clearInterval(id as ReturnType<typeof setInterval>),
-  memoryUsage: () => process.memoryUsage(),
+  // JSC-corrected: under Bun the platform `heapUsed` does not track the real
+  // heap (see jscMemorySampler.ts). `rss` is sound either way, so the cheap
+  // warning-only path below still reads it directly.
+  memoryUsage: () => sampleMemoryUsage(),
   rssBytes: () => process.memoryUsage.rss(),
 };
 

@@ -533,6 +533,15 @@ export { ContentConverters } from './services/history/ContentConverters.js';
 // (e.g. the CLI /dumpcontext command) can type the trace without deep-importing.
 export type { ChronologyTraceEntry } from './services/history/historyChronology.js';
 export type { CurrentTurnMarker } from './services/history/historyChronology.js';
+export {
+  computeHistorySizeBreakdown,
+  estimateBlockBytes,
+  estimateContentBytes,
+} from './services/history/contentSize.js';
+export type {
+  HistorySizeBreakdown,
+  ToolResponseSize,
+} from './services/history/contentSize.js';
 
 // @plan PLAN-20260702-LLMTYPES.P04
 // @requirement REQ-013.1

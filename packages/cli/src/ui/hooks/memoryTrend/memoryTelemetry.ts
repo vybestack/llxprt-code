@@ -32,6 +32,7 @@ import type {
 } from '@vybestack/llxprt-code-telemetry/perf/index.js';
 import { MemoryRing } from './memoryRing.js';
 import type { MemoryRingSample } from './memoryRing.js';
+import { sampleMemoryUsage } from './jscMemorySampler.js';
 
 /**
  * The four operation-end memory columns. Present on the operation record IFF
@@ -87,7 +88,10 @@ export class MemoryTelemetryController implements OperationMemorySampler {
     this.sink = options.sink;
     this.wallNow = options.wallNow ?? (() => Date.now());
     this.monotonicNow = options.monotonicNow ?? (() => performance.now());
-    this.memoryNow = options.memoryNow ?? (() => process.memoryUsage());
+    // Defaults to the JSC-corrected sampler: under Bun `process.memoryUsage()`
+    // reports a `heapUsed` that does not track the JavaScriptCore heap at all
+    // (see jscMemorySampler.ts), which made every recorded heap trend useless.
+    this.memoryNow = options.memoryNow ?? sampleMemoryUsage;
   }
 
   /**

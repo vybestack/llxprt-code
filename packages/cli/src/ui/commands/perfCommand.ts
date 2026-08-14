@@ -29,6 +29,8 @@ import type {
   CommandContext,
 } from './types.js';
 import { CommandKind } from './types.js';
+import { getHistoryServiceFromConfig } from './historyServiceAccess.js';
+import { formatHistoryMemoryBreakdown } from './perfMemoryBreakdown.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import {
   perfInspect,
@@ -283,6 +285,33 @@ function formatSnapshot(
  * message; non-errno internal/programming errors are allowed to reject so they
  * surface as bugs rather than being swallowed.
  */
+/**
+ * `/perf memory` — what the retained conversation is holding, by block type,
+ * tool, and individual response. Unlike the rest of `/perf` this reads live
+ * session state rather than stored perf files, so it needs no telemetry
+ * settings to be enabled.
+ */
+function createMemorySubCommand(): SlashCommand {
+  return {
+    name: 'memory',
+    description: 'Show retained conversation size by block type and tool',
+    kind: CommandKind.BUILT_IN,
+    action: (context: CommandContext): MessageActionReturn => {
+      const historyService = getHistoryServiceFromConfig(
+        context.services.config,
+      );
+      if (historyService === null) {
+        return messageInfo(
+          'History is not available. Start a conversation first.',
+        );
+      }
+      return messageInfo(
+        formatHistoryMemoryBreakdown(historyService.getRawHistory()),
+      );
+    },
+  };
+}
+
 function createInspectSubCommand(
   perfDir: string,
   operations: PerfOperations,
@@ -419,13 +448,14 @@ export function createPerfCommand(
         return formatSnapshot(snapshotCapability);
       }
       return messageError(
-        `Unknown subcommand. Usage: /perf [inspect|report|delete]`,
+        `Unknown subcommand. Usage: /perf [inspect|report|delete|memory]`,
       );
     },
     subCommands: [
       createInspectSubCommand(perfDir, operations),
       createReportSubCommand(perfDir, operations, getSelfHealth, tokenUsageDir),
       createDeleteSubCommand(perfDir, operations),
+      createMemorySubCommand(),
     ],
   };
 }

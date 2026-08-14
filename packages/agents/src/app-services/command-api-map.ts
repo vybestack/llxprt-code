@@ -340,6 +340,11 @@ export const COMMAND_API_MAP: readonly CommandApiMapping[] = [
     'Context dump reads the live conversation state for debugging',
   ),
   runtime(
+    '/perf memory',
+    'agent.getHistory',
+    'Retained-history memory accounting reads the live conversation state',
+  ),
+  runtime(
     '/mcp refresh',
     'agent.mcp.refresh',
     'Refreshing MCP discovery affects the live runtime tool set',
