@@ -66,6 +66,7 @@ interface ResolutionState {
   absoluteToRelativePathMap: Map<string, string>;
   ignoredByReason: IgnoredByReason;
   selectedSubagents: string[];
+  globSearchCount: number;
 }
 
 interface ResolveCommandsResult extends ResolutionState {
@@ -146,6 +147,7 @@ function createResolutionState(): ResolutionState {
     absoluteToRelativePathMap: new Map<string, string>(),
     ignoredByReason: { git: [], llxprt: [], both: [] },
     selectedSubagents: [],
+    globSearchCount: 0,
   };
 }
 
@@ -341,6 +343,22 @@ async function statPathInDirectory(
   return { currentPathSpec: relativePath, relativePath };
 }
 
+// A pasted block can contain many tokens that look like @-paths. Each missing
+// one used to fall back to a full recursive workspace crawl, so a single paste
+// could launch an unbounded number of them.
+const MAX_GLOB_FALLBACK_SEARCHES = 3;
+
+// The fallback searches for `**/*<name>*`. A candidate with almost no
+// substance (punctuation runs, one or two characters) matches essentially
+// every file in the workspace, which is never a useful suggestion and is
+// ruinously expensive on large trees.
+const MIN_FALLBACK_CANDIDATE_LENGTH = 3;
+
+function isSearchableFallbackCandidate(pathName: string): boolean {
+  const significant = pathName.replace(/[^\p{L}\p{N}]/gu, '');
+  return significant.length >= MIN_FALLBACK_CANDIDATE_LENGTH;
+}
+
 async function searchMissingPath(
   params: ResolveParams,
   dir: string,
@@ -356,6 +374,19 @@ async function searchMissingPath(
     );
     return undefined;
   }
+  if (!isSearchableFallbackCandidate(pathName)) {
+    params.onDebugMessage(
+      `Path ${pathName} is too unspecific for a recursive search. Path ${pathName} will be skipped.`,
+    );
+    return undefined;
+  }
+  if (state.globSearchCount >= MAX_GLOB_FALLBACK_SEARCHES) {
+    params.onDebugMessage(
+      `Recursive search limit (${MAX_GLOB_FALLBACK_SEARCHES}) reached. Path ${pathName} will be skipped.`,
+    );
+    return undefined;
+  }
+  state.globSearchCount++;
   params.onDebugMessage(
     `Path ${pathName} not found directly, attempting glob search.`,
   );
