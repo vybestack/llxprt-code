@@ -22,7 +22,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 import { isPosixPlatform } from '../../memory/perms.ts';
 import {
   DEFAULT_STALE_MS,
@@ -153,7 +153,7 @@ describe('makeRequestId — grammar, uniqueness, and path safety', () => {
         pid: 9,
       });
       expect(dirname(queued.path)).toBe(dir);
-      expect(queued.path.startsWith(dir + '/')).toBe(true);
+      expect(queued.path.startsWith(dir + sep)).toBe(true);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

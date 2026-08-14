@@ -14,7 +14,7 @@
 import { describe, expect, it } from 'bun:test';
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import {
   type LauncherOptions,
   LauncherParseError,
@@ -35,7 +35,7 @@ describe('parseLauncherArgs — defaults and recognized options', () => {
     expect(options.snapshots).toBe(false);
     expect(options.intervalMs).toBe(15_000);
     expect(options.maxHeapMb).toBe(DEFAULT_MAX_SNAPSHOT_HEAP_MB);
-    expect(options.runDir).toBe('/default/run');
+    expect(options.runDir).toBe(resolve('/default/run'));
     expect(options.passthrough).toEqual([]);
     expect(options.help).toBe(false);
   });
@@ -56,7 +56,7 @@ describe('parseLauncherArgs — defaults and recognized options', () => {
     expect(options.snapshots).toBe(true);
     expect(options.intervalMs).toBe(5000);
     expect(options.maxHeapMb).toBe(128);
-    expect(options.runDir).toBe('/r');
+    expect(options.runDir).toBe(resolve('/r'));
   });
 
   it('accepts both -h and --help', () => {
