@@ -544,16 +544,31 @@ export function installProbe(): ProbeDeps | null {
   );
 
   let lostLease = false;
+  let leaseUncertain = false;
   const requestDir = join(config.runDir, REQUEST_DIR_NAME);
   const pollTimer = setInterval(() => {
     safeTick(deps, 'request poll', () => {
-      if (!renewLease(config.runDir, owner)) {
+      const renewal = renewLease(config.runDir, owner);
+      if (renewal === 'lost') {
         lostLease = true;
         deps.appendLog(
           'lost the run directory lease; stopping request processing',
         );
         stopTimers();
         return;
+      }
+      if (renewal === 'indeterminate') {
+        if (!leaseUncertain) {
+          deps.appendLog(
+            'could not verify the run directory lease; pausing request processing',
+          );
+        }
+        leaseUncertain = true;
+        return;
+      }
+      if (leaseUncertain) {
+        deps.appendLog('run directory lease verified; resuming requests');
+        leaseUncertain = false;
       }
       cleanStaleRequestTemps(requestDir, deps.now(), REQUEST_TEMP_MAX_AGE_MS);
       drainPendingRequests(deps, validateOptions);

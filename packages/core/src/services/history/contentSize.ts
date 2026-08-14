@@ -384,6 +384,9 @@ function accumulateItem(
   if (!seen.has(content.blocks)) {
     seen.add(content.blocks);
     for (const block of content.blocks) {
+      if (seen.has(block)) {
+        continue;
+      }
       recordBlock(
         block,
         estimateBlockBytesTracked(block, seen),

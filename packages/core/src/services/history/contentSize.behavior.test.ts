@@ -456,6 +456,7 @@ describe('retained-history accounting — complete retained-graph identity', () 
     const breakdown = sizeOf(service);
     expect(breakdown.totalBytes).toBeGreaterThan(200_000);
     expect(breakdown.totalBytes).toBeLessThan(205_000);
+    expect(breakdown.countsByBlockType['text']).toBe(2);
   });
 });
 

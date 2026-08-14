@@ -290,7 +290,7 @@ describe('renewLease — owner-safe heartbeats', () => {
       }
       const t1 = t0 + 5_000;
       expect(renewLease(dir, acquired.lease.owner, clockDeps(t1, 111))).toBe(
-        true,
+        'renewed',
       );
       expect(checkLease(dir, clockDeps(t1)).lease?.heartbeatAt).toBe(t1);
     } finally {
@@ -298,7 +298,7 @@ describe('renewLease — owner-safe heartbeats', () => {
     }
   });
 
-  it('returns false when another owner now holds the lease', () => {
+  it('reports ownership loss when another owner now holds the lease', () => {
     const dir = tempDir();
     try {
       const t0 = 1_700_000_000_000;
@@ -310,7 +310,7 @@ describe('renewLease — owner-safe heartbeats', () => {
           heartbeatAt: t0,
         }),
       );
-      expect(renewLease(dir, 'pme-000111', clockDeps(t0, 111))).toBe(false);
+      expect(renewLease(dir, 'pme-000111', clockDeps(t0, 111))).toBe('lost');
       // The other owner's record is untouched.
       expect(checkLease(dir, clockDeps(t0)).lease?.pid).toBe(222);
     } finally {
@@ -330,9 +330,41 @@ describe('renewLease — owner-safe heartbeats', () => {
       rmSync(leasePath(dir));
       expect(checkLease(dir).status).toBe('missing');
       expect(renewLease(dir, acquired.lease.owner, clockDeps(t0, 111))).toBe(
-        true,
+        'renewed',
       );
       expect(checkLease(dir, clockDeps(t0)).lease?.pid).toBe(111);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reports malformed lease state as indeterminate', () => {
+    const dir = tempDir();
+    try {
+      writeFileSync(leasePath(dir), '{bad json');
+      expect(renewLease(dir, 'pme-000111', clockDeps(1, 111))).toBe(
+        'indeterminate',
+      );
+      expect(readFileSync(leasePath(dir), 'utf8')).toBe('{bad json');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reports unreadable lease state as indeterminate', () => {
+    const dir = tempDir();
+    try {
+      writeFileSync(
+        leasePath(dir),
+        JSON.stringify({ owner: 'pme-000111', pid: 111, heartbeatAt: 1 }),
+      );
+      const deps: LeaseDeps = {
+        ...clockDeps(1, 111),
+        readFile: () => {
+          throw new Error('access denied');
+        },
+      };
+      expect(renewLease(dir, 'pme-000111', deps)).toBe('indeterminate');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

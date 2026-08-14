@@ -148,7 +148,9 @@ describe('memory-tool workflow — probe startup via launcher preload path', () 
       const samples = parseSamples(readFileSync(samplesPath, 'utf8'));
       expect(samples.some((s) => s.tag === 'startup')).toBe(true);
       // The armed log line names the acquired lease: ownership is recorded.
-      const log = readFileSync(join(runDir, 'probe.log'), 'utf8');
+      const logPath = join(runDir, 'probe.log');
+      await waitFor('armed log line', () => existsSync(logPath));
+      const log = readFileSync(logPath, 'utf8');
       expect(log).toContain('lease=');
     } finally {
       // Await close so cleanup cannot race a still-running child.

@@ -67,12 +67,13 @@ describe('formatHistoryMemoryBreakdown', () => {
   });
 
   it('scales units up to GiB rather than printing unreadable MiB', () => {
-    // Two blocks whose logical size exceeds a gibibyte in total.
-    const big = 'x'.repeat(600 * 1024 * 1024);
-    const output = formatHistoryMemoryBreakdown([
-      toolResponse('read_file', 'c1', big),
-      toolResponse('read_file', 'c2', big),
-    ]);
+    // Logical sizing charges every string reference, so repeated references to
+    // one small body exercise the GiB branch without a GiB-scale allocation.
+    const body = 'x'.repeat(2 * 1024 * 1024);
+    const history = Array.from({ length: 600 }, (_unused, index) =>
+      toolResponse('read_file', `c${index}`, body),
+    );
+    const output = formatHistoryMemoryBreakdown(history);
     expect(output).toMatch(/Total: \d+\.\d{2} GiB/);
   });
 

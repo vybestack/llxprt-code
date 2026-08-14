@@ -395,9 +395,15 @@ function main(): void {
     deleteLatestPointer(memprofileRoot, options.runDir);
     process.exit(1);
   }
-  writeFileSync(join(options.runDir, 'pid'), String(child.pid ?? ''), {
-    mode: FILE_MODE,
-  });
+  try {
+    writeFileSync(join(options.runDir, 'pid'), String(child.pid ?? ''), {
+      mode: FILE_MODE,
+    });
+  } catch (error) {
+    process.stderr.write(
+      `memprofile: could not record the child pid: ${message(error)}\n`,
+    );
+  }
 
   child.on('error', (error) => {
     process.stderr.write(

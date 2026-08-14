@@ -218,23 +218,28 @@ export function acquireLease(
   return { outcome: 'acquired', lease };
 }
 
+export type RenewLeaseOutcome = 'renewed' | 'lost' | 'indeterminate';
+
 /**
- * Refreshes the heartbeat of a lease this probe owns. Returns false when the
- * lease no longer names this probe (lost the directory); the caller must stop
- * processing requests in that directory.
+ * Refreshes the heartbeat of a lease this probe owns. A different recorded
+ * owner proves the directory was lost; unreadable or malformed external state
+ * is indeterminate and must not be mistaken for an ownership transfer.
  */
 export function renewLease(
   runDir: string,
   owner: string,
   deps: LeaseDeps = defaultLeaseDeps,
-): boolean {
+): RenewLeaseOutcome {
   const check = checkLease(runDir, deps);
   if (check.status === 'active' || check.status === 'stale') {
-    if (check.lease === undefined || check.lease.owner !== owner) {
-      return false;
+    if (check.lease === undefined) {
+      return 'indeterminate';
+    }
+    if (check.lease.owner !== owner) {
+      return 'lost';
     }
     writeLease(runDir, { ...check.lease, heartbeatAt: deps.now() }, deps);
-    return true;
+    return 'renewed';
   }
   if (check.status === 'missing') {
     // Our lease vanished (external deletion): re-publish it, but only keep
@@ -245,9 +250,12 @@ export function renewLease(
       deps,
     );
     const after = checkLease(runDir, deps);
-    return after.status === 'active' && after.lease?.owner === owner;
+    if (after.status !== 'active' || after.lease === undefined) {
+      return 'indeterminate';
+    }
+    return after.lease.owner === owner ? 'renewed' : 'lost';
   }
-  return false;
+  return 'indeterminate';
 }
 
 /** Removes the lease on normal exit, but only when this probe owns it. */

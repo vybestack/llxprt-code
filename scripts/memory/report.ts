@@ -108,7 +108,7 @@ function renderTable(samples: readonly Sample[]): string[] {
     lines.push(
       `  ${s.t.slice(11, 19)}  ${s.tag.padEnd(14)}${fmtMb(s.heapSize)}` +
         `${fmtMb(s.extraMemorySize)}${fmtMb(s.rss)}  ${s.objectCount
-          .toLocaleString()
+          .toLocaleString('en-US')
           .padStart(11)}`,
     );
   }
@@ -137,18 +137,19 @@ function renderNotes(samples: readonly Sample[]): string[] {
   const lines: string[] = [];
   if (last.extraMemorySize > last.heapSize) {
     lines.push(
-      '  NOTE: extraMemorySize exceeds heapSize. The mass is off-heap backing\n' +
-        '        stores (buffers, typed arrays, natively-held strings), not the\n' +
-        '        object graph itself.',
+      '  NOTE: extraMemorySize exceeds heapSize. These are separate, potentially\n' +
+        '        overlapping JSC accounting signals; inspect both trends, but do\n' +
+        '        not add the counters together.',
     );
   }
   if (
-    first.protectedObjectCount > 0 &&
-    last.protectedObjectCount > first.protectedObjectCount * 2
+    first.protectedObjectCount === 0
+      ? last.protectedObjectCount > 0
+      : last.protectedObjectCount > first.protectedObjectCount * 2
   ) {
     lines.push(
-      `  NOTE: protectedObjectCount ${first.protectedObjectCount.toLocaleString()} -> ` +
-        `${last.protectedObjectCount.toLocaleString()}. Something native is holding JS objects alive.`,
+      `  NOTE: protectedObjectCount ${first.protectedObjectCount.toLocaleString('en-US')} -> ` +
+        `${last.protectedObjectCount.toLocaleString('en-US')}. Something native is holding JS objects alive.`,
     );
   }
   return lines;
@@ -218,8 +219,8 @@ function renderClasses(samples: readonly Sample[]): string[] {
   for (const entry of grew) {
     lines.push(
       `    ${entry.type.padEnd(30)} +${entry.delta
-        .toLocaleString()
-        .padStart(12)}   (now ${entry.count.toLocaleString()})`,
+        .toLocaleString('en-US')
+        .padStart(12)}   (now ${entry.count.toLocaleString('en-US')})`,
     );
   }
   if (truncated) {

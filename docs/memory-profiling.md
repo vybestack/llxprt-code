@@ -33,7 +33,7 @@ Option values are validated: a missing, flag-shaped, nonpositive, non-integer, n
 
 When the session exits, a growth report prints automatically (report-rendering failures print an error but never replace the child's own exit status). Each run writes to a timestamped directory under `.memprofile/`, and `.memprofile/latest` is published atomically (same-directory temp file + rename) to point at the most recent run. If the profiled session is terminated by a signal, the launcher exits nonzero so scripts and CI observe the abnormal termination.
 
-A custom `--dir` outside `.memprofile/` is allowed for legitimate external locations, but the launcher prints a prominent warning: run artifacts can contain sensitive data, and only `.memprofile/` (plus `*.heapsnapshot`) is git-ignored by default — an external directory is your responsibility to exclude.
+A custom `--dir` outside `.memprofile/` is allowed for legitimate external locations, but the launcher prints a prominent warning: run artifacts can contain sensitive data, and `.memprofile/`, `*.heapsnapshot`, and `*.heapsnapshot.tmp` are git-ignored by default — an external directory is your responsibility to exclude.
 
 Run directory layout:
 

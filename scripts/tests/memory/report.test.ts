@@ -93,7 +93,7 @@ describe('renderReport', () => {
     expect(out).toContain('too short');
   });
 
-  it('flags extraMemorySize dominance as an off-heap note', () => {
+  it('flags extraMemorySize dominance without treating counters as additive', () => {
     const samples: Sample[] = [
       makeSample('startup', '2026-08-14T10:00:00.000Z', {
         heap: 50 * MB,
@@ -112,7 +112,8 @@ describe('renderReport', () => {
     ];
     const out = renderReport(samples);
     expect(out).toContain('extraMemorySize');
-    expect(out.toLowerCase()).toContain('off-heap');
+    expect(out).toContain('potentially');
+    expect(out).toContain('not add');
   });
 
   it('flags a doubling protectedObjectCount as a native-retention note', () => {
@@ -137,6 +138,28 @@ describe('renderReport', () => {
     const out = renderReport(samples);
     expect(out).toContain('protectedObjectCount 1,000 -> 2,500');
     expect(out.toLowerCase()).toContain('native');
+  });
+
+  it('flags protected-object growth from a zero baseline', () => {
+    const samples: Sample[] = [
+      makeSample('startup', '2026-08-14T10:00:00.000Z', {
+        heap: 50 * MB,
+        extra: 0,
+        rss: 200 * MB,
+        objects: 1,
+        protected: 0,
+        types: [],
+      }),
+      makeSample('tick', '2026-08-14T10:01:00.000Z', {
+        heap: 60 * MB,
+        extra: 0,
+        rss: 220 * MB,
+        objects: 2,
+        protected: 1,
+        types: [],
+      }),
+    ];
+    expect(renderReport(samples)).toContain('protectedObjectCount 0 -> 1');
   });
 
   it('does not flag protectedObjectCount growth below the doubling threshold', () => {
