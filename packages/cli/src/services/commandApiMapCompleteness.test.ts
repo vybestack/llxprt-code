@@ -188,4 +188,48 @@ describe('Command-map completeness (#2203 / REQ-021)', () => {
       expect(ext.kind).toBe('cli-local');
     }
   });
+
+  // ---- Semantic classification (#3230) ----
+  // /perf memory reads the LIVE HistoryService through the agent client —
+  // the same runtime accessor /dumpcontext uses — so it must be classified
+  // runtime in the agents map, never cli-local. The other /perf subcommands
+  // only read/write CLI-local telemetry files and stay cli-local.
+  it('classifies /perf memory as runtime because it reads live agent history state', () => {
+    const row = COMBINED_COMMAND_API_MAP.find(
+      (e) => e.command === '/perf memory',
+    );
+    expect(row).toBeDefined();
+    expect(row?.kind).toBe('runtime');
+    expect(row?.target).toBe('agent.getHistory');
+    const cliCommands: readonly string[] = CLI_COMMAND_API_EXTENSIONS.map(
+      (e) => e.command,
+    );
+    expect(cliCommands).not.toContain('/perf memory');
+  });
+
+  it('keeps file-only /perf subcommands cli-local', () => {
+    for (const commandPath of [
+      '/perf',
+      '/perf inspect',
+      '/perf report',
+      '/perf delete',
+    ]) {
+      const row = COMBINED_COMMAND_API_MAP.find(
+        (e) => e.command === commandPath,
+      );
+      expect(row).toBeDefined();
+      expect(row?.kind).toBe('cli-local');
+    }
+  });
+
+  it('maps /perf memory to the same runtime target as /dumpcontext live history', () => {
+    const memory = COMBINED_COMMAND_API_MAP.find(
+      (e) => e.command === '/perf memory',
+    );
+    const dumpcontext = COMBINED_COMMAND_API_MAP.find(
+      (e) => e.command === '/dumpcontext',
+    );
+    expect(memory?.kind).toBe(dumpcontext?.kind);
+    expect(memory?.target).toBe(dumpcontext?.target);
+  });
 });

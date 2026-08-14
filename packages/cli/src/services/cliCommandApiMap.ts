@@ -23,9 +23,13 @@
  * These are `cli-local`: pure UI/telemetry operations with no live Agent method
  * and no durable app-service function.
  *
- * `/perf` and its subcommands read/write telemetry data files and display live
- * process snapshots. They never invoke an Agent method or mutate durable
- * app-service state, so they are CLI-local — not runtime, not subpath.
+ * `/perf` and its telemetry subcommands read/write perf data files. They never
+ * invoke an Agent method or mutate durable app-service state, so they are
+ * CLI-local — not runtime, not subpath.
+ *
+ * `/perf memory` is deliberately NOT here: it reads the live HistoryService
+ * through the agent client (the same accessor `/dumpcontext` uses), so it is
+ * classified `runtime` in the agents map with target `agent.getHistory`.
  */
 export const CLI_COMMAND_API_EXTENSIONS = [
   {

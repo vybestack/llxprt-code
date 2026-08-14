@@ -136,7 +136,11 @@
     "test:windows-installed-smoke": "node scripts/windows-installed-command-smoke.cjs",
     "clean": "bun scripts/clean.ts",
     "generate:release-notes": "bun scripts/generate-release-notes.ts",
-    "bundle:cli": "bun scripts/bun-build.config.ts --cli-only"
+    "bundle:cli": "bun scripts/bun-build.config.ts --cli-only",
+    "mem:profile": "bun scripts/memory/launcher.ts",
+    "mem:request": "bun scripts/memory/request-cli.ts",
+    "mem:report": "bun scripts/memory/report.ts",
+    "mem:analyze": "bun scripts/memory/heapanalyze.ts"
   },
   "overrides": {
     "@tootallnate/once": "3.0.1",

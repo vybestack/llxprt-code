@@ -106,3 +106,10 @@ evals/logs/
 
 # ACP test logs (from scripts/test-acp-zed-bugs.ts)
 .acp-test-logs/
+
+# Memory profiling runs and heap snapshots.
+# WARNING: samples, reports, and snapshots can capture full prompts, provider
+# payloads, tool output, source, and credentials. Never commit or upload them.
+.memprofile/
+*.heapsnapshot
+*.heapsnapshot.tmp

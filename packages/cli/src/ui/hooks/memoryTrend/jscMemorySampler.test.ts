@@ -13,10 +13,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import {
-  isJscHeapSamplingActive,
-  sampleMemoryUsage,
-} from './jscMemorySampler.js';
+import { sampleMemoryUsage } from './jscMemorySampler.js';
 
 /** A recognisable base sample so pass-through is provable. */
 const BASE: NodeJS.MemoryUsage = {
@@ -65,10 +62,6 @@ describe('sampleMemoryUsage', () => {
   it('keeps heapTotal at or above heapUsed', () => {
     const sample = sampleMemoryUsage(base);
     expect(sample.heapTotal).toBeGreaterThanOrEqual(sample.heapUsed);
-  });
-
-  it('reports JSC sampling as active exactly when bun:jsc is reachable', () => {
-    expect(isJscHeapSamplingActive()).toBe(jscAvailable);
   });
 
   it('defaults to the platform sampler when no base is injected', () => {

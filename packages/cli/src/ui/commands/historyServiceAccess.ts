@@ -13,7 +13,10 @@
  * command does not re-derive the same nullish guards.
  */
 
-import type { ChronologyTraceEntry, IContent } from '@vybestack/llxprt-code-core';
+import type {
+  ChronologyTraceEntry,
+  IContent,
+} from '@vybestack/llxprt-code-core';
 import type { CommandContext } from './types.js';
 
 /**

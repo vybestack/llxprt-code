@@ -24,9 +24,8 @@
  * `rss` and `external` from the shim are sound and are passed through
  * unchanged; only `heapUsed`/`heapTotal` are re-sourced.
  *
- * Under Node (or if `bun:jsc` is unavailable) this degrades to the platform
- * `process.memoryUsage()` untouched, because there `heapUsed` is already
- * correct.
+ * LLxprt runs under Bun, so failure to load `bun:jsc` is a startup error rather
+ * than a reason to silently fall back to the inaccurate compatibility value.
  *
  * TWO MEASURED PROPERTIES OF `heapStats()` THAT SHAPE THIS CODE
  *
@@ -47,7 +46,6 @@
  * wanting an exact instantaneous figure should collect first and read
  * `heapStats()` themselves.
  */
-
 
 /** The subset of `bun:jsc` this module needs. */
 interface JscHeapApi {
@@ -73,36 +71,28 @@ function isBunRuntime(): boolean {
   return typeof bunVersion === 'string' && bunVersion.length > 0;
 }
 
-/**
- * `bun:jsc` cannot be a static import: this module is type-checked against
- * `bun-types/test` only, and may be loaded by tooling running under Node where
- * the specifier does not resolve at all.
- *
- * `process.getBuiltinModule` is the right loader here — it is synchronous (the
- * sampler must be), and it returns `undefined` rather than throwing for an
- * unknown specifier, so the Node path needs no exception handling.
- */
-function loadJscHeapApi(): JscHeapApi | null {
+function isJscHeapApi(value: unknown): value is JscHeapApi {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  return (
+    'heapSize' in value &&
+    typeof value.heapSize === 'function' &&
+    'heapStats' in value &&
+    typeof value.heapStats === 'function'
+  );
+}
+
+/** Loads the synchronous JavaScriptCore heap API required by this Bun CLI. */
+function loadJscHeapApi(): JscHeapApi {
   if (!isBunRuntime()) {
-    return null;
+    throw new Error('LLxprt memory sampling requires Bun');
   }
-  const getBuiltinModule = (
-    process as unknown as {
-      getBuiltinModule?: (id: string) => unknown;
-    }
-  ).getBuiltinModule;
-  if (typeof getBuiltinModule !== 'function') {
-    return null;
+  const jsc = process.getBuiltinModule('bun:jsc');
+  if (!isJscHeapApi(jsc)) {
+    throw new Error('bun:jsc heap statistics are unavailable');
   }
-  const jsc = getBuiltinModule('bun:jsc') as Partial<JscHeapApi> | undefined;
-  if (
-    jsc === undefined ||
-    typeof jsc.heapSize !== 'function' ||
-    typeof jsc.heapStats !== 'function'
-  ) {
-    return null;
-  }
-  return { heapSize: jsc.heapSize, heapStats: jsc.heapStats };
+  return jsc;
 }
 
 /**
@@ -122,12 +112,7 @@ function defaultBaseSampler(): NodeJS.MemoryUsage {
 }
 
 /** Resolved once: the runtime does not change under a running process. */
-const jscHeapApi: JscHeapApi | null = loadJscHeapApi();
-
-/** True when `heapUsed` is being sourced from JavaScriptCore. */
-export function isJscHeapSamplingActive(): boolean {
-  return jscHeapApi !== null;
-}
+const jscHeapApi = loadJscHeapApi();
 
 /**
  * Samples process memory, correcting `heapUsed`/`heapTotal` from JavaScriptCore
@@ -141,9 +126,6 @@ export function sampleMemoryUsage(
   baseSampler: () => NodeJS.MemoryUsage = defaultBaseSampler,
 ): NodeJS.MemoryUsage {
   const base = baseSampler();
-  if (jscHeapApi === null) {
-    return base;
-  }
   const stats = jscHeapApi.heapStats();
   return {
     ...base,

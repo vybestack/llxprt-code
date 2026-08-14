@@ -1,0 +1,60 @@
+name: 'Windows Memory Tools (issue #3230)'
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/memory/**'
+      - 'scripts/tests/memory/**'
+      - 'scripts/utils/error-guards.ts'
+      - '.bun-version'
+      - '.github/workflows/windows-memory-tools.yml'
+  push:
+    branches:
+      - 'main'
+    paths:
+      - 'scripts/memory/**'
+      - 'scripts/tests/memory/**'
+      - 'scripts/utils/error-guards.ts'
+      - '.bun-version'
+      - '.github/workflows/windows-memory-tools.yml'
+  workflow_dispatch:
+
+# Cancel superseded runs of this workflow for the same ref so repeated pushes
+# to a PR do not queue redundant Windows jobs.
+concurrency:
+  group: '${{ github.workflow }}-${{ github.ref }}'
+  cancel-in-progress: true
+
+jobs:
+  windows-memory-tools:
+    name: 'Bun memory-tool workflow on Windows 11'
+    runs-on: 'windows-latest'
+    timeout-minutes: 20
+    permissions:
+      contents: 'read'
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: 'Setup Bun'
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+
+      # Plain `bun install` (NOT --frozen-lockfile): the monorepo lockfile is
+      # structurally unusable with --frozen-lockfile under Bun re-normalization
+      # (see AGENTS notes); plain install against the committed lockfile is
+      # deterministic and sufficient for running the test suite.
+      - name: 'Install dependencies'
+        run: 'bun install'
+
+      # The production memory-tool workflow test covers, platform-neutrally:
+      # real launcher-style probe startup via --preload, the file request
+      # queue/consume cycle, guarded snapshot refusal while unarmed, and the
+      # report/analyzer CLI entry points. Deterministic and safe: all
+      # artifacts are created in the runner temp directory and removed; no
+      # heap snapshots are committed.
+      - name: 'Run memory-tool workflow tests (Bun)'
+        run: 'bun test scripts/tests/memory/'

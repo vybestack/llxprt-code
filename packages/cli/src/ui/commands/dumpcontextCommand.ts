@@ -45,7 +45,6 @@ function isValidMode(mode: string): mode is DumpMode {
   return validModes.includes(mode as DumpMode);
 }
 
-
 function getProviderDumpMetadata(
   config: NonNullable<CommandContext['services']['config']>,
 ): {
