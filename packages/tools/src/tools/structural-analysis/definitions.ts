@@ -11,13 +11,25 @@ import type {
   DefinitionEntry,
   ResolvedLang,
 } from './types.js';
-import { escapeRegex, getFiles, parseFile, makeRelative } from './helpers.js';
+import {
+  escapeRegex,
+  iterateFiles,
+  parseFile,
+  makeRelative,
+} from './helpers.js';
+import { type AnalysisBudget, BudgetTracker } from './budget.js';
+
+/** Stable dedup key for a definition entry: file path + line number. */
+function definitionKey(file: string, line: number): string {
+  return `${file}:${line}`;
+}
 
 function searchFunctionAndMethodDefinitions(
   parsed: ParsedFile,
   symbol: string,
   relPath: string,
   definitions: DefinitionEntry[],
+  seenKeys: Set<string>,
 ): void {
   const escaped = escapeRegex(symbol);
   const rules: Array<{ kind: string; kindLabel: string; nameKind: string }> = [
@@ -45,6 +57,7 @@ function searchFunctionAndMethodDefinitions(
       kindLabel,
       relPath,
       definitions,
+      seenKeys,
     );
   }
 
@@ -53,6 +66,7 @@ function searchFunctionAndMethodDefinitions(
     escaped,
     relPath,
     definitions,
+    seenKeys,
   );
 }
 
@@ -81,6 +95,7 @@ function collectVariableBoundFunctionDefinitions(
   escapedSymbol: string,
   relPath: string,
   definitions: DefinitionEntry[],
+  seenKeys: Set<string>,
 ): void {
   try {
     const declarators = parsed.root.findAll({
@@ -99,10 +114,9 @@ function collectVariableBoundFunctionDefinitions(
         );
       if (fn === undefined) continue;
       const line = d.range().start.line + 1;
-      const exists = definitions.some(
-        (def) => def.file === relPath && def.line === line,
-      );
-      if (!exists) {
+      const key = definitionKey(relPath, line);
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
         definitions.push({
           file: relPath,
           line,
@@ -126,6 +140,7 @@ function collectRuleDefinitions(
   kindLabel: string,
   relPath: string,
   definitions: DefinitionEntry[],
+  seenKeys: Set<string>,
 ): void {
   let matches: SgNode[];
   try {
@@ -141,10 +156,9 @@ function collectRuleDefinitions(
   }
   for (const m of matches) {
     const line = m.range().start.line + 1;
-    const exists = definitions.some(
-      (d) => d.file === relPath && d.line === line,
-    );
-    if (!exists) {
+    const key = definitionKey(relPath, line);
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
       definitions.push({
         file: relPath,
         line,
@@ -170,6 +184,7 @@ function searchDeclarationRules(
   symbol: string,
   relPath: string,
   definitions: DefinitionEntry[],
+  seenKeys: Set<string>,
 ): void {
   try {
     const ruleMatches = parsed.root.findAll({
@@ -201,14 +216,14 @@ function searchDeclarationRules(
     } as NapiConfig);
     for (const m of ruleMatches) {
       const range = m.range();
-      const exists = definitions.some(
-        (d) => d.file === relPath && d.line === range.start.line + 1,
-      );
-      if (!exists) {
+      const line = range.start.line + 1;
+      const key = definitionKey(relPath, line);
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
         const rawKind = String(m.kind());
         definitions.push({
           file: relPath,
-          line: range.start.line + 1,
+          line,
           kind: DECLARATION_KIND_LABELS[rawKind] ?? rawKind,
           text: m.text().substring(0, 200),
         });
@@ -220,7 +235,9 @@ function searchDeclarationRules(
 }
 
 /**
- * Processes a single file for definitions, unless the signal is aborted.
+ * Processes a single file for definitions, retaining matches through the
+ * budget tracker. Returns false to stop the file loop (budget exhausted or
+ * record-budget sentinel fired).
  */
 async function processDefinitionsFile(
   file: string,
@@ -228,15 +245,36 @@ async function processDefinitionsFile(
   workspaceRoot: string,
   symbol: string,
   definitions: DefinitionEntry[],
+  globalSeenKeys: Set<string>,
+  tracker: BudgetTracker,
 ): Promise<boolean> {
-  const parsed = await parseFile(file, lang);
-  if (!parsed) {
+  if (!tracker.shouldVisitMoreFiles()) return false;
+  tracker.filesVisited++;
+  const outcome = await parseFile(file, lang);
+  if (!outcome.ok) {
+    tracker.recordFileOmission(outcome.reason);
     return true;
   }
 
   const relPath = makeRelative(file, workspaceRoot);
-  searchFunctionAndMethodDefinitions(parsed, symbol, relPath, definitions);
-  searchDeclarationRules(parsed, symbol, relPath, definitions);
+  const pending: DefinitionEntry[] = [];
+  const fileSeenKeys = new Set<string>();
+  searchFunctionAndMethodDefinitions(
+    outcome,
+    symbol,
+    relPath,
+    pending,
+    fileSeenKeys,
+  );
+  searchDeclarationRules(outcome, symbol, relPath, pending, fileSeenKeys);
+
+  for (const def of pending) {
+    const key = definitionKey(def.file, def.line);
+    if (globalSeenKeys.has(key)) continue;
+    if (!tracker.tryRetainRecord()) return false;
+    globalSeenKeys.add(key);
+    definitions.push(def);
+  }
   return true;
 }
 
@@ -246,27 +284,45 @@ export async function executeDefinitions(
   searchPath: string,
   workspaceRoot: string,
   signal: AbortSignal,
+  budget: AnalysisBudget,
 ): Promise<AnalysisResult> {
-  const files = await getFiles(searchPath, lang);
+  const tracker = new BudgetTracker(budget, signal);
   const definitions: DefinitionEntry[] = [];
+  const globalSeenKeys = new Set<string>();
 
-  for (const file of files) {
-    if (signal.aborted) {
+  for await (const file of iterateFiles(searchPath, lang, signal)) {
+    if (
+      !(await processDefinitionsFile(
+        file,
+        lang,
+        workspaceRoot,
+        symbol,
+        definitions,
+        globalSeenKeys,
+        tracker,
+      ))
+    )
       break;
-    }
-    await processDefinitionsFile(
-      file,
-      lang,
-      workspaceRoot,
-      symbol,
-      definitions,
-    );
+  }
+
+  if (signal.aborted) {
+    tracker.markAborted();
   }
 
   return {
     mode: 'definitions',
     symbol,
-    truncated: false,
+    truncated: tracker.truncated,
+    partial: tracker.truncated,
+    partialReason: tracker.partialReason,
+    fileBudget: budget.fileBudget,
+    recordBudget: budget.recordBudget,
+    filesVisited: tracker.filesVisited,
+    recordsRetained: tracker.recordsRetained,
+    recordsObserved: tracker.recordsObserved,
+    oversizedFiles: tracker.oversizedFiles,
+    unparseableFiles: tracker.unparseableFiles,
+    countInexact: tracker.countInexact,
     results: definitions,
   };
 }

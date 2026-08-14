@@ -56,6 +56,11 @@
       "bun": "./src/utils/imageDimensions.ts",
       "import": "./dist/src/utils/imageDimensions.js"
     },
+    "./utils/imageDimensionBudget.js": {
+      "types": "./dist/src/utils/imageDimensionBudget.d.ts",
+      "bun": "./src/utils/imageDimensionBudget.ts",
+      "import": "./dist/src/utils/imageDimensionBudget.js"
+    },
     "./utils/imageTokenEstimation.js": {
       "types": "./dist/src/utils/imageTokenEstimation.d.ts",
       "bun": "./src/utils/imageTokenEstimation.ts",

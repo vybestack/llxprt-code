@@ -25,8 +25,8 @@ import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   BoundedStreamCollector,
   createByteBudget,
-  resolveByteBudgetFromSetting,
 } from '@vybestack/llxprt-code-tools/acquisition.js';
+import { resolveAcquisitionBudgetFromSetting } from '@vybestack/llxprt-code-core';
 import { type UseHistoryManagerReturn } from './useHistoryManager.js';
 import { SHELL_COMMAND_NAME } from '../constants.js';
 import { formatMemoryUsage } from '../utils/formatters.js';
@@ -486,7 +486,7 @@ function handleExecutionResult(
 
 async function initiateShellExecution(params: ShellExecutionParams) {
   const shellExecutionConfig = params.config.getShellExecutionConfig();
-  const outputBudget = resolveByteBudgetFromSetting(
+  const outputBudget = resolveAcquisitionBudgetFromSetting(
     shellExecutionConfig.outputRetentionMaxBytes,
   );
   const liveDisplayBudget = createByteBudget(

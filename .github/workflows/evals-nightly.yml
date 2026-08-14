@@ -54,3 +54,161 @@ jobs:
         env:
           GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
         run: bun scripts/aggregate_evals.ts artifacts >> "$GITHUB_STEP_SUMMARY"
+
+  notify_failure:
+    name: 'Create Issue on Failure'
+    runs-on: 'ubuntu-latest'
+    timeout-minutes: 5
+    needs: [evals]
+    if: ${{ always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
+    permissions:
+      issues: 'write'
+      contents: 'read'
+    steps:
+      - name: 'Create Issue on Failure'
+        env:
+          GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
+          GH_REPO: '${{ github.repository }}'
+          RUN_URL: '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'
+          EVALS_RESULT: '${{ needs.evals.result }}'
+        shell: 'bash'
+        run: |
+          set -euo pipefail
+          ISSUE_TITLE="Evals Nightly workflow failed"
+
+          if [[ ! "${EVALS_RESULT}" =~ ^(failure|cancelled)$ ]]; then
+            echo "Evals job did not fail or get cancelled; nothing to report."
+            exit 0
+          fi
+
+          ensure_label() {
+            local name="$1"
+            local color="$2"
+            local description="$3"
+            local existing=""
+            local create_err=""
+            if create_err="$(gh label create "${name}" --repo "${GH_REPO}" --color "${color}" --description "${description}" 2>&1 >/dev/null)"; then
+              return
+            fi
+            if ! existing="$(gh label list --repo "${GH_REPO}" --search "${name}" --json name --jq ".[] | select(.name == \"${name}\") | .name" 2>&1)"; then
+              echo "Failed to check for label: ${name}" >&2
+              echo "  create error: ${create_err}" >&2
+              echo "  list error: ${existing}" >&2
+              return 1
+            fi
+            if [[ "${existing}" != "${name}" ]]; then
+              echo "Failed to create or find label: ${name}" >&2
+              return 1
+            fi
+          }
+
+          # Resolve the milestone for the version currently being worked on in
+          # main so the auto-created issue surfaces in the release view. Source
+          # of truth is the root package.json version on main. Fails soft: an
+          # unresolvable milestone logs a warning and returns empty.
+          resolve_milestone() {
+            local package_json
+            if ! package_json="$(gh api "repos/${GH_REPO}/contents/package.json?ref=main" -H 'Accept: application/vnd.github.raw' 2>/dev/null)"; then
+              echo "Warning: could not read package.json from main; skipping milestone resolution" >&2
+              return
+            fi
+            local current_version
+            current_version="$(printf '%s' "${package_json}" | jq -r '.version // empty' 2>/dev/null)"
+            if [[ -z "${current_version}" ]]; then
+              echo "Warning: package.json on main has no version field; skipping milestone resolution" >&2
+              return
+            fi
+            local milestone_title
+            milestone_title="$(gh api --paginate --slurp "repos/${GH_REPO}/milestones?state=open&per_page=100" --jq "[.[][] | select(.title == \"${current_version}\")] | .[0].title // empty" 2>/dev/null)"
+            if [[ -z "${milestone_title}" ]]; then
+              echo "Warning: no open milestone titled '${current_version}'; skipping milestone assignment" >&2
+              return
+            fi
+            printf '%s' "${milestone_title}"
+          }
+
+          LABEL_ARGS=()
+          if ensure_label "ci/cd" "e33539" "Issues with github and the workflow scripts and CI CD environment."; then
+            LABEL_ARGS+=(--label "ci/cd")
+          else
+            echo "Warning: continuing without ci/cd label" >&2
+          fi
+
+          MILESTONE_TITLE="$(resolve_milestone)"
+          MILESTONE_ARGS=()
+          if [[ -n "${MILESTONE_TITLE}" ]]; then
+            MILESTONE_ARGS+=(--milestone "${MILESTONE_TITLE}")
+          fi
+
+          retry_gh() {
+            local attempt
+            for attempt in 1 2 3 4; do
+              if "$@"; then
+                return 0
+              fi
+              if [[ "${attempt}" -lt 4 ]]; then
+                echo "Attempt ${attempt} failed, retrying issue notification" >&2
+                sleep 5
+              fi
+            done
+            echo "All retries exhausted for: $*" >&2
+            return 1
+          }
+
+          build_body_file() {
+            local body_file="$1"
+            local introduction="$2"
+            {
+              printf '%s\n\n' "${introduction}"
+              printf 'Full run: %s\n' "${RUN_URL}"
+            } > "${body_file}"
+          }
+
+          if ! EXISTING_ISSUE="$(
+            retry_gh gh issue list \
+              --repo "${GH_REPO}" \
+              --search "\"${ISSUE_TITLE}\" in:title is:issue state:open sort:created-desc" \
+              --limit 30 \
+              --json number,title \
+              --jq "[.[] | select(.title == \"${ISSUE_TITLE}\") | .number] | .[0] // empty"
+          )"; then
+            echo "ERROR: Failed to search for existing issues; aborting to avoid duplicates." >&2
+            exit 1
+          fi
+
+          BODY_FILE=issue_body.md
+          if [[ -n "${EXISTING_ISSUE}" ]]; then
+            INTRODUCTION="Evals Nightly workflow failed again on $(date +'%Y-%m-%d'). Eval job result: ${EVALS_RESULT}."
+            build_body_file "${BODY_FILE}" "${INTRODUCTION}"
+            retry_gh gh issue comment "${EXISTING_ISSUE}" \
+              --repo "${GH_REPO}" \
+              --body-file "${BODY_FILE}" || {
+              echo "ERROR: Failed to comment on existing issue #${EXISTING_ISSUE}" >&2
+              exit 1
+            }
+            if [[ -n "${MILESTONE_TITLE}" ]]; then
+              retry_gh gh issue edit "${EXISTING_ISSUE}" \
+                --repo "${GH_REPO}" \
+                --milestone "${MILESTONE_TITLE}" || \
+                echo "Warning: failed to set milestone '${MILESTONE_TITLE}' on existing issue #${EXISTING_ISSUE}" >&2
+            fi
+          else
+            INTRODUCTION="The evals nightly workflow failed. Eval job result: ${EVALS_RESULT}."
+            build_body_file "${BODY_FILE}" "${INTRODUCTION}"
+            CREATE_ARGS=(--repo "${GH_REPO}" --title "${ISSUE_TITLE}" --body-file "${BODY_FILE}")
+            CREATE_ARGS+=("${LABEL_ARGS[@]}")
+            CREATE_ARGS+=("${MILESTONE_ARGS[@]}")
+            create_issue_once() {
+              local found=""
+              found="$(gh issue list --repo "${GH_REPO}" --search "\"${ISSUE_TITLE}\" in:title is:issue state:open" --limit 30 --json number,title --jq "[.[] | select(.title == \"${ISSUE_TITLE}\") | .number] | .[0] // empty" 2>/dev/null)" || found=""
+              if [[ -n "${found}" ]]; then
+                echo "Issue #${found} already exists; skipping creation." >&2
+                return 0
+              fi
+              gh issue create "${CREATE_ARGS[@]}"
+            }
+            retry_gh create_issue_once || {
+              echo "ERROR: Failed to create evals nightly failure issue" >&2
+              exit 1
+            }
+          fi

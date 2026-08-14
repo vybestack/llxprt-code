@@ -258,3 +258,48 @@ describe('TodoStore — XOR union and dynamic resolver', () => {
     ).toBe(true);
   });
 });
+
+describe('TodoStore — missing file returns empty state', () => {
+  let tempRoot: string;
+
+  beforeEach(() => {
+    tempRoot = makeTempDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  });
+
+  it('returns an empty todo list when no persisted file exists', async () => {
+    const dir = path.join(tempRoot, 'empty');
+    const store = new TodoStore('never-written', {
+      dataDirResolver: () => dir,
+    });
+
+    const todos = await store.readTodos();
+    expect(todos).toEqual([]);
+  });
+
+  it('returns a non-paused state when no persisted file exists', async () => {
+    const dir = path.join(tempRoot, 'empty-pause');
+    const store = new TodoStore('never-written-pause', {
+      dataDirResolver: () => dir,
+    });
+
+    const paused = await store.readPausedState();
+    expect(paused).toBe(false);
+  });
+
+  it('writes successfully into a fresh store that has never read a file', async () => {
+    const dir = path.join(tempRoot, 'fresh-write');
+    const store = new TodoStore('fresh', { dataDirResolver: () => dir });
+
+    await store.writeTodos([
+      { id: 'fresh-1', content: 'brand new', status: 'pending', subtasks: [] },
+    ]);
+
+    const readBack = await store.readTodos();
+    expect(readBack).toHaveLength(1);
+    expect(readBack[0]?.id).toBe('fresh-1');
+  });
+});

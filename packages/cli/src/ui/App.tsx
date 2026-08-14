@@ -21,7 +21,6 @@ import { KeypressProvider } from './contexts/KeypressContext.js';
 import { MouseProvider } from './contexts/MouseContext.js';
 import { SessionStatsProvider } from './contexts/SessionContext.js';
 import { VimModeProvider } from './contexts/VimModeContext.js';
-import { ToolCallProvider } from './contexts/ToolCallProvider.js';
 import { TodoProvider } from './contexts/TodoProvider.js';
 import { RuntimeContextProvider } from './contexts/RuntimeContext.js';
 import { OverflowProvider } from './contexts/OverflowContext.js';
@@ -67,7 +66,6 @@ interface AppProps {
  * - KeypressProvider: Terminal keypress handling with Kitty/Vim support
  * - SessionStatsProvider: Session statistics tracking
  * - VimModeProvider: Vim mode state management
- * - ToolCallProvider: Tool call tracking
  * - TodoProvider: Todo list management
  * - RuntimeContextProvider: Runtime API access
  * - OverflowProvider: Overflow detection for UI
@@ -92,19 +90,15 @@ export const AppWrapper = (props: AppProps) => {
                   props.settings.merged.ui.alwaysDisplayFullShellCommand ?? true
                 }
               >
-                <ToolCallProvider
+                <TodoProvider
                   sessionId={props.uiRuntime.session.getSessionId()}
                 >
-                  <TodoProvider
-                    sessionId={props.uiRuntime.session.getSessionId()}
-                  >
-                    <RuntimeContextProvider agent={props.agent}>
-                      <OverflowProvider>
-                        <AppWithState {...props} />
-                      </OverflowProvider>
-                    </RuntimeContextProvider>
-                  </TodoProvider>
-                </ToolCallProvider>
+                  <RuntimeContextProvider agent={props.agent}>
+                    <OverflowProvider>
+                      <AppWithState {...props} />
+                    </OverflowProvider>
+                  </RuntimeContextProvider>
+                </TodoProvider>
               </ShellCommandDisplayProvider>
             </VimModeProvider>
           </SessionStatsProvider>

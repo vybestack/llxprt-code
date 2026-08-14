@@ -1,0 +1,8 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"todo-write-initial","name":"todo_write","parameters":{"todos":[{"id":"read-readme","content":"Read README.md","status":"in_progress"},{"id":"write-summary","content":"Write summary","status":"pending"}]}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"pause-after-initial-write","name":"todo_pause","parameters":{"reason":"Harness checkpoint after initial todo write"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"todo-read-current","name":"todo_read","parameters":{}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"pause-after-read","name":"todo_pause","parameters":{"reason":"Harness checkpoint after todo read"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"read-readme-file","name":"read_file","parameters":{"file_path":"{{CWD}}/README.md"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"pause-after-file-read","name":"todo_pause","parameters":{"reason":"Harness checkpoint after file read"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"todo-write-update","name":"todo_write","parameters":{"todos":[{"id":"read-readme","content":"Read README.md","status":"completed"},{"id":"write-summary","content":"Write summary","status":"in_progress"}]}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"pause-after-status-update","name":"todo_pause","parameters":{"reason":"Harness checkpoint after status update"}}]}]}

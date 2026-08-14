@@ -15,7 +15,6 @@ declare module '@vybestack/llxprt-code-core' {
     header?: string;
     includeSummary?: boolean;
     maxToolCalls?: number;
-    getLiveToolCalls?: (todoId: string) => TodoToolCall[];
   }
 
   export function groupToolCalls(toolCalls: TodoToolCall[]): GroupedToolCall[];

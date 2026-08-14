@@ -4,17 +4,24 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { DEFAULT_ACQUISITION_BUDGET_BYTES } from '../../acquisition/index.js';
+import {
+  DEFAULT_ACQUISITION_BUDGET_BYTES,
+  ACQUISITION_HARD_MAX_BYTES,
+} from '../../acquisition/index.js';
 import type { GrepMatch } from './types.js';
 
 /**
  * Aggregate semantic budget shared across all roots and strategies for a
  * single invocation. Tracks remaining bytes and objects (matches) that may
- * be retained in bounded semantic storage.
+ * be retained in bounded semantic storage, plus a finite source-observation
+ * byte budget charged against EVERY source chunk read (even when no match is
+ * produced) so a huge no-match input cannot be read without bound.
  */
 export interface SemanticBudget {
   remainingBytes: number;
   remainingObjects: number;
+  /** Finite source-observation byte budget; charged per read chunk. */
+  sourceBytes: number;
 }
 
 /** Per-match overhead added to the raw line/filePath byte cost. */
@@ -23,11 +30,31 @@ export const MATCH_OVERHEAD_BYTES = 256;
 /** Hard ceiling on the number of retained matches for one invocation. */
 export const HARD_RETAINED_MATCH_CAP = 100_000;
 
+/** Hard ceiling on the per-invocation source-observation byte budget. */
+export const SOURCE_BUDGET_HARD_MAX_BYTES = ACQUISITION_HARD_MAX_BYTES;
+
+/**
+ * Default finite source-observation budget. Matches the raw collection budget
+ * used by the subprocess strategies so the JavaScript fallback and direct-file
+ * path stay bounded to the same magnitude.
+ */
+export const DEFAULT_SOURCE_BUDGET_BYTES = DEFAULT_ACQUISITION_BUDGET_BYTES;
+
+/** Normalize and hard-clamp a source-observation byte budget. */
+export function normalizeSourceBudgetBytes(value: number | undefined): number {
+  const base =
+    typeof value === 'number' && Number.isFinite(value) && value > 0
+      ? Math.floor(value)
+      : DEFAULT_SOURCE_BUDGET_BYTES;
+  return Math.min(base, SOURCE_BUDGET_HARD_MAX_BYTES);
+}
+
 /** Create a fresh aggregate semantic budget at the default acquisition size. */
 export function createAggregateSemanticBudget(): SemanticBudget {
   return {
     remainingBytes: DEFAULT_ACQUISITION_BUDGET_BYTES,
     remainingObjects: HARD_RETAINED_MATCH_CAP,
+    sourceBytes: DEFAULT_SOURCE_BUDGET_BYTES,
   };
 }
 

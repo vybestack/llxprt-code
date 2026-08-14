@@ -25,7 +25,16 @@ export const DEFAULT_ACQUISITION_BUDGET_BYTES = 4 * 1024 * 1024; // 4 MiB
  */
 export const DEFAULT_HEAD_FRACTION = 0.5;
 
-function normalizeHardMax(hardMax: number): number {
+/**
+ * Normalize a hard-max ceiling to a finite, in-range value.
+ *
+ * Non-finite or non-positive values collapse to the absolute cap. The result
+ * is clamped to {@link ACQUISITION_MIN_BYTES}..{@link ACQUISITION_HARD_MAX_BYTES}.
+ *
+ * This is a budget primitive (not settings policy): it validates a numeric
+ * ceiling so callers never construct a budget outside the finite range.
+ */
+export function normalizeHardMax(hardMax: number): number {
   const requestedCeiling =
     Number.isFinite(hardMax) && hardMax > 0
       ? Math.floor(hardMax)
@@ -77,39 +86,4 @@ export function createByteBudget(
 /** Create a default {@link ByteBudget}. */
 export function createDefaultByteBudget(): ByteBudget {
   return createByteBudget(DEFAULT_ACQUISITION_BUDGET_BYTES);
-}
-
-/**
- * Resolve a raw setting value (from ephemeral settings / profile) into a
- * validated {@link ByteBudget}. Falls back to the default when the value is
- * absent, invalid, or disabled.
- *
- * This function does NOT read settings itself — it receives the raw value
- * and validates it, keeping the acquisition layer free of settings coupling.
- */
-export function resolveByteBudgetFromSetting(
-  rawValue: unknown,
-  hardMax: number = ACQUISITION_HARD_MAX_BYTES,
-): ByteBudget {
-  const effectiveHardMax = normalizeHardMax(hardMax);
-  if (rawValue === undefined || rawValue === null) {
-    return createByteBudget(DEFAULT_ACQUISITION_BUDGET_BYTES, effectiveHardMax);
-  }
-
-  const numeric = typeof rawValue === 'string' ? Number(rawValue) : rawValue;
-
-  // A configured -1 means "largest permitted value", never unbounded.
-  if (numeric === -1) {
-    return createByteBudget(effectiveHardMax, effectiveHardMax);
-  }
-
-  if (
-    typeof numeric !== 'number' ||
-    !Number.isFinite(numeric) ||
-    numeric <= 0
-  ) {
-    return createByteBudget(DEFAULT_ACQUISITION_BUDGET_BYTES, effectiveHardMax);
-  }
-
-  return createByteBudget(numeric, effectiveHardMax);
 }

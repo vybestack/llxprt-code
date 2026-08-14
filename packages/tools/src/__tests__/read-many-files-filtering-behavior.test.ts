@@ -282,7 +282,8 @@ describe('ReadManyFilesTool real behavioral filtering', () => {
         'image-resize.maxLongEdge must be a positive integer',
       ),
     });
-    expect(result.returnDisplay).toContain('Image Resize Error');
+    // Either policy can fail, so config errors use the generic heading.
+    expect(result.returnDisplay).toContain('Image Configuration Error');
   });
 
   it.each([

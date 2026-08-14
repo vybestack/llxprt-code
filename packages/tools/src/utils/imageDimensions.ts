@@ -151,6 +151,148 @@ function parseJpegDimensions(bytes: Uint8Array): ImageDimensions | undefined {
   return undefined;
 }
 
+/**
+ * Random-access reader used by the bounded on-disk JPEG segment walker.
+ * Reads up to `length` bytes starting at `offset`, mirroring the semantics
+ * of a positioned file read (short reads at end-of-file are allowed).
+ */
+export type JpegSegmentReader = (
+  offset: number,
+  length: number,
+) => Promise<Uint8Array>;
+
+/**
+ * Maximum total byte offset the on-disk JPEG walker inspects. Generous enough
+ * to cover EXIF/XMP-heavy JPEGs, yet bounded so an adversarial file cannot
+ * force an unbounded scan.
+ */
+export const JPEG_SEGMENT_WALK_LIMIT = 524_288; // 512 KiB
+
+/**
+ * Maximum number of segment/marker steps the on-disk JPEG walker will
+ * process. A real JPEG rarely exceeds a few dozen segments; this bound
+ * stops adversarial inputs (long runs of standalone/fill markers) from
+ * inducing hundreds of thousands of reads.
+ */
+export const JPEG_SEGMENT_MAX_STEPS = 4_096;
+
+/** Result of scanning a small chunk for the next JPEG marker. */
+interface JpegMarkerScan {
+  readonly found: boolean;
+  readonly marker: number;
+  readonly nextOffset: number;
+}
+
+/**
+ * Locate the next segment marker in a bounded chunk, skipping FF fill bytes.
+ * Returns the marker and the offset past it, or the next chunk offset when
+ * the marker is not in this chunk.
+ */
+async function scanNextMarker(
+  reader: JpegSegmentReader,
+  offset: number,
+  maxOffset: number,
+): Promise<JpegMarkerScan | undefined> {
+  const seekLen = Math.min(8, maxOffset - offset);
+  const seek = await reader(offset, seekLen);
+  if (seek.length === 0) return undefined;
+  let idx = 0;
+  while (idx < seek.length && seek[idx] !== 0xff) idx++;
+  const fillStart = idx;
+  while (idx < seek.length && seek[idx] === 0xff) idx++;
+  if (idx >= seek.length) {
+    // A trailing FF run may have its marker code in the next chunk. Rewind
+    // to the last FF byte so the next read spans the prefix and its code.
+    // With no FF at all, advance past the whole chunk.
+    const advance = Math.max(fillStart, seek.length - 1);
+    if (advance === 0) return undefined;
+    return { found: false, marker: 0, nextOffset: offset + advance };
+  }
+  return { found: true, marker: seek[idx], nextOffset: offset + idx + 1 };
+}
+
+/** Extract SOF frame dimensions from the segment length-field bytes. */
+function extractSofDimensions(data: Uint8Array): ImageDimensions | undefined {
+  // SOF body layout (offsets relative to the length field):
+  // [len:2][precision:1][height:2][width:2][components...].
+  if (data.length < 7) return undefined;
+  const height = readUint16BE(data, 3);
+  const width = readUint16BE(data, 5);
+  if (!isValidDimension(width) || !isValidDimension(height)) {
+    return undefined;
+  }
+  return makeDimensions(width, height);
+}
+
+/** Outcome of processing one segment in the JPEG walk. */
+interface JpegWalkStep {
+  readonly done: boolean;
+  readonly dimensions?: ImageDimensions;
+  readonly nextOffset: number;
+}
+
+/** One walk step: classify the marker at `offset` and advance or finish. */
+async function processJpegSegment(
+  reader: JpegSegmentReader,
+  offset: number,
+  maxOffset: number,
+): Promise<JpegWalkStep> {
+  const scan = await scanNextMarker(reader, offset, maxOffset);
+  if (scan === undefined) return { done: true, nextOffset: offset };
+  if (!scan.found) return { done: false, nextOffset: scan.nextOffset };
+  const { marker, nextOffset } = scan;
+  // FF 00 is an escaped FF inside entropy data, not a segment marker.
+  if (marker === 0x00) return { done: false, nextOffset };
+  if (marker === 0xda) return { done: true, nextOffset }; // SOS
+  if (isStandaloneMarker(marker)) return { done: false, nextOffset };
+  // Segment carries a length field: read it plus enough for SOF dims.
+  const dataLen = Math.min(8, maxOffset - nextOffset);
+  if (dataLen < 2) return { done: true, nextOffset };
+  const data = await reader(nextOffset, dataLen);
+  if (data.length < 2) return { done: true, nextOffset };
+  const segmentLength = readUint16BE(data, 0);
+  if (segmentLength < 2) return { done: true, nextOffset };
+  if (isStartOfFrameMarker(marker)) {
+    return { done: true, dimensions: extractSofDimensions(data), nextOffset };
+  }
+  return { done: false, nextOffset: nextOffset + segmentLength };
+}
+
+/**
+ * Bounded, marker-aware JPEG dimension preflight for file-backed inputs.
+ *
+ * Walks JPEG segment headers on demand via the supplied reader — reading only
+ * the handful of bytes needed per segment header and skipping payloads by
+ * offset arithmetic — so a JPEG whose SOF sits beyond a fixed prefix (e.g.
+ * after large APP/COM metadata blocks) still yields its dimensions without
+ * reading the entire arbitrary file into memory.
+ *
+ * Uses the same marker classification (SOF/standalone/SOS semantics) as the
+ * in-memory {@link parseJpegDimensions}. Returns `undefined` for non-JPEG
+ * input, malformed structure, truncated reads, or when SOF would lie beyond
+ * `maxOffset`. Reader I/O errors propagate to the caller.
+ */
+export async function parseJpegDimensionsFromReader(
+  reader: JpegSegmentReader,
+  maxOffset: number = JPEG_SEGMENT_WALK_LIMIT,
+  maxSteps: number = JPEG_SEGMENT_MAX_STEPS,
+): Promise<ImageDimensions | undefined> {
+  const sig = await reader(0, 2);
+  if (sig.length < 2 || sig[0] !== 0xff || sig[1] !== 0xd8) {
+    return undefined;
+  }
+  let offset = 2;
+  let steps = 0;
+  while (offset < maxOffset) {
+    if (steps >= maxSteps) return undefined;
+    steps++;
+    const step = await processJpegSegment(reader, offset, maxOffset);
+    if (step.done) return step.dimensions;
+    offset = step.nextOffset;
+  }
+  return undefined;
+}
+
 function parseWebpDimensions(bytes: Uint8Array): ImageDimensions | undefined {
   // RIFF (4) + size (4) + WEBP (4) + chunk FourCC (4) = 16 bytes minimum.
   if (!hasBytes(bytes, 0, 16)) return undefined;

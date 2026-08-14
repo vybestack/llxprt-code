@@ -6,7 +6,12 @@
 
 import type { GenerateChatOptions } from './IProvider.js';
 
-const RETRY_REQUEST_CONTEXT_KEY = '_retryRequestContext';
+/**
+ * Metadata key holding the per-request retry context object shared across
+ * orchestrator attempts (budget + request-scoped recovery state). Exported so
+ * providers can attach request-scoped state that must survive outer retries.
+ */
+export const RETRY_REQUEST_CONTEXT_KEY = '_retryRequestContext';
 const TRANSPORT_ATTEMPT_BUDGET_KEY = 'transportAttemptBudget';
 
 export interface TransportAttemptBudget {

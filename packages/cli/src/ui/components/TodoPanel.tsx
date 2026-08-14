@@ -8,7 +8,6 @@ import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Text } from 'ink';
 import { useTodoContext } from '../contexts/TodoContext.js';
-import { useToolCallContext } from '../contexts/ToolCallContext.js';
 import { SemanticColors } from '../colors.js';
 import type { Todo as CoreTodo, Subtask } from '@vybestack/llxprt-code-core';
 import { truncateEnd } from '../utils/responsive.js';
@@ -249,20 +248,12 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({
   collapsed = false,
 }) => {
   const { todos } = useTodoContext();
-  const { subscribe } = useToolCallContext();
   const { rows } = useTerminalSize();
   const [contentKey, setContentKey] = useState(0);
 
   useEffect(() => {
     setContentKey((prev) => prev + 1);
   }, [todos]);
-
-  useEffect(() => {
-    const unsubscribe = subscribe(() => {
-      setContentKey((prev) => prev + 1);
-    });
-    return unsubscribe;
-  }, [subscribe]);
 
   const maxVisibleItems = useMemo(() => calculateMaxVisibleItems(rows), [rows]);
   const currentTodoIndex = todos.findIndex(

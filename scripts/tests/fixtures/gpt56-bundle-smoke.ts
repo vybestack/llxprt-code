@@ -4,13 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { get_encoding } from '@dqbd/tiktoken';
+import { createRuntimeTokenizerFactory } from '../../../packages/providers/src/composition/runtimeTokenizerFactory.js';
 
-const encoder = get_encoding('o200k_base');
-try {
-  process.stdout.write(
-    `${encoder.encode('The quick brown fox jumps over the lazy dog.', [], []).length}\n`,
+const factory = createRuntimeTokenizerFactory();
+if (typeof factory.prepareTokenizer !== 'function') {
+  throw new Error(
+    'production factory must expose prepareTokenizer for mandatory model readiness',
   );
-} finally {
-  encoder.free();
 }
+await factory.prepareTokenizer('codex-alias', 'gpt-5.6-sol');
+const tokenizer = factory.getTokenizer('codex-alias', 'gpt-5.6-sol');
+if (tokenizer === undefined) {
+  throw new Error('production factory did not provide the GPT-5.6 tokenizer');
+}
+process.stdout.write(
+  `${await tokenizer.countTokens('The quick brown fox jumps over the lazy dog.')}\n`,
+);

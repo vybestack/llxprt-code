@@ -55,6 +55,16 @@ import {
   executeAnthropicApiCall,
 } from './AnthropicApiExecution.js';
 import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
+import {
+  isAnthropicImageDimensionLimitError,
+  parseAnthropicImageDimensionLimit,
+  sanitizeAnthropicRequestBodyImages,
+  resolveAnthropicImageBudget,
+  resolveRecoveryImageBudget,
+  getImageRecoveryState,
+  ensureImageRecoveryState,
+} from './AnthropicImageSanitizer.js';
+import { tryConsumeTransportAttempt } from '../transportAttemptBudget.js';
 
 export class AnthropicProvider extends BaseProvider {
   // @plan PLAN-20251023-STATELESS-HARDENING.P08
@@ -648,19 +658,47 @@ export class AnthropicProvider extends BaseProvider {
       options.invocation.signal,
     );
 
+    // H2: if a prior outer attempt already sanitized this request's images,
+    // reuse the sanitized body instead of resending the poisoned original.
+    const recoveryState = getImageRecoveryState(options);
+    const effectiveRequestBody =
+      recoveryState?.sanitizedBody ?? requestContext.requestBody;
+
     const apiCallWithResponse = createAnthropicApiCall(
       initialClient,
-      requestContext.requestBody,
+      effectiveRequestBody,
       customHeaders,
       options.invocation.signal,
     );
 
-    const { response, rateLimitInfo } = await this.executeApiCall(
-      options,
-      requestContext,
-      apiCallWithResponse,
-      rateLimitLogger,
-    );
+    let response:
+      | Anthropic.Message
+      | AsyncIterable<Anthropic.MessageStreamEvent>;
+    let rateLimitInfo: AnthropicRateLimitInfo | undefined;
+
+    try {
+      const result = await this.executeApiCall(
+        options,
+        { ...requestContext, requestBody: effectiveRequestBody },
+        apiCallWithResponse,
+        rateLimitLogger,
+      );
+      response = result.response;
+      rateLimitInfo = result.rateLimitInfo;
+    } catch (error) {
+      // Issue #3216: one-shot reactive recovery for poisoned history.
+      const recovered = await this.executeImageDimensionRecovery(
+        error,
+        requestContext,
+        options,
+        initialClient,
+        customHeaders,
+        rateLimitLogger,
+      );
+      if (recovered === undefined) throw error;
+      response = recovered.response;
+      rateLimitInfo = recovered.rateLimitInfo;
+    }
 
     if (rateLimitInfo) {
       this.lastRateLimitInfo = rateLimitInfo;
@@ -673,6 +711,84 @@ export class AnthropicProvider extends BaseProvider {
       isOAuth,
       rateLimitLogger,
     );
+  }
+
+  /**
+   * Issue #3216: one-shot recovery from a 400 that specifically states an image
+   * dimension exceeded the many-image maximum. Sanitizes oversized base64 image
+   * blocks from an immutable copy of the request body and retries exactly once.
+   * Returns the retry result, or `undefined` when the error is not recoverable
+   * (unrelated 400, no parseable limit, no oversized blocks to remove, the
+   * request-scoped recovery was already used, or no transport attempt remains)
+   * so the caller rethrows the original error. Never loops.
+   *
+   * H2: the recovery is request-scoped — at most one recovery per logical
+   * request shared across outer RetryOrchestrator attempts — and the retry's
+   * physical transport call consumes a slot from the shared transport budget
+   * so outer attempt accounting stays exact. The sanitized body is stored in
+   * the shared request state so subsequent outer attempts reuse it instead of
+   * reconstructing and resending the poisoned original.
+   */
+  private async executeImageDimensionRecovery(
+    error: unknown,
+    requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
+    options: NormalizedGenerateChatOptions,
+    initialClient: Parameters<typeof createAnthropicApiCall>[0],
+    customHeaders: Parameters<typeof createAnthropicApiCall>[2],
+    rateLimitLogger: { debug: (fn: () => string) => void },
+  ): Promise<
+    | {
+        response:
+          | Anthropic.Message
+          | AsyncIterable<Anthropic.MessageStreamEvent>;
+        rateLimitInfo: AnthropicRateLimitInfo | undefined;
+      }
+    | undefined
+  > {
+    if (!isAnthropicImageDimensionLimitError(error)) return undefined;
+    const state = ensureImageRecoveryState(options);
+    if (state.recoveryUsed) return undefined;
+    const configuredBudget = resolveAnthropicImageBudget(
+      requestContext.configEphemerals,
+    );
+    const errorLimit = parseAnthropicImageDimensionLimit(error);
+    const recoveryBudget = resolveRecoveryImageBudget(
+      configuredBudget,
+      errorLimit,
+    );
+    if (recoveryBudget === undefined) return undefined;
+    const sanitized = sanitizeAnthropicRequestBodyImages(
+      requestContext.requestBody,
+      recoveryBudget,
+    );
+    if (sanitized.replacedCount === 0) return undefined;
+    // A known-aborted request must not consume a transport slot on a recovery
+    // that can never produce a usable response. Check before accounting.
+    if (options.invocation.signal?.aborted === true) return undefined;
+    // H2: the retry is a physical transport call; account it in the shared
+    // budget. When no slot remains, the original error is final.
+    if (!tryConsumeTransportAttempt(options)) return undefined;
+    state.recoveryUsed = true;
+    state.sanitizedBody = sanitized.body;
+    this.getErrorsLogger().debug(
+      () =>
+        '[AnthropicProvider] Image dimension 400: sanitized oversized image block(s), retrying once',
+    );
+    const retryResult = await this.executeApiCall(
+      options,
+      { ...requestContext, requestBody: sanitized.body },
+      createAnthropicApiCall(
+        initialClient,
+        sanitized.body,
+        customHeaders,
+        options.invocation.signal,
+      ),
+      rateLimitLogger,
+    );
+    return {
+      response: retryResult.response,
+      rateLimitInfo: retryResult.rateLimitInfo,
+    };
   }
 
   private async prepareRequestContext(

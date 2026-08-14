@@ -143,6 +143,11 @@
       "bun": "./src/services/fileSystemService.ts",
       "import": "./dist/src/services/fileSystemService.js"
     },
+    "./services/shellAcquisitionConfig.js": {
+      "types": "./dist/src/services/shellAcquisitionConfig.d.ts",
+      "bun": "./src/services/shellAcquisitionConfig.ts",
+      "import": "./dist/src/services/shellAcquisitionConfig.js"
+    },
     "./services/fileDiscoveryService.js": {
       "types": "./dist/src/services/fileDiscoveryService.d.ts",
       "bun": "./src/services/fileDiscoveryService.ts",

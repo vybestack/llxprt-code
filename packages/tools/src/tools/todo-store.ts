@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type Todo, TodoArraySchema } from '../types/todo-schemas.js';
+import {
+  type Todo,
+  TodoArraySchema,
+  PersistedTodoArraySchema,
+} from '../types/todo-schemas.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -164,28 +168,14 @@ export class TodoStore {
   private parseFileContent(content: string): TodoFileData {
     const rawData = JSON.parse(content);
 
-    // Check if it's the new format (object with todos property)
     if (isNewTodoFormat(rawData)) {
-      const todosResult = TodoArraySchema.safeParse(rawData.todos);
-      if (todosResult.success) {
-        return {
-          todos: todosResult.data,
-          paused: rawData.paused === true,
-        };
-      }
+      const todos = PersistedTodoArraySchema.parse(rawData.todos);
+      return { todos, paused: rawData.paused === true };
     }
 
     // Legacy format: just an array of todos
-    const todosResult = TodoArraySchema.safeParse(rawData);
-    if (todosResult.success) {
-      return {
-        todos: todosResult.data,
-        paused: false,
-      };
-    }
-
-    // Invalid format
-    return { todos: [], paused: false };
+    const todos = PersistedTodoArraySchema.parse(rawData);
+    return { todos, paused: false };
   }
 
   /**
@@ -207,17 +197,16 @@ export class TodoStore {
    * single logical operation across directories.
    */
   private async readFileDataAt(filePath: string): Promise<TodoFileData> {
+    let content: string;
     try {
-      if (!fs.existsSync(filePath)) {
+      content = await fs.promises.readFile(filePath, 'utf8');
+    } catch (error: unknown) {
+      if (isENOENT(error)) {
         return { todos: [], paused: false };
       }
-
-      const content = await fs.promises.readFile(filePath, 'utf8');
-      return this.parseFileContent(content);
-    } catch {
-      // Reading persisted task-list data failed; return empty state.
-      return { todos: [], paused: false };
+      throw error;
     }
+    return this.parseFileContent(content);
   }
 
   /**
@@ -303,4 +292,13 @@ function isNewTodoFormat(data: unknown): data is Record<string, unknown> {
     return false;
   }
   return 'todos' in data;
+}
+
+function isENOENT(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'ENOENT'
+  );
 }

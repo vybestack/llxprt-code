@@ -351,9 +351,35 @@ describe('Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P
       expect(result.error?.message).toContain(
         'image-resize.maxLongEdge must be a positive integer',
       );
-      expect(result.returnDisplay).toContain(
-        'Image Resize Configuration Error',
+      expect(result.returnDisplay).toContain('Image Configuration Error');
+    });
+
+    it('returns a clear, accurately-labeled error for malformed image budget settings', async () => {
+      const { filePath } = await createPngFixture(
+        tempDir,
+        'invalid-budget.png',
+        {
+          r: 15,
+          g: 30,
+          b: 45,
+        },
       );
+      const tool = new ReadFileTool(
+        _createFakeFileHost(tempDir, {
+          'max-image-dimension': 0,
+        }),
+      );
+
+      const result = await executeToolForBehavioralAssertion(tool, {
+        file_path: filePath,
+      });
+
+      // A malformed hard image budget surfaces its message and a combined
+      // label that covers both resize and budget configuration errors.
+      expect(result.error?.message).toContain(
+        'max-image-dimension must be a positive integer',
+      );
+      expect(result.returnDisplay).toContain('Image Configuration Error');
     });
 
     it('returns a clear error for corrupt images under automatic resizing', async () => {

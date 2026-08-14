@@ -428,6 +428,14 @@ jobs:
         run: |-
           npm run lint:e2e-model-budget
 
+      # Runs independently of test shard selection. Path observers only reduce
+      # test work; this guard provides the settings synchronization guarantee.
+      # It must run before build:types, whose declaration-only output cannot be
+      # executed when the schema follows runtime imports across workspaces.
+      - name: 'Run settings docs/schema sync guard (#3212)'
+        run: |-
+          npm run lint:settings-sync
+
       # Build must run BEFORE the type-aware lint: three workspace tsconfigs
       # map cross-workspace imports to `dist/*.d.ts` — cli -> tools, core -> mcp,
       # and a2a-server -> settings/storage/tools — so tsserver (projectService)
@@ -436,16 +444,16 @@ jobs:
       # postinstall only symlinks, see scripts/postinstall.cjs) it does not, so
       # the build is explicit here.
       #
-      # `build:types` emits declarations only (issue #2983). Every step in this
-      # job reads types and none executes application code, so the transpiled
-      # `.js` was pure cost here. Do not reuse `build:types` in a job that runs
-      # the CLI or a Bun test suite: Bun honors tsconfig `paths`, so a
-      # declaration-only `dist` makes cross-package imports resolve to a
-      # `.d.ts` with no JavaScript behind it. The release path
-      # (release.yml -> `npm run build:packages`) still does a full emit,
-      # because every published library workspace declares `main:
-      # dist/index.js` and ships `dist`, so npm consumers resolving without the
-      # `bun` export condition load that JavaScript.
+      # `build:types` emits declarations only (issue #2983). Every later step in
+      # this job reads types and none executes application code, so the
+      # transpiled `.js` was pure cost here. Do not reuse `build:types` in a job
+      # that runs the CLI or a Bun test suite: Bun honors tsconfig `paths`, so a
+      # declaration-only `dist` makes cross-package imports resolve to a `.d.ts`
+      # with no JavaScript behind it. The release path (release.yml -> `npm run
+      # build:packages`) still does a full emit, because every published library
+      # workspace declares `main: dist/index.js` and ships `dist`, so npm
+      # consumers resolving without the `bun` export condition load that
+      # JavaScript.
       - name: 'Build declarations for type-aware lint'
         run: |-
           npm run build:types

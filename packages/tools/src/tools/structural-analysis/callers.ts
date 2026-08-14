@@ -6,27 +6,41 @@
 
 import type { NapiConfig } from '@ast-grep/napi';
 import type { SgNode } from '@ast-grep/napi';
-import type {
-  ParsedFile,
-  AnalysisResult,
-  TraversalContext,
-  ResolvedLang,
-} from './types.js';
+import type { ParsedFile, AnalysisResult, ResolvedLang } from './types.js';
 import {
   escapeRegex,
-  getFiles,
+  iterateFiles,
   parseFile,
   makeRelative,
   findFunctionContainer,
   getContainerName,
   getViaContext,
 } from './helpers.js';
+import { type AnalysisBudget, BudgetTracker } from './budget.js';
 
 interface CallerRef {
   method: string;
   file: string;
   line: number;
   via: string;
+}
+
+/**
+ * Accept one caller candidate through the node budget, pushing it into
+ * `results` when it fits. Returns true to keep iterating, false to stop
+ * (budget sentinel). Shared by the member-call and direct-call loops so
+ * each stays to a single break with no nested control flow.
+ */
+function acceptCallerEntry(
+  entry: CallerRef | undefined,
+  results: CallerRef[],
+  tracker: BudgetTracker,
+  effectiveMaxNodes: number,
+): boolean {
+  if (entry === undefined) return true;
+  if (!tracker.tryAcceptNode(effectiveMaxNodes)) return false;
+  results.push(entry);
+  return true;
 }
 
 export interface CallerEntry {
@@ -68,12 +82,19 @@ function buildCallerEntry(
   };
 }
 
+/**
+ * Collect member-call callers. Each valid new caller is accepted through the
+ * shared node budget ({@link BudgetTracker.tryAcceptNode}) BEFORE being
+ * inserted, so the node-candidate aggregate is hard-bounded with one-over
+ * semantics. The loop stops the moment the budget sentinel fires.
+ */
 function findMemberCallCallers(
   parsed: ParsedFile,
   sym: string,
   relPath: string,
   visited: Set<string>,
-  ctx: TraversalContext,
+  tracker: BudgetTracker,
+  effectiveMaxNodes: number,
 ): CallerRef[] {
   const results: CallerRef[] = [];
   try {
@@ -88,16 +109,15 @@ function findMemberCallCallers(
     } as NapiConfig);
 
     for (const callNode of memberCalls) {
-      if (ctx.nodesVisited >= ctx.maxNodes) {
-        ctx.truncated = true;
+      if (
+        !acceptCallerEntry(
+          buildCallerEntry(callNode, sym, relPath, visited),
+          results,
+          tracker,
+          effectiveMaxNodes,
+        )
+      )
         break;
-      }
-
-      const entry = buildCallerEntry(callNode, sym, relPath, visited);
-      if (entry !== undefined) {
-        ctx.nodesVisited++;
-        results.push(entry);
-      }
     }
   } catch {
     /* skip */
@@ -105,29 +125,33 @@ function findMemberCallCallers(
   return results;
 }
 
+/**
+ * Collect direct-call callers. Unlike the member path, every valid caller is
+ * still accepted through the node budget before insertion, closing the
+ * previous gap where the direct path was unbounded.
+ */
 function findDirectCallCallers(
   parsed: ParsedFile,
   sym: string,
   relPath: string,
   visited: Set<string>,
-  ctx: TraversalContext,
+  tracker: BudgetTracker,
+  effectiveMaxNodes: number,
 ): CallerRef[] {
   const results: CallerRef[] = [];
   try {
     const directCallNodes = parsed.root.findAll(`${sym}($$$ARGS)`);
 
     for (const callNode of directCallNodes) {
-      const entry = buildCallerEntry(
-        callNode,
-        sym,
-        relPath,
-        visited,
-        `${sym}(...)`,
-      );
-      if (entry !== undefined) {
-        ctx.nodesVisited++;
-        results.push(entry);
-      }
+      if (
+        !acceptCallerEntry(
+          buildCallerEntry(callNode, sym, relPath, visited, `${sym}(...)`),
+          results,
+          tracker,
+          effectiveMaxNodes,
+        )
+      )
+        break;
     }
   } catch {
     /* skip */
@@ -141,26 +165,39 @@ async function findCallersOfFile(
   sym: string,
   workspaceRoot: string,
   visited: Set<string>,
-  ctx: TraversalContext,
+  tracker: BudgetTracker,
+  effectiveMaxNodes: number,
 ): Promise<CallerRef[]> {
-  if (ctx.signal.aborted || ctx.nodesVisited >= ctx.maxNodes) return [];
-  const parsed = await parseFile(file, lang);
-  if (!parsed) return [];
+  // The node budget is enforced per-candidate by tryAcceptNode inside the
+  // member/direct loops. We deliberately do NOT early-return on the exact
+  // node limit here: that would prevent observing the one-over sentinel
+  // candidate when callers are spread one-per-file. tryAcceptNode stops the
+  // loop and shouldVisitMoreFiles stops the file loop once the sentinel fires.
+  if (tracker.signal.aborted || tracker.truncated) {
+    return [];
+  }
+  const outcome = await parseFile(file, lang);
+  if (!outcome.ok) {
+    tracker.recordFileOmission(outcome.reason);
+    return [];
+  }
 
   const relPath = makeRelative(file, workspaceRoot);
   const memberResults = findMemberCallCallers(
-    parsed,
+    outcome,
     sym,
     relPath,
     visited,
-    ctx,
+    tracker,
+    effectiveMaxNodes,
   );
   const directResults = findDirectCallCallers(
-    parsed,
+    outcome,
     sym,
     relPath,
     visited,
-    ctx,
+    tracker,
+    effectiveMaxNodes,
   );
   return [...memberResults, ...directResults];
 }
@@ -173,36 +210,47 @@ export async function executeCallers(
   depth: number,
   maxNodes: number,
   signal: AbortSignal,
+  budget: AnalysisBudget,
 ): Promise<AnalysisResult> {
-  const files = await getFiles(searchPath, lang);
+  const tracker = new BudgetTracker(budget, signal);
   const visited = new Set<string>();
-  let nodesVisited = 0;
-  let truncated = false;
+  // The node-candidate budget is the smaller of the requested maxNodes and
+  // the finite record budget, so callers traversal is always hard-bounded.
+  const effectiveMaxNodes = Math.min(maxNodes, budget.recordBudget);
 
   const findCallersOf = async (
     sym: string,
     currentDepth: number,
   ): Promise<CallerEntry[]> => {
-    if (currentDepth <= 0 || nodesVisited >= maxNodes || signal.aborted) {
-      if (nodesVisited >= maxNodes) truncated = true;
+    if (signal.aborted) {
+      tracker.markAborted();
+      return [];
+    }
+    // Exact-limit stays complete: when the node budget is exactly reached
+    // (no extra candidate observed) traversal simply stops without marking
+    // partial — only a one-over candidate (observed through tryAcceptNode)
+    // sets the sentinel. shouldVisitMoreFiles stops file iteration once the
+    // sentinel fires.
+    // Snapshot truncation at entry: reading the property directly lets TS's
+    // (unsound) property narrowing hide later mid-traversal flips.
+    const truncatedOnEntry = tracker.truncated;
+    if (currentDepth <= 0 || truncatedOnEntry) {
       return [];
     }
 
     const callers: CallerEntry[] = [];
-    const ctx: TraversalContext = { nodesVisited, maxNodes, truncated, signal };
-    const syncTraversalState = (): void => {
-      nodesVisited = ctx.nodesVisited;
-      truncated = ctx.truncated;
-    };
 
-    for (const file of files) {
+    for await (const file of iterateFiles(searchPath, lang, signal)) {
+      if (!tracker.shouldVisitMoreFiles()) break;
+      tracker.filesVisited++;
       const fileResults = await findCallersOfFile(
         file,
         lang,
         sym,
         workspaceRoot,
         visited,
-        ctx,
+        tracker,
+        effectiveMaxNodes,
       );
       for (const r of fileResults) {
         const entry: CallerEntry = {
@@ -211,27 +259,46 @@ export async function executeCallers(
           line: r.line,
           via: r.via,
         };
-        if (currentDepth > 1 && ctx.nodesVisited < maxNodes) {
-          syncTraversalState();
+        if (
+          currentDepth > 1 &&
+          tracker.nodesObserved < effectiveMaxNodes &&
+          !tracker.truncated
+        ) {
           entry.callers = await findCallersOf(r.method, currentDepth - 1);
-          ctx.nodesVisited = nodesVisited;
-          ctx.truncated = truncated;
         }
         callers.push(entry);
       }
     }
 
-    nodesVisited = ctx.nodesVisited;
-    truncated = ctx.truncated;
     return callers;
   };
 
   const results = await findCallersOf(symbol, depth);
 
+  if (signal.aborted) {
+    tracker.markAborted();
+  }
+
+  // For callers/callees the node-candidate budget IS the record budget
+  // (effectiveMaxNodes = min(maxNodes, recordBudget)), so the node counters
+  // are reported as the record counters too. recordBudget reflects the
+  // effective maximum, not the raw configured recordBudget.
   return {
     mode: 'callers',
     symbol,
-    truncated,
+    truncated: tracker.truncated,
+    partial: tracker.truncated,
+    partialReason: tracker.partialReason,
+    fileBudget: budget.fileBudget,
+    recordBudget: effectiveMaxNodes,
+    filesVisited: tracker.filesVisited,
+    recordsRetained: tracker.nodesRetained,
+    recordsObserved: tracker.nodesObserved,
+    nodesRetained: tracker.nodesRetained,
+    nodesObserved: tracker.nodesObserved,
+    oversizedFiles: tracker.oversizedFiles,
+    unparseableFiles: tracker.unparseableFiles,
+    countInexact: tracker.countInexact,
     results,
   };
 }

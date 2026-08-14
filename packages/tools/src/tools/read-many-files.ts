@@ -15,49 +15,62 @@ import type { IToolHost, IToolMessageBus } from '../interfaces/index.js';
 import { getErrorMessage } from '../utils/errors.js';
 import * as fs from 'fs';
 import * as path from 'path';
-import { glob, escape as globEscape } from 'glob';
+import { globStream, escape as globEscape } from 'glob';
 import {
-  createImageResizeToolResult,
-  detectFileType,
+  createImageConfigurationToolResult,
+  getImageBudgetToolResult,
   getImageResizeToolResult,
-  getImageSourceSizeLimit,
   getProcessedFileSkipReason,
-  isAssetExplicitlyRequested,
-  type ProcessedFileReadResult,
   processSingleFileContent,
-  shouldResizeExplicitImage,
   DEFAULT_ENCODING,
   DEFAULT_MAX_LINES_TEXT_FILE,
   getSpecificMimeType,
 } from '../utils/fileUtils.js';
+import { runPreReadGates } from '../utils/fileBudgetChecks.js';
 import { type ContentPartUnion } from '../types/wire-types.js';
-import { stat } from 'fs/promises';
 import { ToolErrorType } from '../types/tool-error.js';
 import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
 import {
   resolveImageResizePolicy,
   type ImageResizePolicy,
 } from '../utils/imageResize.js';
-import { estimateNonTextPartTokens } from '../utils/imageTokenEstimation.js';
+import {
+  resolveImageDimensionBudget,
+  type ImageDimensionBudget,
+} from '../utils/imageDimensionBudget.js';
+import {
+  addFileContent,
+  DEFAULT_OUTPUT_SEPARATOR_FORMAT,
+  DEFAULT_OUTPUT_TERMINATOR,
+  type ReadManyFilesLimits,
+} from './read-many-files-content.js';
 import {
   buildParameterSchema,
   formatExcludePatterns,
 } from './read-many-files-schema.js';
-
-// Simple token estimation - roughly 4 characters per token
-function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
-}
-
-type AddFileContentAction = 'continue' | 'stop' | 'stopAfterRecord';
-
-interface AddFileContentResult {
-  totalTokens: number;
-  action: AddFileContentAction;
-}
+import {
+  createDefaultByteBudget,
+  type ByteBudget,
+} from '../acquisition/index.js';
 
 type ProcessFilesResult = Readonly<{ totalTokens: number; error?: ToolResult }>;
-type ProcessSingleFileResult = ProcessFilesResult & { readonly done: boolean };
+type ProcessSingleFileResult = ProcessFilesResult & {
+  readonly done: boolean;
+  readonly totalBytes: number;
+};
+
+/**
+ * Invocation-local finite discovery-record observation counter shared across
+ * ALL workspace roots. Every path emitted by the glob stream is one observed
+ * discovery record, charged BEFORE any filtering or deduplication — ignored
+ * records, security-skipped records, and duplicates all consume the budget.
+ * One-over semantics: exactly maxFileCount observed records is complete; the
+ * maxFileCount+1-th record proves `truncated` and is not retained/stored.
+ */
+interface DiscoveryRecordTracker {
+  observed: number;
+  truncated: boolean;
+}
 
 /**
  * Parameters for the ReadManyFilesTool.
@@ -115,14 +128,13 @@ function getDefaultExcludes(host?: IToolHost): string[] {
   return host?.getReadManyFilesExclusions() ?? [];
 }
 
-const DEFAULT_OUTPUT_SEPARATOR_FORMAT = '--- {filePath} ---';
-const DEFAULT_OUTPUT_TERMINATOR = '\n--- End of content ---';
-
 // Default limits for ReadManyFiles
 const DEFAULT_MAX_FILE_COUNT = 50;
 const DEFAULT_MAX_TOKENS = 50000;
 const DEFAULT_TRUNCATE_MODE = 'warn';
 const DEFAULT_FILE_SIZE_LIMIT = 524288; // 512KB
+/** Absolute ceiling on the number of files processed regardless of settings. */
+const MAX_FILE_COUNT_HARD_CAP = 10_000;
 
 class ReadManyFilesToolInvocation extends BaseToolInvocation<
   ReadManyFilesParams,
@@ -174,10 +186,17 @@ ${this.host.getTargetDir()}
     const { fileFilteringOptions, fileDiscovery, effectiveExcludes } =
       this.resolveFileParams(useDefaultExcludes, exclude);
 
+    const limits = this.resolveLimits();
+    const aggregateByteBudget = createDefaultByteBudget();
+
     const filesToConsider = new Set<string>();
     const skippedFiles: Array<{ path: string; reason: string }> = [];
     const processedFilesRelativePaths: string[] = [];
     const contentParts: Array<string | ContentPartUnion> = [];
+    const discoveryRecords: DiscoveryRecordTracker = {
+      observed: 0,
+      truncated: false,
+    };
 
     const searchResult = await this.discoverFiles(
       inputPatterns,
@@ -188,19 +207,20 @@ ${this.host.getTargetDir()}
       filesToConsider,
       skippedFiles,
       signal,
+      limits.maxFileCount,
+      discoveryRecords,
     );
-
     if (searchResult) {
       return searchResult;
     }
 
     const sortedFiles = Array.from(filesToConsider).sort();
 
-    const limits = this.resolveLimits();
     const fileCountResult = this.applyFileCountLimit(
       sortedFiles,
       skippedFiles,
       limits,
+      discoveryRecords.truncated,
     );
     if (fileCountResult) {
       return fileCountResult;
@@ -213,6 +233,7 @@ ${this.host.getTargetDir()}
       processedFilesRelativePaths,
       contentParts,
       limits,
+      aggregateByteBudget,
     );
   }
 
@@ -239,7 +260,8 @@ ${this.host.getTargetDir()}
     skippedFiles: Array<{ path: string; reason: string }>,
     processedFilesRelativePaths: string[],
     contentParts: Array<string | ContentPartUnion>,
-    limits: ReturnType<ReadManyFilesToolInvocation['resolveLimits']>,
+    limits: ReadManyFilesLimits,
+    aggregateByteBudget: ByteBudget,
   ): Promise<ToolResult> {
     const processResult = await this.processFiles(
       sortedFiles,
@@ -248,6 +270,7 @@ ${this.host.getTargetDir()}
       processedFilesRelativePaths,
       contentParts,
       limits,
+      aggregateByteBudget,
     );
     if (processResult.error !== undefined) {
       return processResult.error;
@@ -284,37 +307,35 @@ ${this.host.getTargetDir()}
     filesToConsider: Set<string>,
     skippedFiles: Array<{ path: string; reason: string }>,
     signal: AbortSignal,
+    maxFileCount: number,
+    recordTracker: DiscoveryRecordTracker,
   ): Promise<ToolResult | undefined> {
     const searchPatterns = [...inputPatterns, ...include];
     try {
-      const allEntries = new Set<string>();
-      const workspaceDirs = this.host.getWorkspaceRoots();
+      const ignoredCounts = { git: 0, llxprt: 0 };
 
-      for (const dir of workspaceDirs) {
-        const processedPatterns = this.processSearchPatterns(
+      for (const dir of this.host.getWorkspaceRoots()) {
+        if (recordTracker.truncated) break;
+        await this.collectDirectoryFiles(
           dir,
           searchPatterns,
-        );
-        const entriesInDir = await glob(processedPatterns, {
-          cwd: dir,
-          ignore: effectiveExcludes,
-          nodir: true,
-          dot: true,
-          absolute: true,
-          nocase: true,
+          effectiveExcludes,
+          fileFilteringOptions,
+          fileDiscovery,
+          filesToConsider,
+          ignoredCounts,
+          skippedFiles,
           signal,
-        });
-        for (const entry of entriesInDir) {
-          allEntries.add(entry);
-        }
+          maxFileCount,
+          recordTracker,
+        );
       }
 
-      this.filterEntries(
-        Array.from(allEntries),
-        fileFilteringOptions,
-        fileDiscovery,
-        filesToConsider,
+      this.recordDiscoverySkippedFiles(
         skippedFiles,
+        ignoredCounts,
+        recordTracker.truncated,
+        maxFileCount,
       );
     } catch (error) {
       const errorMessage = `Error during file search: ${getErrorMessage(error)}`;
@@ -328,6 +349,92 @@ ${this.host.getTargetDir()}
       };
     }
     return undefined;
+  }
+
+  private async collectDirectoryFiles(
+    dir: string,
+    searchPatterns: string[],
+    effectiveExcludes: string[],
+    fileFilteringOptions: {
+      respectGitIgnore: boolean;
+      respectLlxprtIgnore: boolean;
+    },
+    fileDiscovery: ReturnType<IToolHost['getFileService']>,
+    filesToConsider: Set<string>,
+    ignoredCounts: { git: number; llxprt: number },
+    skippedFiles: Array<{ path: string; reason: string }>,
+    signal: AbortSignal,
+    maxFileCount: number,
+    recordTracker: DiscoveryRecordTracker,
+  ): Promise<void> {
+    const processedPatterns = this.processSearchPatterns(dir, searchPatterns);
+    const stream = globStream(processedPatterns, {
+      cwd: dir,
+      ignore: effectiveExcludes,
+      nodir: true,
+      dot: true,
+      absolute: true,
+      nocase: true,
+      signal,
+    });
+    for await (const absoluteFilePath of stream) {
+      // Charge every glob emission as ONE discovery record BEFORE any
+      // filtering or dedup — ignored, security-skipped, duplicate, and
+      // non-normalizable records all consume the shared invocation budget.
+      // One-over semantics: exactly maxFileCount records is complete; the
+      // maxFileCount+1-th record proves truncation and is NOT retained or
+      // stored (no Set entry, skip metadata, or ignored count for it).
+      recordTracker.observed++;
+      if (recordTracker.observed > maxFileCount) {
+        recordTracker.truncated = true;
+        return;
+      }
+      const result = this.checkFileFilter(
+        absoluteFilePath,
+        fileFilteringOptions,
+        fileDiscovery,
+      );
+      if (result.skipped) {
+        if (result.type === 'security') {
+          skippedFiles.push({
+            path: absoluteFilePath,
+            reason: result.reason ?? 'security',
+          });
+        }
+        if (result.type === 'git') ignoredCounts.git++;
+        if (result.type === 'llxprt') ignoredCounts.llxprt++;
+        continue;
+      }
+      if (result.normalizedPath) {
+        filesToConsider.add(result.normalizedPath);
+      }
+    }
+  }
+
+  private recordDiscoverySkippedFiles(
+    skippedFiles: Array<{ path: string; reason: string }>,
+    ignoredCounts: { git: number; llxprt: number },
+    discoveryTruncated: boolean,
+    maxFileCount: number,
+  ): void {
+    if (ignoredCounts.git > 0) {
+      skippedFiles.push({
+        path: `${ignoredCounts.git} file(s)`,
+        reason: 'git ignored',
+      });
+    }
+    if (ignoredCounts.llxprt > 0) {
+      skippedFiles.push({
+        path: `${ignoredCounts.llxprt} file(s)`,
+        reason: 'llxprt ignored',
+      });
+    }
+    if (discoveryTruncated) {
+      skippedFiles.push({
+        path: `discovery stopped at ${maxFileCount + 1} discovery record(s)`,
+        reason: `discovery record limit (${maxFileCount}); more matching records may exist`,
+      });
+    }
   }
 
   private processSearchPatterns(
@@ -346,53 +453,6 @@ ${this.host.getTargetDir()}
       }
     }
     return processedPatterns;
-  }
-
-  private filterEntries(
-    entries: string[],
-    fileFilteringOptions: {
-      respectGitIgnore: boolean;
-      respectLlxprtIgnore: boolean;
-    },
-    fileDiscovery: ReturnType<IToolHost['getFileService']>,
-    filesToConsider: Set<string>,
-    skippedFiles: Array<{ path: string; reason: string }>,
-  ): void {
-    let gitIgnoredCount = 0;
-    let llxprtIgnoredCount = 0;
-
-    for (const absoluteFilePath of entries) {
-      const result = this.checkFileFilter(
-        absoluteFilePath,
-        fileFilteringOptions,
-        fileDiscovery,
-      );
-      if (result.skipped) {
-        if (result.reason) {
-          skippedFiles.push({ path: absoluteFilePath, reason: result.reason });
-        }
-        if (result.type === 'git') gitIgnoredCount++;
-        if (result.type === 'llxprt') llxprtIgnoredCount++;
-        continue;
-      }
-      if (result.normalizedPath) {
-        filesToConsider.add(result.normalizedPath);
-      }
-    }
-
-    if (gitIgnoredCount > 0) {
-      skippedFiles.push({
-        path: `${gitIgnoredCount} file(s)`,
-        reason: 'git ignored',
-      });
-    }
-
-    if (llxprtIgnoredCount > 0) {
-      skippedFiles.push({
-        path: `${llxprtIgnoredCount} file(s)`,
-        reason: 'llxprt ignored',
-      });
-    }
   }
 
   private checkFileFilter(
@@ -442,17 +502,18 @@ ${this.host.getTargetDir()}
     return { skipped: false, normalizedPath };
   }
 
-  private resolveLimits(): {
-    maxFileCount: number;
-    maxTokens: number;
-    truncateMode: 'warn' | 'truncate' | 'sample';
-    fileSizeLimit: number;
-  } {
+  private resolveLimits(): ReadManyFilesLimits {
     const ephemeralSettings = this.host.getEphemeralSettings();
-    return {
-      maxFileCount:
-        (ephemeralSettings['tool-output-max-items'] as number | undefined) ??
+    const rawMaxItems = Number(
+      (ephemeralSettings['tool-output-max-items'] as number | undefined) ??
         DEFAULT_MAX_FILE_COUNT,
+    );
+    const maxFileCount =
+      Number.isFinite(rawMaxItems) && rawMaxItems > 0
+        ? Math.min(Math.floor(rawMaxItems), MAX_FILE_COUNT_HARD_CAP)
+        : DEFAULT_MAX_FILE_COUNT;
+    return {
+      maxFileCount,
       maxTokens:
         (ephemeralSettings['tool-output-max-tokens'] as number | undefined) ??
         DEFAULT_MAX_TOKENS,
@@ -472,17 +533,28 @@ ${this.host.getTargetDir()}
   private applyFileCountLimit(
     sortedFiles: string[],
     skippedFiles: Array<{ path: string; reason: string }>,
-    limits: ReturnType<ReadManyFilesToolInvocation['resolveLimits']>,
+    limits: ReadManyFilesLimits,
+    discoveryTruncated: boolean,
   ): ToolResult | undefined {
-    if (sortedFiles.length <= limits.maxFileCount) {
+    const filesExceedCap = sortedFiles.length > limits.maxFileCount;
+    if (!filesExceedCap) {
+      if (discoveryTruncated && limits.truncateMode === 'warn')
+        skippedFiles.push({
+          path: `${limits.maxFileCount} discovery record limit`,
+          reason: 'discovery truncated; some matching files may not be listed',
+        });
       return undefined;
     }
 
     if (limits.truncateMode === 'warn') {
-      const warnMessage = `Found ${sortedFiles.length} files matching your pattern, but limiting to ${limits.maxFileCount} files. Please use more specific patterns to narrow your search.`;
+      // Discovery truncation is proven at the record level (one-over raw
+      // glob emissions). The retained unique-file count alone understates
+      // the traversal when records were skipped or deduplicated, so report
+      // the truthful lower bound rather than implying a known file count.
+      const warnMessage = `Found ${discoveryTruncated ? `more than ${limits.maxFileCount} matching discovery records` : `${sortedFiles.length} files matching your pattern`}, but limiting to ${limits.maxFileCount} files. Please use more specific patterns to narrow your search.`;
       return {
         llmContent: warnMessage,
-        returnDisplay: `## File Count Limit Exceeded\n\n${warnMessage}\n\n**Matched files:** ${sortedFiles.length}\n**Limit:** ${limits.maxFileCount}\n\n**Suggestion:** Use more specific glob patterns or paths to reduce the number of matched files.`,
+        returnDisplay: `## File Count Limit Exceeded\n\n${warnMessage}\n\n**Matched files:** ${discoveryTruncated ? `more than ${limits.maxFileCount}` : sortedFiles.length}\n**Limit:** ${limits.maxFileCount}\n\n**Suggestion:** Use more specific glob patterns or paths to reduce the number of matched files.`,
       };
     } else if (limits.truncateMode === 'sample') {
       const step = Math.ceil(sortedFiles.length / limits.maxFileCount);
@@ -516,14 +588,19 @@ ${this.host.getTargetDir()}
     skippedFiles: Array<{ path: string; reason: string }>,
     processedFilesRelativePaths: string[],
     contentParts: Array<string | ContentPartUnion>,
-    limits: ReturnType<ReadManyFilesToolInvocation['resolveLimits']>,
+    limits: ReadManyFilesLimits,
+    aggregateByteBudget: ByteBudget,
   ): Promise<ProcessFilesResult> {
     const ephemeralSettings = this.host.getEphemeralSettings();
+    // Resolve both image policies once from one settings snapshot inside one
+    // guard so malformed settings surface as structured tool errors.
     let imageResizePolicy: ImageResizePolicy | undefined;
+    let imageBudget: ImageDimensionBudget | undefined;
     try {
       imageResizePolicy = resolveImageResizePolicy(ephemeralSettings);
+      imageBudget = resolveImageDimensionBudget(ephemeralSettings);
     } catch (error) {
-      return createImageResizeToolResult(
+      return createImageConfigurationToolResult(
         getErrorMessage(error),
         ToolErrorType.READ_CONTENT_FAILURE,
         0,
@@ -533,6 +610,10 @@ ${this.host.getTargetDir()}
       (ephemeralSettings['file-read-max-lines'] as number | undefined) ??
       DEFAULT_MAX_LINES_TEXT_FILE;
     let totalTokens = 0;
+    // Pre-charge the output terminator bytes so every content path (ordinary,
+    // warn, truncate, overflow) accounts for it and the final complete output
+    // can never exceed the aggregate acquisition byte budget.
+    let totalBytes = Buffer.byteLength(DEFAULT_OUTPUT_TERMINATOR, 'utf8');
     for (const filePath of sortedFiles) {
       const result = await this.processSingleFile(
         filePath,
@@ -543,13 +624,17 @@ ${this.host.getTargetDir()}
         contentParts,
         limits,
         totalTokens,
+        totalBytes,
+        aggregateByteBudget,
         imageResizePolicy,
+        imageBudget,
         maxLinesPerFile,
       );
       if (result.error !== undefined || result.done) {
         return result;
       }
       totalTokens = result.totalTokens;
+      totalBytes = result.totalBytes;
     }
     return { totalTokens };
   }
@@ -561,46 +646,85 @@ ${this.host.getTargetDir()}
     skippedFiles: Array<{ path: string; reason: string }>,
     processedFilesRelativePaths: string[],
     contentParts: Array<string | ContentPartUnion>,
-    limits: ReturnType<ReadManyFilesToolInvocation['resolveLimits']>,
+    limits: ReadManyFilesLimits,
     currentTokens: number,
+    currentBytes: number,
+    aggregateByteBudget: ByteBudget,
     imageResizePolicy: ImageResizePolicy | undefined,
+    imageBudget: ImageDimensionBudget | undefined,
     maxLinesPerFile: number,
   ): Promise<ProcessSingleFileResult> {
     const relativePathForDisplay = path
       .relative(this.host.getTargetDir(), filePath)
       .replace(/\\/g, '/');
-    const resizeBeforeOutputLimit = await shouldResizeExplicitImage(
+    const gate = await runPreReadGates(
       filePath,
       inputPatterns,
+      relativePathForDisplay,
+      skippedFiles,
+      limits.fileSizeLimit,
+      currentTokens,
+      imageBudget,
       imageResizePolicy !== undefined,
     );
-    if (
-      (await this.checkFileSize(
-        filePath,
-        relativePathForDisplay,
-        skippedFiles,
-        getImageSourceSizeLimit(resizeBeforeOutputLimit, limits.fileSizeLimit),
-      )) === 'skip' ||
-      (await this.checkAssetFile(
-        filePath,
-        relativePathForDisplay,
-        inputPatterns,
-        skippedFiles,
-      )) === 'skip'
-    ) {
-      return { done: false, totalTokens: currentTokens };
+    if (gate.outcome === 'preflight-error') {
+      return { ...gate.result, totalBytes: currentBytes };
+    }
+    if (gate.outcome === 'skip') {
+      return {
+        done: false,
+        totalTokens: currentTokens,
+        totalBytes: currentBytes,
+      };
     }
 
+    return this.assembleFileContent(
+      filePath,
+      relativePathForDisplay,
+      gate.resizeBeforeOutputLimit,
+      sortedFiles,
+      skippedFiles,
+      processedFilesRelativePaths,
+      contentParts,
+      limits,
+      currentTokens,
+      currentBytes,
+      aggregateByteBudget,
+      imageResizePolicy,
+      imageBudget,
+      maxLinesPerFile,
+    );
+  }
+
+  private async assembleFileContent(
+    filePath: string,
+    relativePathForDisplay: string,
+    resizeBeforeOutputLimit: boolean,
+    sortedFiles: string[],
+    skippedFiles: Array<{ path: string; reason: string }>,
+    processedFilesRelativePaths: string[],
+    contentParts: Array<string | ContentPartUnion>,
+    limits: ReadManyFilesLimits,
+    currentTokens: number,
+    currentBytes: number,
+    aggregateByteBudget: ByteBudget,
+    imageResizePolicy: ImageResizePolicy | undefined,
+    imageBudget: ImageDimensionBudget | undefined,
+    maxLinesPerFile: number,
+  ): Promise<ProcessSingleFileResult> {
     const fileReadResult = await processSingleFileContent(
       filePath,
       this.host.getTargetDir(),
       undefined,
       maxLinesPerFile,
       imageResizePolicy,
+      imageBudget,
     );
-    const resizeError = getImageResizeToolResult(fileReadResult, currentTokens);
-    if (resizeError !== undefined) {
-      return resizeError;
+    const imageError =
+      getImageResizeToolResult(fileReadResult, currentTokens) ??
+      getImageBudgetToolResult(fileReadResult, currentTokens);
+    if (imageError !== undefined) {
+      return { ...imageError, totalBytes: currentBytes };
     }
     const skipReason = getProcessedFileSkipReason(
       fileReadResult,
@@ -609,202 +733,49 @@ ${this.host.getTargetDir()}
     );
     if (skipReason !== undefined) {
       skippedFiles.push({ path: relativePathForDisplay, reason: skipReason });
-      return { done: false, totalTokens: currentTokens };
+      return {
+        done: false,
+        totalTokens: currentTokens,
+        totalBytes: currentBytes,
+      };
     }
 
-    const addResult = this.addFileContent(
+    const addResult = addFileContent(
       fileReadResult,
       filePath,
       relativePathForDisplay,
       skippedFiles,
-      processedFilesRelativePaths,
       contentParts,
       limits,
       currentTokens,
+      currentBytes,
+      aggregateByteBudget,
       sortedFiles,
+      processedFilesRelativePaths,
     );
 
     if (addResult.action === 'stop') {
-      return { done: true, totalTokens: addResult.totalTokens };
+      return {
+        done: true,
+        totalTokens: addResult.totalTokens,
+        totalBytes: addResult.totalBytes,
+      };
     }
 
     processedFilesRelativePaths.push(relativePathForDisplay);
     this.recordReadMetric(filePath, fileReadResult.llmContent);
     if (addResult.action === 'stopAfterRecord') {
-      return { done: true, totalTokens: addResult.totalTokens };
+      return {
+        done: true,
+        totalTokens: addResult.totalTokens,
+        totalBytes: addResult.totalBytes,
+      };
     }
-    return { done: false, totalTokens: addResult.totalTokens };
-  }
-  private async checkFileSize(
-    filePath: string,
-    relativePathForDisplay: string,
-    skippedFiles: Array<{ path: string; reason: string }>,
-    fileSizeLimit: number,
-  ): Promise<'skip' | 'continue'> {
-    try {
-      const stats = await stat(filePath);
-      if (stats.size > fileSizeLimit) {
-        skippedFiles.push({
-          path: relativePathForDisplay,
-          reason: `file size (${Math.round(stats.size / 1024)}KB) exceeds limit (${Math.round(fileSizeLimit / 1024)}KB)`,
-        });
-        return 'skip';
-      }
-    } catch (error) {
-      skippedFiles.push({
-        path: relativePathForDisplay,
-        reason: `stat error: ${getErrorMessage(error)}`,
-      });
-      return 'skip';
-    }
-    return 'continue';
-  }
-
-  private async checkAssetFile(
-    filePath: string,
-    relativePathForDisplay: string,
-    inputPatterns: string[],
-    skippedFiles: Array<{ path: string; reason: string }>,
-  ): Promise<'skip' | 'continue'> {
-    const fileType = await detectFileType(filePath);
-    if (
-      (fileType === 'image' || fileType === 'pdf' || fileType === 'audio') &&
-      !isAssetExplicitlyRequested(filePath, inputPatterns)
-    ) {
-      skippedFiles.push({
-        path: relativePathForDisplay,
-        reason:
-          'asset file (image/pdf/audio) was not explicitly requested by name or extension',
-      });
-      return 'skip';
-    }
-    return 'continue';
-  }
-
-  private addFileContent(
-    fileReadResult: ProcessedFileReadResult,
-    filePath: string,
-    relativePathForDisplay: string,
-    skippedFiles: Array<{ path: string; reason: string }>,
-    _processedFilesRelativePaths: string[],
-    contentParts: Array<string | ContentPartUnion>,
-    limits: ReturnType<ReadManyFilesToolInvocation['resolveLimits']>,
-    totalTokens: number,
-    sortedFiles: string[],
-  ): AddFileContentResult {
-    if (typeof fileReadResult.llmContent === 'string') {
-      return this.addTextFileContent(
-        fileReadResult,
-        filePath,
-        relativePathForDisplay,
-        skippedFiles,
-        contentParts,
-        limits,
-        totalTokens,
-        sortedFiles,
-        _processedFilesRelativePaths,
-      );
-    }
-
-    // Non-text content (images/PDFs). No provider is available at the tool
-    // layer, so image estimates use the provider-agnostic default family.
-    const inlineData = fileReadResult.llmContent.inlineData;
-    const estimatedTokens = estimateNonTextPartTokens(
-      inlineData?.mimeType,
-      inlineData?.data,
-    );
-
-    if (totalTokens + estimatedTokens > limits.maxTokens) {
-      skippedFiles.push({
-        path: relativePathForDisplay,
-        reason: 'would exceed token limit (non-text content)',
-      });
-      return { totalTokens, action: 'continue' };
-    }
-    totalTokens += estimatedTokens;
-    contentParts.push(fileReadResult.llmContent);
-    return { totalTokens, action: 'continue' };
-  }
-
-  private addTextFileContent(
-    fileReadResult: ProcessedFileReadResult,
-    filePath: string,
-    relativePathForDisplay: string,
-    skippedFiles: Array<{ path: string; reason: string }>,
-    contentParts: Array<string | ContentPartUnion>,
-    limits: ReturnType<ReadManyFilesToolInvocation['resolveLimits']>,
-    totalTokens: number,
-    sortedFiles: string[],
-    processedFilesRelativePaths: string[],
-  ): AddFileContentResult {
-    const separator = DEFAULT_OUTPUT_SEPARATOR_FORMAT.replace(
-      '{filePath}',
-      filePath,
-    );
-    let fileContentForLlm = '';
-
-    if (fileReadResult.isTruncated === true) {
-      fileContentForLlm += `[WARNING: This file was truncated. To view the full content, use the 'read_file' tool on this specific file.]\n\n`;
-    }
-    fileContentForLlm += fileReadResult.llmContent as string;
-    const contentToAdd = `${separator}\n\n${fileContentForLlm}\n\n`;
-    const contentTokens = estimateTokens(contentToAdd);
-
-    if (totalTokens + contentTokens > limits.maxTokens) {
-      return this.handleTokenOverflow(
-        limits,
-        relativePathForDisplay,
-        sortedFiles,
-        processedFilesRelativePaths,
-        contentParts,
-        contentToAdd,
-        totalTokens,
-        skippedFiles,
-      );
-    }
-
-    totalTokens += contentTokens;
-    contentParts.push(contentToAdd);
-    return { totalTokens, action: 'continue' };
-  }
-
-  private handleTokenOverflow(
-    limits: ReturnType<ReadManyFilesToolInvocation['resolveLimits']>,
-    relativePathForDisplay: string,
-    sortedFiles: string[],
-    processedFilesRelativePaths: string[],
-    contentParts: Array<string | ContentPartUnion>,
-    contentToAdd: string,
-    totalTokens: number,
-    skippedFiles: Array<{ path: string; reason: string }>,
-  ): AddFileContentResult {
-    if (limits.truncateMode === 'warn') {
-      skippedFiles.push({
-        path: `${sortedFiles.length - processedFilesRelativePaths.length} remaining file(s)`,
-        reason: `would exceed token limit of ${limits.maxTokens}`,
-      });
-      return { totalTokens, action: 'stop' };
-    } else if (limits.truncateMode === 'truncate') {
-      const remainingTokens = limits.maxTokens - totalTokens;
-      if (remainingTokens > 100) {
-        const truncatedContent = contentToAdd.substring(0, remainingTokens * 4);
-        const finalContent =
-          truncatedContent + '\n\n[CONTENT TRUNCATED DUE TO TOKEN LIMIT]';
-        contentParts.push(finalContent);
-        const updatedTokens = totalTokens + estimateTokens(finalContent);
-        skippedFiles.push({
-          path: relativePathForDisplay,
-          reason: 'content truncated to fit token limit',
-        });
-        return { totalTokens: updatedTokens, action: 'stopAfterRecord' };
-      }
-      return { totalTokens, action: 'stop' };
-    }
-    skippedFiles.push({
-      path: relativePathForDisplay,
-      reason: 'skipped to stay within token limit',
-    });
-    return { totalTokens, action: 'continue' };
+    return {
+      done: false,
+      totalTokens: addResult.totalTokens,
+      totalBytes: addResult.totalBytes,
+    };
   }
 
   private recordReadMetric(

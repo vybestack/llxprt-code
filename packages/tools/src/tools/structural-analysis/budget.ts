@@ -15,7 +15,7 @@
  * @plan PLAN-20260810-ISSUE3205
  */
 
-import type { PartialReason } from './types.js';
+import type { PartialReason, ParseOmissionReason } from './types.js';
 
 /** Effective finite caps applied to a single analysis traversal. */
 export interface AnalysisBudget {
@@ -84,7 +84,21 @@ export class BudgetTracker {
   truncated = false;
   partialReason: PartialReason | undefined;
 
-  private recordSentinelObserved = false;
+  /**
+   * Node-candidate observation counter for callers/callees (direct/member/callee
+   * insertions). Bounded by the effective max-nodes limit; the first one-over
+   * candidate is observed as a sentinel (proving partiality) but not retained.
+   */
+  nodesObserved = 0;
+  /** Node candidates actually retained into the callers/callees result. */
+  nodesRetained = 0;
+
+  /** Files skipped for exceeding the pre-read size gate (inexact count). */
+  oversizedFiles = 0;
+  /** Files that could not be read or parsed (inexact count). */
+  unparseableFiles = 0;
+
+  private nodeSentinelObserved = false;
 
   constructor(
     private readonly budget: AnalysisBudget,
@@ -93,15 +107,16 @@ export class BudgetTracker {
 
   /**
    * Whether traversal should continue visiting more files. Returns false when
-   * the signal has aborted, the file budget is exhausted, or the record-budget
-   * sentinel has already proven partiality.
+   * the signal has aborted, ANY truncation reason has fired (abort, max-nodes,
+   * max-files, or record-budget — all folded into {@link truncated}), or the
+   * file budget is exhausted.
    */
   shouldVisitMoreFiles(): boolean {
     if (this.signal.aborted) {
       this.markTruncated('aborted');
       return false;
     }
-    if (this.recordSentinelObserved) {
+    if (this.truncated) {
       return false;
     }
     if (this.filesVisited >= this.budget.fileBudget) {
@@ -133,11 +148,53 @@ export class BudgetTracker {
       this.recordsRetained++;
       return true;
     }
-    if (!this.recordSentinelObserved) {
-      this.recordSentinelObserved = true;
-      this.markTruncated('record-budget');
+    // markTruncated is idempotent (partialReason ??=), so calling it on
+    // every post-budget record is harmless and avoids a separate guard.
+    this.markTruncated('record-budget');
+    return false;
+  }
+
+  /**
+   * Attempt to accept one more node candidate (direct/member/callee insertion)
+   * into a callers/callees result, bounded by the effective max-nodes limit.
+   *
+   * Returns true when the node fits (caller retains it). Returns false when the
+   * limit is exhausted: the FIRST such call observes the one-over sentinel
+   * (setting truncated/partialReason='max-nodes') and the node must NOT be
+   * retained. Also returns false without incrementing when the signal aborted.
+   *
+   * `exact-limit stays complete`: when exactly `maxNodes` candidates are
+   * observed and no extra candidate arrives, no sentinel fires, so the result
+   * remains exact/complete.
+   */
+  tryAcceptNode(maxNodes: number): boolean {
+    if (this.signal.aborted) {
+      this.markTruncated('aborted');
+      return false;
+    }
+    this.nodesObserved++;
+    if (this.nodesRetained < maxNodes) {
+      this.nodesRetained++;
+      return true;
+    }
+    if (!this.nodeSentinelObserved) {
+      this.nodeSentinelObserved = true;
+      this.markTruncated('max-nodes');
     }
     return false;
+  }
+
+  /**
+   * Record a single file that could not be parsed (oversized / read-error /
+   * parse-error). Each omission makes the result count a lower bound, so it
+   * flips {@link countInexact} on (without forcing the traversal to stop).
+   */
+  recordFileOmission(reason: ParseOmissionReason): void {
+    if (reason === 'oversized') {
+      this.oversizedFiles++;
+    } else {
+      this.unparseableFiles++;
+    }
   }
 
   /**
@@ -154,7 +211,9 @@ export class BudgetTracker {
 
   /** Whether counts are lower bounds rather than exhaustive totals. */
   get countInexact(): boolean {
-    return this.truncated;
+    return (
+      this.truncated || this.oversizedFiles > 0 || this.unparseableFiles > 0
+    );
   }
 
   private markTruncated(reason: PartialReason): void {

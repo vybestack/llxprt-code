@@ -321,6 +321,9 @@ Signal: Signal number or \`(none)\` if no signal was received.
     const stderr = acquisition.stderrText;
     const truncated = acquisition.metadata.truncated;
     const truncationNotice = acquisition.omissionNotice ?? '';
+    const truncationMetadata = truncated
+      ? { metadata: { outputTruncation: acquisition.metadata } }
+      : {};
 
     const terminationFailed =
       terminationOutcome === 'timeout' || terminationOutcome === 'failure';
@@ -346,6 +349,7 @@ Signal: Signal number or \`(none)\` if no signal was received.
       return {
         llmContent: fullContent,
         returnDisplay: fullContent,
+        ...truncationMetadata,
         error: {
           message: fullContent,
           type: ToolErrorType.DISCOVERED_TOOL_EXECUTION_ERROR,
@@ -358,6 +362,7 @@ Signal: Signal number or \`(none)\` if no signal was received.
     return {
       llmContent,
       returnDisplay: llmContent,
+      ...truncationMetadata,
     };
   }
 }

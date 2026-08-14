@@ -124,6 +124,31 @@ describe('DiscoveredTool bounded acquisition', () => {
   );
 
   it.skipIf(process.platform === 'win32')(
+    'attaches structured outputTruncation metadata when output is bounded',
+    async () => {
+      const script = createScript(
+        tempDir,
+        'huge-output-meta.sh',
+        '#!/bin/sh\nhead -c 10485760 /dev/zero | tr "\\0" "A"',
+      );
+      const tool = createDiscoveredTool(script);
+      const result = await executeTool(tool);
+
+      expect(result.error).toBeUndefined();
+      // Structured truncation metadata must be present so downstream
+      // consumers can detect non-exhaustive results without parsing text.
+      expect(result.metadata).toBeDefined();
+      const meta = result.metadata;
+      expect(meta).toHaveProperty('outputTruncation');
+      const truncation = meta!['outputTruncation'] as Record<string, unknown>;
+      expect(truncation['truncated']).toBe(true);
+      expect(typeof truncation['observedBytes']).toBe('number');
+      expect(truncation['observedBytes']).toBeGreaterThan(0);
+    },
+    { timeout: 30000 },
+  );
+
+  it.skipIf(process.platform === 'win32')(
     'truncation notice is identical in llmContent, returnDisplay, and error.message',
     async () => {
       // Produce 10 MiB on stdout AND write to stderr to trigger error path.

@@ -21,7 +21,6 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { SHELL_COMMAND_NAME, SHELL_NAME } from '../../constants.js';
 import { useTodoContext } from '../../contexts/TodoContext.js';
-import { useToolCallContext } from '../../contexts/ToolCallContext.js';
 import type { CliUiRuntime } from '../../cliUiRuntime.js';
 import { getBorderStyle } from '../../contexts/UnicodeRenderingContext.js';
 
@@ -282,15 +281,11 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
   embeddedShellFocused,
 }) => {
   const { todos } = useTodoContext();
-  const { getExecutingToolCalls } = useToolCallContext();
   const isTodoPanelEnabled = showTodoPanel;
 
   const textualTodoOutput = useMemo(
-    () =>
-      formatTodoListForDisplay(todos, {
-        getLiveToolCalls: (todoId: string) => getExecutingToolCalls(todoId),
-      }),
-    [todos, getExecutingToolCalls],
+    () => formatTodoListForDisplay(todos),
+    [todos],
   );
 
   const { toolAwaitingApproval, filteredToolCalls } = useToolGroupState(

@@ -35,6 +35,20 @@ interface ObserverRule {
   readonly reason: string;
 }
 
+/**
+ * Path observer rule: a shard whose tests read specific source paths without
+ * importing them. Unlike package observers (which fire for any change to an
+ * observed package), a path observer fires only for exact `paths` or files
+ * beneath a `pathPrefixes` directory, making it source-specific.
+ */
+interface PathObserverRule {
+  readonly observingPackage: string;
+  readonly selectShard: string;
+  readonly reason: string;
+  readonly paths: readonly string[];
+  readonly pathPrefixes: readonly string[];
+}
+
 /** The checked-in import graph shape (validated by the checker). */
 export interface GraphData {
   readonly packageToShard: Record<string, string>;
@@ -43,6 +57,7 @@ export interface GraphData {
   readonly importEdges: Record<string, readonly string[]>;
   readonly testOnlyEdges: Record<string, readonly string[]>;
   readonly observers: Record<string, readonly ObserverRule[]>;
+  readonly pathObservers: readonly PathObserverRule[];
   readonly sharedInputs: readonly string[];
 }
 
@@ -83,6 +98,7 @@ export type ReverseGraph = Record<string, readonly string[]>;
 interface SelectionContext {
   readonly packageToShard: Record<string, string>;
   readonly observers: Record<string, readonly ObserverRule[]>;
+  readonly pathObservers: readonly PathObserverRule[];
   readonly reverseGraph: ReverseGraph;
   readonly sharedSet: Set<string>;
 }
@@ -271,6 +287,7 @@ function buildSelectionContext(data: GraphData): SelectionContext {
   return {
     packageToShard: data.packageToShard,
     observers: data.observers,
+    pathObservers: data.pathObservers,
     reverseGraph: buildReverseGraph(data.importEdges, data.testOnlyEdges),
     sharedSet: new Set<string>(data.sharedInputs),
   };
@@ -522,6 +539,63 @@ function classifyOtherPath(p: string): PathClassification | null {
   return null;
 }
 
+/**
+ * Returns true when `p` is `dir` itself or resides beneath `dir`, compared at
+ * path-separator granularity. This is boundary-safe: a sibling directory whose
+ * name merely shares a textual prefix (e.g. `settings-schema` vs
+ * `settings-schema-extra`) never matches, regardless of whether `dir` carries
+ * a trailing slash. The canonical data contract requires a trailing slash
+ * (enforced by the checker), but matching must not silently overmatch if that
+ * invariant is ever violated.
+ */
+function isPathInDirectory(p: string, dir: string): boolean {
+  const base = dir.endsWith('/') ? dir.slice(0, -1) : dir;
+  return p === base || p.startsWith(`${base}/`);
+}
+
+/**
+ * Returns true when a path matches a path-observer rule: an exact match in
+ * `paths`, or the path resides beneath one of the `pathPrefixes` directories.
+ * Directory matching is boundary-safe (see {@link isPathInDirectory}) so a
+ * sibling textual prefix can never overmatch.
+ */
+function pathObserverMatches(p: string, rule: PathObserverRule): boolean {
+  if (rule.paths.includes(p)) return true;
+  for (const prefix of rule.pathPrefixes) {
+    if (isPathInDirectory(p, prefix)) return true;
+  }
+  return false;
+}
+
+/**
+ * Layers source-specific path observers on top of a base classification. Path
+ * observers run alongside (never replace) the normal package owner/reverse-
+ * dependent selection: any matching rule adds its shard and an observer
+ * reason. A full-run classification already selects every shard, so it is
+ * returned unchanged.
+ */
+function applyPathObservers(
+  p: string,
+  base: PathClassification,
+  ctx: SelectionContext,
+): PathClassification {
+  if (base.fullRun) return base;
+  const reasons: string[] = [];
+  const shards = new Set<string>(base.shards);
+  for (const rule of ctx.pathObservers) {
+    if (!pathObserverMatches(p, rule)) continue;
+    shards.add(rule.selectShard);
+    reasons.push(
+      `path-observer '${rule.observingPackage}' (${rule.selectShard}) scans '${p}'`,
+    );
+  }
+  if (reasons.length === 0) return base;
+  return selectShards(
+    [...shards].sort(),
+    `${base.reason}; ${reasons.join('; ')}`,
+  );
+}
+
 function selectPathShards(
   p: string,
   ctx: SelectionContext,
@@ -536,27 +610,30 @@ function selectPathShards(
 
   // 2. Package source change.
   const pkg = packageFromPath(p);
+  let base: PathClassification;
   if (pkg) {
-    return classifyPackageChange(p, pkg, ctx);
-  }
-
-  // 3. Scripts harness change selects scripts shard.
-  if (p.startsWith('scripts/')) {
-    return selectShards(
+    base = classifyPackageChange(p, pkg, ctx);
+  } else if (p.startsWith('scripts/')) {
+    // 3. Scripts harness change selects scripts shard.
+    base = selectShards(
       ['scripts'],
       `scripts harness change selects scripts shard`,
     );
+  } else {
+    // 4-10. Other known path categories.
+    const other = classifyOtherPath(p);
+    base =
+      other ??
+      // 11. Unknown path → fail closed.
+      fullRun(
+        `unknown path '${p}' → fail closed`,
+        `unknown path '${p}' cannot be classified`,
+      );
   }
 
-  // 4-10. Other known path categories.
-  const other = classifyOtherPath(p);
-  if (other) return other;
-
-  // 11. Unknown path → fail closed.
-  return fullRun(
-    `unknown path '${p}' → fail closed`,
-    `unknown path '${p}' cannot be classified`,
-  );
+  // Source-specific path observers apply to every non-full-run path
+  // (package and non-package alike) on top of the base classification.
+  return applyPathObservers(p, base, ctx);
 }
 
 // ---------------------------------------------------------------------------
