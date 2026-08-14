@@ -19,6 +19,7 @@ import { beforeEach, afterEach } from 'bun:test';
 import type { IToolHost } from '../../../interfaces/IToolHost.js';
 import type { ASTEditTool, ASTEditToolParams } from '../../ast-edit.js';
 import type { ToolResult } from '../../tools.js';
+import { createAstReadToolHost } from './ast-read-tool-host.js';
 
 export function createTempDir(prefix = 'llxprt-ast-edit-test-'): {
   dir: string;
@@ -70,33 +71,13 @@ export function useTempDir(): { readonly tempDir: string } {
   };
 }
 
+/**
+ * The single IToolHost stub for ast-edit fixtures. The implementation lives
+ * in the bun-test-free ast-read-tool-host.ts so child-process fixtures build
+ * the identical host; this keeps the in-process and child code paths honest.
+ */
 export function createFakeToolHost(targetDir: string): IToolHost {
-  return {
-    getTargetDir: () => targetDir,
-    getWorkspaceRoots: () => [targetDir],
-    getApprovalMode: () => 'auto',
-    setApprovalMode: () => {},
-    isInteractive: () => false,
-    hasFeatureFlag: () => false,
-    getFileService: () => ({
-      shouldGitIgnoreFile: () => false,
-      shouldLlxprtIgnoreFile: () => false,
-      shouldIgnoreFile: () => false,
-      filterFiles: (paths: string[]) => paths,
-    }),
-    getFileFilteringOptions: () => ({
-      respectGitIgnore: true,
-      respectLlxprtIgnore: true,
-    }),
-    getFileExclusions: () => [],
-    getReadManyFilesExclusions: () => [],
-    getFileFilteringRespectLlxprtIgnore: () => true,
-    getLlxprtIgnoreFilePath: () => null,
-    recordFileRead: () => {},
-    getLlxprtIgnorePatterns: () => [],
-    getEphemeralSettings: () => ({}),
-    getDebugMode: () => false,
-  };
+  return createAstReadToolHost(targetDir);
 }
 
 /**

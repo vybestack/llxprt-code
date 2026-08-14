@@ -120,8 +120,84 @@ export interface CrossFileContext {
 }
 
 export interface ConnectedFile {
-  filePath: string;
-  declarations: EnhancedDeclaration[];
+  readonly filePath: string;
+  readonly declarations: readonly EnhancedDeclaration[];
+}
+
+// ===== Working-Set Acquisition Interfaces =====
+export type WorkingSetPartialReason =
+  | 'file-count'
+  | 'source-bytes'
+  | 'declarations'
+  | 'cancelled'
+  | 'git-error'
+  | 'discovery-limit'
+  | 'skipped-files';
+
+/**
+ * Bounded accounting for one working-set acquisition. Counts only — retained
+ * declarations live in {@link ConnectedFile} entries and are never duplicated
+ * here, so a partial result is described without a second copy of its data.
+ *
+ * Discriminated on {@link WorkingSetAcquisitionStatusBase.complete}: a
+ * complete acquisition may not carry a partial reason, and an incomplete one
+ * must carry exactly one.
+ */
+export interface WorkingSetAcquisitionStatusBase {
+  /**
+   * True only when the context is complete: every eligible working-set file
+   * was observed, retained, and none was omitted. Any skip, early policy
+   * stop, cancellation, Git failure, or discovery truncation makes this
+   * false even when {@link traversalComplete} is true.
+   */
+  readonly complete: boolean;
+  /**
+   * True when the traversal itself ran to exhaustion: discovery completed
+   * and no policy stop ended acquisition early. Distinct from context
+   * completeness — a fully-traversed run with skips is traversal-complete
+   * but partial.
+   */
+  readonly traversalComplete: boolean;
+  /**
+   * True when Git discovery stopped at its finite candidate cap: at least
+   * {@link eligibleFiles} eligible files existed and more were never counted.
+   */
+  readonly discoveryTruncated: boolean;
+  readonly retainedFiles: number;
+  readonly retainedDeclarations: number;
+  readonly retainedSourceBytes: number;
+  /** Eligible working-set candidates observed (bounded by the discovery cap). */
+  readonly eligibleFiles: number;
+  /** Files skipped because reading failed (missing permissions, not a file). */
+  readonly skippedFiles: number;
+  /** Files skipped because one alone exceeds the aggregate byte budget. */
+  readonly oversizedFiles: number;
+  /** Files that Git reported but that no longer exist when acquisition ran. */
+  readonly missingFiles: number;
+}
+
+/** A complete acquisition: nothing was omitted, so no partial reason exists. */
+export interface CompleteWorkingSetAcquisitionStatus
+  extends WorkingSetAcquisitionStatusBase {
+  readonly complete: true;
+  readonly partialReason?: undefined;
+}
+
+/** An incomplete acquisition: exactly one terminating reason is required. */
+export interface PartialWorkingSetAcquisitionStatus
+  extends WorkingSetAcquisitionStatusBase {
+  readonly complete: false;
+  readonly partialReason: WorkingSetPartialReason;
+}
+
+export type WorkingSetAcquisitionStatus =
+  | CompleteWorkingSetAcquisitionStatus
+  | PartialWorkingSetAcquisitionStatus;
+
+/** Bounded working-set acquisition result: retained files plus accounting. */
+export interface WorkingSetAcquisition {
+  readonly files: readonly ConnectedFile[];
+  readonly status: WorkingSetAcquisitionStatus;
 }
 
 export interface EnhancedDeclaration extends Declaration {
@@ -140,7 +216,8 @@ export interface EnhancedASTContext extends ASTContext {
   relatedFiles?: string[];
   relatedSymbols?: SymbolReference[];
   crossFileContext?: CrossFileContext;
-  connectedFiles?: ConnectedFile[];
+  connectedFiles?: readonly ConnectedFile[];
+  workingSetStatus?: WorkingSetAcquisitionStatus;
 }
 
 // ===== Simplified Parameter Interfaces =====

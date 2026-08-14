@@ -1,0 +1,65 @@
+name: 'Windows AST Read Memory (issue #3232)'
+
+on:
+  pull_request:
+    paths:
+      - 'packages/tools/src/tools/ast-edit/**'
+      - 'packages/tools/src/tools/ast-edit.ts'
+      - 'packages/tools/src/acquisition/**'
+      - 'packages/tools/src/utils/ast-grep-utils.ts'
+      - '.bun-version'
+      - '.github/workflows/windows-ast-read-memory.yml'
+  push:
+    branches:
+      - 'main'
+    paths:
+      - 'packages/tools/src/tools/ast-edit/**'
+      - 'packages/tools/src/tools/ast-edit.ts'
+      - 'packages/tools/src/acquisition/**'
+      - 'packages/tools/src/utils/ast-grep-utils.ts'
+      - '.bun-version'
+      - '.github/workflows/windows-ast-read-memory.yml'
+  workflow_dispatch:
+
+# Cancel superseded runs of this workflow for the same ref so repeated pushes
+# to a PR do not queue redundant Windows jobs.
+concurrency:
+  group: '${{ github.workflow }}-${{ github.ref }}'
+  cancel-in-progress: true
+
+jobs:
+  windows-ast-read-memory:
+    name: 'Bun ast_read_file memory regression on Windows'
+    runs-on: 'windows-latest'
+    timeout-minutes: 20
+    permissions:
+      contents: 'read'
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
+        with:
+          fetch-depth: 1
+          # The job only reads repository content; retained credentials would
+          # be an unnecessary secret surface for the spawned test children.
+          persist-credentials: false
+
+      - name: 'Setup Bun'
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+
+      # Plain `bun install` (NOT --frozen-lockfile): the monorepo lockfile is
+      # structurally unusable with --frozen-lockfile under Bun re-normalization
+      # (see AGENTS notes); plain install against the committed lockfile is
+      # deterministic and sufficient for running the test suite.
+      - name: 'Install dependencies'
+        run: 'bun install'
+
+      # Cross-platform memory regression for ast_read_file: a child Bun
+      # process executes the real tool against a generated Git workspace that
+      # previously triggered the multi-symbol native findInFiles fan-out,
+      # samples peak RSS conservatively, and proves the child drains and
+      # exits. The non-Windows path is covered by the ordinary packages/tools
+      # Bun test suite in CI, which includes the same test file.
+      - name: 'Run ast_read_file memory regression (Bun)'
+        run: 'bun test packages/tools/src/tools/ast-edit/__tests__/ast-read-memory.bun.test.ts'
