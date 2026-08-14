@@ -166,6 +166,8 @@ describe('REQ-3232-2: bounded working-set Git discovery', () => {
     expect(discovery.outcome).toBe('truncated');
   });
 
+  // Seeding 3000 long-path files and committing them dominates the runtime;
+  // the discovery run itself stays bounded by the provider's Git timeout.
   it('never exceeds the candidate cap when buffered stdout trails the kill', async () => {
     // The listing emits well over a megabyte of NUL-delimited names, so git
     // keeps writing buffered stdout after the cap is hit and the exact child
@@ -182,8 +184,7 @@ describe('REQ-3232-2: bounded working-set Git discovery', () => {
       );
     expect(discovery.candidates).toHaveLength(3);
     expect(discovery.outcome).toBe('truncated');
-  }, // the discovery run itself stays bounded by the provider's Git timeout. // Seeding 3000 long-path files and committing them dominates the runtime;
-  120_000);
+  }, 120_000);
 
   it('reports aborted when the signal fires before a phase attaches its listener', async () => {
     seedAndModify(ctx.tempDir, simpleModifiedEntries(3, 'aa'));
