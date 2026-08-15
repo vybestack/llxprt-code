@@ -42,6 +42,8 @@ export {
   InvalidStreamError,
   type StreamEvent,
 } from './core/chatSession.js';
+export { MessageStreamOrchestrator } from './core/MessageStreamOrchestrator.js';
+export { TodoContinuationService } from './core/TodoContinuationService.js';
 export * from './core/ChatSessionFactory.js';
 export { CoreToolScheduler } from './core/coreToolScheduler.js';
 export { executeToolCall } from './core/nonInteractiveToolExecutor.js';

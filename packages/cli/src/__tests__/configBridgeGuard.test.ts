@@ -40,13 +40,17 @@ function walk(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
+const TEST_FILE_SUFFIXES = [
+  '.test.ts',
+  '.test.tsx',
+  '.spec.ts',
+  '.spec.tsx',
+  '.bun.ts',
+  '.bun.tsx',
+] as const;
+
 function isTestFile(path: string): boolean {
-  return (
-    path.endsWith('.test.ts') ||
-    path.endsWith('.test.tsx') ||
-    path.endsWith('.spec.ts') ||
-    path.endsWith('.spec.tsx')
-  );
+  return TEST_FILE_SUFFIXES.some((suffix) => path.endsWith(suffix));
 }
 
 function read(rel: string): string {
