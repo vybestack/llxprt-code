@@ -16,6 +16,110 @@ import { KEYWORDS, COMMENT_PREFIXES } from './constants.js';
 /**
  * ASTQueryExtractor handles AST parsing with @ast-grep/napi and declaration extraction.
  */
+type SgNode = ReturnType<ReturnType<typeof parse>['root']>;
+
+/** Declaration-bearing AST node kinds per supported language family. */
+const JS_DECLARATION_KINDS = [
+  'function_declaration',
+  'method_definition',
+  'class_declaration',
+  'variable_declarator',
+  'import_statement',
+] as const;
+
+const PY_DECLARATION_KINDS = [
+  'function_definition',
+  'class_definition',
+] as const;
+
+const RS_DECLARATION_KINDS = [
+  'function_item',
+  'struct_item',
+  'trait_item',
+  'enum_item',
+  'impl_item',
+] as const;
+
+const C_DECLARATION_KINDS = [
+  'function_definition',
+  'declaration',
+  'struct_specifier',
+  'union_specifier',
+  'enum_specifier',
+  'type_definition',
+] as const;
+
+/**
+ * Declaration kinds for an extension, or null when the extension has no
+ * declaration family and extraction falls back to line scanning.
+ */
+function declarationKindsFor(extension: string): ReadonlySet<string> | null {
+  const family = familyOfExtension(extension);
+  return family === null
+    ? null
+    : new Set<string>(DECLARATION_KINDS_BY_FAMILY[family]);
+}
+
+/** Declaration-mapping family names for extensions with AST mappings. */
+type DeclarationFamily = 'js' | 'py' | 'rs' | 'c';
+
+const DECLARATION_KINDS_BY_FAMILY: Readonly<
+  Record<DeclarationFamily, readonly string[]>
+> = {
+  js: JS_DECLARATION_KINDS,
+  py: PY_DECLARATION_KINDS,
+  rs: RS_DECLARATION_KINDS,
+  c: C_DECLARATION_KINDS,
+};
+
+/**
+ * Resolve a file extension to its declaration-mapping family, or null when
+ * the extension has none. An extension with an ast-grep mapping but no
+ * family (cpp, ruby, go, java, ...) resolves to null so it is never
+ * silently interpreted with another family's declaration kinds.
+ */
+function familyOfExtension(extension: string): DeclarationFamily | null {
+  if (JAVASCRIPT_FAMILY_EXTENSIONS.includes(extension)) return 'js';
+  if (extension === 'py') return 'py';
+  if (extension === 'rs') return 'rs';
+  if (extension === 'c' || extension === 'h') return 'c';
+  return null;
+}
+
+const DECLARATION_FAMILIES: readonly DeclarationFamily[] = [
+  'js',
+  'py',
+  'rs',
+  'c',
+];
+
+/** Narrow a string to a declaration family name. */
+function isDeclarationFamily(value: string): value is DeclarationFamily {
+  return (DECLARATION_FAMILIES as readonly string[]).includes(value);
+}
+
+/**
+ * Narrow an ast-grep node kind (typed generically by the napi bindings) to a
+ * string before testing membership in the declaration-kind set.
+ */
+function kindIn(kinds: ReadonlySet<string>, kind: unknown): boolean {
+  return typeof kind === 'string' && kinds.has(kind);
+}
+
+/** Map a Rust struct/trait/enum node kind to its declaration type label. */
+function rustKindToType(kind: string): Declaration['type'] {
+  if (kind === 'struct_item') return 'struct';
+  if (kind === 'trait_item') return 'trait';
+  return 'enum';
+}
+
+/** Map a C struct/union/enum node kind to its declaration type label. */
+function cKindToType(kind: string): Declaration['type'] {
+  if (kind === 'struct_specifier') return 'struct';
+  if (kind === 'union_specifier') return 'union';
+  return 'enum';
+}
+
 export class ASTQueryExtractor {
   constructor() {}
 
@@ -39,240 +143,352 @@ export class ASTQueryExtractor {
       const declarations: EnhancedDeclaration[] = [];
       const sgRoot = root.root();
 
-      if (JAVASCRIPT_FAMILY_EXTENSIONS.includes(extension)) {
-        this.extractJsFamilyDeclarations(sgRoot, declarations);
-      } else if (extension === 'py') {
-        this.extractPythonDeclarations(sgRoot, declarations);
-      } else if (extension === 'rs') {
-        this.extractRustDeclarations(sgRoot, declarations);
-      } else if (extension === 'c' || extension === 'h') {
-        this.extractCDeclarations(sgRoot, declarations);
-      } else {
-        return this.fallbackExtraction(content, extension);
+      const family = familyOfExtension(extension);
+      if (family === null) {
+        return this.fallbackExtraction(content);
       }
+      this.extractFamilyDeclarations(family, sgRoot, declarations);
 
       return declarations;
     } catch {
-      return this.fallbackExtraction(content, extension);
+      return this.fallbackExtraction(content);
     }
   }
 
-  private extractJsFamilyDeclarations(
-    sgRoot: ReturnType<ReturnType<typeof parse>['root']>,
+  /**
+   * Bounded declaration acquisition with one-over sentinel semantics.
+   *
+   * Acquires declarations in document order but stops as soon as `limit`
+   * have been found, so at most `limit` declarations are ever materialized
+   * (no unbounded wrapper array is built and truncated afterwards). Callers
+   * pass remaining+1 to detect the first over-limit declaration via
+   * `result.length === limit`.
+   */
+  async extractDeclarationsBounded(
+    filePath: string,
+    content: string,
+    limit: number,
+  ): Promise<readonly EnhancedDeclaration[]> {
+    // Positive Infinity stays valid (the legacy unbounded fallback needs it);
+    // every other non-finite value, NaN above all, would silently disable
+    // the limit and materialize the whole file.
+    if (!Number.isFinite(limit) && limit !== Number.POSITIVE_INFINITY) {
+      throw new Error(
+        `extractDeclarationsBounded limit must be a number or Infinity, got: ${String(limit)}`,
+      );
+    }
+    const boundedLimit = Math.max(0, Math.floor(limit));
+    if (boundedLimit === 0) {
+      return [];
+    }
+    const extension = stringOrDefault(
+      filePath.split('.').pop(),
+      '',
+    ).toLowerCase();
+    const lang = LANGUAGE_MAP[extension];
+    if (!lang) {
+      return [];
+    }
+    const kinds = declarationKindsFor(extension);
+    try {
+      const sgRoot = parse(lang, content).root();
+      if (kinds === null) {
+        return this.fallbackScan(content, boundedLimit);
+      }
+      return this.walkDeclarationsBounded(
+        sgRoot,
+        kinds,
+        extension,
+        boundedLimit,
+      );
+    } catch {
+      return this.fallbackScan(content, boundedLimit);
+    }
+  }
+
+  /**
+   * Explicit-stack pre-order walk that early-exits at the limit and cannot
+   * overflow the JS stack on deeply nested input. Extracted to keep the
+   * caller's nesting depth within the lint policy.
+   */
+  private walkDeclarationsBounded(
+    sgRoot: SgNode,
+    kinds: ReadonlySet<string>,
+    extension: string,
+    boundedLimit: number,
+  ): readonly EnhancedDeclaration[] {
+    const declarations: EnhancedDeclaration[] = [];
+    const stack: SgNode[] = [sgRoot];
+    while (stack.length > 0 && declarations.length < boundedLimit) {
+      const node = stack.pop();
+      if (node === undefined) {
+        break;
+      }
+      if (kindIn(kinds, node.kind())) {
+        const declaration = this.declarationForNode(extension, node);
+        if (declaration !== null) {
+          declarations.push(declaration);
+        }
+      }
+      const children = node.children();
+      for (let index = children.length - 1; index >= 0; index--) {
+        stack.push(children[index]);
+      }
+    }
+    return declarations;
+  }
+
+  private extractFamilyDeclarations(
+    family: DeclarationFamily,
+    sgRoot: SgNode,
     declarations: EnhancedDeclaration[],
   ): void {
-    // Functions
-    sgRoot.findAll({ rule: { kind: 'function_declaration' } }).forEach((n) => {
-      const nameNode = n.field('name');
-      const paramsNode = n.field('parameters');
-      const returnTypeNode = n.field('return_type');
-      if (nameNode != null) {
-        const signature = this.buildSignature(paramsNode, returnTypeNode);
-        declarations.push(
-          this.nodeToDeclaration(n, nameNode.text(), 'function', signature),
+    this.collectAllByKind(
+      family,
+      sgRoot,
+      DECLARATION_KINDS_BY_FAMILY[family],
+      declarations,
+    );
+  }
+
+  /**
+   * Unbounded extraction used by paths that need every declaration: visits
+   * kinds in the established per-family order (which the bounded walk's
+   * document order intentionally does not need to match).
+   */
+  private collectAllByKind(
+    family: 'js' | 'py' | 'rs' | 'c',
+    sgRoot: SgNode,
+    kinds: readonly string[],
+    declarations: EnhancedDeclaration[],
+  ): void {
+    for (const kind of kinds) {
+      for (const node of sgRoot.findAll({ rule: { kind } })) {
+        const declaration = this.declarationForNode(family, node);
+        if (declaration !== null) {
+          declarations.push(declaration);
+        }
+      }
+    }
+  }
+
+  /** Map one AST node to a declaration, or null when it is not one. */
+  private declarationForNode(
+    familyOrExtension: string,
+    node: SgNode,
+  ): EnhancedDeclaration | null {
+    if (isDeclarationFamily(familyOrExtension)) {
+      return this.familyDeclarationForNode(familyOrExtension, node);
+    }
+    const family = familyOfExtension(familyOrExtension);
+    return family === null ? null : this.familyDeclarationForNode(family, node);
+  }
+
+  /**
+   * Map one AST node to a declaration for a resolved family. Exhaustive by
+   * construction: every family is handled and an unreachable value yields
+   * no declaration rather than an implicit fallthrough.
+   */
+  private familyDeclarationForNode(
+    family: DeclarationFamily,
+    node: SgNode,
+  ): EnhancedDeclaration | null {
+    switch (family) {
+      case 'js':
+        return this.jsDeclarationForNode(node);
+      case 'py':
+        return this.pythonDeclarationForNode(node);
+      case 'rs':
+        return this.rustDeclarationForNode(node);
+      case 'c':
+        return this.cDeclarationForNode(node);
+      default:
+        return null;
+    }
+  }
+
+  private jsDeclarationForNode(node: SgNode): EnhancedDeclaration | null {
+    switch (node.kind()) {
+      case 'function_declaration':
+      case 'method_definition': {
+        const nameNode = node.field('name');
+        if (nameNode === null) return null;
+        const signature = this.buildSignature(
+          node.field('parameters'),
+          node.field('return_type'),
+        );
+        return this.nodeToDeclaration(
+          node,
+          nameNode.text(),
+          'function',
+          signature,
         );
       }
-    });
-
-    // Methods
-    sgRoot.findAll({ rule: { kind: 'method_definition' } }).forEach((n) => {
-      const nameNode = n.field('name');
-      const paramsNode = n.field('parameters');
-      const returnTypeNode = n.field('return_type');
-      if (nameNode != null) {
-        const signature = this.buildSignature(paramsNode, returnTypeNode);
-        declarations.push(
-          this.nodeToDeclaration(n, nameNode.text(), 'function', signature),
-        );
+      case 'class_declaration': {
+        const nameNode = node.field('name');
+        return nameNode !== null
+          ? this.nodeToDeclaration(node, nameNode.text(), 'class')
+          : null;
       }
-    });
-
-    // Classes
-    sgRoot.findAll({ rule: { kind: 'class_declaration' } }).forEach((n) => {
-      const nameNode = n.field('name');
-      if (nameNode != null) {
-        declarations.push(this.nodeToDeclaration(n, nameNode.text(), 'class'));
+      case 'variable_declarator': {
+        const nameNode = node.field('name');
+        return nameNode !== null
+          ? this.nodeToDeclaration(node, nameNode.text(), 'variable')
+          : null;
       }
-    });
-
-    // Variables
-    sgRoot.findAll({ rule: { kind: 'variable_declarator' } }).forEach((n) => {
-      const nameNode = n.field('name');
-      if (nameNode != null) {
-        declarations.push(
-          this.nodeToDeclaration(n, nameNode.text(), 'variable'),
-        );
-      }
-    });
-
-    // Imports
-    sgRoot.findAll({ rule: { kind: 'import_statement' } }).forEach((n) => {
-      const sourceNode = n.field('source');
-      declarations.push(
-        this.nodeToDeclaration(
-          n,
-          sourceNode != null ? sourceNode.text() : 'import',
+      case 'import_statement': {
+        const sourceNode = node.field('source');
+        return this.nodeToDeclaration(
+          node,
+          sourceNode !== null ? sourceNode.text() : 'import',
           'import',
-        ),
-      );
-    });
-  }
-
-  private extractPythonDeclarations(
-    sgRoot: ReturnType<ReturnType<typeof parse>['root']>,
-    declarations: EnhancedDeclaration[],
-  ): void {
-    sgRoot.findAll({ rule: { kind: 'function_definition' } }).forEach((n) => {
-      const nameNode = n.field('name');
-      const paramsNode = n.field('parameters');
-      const returnTypeNode = n.field('return_type');
-      if (nameNode != null) {
-        const signature = this.buildPythonSignature(paramsNode, returnTypeNode);
-        declarations.push(
-          this.nodeToDeclaration(n, nameNode.text(), 'function', signature),
         );
       }
-    });
-
-    sgRoot.findAll({ rule: { kind: 'class_definition' } }).forEach((n) => {
-      const nameNode = n.field('name');
-      if (nameNode != null) {
-        declarations.push(this.nodeToDeclaration(n, nameNode.text(), 'class'));
-      }
-    });
+      default:
+        return null;
+    }
   }
 
-  private extractRustDeclarations(
-    sgRoot: ReturnType<ReturnType<typeof parse>['root']>,
-    declarations: EnhancedDeclaration[],
-  ): void {
-    sgRoot.findAll({ rule: { kind: 'function_item' } }).forEach((n) => {
-      const nameNode = n.field('name');
-      const paramsNode = n.field('parameters');
-      const returnTypeNode = n.field('return_type');
-      if (nameNode != null) {
-        const signature = this.buildPythonSignature(paramsNode, returnTypeNode);
-        declarations.push(
-          this.nodeToDeclaration(n, nameNode.text(), 'function', signature),
+  private pythonDeclarationForNode(node: SgNode): EnhancedDeclaration | null {
+    switch (node.kind()) {
+      case 'function_definition': {
+        const nameNode = node.field('name');
+        if (nameNode === null) return null;
+        const signature = this.buildPythonSignature(
+          node.field('parameters'),
+          node.field('return_type'),
+        );
+        return this.nodeToDeclaration(
+          node,
+          nameNode.text(),
+          'function',
+          signature,
         );
       }
-    });
-
-    sgRoot.findAll({ rule: { kind: 'struct_item' } }).forEach((n) => {
-      const nameNode = n.field('name');
-      if (nameNode != null) {
-        declarations.push(this.nodeToDeclaration(n, nameNode.text(), 'struct'));
+      case 'class_definition': {
+        const nameNode = node.field('name');
+        return nameNode !== null
+          ? this.nodeToDeclaration(node, nameNode.text(), 'class')
+          : null;
       }
-    });
-
-    sgRoot.findAll({ rule: { kind: 'trait_item' } }).forEach((n) => {
-      const nameNode = n.field('name');
-      if (nameNode != null) {
-        declarations.push(this.nodeToDeclaration(n, nameNode.text(), 'trait'));
-      }
-    });
-
-    sgRoot.findAll({ rule: { kind: 'enum_item' } }).forEach((n) => {
-      const nameNode = n.field('name');
-      if (nameNode != null) {
-        declarations.push(this.nodeToDeclaration(n, nameNode.text(), 'enum'));
-      }
-    });
-
-    sgRoot.findAll({ rule: { kind: 'impl_item' } }).forEach((n) => {
-      const nameNode = n.field('type');
-      if (nameNode != null) {
-        declarations.push(this.nodeToDeclaration(n, nameNode.text(), 'impl'));
-      }
-    });
+      default:
+        return null;
+    }
   }
 
-  private extractCDeclarations(
-    sgRoot: ReturnType<ReturnType<typeof parse>['root']>,
-    declarations: EnhancedDeclaration[],
-  ): void {
-    sgRoot.findAll({ rule: { kind: 'function_definition' } }).forEach((n) => {
-      const fdec = n.find({ rule: { kind: 'function_declarator' } });
-      const nameNode = fdec?.find({ rule: { kind: 'identifier' } });
-      const paramsNode = fdec?.find({ rule: { kind: 'parameter_list' } });
-      if (nameNode != null) {
-        const signature = paramsNode != null ? paramsNode.text() : '()';
-        declarations.push(
-          this.nodeToDeclaration(n, nameNode.text(), 'function', signature),
+  private rustDeclarationForNode(node: SgNode): EnhancedDeclaration | null {
+    switch (node.kind()) {
+      case 'function_item': {
+        const nameNode = node.field('name');
+        if (nameNode === null) return null;
+        const signature = this.buildPythonSignature(
+          node.field('parameters'),
+          node.field('return_type'),
+        );
+        return this.nodeToDeclaration(
+          node,
+          nameNode.text(),
+          'function',
+          signature,
         );
       }
-    });
-
-    // Function prototypes: `void init(Vec *v);` parse as `declaration` nodes
-    // containing a `function_declarator` child (no body). Function-pointer
-    // variables (`void (*fp)(int);`) also contain a `function_declarator`, but
-    // its name sits inside a `parenthesized_declarator` rather than a direct
-    // `identifier` child — those are variables, not prototypes, so skip them.
-    sgRoot.findAll({ rule: { kind: 'declaration' } }).forEach((n) => {
-      const fdec = n.find({ rule: { kind: 'function_declarator' } });
-      if (fdec == null) return;
-      const nameNode = fdec.children().find((c) => c.kind() === 'identifier');
-      if (nameNode == null) return;
-      const paramsNode = fdec.find({ rule: { kind: 'parameter_list' } });
-      const signature = paramsNode != null ? paramsNode.text() : '()';
-      declarations.push(
-        this.nodeToDeclaration(n, nameNode.text(), 'function', signature),
-      );
-    });
-
-    sgRoot.findAll({ rule: { kind: 'struct_specifier' } }).forEach((n) => {
-      const nameNode = n.children().find((c) => c.kind() === 'type_identifier');
-      if (nameNode != null) {
-        declarations.push(this.nodeToDeclaration(n, nameNode.text(), 'struct'));
+      case 'struct_item':
+      case 'trait_item':
+      case 'enum_item': {
+        const nameNode = node.field('name');
+        if (nameNode === null) return null;
+        const type = rustKindToType(String(node.kind()));
+        return this.nodeToDeclaration(node, nameNode.text(), type);
       }
-    });
-
-    sgRoot.findAll({ rule: { kind: 'union_specifier' } }).forEach((n) => {
-      const nameNode = n.children().find((c) => c.kind() === 'type_identifier');
-      if (nameNode != null) {
-        declarations.push(this.nodeToDeclaration(n, nameNode.text(), 'union'));
+      case 'impl_item': {
+        const nameNode = node.field('type');
+        return nameNode !== null
+          ? this.nodeToDeclaration(node, nameNode.text(), 'impl')
+          : null;
       }
-    });
+      default:
+        return null;
+    }
+  }
 
-    sgRoot.findAll({ rule: { kind: 'enum_specifier' } }).forEach((n) => {
-      const nameNode = n.children().find((c) => c.kind() === 'type_identifier');
-      if (nameNode != null) {
-        declarations.push(this.nodeToDeclaration(n, nameNode.text(), 'enum'));
+  private cDeclarationForNode(node: SgNode): EnhancedDeclaration | null {
+    switch (node.kind()) {
+      case 'function_definition':
+        return this.cFunctionForNode(node);
+      case 'declaration':
+        // Function prototypes: `void init(Vec *v);` parse as `declaration`
+        // nodes containing a `function_declarator` child (no body).
+        // Function-pointer variables (`void (*fp)(int);`) also contain a
+        // `function_declarator`, but its name sits inside a
+        // `parenthesized_declarator` rather than a direct `identifier`
+        // child — those are variables, not prototypes, so skip them.
+        return this.cPrototypeForNode(node);
+      case 'struct_specifier':
+      case 'union_specifier':
+      case 'enum_specifier': {
+        const nameNode = node
+          .children()
+          .find((child) => child.kind() === 'type_identifier');
+        if (nameNode == null) return null;
+        const type = cKindToType(String(node.kind()));
+        return this.nodeToDeclaration(node, nameNode.text(), type);
       }
-    });
+      case 'type_definition': {
+        const name = findCTypedefName(node);
+        return name !== null
+          ? this.nodeToDeclaration(node, name, 'typedef')
+          : null;
+      }
+      default:
+        return null;
+    }
+  }
 
-    sgRoot.findAll({ rule: { kind: 'type_definition' } }).forEach((n) => {
-      const name = findCTypedefName(n);
-      if (name !== null) {
-        declarations.push(this.nodeToDeclaration(n, name, 'typedef'));
-      }
-    });
+  private cFunctionForNode(node: SgNode): EnhancedDeclaration | null {
+    const declarator = node.find({ rule: { kind: 'function_declarator' } });
+    const nameNode = declarator?.find({ rule: { kind: 'identifier' } });
+    if (nameNode == null) return null;
+    const paramsNode = declarator?.find({ rule: { kind: 'parameter_list' } });
+    const signature = paramsNode != null ? paramsNode.text() : '()';
+    return this.nodeToDeclaration(node, nameNode.text(), 'function', signature);
+  }
+
+  private cPrototypeForNode(node: SgNode): EnhancedDeclaration | null {
+    const declarator = node.find({ rule: { kind: 'function_declarator' } });
+    if (declarator === null) return null;
+    const nameNode = declarator
+      .children()
+      .find((child) => child.kind() === 'identifier');
+    if (nameNode == null) return null;
+    const paramsNode = declarator.find({ rule: { kind: 'parameter_list' } });
+    const signature = paramsNode !== null ? paramsNode.text() : '()';
+    return this.nodeToDeclaration(node, nameNode.text(), 'function', signature);
   }
 
   private buildSignature(
-    paramsNode: ReturnType<ReturnType<typeof parse>['root']> | null,
-    returnTypeNode: ReturnType<ReturnType<typeof parse>['root']> | null,
+    paramsNode: SgNode | null,
+    returnTypeNode: SgNode | null,
   ): string {
-    let signature = paramsNode != null ? paramsNode.text() : '()';
-    if (returnTypeNode != null) {
+    let signature = paramsNode !== null ? paramsNode.text() : '()';
+    if (returnTypeNode !== null) {
       signature += returnTypeNode.text();
     }
     return signature;
   }
 
   private buildPythonSignature(
-    paramsNode: ReturnType<ReturnType<typeof parse>['root']> | null,
-    returnTypeNode: ReturnType<ReturnType<typeof parse>['root']> | null,
+    paramsNode: SgNode | null,
+    returnTypeNode: SgNode | null,
   ): string {
-    let signature = paramsNode != null ? paramsNode.text() : '()';
-    if (returnTypeNode != null) {
+    let signature = paramsNode !== null ? paramsNode.text() : '()';
+    if (returnTypeNode !== null) {
       signature += ` -> ${returnTypeNode.text()}`;
     }
     return signature;
   }
 
   private nodeToDeclaration(
-    n: ReturnType<ReturnType<typeof parse>['root']>,
+    n: SgNode,
     name: string,
     type: Declaration['type'],
     signature?: string,
@@ -292,37 +508,29 @@ export class ASTQueryExtractor {
     };
   }
 
-  private fallbackExtraction(
-    content: string,
-    _language: string,
-  ): EnhancedDeclaration[] {
-    // Keep the regex-based fallback for robustness
-    const declarations: Declaration[] = [];
+  private fallbackExtraction(content: string): EnhancedDeclaration[] {
+    return this.fallbackScan(content, Number.POSITIVE_INFINITY);
+  }
+
+  /**
+   * Line-scan fallback bounded by a declaration limit: stops scanning as
+   * soon as the limit is reached so over-limit inputs never materialize
+   * fully (used by the bounded working-set path and, unbounded, as the
+   * legacy fallback).
+   */
+  private fallbackScan(content: string, limit: number): EnhancedDeclaration[] {
     const lines = content.split('\n');
-
-    lines.forEach((line, index) => {
-      const trimmed = line.trim();
-      const isComment = COMMENT_PREFIXES.some((prefix) =>
-        trimmed.startsWith(prefix),
-      );
-      if (!trimmed || isComment) return;
-
-      if (
-        line.includes(KEYWORDS.FUNCTION) ||
-        line.includes(KEYWORDS.DEF) ||
-        line.includes(KEYWORDS.CLASS)
-      ) {
-        const name = this.extractNameBasic(trimmed);
-        const column = Math.max(0, line.indexOf(name));
-        declarations.push({
-          name,
-          type: trimmed.includes(KEYWORDS.CLASS) ? 'class' : 'function',
-          line: index + 1,
-          column,
-          signature: this.extractSignatureBasic(trimmed),
-        });
+    const declarations: Declaration[] = [];
+    for (const [index, line] of lines.entries()) {
+      if (declarations.length >= limit) {
+        // The declaration limit is reached: stop iterating instead of
+        // scanning every remaining line only to skip it.
+        break;
       }
-    });
+      if (this.isDeclarationLine(line.trim())) {
+        this.pushFallbackDeclaration(declarations, line, index);
+      }
+    }
 
     return declarations.map((decl) => ({
       ...decl,
@@ -333,6 +541,46 @@ export class ASTQueryExtractor {
       visibility: 'public',
       signature: decl.signature,
     }));
+  }
+
+  /**
+   * True when a trimmed line is a non-blank, non-comment line that contains
+   * a declaration keyword (function, def, or class). Extracted to keep the
+   * scan loop's break/continue count within the lint policy.
+   */
+  private isDeclarationLine(trimmed: string): boolean {
+    if (!trimmed) {
+      return false;
+    }
+    const isComment = COMMENT_PREFIXES.some((prefix) =>
+      trimmed.startsWith(prefix),
+    );
+    if (isComment) {
+      return false;
+    }
+    return (
+      trimmed.includes(KEYWORDS.FUNCTION) ||
+      trimmed.includes(KEYWORDS.DEF) ||
+      trimmed.includes(KEYWORDS.CLASS)
+    );
+  }
+
+  /** Push one fallback declaration from a scanned declaration line. */
+  private pushFallbackDeclaration(
+    declarations: Declaration[],
+    line: string,
+    index: number,
+  ): void {
+    const name = this.extractNameBasic(line.trim());
+    declarations.push({
+      name,
+      type: line.includes(KEYWORDS.CLASS) ? 'class' : 'function',
+      line: index + 1,
+      // Column must reflect the raw line: trimming first would report the
+      // name's offset inside the trimmed text and lose the indentation.
+      column: Math.max(0, line.indexOf(name)),
+      signature: this.extractSignatureBasic(line.trim()),
+    });
   }
 
   private extractNameBasic(line: string): string {

@@ -24,9 +24,83 @@ import {
 import type { IToolHost } from '../../interfaces/index.js';
 import type { LiveOutputUpdate } from '../../utils/terminalSerializer.js';
 
-import type { ASTReadFileToolParams } from './types.js';
+import type {
+  ASTReadFileToolParams,
+  WorkingSetAcquisitionStatus,
+  WorkingSetPartialReason,
+} from './types.js';
 import { ASTConfig } from './ast-config.js';
 import type { ASTContextCollector } from './context-collector.js';
+import {
+  MAX_WORKING_SET_DECLARATIONS,
+  MAX_WORKING_SET_FILES,
+} from './workspace-context-provider.js';
+
+/**
+ * Rendered phrase per partial reason. The Record over the full
+ * WorkingSetPartialReason union is compile-time exhaustive: a future union
+ * member without a phrase fails typecheck instead of silently rendering a
+ * generic fallback at runtime.
+ */
+const WORKING_SET_PARTIAL_PHRASES: Readonly<
+  Record<WorkingSetPartialReason, string>
+> = {
+  'file-count': `stopped at the file-count limit (${MAX_WORKING_SET_FILES})`,
+  'source-bytes': 'stopped at the aggregate source-byte budget',
+  declarations: `stopped at the retained-declaration limit (${MAX_WORKING_SET_DECLARATIONS})`,
+  cancelled: 'cancelled before completion',
+  'git-error': 'stopped because Git working-set discovery failed',
+  'discovery-limit': 'stopped at the working-set discovery limit',
+  'skipped-files': 'partial because eligible working-set files were skipped',
+};
+
+function workingSetPartialPhrase(
+  reason: WorkingSetPartialReason | undefined,
+): string {
+  if (reason === undefined) {
+    return 'stopped early';
+  }
+  return WORKING_SET_PARTIAL_PHRASES[reason];
+}
+
+/**
+ * Eligible-file count for the partial header. When discovery was truncated,
+ * the file-count policy stopped acquisition, Git discovery failed after
+ * candidates were observed, or cancellation stopped acquisition mid-run, the
+ * counted candidates are only a lower bound on the true eligible set.
+ */
+function eligibleFilesPhrase(status: WorkingSetAcquisitionStatus): string {
+  const isLowerBound =
+    status.discoveryTruncated ||
+    status.partialReason === 'file-count' ||
+    status.partialReason === 'git-error' ||
+    status.partialReason === 'cancelled';
+  return isLowerBound
+    ? `at least ${status.eligibleFiles}`
+    : String(status.eligibleFiles);
+}
+
+/** Bounded skip accounting rendered to the model alongside partial context. */
+function skipAccountingLines(
+  status: WorkingSetAcquisitionStatus | undefined,
+): string[] {
+  if (status === undefined) {
+    return [];
+  }
+  const skippedParts: string[] = [];
+  if (status.oversizedFiles > 0) {
+    skippedParts.push(`${status.oversizedFiles} oversized`);
+  }
+  if (status.skippedFiles > 0) {
+    skippedParts.push(`${status.skippedFiles} unreadable`);
+  }
+  if (status.missingFiles > 0) {
+    skippedParts.push(`${status.missingFiles} missing`);
+  }
+  return skippedParts.length > 0
+    ? [`- (skipped: ${skippedParts.join(', ')})`]
+    : [];
+}
 
 export class ASTReadFileToolInvocation
   implements ToolInvocation<ASTReadFileToolParams, ToolResult>
@@ -54,7 +128,7 @@ export class ASTReadFileToolInvocation
   }
 
   async execute(
-    _signal?: AbortSignal,
+    signal?: AbortSignal,
     _updateOutput?: (update: LiveOutputUpdate) => void,
     _terminalColumns?: number,
     _terminalRows?: number,
@@ -100,6 +174,13 @@ export class ASTReadFileToolInvocation
           this.params.file_path,
           content,
           workspaceRoot,
+          {
+            // The read path renders none of the repository/related-symbol
+            // results, so their native whole-workspace searches are opted
+            // out; local analysis and the working set are still collected.
+            collectRepositoryContext: false,
+            signal,
+          },
         );
 
       const readLlmContent = this.buildReadLlmContent(
@@ -190,16 +271,27 @@ export class ASTReadFileToolInvocation
     >,
     workspaceRoot: string,
   ): string[] {
-    if (
-      !enhancedContext.connectedFiles ||
-      enhancedContext.connectedFiles.length === 0
-    ) {
+    const status = enhancedContext.workingSetStatus;
+    const connectedFiles = enhancedContext.connectedFiles ?? [];
+    if (connectedFiles.length === 0) {
+      if (status !== undefined && !status.complete) {
+        return [
+          '',
+          `WORKING SET CONTEXT (partial: ${workingSetPartialPhrase(status.partialReason)}; no working-set files retained):`,
+          ...skipAccountingLines(status),
+        ];
+      }
       return [];
     }
+    const header =
+      status !== undefined && !status.complete
+        ? `WORKING SET CONTEXT (partial: ${workingSetPartialPhrase(status.partialReason)}; retained ${status.retainedFiles} of ${eligibleFilesPhrase(status)} files, ${status.retainedDeclarations} declarations, ${status.retainedSourceBytes} source bytes):`
+        : 'WORKING SET CONTEXT:';
     return [
       '',
-      'WORKING SET CONTEXT:',
-      ...enhancedContext.connectedFiles
+      header,
+      ...skipAccountingLines(status),
+      ...connectedFiles
         .map((file) => {
           const relPath = makeRelative(file.filePath, workspaceRoot);
           if (file.declarations.length === 0)

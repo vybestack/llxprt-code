@@ -69,6 +69,24 @@ function scoreDeclaration(decl: EnhancedDeclaration): number {
 }
 
 /**
+ * Caller-specific enhanced-context collection options.
+ */
+export interface EnhancedContextOptions {
+  /** Collect Git working-set context (default true). */
+  collectWorkingSet?: boolean;
+  /**
+   * Collect repository relationship context: repository metadata, the
+   * workspace symbol index, related files, and native whole-workspace
+   * related-symbol searches (default true). Callers whose output never
+   * consumes these results (ast_read_file) opt out deliberately: the
+   * searches are otherwise unobservable dead work with native memory cost.
+   */
+  collectRepositoryContext?: boolean;
+  /** Cancellation signal threaded through LLxprt-owned acquisition. */
+  signal?: AbortSignal;
+}
+
+/**
  * Orchestrates all AST context gathering: local analysis, working set, and cross-file relationships.
  */
 export class ASTContextCollector {
@@ -76,8 +94,13 @@ export class ASTContextCollector {
   private repoProvider: RepositoryContextProvider;
   private relationshipAnalyzer: CrossFileRelationshipAnalyzer;
 
-  constructor() {
-    this.astExtractor = new ASTQueryExtractor();
+  /**
+   * The extractor defaults to the real production instance; passing a real
+   * subclass (for example one that observes bounded acquisition timing)
+   * keeps every other behavior of the collector intact.
+   */
+  constructor(astExtractor: ASTQueryExtractor = new ASTQueryExtractor()) {
+    this.astExtractor = astExtractor;
     this.repoProvider = new RepositoryContextProvider();
     this.relationshipAnalyzer = new CrossFileRelationshipAnalyzer();
   }
@@ -105,9 +128,10 @@ export class ASTContextCollector {
     targetFilePath: string,
     content: string,
     workspaceRoot: string,
-    options?: { collectWorkingSet?: boolean },
+    options?: EnhancedContextOptions,
   ): Promise<EnhancedASTContext> {
     const collectWorkingSet = options?.collectWorkingSet ?? true;
+    const collectRepositoryContext = options?.collectRepositoryContext ?? true;
     const startTime = Date.now();
     const startMemory = process.memoryUsage().heapUsed;
 
@@ -129,51 +153,58 @@ export class ASTContextCollector {
     // Phase 2: Working Set Context (Git-based). Suppressed only for callers
     // (ast_edit preview) that opt out; ast_read_file keeps the working set.
     if (collectWorkingSet) {
-      const connectedFiles = await enrichWithWorkingSetContext(
+      const workingSet = await enrichWithWorkingSetContext(
         targetFilePath,
         workspaceRoot,
         this.repoProvider,
         this.astExtractor,
+        options?.signal,
       );
-      enhancedContext.connectedFiles = connectedFiles;
+      enhancedContext.connectedFiles = workingSet.files;
+      enhancedContext.workingSetStatus = workingSet.status;
     }
 
-    // Phase 3: Repository context and Cross-file Relationships
-    const repoContext =
-      await this.repoProvider.collectRepositoryContext(workspaceRoot);
-    enhancedContext.repositoryContext = repoContext ?? undefined;
+    // Phase 3: Repository context and Cross-file Relationships. Skipped
+    // entirely for callers (ast_read_file) that opt out: none of these
+    // results reach their model-facing or display output, and the
+    // related-symbol searches are native whole-workspace traversals.
+    if (collectRepositoryContext) {
+      const repoContext =
+        await this.repoProvider.collectRepositoryContext(workspaceRoot);
+      enhancedContext.repositoryContext = repoContext ?? undefined;
 
-    // [CCR] Relation: Cross-file relationship analysis segment.
-    // Reason: Optimized to use on-demand findInFiles instead of eager indexing.
-    if (repoContext) {
-      if (ASTConfig.ENABLE_SYMBOL_INDEXING) {
-        const workspaceFiles = await getWorkspaceFiles(workspaceRoot);
-        await this.relationshipAnalyzer.buildSymbolIndex(workspaceFiles);
+      // [CCR] Relation: Cross-file relationship analysis segment.
+      // Reason: Optimized to use on-demand findInFiles instead of eager indexing.
+      if (repoContext) {
+        if (ASTConfig.ENABLE_SYMBOL_INDEXING) {
+          const workspaceFiles = await getWorkspaceFiles(workspaceRoot);
+          await this.relationshipAnalyzer.buildSymbolIndex(workspaceFiles);
 
-        const relatedFiles =
-          await this.relationshipAnalyzer.findRelatedFiles(targetFilePath);
-        enhancedContext.relatedFiles = relatedFiles;
+          const relatedFiles =
+            await this.relationshipAnalyzer.findRelatedFiles(targetFilePath);
+          enhancedContext.relatedFiles = relatedFiles;
+        }
+
+        // Prioritize symbols for Lazy search
+        const topSymbols = prioritizeSymbolsFromDeclarations(
+          enhancedContext.declarations,
+        );
+
+        // Execute atomic queries with strict limits and Survivability (Promise.allSettled)
+        const relatedSymbolsTasks = topSymbols.map((symbol) =>
+          this.relationshipAnalyzer.findRelatedSymbols(symbol, workspaceRoot),
+        );
+
+        const relatedSymbolsResults =
+          await Promise.allSettled(relatedSymbolsTasks);
+        enhancedContext.relatedSymbols = relatedSymbolsResults
+          .filter(
+            (r): r is PromiseFulfilledResult<SymbolReference[]> =>
+              r.status === 'fulfilled',
+          )
+          .map((r) => r.value)
+          .flat();
       }
-
-      // Prioritize symbols for Lazy search
-      const topSymbols = prioritizeSymbolsFromDeclarations(
-        enhancedContext.declarations,
-      );
-
-      // Execute atomic queries with strict limits and Survivability (Promise.allSettled)
-      const relatedSymbolsTasks = topSymbols.map((symbol) =>
-        this.relationshipAnalyzer.findRelatedSymbols(symbol, workspaceRoot),
-      );
-
-      const relatedSymbolsResults =
-        await Promise.allSettled(relatedSymbolsTasks);
-      enhancedContext.relatedSymbols = relatedSymbolsResults
-        .filter(
-          (r): r is PromiseFulfilledResult<SymbolReference[]> =>
-            r.status === 'fulfilled',
-        )
-        .map((r) => r.value)
-        .flat();
     }
 
     const duration = Date.now() - startTime;
