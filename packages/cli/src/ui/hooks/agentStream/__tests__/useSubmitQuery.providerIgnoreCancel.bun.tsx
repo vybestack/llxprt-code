@@ -177,6 +177,8 @@ class ControlledChatSeam {
   private aReadCount = 0;
   private abortObserved = false;
   private readSettled = false;
+  /** Resolves when the parked second read has registered its abort listener. */
+  readonly parkedReadA = createDeferred<void>();
   /** The abort signal Turn hands the provider via config.abortSignal. */
   private turnAbortSignal: AbortSignal | undefined;
   cleanRequests = 0;
@@ -234,6 +236,7 @@ class ControlledChatSeam {
           () => void (this.readSettled = true),
           () => void (this.readSettled = true),
         );
+        this.parkedReadA.resolve();
         return parked;
       },
       // Cleanup is intentionally uncooperative too; closeIteratorBounded's
@@ -793,14 +796,28 @@ describe('useSubmitQuery — cancelled turn whose provider read never settles (i
       act(() => {
         turnAPromiseRef.current = result.current.submitQuery('A');
       });
-      await waitFor(
-        () =>
-          expect(handleContentEventMock).toHaveBeenCalledWith(
-            PROMPT_A_CONTENT,
-            '',
-            expect.any(Number),
-          ),
-        { timeout: 5000 },
+      // Promise-based latch instead of a polling waitFor: resolves the
+      // first time the real chain routes A's content event, so the wait is
+      // driven by the event itself (no timer drift; a broken chain fails
+      // fast at the test runner's per-test deadline instead).
+      const contentEventALatch = createDeferred<void>();
+      handleContentEventMock.mockImplementation(
+        (text: string, buffer: string) => {
+          if (text === PROMPT_A_CONTENT) contentEventALatch.resolve();
+          return buffer + text;
+        },
+      );
+      await contentEventALatch.promise;
+      // ESC must land AFTER the second read parks: the seam's abort listener
+      // (and thus the "provider observed abort" observation under test) is
+      // registered by the parked read itself. Cancelling before the park
+      // exercises the already-aborted fast path instead of the #3236
+      // read-ignores-abort path.
+      await env.chat.parkedReadA.promise;
+      expect(handleContentEventMock).toHaveBeenCalledWith(
+        PROMPT_A_CONTENT,
+        '',
+        expect.any(Number),
       );
       expect(env.startedPrompts).toStrictEqual(['A']);
       rerender({ streamingState: StreamingState.Responding });
