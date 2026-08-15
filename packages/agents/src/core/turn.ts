@@ -63,6 +63,12 @@ import {
 import { buildCitationEvent } from './turnCitations.js';
 import { buildErrorReportContext } from './turnErrorReportContext.js';
 import {
+  beginWatchdogBoundedAcquisition,
+  closeLateAcquiredIterator,
+  formatStreamIdleTimeoutMessage,
+  raceReadWithAbort,
+} from './turnStreamGuards.js';
+import {
   DEFAULT_AGENT_ID,
   AgentEventType,
   type ToolCallRequestInfo,
@@ -73,20 +79,6 @@ import {
 type TurnRequest = string | object | readonly unknown[];
 /** @deprecated Use DEFAULT_STREAM_IDLE_TIMEOUT_MS from streamIdleTimeout.js instead */
 export const TURN_STREAM_IDLE_TIMEOUT_MS = DEFAULT_STREAM_IDLE_TIMEOUT_MS;
-
-function formatStreamIdleTimeoutMessage(
-  fire: StreamWatchdogFire,
-  livenessObserved: boolean,
-): string {
-  const guardLabel =
-    fire.guard === 'first-response'
-      ? 'First-response'
-      : 'Inter-chunk stream-idle';
-  const livenessPart = livenessObserved
-    ? '; provider liveness was observed before the timeout'
-    : '';
-  return `${guardLabel} timeout: no response received within the allowed time (threshold ${fire.thresholdMs}ms) from ${fire.configSource}${livenessPart}.`;
-}
 
 interface IdleFlag {
   timedOut: boolean;
@@ -412,17 +404,23 @@ export class Turn {
         // watchdog in run()); consume it directly, then clear the pending slot.
         result = pendingResult;
         pendingResult = undefined;
-      } else if (watchdog.isActive) {
-        // The watchdog governs the whole stream: its inter-chunk guard is
-        // rearmed by both provider liveness pings and semantic events, so a
-        // healthy stream never false-trips regardless of chunk cadence.
-        result = await Promise.race([
-          streamIterator.next(),
-          watchdog.timeoutPromise,
-        ]);
       } else {
-        // Watchdog disabled: call iterator.next() directly
-        result = await streamIterator.next();
+        // The watchdog governs the whole stream when active: its inter-chunk
+        // guard is rearmed by both provider liveness pings and semantic
+        // events, so a healthy stream never false-trips regardless of chunk
+        // cadence. Transports that ignore the abort signal (issue #3236)
+        // would leave the read pending until the guard fires — or forever
+        // when the watchdog is disabled — so every read also races the
+        // parent abort signal.
+        const read = watchdog.isActive
+          ? Promise.race([streamIterator.next(), watchdog.timeoutPromise])
+          : streamIterator.next();
+        const outcome = await raceReadWithAbort(read, signal);
+        if (outcome.aborted) {
+          yield { type: AgentEventType.UserCancelled };
+          return;
+        }
+        result = outcome.value;
       }
       if (result.done === true) {
         break;
@@ -665,6 +663,7 @@ export class Turn {
       try {
         const { iterator, firstResult } = await this.acquireFirstStreamEvent(
           req,
+          signal,
           timeoutSignal,
           watchdog,
           idleFlag,
@@ -743,6 +742,7 @@ export class Turn {
 
   private async acquireFirstStreamEvent(
     req: TurnRequest,
+    signal: AbortSignal,
     timeoutSignal: AbortSignal,
     watchdog: StreamWatchdog,
     idleFlag: IdleFlag,
@@ -760,51 +760,50 @@ export class Turn {
         onStreamLiveness,
       );
       try {
-        const firstResult = await iterator.next();
-        return { iterator, firstResult };
+        const outcome = await raceReadWithAbort(iterator.next(), signal);
+        if (outcome.aborted) {
+          // Throwing AbortError routes cancellation through run()'s catch →
+          // handleRunError, which maps it to UserCancelled because the
+          // parent signal is aborted.
+          throw new DOMException('Aborted', 'AbortError');
+        }
+        return { iterator, firstResult: outcome.value };
       } catch (error) {
         await closeIteratorBounded(iterator, timeoutSignal);
         throw error;
       }
     }
 
-    let acquiredIterator: AsyncIterator<StreamEvent> | undefined;
     const acquisitionPromise = this.openResponseStreamIterator(
       req,
       timeoutSignal,
       onProviderError,
       onStreamLiveness,
     );
-    acquisitionPromise
-      .then((iterator) => {
-        acquiredIterator = iterator;
-        return iterator;
-      })
-      .catch(() => undefined);
-    const firstEventPromise = acquisitionPromise.then(async (iterator) => {
-      const firstResult = await iterator.next();
-      return { iterator, firstResult };
-    });
-    firstEventPromise.catch(() => {});
+    const acquisition = beginWatchdogBoundedAcquisition(acquisitionPromise);
 
     try {
-      const result = await Promise.race([
-        firstEventPromise,
-        watchdog.timeoutPromise,
-      ]);
-      return result;
+      const outcome = await raceReadWithAbort(
+        Promise.race([acquisition.firstEventPromise, watchdog.timeoutPromise]),
+        signal,
+      );
+      if (outcome.aborted) {
+        // Same routing as the unbounded branch: AbortError → handleRunError
+        // maps an aborted parent signal to UserCancelled. The catch below
+        // still sinks/closes the abandoned acquisition.
+        throw new DOMException('Aborted', 'AbortError');
+      }
+      return outcome.value;
     } catch (error) {
       watchdog.cancel();
-      const iteratorAtCatch = acquiredIterator;
+      const iteratorAtCatch = acquisition.acquiredIterator();
       await closeIteratorBounded(iteratorAtCatch, timeoutSignal);
       // Close a late-acquired iterator without waiting for its first next().
-      acquisitionPromise
-        .then((lateIterator) =>
-          lateIterator === iteratorAtCatch
-            ? undefined
-            : closeIteratorBounded(lateIterator, timeoutSignal),
-        )
-        .catch(() => undefined);
+      closeLateAcquiredIterator(
+        acquisitionPromise,
+        iteratorAtCatch,
+        timeoutSignal,
+      );
       if (idleFlag.fire !== undefined) {
         throw new Error(
           formatStreamIdleTimeoutMessage(
