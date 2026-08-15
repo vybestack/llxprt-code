@@ -542,6 +542,27 @@ describe('REQ-3232-2: bounded working-set file-count policy', () => {
     expect(b).toBeGreaterThan(a);
     expect(c).toBeGreaterThan(b);
   });
+
+  it('retains a multi-chunk working set completely and in sorted order', async () => {
+    // Nine eligible candidates span three policy-sized planning/acquisition
+    // chunks: every candidate must still be planned exactly once and the
+    // retained order must stay sorted, proving the chunked planning of
+    // stats changes nothing observable.
+    seedAndModify(ctx.tempDir, simpleModifiedEntries(9, 'mc'));
+    const target = writeTarget(ctx.tempDir);
+
+    const acquisition = await acquireWorkingSet(target, ctx.tempDir);
+    expect(acquisition.status.complete).toBe(true);
+    expect(acquisition.status.retainedFiles).toBe(9);
+    expect(acquisition.status.eligibleFiles).toBe(9);
+    const retainedNames = acquisition.files.map(
+      (file: ConnectedFile) => file.filePath,
+    );
+    const expected = Array.from({ length: 9 }, (_, i) =>
+      join(ctx.tempDir, `mc${String(i).padStart(3, '0')}.ts`),
+    );
+    expect(retainedNames).toEqual(expected);
+  });
 });
 
 // ---------------------------------------------------------------------------

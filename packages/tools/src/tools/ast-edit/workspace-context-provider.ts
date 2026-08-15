@@ -181,7 +181,9 @@ async function readBoundedTotal(
  * charge is the exact raw byte count the read returned — never a re-encoded
  * UTF-8 length, which would mis-account invalid bytes. Never rejects: a
  * candidate that fails at the open, read, or parse boundary is counted as a
- * skip while the handle is always closed.
+ * skip, and the handle is always closed. A close that fails is not
+ * suppressed either: the candidate is counted unreadable instead of
+ * retained, so the partial accounting surfaces the fault.
  */
 async function acquireAdmittedItem(
   candidate: AdmittedCandidate,
@@ -195,42 +197,70 @@ async function acquireAdmittedItem(
   } catch {
     return { kind: 'skipped', reason: 'unreadable' };
   }
+  let settled: AcquiredItem;
+  let closeFailed = false;
   try {
-    const buffer = Buffer.alloc(candidate.allowance + READ_SENTINEL_BYTES);
-    let total: number;
-    try {
-      total = await readBoundedTotal(handle, buffer);
-    } catch {
-      // One bad candidate must never reject the whole collection.
-      return { kind: 'skipped', reason: 'unreadable' };
-    }
-    if (total === buffer.length) {
-      return { kind: 'skipped', reason: 'oversized' };
-    }
-    if (total > budgetBytes) {
-      return { kind: 'skipped', reason: 'oversized' };
-    }
-    const content = buffer.toString('utf8', 0, total);
-    let declarations;
-    try {
-      declarations = await astExtractor.extractDeclarationsBounded(
-        candidate.path,
-        content,
-        declarationLimit,
-      );
-    } catch {
-      // The bounded parser is an external boundary for arbitrary file
-      // contents: a parse fault skips the file instead of failing the run.
-      return { kind: 'skipped', reason: 'unreadable' };
-    }
-    return {
-      kind: 'file',
-      sourceBytes: Math.max(candidate.allowance, total),
-      declarations,
-    };
+    settled = await readAdmittedCandidate(
+      handle,
+      candidate,
+      budgetBytes,
+      declarationLimit,
+      astExtractor,
+    );
   } finally {
-    await handle.close().catch(() => undefined);
+    try {
+      await handle.close();
+    } catch {
+      closeFailed = true;
+    }
   }
+  return closeFailed ? { kind: 'skipped', reason: 'unreadable' } : settled;
+}
+
+/**
+ * Read and parse one admitted candidate through an open handle. Never
+ * rejects: read- and parse-boundary failures of one candidate become skip
+ * outcomes so they cannot fail the whole collection.
+ */
+async function readAdmittedCandidate(
+  handle: fsPromises.FileHandle,
+  candidate: AdmittedCandidate,
+  budgetBytes: number,
+  declarationLimit: number,
+  astExtractor: ASTQueryExtractor,
+): Promise<AcquiredItem> {
+  const buffer = Buffer.alloc(candidate.allowance + READ_SENTINEL_BYTES);
+  let total: number;
+  try {
+    total = await readBoundedTotal(handle, buffer);
+  } catch {
+    // One bad candidate must never reject the whole collection.
+    return { kind: 'skipped', reason: 'unreadable' };
+  }
+  if (total === buffer.length) {
+    return { kind: 'skipped', reason: 'oversized' };
+  }
+  if (total > budgetBytes) {
+    return { kind: 'skipped', reason: 'oversized' };
+  }
+  const content = buffer.toString('utf8', 0, total);
+  let declarations;
+  try {
+    declarations = await astExtractor.extractDeclarationsBounded(
+      candidate.path,
+      content,
+      declarationLimit,
+    );
+  } catch {
+    // The bounded parser is an external boundary for arbitrary file
+    // contents: a parse fault skips the file instead of failing the run.
+    return { kind: 'skipped', reason: 'unreadable' };
+  }
+  return {
+    kind: 'file',
+    sourceBytes: Math.max(candidate.allowance, total),
+    declarations,
+  };
 }
 
 /** Derive the partial reason with deterministic precedence. */
@@ -461,14 +491,32 @@ async function settleAndRetain(
   return { state: retention.state, stop: retention.stop };
 }
 
-/** Stat all (bounded, at most 51) discovered candidates concurrently. */
+/**
+ * Stat discovered candidates in policy-sized chunks, preserving the input
+ * (sorted) order. Planning obeys the same finite concurrency policy as
+ * acquisition instead of starting one stat promise per candidate.
+ */
 async function planCandidates(
   candidates: readonly string[],
   budgetBytes: number,
 ): Promise<PlannedCandidate[]> {
-  return Promise.all(
-    candidates.map((candidate) => planCandidate(candidate, budgetBytes)),
-  );
+  const planned: PlannedCandidate[] = [];
+  for (
+    let index = 0;
+    index < candidates.length;
+    index += WORKING_SET_ACQUISITION_CONCURRENCY
+  ) {
+    const chunk = candidates.slice(
+      index,
+      index + WORKING_SET_ACQUISITION_CONCURRENCY,
+    );
+    planned.push(
+      ...(await Promise.all(
+        chunk.map((candidate) => planCandidate(candidate, budgetBytes)),
+      )),
+    );
+  }
+  return planned;
 }
 
 /** Count every skip already known from planning (independent of admission). */

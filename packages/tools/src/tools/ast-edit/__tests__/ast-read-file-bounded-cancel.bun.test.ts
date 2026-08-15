@@ -11,6 +11,8 @@ import { describe, it, expect, beforeEach } from 'bun:test';
 import { writeFileSync, rmSync, chmodSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { ASTQueryExtractor } from '../ast-query-extractor.js';
+import { ASTContextCollector } from '../context-collector.js';
+import { ASTReadFileToolInvocation } from '../ast-read-file-invocation.js';
 import { RepositoryContextProvider } from '../repository-context-provider.js';
 import { enrichWithWorkingSetContext } from '../workspace-context-provider.js';
 import { createFakeToolHost, useTempDir } from './test-helpers.js';
@@ -398,6 +400,36 @@ describe('REQ-3232-3: invocation signal threading', () => {
     // first chunk was read and parsed, nothing beyond it.
     expect(observing.extractionEnters).toHaveLength(WORKING_SET_CONCURRENCY);
   });
+
+  it('renders cancelled working-set accounting with a lower-bound eligible count', async () => {
+    // A mid-collection abort retains only the in-flight chunk while more
+    // eligible files were already observed: cancellation proves a lower
+    // bound, never an exact total, so the rendered header must read
+    // "at least N" exactly like discovery truncation.
+    seedAndModify(ctx.tempDir, simpleModifiedEntries(20, 'rc'));
+    const target = writeTarget(ctx.tempDir);
+
+    const controller = new AbortController();
+    const observing = new ObservingExtractor({
+      onFirstBoundedExtraction: () => {
+        controller.abort();
+      },
+    });
+    const invocation = new ASTReadFileToolInvocation(
+      createFakeToolHost(ctx.tempDir),
+      { file_path: target },
+      new ASTContextCollector(observing),
+    );
+    const result = await invocation.execute(controller.signal);
+    expect(result.error).toBeUndefined();
+    const output = String(result.llmContent);
+    expect(output).toContain('partial: cancelled before completion');
+    // The beforeEach working-set file makes the observed eligible set 21.
+    expect(output).toContain(
+      `retained ${WORKING_SET_CONCURRENCY} of at least 21 files`,
+    );
+    expect(output).not.toContain(' of 21 ');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -415,10 +447,14 @@ describe('max-in-flight acquisition stays within the concurrency policy', () => 
     seedAndModify(ctx.tempDir, simpleModifiedEntries(12, 'kk'));
     const target = writeTarget(ctx.tempDir);
 
-    // The delay must be wide enough that all workers of a chunk are still
-    // inside their extraction window when the last one starts, even on a
-    // loaded CI runner; a short delay only observes accidental overlap.
-    const observing = new ObservingExtractor({ delayMs: 250 });
+    // Deterministic chunk barrier: every extraction holds until the
+    // policy-sized chunk has fully entered, so overlap is observed because
+    // of the concurrency policy itself, not a timing window. A regression
+    // that serializes acquisition is released by the barrier's bounded
+    // failure timer and fails the peak assertion below instead of hanging.
+    const observing = new ObservingExtractor({
+      barrierWidth: WORKING_SET_CONCURRENCY,
+    });
     const acquisition = await acquireWorkingSet(target, ctx.tempDir, observing);
     expect(acquisition.status.complete).toBe(true);
     expect(observing.peakActive).toBe(WORKING_SET_CONCURRENCY);

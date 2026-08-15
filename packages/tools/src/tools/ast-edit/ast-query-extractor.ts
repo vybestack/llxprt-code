@@ -312,7 +312,7 @@ export class ASTQueryExtractor {
       case 'function_declaration':
       case 'method_definition': {
         const nameNode = node.field('name');
-        if (nameNode == null) return null;
+        if (nameNode === null) return null;
         const signature = this.buildSignature(
           node.field('parameters'),
           node.field('return_type'),
@@ -326,13 +326,13 @@ export class ASTQueryExtractor {
       }
       case 'class_declaration': {
         const nameNode = node.field('name');
-        return nameNode != null
+        return nameNode !== null
           ? this.nodeToDeclaration(node, nameNode.text(), 'class')
           : null;
       }
       case 'variable_declarator': {
         const nameNode = node.field('name');
-        return nameNode != null
+        return nameNode !== null
           ? this.nodeToDeclaration(node, nameNode.text(), 'variable')
           : null;
       }
@@ -340,7 +340,7 @@ export class ASTQueryExtractor {
         const sourceNode = node.field('source');
         return this.nodeToDeclaration(
           node,
-          sourceNode != null ? sourceNode.text() : 'import',
+          sourceNode !== null ? sourceNode.text() : 'import',
           'import',
         );
       }
@@ -353,7 +353,7 @@ export class ASTQueryExtractor {
     switch (node.kind()) {
       case 'function_definition': {
         const nameNode = node.field('name');
-        if (nameNode == null) return null;
+        if (nameNode === null) return null;
         const signature = this.buildPythonSignature(
           node.field('parameters'),
           node.field('return_type'),
@@ -367,7 +367,7 @@ export class ASTQueryExtractor {
       }
       case 'class_definition': {
         const nameNode = node.field('name');
-        return nameNode != null
+        return nameNode !== null
           ? this.nodeToDeclaration(node, nameNode.text(), 'class')
           : null;
       }
@@ -380,7 +380,7 @@ export class ASTQueryExtractor {
     switch (node.kind()) {
       case 'function_item': {
         const nameNode = node.field('name');
-        if (nameNode == null) return null;
+        if (nameNode === null) return null;
         const signature = this.buildPythonSignature(
           node.field('parameters'),
           node.field('return_type'),
@@ -396,13 +396,13 @@ export class ASTQueryExtractor {
       case 'trait_item':
       case 'enum_item': {
         const nameNode = node.field('name');
-        if (nameNode == null) return null;
+        if (nameNode === null) return null;
         const type = rustKindToType(String(node.kind()));
         return this.nodeToDeclaration(node, nameNode.text(), type);
       }
       case 'impl_item': {
         const nameNode = node.field('type');
-        return nameNode != null
+        return nameNode !== null
           ? this.nodeToDeclaration(node, nameNode.text(), 'impl')
           : null;
       }
@@ -455,13 +455,13 @@ export class ASTQueryExtractor {
 
   private cPrototypeForNode(node: SgNode): EnhancedDeclaration | null {
     const declarator = node.find({ rule: { kind: 'function_declarator' } });
-    if (declarator == null) return null;
+    if (declarator === null) return null;
     const nameNode = declarator
       .children()
       .find((child) => child.kind() === 'identifier');
     if (nameNode == null) return null;
     const paramsNode = declarator.find({ rule: { kind: 'parameter_list' } });
-    const signature = paramsNode != null ? paramsNode.text() : '()';
+    const signature = paramsNode !== null ? paramsNode.text() : '()';
     return this.nodeToDeclaration(node, nameNode.text(), 'function', signature);
   }
 
@@ -469,8 +469,8 @@ export class ASTQueryExtractor {
     paramsNode: SgNode | null,
     returnTypeNode: SgNode | null,
   ): string {
-    let signature = paramsNode != null ? paramsNode.text() : '()';
-    if (returnTypeNode != null) {
+    let signature = paramsNode !== null ? paramsNode.text() : '()';
+    if (returnTypeNode !== null) {
       signature += returnTypeNode.text();
     }
     return signature;
@@ -480,8 +480,8 @@ export class ASTQueryExtractor {
     paramsNode: SgNode | null,
     returnTypeNode: SgNode | null,
   ): string {
-    let signature = paramsNode != null ? paramsNode.text() : '()';
-    if (returnTypeNode != null) {
+    let signature = paramsNode !== null ? paramsNode.text() : '()';
+    if (returnTypeNode !== null) {
       signature += ` -> ${returnTypeNode.text()}`;
     }
     return signature;
@@ -522,13 +522,14 @@ export class ASTQueryExtractor {
     const lines = content.split('\n');
     const declarations: Declaration[] = [];
     for (const [index, line] of lines.entries()) {
-      if (
-        declarations.length >= limit ||
-        !this.isDeclarationLine(line.trim())
-      ) {
-        continue;
+      if (declarations.length >= limit) {
+        // The declaration limit is reached: stop iterating instead of
+        // scanning every remaining line only to skip it.
+        break;
       }
-      this.pushFallbackDeclaration(declarations, line, index);
+      if (this.isDeclarationLine(line.trim())) {
+        this.pushFallbackDeclaration(declarations, line, index);
+      }
     }
 
     return declarations.map((decl) => ({

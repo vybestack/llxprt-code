@@ -94,8 +94,13 @@ export class ASTContextCollector {
   private repoProvider: RepositoryContextProvider;
   private relationshipAnalyzer: CrossFileRelationshipAnalyzer;
 
-  constructor() {
-    this.astExtractor = new ASTQueryExtractor();
+  /**
+   * The extractor defaults to the real production instance; passing a real
+   * subclass (for example one that observes bounded acquisition timing)
+   * keeps every other behavior of the collector intact.
+   */
+  constructor(astExtractor: ASTQueryExtractor = new ASTQueryExtractor()) {
+    this.astExtractor = astExtractor;
     this.repoProvider = new RepositoryContextProvider();
     this.relationshipAnalyzer = new CrossFileRelationshipAnalyzer();
   }

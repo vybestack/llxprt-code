@@ -84,6 +84,31 @@ describe('bounded fallback limit validation', () => {
     );
     expect(declarations).toEqual([]);
   });
+
+  it('stops at the limit in document order with output identical to the unbounded scan', async () => {
+    // A declaration-dense fallback file: the bounded scan must return
+    // exactly the first declarations of the unbounded scan (names, lines,
+    // columns, ranges) and never materialize past the limit.
+    const lines = Array.from({ length: 2000 }, (_, i) => `  def method${i}`);
+    const source = lines.join('\n');
+    const bounded = await extractor.extractDeclarationsBounded(
+      '/repo/dense.rb',
+      source,
+      3,
+    );
+    const unbounded = await extractor.extractDeclarations(
+      '/repo/dense.rb',
+      source,
+    );
+    expect(bounded).toEqual(unbounded.slice(0, 3));
+    expect(bounded.map((decl) => decl.name)).toEqual([
+      'method0',
+      'method1',
+      'method2',
+    ]);
+    // Raw-line column is preserved: '  def method0' puts the name at column 6.
+    expect(bounded.every((decl) => decl.column === 6)).toBe(true);
+  });
 });
 
 describe('declaration family resolution', () => {

@@ -28,7 +28,7 @@
  * is AbortController timing or real acquisition observation.
  */
 
-import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ToolResult } from '../../tools.js';
 import { ASTReadFileTool } from '../../ast-edit.js';
@@ -48,7 +48,11 @@ const DISCOVERY_CANDIDATE_CAP = MAX_WORKING_SET_FILES + 1;
 const READ_SENTINEL_BYTES = 4096;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === null || prototype === Object.prototype;
 }
 
 /**
@@ -166,9 +170,9 @@ function simpleModifiedEntries(
 }
 
 /**
- * Smallest stdout chunk Node delivers from a child pipe (64 KiB). Fixtures
- * that must produce trailing data events after the first chunk generate more
- * NUL-delimited output than this.
+ * Fixture floor for trailing Git stdout after a discovery kill: one full
+ * MiB of NUL-delimited names, far beyond the 64 KiB a child pipe typically
+ * delivers in its first chunk, so buffered late data events are guaranteed.
  */
 const GIT_TRAILING_OUTPUT_FLOOR_BYTES = 1024 * 1024;
 
@@ -209,7 +213,9 @@ function createLongPathCandidates(dir: string, count: number): string[] {
 function hasCaseInsensitiveFilenames(dir: string): boolean {
   const probe = join(dir, `case-probe-${process.pid}.txt`);
   writeFileSync(probe, '', 'utf-8');
-  return existsSync(probe.toUpperCase());
+  const caseInsensitive = existsSync(probe.toUpperCase());
+  rmSync(probe, { force: true });
+  return caseInsensitive;
 }
 
 /**
@@ -233,10 +239,17 @@ function writeTrackedModifiedTarget(
   return target;
 }
 
+/** Failure release for the chunk barrier: a chunk that never fills must fail
+ * an assertion instead of hanging the suite, so waiters give up after this. */
+const BARRIER_FAILURE_RELEASE_MS = 5000;
+
 /**
  * Real extractor wrapper that observes genuine acquisition activity while
- * delegating every extraction to the real implementation. The optional delay
- * widens the real extraction window so concurrent overlap is observable.
+ * delegating every extraction to the real implementation. Two mechanisms:
+ * the optional delay widens the real extraction window, and the optional
+ * chunk barrier deterministically holds each extraction until a full
+ * policy-sized chunk has entered (released by the last worker of the chunk,
+ * with a bounded failure release when the chunk never fills).
  */
 class ObservingExtractor extends ASTQueryExtractor {
   readonly extractionEnters: string[] = [];
@@ -246,13 +259,24 @@ class ObservingExtractor extends ASTQueryExtractor {
   activeContentBytes = 0;
   peakActiveContentBytes = 0;
   private readonly delayMs: number;
+  private readonly barrierWidth: number;
   private readonly onFirstExtraction?: () => void;
+  private readonly onFirstBoundedExtraction?: () => void;
   private firstExtractionSeen = false;
+  private firstBoundedExtractionSeen = false;
+  private barrierWaiters: Array<() => void> = [];
 
-  constructor(options?: { delayMs?: number; onFirstExtraction?: () => void }) {
+  constructor(options?: {
+    delayMs?: number;
+    onFirstExtraction?: () => void;
+    onFirstBoundedExtraction?: () => void;
+    barrierWidth?: number;
+  }) {
     super();
     this.delayMs = options?.delayMs ?? 0;
     this.onFirstExtraction = options?.onFirstExtraction;
+    this.onFirstBoundedExtraction = options?.onFirstBoundedExtraction;
+    this.barrierWidth = options?.barrierWidth ?? 0;
   }
 
   private enter(filePath: string, content: string): void {
@@ -268,6 +292,20 @@ class ObservingExtractor extends ASTQueryExtractor {
       this.activeContentBytes,
     );
     this.extractionEnters.push(filePath);
+    this.releaseBarrierIfChunkFull();
+  }
+
+  /** Release every held worker once the chunk has fully entered. */
+  private releaseBarrierIfChunkFull(): void {
+    if (
+      this.barrierWidth > 0 &&
+      this.active >= this.barrierWidth &&
+      this.barrierWaiters.length > 0
+    ) {
+      for (const release of this.barrierWaiters.splice(0)) {
+        release();
+      }
+    }
   }
 
   private exit(content: string): void {
@@ -293,6 +331,10 @@ class ObservingExtractor extends ASTQueryExtractor {
     content: string,
     limit: number,
   ): Promise<readonly EnhancedDeclaration[]> {
+    if (!this.firstBoundedExtractionSeen) {
+      this.firstBoundedExtractionSeen = true;
+      this.onFirstBoundedExtraction?.();
+    }
     this.enter(filePath, content);
     try {
       await this.settle();
@@ -309,6 +351,21 @@ class ObservingExtractor extends ASTQueryExtractor {
   }
 
   private async settle(): Promise<void> {
+    if (this.barrierWidth > 0) {
+      if (this.active < this.barrierWidth) {
+        await new Promise<void>((resolve) => {
+          const failureRelease = setTimeout(
+            resolve,
+            BARRIER_FAILURE_RELEASE_MS,
+          );
+          this.barrierWaiters.push(() => {
+            clearTimeout(failureRelease);
+            resolve();
+          });
+        });
+      }
+      return;
+    }
     if (this.delayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, this.delayMs));
     }

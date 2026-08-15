@@ -36,40 +36,45 @@ import {
   MAX_WORKING_SET_FILES,
 } from './workspace-context-provider.js';
 
+/**
+ * Rendered phrase per partial reason. The Record over the full
+ * WorkingSetPartialReason union is compile-time exhaustive: a future union
+ * member without a phrase fails typecheck instead of silently rendering a
+ * generic fallback at runtime.
+ */
+const WORKING_SET_PARTIAL_PHRASES: Readonly<
+  Record<WorkingSetPartialReason, string>
+> = {
+  'file-count': `stopped at the file-count limit (${MAX_WORKING_SET_FILES})`,
+  'source-bytes': 'stopped at the aggregate source-byte budget',
+  declarations: `stopped at the retained-declaration limit (${MAX_WORKING_SET_DECLARATIONS})`,
+  cancelled: 'cancelled before completion',
+  'git-error': 'stopped because Git working-set discovery failed',
+  'discovery-limit': 'stopped at the working-set discovery limit',
+  'skipped-files': 'partial because eligible working-set files were skipped',
+};
+
 function workingSetPartialPhrase(
   reason: WorkingSetPartialReason | undefined,
 ): string {
-  switch (reason) {
-    case 'file-count':
-      return `stopped at the file-count limit (${MAX_WORKING_SET_FILES})`;
-    case 'source-bytes':
-      return 'stopped at the aggregate source-byte budget';
-    case 'declarations':
-      return `stopped at the retained-declaration limit (${MAX_WORKING_SET_DECLARATIONS})`;
-    case 'cancelled':
-      return 'cancelled before completion';
-    case 'git-error':
-      return 'stopped because Git working-set discovery failed';
-    case 'discovery-limit':
-      return 'stopped at the working-set discovery limit';
-    case 'skipped-files':
-      return 'partial because eligible working-set files were skipped';
-    default:
-      return 'stopped early';
+  if (reason === undefined) {
+    return 'stopped early';
   }
+  return WORKING_SET_PARTIAL_PHRASES[reason];
 }
 
 /**
  * Eligible-file count for the partial header. When discovery was truncated,
- * the file-count policy stopped acquisition, or Git discovery failed after
- * candidates were observed, the counted candidates are only a lower bound on
- * the true eligible set.
+ * the file-count policy stopped acquisition, Git discovery failed after
+ * candidates were observed, or cancellation stopped acquisition mid-run, the
+ * counted candidates are only a lower bound on the true eligible set.
  */
 function eligibleFilesPhrase(status: WorkingSetAcquisitionStatus): string {
   const isLowerBound =
     status.discoveryTruncated ||
     status.partialReason === 'file-count' ||
-    status.partialReason === 'git-error';
+    status.partialReason === 'git-error' ||
+    status.partialReason === 'cancelled';
   return isLowerBound
     ? `at least ${status.eligibleFiles}`
     : String(status.eligibleFiles);

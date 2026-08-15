@@ -192,13 +192,14 @@ function describeChildFailure(child: SpawnSyncReturns<string>): string {
 }
 
 /**
- * Drop the leading `-C <dir>` argv pair from a logged Git invocation so the
- * subcommand itself is comparable. The workspace path may contain spaces,
- * but the provider always emits exactly two tokens before the subcommand.
+ * Drop the leading `-C <workspace>` argv pair from a logged Git invocation
+ * so the subcommand itself is comparable. The literal known prefix is
+ * stripped (rather than splitting on spaces) so a workspace path containing
+ * spaces cannot corrupt the remaining subcommand text.
  */
-function stripGitDirPrefix(line: string): string {
-  const tokens = line.split(' ');
-  return tokens[0] === '-C' ? tokens.slice(2).join(' ') : line;
+function stripGitDirPrefix(line: string, workspace: string): string {
+  const prefix = `-C ${workspace} `;
+  return line.startsWith(prefix) ? line.slice(prefix.length) : line;
 }
 
 describe('REQ-3232-5: ast_read_file memory regression', () => {
@@ -220,7 +221,6 @@ describe('REQ-3232-5: ast_read_file memory regression', () => {
       if (child.status !== 0) {
         throw new Error(describeChildFailure(child));
       }
-      expect(child.status).toBe(0);
       // The child must emit both markers, proving the quiet window ran.
       expect(child.stdout).toContain('AST_READ_TOOL_RESULT');
       expect(child.stdout).toContain('AST_READ_QUIET_DONE');
@@ -264,9 +264,13 @@ describe('REQ-3232-5: ast_read_file repository wiring canary', () => {
   it.skipIf(process.platform === 'win32')(
     'spawns no repository-relationship Git commands during a real read',
     () => {
-      const workspace = mkdtempSync(join(tmpdir(), 'llxprt-3232-spy-'));
+      const spyRoot = mkdtempSync(join(tmpdir(), 'llxprt-3232-spy-'));
       const shimDir = mkdtempSync(join(tmpdir(), 'llxprt-3232-shim-'));
+      // A workspace directory whose name contains spaces exercises the real
+      // canary against the path shape that defeats space-splitting parsers.
+      const workspace = join(spyRoot, 'work space');
       try {
+        mkdirSync(workspace, { recursive: true });
         gitInit(workspace);
         writeFileSync(
           join(workspace, 'dep.ts'),
@@ -330,10 +334,16 @@ describe('REQ-3232-5: ast_read_file repository wiring canary', () => {
           ? readFileSync(logPath, 'utf-8')
               .split('\n')
               .filter((line) => line.length > 0)
-              .map(stripGitDirPrefix)
+              .map((line) => stripGitDirPrefix(line, workspace))
           : [];
         // The read genuinely used Git (bounded discovery ran) ...
         expect(invocations.length).toBeGreaterThan(0);
+        // ... and the exact `-C <workspace> ` prefix stripped cleanly even
+        // with the spaced path: the logged subcommands parse intact.
+        expect(invocations.some((line) => line.startsWith('rev-parse '))).toBe(
+          true,
+        );
+        expect(invocations.some((line) => line.startsWith('diff '))).toBe(true);
         // ... but never the repository-relationship subcommands.
         expect(invocations.some((line) => line.startsWith('remote '))).toBe(
           false,
@@ -342,7 +352,7 @@ describe('REQ-3232-5: ast_read_file repository wiring canary', () => {
           false,
         );
       } finally {
-        rmSync(workspace, { recursive: true, force: true });
+        rmSync(spyRoot, { recursive: true, force: true });
         rmSync(shimDir, { recursive: true, force: true });
       }
     },
