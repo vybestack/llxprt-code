@@ -47,12 +47,12 @@ future authors do not reintroduce over-broad filters.
    green conclusion.
 
 7. **Rename and deletion handling.** Deleting or renaming a relevant input is
-   itself relevant. The classifier consumes structured changed-file entries
-   (status + previous_filename) so a rename to OR from a relevant path
-   selects run, and a deletion of any relevant path selects run. Required
-   packed assets (`README.md`, `LICENSE`) are documentation for ordinary
-   content edits (skip) but their deletion or rename-away breaks the package
-   and selects run.
+   itself relevant. A semantic gate that consumes structured changed-file
+   entries (status + previous_filename) can select run for a rename to OR
+   from a relevant path — the shared docs-only filter does this for renames
+   today. Deletion-of-input sensitivity (beyond plain path classification)
+   was a property of the deleted Windows relevance classifier (#2693,
+   removed with the per-PR path in #3249).
 
 8. **Event paths are a coarse boundary.** GitHub `paths:` filters and
    `on:` event triggers are a coarse pre-classifier that determines whether
@@ -60,7 +60,7 @@ future authors do not reintroduce over-broad filters.
    file, and the GitHub changed-file API has platform-specific limitations
    around rename detection and the 3000-file ceiling. Coarse boundaries are
    acceptable only when paired with a job-level semantic gate (like the
-   Windows relevance classifier or the shared docs-only filter) that can
+   shared docs-only filter) that can
    make the fine-grained run/skip decision. Consolidating all event paths
    into a universal, always-running relevance gate is explicitly deferred —
    the current per-workflow coarse-plus-semantic design is the accepted
@@ -72,16 +72,11 @@ Every workflow in `.github/workflows/` falls into one of these categories:
 
 ### Event-path filtered (path filter + optional job-level gate)
 
-| Workflow                        | Filter                       | Job-level gate                   | Behavioral test owner                                          |
-| ------------------------------- | ---------------------------- | -------------------------------- | -------------------------------------------------------------- |
-| `interactive-ui.yml`            | `pull_request`, `push` paths | none (broad build)               | `scripts/tests/interactive-ui-paths.bun.test.ts`               |
-| `windows-installed-command.yml` | `pull_request`, `push` paths | `windows_relevance` semantic job | `scripts/tests/windows-installed-command-workflow.bun.test.ts` |
+| Workflow             | Filter                       | Job-level gate     | Behavioral test owner                            |
+| -------------------- | ---------------------------- | ------------------ | ------------------------------------------------ |
+| `interactive-ui.yml` | `pull_request`, `push` paths | none (broad build) | `scripts/tests/interactive-ui-paths.bun.test.ts` |
 
-These workflows use `paths:` to select a coarse candidate set. The
-Windows workflow additionally runs a cheap Ubuntu job
-(`scripts/windows-installed-command-relevance.ts`) that semantically
-classifies the root manifest diff to prevent unrelated ordinary script
-additions from allocating a `windows-latest` runner.
+These workflows use `paths:` to select a coarse candidate set.
 
 ### Job-level gated (no path filter; run on PR/push but skip via job output)
 
@@ -101,12 +96,13 @@ authoritative `changed_files` count.
 | ---------------- | ------------------------------------------------ | -------------------------------------------------------------------- |
 | `smoke-test.yml` | `push` (main, release/\*\*), `workflow_dispatch` | Runs the full smoke suite on merge or manual dispatch; not every PR. |
 
-### Reusable / caller-controlled (workflow_call only)
+### Reusable / caller-controlled (no PR/push triggers)
 
-| Workflow                    | Reason                                                            |
-| --------------------------- | ----------------------------------------------------------------- |
-| `_evals-run.yml`            | Called by `evals-nightly.yml`; the caller controls when it runs.  |
-| `_pr-mergeability-gate.yml` | Called by `e2e.yml` and others; the caller controls when it runs. |
+| Workflow                        | Reason                                                                                                                              |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `_evals-run.yml`                | Called by `evals-nightly.yml`; the caller controls when it runs.                                                                    |
+| `_pr-mergeability-gate.yml`     | Called by `e2e.yml` and others; the caller controls when it runs.                                                                   |
+| `windows-installed-command.yml` | Called by `nightly.yml` (nightly Windows installed-command smoke) and manually dispatchable; no PR/push triggers since issue #3249. |
 
 ### Pull-request-target / action-gated
 
@@ -136,47 +132,20 @@ These workflows are triggered by non-code events (schedules, issue comments,
 labels) and have no code-path filter because the event itself determines
 relevance.
 
-## Windows installed-command semantic relevance
+## Windows installed-command smoke scheduling
 
-GitHub path filters cannot distinguish fields within a single JSON file, so
-root `package.json` stays a coarse candidate in `paths:`. A cheap
-Ubuntu-hosted job (`windows_relevance`) runs the committed classifier
-(`scripts/windows-installed-command-relevance.ts`) which:
-
-- Compares the base and head root manifests to detect install-relevant
-  changes (workspaces, dependencies, overrides, engines, package-manager
-  metadata, lifecycle scripts — including `preprepare`, `postprepare`, and
-  `dependencies` — or an invoked script).
-- Treats unrelated named scripts (e.g. `lint:doc-links`) as irrelevant.
-- Always treats root `package-lock.json` as relevant (npm ci and release
-  binding consume it unconditionally).
-- Treats `.nvmrc`, `.bun-version`, `.npmrc`, workspace manifests, release
-  helpers (`scripts/lib/npm-command.cjs`, `scripts/lib/tar-command.cjs`,
-  `scripts/utils/release-packages.ts`, `scripts/utils/error-guards.ts`,
-  `scripts/bind-release-deps.ts`, `scripts/prepare-package.ts`), publishable
-  package runtime source (`packages/*/src/**`, `packages/*/index.ts`,
-  `packages/cli/bundle/**` — excluding test/spec/**tests**/**snapshots**
-  content so a package test-only change allocates only the cheap relevance
-  job), the smoke modules, probe, benchmark, and the workflow YAML as direct
-  relevant inputs.
-- Consumes structured changed-file entries (status + previous_filename) so a
-  rename to or from a relevant path, or a deletion of a relevant path,
-  selects run.
-- Treats `README.md` and `LICENSE` (required packed assets) as relevant on
-  deletion or rename-away, but as ordinary documentation (skip) for content
-  edits.
-- Fails closed on any uncertainty: malformed manifests, incomplete file data,
-  count mismatches, ambiguous renames/deletions, unsupported events, or an
-  untrustworthy push base all select running the Windows smoke.
-- The expensive runner skips ONLY on an explicit successful
-  `windows_relevant=false`; relevance-job failure, missing output, or invalid
-  output all select run.
-- `workflow_dispatch` always runs.
+The Windows installed-command smoke no longer runs per-PR (issue #3249):
+the 20-45 min `windows-latest` job sat on virtually every PR's critical
+path because the `packages/*/src/**` path filter matched nearly all
+runtime-source changes. It now runs via `nightly.yml`, which calls the
+reusable workflow through its `windows_installed_command` job, plus
+manual `workflow_dispatch` for debugging Windows-specific install
+failures. The #2693 semantic relevance classifier and its per-PR
+`windows_relevance` gate were deleted as dead code along with the PR
+trigger.
 
 **Behavioral test owner:**
-
-- Classifier: `scripts/tests/windows-installed-command-relevance.bun.test.ts`
-- Workflow wiring: `scripts/tests/windows-installed-command-workflow.bun.test.ts`
+`scripts/tests/windows-installed-command-workflow.bun.test.ts`
 
 ## E2E docs-only detection
 
@@ -225,7 +194,7 @@ trigger the workflow.
 1. List every file the workflow installs, builds, tests, or otherwise
    consumes. Each becomes a `paths:` entry.
 2. If a coarse candidate (a single file whose fields matter) is needed,
-   add a cheap job-level semantic gate (like the Windows relevance classifier)
+   add a cheap job-level semantic gate (like the shared docs-only filter)
    that runs on an inexpensive runner and outputs a boolean.
 3. Write a Bun behavioral test that reads the real workflow YAML through
    `scripts/tests/typed-test-helpers.ts` and asserts the wiring.
