@@ -436,7 +436,7 @@ describe('OpenFilesManager', () => {
     // re-reads the document and forwards the result. A route that cached
     // a constant or ignored the selection would fail.
     const getText = vi.fn().mockImplementation((sel: vscode.Selection) => {
-      const char = sel?.active?.character ?? 0;
+      const char = sel.active.character;
       return `text-at-char-${char}`;
     });
     const textEditor = {
