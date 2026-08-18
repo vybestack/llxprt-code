@@ -381,6 +381,7 @@ describe('scripts/bind-release-deps.ts', () => {
 describe('.github/workflows/nightly.yml', () => {
   let nightlyParsed: Record<string, unknown> | undefined;
   let windowsCiJob: Record<string, unknown> | undefined;
+  let macosCiJob: Record<string, unknown> | undefined;
   let notifyFailureJob: Record<string, unknown> | undefined;
 
   function stepNamed(
@@ -397,6 +398,21 @@ describe('.github/workflows/nightly.yml', () => {
       throw new Error(`job should contain step: ${name}`);
     }
     return step;
+  }
+
+  function matrixShardNames(
+    job: Record<string, unknown> | undefined,
+  ): string[] {
+    const strategy = asOptionalRecord(job?.strategy);
+    const matrix = asOptionalRecord(strategy?.matrix);
+    const shards = matrix?.shard;
+    if (
+      !Array.isArray(shards) ||
+      !shards.every((shard) => typeof shard === 'string')
+    ) {
+      throw new Error('job should define a string strategy.matrix.shard array');
+    }
+    return shards;
   }
 
   function failureNotificationStep(): Record<string, unknown> {
@@ -421,6 +437,7 @@ describe('.github/workflows/nightly.yml', () => {
     nightlyParsed = asRecord(parseWorkflowYaml(nightlyYml));
     const jobs = asOptionalRecord(nightlyParsed.jobs);
     windowsCiJob = asOptionalRecord(jobs?.windows_ci);
+    macosCiJob = asOptionalRecord(jobs?.macos_ci);
     notifyFailureJob = asOptionalRecord(jobs?.notify_failure);
   });
 
@@ -429,6 +446,7 @@ describe('.github/workflows/nightly.yml', () => {
       windowsCiJob,
       'nightly.yml should contain job: windows_ci',
     ).toBeTruthy();
+    expect(macosCiJob, 'nightly.yml should contain job: macos_ci').toBeTruthy();
     expect(
       notifyFailureJob,
       'nightly.yml should contain job: notify_failure',
@@ -442,23 +460,51 @@ describe('.github/workflows/nightly.yml', () => {
     ).toBe(true);
   });
 
-  it('runs lint:agents-api-surface before npm run test in the Windows CI job', () => {
-    const rawSteps = windowsCiJob?.steps;
-    const steps = Array.isArray(rawSteps) ? rawSteps.map(asRecord) : [];
-    const surfaceIndex = steps.findIndex((step: Record<string, unknown>) =>
-      String(step.run ?? '').includes('npm run lint:agents-api-surface'),
-    );
-    const testRunIndex = steps.findIndex((step: Record<string, unknown>) =>
-      /(?:^|\s)npm run test(?:\s|$)/.test(String(step.run ?? '')),
-    );
+  it('runs the canonical test shards independently on Windows and macOS', () => {
+    const expectedShards = [
+      'cli',
+      'agents',
+      'providers',
+      'core',
+      'rest',
+      'scripts',
+    ];
+    expect(matrixShardNames(windowsCiJob)).toEqual(expectedShards);
+    expect(matrixShardNames(macosCiJob)).toEqual(expectedShards);
+
+    for (const job of [windowsCiJob, macosCiJob]) {
+      const shardStep = stepNamed(job, 'Run shard tests (issue #3153)');
+      expect(shardStep.run).toBe(
+        'bun scripts/test.ts --shard "${{ matrix.shard }}"',
+      );
+      const steps = Array.isArray(job?.steps) ? job.steps.map(asRecord) : [];
+      expect(
+        steps.some((step) =>
+          /(?:^|\s)npm run test(?:\s|$)/.test(String(step.run ?? '')),
+        ),
+      ).toBe(false);
+    }
+  });
+
+  it('gates once-per-platform checks to their owning shards', () => {
+    for (const job of [windowsCiJob, macosCiJob]) {
+      expect(
+        stepNamed(job, 'Build project (agents and scripts shards)').if,
+      ).toBe("matrix.shard == 'agents' || matrix.shard == 'scripts'");
+      expect(
+        stepNamed(
+          job,
+          'Smoke test CLI entry (launcher -> Bun, no Node in chain)',
+        ).if,
+      ).toBe("matrix.shard == 'cli'");
+      expect(
+        stepNamed(job, 'Publish Test Report (for non-forks)').if,
+      ).toContain("matrix.shard != 'scripts'");
+    }
+
     expect(
-      surfaceIndex,
-      'windows_ci should run npm run lint:agents-api-surface',
-    ).toBeGreaterThan(-1);
-    expect(testRunIndex, 'windows_ci should run npm run test').toBeGreaterThan(
-      -1,
-    );
-    expect(surfaceIndex).toBeLessThan(testRunIndex);
+      stepNamed(macosCiJob, 'Run shell-script behavioral tests (#2606)').if,
+    ).toBe("matrix.shard == 'scripts'");
   });
 
   it('grants bounded issues: write access in the failure notification job', () => {

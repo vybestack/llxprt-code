@@ -23,13 +23,22 @@ defaults:
     shell: 'bash'
 
 jobs:
+  # Run the canonical test shards independently so the nightly wall clock is
+  # bounded by its slowest shard instead of the sum of every workspace.
   windows_ci:
-    name: 'Windows CI (Nightly)'
+    name: 'Windows CI (Nightly) [${{ matrix.shard }}]'
     runs-on: '${{ matrix.os }}'
-    timeout-minutes: 60
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
+        shard:
+          - 'cli'
+          - 'agents'
+          - 'providers'
+          - 'core'
+          - 'rest'
+          - 'scripts'
         os:
           - 'windows-latest'
         node-version:
@@ -70,43 +79,35 @@ jobs:
       - name: 'Install dependencies for testing'
         run: |-
           npm ci
-      - name: 'Build project'
-        run: |-
-          npm run build
 
       - name: 'Fix rollup platform dependency'
         run: |-
-          # Explicitly install the platform-specific rollup package
-          # This is a workaround for https://github.com/npm/cli/issues/4828
-          if [ "${{ runner.os }}" == "Linux" ]; then
-            npm install @rollup/rollup-linux-x64-gnu --no-save || true
-          elif [ "${{ runner.os }}" == "Windows" ]; then
-            npm install @rollup/rollup-win32-x64-msvc --no-save || true
-          fi
+          npm install @rollup/rollup-win32-x64-msvc --no-save || true
         shell: 'bash'
 
-      - name: 'Generate agents API surface report'
-        shell: 'bash'
+      - name: 'Build project (agents and scripts shards)'
+        if: matrix.shard == 'agents' || matrix.shard == 'scripts'
         run: |-
-          npm run lint:agents-api-surface
+          npm run build
 
-      - name: 'Run tests and generate reports'
+      - name: 'Verify test shard completeness'
+        run: 'npm run lint:test-shards'
+
+      - name: 'Run shard tests (issue #3153)'
         env:
-          # Provider configuration from repository secrets/variables
           OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
           OPENAI_API_KEY_2: ${{ secrets[vars.KEY_VAR_NAME_2] }}
           KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
           LLXPRT_DEFAULT_MODEL: ${{ vars.LLXPRT_DEFAULT_MODEL }}
           LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
-          # Set auth type to provider for API key authentication
           LLXPRT_AUTH_TYPE: provider
           NO_COLOR: true
-          # Ensure OAuth tests are skipped in CI (they require browser interaction)
           CI: true
-        run: 'npm run test'
+        run: 'bun scripts/test.ts --shard "${{ matrix.shard }}"'
 
       - name: 'Smoke test CLI entry (launcher -> Bun, no Node in chain)'
+        if: matrix.shard == 'cli'
         run: './packages/cli/bin/llxprt --version'
 
       - name: 'Wait for file system sync'
@@ -114,43 +115,51 @@ jobs:
 
       - name: 'Publish Test Report (for non-forks)'
         if: |-
-          ${{ always() && (github.event.pull_request.head.repo.full_name == github.repository) }}
+          ${{ always() && matrix.shard != 'scripts' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: 'dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2' # ratchet:dorny/test-reporter@v3
         with:
-          name: 'Test Results (Node ${{ matrix.node-version }})'
+          name: 'Windows Test Results [${{ matrix.shard }}] (Node ${{ matrix.node-version }})'
           path: 'packages/*/junit.xml'
           reporter: 'java-junit'
           fail-on-error: 'false'
 
       - name: 'Upload Test Results Artifact (for forks)'
         if: |-
-          ${{ always() && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) }}
+          ${{ always() && matrix.shard != 'scripts' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
         with:
-          name: 'test-results-fork-${{ matrix.node-version }}-${{ matrix.os }}'
+          name: 'test-results-fork-windows-${{ matrix.shard }}-${{ matrix.node-version }}'
           path: 'packages/*/junit.xml'
 
   #
   # macOS CI (Nightly) — issue #2876
   #
-  # The macOS test legs moved out of PR CI (ci.yml) into this nightly job so
-  # macOS runner-minute spend on PR CI drops to near zero. macOS cross-platform
-  # coverage is preserved on a nightly cadence, alongside the existing Windows
-  # CI job above. Like windows_ci, this runs the full unsharded workspace test
-  # suite (npm run test) plus the script harness and shell-script behavioral
-  # tests that the PR scripts shard covers.
   macos_ci:
-    name: 'macOS CI (Nightly)'
-    runs-on: 'macos-latest'
-    timeout-minutes: 60
+    name: 'macOS CI (Nightly) [${{ matrix.shard }}]'
+    runs-on: '${{ matrix.os }}'
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - 'cli'
+          - 'agents'
+          - 'providers'
+          - 'core'
+          - 'rest'
+          - 'scripts'
+        os:
+          - 'macos-latest'
+        node-version:
+          - '24.x'
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
 
-      - name: 'Set up Node.js 24.x'
+      - name: 'Set up Node.js ${{ matrix.node-version }}'
         uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
         with:
-          node-version: '24.x'
+          node-version: '${{ matrix.node-version }}'
           cache: 'npm'
 
       - name: 'Setup Bun'
@@ -164,8 +173,6 @@ jobs:
 
       - name: 'Fix rollup platform dependency'
         run: |-
-          # Explicitly install the platform-specific rollup package
-          # This is a workaround for https://github.com/npm/cli/issues/4828
           if [ "$(uname -m)" == "arm64" ]; then
             npm install @rollup/rollup-darwin-arm64 --no-save || true
           else
@@ -173,49 +180,35 @@ jobs:
           fi
         shell: 'bash'
 
-      - name: 'Build project'
+      - name: 'Build project (agents and scripts shards)'
+        if: matrix.shard == 'agents' || matrix.shard == 'scripts'
         run: |-
           npm run build
 
-      - name: 'Generate agents API surface report'
-        shell: 'bash'
-        run: |-
-          npm run lint:agents-api-surface
+      - name: 'Verify test shard completeness'
+        run: 'npm run lint:test-shards'
 
-      - name: 'Run tests and generate reports'
-        id: macos_main_tests
+      - name: 'Run shard tests (issue #3153)'
         env:
-          # Provider configuration from repository secrets/variables
           OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
           OPENAI_API_KEY_2: ${{ secrets[vars.KEY_VAR_NAME_2] }}
           KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
           LLXPRT_DEFAULT_MODEL: ${{ vars.LLXPRT_DEFAULT_MODEL }}
           LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
-          # Set auth type to provider for API key authentication
           LLXPRT_AUTH_TYPE: provider
           NO_COLOR: true
-          # Ensure OAuth tests are skipped in CI (they require browser interaction)
           CI: true
-        run: 'npm run test'
-
-      - name: 'Run script harness tests'
-        # Run when the main test step completed (success or failure) but NOT
-        # when the workflow was cancelled — so macOS platform coverage of the
-        # script harness still runs after a test failure, without burning
-        # runner minutes after cancellation (issue #3149).
-        if: ${{ !cancelled() && (steps.macos_main_tests.outcome == 'success' || steps.macos_main_tests.outcome == 'failure') }}
-        env:
-          CI: true
-        run: 'npm run test:scripts'
+        run: 'bun scripts/test.ts --shard "${{ matrix.shard }}"'
 
       - name: 'Run shell-script behavioral tests (#2606)'
-        if: ${{ !cancelled() && (steps.macos_main_tests.outcome == 'success' || steps.macos_main_tests.outcome == 'failure') }}
+        if: matrix.shard == 'scripts'
         env:
           CI: true
         run: 'npm run test:shell'
 
       - name: 'Smoke test CLI entry (launcher -> Bun, no Node in chain)'
+        if: matrix.shard == 'cli'
         run: './packages/cli/bin/llxprt --version'
 
       - name: 'Wait for file system sync'
@@ -223,20 +216,20 @@ jobs:
 
       - name: 'Publish Test Report (for non-forks)'
         if: |-
-          ${{ always() && (github.event.pull_request.head.repo.full_name == github.repository) }}
+          ${{ always() && matrix.shard != 'scripts' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: 'dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2' # ratchet:dorny/test-reporter@v3
         with:
-          name: 'macOS Test Results (Node 24.x)'
+          name: 'macOS Test Results [${{ matrix.shard }}] (Node ${{ matrix.node-version }})'
           path: 'packages/*/junit.xml'
           reporter: 'java-junit'
           fail-on-error: 'false'
 
       - name: 'Upload Test Results Artifact (for forks)'
         if: |-
-          ${{ always() && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) }}
+          ${{ always() && matrix.shard != 'scripts' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
         with:
-          name: 'test-results-fork-macos-24.x'
+          name: 'test-results-fork-macos-${{ matrix.shard }}-${{ matrix.node-version }}'
           path: 'packages/*/junit.xml'
 
   #
