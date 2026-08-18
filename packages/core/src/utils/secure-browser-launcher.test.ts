@@ -537,9 +537,9 @@ describe('secure-browser-launcher', () => {
         [
           '-a',
           'Google Chrome',
+          'https://example.com',
           '--args',
           '--profile-directory=Profile 1',
-          'https://example.com',
         ],
         expect.any(Object),
       );
@@ -604,10 +604,10 @@ describe('secure-browser-launcher', () => {
           '-n',
           '-a',
           'Firefox',
+          'https://example.com',
           '--args',
           '-P',
           'myprofile',
-          'https://example.com',
         ],
         expect.any(Object),
       );
@@ -629,10 +629,10 @@ describe('secure-browser-launcher', () => {
           '-n',
           '-a',
           'Firefox',
+          'https://example.com',
           '--args',
           '-profile',
           profilePath,
-          'https://example.com',
         ],
         expect.any(Object),
       );
@@ -870,7 +870,22 @@ describe('secure-browser-launcher', () => {
 
       expect(mockExecFile).toHaveBeenCalledWith(
         'open',
-        expect.arrayContaining(['-a', 'Google Chrome', 'https://example.com']),
+        ['-a', 'Google Chrome', 'https://example.com'],
+        expect.any(Object),
+      );
+      const args = mockExecFile.mock.calls[0]?.[1] ?? [];
+      expect(args).not.toContain('--args');
+    });
+
+    it('launches Firefox without a profile on macOS', async () => {
+      setPlatform('darwin');
+      await openBrowserSecurely('https://example.com', {
+        browser: 'firefox',
+      });
+
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'open',
+        ['-a', 'Firefox', 'https://example.com'],
         expect.any(Object),
       );
       const args = mockExecFile.mock.calls[0]?.[1] ?? [];
