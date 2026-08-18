@@ -39,6 +39,11 @@ import type { ASTEditToolParams } from './types.js';
 import { ASTConfig } from './ast-config.js';
 import type { ASTContextCollector } from './context-collector.js';
 import {
+  assembleBoundedPreview,
+  boundedValidationSummaryLabel,
+  preExistingSyntaxErrorStatus,
+} from './preview-context-policy.js';
+import {
   calculateEdit,
   validateASTSyntax,
   getFileLastModified,
@@ -47,7 +52,6 @@ import {
 import {
   summarizeAstValidation,
   deriveCandidateMapping,
-  findEditStartLine,
   formatValidationLineLabel,
   type AstValidationResult,
   type AstValidationSummary,
@@ -202,9 +206,9 @@ export class ASTEditToolInvocation
     return this.executeApply(signal);
   }
 
-  private async executePreview(_signal: AbortSignal): Promise<ToolResult> {
+  private async executePreview(signal: AbortSignal): Promise<ToolResult> {
     try {
-      const editData = await this.calculateEdit(this.params, _signal);
+      const editData = await this.calculateEdit(this.params, signal);
       if (editData.error) {
         return {
           llmContent: editData.error.raw,
@@ -228,7 +232,20 @@ export class ASTEditToolInvocation
           // REQ-3035-6: previews keep the target file's enhanced context but
           // omit working-set collection/rendering. ast_read_file still collects
           // the working set because it passes no option.
-          { collectWorkingSet: false },
+          // REQ-3242-1: previews also opt out of repository relationship
+          // context (repository metadata, symbol index, and the native
+          // whole-workspace related-symbol fan-out) — a localized exact
+          // replacement is validated against the target file alone, and the
+          // abandoned native traversals cannot be cancelled.
+          // REQ-3242-2: preview retains at most its own snippet policy in
+          // the context itself; the collector records the truthful pre-cap
+          // total for the "(capped from N)" report.
+          {
+            collectWorkingSet: false,
+            collectRepositoryContext: false,
+            previewSnippetItemCap: ASTConfig.PREVIEW_MAX_SNIPPETS,
+            signal,
+          },
         );
 
       const { astValidation, preEditValidation, mapping } =
@@ -250,6 +267,7 @@ export class ASTEditToolInvocation
         preEditValidation,
         mapping,
         currentMtime,
+        editData.editStartLine ?? null,
       );
 
       const returnDisplay: FileDiff = {
@@ -282,10 +300,10 @@ export class ASTEditToolInvocation
     preEditValidation: AstValidationResult | undefined;
     mapping: CandidateMapping;
   } {
-    const editStartLine = findEditStartLine(
-      editData.currentContent,
-      this.params.old_string,
-    );
+    // The anchor is carried from calculateEdit, which computed it against
+    // the same LF-normalized content used for matching, so CRLF old_string
+    // parameters anchor identically to LF ones.
+    const editStartLine = editData.editStartLine ?? null;
     const editRegion =
       editStartLine !== null ? { startLine: editStartLine } : undefined;
     const astValidation =
@@ -318,6 +336,7 @@ export class ASTEditToolInvocation
     preEditValidation: AstValidationResult | undefined,
     mapping: CandidateMapping,
     currentMtime: number | null,
+    editStartLine: number | null,
   ): string {
     const summary = summarizeAstValidation(
       preEditValidation,
@@ -330,59 +349,49 @@ export class ASTEditToolInvocation
         !astValidation.valid &&
         !summary.newlyIntroduced,
     );
-    const preExistingSyntaxErrors = hasOnlyPreExistingSyntaxErrors
-      ? `- Pre-existing syntax errors: Yes${formatValidationLineLabel(astValidation.errors)}`
-      : '';
-    return [
-      `LLXPRT EDIT PREVIEW: ${this.params.file_path}`,
-      `- Context: ${enhancedContext.language} file with ${enhancedContext.declarations.length} declarations`,
-      `- Functions: ${enhancedContext.languageContext.functions.length}`,
-      `- Classes: ${enhancedContext.languageContext.classes.length}`,
-      `- AST validation: ${summary.label}`,
-      preExistingSyntaxErrors,
-      !astValidation.valid
-        ? `- AST errors: ${astValidation.errors.join(', ')}`
-        : '',
-      `- Relevant snippets: ${enhancedContext.relevantSnippets.length} found`,
-      enhancedContext.repositoryContext
-        ? `- Repository: ${enhancedContext.repositoryContext.gitUrl}`
-        : '',
-      enhancedContext.relatedFiles
-        ? `- Related files: ${enhancedContext.relatedFiles.length}`
-        : '',
-      currentMtime !== null ? `- Timestamp: ${currentMtime}` : '',
-      '',
-      'ENHANCED CONTEXT ANALYSIS:',
-      ...enhancedContext.declarations.map(
-        (decl) => `- ${decl.type}: ${decl.name} (line ${decl.line})`,
-      ),
-      this.formatRelatedSymbols(enhancedContext),
-      '',
-      'NEXT STEP: Call again with force: true to apply changes',
-    ]
-      .flat()
-      .filter(Boolean)
-      .join('\n');
-  }
-
-  private formatRelatedSymbols(
-    enhancedContext: Awaited<
-      ReturnType<ASTContextCollector['collectEnhancedContext']>
-    >,
-  ): string[] {
-    if (
-      !enhancedContext.relatedSymbols ||
-      enhancedContext.relatedSymbols.length === 0
-    ) {
-      return [];
-    }
-    return [
-      '',
-      'RELATED SYMBOLS:',
-      ...enhancedContext.relatedSymbols
-        .slice(0, ASTConfig.MAX_DISPLAY_RESULTS)
-        .map((symbol) => `- ${symbol.type}: ${symbol.filePath}:${symbol.line}`),
-    ];
+    // Fixed-width mandatory status (issue #3242): per-error locations live
+    // only in the separately budgeted validation detail, so even tens of
+    // thousands of pre-existing diagnostics cannot expand mandatory,
+    // non-budgetable content.
+    const preExistingSyntaxErrors = preExistingSyntaxErrorStatus(
+      hasOnlyPreExistingSyntaxErrors,
+    );
+    // REQ-3242-2: preview reports the snippet count its context actually
+    // retains, with the truthful pre-cap total the collector recorded.
+    const snippetShown = enhancedContext.relevantSnippets.length;
+    const snippetTotal = enhancedContext.relevantSnippetTotal ?? snippetShown;
+    const snippetLine =
+      snippetTotal > snippetShown
+        ? `- Relevant snippets: ${snippetShown} found (capped from ${snippetTotal})`
+        : `- Relevant snippets: ${snippetShown} found`;
+    // Mandatory status/structure lines are reserved before any variable
+    // detail; REQ-3242-2/3 selection and byte budgeting live in the internal
+    // preview policy. Variable AST validation detail is passed separately so
+    // it is budgeted at whole diagnostic items instead of joining every
+    // diagnostic into an unbounded mandatory line.
+    const bounded = assembleBoundedPreview({
+      mandatoryHead: [
+        `LLXPRT EDIT PREVIEW: ${this.params.file_path}`,
+        `- Context: ${enhancedContext.language} file with ${enhancedContext.declarations.length} declarations`,
+        `- Functions: ${enhancedContext.languageContext.functions.length}`,
+        `- Classes: ${enhancedContext.languageContext.classes.length}`,
+        `- AST validation: ${boundedValidationSummaryLabel(summary)}`,
+        preExistingSyntaxErrors,
+      ].filter(Boolean),
+      validationDetail: astValidation.valid ? [] : astValidation.errors,
+      mandatoryTail: [
+        snippetLine,
+        currentMtime !== null ? `- Timestamp: ${currentMtime}` : '',
+        'ENHANCED CONTEXT ANALYSIS:',
+      ].filter(Boolean),
+      declarations: enhancedContext.declarations,
+      // Deterministic anchor for new-file previews (no old_string to locate).
+      anchorLine: editStartLine ?? 1,
+      mandatorySuffix: [
+        'NEXT STEP: Call again with force: true to apply changes',
+      ],
+    });
+    return bounded.lines.join('\n');
   }
 
   private async executeApply(signal: AbortSignal): Promise<ToolResult> {
@@ -512,10 +521,9 @@ export class ASTEditToolInvocation
     );
     let editStartLine: number | null;
     if (isModelContent) {
-      editStartLine = findEditStartLine(
-        editData.currentContent,
-        this.params.old_string,
-      );
+      // Carried from calculateEdit so CRLF old_string parameters anchor
+      // identically to LF ones (same normalized matching boundary).
+      editStartLine = editData.editStartLine ?? null;
     } else if (
       editData.currentContent !== null &&
       contentToWrite !== editData.currentContent

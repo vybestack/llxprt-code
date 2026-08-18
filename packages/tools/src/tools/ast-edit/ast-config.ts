@@ -54,6 +54,33 @@ export class ASTConfig {
    */
   static readonly MAX_DISPLAY_RESULTS = 5;
 
+  // Section: ast_edit Preview Safety Policies (issue #3242)
+  /**
+   * Maximum declarations rendered by an ast_edit preview, selected by
+   * proximity to the edit's start line (nearest first, rendered in source
+   * order). Internal policy — not a public tool parameter.
+   */
+  static readonly PREVIEW_MAX_DECLARATIONS = 128;
+  /**
+   * Maximum relevant snippets reported by an ast_edit preview.
+   */
+  static readonly PREVIEW_MAX_SNIPPETS = 64;
+  /**
+   * Hard UTF-8 byte budget for the entire ast_edit preview llmContent,
+   * including path, validation, declarations, truncation metadata, timestamp,
+   * and next-step instruction.
+   */
+  static readonly PREVIEW_LLM_MAX_BYTES = 256 * 1024;
+
+  /**
+   * Maximum UTF-8 bytes of the AST validation summary label an ast_edit
+   * preview embeds verbatim in its mandatory status line. The shared
+   * categorizer embeds every diagnostic line number into its labels, so a
+   * label above this allowance is replaced by a fixed-width truthful
+   * classification. Internal policy — not a public tool parameter.
+   */
+  static readonly PREVIEW_VALIDATION_SUMMARY_MAX_BYTES = 512;
+
   static readonly SUPPORTED_LANGUAGES = {
     ts: 'typescript',
     js: 'javascript',
