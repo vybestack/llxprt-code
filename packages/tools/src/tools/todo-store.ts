@@ -179,19 +179,6 @@ export class TodoStore {
   }
 
   /**
-   * Read the full file data including todos and paused state.
-   *
-   * Resolves the file path exactly once for the entire operation and threads
-   * that captured path through both the exists-check and the read.
-   * This guarantees a dynamic resolver that changes between calls cannot split
-   * the exists/read across different directories.
-   */
-  private async readFileData(): Promise<TodoFileData> {
-    const filePath = this.resolveFilePath();
-    return this.readFileDataAt(filePath);
-  }
-
-  /**
    * Reads file data at a specific captured path. The path is resolved once by
    * the caller and threaded through so a dynamic resolver cannot split a
    * single logical operation across directories.
@@ -235,8 +222,18 @@ export class TodoStore {
     await fs.promises.writeFile(filePath, content, 'utf8');
   }
 
+  /**
+   * Reads the todo list. The complete read transaction is queued behind
+   * earlier transactions for the same resolved path, so it can never observe
+   * a same-process partial write.
+   *
+   * Resolves the file path exactly once for the entire operation.
+   */
   async readTodos(): Promise<Todo[]> {
-    const data = await this.readFileData();
+    const filePath = this.resolveFilePath();
+    const data = await runTodoPathTransaction(filePath, () =>
+      this.readFileDataAt(filePath),
+    );
     return data.todos;
   }
 
@@ -245,23 +242,34 @@ export class TodoStore {
    *
    * Resolves the file path exactly once for the whole logical operation
    * (read-existing + write) so a dynamic resolver cannot split the read and
-   * write across different directories.
+   * write across different directories. The read-preserve-write transaction
+   * is queued behind earlier transactions for the same resolved path so
+   * concurrent writers cannot overwrite each other's fields.
    */
   async writeTodos(todos: Todo[]): Promise<void> {
     const filePath = this.resolveFilePath();
-    const existingData = await this.readFileDataAt(filePath);
-    await this.writeFileDataAt(filePath, {
-      todos,
-      paused: existingData.paused,
+    await runTodoPathTransaction(filePath, async () => {
+      const existingData = await this.readFileDataAt(filePath);
+      await this.writeFileDataAt(filePath, {
+        todos,
+        paused: existingData.paused,
+      });
     });
   }
 
   /**
    * Read the paused state from the task file.
-   * Returns false if file doesn't exist or is in legacy format.
+   * Returns false if file doesn't exist or is in legacy format. The complete
+   * read transaction is queued behind earlier transactions for the same
+   * resolved path, so it can never observe a same-process partial write.
+   *
+   * Resolves the file path exactly once for the entire operation.
    */
   async readPausedState(): Promise<boolean> {
-    const data = await this.readFileData();
+    const filePath = this.resolveFilePath();
+    const data = await runTodoPathTransaction(filePath, () =>
+      this.readFileDataAt(filePath),
+    );
     return data.paused;
   }
 
@@ -270,16 +278,62 @@ export class TodoStore {
    *
    * Resolves the file path exactly once for the whole logical operation
    * (read-existing + write) so a dynamic resolver cannot split the read and
-   * write across different directories.
+   * write across different directories. The read-preserve-write transaction
+   * is queued behind earlier transactions for the same resolved path so
+   * concurrent writers cannot overwrite each other's fields.
    */
   async writePausedState(paused: boolean): Promise<void> {
     const filePath = this.resolveFilePath();
-    const existingData = await this.readFileDataAt(filePath);
-    await this.writeFileDataAt(filePath, {
-      todos: existingData.todos,
-      paused,
+    await runTodoPathTransaction(filePath, async () => {
+      const existingData = await this.readFileDataAt(filePath);
+      await this.writeFileDataAt(filePath, {
+        todos: existingData.todos,
+        paused,
+      });
     });
   }
+}
+
+/**
+ * Process-local transaction queues keyed by the platform-native lexically
+ * normalized resolved todo-file path (issue #3239). Todo tools construct a
+ * fresh TodoStore per call, so same-file coordination cannot live on any
+ * single instance. Queuing each complete read or read-modify-write
+ * transaction prevents concurrent same-file operations from interleaving
+ * filesystem access and overwriting each other's fields. Normalization is
+ * lexical only (path.normalize): different spellings of one directory share
+ * a queue, while symlink and hardlink aliasing stay outside the
+ * coordination contract.
+ */
+const todoPathQueues = new Map<string, Promise<void>>();
+
+/**
+ * Runs `transaction` after every previously invoked transaction for the
+ * same resolved path has settled, in invocation order. The queue is keyed
+ * by the lexically normalized path while the transaction keeps using the
+ * caller's once-resolved path for I/O. The queue tail never rejects and
+ * removes itself once idle, so a failed transaction still releases its
+ * successors and inactive paths do not accumulate. Different paths are
+ * independent map entries and stay concurrent.
+ */
+function runTodoPathTransaction<T>(
+  filePath: string,
+  transaction: () => Promise<T>,
+): Promise<T> {
+  const queueKey = path.normalize(filePath);
+  const predecessor = todoPathQueues.get(queueKey) ?? Promise.resolve();
+  const result = predecessor.then(transaction);
+  const settled = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  todoPathQueues.set(queueKey, settled);
+  void settled.then(() => {
+    if (todoPathQueues.get(queueKey) === settled) {
+      todoPathQueues.delete(queueKey);
+    }
+  });
+  return result;
 }
 
 /**

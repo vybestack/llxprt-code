@@ -29,6 +29,7 @@ import type { LiveOutputUpdate } from '@vybestack/llxprt-code-core/utils/termina
 import { triggerToolNotificationHook } from '@vybestack/llxprt-code-core/core/coreToolHookTriggers.js';
 import { ToolExecutor } from '../scheduler/tool-executor.js';
 import { ToolDispatcher } from '../scheduler/tool-dispatcher.js';
+import { launchCallsWithSamePathOrdering } from '../scheduler/mutation-ordering.js';
 import {
   ResultAggregator,
   type ResultPublishCallbacks,
@@ -693,17 +694,46 @@ export class CoreToolScheduler implements ToolSchedulerContract {
           signal,
         );
       } else {
-        const toolPromises = callsToExecute.map((toolCall) => {
-          const scheduledCall = toolCall;
-          const executionIndex = executionIndices.get(
-            scheduledCall.request.callId,
-          )!;
-          return this.launchToolExecution(
-            scheduledCall,
-            executionIndex,
-            signal,
-          );
-        });
+        // Issue #3239: mutating calls whose normalized toolLocations overlap
+        // an earlier call in the batch wait for that call to settle before
+        // launching, preserving request order for same-file read-modify-write
+        // tools. All other calls launch concurrently exactly as before, and
+        // each launch promise resolves (never rejects) once its result is
+        // buffered and published, so a failed predecessor still releases its
+        // dependents.
+        const executionIndexOf = (call: ScheduledToolCall): number => {
+          const index = executionIndices.get(call.request.callId);
+          if (index === undefined) {
+            throw new Error(
+              `No execution index assigned for tool call ${call.request.callId}.`,
+            );
+          }
+          return index;
+        };
+        const toolPromises = launchCallsWithSamePathOrdering(
+          callsToExecute,
+          (scheduledCall) =>
+            this.launchToolExecution(
+              scheduledCall,
+              executionIndexOf(scheduledCall),
+              signal,
+            ),
+          signal,
+          (abandonedCall) => {
+            // A waiting same-path mutation abandoned by an abort never
+            // launches, so nothing else will buffer its result. Without a
+            // cancelled placeholder at its execution index, ordered
+            // publication stalls and the stale cursor corrupts the next
+            // batch scheduled on this scheduler.
+            const callId = abandonedCall.request.callId;
+            this.resultAggregator.bufferCancelled(
+              callId,
+              abandonedCall,
+              executionIndexOf(abandonedCall),
+            );
+            void this.publishBufferedResults(signal);
+          },
+        );
 
         const batchPromise = Promise.all(toolPromises);
         await this.awaitBatchOrAbort(callsToExecute, batchPromise, signal);
