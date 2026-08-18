@@ -32,7 +32,7 @@ import {
   buildRegistry,
   buildScheduler,
   trackPublicationOrder,
-} from './coreToolScheduler-same-path-mutations-helpers.js';
+} from '../test-utils/coreToolScheduler-same-path-mutations-helpers.js';
 
 describe('CoreToolScheduler same-path mutation ordering', () => {
   it('holds a later same-path mutation until the earlier one settles', async () => {

@@ -14,10 +14,10 @@ import { beforeEach, afterEach } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CoreToolScheduler, type ToolCall } from './coreToolScheduler.js';
-import type { CompletedToolCall } from './coreToolScheduler.js';
+import { CoreToolScheduler, type ToolCall } from '../core/coreToolScheduler.js';
+import type { CompletedToolCall } from '../core/coreToolScheduler.js';
 import type { ToolCallRequestInfo } from '@vybestack/llxprt-code-core/core/turn.js';
-import { createMockConfig } from './coreToolScheduler-test-helpers.js';
+import { createMockConfig } from '../core/coreToolScheduler-test-helpers.js';
 import { createSessionMessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
   BaseDeclarativeTool,
