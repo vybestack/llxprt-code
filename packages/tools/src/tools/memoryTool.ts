@@ -10,6 +10,7 @@ import {
   Kind,
   type ToolEditConfirmationDetails,
   ToolConfirmationOutcome,
+  type ToolLocation,
   type ToolResult,
 } from './tools.js';
 import type { FunctionDeclaration } from '../types/wire-types.js';
@@ -289,6 +290,19 @@ class MemoryToolInvocation extends BaseToolInvocation<
     this.getWorkingDir = () => workingDir;
   }
 
+  /**
+   * Memory additions write the resolved memory file, so they report that
+   * target through the standard location contract and participate in
+   * scheduler same-path mutation ordering. Read-only invocations report no
+   * location.
+   */
+  override toolLocations(): ToolLocation[] {
+    if (this.params.read === true) {
+      return [];
+    }
+    return [{ path: this.getMemoryFilePath() }];
+  }
+
   private resolveWorkingDir(): string | undefined {
     return this.getWorkingDir?.();
   }
@@ -463,7 +477,7 @@ export class MemoryTool
       MemoryTool.Name,
       'SaveMemory',
       memoryToolDescription,
-      Kind.Think,
+      Kind.Edit,
       memoryToolSchemaData.parametersJsonSchema as Record<string, unknown>,
       false, // output is not markdown
       false, // output cannot be updated
