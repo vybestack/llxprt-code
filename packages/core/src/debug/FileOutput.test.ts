@@ -506,12 +506,36 @@ describe('FileOutput', () => {
       void fileOutput.write(entry); // Don't await to allow queueing
     }
 
-    // Queue should be limited to max size
-    // We can't directly test the queue size, but the implementation
-    // should handle this gracefully without memory issues
-    expect(true).toBe(true); // Test that we don't crash
-
+    // The first write flushes immediately (its append is blocked in flight);
+    // while it is blocked the other 1,099 writes queue up and the
+    // 1,000-entry cap slices off the oldest queued entries. Releasing the
+    // append and disposing force-flushes the survivors, so the outcome is
+    // deterministic instead of racing the 1s flush timer.
     resolveAppend();
+    await FileOutput.disposeInstance();
+
+    const payloads = (fs.appendFile as Mock<typeof fs.appendFile>).mock.calls
+      .map((call) => String(call[1]))
+      .join('');
+    const appendedEntries = payloads.split('"overflow message ').length - 1;
+
+    // The cap must have dropped some entries — without it all 1,100 would
+    // be persisted. With it, at most 1,001 survive (1 in-flight + 1,000
+    // queued, or fewer if the in-flight batch was already counted).
+    expect(appendedEntries).toBeLessThanOrEqual(1001);
+    expect(appendedEntries).toBeLessThan(1100);
+
+    // A mid-window entry survived the cap, confirming the cap kept a
+    // broad range (not just the newest few). Entry 600 is well inside the
+    // survivor window if 1,000 entries were retained.
+    expect(payloads).toContain('"overflow message 600"}');
+
+    // The newest entries survived the cap; older queued entries were
+    // dropped. Entry 1,099 is the newest, entry 50 is near the front of
+    // the dropped range. A no-cap implementation would also persist
+    // entry 50, so asserting its absence specifically tests the drop.
+    expect(payloads).toContain('"overflow message 1099"}');
+    expect(payloads).not.toContain('"overflow message 50"}');
   });
 
   /**

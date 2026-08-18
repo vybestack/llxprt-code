@@ -115,6 +115,13 @@ Is it the component you're testing?
    expects. The test is worthless: it can never fail for the right reason.
 3. **Mock verification** — asserting a mock was called
    (`expect(mockFn).toHaveBeenCalledWith(...)`) proves nothing about real code.
+4. **Mirror-echo assertion** — configuring a stub with a literal and asserting
+   that same literal back (`.mockReturnValue('JIT_MARKER')` …
+   `expect(policy.marker).toBe('JIT_MARKER')`). Unless producing that literal
+   IS the behavior under test, the test asserts its own configuration and can
+   never fail for the right reason. Assert a derived property instead —
+   ordering, precedence, counts, aggregation — with literals on the input side
+   only.
 
 Also watch for: the mock chain (A calls MockB calls MockC — no real code tested)
 and mocks with complex implementations (if the mock has the logic, test the real
@@ -145,3 +152,22 @@ After writing a test, all four answers must be the "good" one:
 - No linting warnings (`npm run lint`).
 - No console.logs or debug code left behind.
 - Every production line you touched is covered by behavior tests.
+- Self-check files you touched with the AST test-audit scanner:
+  `bun scripts/test-audit/scan.ts` — no new MOCK_MIRROR, ALWAYS_TRUE,
+  SELF_CONFIRMING, or NO_ASSERT findings may appear on them. The scanner
+  runs over the full corpus and writes `findings.tsv` + `file-stats.tsv` to
+  the output dir (defaults to `tmp/test-audit`). To compare against the
+  baseline, run it once on `main` with a custom output dir, then on your
+  branch with a different output dir, and diff the TSVs:
+  `bun scripts/test-audit/scan.ts tmp/scan-main` vs
+  `bun scripts/test-audit/scan.ts tmp/scan-branch`, then
+  `diff tmp/scan-main/findings.tsv tmp/scan-branch/findings.tsv`.
+  Note: the scanner compares exact stable literals (not substrings) between
+  mock configurations and assertion arguments. A MOCK_MIRROR finding on a
+  test that verifies a transformation (e.g., asserting `'A
+B'` where the
+  stub returns `'A'` and `'B'` separately) is a false positive — the
+  assertion literal does not exactly match any single mock literal. Inspect
+  the exact positive equality that triggered the finding before dismissing
+  it. Disjoint-source and leakage assertions (e.g., `not.toContain('X')`)
+  are not mirror echoes and will not trigger MOCK_MIRROR.

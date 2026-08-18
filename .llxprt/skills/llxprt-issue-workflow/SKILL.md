@@ -51,7 +51,11 @@ green, review-clean pull request.
 2. Have deepthinker review for compliance and issue intent (it must also run the
    verification cycle).
 3. If review fails: remediate with typescriptexpert (giving feedback, run
-   verification), then have deepthinker review again — loop until satisfied.
+   verification), then have deepthinker review again. **Cap: at most 2
+   review rounds total** (initial + 1 remediation). If the second round
+   still has findings, fix HIGH-severity items, document remaining
+   MEDIUM/LOW as known follow-ups in the plan, and proceed to PR.
+   Do NOT enter an infinite review loop.
 
 ## 4. Verification cycle (how AND when)
 
@@ -100,8 +104,11 @@ Also see the `open-code-review` skill.
 6. If stdout is lost anyway, recover findings from
    ~/.opencodereview/sessions/*/*.jsonl (grep for `code_comment` tool calls).
 7. Address EVERY ocr finding: remediate with typescriptexpert, re-run the
-   verification cycle, and re-run ocr if changes were significant — loop until
-   ocr is clean.
+   verification cycle, and re-run ocr if changes were significant.
+   **Cap: at most 2 OCR rounds total** (initial + 1 remediation). If the
+   second round still has findings, fix HIGH-severity items, document
+   remaining MEDIUM/LOW as known follow-ups in the plan, and proceed to PR.
+   Do NOT enter an infinite review loop.
 
 ## 6. Create the PR
 

@@ -49,18 +49,25 @@ describe('Issue #1468 getProfileBuckets case 12', () => {
       },
       'named-bucket',
     );
-    mockFetchAnthropicUsage.mockResolvedValue({ bucket: 'named-bucket' });
+    // The fetch result is derived from the token it receives, so the value
+    // asserted below can only match if the manager selected the profile
+    // bucket's token.
+    mockFetchAnthropicUsage.mockImplementation(async (token: string) => ({
+      fetchedToken: token,
+    }));
 
-    const statusesBeforeLogout =
-      await manager.getAuthStatusWithBuckets('claudecode');
+    // Verify the auth-status service path identifies the named bucket as a
+    // session bucket — the getAuthStatusWithBuckets coverage is separate
+    // from the usage fetch and must not regress.
+    const statuses = await manager.getAuthStatusWithBuckets('claudecode');
     expect(
-      statusesBeforeLogout.find((status) => status.bucket === 'named-bucket')
+      statuses.find((status) => status.bucket === 'named-bucket')
         ?.isSessionBucket,
     ).toBe(true);
 
     const usage = await manager.getAnthropicUsageInfo();
     expect(mockFetchAnthropicUsage).toHaveBeenCalledWith('named-bucket-token');
-    expect(usage).toStrictEqual({ bucket: 'named-bucket' });
+    expect(usage).toStrictEqual({ fetchedToken: 'named-bucket-token' });
 
     await manager.logout('claudecode');
 

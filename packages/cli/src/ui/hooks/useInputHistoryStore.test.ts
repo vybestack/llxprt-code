@@ -235,10 +235,14 @@ describe('useInputHistoryStore', () => {
     });
 
     it('should preserve non-consecutive duplicates', async () => {
+      // Newest-first with a non-consecutive duplicate and deliberately NOT a
+      // palindrome, so the expected oldest-first order is a derived value: a
+      // passthrough that skips the reversal would leave message3 first and
+      // fail this test.
       const mockLogger = {
         getPreviousUserMessages: vi
           .fn()
-          .mockResolvedValue(['message2', 'message1', 'message2']), // newest first with non-consecutive duplicate
+          .mockResolvedValue(['message3', 'message1', 'message2', 'message1']),
       };
 
       const { result } = renderHook(() => useInputHistoryStore());
@@ -247,11 +251,13 @@ describe('useInputHistoryStore', () => {
         await result.current.initializeFromLogger(mockLogger);
       });
 
-      // Non-consecutive duplicates should be preserved
+      // Non-consecutive duplicates are preserved and the store serves
+      // oldest-first (reversed from the logger's newest-first order).
       expect(result.current.inputHistory).toStrictEqual([
-        'message2',
         'message1',
         'message2',
+        'message1',
+        'message3',
       ]);
     });
 

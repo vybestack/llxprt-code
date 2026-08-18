@@ -275,10 +275,13 @@ describe('useSlashCommandProcessor', () => {
   });
 
   it('loads slash commands via BuiltinCommandLoader', async () => {
-    const testCommand = createTestCommand({ name: 'subagent' });
-    loaderMocks.builtinLoaderInstance.loadCommands.mockResolvedValue([
-      testCommand,
-    ]);
+    const testCommands = [
+      createTestCommand({ name: 'subagent' }),
+      createTestCommand({ name: 'about' }),
+    ];
+    loaderMocks.builtinLoaderInstance.loadCommands.mockResolvedValue(
+      testCommands,
+    );
 
     useSlashCommandProcessor(
       mockConfig,
@@ -309,6 +312,20 @@ describe('useSlashCommandProcessor', () => {
       ?.value;
     await commandsPromise;
 
-    expect(latestCommands).toStrictEqual([testCommand]);
+    // The hook's contract here is forwarding the builtin loader's result to
+    // the commands callback; assert a derived projection of behaviorally
+    // relevant fields so a dropped field, misrouted load, or mutation
+    // cannot pass by echoing a constant. The forwarded command names AND
+    // kinds can only match if the loader was called and its complete
+    // result was routed to the state setter.
+    expect(
+      latestCommands.map((command) => ({
+        name: command.name,
+        kind: command.kind,
+      })),
+    ).toStrictEqual([
+      { name: 'subagent', kind: 'built-in' },
+      { name: 'about', kind: 'built-in' },
+    ]);
   });
 });

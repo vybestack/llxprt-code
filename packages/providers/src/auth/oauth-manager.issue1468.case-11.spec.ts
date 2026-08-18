@@ -48,11 +48,16 @@ describe('Issue #1468 getProfileBuckets case 11', () => {
       'bucket-b',
     );
     manager.setSessionBucket('claudecode', 'bucket-b');
-    mockFetchAnthropicUsage.mockResolvedValue({ bucket: 'bucket-b' });
+    // The fetch implementation derives its response from the token it
+    // receives, so the asserted value can only match if the manager
+    // selected the foreground session bucket's token.
+    mockFetchAnthropicUsage.mockImplementation(async (token: string) => ({
+      fetchedToken: token,
+    }));
 
     const usage = await manager.getAnthropicUsageInfo();
 
     expect(mockFetchAnthropicUsage).toHaveBeenCalledWith('bucket-b-token');
-    expect(usage).toStrictEqual({ bucket: 'bucket-b' });
+    expect(usage).toStrictEqual({ fetchedToken: 'bucket-b-token' });
   });
 });

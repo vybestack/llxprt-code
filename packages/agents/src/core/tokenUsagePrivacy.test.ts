@@ -133,7 +133,20 @@ describe('tokenUsagePrivacy (AC-10) — no sensitive content in JSONL', () => {
     expect(record.record_type).toBe('turn');
     expect(record.tool_calls).toBeDefined();
     expect(record.instructions_tokens).toBeDefined();
-    expect(resultTokenField(record, 'tool_calls'));
+    // Exactly one tool_call block is in the fixture, so the recorded array
+    // must have length 1 — the value, not just field presence, is the
+    // contract. The entry must carry only privacy-safe fields.
+    const toolCalls = record.tool_calls;
+    expect(Array.isArray(toolCalls)).toBe(true);
+    expect(toolCalls).toHaveLength(1);
+    const firstCall = Array.isArray(toolCalls) ? toolCalls[0] : undefined;
+    expect(typeof firstCall).toBe('object');
+    expect(firstCall).not.toBeNull();
+    const toolCall = firstCall as Record<string, unknown>;
+    expect(toolCall.call_id).toBe('call-priv-1');
+    expect(toolCall.tool_name).toBe('read_file');
+    expect(toolCall.result_tokens).toBe(9);
+    expect(toolCall.was_truncated).toBe(false);
     expect(record.prefix_fingerprint).toBeDefined();
     expect(record.new_tool_result_tokens).toBeDefined();
   });
@@ -227,24 +240,20 @@ describe('tokenUsagePrivacy (AC-10) — no sensitive content in JSONL', () => {
     expect(raw).not.toContain(RESULT_SENTINEL);
 
     const record = JSON.parse(raw.trim()) as Record<string, unknown>;
-    const toolCalls = record.tool_calls as Array<Record<string, unknown>>;
-    expect(toolCalls).toHaveLength(1);
-    const entry = toolCalls[0];
+    const toolCalls = record.tool_calls;
+    expect(Array.isArray(toolCalls)).toBe(true);
+    const entry = Array.isArray(toolCalls) ? toolCalls[0] : undefined;
+    expect(entry).toBeDefined();
+    expect(typeof entry).toBe('object');
+    expect(entry).not.toBeNull();
+    const entryRec = entry as Record<string, unknown>;
     // Only these four keys are permitted per entry.
-    expect(Object.keys(entry).sort()).toEqual(
+    expect(Object.keys(entryRec).sort()).toEqual(
       ['call_id', 'result_tokens', 'tool_name', 'was_truncated'].sort(),
     );
-    expect(entry.call_id).toBe('call-tc');
-    expect(entry.tool_name).toBe('search');
-    expect(typeof entry.result_tokens).toBe('number');
-    expect(entry.was_truncated).toBe(false);
+    expect(entryRec.call_id).toBe('call-tc');
+    expect(entryRec.tool_name).toBe('search');
+    expect(typeof entryRec.result_tokens).toBe('number');
+    expect(entryRec.was_truncated).toBe(false);
   });
 });
-
-/** Asserts that a field is defined; helper to keep the test readable. */
-function resultTokenField(
-  record: Record<string, unknown>,
-  field: string,
-): void {
-  expect(record[field]).toBeDefined();
-}

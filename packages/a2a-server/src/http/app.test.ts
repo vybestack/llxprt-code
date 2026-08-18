@@ -904,26 +904,65 @@ describe('E2E Tests', () => {
       });
 
       it('should handle non-streaming commands gracefully', async () => {
-        const mockNonStreamCommand = {
-          name: 'non-stream-test',
-          description: 'A test non-streaming command',
-          execute: vi
-            .fn()
-            .mockResolvedValue({ name: 'non-stream-test', data: 'done' }),
-        };
-        mockCommandLookup(mockNonStreamCommand);
-
+        const registry = new Map<
+          string,
+          {
+            name: string;
+            description: string;
+            execute: ReturnType<typeof vi.fn>;
+          }
+        >([
+          [
+            'non-stream-test',
+            {
+              name: 'non-stream-test',
+              description: 'First test command',
+              execute: vi.fn().mockResolvedValue({
+                name: 'non-stream-test',
+                data: 'first-done',
+              }),
+            },
+          ],
+          [
+            'other-command',
+            {
+              name: 'other-command',
+              description: 'Second test command',
+              execute: vi.fn().mockResolvedValue({
+                name: 'other-command',
+                data: 'second-done',
+              }),
+            },
+          ],
+        ]);
+        commandLookupSpies.push(
+          vi
+            .spyOn(commandRegistry, 'get')
+            .mockImplementation((name: string) => registry.get(name)),
+        );
         const agent = request.agent(app);
-        const res = await agent
+        const first = await agent
           .post('/executeCommand')
           .send({ command: 'non-stream-test', args: [] })
           .set('Content-Type', 'application/json')
           .expect(200);
-
-        expect(res.body).toStrictEqual({
+        expect(first.body).toStrictEqual({
           name: 'non-stream-test',
-          data: 'done',
+          data: 'first-done',
         });
+        const second = await agent
+          .post('/executeCommand')
+          .send({ command: 'other-command', args: [] })
+          .set('Content-Type', 'application/json')
+          .expect(200);
+        expect(second.body).toStrictEqual({
+          name: 'other-command',
+          data: 'second-done',
+        });
+        expect(registry.get('non-stream-test')!.execute).toHaveBeenCalledTimes(
+          1,
+        );
+        expect(registry.get('other-command')!.execute).toHaveBeenCalledTimes(1);
       });
     });
   });

@@ -260,6 +260,7 @@ describe('resolveNpmCliJs existence verification', () => {
   });
 
   it('error includes the probed paths in details', () => {
+    let caught: (Error & { details?: { probed: string[] } }) | null = null;
     try {
       resolveNpmCliJs({
         env: {},
@@ -267,15 +268,17 @@ describe('resolveNpmCliJs existence verification', () => {
         existsSync: () => false,
       });
     } catch (e) {
-      const err = e as Error & { details?: { probed: string[] } };
-      expect(err.details).toBeDefined();
-      // On POSIX hosts the path module produces a POSIX-joined fallback; on
-      // Windows it is backslash-joined. Assert the npm-cli.js suffix only.
-      expect(err.details?.probed).toHaveLength(1);
-      expect(err.details?.probed[0]).toMatch(
-        /node_modules[\\/]npm[\\/]bin[\\/]npm-cli\.js$/,
-      );
+      caught = e as Error & { details?: { probed: string[] } };
     }
+    // The resolver must throw when no candidate exists; resolving normally
+    // would leave `caught` null and fail here instead of silently passing.
+    expect(caught).toBeInstanceOf(NpmCliNotFoundError);
+    expect(caught?.details?.probed).toHaveLength(1);
+    // On POSIX hosts the path module produces a POSIX-joined fallback; on
+    // Windows it is backslash-joined. Assert the npm-cli.js suffix only.
+    expect(caught?.details?.probed?.[0]).toMatch(
+      /node_modules[\\/]npm[\\/]bin[\\/]npm-cli\.js$/,
+    );
   });
 
   it('falls back when npm_execpath is set but missing, if the fallback exists', () => {
@@ -367,6 +370,7 @@ describe('resolveNpmCliJs existence verification', () => {
     });
 
     it('includes prefix probed paths in the error details when all fail', () => {
+      let caught: (Error & { details?: { probed: string[] } }) | null = null;
       try {
         resolveNpmCliJs({
           env: {
@@ -377,13 +381,15 @@ describe('resolveNpmCliJs existence verification', () => {
           existsSync: () => false,
         });
       } catch (e) {
-        const err = e as Error & { details?: { probed: string[] } };
-        expect(err.details).toBeDefined();
-        // probed should include the NPM_CONFIG_PREFIX and APPDATA candidates.
-        const probedStr = JSON.stringify(err.details?.probed);
-        expect(probedStr).toContain('C:\\\\prefix');
-        expect(probedStr).toContain('C:\\\\appdata');
+        caught = e as Error & { details?: { probed: string[] } };
       }
+      // The resolver must throw when every candidate is missing; a normal
+      // return would leave `caught` null and fail here.
+      expect(caught).toBeInstanceOf(NpmCliNotFoundError);
+      // probed should include the NPM_CONFIG_PREFIX and APPDATA candidates.
+      const probedStr = JSON.stringify(caught?.details?.probed);
+      expect(probedStr).toContain('C:\\\\prefix');
+      expect(probedStr).toContain('C:\\\\appdata');
     });
   });
 });
@@ -487,18 +493,21 @@ describe('resolveNpmCliJs PATH/npm.cmd fallback', () => {
       }),
     ).toThrow(NpmCliNotFoundError);
 
+    let caught: (Error & { details?: { probed: string[] } }) | null = null;
     try {
       resolveNpmCliJs({
         execPath: RUNTIME_EXEC_PATH,
         env: { PATH: joinPath(PATH_DIR) },
         existsSync,
       });
-      expect.unreachable('resolveNpmCliJs should have thrown');
     } catch (e) {
-      const err = e as Error & { details?: { probed: string[] } };
-      expect(err.details?.probed).toContain(cliUnder(PATH_DIR));
-      expect(err.message).toContain('npm.cmd');
+      caught = e as Error & { details?: { probed: string[] } };
     }
+    // The details contract is asserted outside the catch so a non-throwing
+    // resolver fails the test instead of skipping the assertions.
+    expect(caught).toBeInstanceOf(NpmCliNotFoundError);
+    expect(caught?.details?.probed).toContain(cliUnder(PATH_DIR));
+    expect(caught?.message).toContain('npm.cmd');
   });
 
   it('does not throw on a missing or empty PATH', () => {
