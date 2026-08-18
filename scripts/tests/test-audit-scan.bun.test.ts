@@ -66,11 +66,11 @@ function findOne(
   const hit = findings.find(
     (f) => f.flag === flag && f.test.includes(testNameFragment),
   );
-  expect(hit).toBeDefined();
-  if (!hit)
+  if (!hit) {
     throw new Error(
       `no ${flag} finding for test containing '${testNameFragment}'`,
     );
+  }
   return hit;
 }
 
@@ -133,7 +133,7 @@ describe('test-audit scanner: negative control and stats', () => {
     // 12 it() tests + 1 it.each test (counted as 1 by the scanner's
     // decorator-chain logic) = 13 total.
     expect(stats.tests).toBe(13);
-    expect(stats.asserts).toBeGreaterThanOrEqual(10);
+    expect(stats.asserts).toBe(15);
   });
 
   it('attributes every finding to a named test with a line number', () => {
@@ -166,9 +166,9 @@ describe('test-audit scanner: new detector coverage', () => {
 
   it('detects it.each parametric tests (not zero-test)', () => {
     const { stats, findings } = runFixture();
-    // The fixture has 13 tests total (11 it() + 1 it.each + 1 negative
-    // control). If the decorator-chain detection regressed and treated
-    // it.each as zero tests, the count would drop to 12.
+    // The fixture has 13 tests total (12 it() + 1 it.each). If the
+    // decorator-chain detection regressed and treated it.each as zero
+    // tests, the count would drop to 12.
     expect(stats.tests).toBe(13);
     // The it.each test must not be flagged as NO_ASSERT — it has
     // assertions inside its callback.

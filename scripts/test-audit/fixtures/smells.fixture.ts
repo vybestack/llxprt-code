@@ -80,7 +80,7 @@ describe('fixture smells (parse-only, never executed)', () => {
     expect(result).toMatchSnapshot();
   });
 
-  it('uses it.each to check parametric cases', () => {
+  it('uses a manual loop to check parametric cases', () => {
     const cases: Array<[number, number]> = [
       [1, 2],
       [2, 4],

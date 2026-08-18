@@ -167,15 +167,15 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
     /**
      * @scenario OAuth enablement config persists across resolver instances
      * @given OAuth enabled for device-code-test
-     * @when New resolver instance is constructed from the same config
-     * @then OAuth remains enabled
+     * @when New resolver instance is constructed from the updated config flag
+     * @then OAuth reflects the new flag value
      * @and Can be toggled again
      */
-    it('should gate OAuth on the enablement config across resolver instances', async () => {
+    it('should gate OAuth on the isOAuthEnabled constructor flag across resolver instances', async () => {
       delete process.env.OPENAI_API_KEY;
-      // The enablement record is the config seam: every new resolver
-      // instance reads it, the way production wiring reads stored enablement
-      // when constructing providers.
+      // The enablement flag is a constructor parameter: each new resolver
+      // instance reads it at construction time, the way production wiring
+      // reads stored enablement when constructing providers.
       const persistedEnablement: Record<string, boolean> = {};
       const tokenRequests: string[] = [];
       const buildResolver = (): AuthPrecedenceResolver =>

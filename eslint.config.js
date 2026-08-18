@@ -619,7 +619,7 @@ export default tseslint.config(
   // can stay in one file for ease of maintenance.
   // ============================================================================
   {
-    files: ['scripts/test-audit/**/*.ts'],
+    files: ['scripts/test-audit/scan.ts'],
     rules: {
       'max-lines': 'off', // eslint-policy-allow-off: #3240 single-file scanner
       'max-lines-per-function': 'off', // eslint-policy-allow-off: #3240

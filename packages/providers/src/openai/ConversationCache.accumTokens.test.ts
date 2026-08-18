@@ -66,8 +66,7 @@ describe('ConversationCache.accumTokens', () => {
     // Use a controlled clock so the TTL boundary is deterministic, not a
     // wall-clock race. Bun does not provide fake timers, so we spy on
     // Date.now to advance time in test-space. try/finally ensures the
-    // global clock is restored even if an assertion fails.
-    const realNow = Date.now;
+    // spy is restored even if an assertion fails.
     let currentTime = 1_000_000;
     const spy = vi.spyOn(Date, 'now').mockImplementation(() => currentTime);
 
@@ -89,7 +88,6 @@ describe('ConversationCache.accumTokens', () => {
       expect(shortCache.getAccumulatedTokens('conv1', 'parent1')).toBe(0);
     } finally {
       spy.mockRestore();
-      Date.now = realNow;
     }
   });
 

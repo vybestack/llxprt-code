@@ -477,9 +477,14 @@ describe('FileOutput', () => {
     expect(appendedEntries).toBeLessThanOrEqual(1001);
     expect(appendedEntries).toBeLessThan(1100);
 
+    // A mid-window entry survived the cap, confirming the cap kept a
+    // broad range (not just the newest few). Entry 600 is well inside the
+    // survivor window if 1,000 entries were retained.
+    expect(payloads).toContain('"overflow message 600"}');
+
     // The newest entries survived the cap; older queued entries were
-    // dropped. Entry 1,099 is the newest, entry 100 is near the front of
-    // the survivor window. A no-cap implementation would also persist
+    // dropped. Entry 1,099 is the newest, entry 50 is near the front of
+    // the dropped range. A no-cap implementation would also persist
     // entry 50, so asserting its absence specifically tests the drop.
     expect(payloads).toContain('"overflow message 1099"}');
     expect(payloads).not.toContain('"overflow message 50"}');

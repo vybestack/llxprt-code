@@ -143,6 +143,8 @@ function stableLiteral(n: ts.Node | undefined): string | null {
   if (n.kind === ts.SyntaxKind.TrueKeyword) return 'true';
   if (n.kind === ts.SyntaxKind.FalseKeyword) return 'false';
   if (n.kind === ts.SyntaxKind.NullKeyword) return 'null';
+  if (n.kind === ts.SyntaxKind.UndefinedKeyword) return 'undefined';
+  if (ts.isBigIntLiteral(n)) return n.text;
   if (ts.isObjectLiteralExpression(n)) {
     const parts = n.properties.map((p) => {
       if (ts.isPropertyAssignment(p)) {
@@ -150,7 +152,8 @@ function stableLiteral(n: ts.Node | undefined): string | null {
         return v === null ? null : `${p.name.getText()}:${v}`;
       }
       if (ts.isShorthandPropertyAssignment(p)) return `${p.name.getText()}:?`;
-      return '?';
+      // Spread elements and methods are not stable literals.
+      return null;
     });
     // If any child is not a stable literal, reject the whole object.
     if (parts.some((p) => p === null)) return null;
@@ -252,7 +255,6 @@ function isRegexStart(out: string): boolean {
     last === '-' ||
     last === '*' ||
     last === '%' ||
-    last === '<' ||
     last === '>' ||
     last === '\n'
   );
@@ -302,8 +304,9 @@ function literalOfText(text: string): string | null {
 function isPlainActual(text: string): boolean {
   const t = text.trim();
   // A "plain" actual is a simple identifier or member-access chain —
-  // not a transformation (call, binary op, template, etc.).
-  return /^[a-zA-Z_$][\w$]*(\.[a-zA-Z_$][\w$]*)*$/.test(t);
+  // not a transformation (call, binary op, template, etc.). Optional
+  // chaining (?.) is treated the same as regular member access.
+  return /^[a-zA-Z_$][\w$]*(\??\.[a-zA-Z_$][\w$]*)*$/.test(t);
 }
 
 interface CallChain {
@@ -446,8 +449,9 @@ export function scanFile(
   const suiteStack: string[] = [];
 
   // Collect named function declarations for fnBody() lookup, and track
-  // which ones are actually referenced as it()/test() callbacks so we
-  // only skip those during traversal (not all named functions).
+  // which ones are actually referenced as it()/test() or describe()
+  // callbacks so we only skip those during traversal (not all named
+  // functions).
   const namedFunctions = new Map<string, ts.FunctionLikeDeclaration>();
   const usedAsTestCallback = new Set<string>();
   function collectNamedFunctions(node: ts.Node): void {
@@ -457,10 +461,14 @@ export function scanFile(
     ) {
       namedFunctions.set(node.name.text, node);
     }
-    // Detect it('name', namedFunc) / test('name', namedFunc) references
+    // Detect it('name', namedFunc) / test('name', namedFunc) and
+    // describe('name', namedFunc) references
     if (ts.isCallExpression(node)) {
       const chain = unwrapCallChain(node);
-      if (chain && TEST_ROOTS.has(chain.root)) {
+      if (
+        chain &&
+        (TEST_ROOTS.has(chain.root) || DESCRIBE_ROOTS.has(chain.root))
+      ) {
         const arg = node.arguments[chain.suffixes.length > 0 ? 1 : 1];
         if (arg && ts.isIdentifier(arg)) {
           usedAsTestCallback.add(arg.text);
@@ -600,7 +608,7 @@ export function scanFile(
 
     if (
       expects.length === 0 &&
-      !/expect\(|fc\.assert|\.rejects|\.resolves|toThrow\(|assert\(|assert\.ok|assert\.equal|assert\.strictEqual|assert\.deepEqual|assert\.throws|assert\.doesNotThrow|assert\.notStrictEqual|assert\.notDeepEqual|assert\.fail|assert\.true|assert\.false|assert\.isNull|assert\.isNotNull|assert\.isUndefined|assert\.isDefined/.test(
+      !/expect\(|expect`|fc\.assert|\.rejects|\.resolves|toThrow\(|assert\(|assert\.ok|assert\.equal|assert\.strictEqual|assert\.deepEqual|assert\.throws|assert\.doesNotThrow|assert\.notStrictEqual|assert\.notDeepEqual|assert\.fail|assert\.true|assert\.false|assert\.isNull|assert\.isNotNull|assert\.isUndefined|assert\.isDefined/.test(
         stripComments(rec.body.getText()),
       )
     ) {
@@ -839,7 +847,8 @@ export function scanFile(
       if (
         chain &&
         TEST_ROOTS.has(chain.root) &&
-        !chain.suffixes.includes('todo')
+        !chain.suffixes.includes('todo') &&
+        !chain.suffixes.includes('skip')
       ) {
         const b = fnBody(node);
         if (b) {
@@ -926,7 +935,8 @@ export function scanFile(
 
       if (
         ts.isIdentifier(node.expression) &&
-        node.expression.text === 'expect'
+        node.expression.text === 'expect' &&
+        node.arguments.length > 0
       ) {
         const parent = node.parent;
         if (
