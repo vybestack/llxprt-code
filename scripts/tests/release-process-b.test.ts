@@ -483,6 +483,11 @@ describe('.github/workflows/nightly.yml', () => {
           /(?:^|\s)npm run test(?:\s|$)/.test(String(step.run ?? '')),
         ),
       ).toBe(false);
+      expect(
+        steps.some((step) =>
+          String(step.run ?? '').includes('npm run lint:agents-api-surface'),
+        ),
+      ).toBe(false);
     }
   });
 
