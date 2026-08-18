@@ -777,9 +777,10 @@ function buildChromeLaunchArgs(
     case 'darwin': {
       const args = ['-a', 'Google Chrome'];
       if (profileDirectory !== undefined) {
-        args.push('--args', `--profile-directory=${profileDirectory}`);
+        args.push(url, '--args', `--profile-directory=${profileDirectory}`);
+      } else {
+        args.push(url);
       }
-      args.push(url);
       return ['open', args];
     }
 
@@ -825,9 +826,8 @@ function buildFirefoxLaunchArgs(
     case 'darwin': {
       const args =
         profileArguments.length > 0
-          ? ['-n', '-a', 'Firefox', '--args', ...profileArguments]
-          : ['-a', 'Firefox'];
-      args.push(url);
+          ? ['-n', '-a', 'Firefox', url, '--args', ...profileArguments]
+          : ['-a', 'Firefox', url];
       return ['open', args];
     }
 
