@@ -614,12 +614,20 @@ describe('REQ-3242-3: bounded preview llmContent byte budget', () => {
 
     expect(result.error).toBeUndefined();
     const output = String(result.llmContent);
-    expect(output).toMatch(
-      new RegExp(
-        `^- Relevant snippets: ${PREVIEW_MAX_SNIPPETS} found \\(capped from \\d+\\)$`,
-        'm',
-      ),
-    );
+    const prefix = `- Relevant snippets: ${PREVIEW_MAX_SNIPPETS} found (capped from `;
+    const snippetLine = output
+      .split('\n')
+      .find((line) => line.startsWith(prefix));
+    if (snippetLine === undefined) {
+      throw new Error('preview omitted the capped relevant-snippet summary');
+    }
+
+    const totalText = snippetLine.slice(prefix.length, -1);
+    const total = Number(totalText);
+    expect(snippetLine.endsWith(')')).toBe(true);
+    expect(Number.isInteger(total)).toBe(true);
+    expect(String(total)).toBe(totalText);
+    expect(total).toBeGreaterThan(PREVIEW_MAX_SNIPPETS);
   });
 });
 
