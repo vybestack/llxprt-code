@@ -122,7 +122,7 @@ describe('REQ-3232-1: enhanced context repository opt-out', () => {
     expect(output).toContain('other.ts');
   });
 
-  it('ast_edit preview still renders repository context', async () => {
+  it('ast_edit preview also opts out of repository context (issue #3242)', async () => {
     const tool = new ASTEditTool(createFakeToolHost(ctx.tempDir));
     const result = await tool
       .build({
@@ -133,7 +133,8 @@ describe('REQ-3232-1: enhanced context repository opt-out', () => {
       })
       .execute(new AbortController().signal);
     expect(result.error).toBeUndefined();
-    expect(String(result.llmContent)).toContain('- Repository:');
+    expect(String(result.llmContent)).not.toContain('- Repository:');
+    expect(String(result.llmContent)).not.toContain('RELATED SYMBOLS:');
   });
 });
 

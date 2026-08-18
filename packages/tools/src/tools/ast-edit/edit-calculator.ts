@@ -46,6 +46,13 @@ export interface CalculatedEdit {
   astValidation?: AstValidationResult;
   preEditValidation?: AstValidationResult;
   fileFreshness?: number | null;
+  /**
+   * 1-based line where the exact replacement starts, computed once against
+   * the same LF-normalized content used for matching (issue #3242). Null for
+   * new files or when the position cannot be determined; error results may
+   * leave it unset.
+   */
+  editStartLine?: number | null;
 }
 
 /**
@@ -148,10 +155,19 @@ export async function calculateEdit(
       ? validateASTSyntax(params.file_path, currentContent)
       : undefined;
 
+  // Single source of truth for the edit's start line: computed against the
+  // LF-normalized content and old_string used for matching, so CRLF
+  // parameters anchor identically to LF ones (issue #3242).
+  const editStartLine =
+    currentContent !== null && normalizedOldString !== ''
+      ? findEditStartLine(currentContent, normalizedOldString)
+      : null;
+
   let astValidation: AstValidationResult | undefined;
   if (!noChangeError) {
     // Refine whole-file recovery locations using the edited region.
-    const editRegion = buildEditRegion(currentContent, normalizedOldString);
+    const editRegion =
+      editStartLine === null ? undefined : { startLine: editStartLine };
     astValidation = validateASTSyntax(params.file_path, newContent, editRegion);
   }
 
@@ -164,6 +180,7 @@ export async function calculateEdit(
     astValidation,
     preEditValidation,
     fileFreshness: currentMtime,
+    editStartLine,
   };
 }
 
@@ -299,20 +316,6 @@ function checkNoChange(
     };
   }
   return error;
-}
-
-/**
- * Derives the edited region's start line so whole-file tree-sitter recovery
- * can report a useful location. Returns undefined for new files or when the
- * edit position cannot be determined.
- */
-function buildEditRegion(
-  currentContent: string | null,
-  oldString: string,
-): EditRegion | undefined {
-  if (!currentContent || !oldString) return undefined;
-  const startLine = findEditStartLine(currentContent, oldString);
-  return startLine === null ? undefined : { startLine };
 }
 
 /**

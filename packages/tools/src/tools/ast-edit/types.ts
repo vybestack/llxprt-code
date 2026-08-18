@@ -218,6 +218,13 @@ export interface EnhancedASTContext extends ASTContext {
   crossFileContext?: CrossFileContext;
   connectedFiles?: readonly ConnectedFile[];
   workingSetStatus?: WorkingSetAcquisitionStatus;
+  /**
+   * Original relevant-snippet count before a caller-specific preview item cap
+   * was applied (issue #3242). Present only when snippets were capped, so
+   * reporting can state a truthful "(capped from N)" total while
+   * `relevantSnippets` holds only the bounded collection.
+   */
+  relevantSnippetTotal?: number;
 }
 
 // ===== Simplified Parameter Interfaces =====

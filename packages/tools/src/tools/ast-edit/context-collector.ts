@@ -82,8 +82,37 @@ export interface EnhancedContextOptions {
    * searches are otherwise unobservable dead work with native memory cost.
    */
   collectRepositoryContext?: boolean;
+  /**
+   * Internal preview policy (issue #3242): cap the relevant-snippet items
+   * retained in the returned context at this many policy-ordered items. The
+   * pre-cap total is recorded as `relevantSnippetTotal` on the context so
+   * callers can report a truthful "(capped from N)" count. General callers
+   * (ast_read_file) leave it unset and keep every collected item.
+   */
+  previewSnippetItemCap?: number;
   /** Cancellation signal threaded through LLxprt-owned acquisition. */
   signal?: AbortSignal;
+}
+
+/**
+ * Apply the preview-specific snippet item bound (issue #3242) to a collected
+ * context: the context itself retains at most the caller's policy-ordered
+ * items, releasing the omitted snippet objects, while the truthful pre-cap
+ * total is carried for reporting. Rebinding (not truncating in place) drops
+ * the uncapped array from the returned context entirely.
+ */
+function applyPreviewSnippetCap(
+  context: EnhancedASTContext,
+  snippetItemCap: number | undefined,
+): void {
+  if (
+    snippetItemCap === undefined ||
+    context.relevantSnippets.length <= snippetItemCap
+  ) {
+    return;
+  }
+  context.relevantSnippetTotal = context.relevantSnippets.length;
+  context.relevantSnippets = context.relevantSnippets.slice(0, snippetItemCap);
 }
 
 /**
@@ -149,6 +178,9 @@ export class ASTContextCollector {
       content,
       workspaceRoot,
     );
+
+    // Preview-specific item bound (issue #3242).
+    applyPreviewSnippetCap(enhancedContext, options?.previewSnippetItemCap);
 
     // Phase 2: Working Set Context (Git-based). Suppressed only for callers
     // (ast_edit preview) that opt out; ast_read_file keeps the working set.
