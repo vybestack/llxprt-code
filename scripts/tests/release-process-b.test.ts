@@ -621,6 +621,7 @@ describe('.github/workflows/nightly.yml', () => {
       'behavioral_evals',
       'windows_bun_native_smoke',
       'cli_bundle_launch',
+      'windows_installed_command',
     ];
     const actualNeeds = Array.isArray(notifyFailureJob?.needs)
       ? asStringArray(notifyFailureJob.needs)

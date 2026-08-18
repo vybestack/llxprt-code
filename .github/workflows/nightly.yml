@@ -485,6 +485,16 @@ jobs:
           ENCODED="$(base64 < "${TRIMMED_OUTPUT_FILE}" | tr -d '\r\n')"
           printf 'smoke_output=%s\n' "${ENCODED}" >> "${GITHUB_OUTPUT}"
 
+  # Issue #3249: the Windows installed-command smoke + benchmark moved off
+  # the per-PR critical path. Nightly calls the reusable workflow so the
+  # smoke steps are defined once; it can also be dispatched manually for
+  # debugging Windows-specific install failures.
+  windows_installed_command:
+    name: 'Windows Installed Command (Nightly)'
+    uses: './.github/workflows/windows-installed-command.yml'
+    permissions:
+      contents: 'read'
+
   # Issue #2999: the published package prefers the prebuilt bundle over
   # index.ts, so a bundle that builds but cannot launch would shadow the
   # working TypeScript source and break startup for every user. The test is
@@ -534,6 +544,7 @@ jobs:
       - 'e2e_full'
       - 'behavioral_evals'
       - 'windows_bun_native_smoke'
+      - 'windows_installed_command'
       - 'cli_bundle_launch'
     if: ${{ always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
     permissions:
@@ -551,6 +562,7 @@ jobs:
           E2E_FULL_RESULT: '${{ needs.e2e_full.result }}'
           BEHAVIORAL_EVALS_RESULT: '${{ needs.behavioral_evals.result }}'
           WINDOWS_BUN_NATIVE_SMOKE_RESULT: '${{ needs.windows_bun_native_smoke.result }}'
+          WINDOWS_INSTALLED_COMMAND_RESULT: '${{ needs.windows_installed_command.result }}'
           CLI_BUNDLE_LAUNCH_RESULT: '${{ needs.cli_bundle_launch.result }}'
           SMOKE_OUTPUT_B64: '${{ needs.windows_bun_native_smoke.outputs.smoke_output }}'
         shell: 'bash'
@@ -573,6 +585,7 @@ jobs:
             FAILED_JOBS+=("windows_bun_native_smoke=${WINDOWS_BUN_NATIVE_SMOKE_RESULT}")
             INCLUDE_SMOKE_OUTPUT=true
           fi
+          [[ "${WINDOWS_INSTALLED_COMMAND_RESULT}" =~ ^(failure|cancelled)$ ]] && FAILED_JOBS+=("windows_installed_command=${WINDOWS_INSTALLED_COMMAND_RESULT}")
           if [[ "${INCLUDE_SMOKE_OUTPUT}" == true && -n "${SMOKE_OUTPUT_B64}" ]] && \
             ! printf '%s' "${SMOKE_OUTPUT_B64}" | base64 --decode > "${SMOKE_OUTPUT_FILE}"; then
             echo "ERROR: Failed to decode Windows Bun smoke output; the transferred job output is malformed." >&2
