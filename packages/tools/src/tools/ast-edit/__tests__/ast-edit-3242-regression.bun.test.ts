@@ -76,30 +76,39 @@ async function runPreview(
     .execute(new AbortController().signal);
 }
 
+interface RankedDeclaration {
+  readonly declaration: EnhancedDeclaration;
+  /** Original extractor-array index, attached before any sorting. */
+  readonly sourceIndex: number;
+}
+
+function sourceOrder(a: RankedDeclaration, b: RankedDeclaration): number {
+  const byLine = a.declaration.line - b.declaration.line;
+  if (byLine !== 0) {
+    return byLine;
+  }
+  const byColumn = a.declaration.column - b.declaration.column;
+  if (byColumn !== 0) {
+    return byColumn;
+  }
+  return a.sourceIndex - b.sourceIndex;
+}
+
 /**
- * Oracle for the accepted selection policy: source-order the real extractor
- * output, keep the 128 declarations nearest the edit start line (ties break
- * to the earlier line), then render the kept set back in source order.
+ * Oracle for the accepted selection policy: attach each real-extractor
+ * declaration's original array index before any sorting (the extractor
+ * lists kinds in family order, not document order, so that index is what
+ * production preserves for same-line ties), keep the 128 declarations
+ * nearest the edit start line (ties break to the earlier line, then to
+ * the earlier original extractor index), then render the kept set back in
+ * true source order.
  */
 function expectedPreviewDeclarationLines(
   declarations: readonly EnhancedDeclaration[],
   editStartLine: number,
 ): string[] {
-  const bySource = [...declarations]
-    .map((declaration, index) => ({ declaration, index }))
-    .sort((a, b) => {
-      const byLine = a.declaration.line - b.declaration.line;
-      if (byLine !== 0) {
-        return byLine;
-      }
-      const byColumn = a.declaration.column - b.declaration.column;
-      if (byColumn !== 0) {
-        return byColumn;
-      }
-      return a.index - b.index;
-    });
-  const byProximity = [...bySource]
-    .map((entry, sourceIndex) => ({ ...entry, sourceIndex }))
+  const byProximity = declarations
+    .map((declaration, sourceIndex) => ({ declaration, sourceIndex }))
     .sort((a, b) => {
       const byDistance =
         Math.abs(a.declaration.line - editStartLine) -
@@ -115,7 +124,7 @@ function expectedPreviewDeclarationLines(
     });
   return byProximity
     .slice(0, PREVIEW_MAX_DECLARATIONS)
-    .sort((a, b) => a.sourceIndex - b.sourceIndex)
+    .sort(sourceOrder)
     .map(
       (entry) =>
         `- ${entry.declaration.type}: ${entry.declaration.name} (line ${entry.declaration.line})`,
@@ -396,6 +405,47 @@ describe('REQ-3242-2: bounded proximity declaration context', () => {
     expect(boundedMarker(output)).toEqual({ shown: 128, total: 129 });
     expect(output).toContain('- function: d001 (line 1)');
     expect(output).not.toContain('dSpecial');
+  });
+
+  it('breaks same-line proximity ties by original extractor order at the selection boundary', async () => {
+    const lines: string[] = [
+      // Same-line pair: the variable starts at the earlier column, but the
+      // extractor lists every function before any variable, so the function
+      // holds the earlier original extractor index.
+      'const v = 1; function dSpecial(): void {}',
+    ];
+    for (let i = 1; i <= 127; i++) {
+      lines.push(`function d${String(i).padStart(3, '0')}(): void {}`);
+    }
+    lines.push('// same-line filler anchor');
+    const target = join(ctx.tempDir, 'same-line-tie.ts');
+    writeFileSync(target, `${lines.join('\n')}\n`, 'utf-8');
+
+    // Anchor at line 129: d001..d127 occupy distances 127 down to 1, so the
+    // same-line pair (both distance 128) competes for the final slot.
+    const anchorLine = 129;
+    const result = await runPreview(ctx.tempDir, target, {
+      oldString: '// same-line filler anchor',
+      newString: '// same-line filler anchor edited',
+    });
+
+    expect(result.error).toBeUndefined();
+    const output = String(result.llmContent);
+    const rendered = renderedDeclarations(output);
+    expect(rendered).toHaveLength(PREVIEW_MAX_DECLARATIONS);
+    expect(boundedMarker(output)).toEqual({ shown: 128, total: 129 });
+    // The same-line tie resolves by original extractor index, not column:
+    // the function wins the final slot over the column-earlier variable.
+    expect(output).toContain('- function: dSpecial (line 1)');
+    expect(output).not.toContain('- variable: v (line 1)');
+    const expected = expectedPreviewDeclarationLines(
+      await new ASTQueryExtractor().extractDeclarations(
+        target,
+        readFileSync(target, 'utf-8'),
+      ),
+      anchorLine,
+    );
+    expect(rendered.map((entry) => entry.raw)).toEqual(expected);
   });
 
   it('succeeds with zero declaration context for a new file', async () => {

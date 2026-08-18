@@ -8,10 +8,11 @@
  * generated workspace directory. Runs the real ASTEditTool against the
  * 5,250-line Rust target: three localized previews (middle, then head and
  * tail in parallel) followed immediately by a force=true apply that reuses
- * the preview timestamp, then verifies the exact bytes landed on disk. RSS
- * is sampled throughout, and a post-result quiet window proves no repository
- * traversal or pending native callback kept allocating after every tool
- * result resolved.
+ * the preview timestamp — the middle preview and the apply run through the
+ * same tool instance, mirroring the CLI's registered-tool reuse — then
+ * verifies the exact bytes landed on disk. RSS is sampled throughout, and a
+ * post-result quiet window proves no repository traversal or pending native
+ * callback kept allocating after every tool result resolved.
  */
 
 import { readFileSync } from 'node:fs';
@@ -62,8 +63,10 @@ const sampler = setInterval(() => {
   sampleRss();
 }, 20);
 
-async function executePreview(edit: RustFixtureEdit): Promise<ToolOutcome> {
-  const tool = new ASTEditTool(createAstReadToolHost(workspaceRoot));
+async function executePreview(
+  tool: ASTEditTool,
+  edit: RustFixtureEdit,
+): Promise<ToolOutcome> {
   const result = await tool
     .build({
       file_path: targetPath,
@@ -78,23 +81,33 @@ async function executePreview(edit: RustFixtureEdit): Promise<ToolOutcome> {
   return { error: result.error, llmContent: String(result.llmContent) };
 }
 
-const middle = await executePreview(fixture.edits.middle);
+// The CLI reuses the registered ASTEditTool instance to build every
+// invocation, so the accepted regression drives the middle preview and its
+// immediate force apply through the same shared tool instance. Only the
+// parallel head/tail previews use distinct instances.
+const middleTool = new ASTEditTool(createAstReadToolHost(workspaceRoot));
+const middle = await executePreview(middleTool, fixture.edits.middle);
 const middleOk = middle.error === undefined;
 const timestampMatch = /- Timestamp: (\d+)/.exec(middle.llmContent);
 const timestampParsed = timestampMatch !== null;
 const previewBoundedMarker = middle.llmContent.includes('bounded preview');
 
 const headTail = await Promise.all([
-  executePreview(fixture.edits.head),
-  executePreview(fixture.edits.tail),
+  executePreview(
+    new ASTEditTool(createAstReadToolHost(workspaceRoot)),
+    fixture.edits.head,
+  ),
+  executePreview(
+    new ASTEditTool(createAstReadToolHost(workspaceRoot)),
+    fixture.edits.tail,
+  ),
 ]);
 const previewOk =
   middleOk && headTail.every((result) => result.error === undefined);
 
-const applyTool = new ASTEditTool(createAstReadToolHost(workspaceRoot));
 const lastModified =
   timestampMatch !== null ? Number(timestampMatch[1]) : undefined;
-const applyResult = await applyTool
+const applyResult = await middleTool
   .build({
     file_path: targetPath,
     old_string: fixture.edits.middle.oldString,
