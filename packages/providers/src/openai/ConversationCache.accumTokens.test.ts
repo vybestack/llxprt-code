@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { ConversationCache } from './ConversationCache.js';
 import type { IMessage } from '../IMessage.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
@@ -63,18 +63,34 @@ describe('ConversationCache.accumTokens', () => {
   });
 
   it('should return 0 for expired entries', () => {
-    // Create cache with very short TTL (1ms)
-    const shortCache = new ConversationCache(100, 0.000000278); // 1ms in hours
-    const messages: IMessage[] = [
-      { role: ContentGeneratorRole.ASSISTANT, content: 'Response' },
-    ];
+    // Use a controlled clock so the TTL boundary is deterministic, not a
+    // wall-clock race. Bun does not provide fake timers, so we spy on
+    // Date.now to advance time in test-space. try/finally ensures the
+    // global clock is restored even if an assertion fails.
+    const realNow = Date.now;
+    let currentTime = 1_000_000;
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => currentTime);
 
-    shortCache.set('conv1', 'parent1', messages, 1000);
+    try {
+      // Create cache with a short TTL (20ms, expressed in hours)
+      const shortCache = new ConversationCache(100, 20 / 3_600_000);
+      const messages: IMessage[] = [
+        { role: ContentGeneratorRole.ASSISTANT, content: 'Response' },
+      ];
 
-    // Wait for expiry
-    setTimeout(() => {
+      shortCache.set('conv1', 'parent1', messages, 1000);
+
+      // Before the TTL elapses the entry is still live…
+      expect(shortCache.getAccumulatedTokens('conv1', 'parent1')).toBe(1000);
+
+      // …and after it elapses the cache reports zero. Advancing the mocked
+      // clock past the TTL window makes the expiry check deterministic.
+      currentTime += 30; // 30ms > 20ms TTL
       expect(shortCache.getAccumulatedTokens('conv1', 'parent1')).toBe(0);
-    }, 5);
+    } finally {
+      spy.mockRestore();
+      Date.now = realNow;
+    }
   });
 
   it('should invalidate entries and reset token count', () => {

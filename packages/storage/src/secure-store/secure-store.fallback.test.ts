@@ -566,6 +566,63 @@ describe('SecureStore — Fallback Policy', () => {
   });
 });
 
+// ─── Fallback Permissions (R4.7 file, R4.8 directory) ────────────────────────
+
+describe('SecureStore — Fallback Permissions', () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await createTempFallbackDir();
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  /**
+   * @plan PLAN-20260211-SECURESTORE.P05
+   * @requirement R4.8
+   */
+  it.skipIf(process.platform === 'win32')(
+    'fallback directory created with 0o700 permissions',
+    async () => {
+      const nestedDir = path.join(tempDir, 'nested', 'secure');
+      const store = new SecureStore('test-service', {
+        keyringLoader: async () => null,
+        fallbackDir: nestedDir,
+        lockDir: path.join(tempDir, 'locks'),
+        fallbackPolicy: 'allow',
+      });
+
+      await store.set('dir-key', 'dir-value');
+
+      const stat = await fs.stat(nestedDir);
+      expect(stat.mode & 0o777).toBe(0o700);
+    },
+  );
+
+  /**
+   * @plan PLAN-20260211-SECURESTORE.P05
+   * @requirement R4.7
+   */
+  it.skipIf(process.platform === 'win32')(
+    'fallback file permissions are 0o600',
+    async () => {
+      const store = new SecureStore('test-service', {
+        keyringLoader: async () => null,
+        fallbackDir: tempDir,
+        lockDir: path.join(tempDir, 'locks'),
+        fallbackPolicy: 'allow',
+      });
+
+      await store.set('perm-key', 'perm-value');
+
+      const stat = await fs.stat(path.join(tempDir, 'perm-key.enc'));
+      expect(stat.mode & 0o777).toBe(0o600);
+    },
+  );
+});
+
 // ─── Cross-Instance Consistency ──────────────────────────────────────────────
 
 describe('SecureStore — Cross-Instance Consistency', () => {

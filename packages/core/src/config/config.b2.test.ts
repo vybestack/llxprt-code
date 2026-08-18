@@ -121,6 +121,24 @@ describe('Server Config (config.ts)', () => {
   describe('Ephemeral Settings with SettingsService Integration', () => {
     let mockSettingsService: ReturnType<typeof vi.fn>;
 
+    /**
+     * Wire mockSettingsService.get/set to a local Map so tests can verify
+     * set→get round trips through Config without the mock returning
+     * independently of writes.
+     */
+    function wireMapStore(): Map<string, unknown> {
+      const store = new Map<string, unknown>();
+      mockSettingsService.get.mockImplementation((key: string) =>
+        store.get(key),
+      );
+      mockSettingsService.set.mockImplementation(
+        (key: string, value: unknown) => {
+          store.set(key, value);
+        },
+      );
+      return store;
+    }
+
     beforeEach(() => {
       mockSettingsService = getSettingsService() as ReturnType<typeof vi.fn>;
       vi.clearAllMocks();
@@ -139,13 +157,17 @@ describe('Server Config (config.ts)', () => {
 
       // Reset mock after construction to isolate test
       vi.clearAllMocks();
-      mockSettingsService.get.mockReturnValue('gpt-4');
+      // Key-derived store: the value Config returns can only be right if the
+      // exact key was forwarded to the SettingsService.
+      mockSettingsService.get.mockImplementation(
+        (key: string) => `stored-value-for-${key}`,
+      );
 
       const result = config.getEphemeralSetting('model');
+      const otherKey = config.getEphemeralSetting('viewModel');
 
-      expect(mockSettingsService.get).toHaveBeenCalledWith('model');
-      expect(result).toBe('gpt-4');
-      expect(mockSettingsService.get).toHaveBeenCalledTimes(1);
+      expect(result).toBe('stored-value-for-model');
+      expect(otherKey).toBe('stored-value-for-viewModel');
     });
 
     /**
@@ -193,15 +215,15 @@ describe('Server Config (config.ts)', () => {
      */
     it('should complete operations synchronously', () => {
       const config = new Config(baseParams);
-      mockSettingsService.get.mockReturnValue(true);
+      wireMapStore();
 
       // No await needed - operations must be synchronous
-      config.setEphemeralSetting('instant', true);
+      config.setEphemeralSetting('instant', 'written-before-read');
       const result = config.getEphemeralSetting('instant');
 
-      expect(result).toBe(true);
-      expect(mockSettingsService.set).toHaveBeenCalledWith('instant', true);
-      expect(mockSettingsService.get).toHaveBeenCalledWith('instant');
+      // Round trip through Config: the value written via setEphemeralSetting
+      // is the one read back, proving synchronous set→get ordering.
+      expect(result).toBe('written-before-read');
     });
 
     /**
@@ -213,29 +235,19 @@ describe('Server Config (config.ts)', () => {
      */
     it('should handle multiple synchronous operations', () => {
       const config = new Config(baseParams);
+      wireMapStore();
 
-      // Reset mock after construction to isolate test
-      vi.clearAllMocks();
-      mockSettingsService.get
-        .mockReturnValueOnce('provider1')
-        .mockReturnValueOnce('model1')
-        .mockReturnValueOnce(0.7);
-
-      // All operations should be synchronous
+      // All operations should be synchronous — no await needed.
       config.setEphemeralSetting('provider', 'provider1');
       config.setEphemeralSetting('model', 'model1');
       config.setEphemeralSetting('temperature', 0.7);
 
-      const provider = config.getEphemeralSetting('provider');
-      const model = config.getEphemeralSetting('model');
-      const temperature = config.getEphemeralSetting('temperature');
-
-      expect(provider).toBe('provider1');
-      expect(model).toBe('model1');
-      expect(temperature).toBe(0.7);
-
-      expect(mockSettingsService.set).toHaveBeenCalledTimes(3);
-      expect(mockSettingsService.get).toHaveBeenCalledTimes(3);
+      // Round trip through Config: each value written via
+      // setEphemeralSetting is the one read back for the same key, proving
+      // all three writes landed and there is no cross-key confusion.
+      expect(config.getEphemeralSetting('provider')).toBe('provider1');
+      expect(config.getEphemeralSetting('model')).toBe('model1');
+      expect(config.getEphemeralSetting('temperature')).toBe(0.7);
     });
 
     /**

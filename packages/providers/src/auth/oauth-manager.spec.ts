@@ -241,19 +241,24 @@ describe.skipIf(skipInCI)(
        * @and No OAuth flow is triggered immediately
        */
       it('should toggle OAuth enablement without triggering auth flow', async () => {
-        manager.registerProvider(deviceCodeProvider);
+        const settings = createLoadedSettings();
+        const managerWithSettings = new OAuthManager(tokenStore, settings);
+        managerWithSettings.registerProvider(deviceCodeProvider);
 
-        // Mock the toggle method (would be implemented in real OAuthManager)
-        const mockToggle = vi.fn().mockResolvedValue(true);
-        (
-          manager as unknown as { toggleOAuthEnabled: typeof mockToggle }
-        ).toggleOAuthEnabled = mockToggle;
+        // Nothing enabled yet: the settings-backed state starts disabled.
+        expect(managerWithSettings.isOAuthEnabled('device-code-test')).toBe(
+          false,
+        );
 
-        const result = await (
-          manager as unknown as { toggleOAuthEnabled: typeof mockToggle }
-        ).toggleOAuthEnabled('device-code-test');
-        expect(result).toBe(true);
+        const newState =
+          await managerWithSettings.toggleOAuthEnabled('device-code-test');
 
+        // The real toggle flips the enablement state and reports the NEW
+        // state, observable through the settings-backed registry read.
+        expect(newState).toBe(true);
+        expect(managerWithSettings.isOAuthEnabled('device-code-test')).toBe(
+          true,
+        );
         // Verify provider's initiateAuth was NOT called
         expect(deviceCodeProvider.wasAuthInitiated()).toBe(false);
       });
@@ -267,18 +272,21 @@ describe.skipIf(skipInCI)(
        * @and No OAuth flow is triggered
        */
       it('should check OAuth enablement status without triggering auth', async () => {
-        manager.registerProvider(deviceCodeProvider);
+        // Enablement persisted by a previous session (e.g. via toggle).
+        const settings = createLoadedSettings({
+          oauthEnabledProviders: { 'device-code-test': true },
+        });
+        const managerWithSettings = new OAuthManager(tokenStore, settings);
+        managerWithSettings.registerProvider(deviceCodeProvider);
 
-        // Mock the enablement check method
-        const mockIsEnabled = vi.fn().mockResolvedValue(false);
-        (
-          manager as unknown as { isOAuthEnabled: typeof mockIsEnabled }
-        ).isOAuthEnabled = mockIsEnabled;
+        const result = managerWithSettings.isOAuthEnabled('device-code-test');
 
-        const result = await (
-          manager as unknown as { isOAuthEnabled: typeof mockIsEnabled }
-        ).isOAuthEnabled('device-code-test');
-        expect(result).toBe(false);
+        // The real check reads the persisted enablement; providers without a
+        // persisted entry stay disabled — both directions are observable.
+        expect(result).toBe(true);
+        expect(managerWithSettings.isOAuthEnabled('unpersisted-provider')).toBe(
+          false,
+        );
 
         // Verify OAuth flow was not initiated
         expect(deviceCodeProvider.wasAuthInitiated()).toBe(false);
@@ -293,27 +301,31 @@ describe.skipIf(skipInCI)(
        * @and Enablement state persists separately
        */
       it('should toggle OAuth enablement for multiple providers independently', async () => {
-        manager.registerProvider(deviceCodeProvider);
-        manager.registerProvider(geminiProvider);
+        const settings = createLoadedSettings();
+        const managerWithSettings = new OAuthManager(tokenStore, settings);
+        managerWithSettings.registerProvider(deviceCodeProvider);
+        managerWithSettings.registerProvider(geminiProvider);
 
-        // Mock toggle methods for both providers
-        const mockToggle = vi
-          .fn()
-          .mockResolvedValueOnce(true) // Enable device-code-test
-          .mockResolvedValueOnce(false); // Disable gemini
-        (
-          manager as unknown as { toggleOAuthEnabled: typeof mockToggle }
-        ).toggleOAuthEnabled = mockToggle;
+        // Both start disabled; a first toggle enables each provider.
+        const deviceCodeResult =
+          await managerWithSettings.toggleOAuthEnabled('device-code-test');
+        const geminiResult =
+          await managerWithSettings.toggleOAuthEnabled('gemini');
 
-        const deviceCodeResult = await (
-          manager as unknown as { toggleOAuthEnabled: typeof mockToggle }
-        ).toggleOAuthEnabled('device-code-test');
-        const geminiResult = await (
-          manager as unknown as { toggleOAuthEnabled: typeof mockToggle }
-        ).toggleOAuthEnabled('gemini');
+        expect(deviceCodeResult).toBe(true);
+        expect(geminiResult).toBe(true);
+        expect(managerWithSettings.isOAuthEnabled('device-code-test')).toBe(
+          true,
+        );
+        expect(managerWithSettings.isOAuthEnabled('gemini')).toBe(true);
 
-        expect(deviceCodeResult).toBe(true); // OAuth enabled for device-code-test
-        expect(geminiResult).toBe(false); // OAuth disabled for gemini
+        // Derived independence: toggling one provider again must not disturb
+        // the other's persisted enablement.
+        await managerWithSettings.toggleOAuthEnabled('device-code-test');
+        expect(managerWithSettings.isOAuthEnabled('device-code-test')).toBe(
+          false,
+        );
+        expect(managerWithSettings.isOAuthEnabled('gemini')).toBe(true);
 
         // Neither provider should have auth initiated
         expect(deviceCodeProvider.wasAuthInitiated()).toBe(false);
@@ -780,38 +792,41 @@ describe.skipIf(skipInCI)(
        * @and No additional authentication needed
        */
       it('should persist OAuth enablement and tokens across manager instances', async () => {
-        // Enable OAuth and authenticate with first manager
-        manager.registerProvider(deviceCodeProvider);
+        // Use settings-backed enablement (not monkey-patched mocks) so the
+        // second manager reads the persisted state from the same settings
+        // service the first manager wrote to.
+        const settings = createLoadedSettings();
+        const managerWithSettings = new OAuthManager(tokenStore, settings);
+        managerWithSettings.registerProvider(deviceCodeProvider);
 
-        const mockToggle = vi.fn().mockResolvedValue(true);
-        const mockIsEnabled = vi.fn().mockResolvedValue(true);
-        (
-          manager as unknown as { toggleOAuthEnabled: typeof mockToggle }
-        ).toggleOAuthEnabled = mockToggle;
-        (
-          manager as unknown as { isOAuthEnabled: typeof mockIsEnabled }
-        ).isOAuthEnabled = mockIsEnabled;
+        // Enable OAuth via the real toggle — this writes to the settings
+        // service that the second manager will read from.
+        await managerWithSettings.toggleOAuthEnabled('device-code-test');
+        expect(managerWithSettings.isOAuthEnabled('device-code-test')).toBe(
+          true,
+        );
 
-        await (
-          manager as unknown as { toggleOAuthEnabled: typeof mockToggle }
-        ).toggleOAuthEnabled('device-code-test');
-        await manager.getToken('device-code-test'); // Triggers lazy auth
+        // Authenticate with the first manager so a token is stored.
+        await managerWithSettings.getToken('device-code-test');
+        expect(deviceCodeProvider.wasAuthInitiated()).toBe(true);
 
-        // Create new manager with same token store
-        const newManager = new OAuthManager(tokenStore);
+        // Construct a fresh manager sharing the same token store and
+        // settings service. The enablement state must survive the new
+        // construction — if persistence is broken, isOAuthEnabled returns
+        // false and getToken would not attempt the stored-token path.
+        const newManager = new OAuthManager(tokenStore, settings);
         const newProvider = new MockOAuthProvider('device-code-test');
         newManager.registerProvider(newProvider);
 
-        // Mock OAuth as still enabled in new manager
-        (
-          newManager as unknown as { isOAuthEnabled: typeof mockIsEnabled }
-        ).isOAuthEnabled = mockIsEnabled;
+        // Observable: enablement persisted across instances.
+        expect(newManager.isOAuthEnabled('device-code-test')).toBe(true);
 
         const token = await newManager.getToken('device-code-test');
 
+        // Token was stored by the first manager; the new manager retrieves
+        // it without re-authenticating.
         expect(token).not.toBeNull();
         expect(token).toBeDefined();
-        // New provider shouldn't need to authenticate since token exists
         expect(newProvider.wasAuthInitiated()).toBe(false);
       });
     });

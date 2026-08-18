@@ -51,11 +51,15 @@ describe('Issue #1468 getProfileBuckets case 10', () => {
       profileId: 'opusthinkingbucketed',
       providerId: 'claudecode',
     });
-    mockFetchAnthropicUsage.mockResolvedValue({ bucket: 'bucket-b' });
+    // The fetch result is derived from the token it receives, so the value
+    // asserted below can only match if the manager selected bucket-b's token.
+    mockFetchAnthropicUsage.mockImplementation(async (token: string) => ({
+      fetchedToken: token,
+    }));
 
     const usage = await manager.getAnthropicUsageInfo();
 
     expect(mockFetchAnthropicUsage).toHaveBeenCalledWith('bucket-b-token');
-    expect(usage).toStrictEqual({ bucket: 'bucket-b' });
+    expect(usage).toStrictEqual({ fetchedToken: 'bucket-b-token' });
   });
 });

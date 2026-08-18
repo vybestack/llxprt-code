@@ -431,11 +431,18 @@ describe('OpenFilesManager', () => {
       active: { line: 10, character: 20 },
     } as vscode.Selection;
 
-    // We need to override the mock for getText for this test
+    // getText returns a length-encoded value derived from the selection's
+    // character offset so the assertion can only pass if the manager
+    // re-reads the document and forwards the result. A route that cached
+    // a constant or ignored the selection would fail.
+    const getText = vi.fn().mockImplementation((sel: vscode.Selection) => {
+      const char = sel?.active?.character ?? 0;
+      return `text-at-char-${char}`;
+    });
     const textEditor = {
       document: {
         uri,
-        getText: vi.fn().mockReturnValue('selected text'),
+        getText,
       },
       selection,
     } as unknown as vscode.TextEditor;
@@ -452,8 +459,25 @@ describe('OpenFilesManager', () => {
     await advanceTimersByTimeAsync(100);
 
     const file = manager.state.workspaceState!.openFiles![0];
-    expect(file.selectedText).toBe('selected text');
-    expect(textEditor.document.getText).toHaveBeenCalledWith(selection);
+    // The assertion uses the selection-derived string, not a stub literal.
+    expect(file.selectedText).toBe('text-at-char-20');
+
+    // A later selection with a different character offset must produce a
+    // different value, proving the manager re-reads rather than caching.
+    const selection2 = {
+      active: { line: 30, character: 42 },
+    } as vscode.Selection;
+    onDidChangeTextEditorSelectionListener({
+      textEditor: { ...textEditor, selection: selection2 },
+      selections: [selection2],
+      kind: vscode.TextEditorSelectionChangeKind.Mouse,
+    });
+
+    await advanceTimersByTimeAsync(100);
+
+    const updatedFile = manager.state.workspaceState!.openFiles![0];
+    expect(updatedFile.selectedText).toBe('text-at-char-42');
+    expect(getText.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
   it('truncates long selected text', async () => {

@@ -471,8 +471,11 @@ describe('PromptInstaller', () => {
         // On Windows, just create a directory and verify it exists
         await fs.mkdir(testBaseDir, { recursive: true });
         const result = await installer.validate(testBaseDir);
-        // Windows directories are generally writable if they exist
-        expect(result.warnings.length).toBeGreaterThanOrEqual(0);
+        // A freshly created directory is writable, so the permission check
+        // must stay silent here — the sibling Unix test proves the warning
+        // fires when it should; this one proves it stays quiet when it
+        // should not.
+        expect(result.warnings).not.toContain('Cannot write to directory');
       },
     );
 

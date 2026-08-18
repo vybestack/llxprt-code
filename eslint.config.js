@@ -613,6 +613,39 @@ export default tseslint.config(
     },
   },
   // ============================================================================
+  // Issue #3240: The AST test-audit scanner is a single-file analysis tool
+  // with inherently high cyclomatic complexity (large switch/if-cascade over
+  // AST node kinds). Size and complexity limits are relaxed so the scanner
+  // can stay in one file for ease of maintenance.
+  // ============================================================================
+  {
+    files: ['scripts/test-audit/**/*.ts'],
+    rules: {
+      'max-lines': 'off', // eslint-policy-allow-off: #3240 single-file scanner
+      'max-lines-per-function': 'off', // eslint-policy-allow-off: #3240
+      complexity: 'off', // eslint-policy-allow-off: #3240
+      'sonarjs/cognitive-complexity': 'off', // eslint-policy-allow-off: #3240
+      'sonarjs/expression-complexity': 'off', // eslint-policy-allow-off: #3240
+      'sonarjs/no-nested-conditional': 'off', // eslint-policy-allow-off: #3240
+      'sonarjs/nested-control-flow': 'off', // eslint-policy-allow-off: #3240
+      'sonarjs/too-many-break-or-continue-in-loop': 'off', // eslint-policy-allow-off: #3240
+      'sonarjs/no-all-duplicated-branches': 'off', // eslint-policy-allow-off: #3240
+    },
+  },
+  // ============================================================================
+  // Issue #3240: app.test.ts was already at 801 effective lines on main
+  // (930 total - 95 blank - 30 comment - 4 block = 801). Our mock-theater
+  // fix added a second command to the non-streaming route test, pushing it
+  // to 839 effective. The file is a single E2E integration suite that is
+  // inherently large; relaxing max-lines preserves the pre-existing state.
+  // ============================================================================
+  {
+    files: ['packages/a2a-server/src/http/app.test.ts'],
+    rules: {
+      'max-lines': ['error', { max: 900, skipBlankLines: true, skipComments: true }], // eslint-policy-allow-off: #3240 raised from 800 for mock-theater fix
+    },
+  },
+  // ============================================================================
   // Issue #2605: Apply strict code-quality lint rules to eval TypeScript
   // ============================================================================
   // The eval suite (evals/**/*.ts) is real source executed by the nightly
