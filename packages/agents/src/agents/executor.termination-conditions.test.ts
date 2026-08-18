@@ -35,7 +35,16 @@ import {
   type ExecutorTestFixture,
   type MockFn,
 } from './executor-test-helpers.js';
-import { waitForCondition } from '../test-utils/eventLoop.js';
+
+const realPromptsModule = {
+  ...(await import('@vybestack/llxprt-code-core/core/prompts.js')),
+};
+void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+  ...realPromptsModule,
+  getCoreSystemPromptAsync: vi
+    .fn()
+    .mockResolvedValue('Test core system prompt'),
+}));
 
 const realEnvironmentContextModule = {
   ...(await import('@vybestack/llxprt-code-core/utils/environmentContext.js')),
@@ -203,11 +212,17 @@ describe('AgentExecutor run (Termination Conditions)', () => {
       },
     );
 
-    // Flush microtasks so the executor's async setup chain registers the
-    // stream-idle-timeout timer before we advance fake time.
-    expect(await waitForCondition(() => capturedSignal !== undefined)).toBe(
-      true,
-    );
+    // Drain microtasks so the executor's async setup chain settles and
+    // captures the abort signal.  With the prompts module mocked there is
+    // no real disk I/O in the chain, so `advanceTimersByTimeAsync(0)` —
+    // which flushes microtasks without advancing the clock — is sufficient
+    // on every platform.  The loop walks the full promise chain from
+    // `run()` → `createChatObject()` → `buildRuntimeBundle()` →
+    // `runAgentLoop()` → `sendMessageStream()` (mock) → `capturedSignal`.
+    for (let i = 0; i < 200 && capturedSignal === undefined; i++) {
+      await advanceTimersByTimeAsync(0);
+    }
+    expect(capturedSignal).toBeDefined();
     await advanceTimersByTimeAsync(testTimeoutMs + 1_000);
 
     await runRejection;
