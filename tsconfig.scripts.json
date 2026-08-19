@@ -235,6 +235,7 @@
     "scripts/tests/issue-2603-windows-lineage-helpers.test.ts",
     "scripts/tests/issue-2603-windows-probe.ts",
     "scripts/tests/issue-2983-declaration-build.test.ts",
+    "scripts/tests/issue-3241-dockerfile-npm-retry.bun.test.ts",
     "scripts/tests/issue-planner.test.ts",
     "scripts/tests/legacy-paths-ast-scanner.test.ts",
     "scripts/tests/legacy-paths-guard-helpers.ts",

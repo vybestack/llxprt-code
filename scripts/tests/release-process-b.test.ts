@@ -141,8 +141,10 @@ describe('Dockerfile', () => {
   });
 
   it('installs local tarballs in one npm transaction for unpublished versions', () => {
+    // Issue #3241 wrapped the install in a bounded `until` retry loop, so the
+    // slice anchors on the loop head instead of the old `RUN npm install -g`.
     const installCommand = dockerfile.slice(
-      dockerfile.indexOf('RUN npm install -g'),
+      dockerfile.indexOf('until npm install -g'),
       dockerfile.indexOf('npm cache clean --force'),
     );
 
@@ -160,6 +162,10 @@ describe('Dockerfile', () => {
     expect(installCommand).toContain('vybestack-llxprt-code-providers-*.tgz');
     expect(installCommand).toContain('vybestack-llxprt-code-agents-*.tgz');
     expect(installCommand).toContain('vybestack-llxprt-code-*.tgz');
+    // The retry wrapper must not reintroduce a second, split tarball install:
+    // the slice between the loop head and the cache clean contains exactly
+    // one `npm install -g`, in either the old or the retry-wrapped layout.
+    expect(installCommand.match(/npm install -g/g)?.length ?? 0).toBe(1);
     expect(installCommand).not.toContain('&& \\\n    npm install -g');
   });
 

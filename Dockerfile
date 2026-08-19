@@ -74,7 +74,16 @@ COPY --chown=node:node packages/cli/dist/vybestack-llxprt-code-*.tgz /tmp/
 # Install packages globally
 # Install all local tarballs in one transaction so unpublished package versions
 # satisfy each other without falling back to the npm registry.
-RUN npm install -g \
+# Nightly 2026-08-18 (issue #3241) lost the whole release when a transient
+# `npm error code ECONNRESET` killed this install on the QEMU-emulated arm64
+# leg. The bounded retry below rides out such transient network failures;
+# retries are cheap because npm's cache inside this layer already holds what
+# earlier attempts fetched.
+RUN export npm_config_fetch_retries=5 \
+      npm_config_fetch_retry_mintimeout=1000 \
+      npm_config_fetch_retry_maxtimeout=60000; \
+    attempts=0; \
+    until npm install -g \
       /tmp/vybestack-llxprt-code-tools-*.tgz \
       /tmp/vybestack-llxprt-code-storage-*.tgz \
       /tmp/vybestack-llxprt-code-auth-*.tgz \
@@ -86,15 +95,38 @@ RUN npm install -g \
       /tmp/vybestack-llxprt-code-core-*.tgz \
       /tmp/vybestack-llxprt-code-providers-*.tgz \
       /tmp/vybestack-llxprt-code-agents-*.tgz \
-      /tmp/vybestack-llxprt-code-*.tgz && \
+      /tmp/vybestack-llxprt-code-*.tgz; do \
+      attempts=$((attempts + 1)); \
+      if [ "$attempts" -ge 3 ]; then \
+        echo "npm install of release tarballs failed after $attempts attempts" >&2; \
+        exit 1; \
+      fi; \
+      echo "npm install attempt $attempts failed; retrying in 15s" >&2; \
+      sleep 15; \
+    done && \
     npm cache clean --force && \
     rm -f /tmp/*.tgz
 
 
 # Install experimental UI package into the sandbox so --experimental-ui works.
 # If it's not available on the registry yet (e.g. nightlies), users can still
-# mount/install it manually.
-RUN npm install -g @vybestack/llxprt-ui && npm cache clean --force
+# mount/install it manually. This install streams straight from the registry
+# and can hit the same transient network resets as the tarball install
+# (issue #3241), so it gets the same bounded retry.
+RUN export npm_config_fetch_retries=5 \
+      npm_config_fetch_retry_mintimeout=1000 \
+      npm_config_fetch_retry_maxtimeout=60000; \
+    attempts=0; \
+    until npm install -g @vybestack/llxprt-ui; do \
+      attempts=$((attempts + 1)); \
+      if [ "$attempts" -ge 3 ]; then \
+        echo "npm install of @vybestack/llxprt-ui failed after $attempts attempts" >&2; \
+        exit 1; \
+      fi; \
+      echo "npm install of @vybestack/llxprt-ui attempt $attempts failed; retrying in 15s" >&2; \
+      sleep 15; \
+    done && \
+    npm cache clean --force
 
 # default entrypoint when none specified
 CMD ["llxprt"]
