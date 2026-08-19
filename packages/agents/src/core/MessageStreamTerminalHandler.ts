@@ -135,7 +135,9 @@ async function* handleContextSize413Error(
   }
   deps.logger.warn(
     () =>
-      `[stream:orchestrator] retrying original request after 413 context compression`,
+      compressionSucceeded
+        ? '[stream:orchestrator] retrying original request after 413 context compression'
+        : '[stream:orchestrator] retrying original request after 413 context-window enforcement',
     {
       deferredEventCount: deferredEvents.length,
       hadToolCallsThisTurn: state.hadToolCallsThisTurn,
