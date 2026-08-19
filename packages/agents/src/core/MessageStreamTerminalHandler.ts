@@ -4,14 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import {
+  iContentFromAgentMessageInput,
+  type AgentMessageInput,
+} from '@vybestack/llxprt-code-core/llm-types/index.js';
 import {
   type IterationResult,
   MAX_TURNS,
   type MessageStreamDeps,
   type StreamContext,
 } from './MessageStreamOrchestrator.js';
-import { AgentEventType, type ServerAgentStreamEvent } from './turn.js';
+import {
+  AgentEventType,
+  PerformCompressionResult,
+  type ServerAgentStreamEvent,
+} from './turn.js';
 import {
   buildToolContentRejectionAdvice,
   describeRejectedPayload,
@@ -71,6 +78,84 @@ async function* fireAfterHookAndEmitClearContext(
   }
 }
 
+/**
+ * Context-size 413 recovery: the pending request carries no oversized
+ * tool/media payload, so the rejection came from the accumulated
+ * conversation. Compress the history, escalate once to hard context-window
+ * enforcement when compression cannot run or did not compress, then retry the
+ * ORIGINAL pending request once. The isPayloadRecoveryRetry=true retry flag
+ * keeps this bounded (see the repeated-413 guard in handle413Error).
+ */
+async function* handleContextSize413Error(
+  deps: MessageStreamDeps,
+  ctx: StreamContext,
+  deferredEvents: ServerAgentStreamEvent[],
+  state: TerminalState,
+  initialRequest: AgentMessageInput,
+  signal: AbortSignal,
+  boundedTurns: number,
+): AsyncGenerator<ServerAgentStreamEvent, IterationResult | undefined> {
+  const chat = deps.getChat();
+  let compressionSucceeded = false;
+  try {
+    const result = await chat.performCompression(ctx.prompt_id, {
+      trigger: 'auto',
+    });
+    compressionSucceeded = result === PerformCompressionResult.COMPRESSED;
+  } catch (error) {
+    // Compression is best-effort recovery: a subsystem failure escalates to
+    // enforcement rather than aborting the stream.
+    deps.logger.warn(
+      () =>
+        `[stream:orchestrator] 413 compression attempt failed; escalating to context-window enforcement`,
+      { error: error instanceof Error ? error.message : String(error) },
+    );
+  }
+  if (!compressionSucceeded) {
+    try {
+      const pendingTokens = await chat.estimatePendingTokens(
+        iContentFromAgentMessageInput(initialRequest),
+      );
+      await chat.enforceContextWindow(pendingTokens, ctx.prompt_id);
+    } catch (error) {
+      // Enforcement throwing means the context cannot be reduced locally;
+      // end the iteration gracefully instead of crashing the stream.
+      deps.logger.warn(
+        () =>
+          `[stream:orchestrator] 413 context-window enforcement failed; ending iteration without retry`,
+        { error: error instanceof Error ? error.message : String(error) },
+      );
+      for (const d of deferredEvents) yield d;
+      await fireAfterHook(deps, ctx);
+      return earlyIterResult(state.hadToolCallsThisTurn, {
+        ...state,
+        deferredEvents,
+      });
+    }
+  }
+  deps.logger.warn(
+    () =>
+      `[stream:orchestrator] retrying original request after 413 context compression`,
+    {
+      deferredEventCount: deferredEvents.length,
+      hadToolCallsThisTurn: state.hadToolCallsThisTurn,
+    },
+  );
+  yield* deps.sendMessageStream(
+    initialRequest,
+    signal,
+    ctx.prompt_id,
+    boundedTurns - 1,
+    false,
+    true,
+  );
+  await fireAfterHook(deps, ctx);
+  return earlyIterResult(state.hadToolCallsThisTurn, {
+    ...state,
+    deferredEvents,
+  });
+}
+
 async function* handle413Error(
   deps: MessageStreamDeps,
   ctx: StreamContext,
@@ -95,6 +180,24 @@ async function* handle413Error(
       ...state,
       deferredEvents,
     });
+  }
+
+  // Without tool-response/media evidence the 413 reflects the whole context
+  // size, not an oversized payload, so compress instead of advising the model.
+  const description = describeRejectedPayload(initialRequest);
+  if (
+    description.toolNames.length === 0 &&
+    description.mediaDescriptors.length === 0
+  ) {
+    return yield* handleContextSize413Error(
+      deps,
+      ctx,
+      deferredEvents,
+      state,
+      initialRequest,
+      signal,
+      boundedTurns,
+    );
   }
 
   const toolNames = extractToolNamesFromRequest(initialRequest);
