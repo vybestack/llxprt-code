@@ -13,7 +13,7 @@ import { automock } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { AgentClient } from './client.js';
 import type { ChatSession } from './chatSession.js';
-import { AgentEventType } from './turn.js';
+import { AgentEventType, PerformCompressionResult } from './turn.js';
 import {
   fromAsync,
   setupAgentClient,
@@ -201,6 +201,32 @@ void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   },
 }));
 
+/**
+ * Builds the partial ChatSession mock shared by every 413 test. Recovery
+ * methods default to bare spies so not-called assertions work out of the box;
+ * pass overrides for the behavior under test.
+ */
+function makeMockChat(
+  overrides: Partial<
+    Pick<
+      ChatSession,
+      'performCompression' | 'enforceContextWindow' | 'estimatePendingTokens'
+    >
+  > = {},
+): Partial<ChatSession> {
+  const base: Partial<ChatSession> = {
+    addHistory: vi.fn(),
+    getHistory: vi.fn().mockReturnValue([]),
+    getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+    getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
+    getContextLimit: vi.fn().mockReturnValue(1000000),
+    performCompression: vi.fn(),
+    enforceContextWindow: vi.fn(),
+    estimatePendingTokens: vi.fn(),
+  };
+  return { ...base, ...overrides };
+}
+
 describe('Agent Client (client.ts)', () => {
   let client: AgentClient;
 
@@ -257,13 +283,7 @@ describe('Agent Client (client.ts)', () => {
         .mockReturnValueOnce(mockStream1)
         .mockReturnValueOnce(mockStream2);
 
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
-        getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
-        getContextLimit: vi.fn().mockReturnValue(1000000),
-      };
+      const mockChat = makeMockChat();
       client['chat'] = mockChat as ChatSession;
 
       // Include tool_response blocks to test tool name extraction
@@ -328,6 +348,270 @@ describe('Agent Client (client.ts)', () => {
         ],
         expect.any(Object),
       );
+
+      // A tool-payload 413 must not run compression or enforcement (REQ-3251-5)
+      expect(mockChat.performCompression).not.toHaveBeenCalled();
+      expect(mockChat.enforceContextWindow).not.toHaveBeenCalled();
+    });
+
+    it('compresses the context and retries the original request on a context-size 413 (request_too_large)', async () => {
+      vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
+        true,
+      );
+      // Anthropic-style context-size rejection: no tool or media payload.
+      const requestTooLarge = {
+        error: { message: 'Request exceeds the maximum size', status: 413 },
+      };
+      const mockStream1 = (async function* () {
+        yield { type: AgentEventType.Error, value: requestTooLarge };
+      })();
+      const mockStream2 = (async function* () {
+        yield { type: AgentEventType.Content, value: 'Retried content' };
+      })();
+
+      mockTurnRunFn
+        .mockReturnValueOnce(mockStream1)
+        .mockReturnValueOnce(mockStream2);
+
+      const promptId = 'prompt-id-413-context-size';
+      const mockChat = makeMockChat({
+        performCompression: vi
+          .fn()
+          .mockResolvedValue(PerformCompressionResult.COMPRESSED),
+        enforceContextWindow: vi.fn().mockResolvedValue(undefined),
+        estimatePendingTokens: vi.fn().mockResolvedValue(4242),
+      });
+      client['chat'] = mockChat as ChatSession;
+
+      const initialRequest = [{ type: 'text', text: 'Hi' }];
+      const events = await fromAsync(
+        client.sendMessageStream(
+          initialRequest,
+          new AbortController().signal,
+          promptId,
+        ),
+      );
+
+      // The retried Content flows to the consumer after the surfaced 413.
+      expect(events).toStrictEqual([
+        {
+          type: AgentEventType.ModelInfo,
+          value: {
+            model: 'test-model',
+            providerName: 'gemini',
+            profileName: null,
+            displayLabel: 'test-model',
+          },
+        },
+        { type: AgentEventType.Error, value: requestTooLarge },
+        { type: AgentEventType.Content, value: 'Retried content' },
+      ]);
+
+      expect(mockChat.performCompression).toHaveBeenCalledTimes(1);
+      expect(mockChat.performCompression).toHaveBeenCalledWith(promptId, {
+        trigger: 'auto',
+      });
+      expect(mockChat.enforceContextWindow).not.toHaveBeenCalled();
+
+      // The retry carries the ORIGINAL pending request, not a synthetic message.
+      expect(mockTurnRunFn).toHaveBeenCalledTimes(2);
+      expect(mockTurnRunFn).toHaveBeenNthCalledWith(
+        2,
+        [{ speaker: 'human', blocks: [{ type: 'text', text: 'Hi' }] }],
+        expect.any(Object),
+      );
+    });
+
+    it.each([
+      {
+        label: 'SKIPPED_EMPTY',
+        result: PerformCompressionResult.SKIPPED_EMPTY,
+      },
+      {
+        label: 'SKIPPED_COOLDOWN',
+        result: PerformCompressionResult.SKIPPED_COOLDOWN,
+      },
+      { label: 'NOOP', result: PerformCompressionResult.NOOP },
+      { label: 'FAILED', result: PerformCompressionResult.FAILED },
+      { label: 'rejected', result: undefined },
+    ])(
+      'escalates to context-window enforcement when compression is $label on a context-size 413',
+      async ({ label, result }) => {
+        vi.spyOn(
+          client['config'],
+          'getContinueOnFailedApiCall',
+        ).mockReturnValue(true);
+        const mockStream1 = (async function* () {
+          yield {
+            type: AgentEventType.Error,
+            value: {
+              error: { message: 'Payload too large', status: 413 },
+            },
+          };
+        })();
+        const mockStream2 = (async function* () {
+          yield { type: AgentEventType.Content, value: 'Retried content' };
+        })();
+
+        mockTurnRunFn
+          .mockReturnValueOnce(mockStream1)
+          .mockReturnValueOnce(mockStream2);
+
+        const promptId = `prompt-id-413-escalate-${label}`;
+        const mockChat = makeMockChat({
+          performCompression:
+            result === undefined
+              ? vi.fn().mockRejectedValue(new Error('compression blew up'))
+              : vi.fn().mockResolvedValue(result),
+          enforceContextWindow: vi.fn().mockResolvedValue(undefined),
+          estimatePendingTokens: vi.fn().mockResolvedValue(4242),
+        });
+        client['chat'] = mockChat as ChatSession;
+
+        const initialRequest = [{ type: 'text', text: 'Hi' }];
+        // A rejected compression must not crash the stream; the retry still runs.
+        const events = await fromAsync(
+          client.sendMessageStream(
+            initialRequest,
+            new AbortController().signal,
+            promptId,
+          ),
+        );
+
+        expect(mockChat.enforceContextWindow).toHaveBeenCalledTimes(1);
+        expect(mockChat.enforceContextWindow).toHaveBeenCalledWith(
+          4242,
+          promptId,
+        );
+        expect(mockTurnRunFn).toHaveBeenCalledTimes(2);
+        expect(mockTurnRunFn).toHaveBeenNthCalledWith(
+          2,
+          [{ speaker: 'human', blocks: [{ type: 'text', text: 'Hi' }] }],
+          expect.any(Object),
+        );
+        expect(events).toContainEqual({
+          type: AgentEventType.Content,
+          value: 'Retried content',
+        });
+      },
+    );
+
+    it('ends the iteration gracefully when context-window enforcement fails on a context-size 413', async () => {
+      vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
+        true,
+      );
+      const requestTooLarge = {
+        error: { message: 'Request exceeds the maximum size', status: 413 },
+      };
+      mockTurnRunFn.mockReturnValueOnce(
+        (async function* () {
+          yield { type: AgentEventType.Finished, value: { reason: 'STOP' } };
+          yield { type: AgentEventType.Error, value: requestTooLarge };
+        })(),
+      );
+
+      const promptId = 'prompt-id-413-enforcement-failed';
+      const mockChat = makeMockChat({
+        performCompression: vi
+          .fn()
+          .mockResolvedValue(PerformCompressionResult.NOOP),
+        enforceContextWindow: vi
+          .fn()
+          .mockRejectedValue(new Error('unrecoverable context overflow')),
+        estimatePendingTokens: vi.fn().mockResolvedValue(4242),
+      });
+      client['chat'] = mockChat as ChatSession;
+      const afterHook = vi
+        .spyOn(client['agentHookManager'], 'fireAfterAgentHookSafe')
+        .mockResolvedValue(undefined);
+
+      // fromAsync completing is itself the assertion that the stream did not throw.
+      const events = await fromAsync(
+        client.sendMessageStream(
+          [{ type: 'text', text: 'Hi' }],
+          new AbortController().signal,
+          promptId,
+        ),
+      );
+
+      // No retry was issued and the original 413 Error event stays surfaced.
+      expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
+      expect(mockChat.enforceContextWindow).toHaveBeenCalledTimes(1);
+      // The deferred Finished event is flushed after the terminal Error,
+      // not dropped, and the after-agent hook still fires exactly once.
+      expect(events.slice(-2)).toStrictEqual([
+        { type: AgentEventType.Error, value: requestTooLarge },
+        { type: AgentEventType.Finished, value: { reason: 'STOP' } },
+      ]);
+      expect(afterHook).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries with the synthetic 413 message when the rejected payload carries only media evidence', async () => {
+      vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
+        true,
+      );
+      const mockStream1 = (async function* () {
+        yield {
+          type: AgentEventType.Error,
+          value: {
+            error: { message: 'Payload too large', status: 413 },
+          },
+        };
+      })();
+      const mockStream2 = (async function* () {
+        yield { type: AgentEventType.Content, value: 'Retried content' };
+      })();
+
+      mockTurnRunFn
+        .mockReturnValueOnce(mockStream1)
+        .mockReturnValueOnce(mockStream2);
+
+      const promptId = 'prompt-id-413-media-only';
+      const mockChat = makeMockChat();
+      client['chat'] = mockChat as ChatSession;
+
+      // Media evidence without any tool_response still routes to the
+      // synthetic tool-name retry (REQ-3251-5).
+      const initialRequest = [
+        { type: 'text', text: 'Describe this chart' },
+        {
+          type: 'media',
+          mimeType: 'image/png',
+          data: 'aGk=',
+          encoding: 'base64',
+          filename: 'chart.png',
+        },
+      ];
+      const events = await fromAsync(
+        client.sendMessageStream(
+          initialRequest,
+          new AbortController().signal,
+          promptId,
+        ),
+      );
+
+      expect(mockTurnRunFn).toHaveBeenCalledTimes(2);
+      expect(mockTurnRunFn).toHaveBeenNthCalledWith(
+        2,
+        [
+          {
+            speaker: 'human',
+            blocks: [
+              {
+                type: 'text',
+                text: 'System: The previous tool calls produced a response that was too large (HTTP 413). Please retry with fewer or more focused queries.',
+              },
+            ],
+          },
+        ],
+        expect.any(Object),
+      );
+      expect(mockChat.performCompression).not.toHaveBeenCalled();
+      expect(mockChat.enforceContextWindow).not.toHaveBeenCalled();
+      expect(events).toContainEqual({
+        type: AgentEventType.Content,
+        value: 'Retried content',
+      });
     });
 
     it('does not retry a 413 after ordinary content was already emitted', async () => {
@@ -344,17 +628,12 @@ describe('Agent Client (client.ts)', () => {
         };
       })();
       mockTurnRunFn.mockReturnValueOnce(mockStream);
-      client['chat'] = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
-        getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
-        getContextLimit: vi.fn().mockReturnValue(1000000),
-      } as unknown as ChatSession;
+      const mockChat = makeMockChat();
+      client['chat'] = mockChat as ChatSession;
 
       const events = await fromAsync(
         client.sendMessageStream(
-          [{ text: 'Hi' }],
+          [{ type: 'text', text: 'Hi' }],
           new AbortController().signal,
           'prompt-id-413-after-content',
         ),
@@ -370,6 +649,10 @@ describe('Agent Client (client.ts)', () => {
         },
       ]);
       expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
+      // An unretryable 413 must not run compression recovery either.
+      expect(mockChat.performCompression).not.toHaveBeenCalled();
+      expect(mockChat.enforceContextWindow).not.toHaveBeenCalled();
+      expect(mockChat.estimatePendingTokens).not.toHaveBeenCalled();
     });
 
     it.each([
@@ -408,17 +691,12 @@ describe('Agent Client (client.ts)', () => {
           yield terminalEvent;
         })();
         mockTurnRunFn.mockReturnValueOnce(mockStream);
-        client['chat'] = {
-          addHistory: vi.fn(),
-          getHistory: vi.fn().mockReturnValue([]),
-          getLastPromptTokenCount: vi.fn().mockReturnValue(0),
-          getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
-          getContextLimit: vi.fn().mockReturnValue(1000000),
-        } as unknown as ChatSession;
+        const mockChat = makeMockChat();
+        client['chat'] = mockChat as ChatSession;
 
         const events = await fromAsync(
           client.sendMessageStream(
-            [{ text: 'Hi' }],
+            [{ type: 'text', text: 'Hi' }],
             new AbortController().signal,
             'prompt-id-after-tool-call',
           ),
@@ -426,8 +704,53 @@ describe('Agent Client (client.ts)', () => {
 
         expect(events.slice(-2)).toStrictEqual([toolCallEvent, terminalEvent]);
         expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
+        // A terminal event after a tool call is unretryable; no compression.
+        expect(mockChat.performCompression).not.toHaveBeenCalled();
+        expect(mockChat.enforceContextWindow).not.toHaveBeenCalled();
+        expect(mockChat.estimatePendingTokens).not.toHaveBeenCalled();
       },
     );
+
+    it('does not retry a 413 after thinking was already emitted', async () => {
+      vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
+        true,
+      );
+      const thoughtEvent = {
+        type: AgentEventType.Thought,
+        value: {
+          subject: 'Planning',
+          description: 'I will do something',
+        },
+      };
+      const requestTooLarge = {
+        error: { message: 'Payload too large', status: 413 },
+      };
+      const mockStream = (async function* () {
+        yield thoughtEvent;
+        yield { type: AgentEventType.Error, value: requestTooLarge };
+      })();
+      mockTurnRunFn.mockReturnValueOnce(mockStream);
+      const mockChat = makeMockChat();
+      client['chat'] = mockChat as ChatSession;
+
+      const events = await fromAsync(
+        client.sendMessageStream(
+          [{ type: 'text', text: 'Hi' }],
+          new AbortController().signal,
+          'prompt-id-413-after-thinking',
+        ),
+      );
+
+      expect(events.slice(-2)).toStrictEqual([
+        thoughtEvent,
+        { type: AgentEventType.Error, value: requestTooLarge },
+      ]);
+      expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
+      // An unretryable 413 must not run compression recovery either.
+      expect(mockChat.performCompression).not.toHaveBeenCalled();
+      expect(mockChat.enforceContextWindow).not.toHaveBeenCalled();
+      expect(mockChat.estimatePendingTokens).not.toHaveBeenCalled();
+    });
 
     it('should not retry on 413 when getContinueOnFailedApiCall returns false', async () => {
       vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
@@ -445,16 +768,10 @@ describe('Agent Client (client.ts)', () => {
 
       mockTurnRunFn.mockReturnValueOnce(mockStream1);
 
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
-        getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
-        getContextLimit: vi.fn().mockReturnValue(1000000),
-      };
+      const mockChat = makeMockChat();
       client['chat'] = mockChat as ChatSession;
 
-      const initialRequest = [{ text: 'Hi' }];
+      const initialRequest = [{ type: 'text', text: 'Hi' }];
       const promptId = 'prompt-id-413-no-retry';
       const signal = new AbortController().signal;
 
@@ -483,6 +800,10 @@ describe('Agent Client (client.ts)', () => {
 
       // turn.run should be called only once
       expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
+
+      // Suppressed retries must not run compression either (REQ-3251-6)
+      expect(mockChat.performCompression).not.toHaveBeenCalled();
+      expect(mockChat.enforceContextWindow).not.toHaveBeenCalled();
     });
 
     it('should stop recursing after one retry when 413 errors are repeatedly received', async () => {
@@ -501,16 +822,16 @@ describe('Agent Client (client.ts)', () => {
         })(),
       );
 
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
-        getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
-        getContextLimit: vi.fn().mockReturnValue(1000000),
-      };
+      const mockChat = makeMockChat({
+        performCompression: vi
+          .fn()
+          .mockResolvedValue(PerformCompressionResult.COMPRESSED),
+        enforceContextWindow: vi.fn().mockResolvedValue(undefined),
+        estimatePendingTokens: vi.fn().mockResolvedValue(0),
+      });
       client['chat'] = mockChat as ChatSession;
 
-      const initialRequest = [{ text: 'Hi' }];
+      const initialRequest = [{ type: 'text', text: 'Hi' }];
       const promptId = 'prompt-id-413-infinite';
       const signal = new AbortController().signal;
 
@@ -533,6 +854,9 @@ describe('Agent Client (client.ts)', () => {
 
       // turn.run should be called exactly twice
       expect(mockTurnRunFn).toHaveBeenCalledTimes(2);
+
+      // The guarded retry must not compress a second time (REQ-3251-3)
+      expect(mockChat.performCompression).toHaveBeenCalledTimes(1);
     });
   });
 });
