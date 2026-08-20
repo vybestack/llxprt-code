@@ -401,4 +401,57 @@ describe('AttemptRecorder perf phase observer (P07)', () => {
     expect(ends[0].inputTokens).toBe(100);
     expect(ends[0].outputTokens).toBe(50);
   });
+
+  // Fail-open boundary: malformed provider usage (genuinely external data)
+  // can make token resolution throw. The attempt-end boundary must still
+  // run — telemetry, pruning, and the perf-observer notification — with the
+  // raw info counts as the fallback, and no exception may escape into
+  // provider teardown.
+  it('malformed usage that throws during resolution still notifies the perf observer with raw info counts', () => {
+    const { observer, ends } = capturingObserver();
+    setPerfPhaseObserver(observer);
+
+    const malformedUsage: UsageStats = {
+      promptTokens: 100,
+      completionTokens: 50,
+      totalTokens: 150,
+      get cachedTokens(): number {
+        throw new Error('malformed usage payload');
+      },
+    };
+    const recorder = createRecorder(false);
+    recorder.onAttemptStart({
+      requestStartMs: 1000,
+      attemptId: 'malformed-1',
+      attemptIndex: 0,
+    });
+    recorder.recordMetadataUsage('malformed-1', malformedUsage);
+
+    expect(() =>
+      recorder.onAttemptEnd({
+        attemptId: 'malformed-1',
+        attemptIndex: 0,
+        start: 1000,
+        completionMs: 2000,
+        firstTokenMs: 1100,
+        lastTokenMs: 1900,
+        status: 'error',
+        providerName: 'test-provider',
+        modelName: 'test-model',
+        inputTokens: 111,
+        outputTokens: 22,
+        cachedTokens: 0,
+        thoughtsTokens: 0,
+        toolTokens: 0,
+        errorMessage: 'stream failed after usage chunk',
+      }),
+    ).not.toThrow();
+
+    expect(ends).toHaveLength(1);
+    expect(ends[0].attemptId).toBe('malformed-1');
+    expect(ends[0].status).toBe('error');
+    // Resolution failed, so the raw info counts are the fallback.
+    expect(ends[0].inputTokens).toBe(111);
+    expect(ends[0].outputTokens).toBe(22);
+  });
 });

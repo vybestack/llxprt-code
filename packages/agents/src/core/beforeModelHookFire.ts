@@ -57,11 +57,19 @@ export async function fireBeforeModelHook(
     model,
     log,
   } = options;
-  // Zero-overhead early return when hooks disabled / no hook system: no
-  // snapshot (differential recovery falls back to reference equality).
+  // Hooks disabled / no hook system: no snapshot (differential recovery
+  // falls back to reference equality), but the boundary resolver still runs
+  // so the caller-boundary diagnostic fires on this path too (parity with
+  // the pre-extraction StreamProcessor ordering).
   const passthrough = (): BeforeModelHookFireResult => ({
     contents: requestContents,
-    pendingContents: pendingUserIContents,
+    pendingContents: resolvePendingBoundaryFromHook(
+      requestContents,
+      requestContents,
+      pendingUserIContents,
+      undefined,
+      log,
+    ),
   });
   if (
     configForHooks === undefined ||

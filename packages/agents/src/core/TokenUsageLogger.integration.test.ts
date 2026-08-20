@@ -754,4 +754,136 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     expect(record.provider_request_ms).toBeGreaterThanOrEqual(0);
     expect(record.chunk_count).toBe(1);
   });
+
+  // #3257 review finding: a failed attempt's partial timing must be
+  // attached at the stream-error seam before the error propagates, so the
+  // abandoned-attempt record carries measured ttft/provider_request (no
+  // generation window from a single token-bearing chunk). The retry's
+  // success record must carry its own fresh timing, not attempt 1's.
+  it('records partial timing on an abandoned stream attempt and fresh timing on the retry (#3257)', async () => {
+    const fixture = createTokenSyncTestFixture();
+    const mockConfig = fixture.mockConfig;
+    const providerRuntimeSnapshot = fixture.providerRuntimeSnapshot;
+    const mockContentGenerator = fixture.mockContentGenerator;
+    const historyService = fixture.historyService;
+
+    const runtimeState: AgentRuntimeState = createAgentRuntimeState({
+      runtimeId: fixture.runtimeSetup.runtime.runtimeId,
+      provider: 'anthropic',
+      model: 'claude-3-5-sonnet-20241022',
+      sessionId: 'abandoned-timing-session',
+    });
+
+    let attempt = 0;
+    const mockProvider = {
+      name: 'anthropic',
+      generateChatCompletion: vi.fn().mockImplementation(async function* () {
+        attempt++;
+        if (attempt === 1) {
+          yield {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'partial' }],
+            metadata: {
+              usage: {
+                promptTokens: 5000,
+                completionTokens: 5,
+                totalTokens: 5005,
+              },
+            },
+          };
+          throw new Error('Connection error.');
+        }
+        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'The ' }] };
+        await Bun.sleep(15);
+        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'answer ' }] };
+        await Bun.sleep(15);
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'is 4.' }],
+          metadata: {
+            usage: {
+              promptTokens: 5100,
+              completionTokens: 15,
+              totalTokens: 5115,
+            },
+          },
+        };
+      }),
+    };
+
+    const providerManager = {
+      getActiveProvider: vi.fn(() => mockProvider),
+    };
+    mockConfig.getProviderManager = vi.fn().mockReturnValue(providerManager);
+
+    const view = createAgentRuntimeContext({
+      state: runtimeState,
+      history: historyService,
+      settings: {
+        compressionThreshold: 0.8,
+        contextLimit: 200000,
+        preserveThreshold: 0.2,
+        telemetry: { enabled: true, target: null },
+      },
+      provider: createProviderAdapterFromManager(
+        mockConfig.getProviderManager() as never,
+      ),
+      telemetry: createTelemetryAdapterFromConfig(mockConfig),
+      tools: createToolRegistryViewFromRegistry(),
+      providerRuntime: providerRuntimeSnapshot,
+    });
+
+    const chat = new ChatSession(view, mockContentGenerator, {}, []);
+
+    const realLogger = new TokenUsageLogger(true, logFile);
+    chat.setTokenUsageLoggerForTesting(realLogger);
+
+    const promptId = 'abandoned-timing-prompt';
+    realLogger.recordEstimate(promptId, {
+      provider: 'anthropic',
+      model: 'claude-3-5-sonnet-20241022',
+      estimatedTokens: 150,
+      estimator: 'anthropic-char',
+      tiktokenTokens: 140,
+    });
+
+    const stream = await chat.sendMessageStream(
+      { message: [{ text: 'What is 2+2?' }] },
+      promptId,
+    );
+    for await (const _event of stream) {
+      // consume
+    }
+
+    await historyService.waitForTokenUpdates();
+
+    expect(attempt).toBe(2);
+    const records = readJsonl(logFile);
+    expect(records).toHaveLength(2);
+
+    const abandoned = records.find((r) => r.attempt_outcome === 'abandoned');
+    expect(abandoned).toBeDefined();
+    if (abandoned === undefined) throw new Error('no abandoned record');
+    expect(abandoned.attempt_index).toBe(0);
+    expect(typeof abandoned.ttft_ms).toBe('number');
+    expect(abandoned.ttft_ms).toBeGreaterThanOrEqual(0);
+    expect(typeof abandoned.provider_request_ms).toBe('number');
+    expect(abandoned.provider_request_ms).toBeGreaterThanOrEqual(0);
+    // Single token-bearing chunk: the generation window is not strictly
+    // positive, so generation_ms must be omitted.
+    expect('generation_ms' in abandoned).toBe(false);
+    expect(abandoned.chunk_count).toBe(1);
+
+    const success = records.find((r) => r.attempt_outcome !== 'abandoned');
+    expect(success).toBeDefined();
+    if (success === undefined) throw new Error('no success record');
+    expect(success.attempt_index).toBe(1);
+    expect(typeof success.ttft_ms).toBe('number');
+    expect(success.ttft_ms).toBeGreaterThanOrEqual(0);
+    expect(success.generation_ms).toBeGreaterThan(0);
+    expect(typeof success.provider_request_ms).toBe('number');
+    expect(success.provider_request_ms).toBeGreaterThanOrEqual(0);
+    // Fresh attempt-2 timing wins: three chunks, not attempt 1's single one.
+    expect(success.chunk_count).toBe(3);
+  });
 });

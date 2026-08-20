@@ -51,6 +51,7 @@ import {
 } from './chatSession.js';
 import { filterHookRestrictedBlocks } from './hookToolRestrictions.js';
 import {
+  attachStreamTiming,
   logStreamTelemetry,
   StreamTimingTracker,
 } from './streamTelemetryLogger.js';
@@ -673,6 +674,11 @@ export class StreamProcessor {
       }
     } catch (error) {
       this.currentPromptEnvelopeEstimate = null;
+      attachStreamTiming(
+        this.compressionHandler.tokenUsageLogger,
+        telemetryContext,
+        timing.measure(),
+      );
       throw error;
     }
 

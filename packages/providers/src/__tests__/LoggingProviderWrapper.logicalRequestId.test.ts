@@ -54,7 +54,7 @@ const TEXT_AND_USAGE_CHUNKS: IContent[] = [
   { speaker: 'ai', blocks: [{ type: 'text', text: 'Hello' }] },
   { speaker: 'ai', blocks: [{ type: 'text', text: ' world' }] },
   { speaker: 'ai', blocks: [], metadata: { usage: USAGE_BASIC } },
-] as IContent[];
+];
 
 describe('LoggingProviderWrapper logical request id threading (#3257)', () => {
   beforeEach(() => {

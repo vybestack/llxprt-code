@@ -18,12 +18,22 @@ function makeTempLogPath(): string {
   );
 }
 
+function parseJsonRecord(line: string): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(line);
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error(`Expected a JSON object record in usage log: ${line}`);
+  }
+  const record: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    record[key] = value;
+  }
+  return record;
+}
+
 function readJsonl(filePath: string): Array<Record<string, unknown>> {
   const raw = fs.readFileSync(filePath, 'utf-8').trim();
   if (raw.length === 0) return [];
-  return raw
-    .split('\n')
-    .map((line) => JSON.parse(line) as Record<string, unknown>);
+  return raw.split('\n').map(parseJsonRecord);
 }
 
 /**

@@ -135,6 +135,37 @@ export async function logStreamTelemetry(
   }
 }
 
+/**
+ * Attach measured stream timing to the pending token-usage entry for the
+ * prompt. Guarded like logStreamTelemetry: a telemetry-side failure must
+ * never escape into the stream path. All four keys are attached every
+ * time — null where unmeasured — so a retry attempt fully replaces the
+ * prior attempt's timing via the spread-merge. Also used on the
+ * stream-error path so a failed attempt's partial timing (with
+ * provider_request_ms as elapsed-so-far) reaches the abandoned-attempt
+ * record (#3257).
+ */
+export function attachStreamTiming(
+  tokenUsageLogger: TokenUsageLogger | null | undefined,
+  telemetry: { promptId: string } | undefined,
+  timing: StreamTimingMeasurement | undefined,
+): void {
+  if (telemetry === undefined) return;
+  try {
+    tokenUsageLogger?.attachTurnContext(telemetry.promptId, {
+      ttftMs: timing?.firstTokenMs ?? null,
+      lastTokenMs: timing?.lastTokenMs ?? null,
+      providerRequestMs: timing?.providerRequestMs ?? null,
+      chunkCount: timing?.chunkCount,
+    });
+  } catch (error) {
+    new DebugLogger('llxprt:stream-telemetry').error(
+      `Failed to attach stream timing for prompt ${telemetry.promptId}`,
+      error,
+    );
+  }
+}
+
 async function emitStreamTelemetry(
   runtimeContext: AgentRuntimeContext,
   telemetry: { promptId: string; startTime: number; attemptIndex?: number },
@@ -153,14 +184,7 @@ async function emitStreamTelemetry(
     usage ? { ...usage } : undefined,
     safeJsonStringify(lastIContent),
   );
-  // Attach all four keys every time — null where unmeasured — so a retry
-  // attempt fully replaces the prior attempt's timing via the spread-merge.
-  tokenUsageLogger?.attachTurnContext(telemetry.promptId, {
-    ttftMs: timing?.firstTokenMs ?? null,
-    lastTokenMs: timing?.lastTokenMs ?? null,
-    providerRequestMs: timing?.providerRequestMs ?? null,
-    chunkCount: timing?.chunkCount,
-  });
+  attachStreamTiming(tokenUsageLogger, telemetry, timing);
   await recordActualTokenUsage(
     tokenUsageLogger,
     telemetry.promptId,
