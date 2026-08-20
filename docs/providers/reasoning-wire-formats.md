@@ -279,8 +279,8 @@ thinking, and effort is omitted.
 
 ### Explicit Anthropic budget
 
-A legacy budgeted model needs a direct budget or a numeric map. This example
-uses a direct `reasoning.budgetTokens` value:
+A legacy model with budgeted thinking needs a direct budget or a numeric
+map. This example uses a direct `reasoning.budgetTokens` value:
 
 ```json
 {

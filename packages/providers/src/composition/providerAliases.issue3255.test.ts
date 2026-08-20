@@ -148,6 +148,25 @@ describe('issue #3255 builtin alias reasoning defaults', () => {
     });
   });
 
+  it.each(['glm-5', 'glm-5.2', 'glm-5.3'])(
+    'applies the broad GLM-5 enablement default to %s',
+    (model) => {
+      const defaults = resolveAliasDefaults('zai', model);
+
+      expect(defaults['reasoning.enabled']).toBe(true);
+      expect(defaults['reasoning.effort']).toBe('high');
+    },
+  );
+
+  it.each(['foreign-glm-5', 'my-glm-5.3', 'glm-50'])(
+    'does not apply GLM-5 defaults to the near-match %s',
+    (model) => {
+      const defaults = resolveAliasDefaults('zai', model);
+
+      expect(defaults).toStrictEqual({});
+    },
+  );
+
   it.each(['kimi-for-coding', 'kimi-for-coding-highspeed'])(
     'uses thinking enablement without a K3 effort default for %s',
     (model) => {

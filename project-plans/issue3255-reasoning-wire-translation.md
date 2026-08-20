@@ -515,19 +515,50 @@ Every round-two comment was classified as follows. Duplicate comments inherit th
 
 Two OCR-remediation attempts ended without reports after leaving partial workspace edits. Their edits were inspected and completed by reporting specialists. No RED/GREEN or completion claim is attributed to the interrupted attempts.
 
+### PR review remediation
+
+PR #3260 produced 33 review threads. Each thread was checked against the accepted requirements, current code, and behavioral tests before any source change. The dispositions were 8 `Blocker-Fix`, 4 `In-scope-Fix`, 20 `Reject`, and 1 `Defer`.
+
+The accepted fixes cover these behaviors:
+
+- Fable 5 rejects both explicit `anthropic-budget` selection and direct manual budgets before transport.
+- Adaptive-capable non-Fable Anthropic models honor a direct manual budget without discarding native effort.
+- Anthropic reports dropped effort and budget independently.
+- Z.AI GLM-5 model defaults use an anchored family pattern.
+- Gemini 2 and Gemini 3 use generation-specific translation; unsupported generations omit `thinkingConfig` and report each dropped setting.
+- A false Gemini enabled map cannot enable thinking through `LOW` or `true`.
+- OpenAI Chat rejects a manual budget combined with a mapped thinking type other than `enabled`.
+- OpenAI Chat reports dropped direct budgets independently from dropped disablement.
+- Review-identified documentation, warning wording, interface comments, and test-helper own-property semantics match the implemented behavior.
+
+The `Defer` disposition applies to DeepSeek `max_tokens`. That output-tuning value predates this issue and requires separate provider evidence. The rejected findings conflict with accepted map semantics, explicit-native precedence, fail-fast validation, switch-local generic settings, provider test isolation, or proven implementation behavior.
+
+RED evidence was reconstructed in a detached temporary worktree at the pushed pre-remediation head `59433d45b5df8dab64e78f827c845a2f6273423b`. Only the current regression tests were copied into that worktree. Old production failed as follows:
+
+- Anthropic: 40 passed and 4 failed, covering independent drop warnings, adaptive manual budgets, direct Fable budgets, and Fable `anthropic-budget` selection.
+- Gemini: 42 passed and 3 failed, covering false-map safety and unsupported-generation omission.
+- OpenAI Chat: 49 passed and 2 failed, covering incompatible budget/thinking combinations and independent budget warnings.
+- Alias defaults: 23 passed and 3 failed for the near-match model IDs `foreign-glm-5`, `my-glm-5.3`, and `glm-50`.
+
+The remediated candidate passed the corresponding focused suites: Anthropic 44/44, Gemini 45/45, OpenAI Chat 51/51, and alias defaults 26/26. Related regression suites also passed, including Fable, Anthropic thinking, Gemini thinking levels, shared resolver, issue #2896, reasoning dialect, model-default precedence, and ownership tests.
+
 ### Candidate-head verification
 
-The candidate passed the complete repository test command under the controlled test environment with serialized Agents tests. The command exited 0. Workspace summaries included Tools 126/126, Storage 37/37, Auth 43/43, Settings 18/18, Telemetry 42/42, IDE integration 10/10, Policy 12/12, MCP 43/43, Core 393/393, LSP 13/13, Providers 578/578, Agents 374/374 plus 6/6 isolated files, CLI 713/713, A2A 22/22, test-utils 13/13, and VS Code companion 7/7.
+Before PR creation, the candidate passed the complete repository test command under the controlled test environment with serialized Agents tests. The command exited 0. Workspace summaries included Tools 126/126, Storage 37/37, Auth 43/43, Settings 18/18, Telemetry 42/42, IDE integration 10/10, Policy 12/12, MCP 43/43, Core 393/393, LSP 13/13, Providers 578/578, Agents 374/374 plus 6/6 isolated files, CLI 713/713, A2A 22/22, test-utils 13/13, and VS Code companion 7/7.
 
 Two earlier full runs exposed three unrelated load-sensitive failures. Each failing file passed through its authoritative isolated runner, and the clean full run then passed the same Tools and Agents workspaces without modification to those unrelated tests.
 
-The candidate-wide test audit scanned 2,693 files, 36,107 tests, and 77,730 assertions with no scanner errors. The issue-specific files produced five `DUP_ASSERT` reports in the ownership-transition suite. Those equal-value before-and-after assertions are intentional evidence that user-owned values persist and provider/model-owned values release across transitions.
+The first PR-remediation aggregate completed every workspace with one load-sensitive Agents timeout and no issue-related failure. Providers passed 579/579 and CLI passed 713/713. The sole failing file, `mutationCoverage.behavior.test.ts`, then passed 22/22 with 38 assertions in 10.12 seconds under the same unchanged 30-second timeout when run in isolation. A second aggregate likewise completed every other workspace but timed out in the unchanged Agents `cli-turn-parity.spec.ts`; that complete file passed 3/3 in 3.35 seconds under the same unchanged 30-second timeout when run in isolation.
+
+The final serialized aggregate used Agents concurrency 1 and exited 0. It passed Core 393/393, LSP 13/13, Providers 579/579, Agents 375/375 plus 6/6 isolated files, CLI 713/713, A2A 22/22, test-utils 13/13, and VS Code companion 7/7. No test timeout or failure remained.
+
+The final candidate-wide test audit scanned 2,695 files, 36,138 tests, and 77,855 assertions with no scanner errors. Issue-added ownership-transition and provider/model fallback tests produced nine new `DUP_ASSERT` reports. Those equal-value before-and-after assertions are intentional evidence that user-owned values persist and provider/model-owned values release or restore across transitions. No issue test produced a new mock-mirror, no-assert, always-true, self-confirming, or weak-oracle finding.
 
 The final candidate passed full lint, CI lint, standalone typecheck, build, the ESLint policy guard, provider-neutral naming tests, Prettier checks, documentation link and placement guards, settings synchronization, copyright-year validation, the no-new-JavaScript guard, the no-Vitest guard, secret scans, prohibited-marker and prose scans, and `git diff --check`.
 
 Live evidence is externally blocked for the required profiles `synthetic_gpt56`, `antigravity-claude-sonnet-4-5-thinking`, `antigravity-gemini-3-pro`, `codex_gpt56`, and `gemini_gemini3`. Safe filename and reference searches found none in the configured profile locations. The requested `$HOME/.bun/bin/llxprt` executable is also unavailable. Attempts through the installed `llxprt` executable failed with the sanitized classification "missing profile." The separate `stepfun-37` smoke completed with a valid haiku, but it is recorded only as general startup evidence and not as a substitute for the five requested profiles.
 
-Local implementation, verification, deep review, and both permitted local OCR rounds are complete. Remote CI, PR review, ancestry, and conflict checks remain pending until the candidate is committed and the PR is created.
+Local implementation, deep review, and both permitted local OCR rounds are complete. PR review is classified and the accepted findings are remediated. The remediation commit, thread replies, updated ancestry checks, remote CI, and final mergeability verification remain pending.
 
 ## Completion conditions
 

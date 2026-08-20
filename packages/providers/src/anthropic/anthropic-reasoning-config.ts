@@ -298,6 +298,13 @@ function buildSelectedThinking(
     return buildDisabledThinking(input, resolved);
   }
   if (resolved.effortFormat === 'anthropic-budget') {
+    // Fable 5 is adaptive-only: an anthropic-budget selection would bypass
+    // that constraint, so refuse before transport (issue #3255).
+    if (isFable5(input.model)) {
+      throw new Error(
+        `Model '${input.model}' is adaptive-only: the anthropic-budget effort format cannot emit budgeted thinking. Use the 'anthropic' effort format or remove reasoning.effortWireFormat=anthropic-budget.`,
+      );
+    }
     return buildBudgetThinking(input, resolved);
   }
   if (input.settings.enabled === undefined) {
@@ -388,6 +395,14 @@ function selectEnabledThinkingType(
   resolved: ResolvedReasoningConfiguration,
 ): 'adaptive' | 'enabled' | undefined {
   if (isFable5(input.model)) {
+    // Fable 5 is adaptive-only: an explicit direct budget would otherwise
+    // reach the manual budgeted branch below, so refuse before transport
+    // (issue #3255).
+    if (input.settings.budgetTokens !== undefined) {
+      throw new Error(
+        `Model '${input.model}' is adaptive-only: reasoning.budgetTokens cannot select budgeted thinking. Remove reasoning.budgetTokens to use adaptive thinking.`,
+      );
+    }
     return 'adaptive';
   }
   if (resolved.enabled.state !== 'emitted') {
@@ -395,6 +410,14 @@ function selectEnabledThinkingType(
   }
   if (typeof resolved.enabled.value !== 'string') {
     throw new Error('Anthropic thinking enablement must resolve to a string');
+  }
+  // A direct budget selects manual budgeted thinking on adaptive-capable
+  // models even when an enabled map or default prefers adaptive (issue #3255).
+  if (
+    input.settings.budgetTokens !== undefined &&
+    supportsAdaptiveThinking(input.model)
+  ) {
+    return 'enabled';
   }
   if (
     input.settings.enabledMap?.true === undefined &&
@@ -507,13 +530,19 @@ function warnForDroppedReasoning(
       resolved.effortFormat,
       resolved.effort,
     );
-  } else if (input.settings.budgetTokens !== undefined) {
-    warnForOutcome(
-      input,
-      'reasoning.budgetTokens',
-      resolved.effortFormat,
-      resolved.effort,
-    );
+  }
+  // A direct budget never reaches the wire once thinking is disabled; report
+  // it independently of the effort outcome instead of only when effort is
+  // absent (issue #3255).
+  if (
+    input.settings.budgetTokens !== undefined &&
+    input.settings.enabled === false
+  ) {
+    warn(input, {
+      format: resolved.effortFormat,
+      setting: 'reasoning.budgetTokens',
+      reason: 'reasoning-disabled',
+    });
   }
   if (input.settings.enabled !== undefined) {
     warnForOutcome(
@@ -558,7 +587,7 @@ function warn(
 ): void {
   input.logger.warn(
     () =>
-      `Anthropic omitted configured ${detail.setting} because ${detail.setting === 'reasoning.enabled' ? 'enabled' : 'effort'} format '${detail.format}' cannot emit it`,
+      `Anthropic omitted configured ${detail.setting} because ${formatLabel(detail.setting)} format '${detail.format}' cannot emit it`,
     {
       providerName: input.providerName,
       model: input.model,
@@ -567,6 +596,18 @@ function warn(
       reason: detail.reason,
     },
   );
+}
+
+/** Name the wire-format dimension after the setting it drops (issue #3255). */
+function formatLabel(setting: string): 'enabled' | 'effort' | 'budget' {
+  switch (setting) {
+    case 'reasoning.enabled':
+      return 'enabled';
+    case 'reasoning.budgetTokens':
+      return 'budget';
+    default:
+      return 'effort';
+  }
 }
 
 function hasOwn(

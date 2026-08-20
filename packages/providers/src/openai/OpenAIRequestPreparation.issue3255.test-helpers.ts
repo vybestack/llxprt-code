@@ -175,7 +175,7 @@ export function reasoningFields(
 ): Record<string, unknown> {
   const fields: Record<string, unknown> = {};
   for (const key of REASONING_BODY_KEYS) {
-    if (key in body) {
+    if (Object.prototype.hasOwnProperty.call(body, key)) {
       fields[key] = body[key];
     }
   }

@@ -27,6 +27,12 @@ import type { DumpMode } from '../utils/dumpContext.js';
 import { shouldDumpSDKContext } from '../utils/dumpSDKContext.js';
 
 export interface ReasoningConfig {
+  /**
+   * Generic thinking enablement choice. `undefined` means the caller made
+   * no generic enablement choice (only effort/maxTokens may still apply);
+   * it differs from an explicit `false`, which requests disablement and can
+   * surface an unrepresentable-disablement warning.
+   */
   readonly enabled: boolean | undefined;
   readonly includeInResponse: boolean;
   readonly stripFromContext: 'all' | 'allButLast' | 'none';

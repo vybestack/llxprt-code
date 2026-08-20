@@ -80,12 +80,53 @@ export function applyGeminiReasoningTranslation(
     return;
   }
 
+  // Budget translation belongs to Gemini 2 and level translation to
+  // Gemini 3; any other generation has no native reasoning representation,
+  // so configured values are omitted with a warning (issue #3255).
   if (isGemini3Model(input.model)) {
     applyGemini3Thinking(input, resolved);
     return;
   }
 
-  applyBudgetThinking(input, resolved);
+  if (isGemini2Model(input.model)) {
+    applyBudgetThinking(input, resolved);
+    return;
+  }
+
+  warnUnsupportedGeneration(input, resolved);
+}
+
+function warnUnsupportedGeneration(
+  input: GeminiReasoningTranslationInput,
+  resolved: ResolvedReasoningConfiguration,
+): void {
+  if (input.reasoningConfig.enabled !== undefined) {
+    warnDropped(
+      input,
+      'reasoning.enabled',
+      resolved.enabledFormat,
+      'model-generation-unsupported',
+    );
+  }
+  if (
+    input.reasoningConfig.effort !== undefined &&
+    resolved.effort.state === 'emitted'
+  ) {
+    warnDropped(
+      input,
+      'reasoning.effort',
+      resolved.effortFormat,
+      'model-generation-unsupported',
+    );
+  }
+  if (input.reasoningConfig.maxTokens !== undefined) {
+    warnDropped(
+      input,
+      'reasoning.maxTokens',
+      'gemini',
+      'model-generation-unsupported',
+    );
+  }
 }
 
 function applyDisabledThinking(
@@ -102,20 +143,29 @@ function applyDisabledThinking(
     return;
   }
 
+  // The disabled path permits only a genuine disable representation: a
+  // thinking level or a true boolean enables thinking, so neither can
+  // express reasoning.enabled=false (issue #3255).
   if (typeof resolved.enabled.value === 'string') {
-    const level = readNativeThinkingLevel(resolved.enabled.value, input.model);
     if (!isGemini3Model(input.model)) {
-      throw unsupportedNativeLevelError(level, input.model);
+      throw unsupportedNativeLevelError(resolved.enabled.value, input.model);
     }
-    input.requestConfig['thinkingConfig'] = {
-      includeThoughts: true,
-      thinkingLevel: level,
-    };
+    warnDropped(
+      input,
+      'reasoning.enabled',
+      resolved.enabledFormat,
+      'gemini-3-disablement-unrepresentable',
+    );
     return;
   }
 
   if (resolved.enabled.value === true) {
-    applyEnabledWithoutEffort(input);
+    warnDropped(
+      input,
+      'reasoning.enabled',
+      resolved.enabledFormat,
+      disablementReason(input.model),
+    );
     return;
   }
 
@@ -128,23 +178,14 @@ function applyDisabledThinking(
     input,
     'reasoning.enabled',
     resolved.enabledFormat,
-    isGemini3Model(input.model)
-      ? 'gemini-3-disablement-unrepresentable'
-      : 'gemini-disablement-unrepresentable',
+    disablementReason(input.model),
   );
 }
 
-function applyEnabledWithoutEffort(
-  input: GeminiReasoningTranslationInput,
-): void {
-  if (isGemini3Model(input.model)) {
-    input.requestConfig['thinkingConfig'] = { includeThoughts: true };
-    return;
-  }
-  input.requestConfig['thinkingConfig'] = {
-    includeThoughts: true,
-    thinkingBudget: input.reasoningConfig.maxTokens ?? -1,
-  };
+function disablementReason(model: string): string {
+  return isGemini3Model(model)
+    ? 'gemini-3-disablement-unrepresentable'
+    : 'gemini-disablement-unrepresentable';
 }
 
 function applyGemini3Thinking(

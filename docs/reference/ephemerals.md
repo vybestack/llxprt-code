@@ -29,9 +29,9 @@ the active provider and transport.
 
 ### Reasoning request translation
 
-The four wire translation settings are supported model-behavior settings. They
-remain session-only until saved with `/profile save`, then persist in the
-profile's `ephemeralSettings` object.
+The four wire-format translation settings are supported model-behavior
+settings. They remain session-only until saved with `/profile save`, then
+persist in the profile's `ephemeralSettings` object.
 
 Each selector and map resolves in this order, highest precedence first:
 

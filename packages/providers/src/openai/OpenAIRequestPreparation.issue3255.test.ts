@@ -309,6 +309,23 @@ describe('OpenAI Chat reasoning wire translation (issue #3255)', () => {
     );
   });
 
+  it('fails before transport when a thinking disabled map meets an emitted budget', async () => {
+    const preparation = prepare({
+      modelBehavior: {
+        'reasoning.enabled': true,
+        'reasoning.effort': 'high',
+        'reasoning.effortWireFormat': 'anthropic-budget',
+        'reasoning.effortMap': { high: 8192 },
+        'reasoning.enabledWireFormat': 'thinking',
+        'reasoning.enabledMap': { true: 'disabled' },
+      },
+    });
+
+    await expect(preparation).rejects.toThrow(
+      "effort format 'anthropic-budget' and thinking type 'disabled' emit conflicting OpenAI Chat reasoning representations",
+    );
+  });
+
   it('suppresses a direct budget when reasoning is disabled', async () => {
     const { body } = await prepare({
       baseURL: 'http://localhost:8000/v1',
@@ -465,6 +482,43 @@ describe('OpenAI Chat reasoning wire translation (issue #3255)', () => {
       thinking: { type: 'enabled', budget_tokens: 8192 },
     });
     expect(logger.warnings).toStrictEqual([]);
+  });
+
+  it('warns for a dropped budget and disablement separately under anthropic-budget', async () => {
+    const { body, logger } = await prepare({
+      modelBehavior: {
+        'reasoning.enabled': false,
+        'reasoning.budgetTokens': 8192,
+        'reasoning.effortWireFormat': 'anthropic-budget',
+        'reasoning.enabledWireFormat': 'none',
+      },
+    });
+
+    expect(reasoningFields(body)).toStrictEqual({});
+    expect(logger.warnings).toStrictEqual([
+      {
+        message:
+          'OpenAI Chat omitted configured reasoning.budgetTokens because reasoning is explicitly disabled',
+        metadata: {
+          provider: 'openai',
+          model: 'test-reasoning-model',
+          selectedFormat: 'anthropic-budget',
+          setting: 'reasoning.budgetTokens',
+          reason: 'reasoning-disabled',
+        },
+      },
+      {
+        message:
+          "OpenAI Chat omitted configured reasoning.enabled because the enabled format is set to 'none'",
+        metadata: {
+          provider: 'openai',
+          model: 'test-reasoning-model',
+          selectedFormat: 'none',
+          setting: 'reasoning.enabled',
+          reason: 'enabled-format-none',
+        },
+      },
+    ]);
   });
   it.each([
     ['reasoning', { effort: 'max' }],
@@ -822,5 +876,15 @@ describe('OpenAI Chat reasoning wire translation (issue #3255)', () => {
       thinking: { type: 'enabled' },
     });
     expect(logger.warnings).toStrictEqual([]);
+  });
+
+  it('reports only own reasoning properties and ignores inherited ones', () => {
+    const body: Record<string, unknown> = Object.create({
+      reasoning_effort: 'inherited',
+    });
+    body['thinking'] = { type: 'enabled' };
+    expect(reasoningFields(body)).toStrictEqual({
+      thinking: { type: 'enabled' },
+    });
   });
 });

@@ -117,18 +117,12 @@ function warnForDroppedReasoning(
   }
   // A direct budget is consumed in Chat only by the anthropic-budget effort
   // format; any other format drops it even when an effort was emitted from
-  // reasoning.effort or no effort outcome exists at all (issue #3255).
-  if (
-    behavior.reasoning.budgetTokens !== undefined &&
-    resolved.effortFormat !== 'anthropic-budget'
-  ) {
-    warnDropped(input, {
-      setting: 'reasoning.budgetTokens',
-      selectedFormat: resolved.effortFormat,
-      reason: 'budget-not-supported',
-      detail:
-        'direct budgets are only supported by the anthropic-budget effort format',
-    });
+  // reasoning.effort or no effort outcome exists at all. Under
+  // anthropic-budget the warning comes from the actual resolved budget
+  // outcome, so a suppressed or unrepresentable budget is still reported
+  // (issue #3255).
+  if (behavior.reasoning.budgetTokens !== undefined) {
+    warnForDroppedBudget(input, resolved);
   }
   if (behavior.reasoning.enabled !== undefined) {
     warnForOutcome(
@@ -154,6 +148,38 @@ function warnForOutcome(
     selectedFormat,
     reason: outcome.reason,
     detail: describeDroppedReason(outcome),
+  });
+}
+
+/** Warn for a dropped direct budget from its actual resolved outcome. */
+function warnForDroppedBudget(
+  input: OpenAIChatReasoningInput,
+  resolved: ResolvedReasoningConfiguration,
+): void {
+  if (resolved.effortFormat !== 'anthropic-budget') {
+    warnDropped(input, {
+      setting: 'reasoning.budgetTokens',
+      selectedFormat: resolved.effortFormat,
+      reason: 'budget-not-supported',
+      detail:
+        'direct budgets are only supported by the anthropic-budget effort format',
+    });
+    return;
+  }
+  if (resolved.effort.state === 'emitted') {
+    return;
+  }
+  if (
+    resolved.effort.state !== 'suppressed' &&
+    resolved.effort.state !== 'unrepresentable'
+  ) {
+    return;
+  }
+  warnDropped(input, {
+    setting: 'reasoning.budgetTokens',
+    selectedFormat: resolved.effortFormat,
+    reason: resolved.effort.reason,
+    detail: describeDroppedReason(resolved.effort),
   });
 }
 
@@ -312,6 +338,15 @@ function applyResolvedEnabled(
       break;
     case 'thinking':
       if (typeof resolved.enabled.value === 'string') {
+        if (
+          fields.thinking !== undefined &&
+          'budget_tokens' in fields.thinking &&
+          resolved.enabled.value !== 'enabled'
+        ) {
+          throw new Error(
+            `effort format 'anthropic-budget' and thinking type '${resolved.enabled.value}' emit conflicting OpenAI Chat reasoning representations`,
+          );
+        }
         fields.thinking = {
           ...fields.thinking,
           type: resolved.enabled.value,

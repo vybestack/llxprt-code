@@ -117,7 +117,7 @@ function reasoningFields(
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const key of ['thinking', 'output_config', 'reasoning_effort']) {
-    if (key in body) {
+    if (Object.prototype.hasOwnProperty.call(body, key)) {
       result[key] = body[key];
     }
   }
@@ -200,6 +200,44 @@ describe('Anthropic reasoning wire translation (issue #3255)', () => {
     expect(reasoningFields(body)).toStrictEqual({
       thinking: { type: 'disabled' },
     });
+  });
+
+  it('warns separately for dropped effort and budget when disabled', async () => {
+    const { body, logger } = await prepare({
+      modelBehavior: {
+        'reasoning.enabled': false,
+        'reasoning.effort': 'high',
+        'reasoning.budgetTokens': 6000,
+      },
+    });
+
+    expect(reasoningFields(body)).toStrictEqual({
+      thinking: { type: 'disabled' },
+    });
+    expect(logger.warnings).toStrictEqual([
+      {
+        message:
+          "Anthropic omitted configured reasoning.effort because effort format 'anthropic' cannot emit it",
+        metadata: {
+          providerName: PROVIDER_NAME,
+          model: 'claude-opus-5',
+          format: 'anthropic',
+          setting: 'reasoning.effort',
+          reason: 'reasoning-disabled',
+        },
+      },
+      {
+        message:
+          "Anthropic omitted configured reasoning.budgetTokens because budget format 'anthropic' cannot emit it",
+        metadata: {
+          providerName: PROVIDER_NAME,
+          model: 'claude-opus-5',
+          format: 'anthropic',
+          setting: 'reasoning.budgetTokens',
+          reason: 'reasoning-disabled',
+        },
+      },
+    ]);
   });
 
   it('preserves direct legacy budget behavior under auto selection', async () => {
@@ -600,6 +638,41 @@ describe('Anthropic reasoning wire translation (issue #3255)', () => {
     });
   });
 
+  it('selects manual budgeted thinking when a direct budget meets an adaptive enabled map', async () => {
+    const { body } = await prepare({
+      modelBehavior: {
+        'reasoning.enabled': true,
+        'reasoning.effort': 'high',
+        'reasoning.budgetTokens': 6000,
+        'reasoning.effortWireFormat': 'anthropic',
+        'reasoning.enabledWireFormat': 'thinking',
+        'reasoning.enabledMap': { true: 'adaptive' },
+      },
+    });
+
+    expect(reasoningFields(body)).toStrictEqual({
+      thinking: { type: 'enabled', budget_tokens: 6000 },
+      output_config: { effort: 'high' },
+    });
+  });
+
+  it('rejects a direct Fable 5 budget before transport instead of ignoring it', async () => {
+    const request = prepare({
+      model: 'claude-fable-5',
+      modelBehavior: {
+        'reasoning.enabled': true,
+        'reasoning.budgetTokens': 6000,
+        'reasoning.effortWireFormat': 'anthropic',
+        'reasoning.enabledWireFormat': 'thinking',
+        'reasoning.enabledMap': { true: 'adaptive' },
+      },
+    });
+
+    await expect(request).rejects.toThrow(
+      "Model 'claude-fable-5' is adaptive-only: reasoning.budgetTokens cannot select budgeted thinking. Remove reasoning.budgetTokens to use adaptive thinking.",
+    );
+  });
+
   it('preserves Fable 5 always-adaptive behavior without duplicate representations', async () => {
     const { body } = await prepare({
       model: 'claude-fable-5',
@@ -614,6 +687,39 @@ describe('Anthropic reasoning wire translation (issue #3255)', () => {
     expect(reasoningFields(body)).toStrictEqual({
       thinking: { type: 'adaptive', display: 'summarized' },
       output_config: { effort: 'medium' },
+    });
+  });
+
+  it('rejects an anthropic-budget selection for Fable 5 before transport', async () => {
+    const request = prepare({
+      model: 'claude-fable-5',
+      modelBehavior: {
+        'reasoning.enabled': true,
+        'reasoning.effort': 'high',
+        'reasoning.effortWireFormat': 'anthropic-budget',
+        'reasoning.effortMap': { high: 8192 },
+      },
+    });
+
+    await expect(request).rejects.toThrow(
+      "Model 'claude-fable-5' is adaptive-only: the anthropic-budget effort format cannot emit budgeted thinking. Use the 'anthropic' effort format or remove reasoning.effortWireFormat=anthropic-budget.",
+    );
+  });
+
+  it('reports only own reasoning properties and ignores inherited ones', () => {
+    const body: Record<string, unknown> = Object.create({
+      reasoning_effort: 'inherited',
+    });
+    body['thinking'] = { type: 'enabled' };
+
+    expect(reasoningFields(body)).toStrictEqual({
+      thinking: { type: 'enabled' },
+    });
+
+    body['reasoning_effort'] = 'own';
+    expect(reasoningFields(body)).toStrictEqual({
+      thinking: { type: 'enabled' },
+      reasoning_effort: 'own',
     });
   });
 

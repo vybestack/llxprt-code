@@ -266,18 +266,53 @@ describe('Gemini issue 3255 reasoning request translation', () => {
     ]);
   });
 
-  it('uses an explicit supported native level to represent Gemini 3 disablement', () => {
-    const config = buildConfig({
+  it('warns instead of enabling thinking when a Gemini 3 disabled map selects a level', () => {
+    const result = build({
       modelBehavior: {
         'reasoning.enabled': false,
         'reasoning.enabledMap': { false: 'LOW' },
       },
     });
 
-    expect(thinkingConfig(config)).toStrictEqual({
-      includeThoughts: true,
-      thinkingLevel: 'LOW',
+    expect(result.config).not.toHaveProperty('thinkingConfig');
+    expect(result.logger.warnings).toStrictEqual([
+      {
+        message:
+          "Gemini omitted configured reasoning.enabled for model gemini-3-flash-preview using format 'gemini' because gemini-3-disablement-unrepresentable",
+        metadata: {
+          provider: 'gemini',
+          model: 'gemini-3-flash-preview',
+          format: 'gemini',
+          genericSetting: 'reasoning.enabled',
+          reason: 'gemini-3-disablement-unrepresentable',
+        },
+      },
+    ]);
+  });
+
+  it('warns instead of enabling thinking when a Gemini 2 disabled map selects true', () => {
+    const result = build({
+      model: 'gemini-2.5-pro',
+      modelBehavior: {
+        'reasoning.enabled': false,
+        'reasoning.enabledMap': { false: true },
+      },
     });
+
+    expect(result.config).not.toHaveProperty('thinkingConfig');
+    expect(result.logger.warnings).toStrictEqual([
+      {
+        message:
+          "Gemini omitted configured reasoning.enabled for model gemini-2.5-pro using format 'gemini' because gemini-disablement-unrepresentable",
+        metadata: {
+          provider: 'gemini',
+          model: 'gemini-2.5-pro',
+          format: 'gemini',
+          genericSetting: 'reasoning.enabled',
+          reason: 'gemini-disablement-unrepresentable',
+        },
+      },
+    ]);
   });
 
   it('emits Gemini 2 thinking budget when reasoning is enabled', () => {
@@ -293,6 +328,42 @@ describe('Gemini issue 3255 reasoning request translation', () => {
       includeThoughts: true,
       thinkingBudget: 4096,
     });
+  });
+
+  it('omits thinkingConfig for an unsupported generation and warns for each dropped setting', () => {
+    const result = build({
+      model: 'gemini-1.5-pro',
+      modelBehavior: {
+        'reasoning.enabled': true,
+        'reasoning.maxTokens': 4096,
+      },
+    });
+
+    expect(result.config).not.toHaveProperty('thinkingConfig');
+    expect(result.logger.warnings).toStrictEqual([
+      {
+        message:
+          "Gemini omitted configured reasoning.enabled for model gemini-1.5-pro using format 'gemini' because model-generation-unsupported",
+        metadata: {
+          provider: 'gemini',
+          model: 'gemini-1.5-pro',
+          format: 'gemini',
+          genericSetting: 'reasoning.enabled',
+          reason: 'model-generation-unsupported',
+        },
+      },
+      {
+        message:
+          "Gemini omitted configured reasoning.maxTokens for model gemini-1.5-pro using format 'gemini' because model-generation-unsupported",
+        metadata: {
+          provider: 'gemini',
+          model: 'gemini-1.5-pro',
+          format: 'gemini',
+          genericSetting: 'reasoning.maxTokens',
+          reason: 'model-generation-unsupported',
+        },
+      },
+    ]);
   });
 
   it('emits thinkingBudget zero for default Gemini 2 disablement', () => {
