@@ -141,24 +141,72 @@ Merged runtime settings keep `model` as the active model string for existing cal
 
 ### Reasoning Settings
 
-These control extended thinking / chain-of-thought for models that support it (Kimi K3, Claude with thinking, GPT-5.x reasoning effort, etc.).
+Use these settings for models that support thinking or reasoning effort.
 
 | Setting                       | Description                                                   | Default          |
 | ----------------------------- | ------------------------------------------------------------- | ---------------- |
-| `reasoning.enabled`           | Enable thinking/reasoning mode                                | `false`          |
+| `reasoning.enabled`           | Enable or disable reasoning                                   | `false`          |
 | `reasoning.effort`            | Effort (`minimal`, `low`, `medium`, `high`, `xhigh`, `max`)   | provider default |
+| `reasoning.effortWireFormat`  | Select the provider request shape for effort                  | `auto`           |
+| `reasoning.enabledWireFormat` | Select the provider request shape for enablement              | `auto`           |
+| `reasoning.effortMap`         | Map generic effort values to model values or numeric budgets  | no map           |
+| `reasoning.enabledMap`        | Map generic booleans to provider values                       | no map           |
 | `reasoning.includeInResponse` | Show thinking blocks in the terminal                          | `true`           |
 | `reasoning.includeInContext`  | Keep thinking in conversation history sent to the model       | `true`           |
 | `reasoning.stripFromContext`  | Prune thinking from older turns (`none`, `all`, `allButLast`) | `none`           |
-| `reasoning.adaptiveThinking`  | Let provider auto-tune thinking budget                        | `false`          |
+| `reasoning.adaptiveThinking`  | Let a supported provider choose a thinking budget             | `false`          |
 
-When you set `reasoning.enabled true`, the other defaults are already sensible — thinking is shown in the terminal, kept in context, and nothing is stripped. You typically only need `/set reasoning.enabled true`.
+#### Run a local server that accepts `reasoning_effort`
 
-**Why these matter:**
+Save a profile like this when a custom OpenAI-compatible Chat server accepts a
+top-level `reasoning_effort` field:
 
-- **`includeInResponse`** — if `false`, the model still thinks but you don't see it. Useful if you want reasoning quality without the noise.
-- **`includeInContext`** — if `false`, thinking blocks are discarded before the next turn. The model loses access to its own reasoning, which can hurt multi-step tasks. Keep this `true` unless you're tight on context.
-- **`stripFromContext`** — controls context growth for long sessions. `none` keeps all thinking (best quality, most tokens). `allButLast` keeps only the most recent thinking block (good balance). `all` strips everything (saves context but the model can't reference prior reasoning). For models with large context windows like K3 (1M), `none` is fine. For smaller windows, `allButLast` or `all` helps.
+```json
+{
+  "version": 1,
+  "provider": "openai",
+  "model": "local-reasoning-model",
+  "modelParams": {},
+  "ephemeralSettings": {
+    "base-url": "http://127.0.0.1:8000/v1",
+    "requires-auth": false,
+    "responses-mode": "chat",
+    "reasoning.enabled": true,
+    "reasoning.effort": "high",
+    "reasoning.effortWireFormat": "openai"
+  }
+}
+```
+
+Load the profile with `llxprt --profile-load <name>`. The resulting Chat request
+contains `"reasoning_effort": "high"`. For a server whose chat template reads
+kwargs instead, use `template-kwargs`; see the
+[vLLM profile example](./providers/reasoning-wire-formats.md#vllm-chat_template_kwargs).
+
+The four wire settings resolve independently in this order, highest precedence
+first: explicit profile or session value, last matched model default, provider
+alias default, then `auto` for selectors or no map for maps. Later matching
+model rules win.
+
+Maps replace as a whole. A profile map does not inherit entries from an alias or
+matched model map. Missing keys in a string-valued `reasoning.effortMap` use the
+generic effort unchanged. For example, a map containing only
+`{ "minimal": "low" }` still sends `high` unchanged when the generic effort is
+`high`.
+
+`reasoning.budgetTokens` is a direct Anthropic budget. Generic effort does not
+automatically produce a token budget because no universal conversion exists.
+To derive a budget from effort, select `anthropic-budget` and provide an explicit
+numeric effort map.
+
+See [Reasoning Wire Formats](./providers/reasoning-wire-formats.md) for all
+selector values, request shapes, warnings, model restrictions, and profile
+examples.
+
+`reasoning.includeInResponse` controls terminal display.
+`reasoning.includeInContext` controls whether thinking remains available on the
+next turn. `reasoning.stripFromContext` controls how older thinking is pruned as
+the conversation grows.
 
 ### Context and Output Limits
 
@@ -272,17 +320,28 @@ llxprt --profile-load kimi-k3 --set streaming=disabled
 
 ## Provider Alias Defaults
 
-Some provider aliases ship with tuned defaults for their models — you get reasonable settings just by using `/provider <name>` without configuring anything. These are a good starting point; you can override any of them with `/set`.
+Some provider aliases supply model settings in addition to their endpoint and
+default model. You can inspect the active values with `/set` and override them
+with a profile or session setting.
 
-**Anthropic** — sets `maxOutputTokens` to 40K globally and `context-limit` to 200K. For Claude models specifically, enables reasoning with adaptive thinking (lets the model decide how much to think). For Claude Opus models, sets `reasoning.effort` to `high`.
+**Anthropic and Claude Code** enable reasoning for Claude models. Claude Opus 5
+uses adaptive thinking, Anthropic effort, and an effort default of `high`.
 
-**Codex** — defaults to GPT-5.6 Sol and lists the Sol, Terra, and Luna tiers. It sets `context-limit` to 262K, enables 24-hour prompt caching, sets `reasoning.effort` to `medium`, and enables reasoning summaries. Use `reasoning.effort max` when maximum GPT-5.6 reasoning is worth the additional latency and tokens.
+**Codex** defaults to GPT-5.6 Sol. Sol, Terra, and Luna use the Responses effort
+shape. The alias sets effort to `medium`, summary to `auto`, and prompt caching
+to `24h`.
 
-**Kimi** — sets `context-limit` to 262K and `max_tokens` to 32K. For Kimi models specifically, enables reasoning with `includeInResponse`, `includeInContext`, and `stripFromContext: none` — full thinking visibility with nothing discarded. The `kimi-k3` model overrides these with its shipped geometry: `context-limit` 1M, `max_tokens` 131072 (K3's default output allocation; the server supports up to 1048576), and `reasoning.effort` `max` (K3 accepts only `low` / `high` / `max`; `medium` is invalid for K3).
+**Kimi** uses different reasoning policies for Kimi K3 and Kimi for Coding K2.7.
+K3 accepts `low`, `high`, and `max`, so its model map normalizes the generic
+ladder. K2.7 coding uses enabled thinking and no effort field.
 
-**Gemini, OpenAI, xAI, OpenRouter, Fireworks** — minimal defaults (just endpoint URL and default model). You configure behavior yourself.
+**OpenRouter** selects its nested `reasoning` object. **Z.AI**, **DeepSeek**, and
+**Fireworks** have model-specific defaults only where a documented model and
+request shape are known. **Gemini** owns its native `thinkingConfig`.
 
-When you load a provider alias, its defaults apply first, then any `/set` overrides or profile settings layer on top. You can inspect what a provider alias sets by looking at its config file in the source, or just check your active settings with `/set` after loading a provider.
+See the [reasoning alias and model matrix](./providers/reasoning-wire-formats.md#shipped-model-restrictions)
+for the exact selectors, maps, and restrictions. Alias defaults are applied
+below explicit profile and session values.
 
 ## Tuning for Your Model
 

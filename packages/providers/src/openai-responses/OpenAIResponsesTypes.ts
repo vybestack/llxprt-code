@@ -58,7 +58,11 @@ export type OpenAIResponsesRequest = {
   parallel_tool_calls?: boolean;
   stream: boolean;
   include?: string[];
-  reasoning?: { effort?: string; summary?: string };
+  reasoning?: {
+    effort?: string;
+    summary?: string;
+    [key: string]: unknown;
+  };
   text?: { verbosity: string };
   store?: boolean;
   previous_response_id?: string;

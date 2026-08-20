@@ -199,6 +199,16 @@ export function supportsAdaptiveThinking(modelId: string): boolean {
   return isOpus46Plus(modelId) || isSonnet5(modelId) || isFable5(modelId);
 }
 
+const OPUS_5_PATTERN = /^claude-opus-5(-latest|-\d{8})?$/i;
+
+/**
+ * Whether the model accepts the explicit disabled thinking mode. This is kept
+ * narrower than adaptive-thinking support because those capabilities differ.
+ */
+export function supportsDisabledThinking(modelId: string): boolean {
+  return OPUS_5_PATTERN.test(modelId);
+}
+
 /**
  * Get max output tokens for a given model
  */

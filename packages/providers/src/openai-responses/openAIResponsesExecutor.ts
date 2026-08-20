@@ -39,11 +39,12 @@ import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 import { isPreviousResponseNotFoundError } from './openAIResponsesStatefulRecovery.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import {
-  toOpenAIResponsesWireEffort,
-  OPENAI_TRANSPORT_SELECTOR_KEYS,
-} from '../openai/openaiModelPolicy.js';
+import { OPENAI_TRANSPORT_SELECTOR_KEYS } from '../openai/openaiModelPolicy.js';
 import { buildOpenAIResponsesInput } from './OpenAIResponsesInputBuilder.js';
+import {
+  applyOpenAIResponsesReasoning,
+  type AppliedOpenAIResponsesReasoning,
+} from './openai-responses-reasoning.js';
 import { sanitizePromptCacheKey } from './sanitizePromptCacheKey.js';
 import type {
   OpenAIResponsesRequest,
@@ -167,13 +168,6 @@ export interface PreparedResponsesRequestContext {
 interface RequestContext extends PreparedResponsesRequestContext {
   readonly apiKey: string;
   readonly baseURL: string;
-}
-
-interface ReasoningOptions {
-  enabled: boolean;
-  effort?: string;
-  summary?: string;
-  includeThinkingInResponse: boolean;
 }
 
 function resolveInvocationEphemerals(
@@ -646,11 +640,6 @@ function translateRequestOverrides(
         () =>
           `Translated ${key}=${value} to max_output_tokens for Responses API`,
       );
-    } else if (key === 'reasoning') {
-      deps.logger.debug(
-        () =>
-          `Skipping reasoning object in modelParams - handled via model-behavior settings`,
-      );
     } else if (key === 'prompt_cache_key') {
       const sanitized =
         typeof value === 'string' ? sanitizePromptCacheKey(value) : '';
@@ -726,98 +715,44 @@ function applyReasoningSettings(
   options: NormalizedGenerateChatOptions,
   invocationEphemerals: Record<string, unknown>,
   deps: ResponsesExecutorDeps,
-): ReasoningOptions {
-  const reasoning = getReasoningOptions(options, invocationEphemerals);
-  const shouldRequestReasoning =
-    reasoning.enabled || reasoning.effort !== undefined;
+): AppliedOpenAIResponsesReasoning {
+  const reasoning = applyOpenAIResponsesReasoning({
+    request,
+    modelBehavior: options.invocation.modelBehavior,
+    fallbacks: {
+      enabled:
+        invocationEphemerals['reasoning.enabled'] ??
+        readOptionalSetting(options, 'reasoning.enabled'),
+      effort:
+        invocationEphemerals['reasoning.effort'] ??
+        readOptionalSetting(options, 'reasoning.effort'),
+      budgetTokens:
+        invocationEphemerals['reasoning.budgetTokens'] ??
+        readOptionalSetting(options, 'reasoning.budgetTokens'),
+      summary:
+        invocationEphemerals['reasoning.summary'] ??
+        readOptionalSetting(options, 'reasoning.summary'),
+      includeInResponse:
+        invocationEphemerals['reasoning.includeInResponse'] ??
+        readOptionalSetting(options, 'reasoning.includeInResponse'),
+    },
+    providerName: deps.providerName,
+    logger: deps.logger,
+  });
   deps.logger.debug(
     () =>
-      `Reasoning check: enabled=${reasoning.enabled}, effort=${String(reasoning.effort)}, summary=${String(reasoning.summary)}, shouldRequest=${shouldRequestReasoning}, includeInResponse=${reasoning.includeThinkingInResponse}`,
+      `Reasoning check: enabled=${String(reasoning.enabled)}, effort=${String(reasoning.effort)}, summary=${String(reasoning.summary)}, shouldRequest=${reasoning.selected}, includeInResponse=${reasoning.includeThinkingInResponse}`,
   );
-  if (shouldRequestReasoning) {
+  if (reasoning.selected) {
     request.include = ['reasoning.encrypted_content'];
     deps.logger.debug(
       () => `Added include parameter: ${JSON.stringify(request.include)}`,
     );
-    applyReasoningEffort(request, reasoning.effort, deps);
   }
-  applyReasoningSummary(request, reasoning.summary, deps);
   deps.logger.debug(
     () => `Full request reasoning config: ${JSON.stringify(request.reasoning)}`,
   );
   return reasoning;
-}
-
-function getReasoningOptions(
-  options: NormalizedGenerateChatOptions,
-  ephemerals: Record<string, unknown>,
-): ReasoningOptions {
-  const settings = (options as { settings?: { get: (key: string) => unknown } })
-    .settings;
-  const enabled =
-    ((ephemerals['reasoning.enabled'] as boolean | undefined) ??
-      options.invocation.getModelBehavior<boolean>('reasoning.enabled') ??
-      settings?.get('reasoning.enabled')) === true;
-  const effort =
-    (ephemerals['reasoning.effort'] as string | undefined) ??
-    options.invocation.getModelBehavior<string>('reasoning.effort') ??
-    (settings?.get('reasoning.effort') as string | undefined);
-  const summary =
-    (ephemerals['reasoning.summary'] as string | undefined) ??
-    options.invocation.getModelBehavior<string>('reasoning.summary') ??
-    (settings?.get('reasoning.summary') as string | undefined);
-  const includeSetting =
-    (ephemerals['reasoning.includeInResponse'] as boolean | undefined) ??
-    options.invocation.getModelBehavior<boolean>(
-      'reasoning.includeInResponse',
-    ) ??
-    settings?.get('reasoning.includeInResponse');
-  return {
-    enabled,
-    effort,
-    summary,
-    includeThinkingInResponse: includeSetting !== false,
-  };
-}
-
-function applyReasoningEffort(
-  request: OpenAIResponsesRequest,
-  reasoningEffort: string | undefined,
-  deps: ResponsesExecutorDeps,
-): void {
-  if (typeof reasoningEffort !== 'string' || reasoningEffort === '') return;
-  const wireEffort = toOpenAIResponsesWireEffort(
-    reasoningEffort,
-    request.model,
-  );
-  request.reasoning ??= {};
-  request.reasoning.effort = wireEffort;
-  deps.logger.debug(
-    () =>
-      `Added reasoning.effort to request: ${reasoningEffort}` +
-      (wireEffort !== reasoningEffort
-        ? ` (mapped to ${wireEffort} for model ${request.model})`
-        : ''),
-  );
-}
-
-function applyReasoningSummary(
-  request: OpenAIResponsesRequest,
-  reasoningSummary: string | undefined,
-  deps: ResponsesExecutorDeps,
-): void {
-  if (
-    typeof reasoningSummary !== 'string' ||
-    reasoningSummary === '' ||
-    reasoningSummary === 'none'
-  ) {
-    return;
-  }
-  request.reasoning ??= {};
-  request.reasoning.summary = reasoningSummary;
-  deps.logger.debug(
-    () => `Added reasoning.summary to request: ${reasoningSummary}`,
-  );
 }
 
 function applyTextVerbosity(

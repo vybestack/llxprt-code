@@ -58,6 +58,10 @@ import {
   loadProviderAliasEntries,
   computeUnallowedParameters,
 } from '../composition/index.js';
+import {
+  markEphemeralUserOwned,
+  releaseEphemeralOwnership,
+} from './modelDefaultOwnership.js';
 
 const logger = new DebugLogger('llxprt:runtime:settings');
 
@@ -618,11 +622,21 @@ export function getEphemeralSetting(key: string): unknown {
 export function setEphemeralSetting(key: string, value: unknown): void {
   const { config } = getCliRuntimeServices();
   config.setEphemeralSetting(key, value);
+  // Session and profile writes own the key: default application must not
+  // later overwrite an explicit value on provider or model changes
+  // (issue #3255). A cleared key releases ownership so defaults manage it
+  // again instead of the key staying permanently user-owned.
+  if (value === undefined) {
+    releaseEphemeralOwnership(config, key);
+    return;
+  }
+  markEphemeralUserOwned(config, key);
 }
 
 export function clearEphemeralSetting(key: string): void {
   const { config } = getCliRuntimeServices();
   config.setEphemeralSetting(key, undefined);
+  releaseEphemeralOwnership(config, key);
 }
 
 export function getSessionSetting(key: string): unknown {

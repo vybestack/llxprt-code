@@ -6,48 +6,65 @@ For guidance on tuning these for specific models, see [Settings and Profiles](..
 
 ## Reasoning
 
-Control extended thinking / chain-of-thought. Most models need `reasoning.enabled true` at minimum; the rest have sensible defaults.
+Control provider-neutral reasoning behavior and select the request shape used by
+the active provider and transport.
 
-| Setting                       | Type    | Default          | Profile | Description                                                                                                                                                                                                                                                                                                                              |
-| ----------------------------- | ------- | ---------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `reasoning.enabled`           | boolean | `false`          | yes     | Turn on thinking mode. Required for models like Kimi K3, Claude with thinking, GPT-5.x reasoning effort. (For Kimi K3, thinking is always on and cannot be disabled.)                                                                                                                                                                    |
-| `reasoning.effort`            | enum    | provider default | yes     | How hard the model thinks: `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. Higher = slower + more tokens but better results. `max` is model/provider-specific; not all models support all levels. Anthropic Opus defaults to `high`. Codex defaults to `medium`. Project `minimal` maps to OpenAI wire `none` for GPT-5.6 Responses. |
-| `reasoning.maxTokens`         | number  | —                | yes     | Cap the thinking token budget (OpenAI). Limits how much the model can think per turn.                                                                                                                                                                                                                                                    |
-| `reasoning.budgetTokens`      | number  | —                | yes     | Anthropic-specific thinking budget. Usually set automatically via `reasoning.effort` or adaptive thinking.                                                                                                                                                                                                                               |
-| `reasoning.adaptiveThinking`  | boolean | `false`          | yes     | Let Anthropic auto-tune the thinking budget based on task complexity. Enabled by default for Claude via the `anthropic` provider alias.                                                                                                                                                                                                  |
-| `reasoning.includeInResponse` | boolean | `true`           | yes     | Show thinking blocks in the terminal. Set `false` to get reasoning quality without the visual noise.                                                                                                                                                                                                                                     |
-| `reasoning.includeInContext`  | boolean | `true`           | yes     | Keep thinking in conversation history sent to the model. If `false`, the model can't reference its own prior reasoning — hurts multi-step tasks.                                                                                                                                                                                         |
-| `reasoning.stripFromContext`  | enum    | `none`           | yes     | Prune old thinking to manage context growth. `none` = keep all (best quality). `allButLast` = keep only latest thinking (good balance). `all` = discard all thinking from context (saves tokens).                                                                                                                                        |
-| `reasoning.format`            | enum    | —                | yes     | API format: `native` or `field`. Leave unset unless you know your provider needs a specific format.                                                                                                                                                                                                                                      |
-| `reasoning.summary`           | enum    | —                | yes     | OpenAI Responses API reasoning summary: `auto`, `concise`, `detailed`, `none`. Codex alias defaults to `auto`.                                                                                                                                                                                                                           |
-| `text.verbosity`              | enum    | —                | yes     | OpenAI Responses API text verbosity for thinking output: `low`, `medium`, `high`.                                                                                                                                                                                                                                                        |
+| Setting                       | Type    | Default          | Profile | Description                                                                                                                                                    |
+| ----------------------------- | ------- | ---------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `reasoning.enabled`           | boolean | `false`          | yes     | Turn thinking mode on or off. Some models cannot disable thinking.                                                                                             |
+| `reasoning.effort`            | enum    | provider default | yes     | Generic effort: `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. Model-specific maps can normalize this value before it is sent.                         |
+| `reasoning.effortWireFormat`  | enum    | `auto`           | yes     | Effort request shape: `auto`, `openai`, `openai-responses`, `anthropic`, `anthropic-budget`, `openrouter`, `gemini`, `template-kwargs`, or `none`.             |
+| `reasoning.enabledWireFormat` | enum    | `auto`           | yes     | Enablement request shape: `auto`, `openai`, `openai-responses`, `openrouter`, `thinking`, `gemini`, `template-kwargs`, or `none`.                              |
+| `reasoning.effortMap`         | JSON    | no map           | yes     | Object with optional `minimal`, `low`, `medium`, `high`, `xhigh`, and `max` keys. Values are non-empty strings, integer budgets of at least `1024`, or `null`. |
+| `reasoning.enabledMap`        | JSON    | no map           | yes     | Object with optional `true` and `false` keys. Values are non-empty strings, booleans, or `null`.                                                               |
+| `reasoning.maxTokens`         | number  | none             | yes     | Set a native reasoning token limit where the provider supports one.                                                                                            |
+| `reasoning.budgetTokens`      | number  | none             | yes     | Direct Anthropic thinking budget. It takes precedence over a numeric effort map. No universal conversion from generic effort to budget tokens exists.          |
+| `reasoning.adaptiveThinking`  | boolean | `false`          | yes     | Let supported Anthropic models choose a thinking budget. Some Claude model defaults enable it.                                                                 |
+| `reasoning.includeInResponse` | boolean | `true`           | yes     | Show thinking blocks in the terminal.                                                                                                                          |
+| `reasoning.includeInContext`  | boolean | `true`           | yes     | Keep thinking in conversation history sent to the model.                                                                                                       |
+| `reasoning.stripFromContext`  | enum    | `none`           | yes     | Prune old thinking: `none`, `allButLast`, or `all`.                                                                                                            |
+| `reasoning.format`            | enum    | none             | yes     | Response reasoning format: `native` or `field`.                                                                                                                |
+| `reasoning.summary`           | enum    | none             | yes     | OpenAI Responses reasoning summary: `auto`, `concise`, `detailed`, or `none`. Codex defaults to `auto`.                                                        |
+| `text.verbosity`              | enum    | none             | yes     | OpenAI Responses text verbosity: `low`, `medium`, or `high`.                                                                                                   |
 
-### Reasoning dialect on OpenAI-compatible endpoints
+### Reasoning request translation
 
-`reasoning.enabled` and `reasoning.effort` are provider-neutral settings.
-Vendors disagree on how to express them on the wire, so on the OpenAI Chat
-Completions transport llxprt emits **at most one** vendor dialect, chosen from
-the endpoint's base URL:
+The four wire translation settings are supported model-behavior settings. They
+remain session-only until saved with `/profile save`, then persist in the
+profile's `ephemeralSettings` object.
 
-| Base URL host         | Emitted field                                 |
-| --------------------- | --------------------------------------------- |
-| `openrouter.ai`       | `reasoning: { effort }` (or `{ enabled }`)    |
-| `z.ai`, `bigmodel.cn` | `thinking: { type: "enabled" \| "disabled" }` |
-| anything else         | nothing                                       |
+Each selector and map resolves in this order, highest precedence first:
 
-llxprt cannot know an arbitrary OpenAI-compatible endpoint's dialect, and
-guessing gets requests rejected — Friendli answers `422 no such field:
-'reasoning'` and Crusoe answers `403 parameter 'reasoning' is not allowed`.
-So unlisted endpoints get no reasoning field at all and use the model's own
-default.
+1. An explicit profile or session value
+2. The last matching model default from the provider alias
+3. The provider alias default
+4. `auto` for selectors, or no map for maps
 
-To drive a reasoning field on an unlisted endpoint, set it as a model param;
-an explicit model param always wins over the automatic selection and nothing
-else is added alongside it:
+A higher-precedence map replaces the lower-precedence map as a whole. Maps are
+not recursively merged. In a partial string effort map, a missing effort key
+uses the original generic effort string. `anthropic-budget` instead requires a
+numeric mapped value or direct `reasoning.budgetTokens`.
 
-    /set modelparam thinking {"type":"enabled"}
-    /set modelparam reasoning_effort high
-    /set modelparam parse_reasoning true
+Under `auto`, OpenAI Responses, Codex, native Anthropic, native Gemini,
+OpenRouter Chat, Z.AI Chat, and BigModel Chat select their owned request shapes.
+The official `api.openai.com` Chat endpoint selects top-level
+`reasoning_effort`. An unknown OpenAI-compatible Chat endpoint selects `none`.
+This avoids sending fields that a strict custom endpoint may reject. Select a
+format explicitly when you know the server's accepted request shape.
+
+`none` and a selected `null` map entry deliberately omit the generic control and
+produce a warning. `reasoning.enabled=false` suppresses effort. If the selected
+format or model has no disable form, LLxprt Code omits both controls and warns.
+
+Explicit native reasoning fields in `modelParams` remain authoritative. When a
+native field collides with translation, LLxprt Code leaves it unchanged and
+adds no competing reasoning representation. Unrelated nested siblings are
+merged where supported. LLxprt Code does not send several reasoning formats in
+one request.
+
+See [Reasoning Wire Formats](../providers/reasoning-wire-formats.md) for selector
+compatibility, exact request shapes, model restrictions, warnings, and profile
+examples.
 
 ## Context and Compression
 

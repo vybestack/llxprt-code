@@ -122,7 +122,11 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       ];
 
       const generator = provider.generateChatCompletion(
-        buildCallOptions(messages),
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            global: { model: 'claude-sonnet-4-5-20250929' },
+          },
+        }),
       );
       await generator.next();
 
@@ -252,14 +256,9 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       expect(request.thinking?.budget_tokens).toBe(15000);
     });
 
-    it('should use manual mode when adaptiveThinking is explicitly false @issue:1307', async () => {
+    it('should fail fast when adaptiveThinking is explicitly false without a budget @issue:1307', async () => {
       settingsService.set('reasoning.enabled', true);
       settingsService.set('reasoning.adaptiveThinking', false);
-
-      mockMessagesCreate.mockResolvedValueOnce({
-        content: [{ type: 'text', text: 'response' }],
-        usage: { input_tokens: 100, output_tokens: 50 },
-      });
 
       const messages: IContent[] = [
         {
@@ -277,13 +276,13 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
           },
         }),
       );
-      await generator.next();
 
-      const request = mockMessagesCreate.mock
-        .calls[0][0] as AnthropicRequestBody;
-      expect(request.thinking).toBeDefined();
-      expect(request.thinking?.type).toBe('enabled');
-      expect(request.thinking?.budget_tokens).toBe(10000); // default
+      // Opus 4.6 is adaptive-capable and has no legacy budget default, so
+      // budgeted thinking without an explicit reasoning.budgetTokens fails
+      // before transport instead of fabricating one (issue #3255).
+      await expect(generator.next()).rejects.toThrow(
+        "Model 'claude-opus-4-6' supports adaptive thinking: budgeted thinking requires an explicit reasoning.budgetTokens",
+      );
     });
 
     it('should place effort in output_config not under thinking @issue:1307', async () => {
