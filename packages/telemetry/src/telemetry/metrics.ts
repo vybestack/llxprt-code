@@ -67,7 +67,7 @@ export function initializeMetrics(config: TelemetryConfig): void {
   toolCallLatencyHistogram = meter.createHistogram(METRIC_TOOL_CALL_LATENCY, {
     description: 'Latency of tool calls in milliseconds.',
     unit: 'ms',
-    valueType: ValueType.INT,
+    valueType: ValueType.DOUBLE,
   });
   apiRequestCounter = meter.createCounter(METRIC_API_REQUEST_COUNT, {
     description: 'Counts API requests, tagged by model and status.',
@@ -78,7 +78,7 @@ export function initializeMetrics(config: TelemetryConfig): void {
     {
       description: 'Latency of API requests in milliseconds.',
       unit: 'ms',
-      valueType: ValueType.INT,
+      valueType: ValueType.DOUBLE,
     },
   );
   tokenUsageCounter = meter.createCounter(METRIC_TOKEN_USAGE, {
