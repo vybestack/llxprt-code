@@ -130,7 +130,6 @@
     "../providers/src/__tests__/LoadBalancingProvider.types.test.ts",
     "../providers/src/__tests__/LoggingProviderWrapper.apiTelemetry.test.ts",
     "../providers/src/__tests__/LoggingProviderWrapper.enhancedMetrics.test.ts",
-    "../providers/src/__tests__/LoggingProviderWrapper.logicalRequestId.test.ts",
     "../providers/src/__tests__/LoggingProviderWrapper.stateless.test.ts",
     "../providers/src/__tests__/LoggingProviderWrapper.tpm.test.ts",
     "../providers/src/__tests__/ProviderManager.guard.test.ts",
