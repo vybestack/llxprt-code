@@ -304,7 +304,7 @@ export interface TokenUsageTurnContext {
   ttftMs?: number | null;
   lastTokenMs?: number | null;
   providerRequestMs?: number | null;
-  chunkCount?: number;
+  chunkCount?: number | null;
 }
 
 /**

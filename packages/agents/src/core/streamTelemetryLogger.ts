@@ -160,7 +160,7 @@ export function attachStreamTiming(
       ttftMs: timing?.firstTokenMs ?? null,
       lastTokenMs: timing?.lastTokenMs ?? null,
       providerRequestMs: timing?.providerRequestMs ?? null,
-      chunkCount: timing?.chunkCount,
+      chunkCount: timing?.chunkCount ?? null,
     });
   } catch (error) {
     new DebugLogger('llxprt:stream-telemetry').error(

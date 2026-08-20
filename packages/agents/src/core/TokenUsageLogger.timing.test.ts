@@ -47,6 +47,9 @@ async function recordTurnWithTiming(
   promptId: string,
   ...timing: Array<Parameters<TokenUsageLogger['attachTurnContext']>[1]>
 ): Promise<Record<string, unknown>> {
+  // Capture the path before any await so a reassignment between suspension
+  // points cannot redirect the read.
+  const filePath = logFilePath;
   logger.recordEstimate(promptId, {
     provider: 'anthropic',
     model: 'claude-3-5-sonnet-20241022',
@@ -61,7 +64,7 @@ async function recordTurnWithTiming(
     actualPromptTokens: 120,
     cachedTokens: 0,
   });
-  const records = readJsonl(logFilePath);
+  const records = readJsonl(filePath);
   const record = records.find((r) => r.prompt_id === promptId);
   expect(record).toBeDefined();
   if (record === undefined) throw new Error(`no record for ${promptId}`);
