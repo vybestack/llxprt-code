@@ -80,8 +80,8 @@ function summarizeHistogram(
     .filter((entry) => entry.descriptor.name === metricName)
     .find(isHistogramMetric);
   if (metric === undefined) return undefined;
-  const point = metric.dataPoints.at(0);
-  if (point === undefined) return undefined;
+  if (metric.dataPoints.length === 0) return undefined;
+  const point = metric.dataPoints[0];
   return { count: point.value.count, sum: point.value.sum ?? 0 };
 }
 
@@ -114,9 +114,12 @@ describe('latency histogram value types (real OpenTelemetry SDK)', () => {
 
   afterEach(async (): Promise<void> => {
     resetMetricsState();
-    await meterProvider.shutdown();
-    metrics.disable();
-    diag.disable();
+    try {
+      await meterProvider.shutdown();
+    } finally {
+      metrics.disable();
+      diag.disable();
+    }
   });
 
   it('stores the exact fractional API request latency without an INT truncation warning', async (): Promise<void> => {

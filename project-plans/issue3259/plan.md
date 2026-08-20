@@ -201,14 +201,19 @@ INT, so no change was made here.
 
 - Round 1: one LOW finding. `summarizeHistogram` indexed
   `metric.dataPoints[0]` directly; a metric with zero data points
-  would throw a TypeError that masks the assertion failure. Fixed by
-  adding an undefined guard.
-- That guard tripped `@typescript-eslint/no-unnecessary-condition`
-  because `[0]` indexing types as always-defined; switched to
-  `dataPoints.at(0)` (typed `T | undefined`, matches existing repo
-  usage in `packages/cli/src/utils/sandbox-env.ts` and
-  `mcpPromptArgParser.ts`). Lint re-run: exit 0.
-- Round 2: zero findings. The `.at(0)` one-token change postdates
-  round 2 and was validated by lint, typecheck, the behavior test
-  (2/2), and the telemetry workspace suite (43/43); both OCR rounds
-  were spent per the workflow cap.
+  would throw a TypeError that masks the assertion failure.
+- Guard evolution: an explicit `point === undefined` check next to
+  `[0]` indexing tripped `@typescript-eslint/no-unnecessary-condition`
+  (the index type reads as always-defined), while `dataPoints.at(0)`
+  passed lint but failed typecheck because the telemetry package's
+  tsconfig lib predates ES2022. The final guard is
+  `if (metric.dataPoints.length === 0) return undefined;` before the
+  `[0]` index, which needs no lib bump and satisfies lint.
+- Round 2: zero findings. Both OCR rounds were spent per the workflow
+  cap; the guard's final form was validated by lint, typecheck, the
+  behavior test (2/2), and the telemetry workspace suite (43/43).
+- PR inline review (LLxprt ocr bot): one bug/medium finding —
+  `afterEach` awaited `meterProvider.shutdown()` unguarded, so a
+  rejection would skip `metrics.disable()` and `diag.disable()`.
+  Fixed with try/finally: shutdown still propagates fail-fast, the
+  disables always run.
