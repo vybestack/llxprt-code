@@ -86,6 +86,27 @@ export interface AttemptLifecycleObserver {
 export const ATTEMPT_LIFECYCLE_KEY = '__attemptLifecycle';
 
 /**
+ * Metadata key carrying the caller-visible logical request id (e.g. the
+ * agents-layer prompt id) through GenerateChatOptions.metadata, so wrapper
+ * records join caller-side registries instead of minting a parallel id
+ * namespace (issue #3257).
+ */
+export const LOGICAL_REQUEST_ID_KEY = '__logicalRequestId';
+
+/**
+ * Extract the logical request id from GenerateChatOptions metadata.
+ * Returns a non-empty string when present, otherwise undefined.
+ */
+export function extractLogicalRequestId(
+  metadata: Record<string, unknown> | undefined,
+): string | undefined {
+  if (!metadata) return undefined;
+  const raw = metadata[LOGICAL_REQUEST_ID_KEY];
+  if (typeof raw !== 'string' || raw.length === 0) return undefined;
+  return raw;
+}
+
+/**
  * Extract the attempt lifecycle observer from GenerateChatOptions metadata,
  * or return undefined if not set.
  */

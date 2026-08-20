@@ -31,6 +31,7 @@ import {
   type PerfProviderAttemptStartInfo,
   type PerfProviderAttemptEndInfo,
 } from '@vybestack/llxprt-code-telemetry/perf/perfPhaseObserver.js';
+import type { UsageStats } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 function createRecorder(wrapperOwned = true): AttemptRecorder {
   return new AttemptRecorder({
@@ -337,5 +338,67 @@ describe('AttemptRecorder perf phase observer (P07)', () => {
 
     expect(starts[0].promptId).toBe('sess#agentic-loop#ext-req');
     expect(ends[0].promptId).toBe('sess#agentic-loop#ext-req');
+  });
+
+  // #3257: orchestrator-owned attempts (claudecode/anthropic) end with info
+  // token metrics of zero — the orchestrator's notifyEnd carries none. The
+  // perf observer must receive the counts resolved from the usage the
+  // wrapper recorded, not the raw zeros.
+  it('resolves zero info tokens from recorded usage for the perf observer (orchestrator shape)', () => {
+    const { observer, ends } = capturingObserver();
+    setPerfPhaseObserver(observer);
+
+    const usage: UsageStats = {
+      promptTokens: 100,
+      completionTokens: 50,
+      totalTokens: 150,
+    };
+    const recorder = createRecorder(false);
+    recorder.onAttemptStart({
+      requestStartMs: 1000,
+      attemptId: 'zero-tok-1',
+      attemptIndex: 0,
+    });
+    recorder.recordTokenBearingChunk('zero-tok-1', undefined, 'partial text');
+    recorder.recordMetadataUsage('zero-tok-1', usage);
+    recorder.onAttemptEnd({
+      attemptId: 'zero-tok-1',
+      attemptIndex: 0,
+      start: 1000,
+      completionMs: 2000,
+      firstTokenMs: 1100,
+      lastTokenMs: 1900,
+      status: 'success',
+      providerName: 'test-provider',
+      modelName: 'test-model',
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedTokens: 0,
+      thoughtsTokens: 0,
+      toolTokens: 0,
+    });
+
+    expect(ends).toHaveLength(1);
+    expect(ends[0].inputTokens).toBe(100);
+    expect(ends[0].outputTokens).toBe(50);
+  });
+
+  it('wrapper-owned finalize still carries resolved counts to the perf observer', () => {
+    const { observer, ends } = capturingObserver();
+    setPerfPhaseObserver(observer);
+
+    const usage: UsageStats = {
+      promptTokens: 100,
+      completionTokens: 50,
+      totalTokens: 150,
+    };
+    const recorder = createRecorder(true);
+    recorder.ensureAttemptStarted();
+    recorder.recordMetadataUsage(recorder.getCurrentAttemptId()!, usage);
+    recorder.finalizeAttempt('success', 'test-model');
+
+    expect(ends).toHaveLength(1);
+    expect(ends[0].inputTokens).toBe(100);
+    expect(ends[0].outputTokens).toBe(50);
   });
 });

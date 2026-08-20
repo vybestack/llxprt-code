@@ -113,6 +113,7 @@
     "src/__tests__/attemptLifecycle.exact.test.ts",
     "src/__tests__/attemptLifecycle.exactCounts.test.ts",
     "src/__tests__/attemptLifecycle.helpers.test.ts",
+    "src/__tests__/LoggingProviderWrapper.logicalRequestId.test.ts",
     "src/__tests__/auth-migration-p16.integration.test.ts",
     "src/__tests__/extracted-helpers.behavior.test.ts",
     "src/__tests__/headless-provider.test.ts",

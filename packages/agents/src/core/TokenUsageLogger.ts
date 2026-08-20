@@ -443,10 +443,26 @@ export class TokenUsageLogger {
     };
   }
 
+  /**
+   * lastToken-ttft window in ms, only when both endpoints are measured and
+   * the window is strictly positive — never a total-duration fallback
+   * (ProviderPerformanceTracker Finding #7).
+   */
+  private _generationWindowMs(
+    ctx: Partial<TokenUsageTurnContext>,
+  ): number | undefined {
+    if (typeof ctx.ttftMs !== 'number' || typeof ctx.lastTokenMs !== 'number') {
+      return undefined;
+    }
+    const windowMs = ctx.lastTokenMs - ctx.ttftMs;
+    return windowMs > 0 ? windowMs : undefined;
+  }
+
   private _serializeContextFields(
     ctx: Partial<TokenUsageTurnContext> | undefined,
   ) {
     const c = ctx ?? {};
+    const generationMs = this._generationWindowMs(c);
     return {
       ...(c.sessionId !== undefined && { session_id: c.sessionId }),
       ...(c.turnId !== undefined && { turn_id: c.turnId }),
@@ -495,6 +511,13 @@ export class TokenUsageLogger {
       ...(c.prefixFingerprintChanged !== undefined && {
         prefix_fingerprint_changed: c.prefixFingerprintChanged,
       }),
+      // #3257: emit only measured values, never zero-filled.
+      ...(typeof c.ttftMs === 'number' && { ttft_ms: c.ttftMs }),
+      ...(generationMs !== undefined && { generation_ms: generationMs }),
+      ...(typeof c.providerRequestMs === 'number' && {
+        provider_request_ms: c.providerRequestMs,
+      }),
+      ...(c.chunkCount !== undefined && { chunk_count: c.chunkCount }),
     };
   }
 

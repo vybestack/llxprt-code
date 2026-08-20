@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { InvalidStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import { ChatSession } from './chatSession.js';
 import {
   TokenUsageLogger,
@@ -549,5 +550,208 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     // Unreported fields are omitted
     expect('reasoning_tokens' in record).toBe(false);
     expect('tool_tokens' in record).toBe(false);
+  });
+
+  // #3257: per-attempt provider timing measured at the agents-layer stream
+  // seam. Real ChatSession + real TokenUsageLogger; only the provider
+  // transport is a fake whose generator sleeps between token-bearing chunks.
+  it('records ttft/generation/provider_request/chunk_count for a timed streaming turn (#3257)', async () => {
+    const fixture = createTokenSyncTestFixture();
+    const mockConfig = fixture.mockConfig;
+    const providerRuntimeSnapshot = fixture.providerRuntimeSnapshot;
+    const mockContentGenerator = fixture.mockContentGenerator;
+    const historyService = fixture.historyService;
+
+    const runtimeState: AgentRuntimeState = createAgentRuntimeState({
+      runtimeId: fixture.runtimeSetup.runtime.runtimeId,
+      provider: 'anthropic',
+      model: 'claude-3-5-sonnet-20241022',
+      sessionId: 'timing-stream-session',
+    });
+
+    const providerOptions: Array<{
+      metadata?: Record<string, unknown>;
+    }> = [];
+    const mockProvider = {
+      name: 'anthropic',
+      generateChatCompletion: vi
+        .fn()
+        .mockImplementation(async function* (options: {
+          metadata?: Record<string, unknown>;
+        }) {
+          providerOptions.push(options);
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'The ' }] };
+          await Bun.sleep(15);
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'answer ' }] };
+          await Bun.sleep(15);
+          yield {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'is 4.' }],
+            metadata: {
+              usage: {
+                promptTokens: 5000,
+                completionTokens: 15,
+                totalTokens: 5015,
+              },
+            },
+          };
+        }),
+    };
+
+    const providerManager = {
+      getActiveProvider: vi.fn(() => mockProvider),
+    };
+    mockConfig.getProviderManager = vi.fn().mockReturnValue(providerManager);
+
+    const view = createAgentRuntimeContext({
+      state: runtimeState,
+      history: historyService,
+      settings: {
+        compressionThreshold: 0.8,
+        contextLimit: 200000,
+        preserveThreshold: 0.2,
+        telemetry: { enabled: true, target: null },
+      },
+      provider: createProviderAdapterFromManager(
+        mockConfig.getProviderManager() as never,
+      ),
+      telemetry: createTelemetryAdapterFromConfig(mockConfig),
+      tools: createToolRegistryViewFromRegistry(),
+      providerRuntime: providerRuntimeSnapshot,
+    });
+
+    const chat = new ChatSession(view, mockContentGenerator, {}, []);
+
+    const realLogger = new TokenUsageLogger(true, logFile);
+    chat.setTokenUsageLoggerForTesting(realLogger);
+
+    const promptId = 'timing-stream-prompt';
+    realLogger.recordEstimate(promptId, {
+      provider: 'anthropic',
+      model: 'claude-3-5-sonnet-20241022',
+      estimatedTokens: 150,
+      estimator: 'anthropic-char',
+      tiktokenTokens: 140,
+    });
+
+    const stream = await chat.sendMessageStream(
+      { message: [{ text: 'What is 2+2?' }] },
+      promptId,
+    );
+    for await (const _event of stream) {
+      // consume
+    }
+
+    await historyService.waitForTokenUpdates();
+
+    const records = readJsonl(logFile);
+    expect(records).toHaveLength(1);
+    const record = records[0];
+    expect(record.ttft_ms).toBeGreaterThanOrEqual(0);
+    expect(record.generation_ms).toBeGreaterThan(0);
+    expect(record.provider_request_ms).toBeGreaterThan(0);
+    expect(record.chunk_count).toBe(3);
+
+    // AC-6: the agents layer threads the caller-visible prompt id through
+    // options metadata so the provider-layer recorder can join perf records.
+    expect(providerOptions).toHaveLength(1);
+    expect(providerOptions[0].metadata?.['__logicalRequestId']).toBe(promptId);
+  });
+
+  // #3257: a stream with no token-bearing output has no token window —
+  // ttft/generation are omitted while request duration + chunk count remain.
+  it('omits ttft/generation for a usage-only stream but keeps provider_request/chunk_count (#3257)', async () => {
+    const fixture = createTokenSyncTestFixture();
+    const mockConfig = fixture.mockConfig;
+    const providerRuntimeSnapshot = fixture.providerRuntimeSnapshot;
+    const mockContentGenerator = fixture.mockContentGenerator;
+    const historyService = fixture.historyService;
+
+    const runtimeState: AgentRuntimeState = createAgentRuntimeState({
+      runtimeId: fixture.runtimeSetup.runtime.runtimeId,
+      provider: 'anthropic',
+      model: 'claude-3-5-sonnet-20241022',
+      sessionId: 'usage-only-session',
+    });
+
+    const mockProvider = {
+      name: 'anthropic',
+      generateChatCompletion: vi.fn().mockImplementation(async function* () {
+        yield {
+          speaker: 'ai',
+          blocks: [],
+          metadata: {
+            usage: {
+              promptTokens: 5000,
+              completionTokens: 5,
+              totalTokens: 5005,
+            },
+          },
+        };
+      }),
+    };
+
+    const providerManager = {
+      getActiveProvider: vi.fn(() => mockProvider),
+    };
+    mockConfig.getProviderManager = vi.fn().mockReturnValue(providerManager);
+
+    const view = createAgentRuntimeContext({
+      state: runtimeState,
+      history: historyService,
+      settings: {
+        compressionThreshold: 0.8,
+        contextLimit: 200000,
+        preserveThreshold: 0.2,
+        telemetry: { enabled: true, target: null },
+      },
+      provider: createProviderAdapterFromManager(
+        mockConfig.getProviderManager() as never,
+      ),
+      telemetry: createTelemetryAdapterFromConfig(mockConfig),
+      tools: createToolRegistryViewFromRegistry(),
+      providerRuntime: providerRuntimeSnapshot,
+    });
+
+    const chat = new ChatSession(view, mockContentGenerator, {}, []);
+
+    const realLogger = new TokenUsageLogger(true, logFile);
+    chat.setTokenUsageLoggerForTesting(realLogger);
+
+    const promptId = 'usage-only-prompt';
+    realLogger.recordEstimate(promptId, {
+      provider: 'anthropic',
+      model: 'claude-3-5-sonnet-20241022',
+      estimatedTokens: 150,
+      estimator: 'anthropic-char',
+      tiktokenTokens: 140,
+    });
+
+    const stream = await chat.sendMessageStream(
+      { message: [{ text: 'What is 2+2?' }] },
+      promptId,
+    );
+    // A usage-only stream fails completion validation (no response text).
+    // The turn record is written at stream end before that terminal error,
+    // which is the behavior under test here.
+    let streamError: unknown;
+    try {
+      for await (const _event of stream) {
+        // consume
+      }
+    } catch (error) {
+      streamError = error;
+    }
+    expect(streamError).toBeInstanceOf(InvalidStreamError);
+
+    await historyService.waitForTokenUpdates();
+
+    const records = readJsonl(logFile);
+    expect(records).toHaveLength(1);
+    const record = records[0];
+    expect('ttft_ms' in record).toBe(false);
+    expect('generation_ms' in record).toBe(false);
+    expect(record.provider_request_ms).toBeGreaterThanOrEqual(0);
+    expect(record.chunk_count).toBe(1);
   });
 });
