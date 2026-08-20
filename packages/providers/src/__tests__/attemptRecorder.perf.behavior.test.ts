@@ -483,7 +483,9 @@ describe('AttemptRecorder perf phase observer (P07)', () => {
     }
     recorder.recordMetadataUsage(attemptId, malformedUsage);
 
-    expect(() => recorder.finalizeAttempt('success', 'test-model')).not.toThrow();
+    expect(() =>
+      recorder.finalizeAttempt('success', 'test-model'),
+    ).not.toThrow();
 
     expect(ends).toHaveLength(1);
     expect(ends[0].status).toBe('success');
