@@ -15,16 +15,10 @@ import type {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { RuntimeSettingsState } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
-/**
- * Creates a minimal RuntimeSettingsState stub that returns the given config
- * from getConfig() and no-ops all other SettingsService methods. This is
- * used by test stacks that exercise the LoggingProviderWrapper without
- * needing a full SettingsService instance.
- */
-export function createTestSettingsService(
-  _config: Config,
-): RuntimeSettingsState {
+/** Minimal RuntimeSettingsState for the runtime-context resolver in buildStack. */
+function stubRuntimeSettingsState(): RuntimeSettingsState {
   return {
     get: () => undefined,
     set: () => {},
@@ -60,9 +54,9 @@ export function createConfig(loggingEnabled = false): Config {
 export function makeContent(text = 'Hello'): IContent[] {
   return [
     {
-      speaker: 'user',
+      speaker: 'human',
       blocks: [{ type: 'text', text }],
-    } as IContent,
+    },
   ];
 }
 
@@ -72,10 +66,8 @@ export function makeOptions(
 ): GenerateChatOptions {
   return {
     contents,
-    invocation: {
-      settingsService: createTestSettingsService(config),
-      config,
-    },
+    settings: new SettingsService(),
+    config,
     resolved: { model: 'test-model' },
   };
 }
@@ -122,7 +114,7 @@ export function buildStack(
   const wrapper = new LoggingProviderWrapper(retry, config);
   wrapper.setRuntimeContextResolver(() => ({
     runtimeId: 'test-exact',
-    settingsService: createTestSettingsService(config),
+    settingsService: stubRuntimeSettingsState(),
     config,
     metadata: {},
   }));
@@ -152,7 +144,7 @@ export class SuccessProvider implements IProvider {
     return {};
   }
   generateChatCompletion(
-    _options: GenerateChatOptions,
+    _options: GenerateChatOptions | IContent[],
   ): AsyncIterableIterator<IContent> {
     const chunks = this.chunks;
     return (async function* () {
@@ -184,7 +176,7 @@ export class SyncThrowProvider implements IProvider {
     return {};
   }
   generateChatCompletion(
-    _options: GenerateChatOptions,
+    _options: GenerateChatOptions | IContent[],
   ): AsyncIterableIterator<IContent> {
     throw this.error;
   }
@@ -225,7 +217,7 @@ export class FailThenSucceedProvider implements IProvider {
     return {};
   }
   generateChatCompletion(
-    _options: GenerateChatOptions,
+    _options: GenerateChatOptions | IContent[],
   ): AsyncIterableIterator<IContent> {
     this.callCount++;
     if (this.callCount < this.succeedOnCall) {
@@ -275,7 +267,7 @@ export class AlwaysFailProvider implements IProvider {
     return {};
   }
   generateChatCompletion(
-    _options: GenerateChatOptions,
+    _options: GenerateChatOptions | IContent[],
   ): AsyncIterableIterator<IContent> {
     const err = this.error;
     return {
@@ -316,7 +308,7 @@ export class ConsumerAbortedProvider implements IProvider {
     return {};
   }
   generateChatCompletion(
-    _options: GenerateChatOptions,
+    _options: GenerateChatOptions | IContent[],
   ): AsyncIterableIterator<IContent> {
     const chunks = this.chunks;
     return (async function* () {
@@ -350,7 +342,7 @@ export class MetadataOnlyProvider implements IProvider {
     return {};
   }
   generateChatCompletion(
-    _options: GenerateChatOptions,
+    _options: GenerateChatOptions | IContent[],
   ): AsyncIterableIterator<IContent> {
     const usageChunk = this.usageChunk;
     const textChunks = this.textChunks;

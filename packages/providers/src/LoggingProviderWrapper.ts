@@ -49,6 +49,7 @@ import {
 } from './loadBalancing/wrappedProviderDelegation.js';
 import {
   ATTEMPT_LIFECYCLE_KEY,
+  extractLogicalRequestId,
   type AttemptLifecycleObserver,
 } from './logging/attemptLifecycle.js';
 import { AttemptRecorder } from './logging/attemptRecorder.js';
@@ -230,7 +231,11 @@ export class LoggingProviderWrapper implements IProvider {
     this.ensureRuntimeContext(normalizedOptions);
     const activeConfig = this.resolveAndValidateConfig(normalizedOptions);
     this.setupRedactorAndLogging(normalizedOptions, activeConfig);
-    const promptId = this.generatePromptId();
+    // Prefer the caller-threaded logical request id so attempt records join
+    // caller-side registries (#3257); mint one only when absent.
+    const promptId =
+      extractLogicalRequestId(normalizedOptions.metadata) ??
+      this.generatePromptId();
     this.turnNumber++;
     const conversationLoggingEnabled =
       this.checkConversationLoggingEnabled(activeConfig);

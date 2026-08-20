@@ -110,6 +110,11 @@ export const SerializedTokenUsageTurnRecordSchema = z.object({
   prompt_cache_key: z.string().optional(),
   prefix_fingerprint: z.string().optional(),
   prefix_fingerprint_changed: z.boolean().nullable().optional(),
+  // --- #3257 per-attempt provider timing (agents-layer stream seam) ---
+  ttft_ms: z.number().optional(),
+  generation_ms: z.number().optional(),
+  provider_request_ms: z.number().optional(),
+  chunk_count: z.number().optional(),
 });
 
 export type SerializedTokenUsageTurnRecord = z.infer<
@@ -294,6 +299,12 @@ export interface TokenUsageTurnContext {
   promptCacheKey?: string;
   prefixFingerprint?: string;
   prefixFingerprintChanged?: boolean | null;
+  // #3257: per-attempt provider timing measured at the agents-layer stream
+  // seam — request-relative ms from the start of the provider stream.
+  ttftMs?: number | null;
+  lastTokenMs?: number | null;
+  providerRequestMs?: number | null;
+  chunkCount?: number | null;
 }
 
 /**

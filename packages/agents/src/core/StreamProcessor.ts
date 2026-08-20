@@ -3,7 +3,6 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
 import type {
@@ -51,7 +50,12 @@ import {
   AgentExecutionBlockedError,
 } from './chatSession.js';
 import { filterHookRestrictedBlocks } from './hookToolRestrictions.js';
-import { logStreamTelemetry } from './streamTelemetryLogger.js';
+import {
+  attachStreamTiming,
+  logStreamTelemetry,
+  StreamTimingTracker,
+} from './streamTelemetryLogger.js';
+import { LOGICAL_REQUEST_ID_KEY } from '@vybestack/llxprt-code-providers';
 import { canonicalizeToolName } from './toolGovernance.js';
 import {
   buildRequestContentsResult,
@@ -59,19 +63,13 @@ import {
   selectRequestTools,
   prepareRequestPayload,
   buildRuntimeContext,
-  applyRequestModifications,
   resolveUserMemory,
   logOutgoingRequest,
   extractSystemInstructionText,
   type ToolGroupArray,
   type ToolSelectionHookResult,
 } from './streamRequestHelpers.js';
-import {
-  resolvePendingBoundaryFromHook,
-  snapshotContents,
-  type ProjectionSnapshot,
-} from './boundaryRecovery.js';
-import { enforceBeforeModelHookDecision } from './beforeModelHookDecision.js';
+import { fireBeforeModelHook } from './beforeModelHookFire.js';
 import {
   trackPromptTokens,
   isMissingFinishReason,
@@ -102,13 +100,6 @@ function extractAllowedFunctionNames(
   if (!('allowedFunctionNames' in toolConfig)) return undefined;
   if (!Array.isArray(toolConfig.allowedFunctionNames)) return undefined;
   return toolConfig.allowedFunctionNames;
-}
-
-/** Result of firing the BeforeModel hook (contents + metadata + pre-hook snapshot). */
-interface BeforeModelHookFireResult {
-  contents: IContent[];
-  hookOutput: BeforeModelHookOutput | undefined;
-  snapshot: ProjectionSnapshot | undefined;
 }
 
 export class StreamProcessor {
@@ -310,27 +301,23 @@ export class StreamProcessor {
 
     try {
       const originalContents = requestPayload.contents;
-      const hookResult = await this._fireBeforeModelHook(
-        configForHooks,
-        originalContents,
-        toolSelection.tools as ProviderToolset | undefined,
-        toolSelection.allowedFunctionNames,
-      );
-      const { contents: finalContents, hookOutput, snapshot } = hookResult;
-      const pendingContents = resolvePendingBoundaryFromHook(
-        originalContents,
-        finalContents,
-        pendingUserIContents,
-        hookOutput,
-        (msg) => this.logger.debug(() => msg),
-        snapshot,
-      );
+      const { contents: finalContents, pendingContents } =
+        await fireBeforeModelHook({
+          configForHooks,
+          requestContents: originalContents,
+          pendingUserIContents,
+          tools: toolSelection.tools as ProviderToolset | undefined,
+          hookRestrictedAllowedTools: toolSelection.allowedFunctionNames,
+          model: this.runtimeContext.state.model,
+          log: (msg) => this.logger.debug(() => msg),
+        });
 
       const streamPreparation = await preparePromptEnvelopeAfterEnforcement({
         provider,
         contents: finalContents,
         buildOptions: (contents) =>
           this._buildStreamChatOptions(
+            promptId,
             { contents, tools: toolSelection.tools },
             runtimeContext,
             baseRuntimeContext,
@@ -375,70 +362,6 @@ export class StreamProcessor {
       throw error;
     }
   }
-
-  /**
-   * Fire BeforeModel hook; return contents, hook output, and a pre-hook
-   * snapshot (captured only when hooks fire — G1). Throws on stop/block.
-   */
-  private async _fireBeforeModelHook(
-    configForHooks: AgentRuntimeContext['providerRuntime']['config'],
-    requestContents: IContent[],
-    tools: ProviderToolset | undefined,
-    hookRestrictedAllowedTools: string[] | undefined,
-  ): Promise<BeforeModelHookFireResult> {
-    // Zero-overhead early return when hooks disabled / no hook system: no
-    // snapshot (differential recovery falls back to reference equality).
-    const passthrough = (): BeforeModelHookFireResult => ({
-      contents: requestContents,
-      hookOutput: undefined,
-      snapshot: undefined,
-    });
-    if (
-      configForHooks === undefined ||
-      typeof configForHooks.getEnableHooks !== 'function' ||
-      configForHooks.getEnableHooks() !== true
-    ) {
-      return passthrough();
-    }
-    const hookSystem =
-      typeof configForHooks.getHookSystem === 'function'
-        ? configForHooks.getHookSystem()
-        : undefined;
-    if (hookSystem === undefined) return passthrough();
-
-    await hookSystem.initialize();
-    // Capture a projection snapshot BEFORE firing the hook so in-place
-    // mutations (hooks that mutate the live array/elements and return no
-    // llm_request) are detected by differential recovery (G1, issue #2306).
-    const snapshot = snapshotContents(requestContents);
-    const beforeModelResult = await hookSystem.fireBeforeModelEvent({
-      contents: requestContents,
-      tools,
-    });
-
-    enforceBeforeModelHookDecision(
-      beforeModelResult,
-      hookRestrictedAllowedTools,
-    );
-
-    const contents = this._applyRequestModifications(
-      beforeModelResult,
-      requestContents,
-    );
-    return { contents, hookOutput: beforeModelResult ?? undefined, snapshot };
-  }
-
-  private _applyRequestModifications(
-    beforeModelResult: BeforeModelHookOutput | undefined,
-    requestContents: IContent[],
-  ): IContent[] {
-    return applyRequestModifications(
-      beforeModelResult,
-      requestContents,
-      this.runtimeContext.state.model,
-    );
-  }
-
   private _prepareRequestPayload(
     requestContents: IContent[],
     tools: AgentClientGenerateConfig['tools'],
@@ -482,6 +405,7 @@ export class StreamProcessor {
   }
 
   private _buildStreamChatOptions(
+    promptId: string,
     requestPayload: { contents: IContent[]; tools: unknown },
     runtimeContext: ProviderRuntimeContext,
     baseRuntimeContext: ProviderRuntimeContext,
@@ -501,6 +425,10 @@ export class StreamProcessor {
         ...runtimeContext.metadata,
         abortSignal: params.config?.abortSignal,
         _retryRequestContext: params.config?.providerRequestContext,
+        // Thread the caller-visible prompt id so provider-attempt records
+        // join caller-side registries (#3257); internal plumbing, never sent
+        // on the wire.
+        [LOGICAL_REQUEST_ID_KEY]: promptId,
       },
       userMemory,
       systemInstruction: extractSystemInstructionText(
@@ -522,17 +450,16 @@ export class StreamProcessor {
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     const startTime = Date.now();
     try {
+      const chatOptions = this._buildStreamChatOptions(
+        promptId,
+        requestPayload,
+        runtimeContext,
+        baseRuntimeContext,
+        params,
+      );
       const prepared =
         preparedAtEnforcement ??
-        (await prepareAtSendSeam(
-          provider,
-          this._buildStreamChatOptions(
-            requestPayload,
-            runtimeContext,
-            baseRuntimeContext,
-            params,
-          ),
-        ));
+        (await prepareAtSendSeam(provider, chatOptions));
       this.currentPromptEnvelopeEstimate = prepared.estimate;
       recordSendSeamTelemetry({
         usageLogger: this.compressionHandler.tokenUsageLogger,
@@ -714,12 +641,17 @@ export class StreamProcessor {
     hookRestrictedAllowedTools?: string[],
   ): AsyncGenerator<ModelStreamChunk> {
     let lastIContent: IContent | undefined;
+    // Constructed at generator-body start (first pull — the provider call
+    // boundary), so provider_request_ms covers the stream lifecycle alone
+    // and excludes send-seam estimation (#3257).
+    const timing = new StreamTimingTracker();
 
     // The caller iterates this generator after _sendProviderRequest returned,
     // so a mid-stream failure never re-enters its try/catch; clear the failed
     // attempt's estimate here so only a successful one stays observable.
     try {
       for await (const iContent of streamResponse) {
+        timing.recordChunk(iContent);
         this._trackPromptTokens(iContent);
         const chunk = toModelStreamChunk(iContent);
         if (hookRestrictedAllowedTools !== undefined) {
@@ -742,6 +674,11 @@ export class StreamProcessor {
       }
     } catch (error) {
       this.currentPromptEnvelopeEstimate = null;
+      attachStreamTiming(
+        this.compressionHandler.tokenUsageLogger,
+        telemetryContext,
+        timing.measure(),
+      );
       throw error;
     }
 
@@ -750,6 +687,7 @@ export class StreamProcessor {
       telemetryContext,
       lastIContent,
       this.compressionHandler.tokenUsageLogger,
+      timing.measure(),
     );
   }
 

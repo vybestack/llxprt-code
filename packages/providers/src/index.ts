@@ -119,6 +119,11 @@ export type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime
 // --- Provider config keys ---
 export { PROVIDER_CONFIG_KEYS } from './providerConfigKeys.js';
 
+// --- Attempt lifecycle observability ---
+// Callers (e.g. the agents layer) thread their logical request id through
+// options metadata so provider-attempt records join caller-side registries.
+export { LOGICAL_REQUEST_ID_KEY } from './logging/attemptLifecycle.js';
+
 // --- Provider utilities ---
 export {
   fetchApiKeyQuota,

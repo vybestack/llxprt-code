@@ -68,6 +68,17 @@ function isRetriedOutcome(
   return outcome === 'abandoned' || outcome === 'error';
 }
 
+/**
+ * Narrow an optional timing field to a finite number. Non-finite values
+ * (NaN/Infinity) must be omitted, not serialized: JSON.stringify would
+ * write them as null, which the schema forbids (#3257).
+ */
+function _finiteMs(value: number | null | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
 /** True when a pending entry has all the estimate fields required to emit a turn record. */
 
 /**
@@ -443,10 +454,29 @@ export class TokenUsageLogger {
     };
   }
 
+  /**
+   * lastToken-ttft window in ms, only when both endpoints are measured and
+   * the window is strictly positive — never a total-duration fallback
+   * (ProviderPerformanceTracker Finding #7).
+   */
+  private _generationWindowMs(
+    ctx: Partial<TokenUsageTurnContext>,
+  ): number | undefined {
+    const ttftMs = _finiteMs(ctx.ttftMs);
+    const lastTokenMs = _finiteMs(ctx.lastTokenMs);
+    if (ttftMs === undefined || lastTokenMs === undefined) return undefined;
+    const windowMs = lastTokenMs - ttftMs;
+    return windowMs > 0 ? windowMs : undefined;
+  }
+
   private _serializeContextFields(
     ctx: Partial<TokenUsageTurnContext> | undefined,
   ) {
     const c = ctx ?? {};
+    const generationMs = this._generationWindowMs(c);
+    const ttftMs = _finiteMs(c.ttftMs);
+    const providerRequestMs = _finiteMs(c.providerRequestMs);
+    const chunkCount = _finiteMs(c.chunkCount);
     return {
       ...(c.sessionId !== undefined && { session_id: c.sessionId }),
       ...(c.turnId !== undefined && { turn_id: c.turnId }),
@@ -495,6 +525,13 @@ export class TokenUsageLogger {
       ...(c.prefixFingerprintChanged !== undefined && {
         prefix_fingerprint_changed: c.prefixFingerprintChanged,
       }),
+      // #3257: emit only measured values, never zero-filled.
+      ...(ttftMs !== undefined && { ttft_ms: ttftMs }),
+      ...(generationMs !== undefined && { generation_ms: generationMs }),
+      ...(providerRequestMs !== undefined && {
+        provider_request_ms: providerRequestMs,
+      }),
+      ...(chunkCount !== undefined && { chunk_count: chunkCount }),
     };
   }
 

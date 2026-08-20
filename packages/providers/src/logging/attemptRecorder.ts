@@ -63,6 +63,20 @@ interface ActiveAttempt {
 }
 
 /**
+ * Token counts resolved once at attempt end with the emitAttemptRecord
+ * precedence, feeding both the telemetry record and the perf observer's
+ * end notification.
+ */
+interface ResolvedAttemptTokens {
+  tokenCounts: ResponseTokenCounts;
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens: number;
+  thoughtsTokens: number;
+  toolTokens: number;
+}
+
+/**
  * Options for constructing an AttemptRecorder.
  */
 export interface AttemptRecorderOptions {
@@ -239,8 +253,34 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
     }
     attempt.hasEmittedTerminal = true;
 
+    // Resolve token counts once with the emitAttemptRecord precedence
+    // (non-zero info values win, else counts resolved from accumulated
+    // usage/text) — the perf observer below needs the resolved values
+    // because orchestrator-owned attempts end with zero info metrics
+    // (#3257). Resolution runs inside the fail-open boundary: malformed
+    // provider usage (genuinely external data) falls back to the raw info
+    // counts so telemetry, pruning, and the perf-observer notification
+    // still run.
+    let resolved: ResolvedAttemptTokens;
     try {
-      this.emitAttemptRecord(attempt, info);
+      resolved = this.resolveAttemptTokens(attempt, info);
+    } catch (err) {
+      this.logger.error(
+        () =>
+          `Failed to resolve attempt tokens: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      resolved = {
+        tokenCounts: this.resolveTokenCounts(undefined, ''),
+        inputTokens: sanitize(info.inputTokens),
+        outputTokens: sanitize(info.outputTokens),
+        cachedTokens: sanitize(info.cachedTokens),
+        thoughtsTokens: sanitize(info.thoughtsTokens),
+        toolTokens: sanitize(info.toolTokens),
+      };
+    }
+
+    try {
+      this.emitAttemptRecord(attempt, info, resolved);
     } catch (err) {
       this.logger.error(
         () =>
@@ -268,8 +308,8 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
         startMs: attempt.requestStartMs,
         endMs: completionMs,
         status: info.status,
-        inputTokens: info.inputTokens,
-        outputTokens: info.outputTokens,
+        inputTokens: resolved.inputTokens,
+        outputTokens: resolved.outputTokens,
       });
     }
   }
@@ -304,11 +344,53 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
   }
 
   /**
+   * Token counts resolved once per terminal attempt with the precedence:
+   * non-zero info values win, else the counts resolved from accumulated
+   * usage/text.
+   */
+  private resolveAttemptTokens(
+    attempt: ActiveAttempt,
+    info: AttemptEndInfo,
+  ): ResolvedAttemptTokens {
+    const tokenCounts = this.resolveTokenCounts(
+      attempt.latestTokenUsage,
+      attempt.streamedText,
+    );
+    return {
+      tokenCounts,
+      inputTokens: sanitize(
+        info.inputTokens !== 0
+          ? info.inputTokens
+          : tokenCounts.input_token_count,
+      ),
+      outputTokens: sanitize(
+        info.outputTokens !== 0
+          ? info.outputTokens
+          : tokenCounts.output_token_count,
+      ),
+      cachedTokens: sanitize(
+        info.cachedTokens !== 0
+          ? info.cachedTokens
+          : tokenCounts.cached_content_token_count,
+      ),
+      thoughtsTokens: sanitize(
+        info.thoughtsTokens !== 0
+          ? info.thoughtsTokens
+          : tokenCounts.thoughts_token_count,
+      ),
+      toolTokens: sanitize(
+        info.toolTokens !== 0 ? info.toolTokens : tokenCounts.tool_token_count,
+      ),
+    };
+  }
+
+  /**
    * Emit the terminal telemetry record for a single attempt.
    */
   private emitAttemptRecord(
     attempt: ActiveAttempt,
     info: AttemptEndInfo,
+    resolved: ResolvedAttemptTokens,
   ): void {
     const startMs = info.start;
     const completionMs =
@@ -323,32 +405,7 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
     const lastTokenRelMs =
       lastTokenMs !== null ? Math.max(0, lastTokenMs - startMs) : null;
 
-    const tokenCounts = this.resolveTokenCounts(
-      attempt.latestTokenUsage,
-      attempt.streamedText,
-    );
-
-    const inputTokens = sanitize(
-      info.inputTokens !== 0 ? info.inputTokens : tokenCounts.input_token_count,
-    );
-    const outputTokens = sanitize(
-      info.outputTokens !== 0
-        ? info.outputTokens
-        : tokenCounts.output_token_count,
-    );
-    const cachedTokens = sanitize(
-      info.cachedTokens !== 0
-        ? info.cachedTokens
-        : tokenCounts.cached_content_token_count,
-    );
-    const thoughtsTokens = sanitize(
-      info.thoughtsTokens !== 0
-        ? info.thoughtsTokens
-        : tokenCounts.thoughts_token_count,
-    );
-    const toolTokens = sanitize(
-      info.toolTokens !== 0 ? info.toolTokens : tokenCounts.tool_token_count,
-    );
+    const { tokenCounts } = resolved;
 
     // Preserve actual provider/model from the attempt state rather than
     // the callback info, which may carry wrapper-level names.
@@ -363,11 +420,11 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
         attempt,
         info,
         tokenCounts,
-        inputTokens,
-        outputTokens,
-        cachedTokens,
-        thoughtsTokens,
-        toolTokens,
+        resolved.inputTokens,
+        resolved.outputTokens,
+        resolved.cachedTokens,
+        resolved.thoughtsTokens,
+        resolved.toolTokens,
         providerName,
         modelName,
         durationMs,
@@ -384,11 +441,11 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
         durationMs,
         ttftMs,
         lastTokenRelMs,
-        inputTokens,
-        outputTokens,
-        cachedTokens,
-        thoughtsTokens,
-        toolTokens,
+        resolved.inputTokens,
+        resolved.outputTokens,
+        resolved.cachedTokens,
+        resolved.thoughtsTokens,
+        resolved.toolTokens,
         tokenCounts,
       );
     }
@@ -612,11 +669,9 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
       attempt.latestTokenUsage = latestTokenUsage;
     }
 
-    const tokenCounts = this.resolveTokenCounts(
-      attempt.latestTokenUsage,
-      attempt.streamedText,
-    );
-
+    // Zero info counts: onAttemptEnd's guarded resolution is the single
+    // resolution point for every lifecycle shape, so malformed usage on
+    // this path cannot throw before the fail-open boundary (#3257).
     this.onAttemptEnd({
       attemptId: '',
       attemptIndex: attempt.attemptIndex,
@@ -627,13 +682,11 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
       status,
       providerName: this.providerName,
       modelName,
-      inputTokens: tokenCounts.input_token_count,
-      outputTokens: tokenCounts.output_token_count,
-      cachedTokens: tokenCounts.cached_content_token_count,
-      thoughtsTokens: tokenCounts.thoughts_token_count,
-      toolTokens: tokenCounts.tool_token_count,
-      cacheReads: tokenCounts.cache_read_input_tokens,
-      cacheWrites: tokenCounts.cache_creation_input_tokens,
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedTokens: 0,
+      thoughtsTokens: 0,
+      toolTokens: 0,
       finishReasons: attempt.finishReasons,
       errorMessage,
     });
