@@ -394,7 +394,11 @@ describe('AttemptRecorder perf phase observer (P07)', () => {
     };
     const recorder = createRecorder(true);
     recorder.ensureAttemptStarted();
-    recorder.recordMetadataUsage(recorder.getCurrentAttemptId()!, usage);
+    const attemptId = recorder.getCurrentAttemptId();
+    if (attemptId === undefined) {
+      throw new Error('expected an active attempt before recording usage');
+    }
+    recorder.recordMetadataUsage(attemptId, usage);
     recorder.finalizeAttempt('success', 'test-model');
 
     expect(ends).toHaveLength(1);
@@ -453,5 +457,38 @@ describe('AttemptRecorder perf phase observer (P07)', () => {
     // Resolution failed, so the raw info counts are the fallback.
     expect(ends[0].inputTokens).toBe(111);
     expect(ends[0].outputTokens).toBe(22);
+  });
+
+  // #3257: the wrapper-owned finalizeAttempt path must sit behind the same
+  // fail-open boundary. Malformed usage can make resolution throw there too;
+  // the perf observer must still be notified with the raw info counts (zeros)
+  // and no exception may escape into stream teardown.
+  it('malformed usage that throws during wrapper-owned finalize still notifies the perf observer', () => {
+    const { observer, ends } = capturingObserver();
+    setPerfPhaseObserver(observer);
+
+    const malformedUsage: UsageStats = {
+      promptTokens: 100,
+      completionTokens: 50,
+      totalTokens: 150,
+      get cachedTokens(): number {
+        throw new Error('malformed usage payload');
+      },
+    };
+    const recorder = createRecorder(true);
+    recorder.ensureAttemptStarted();
+    const attemptId = recorder.getCurrentAttemptId();
+    if (attemptId === undefined) {
+      throw new Error('expected an active attempt before recording usage');
+    }
+    recorder.recordMetadataUsage(attemptId, malformedUsage);
+
+    expect(() => recorder.finalizeAttempt('success', 'test-model')).not.toThrow();
+
+    expect(ends).toHaveLength(1);
+    expect(ends[0].status).toBe('success');
+    // Resolution failed; raw info counts (zeros) are the fallback.
+    expect(ends[0].inputTokens).toBe(0);
+    expect(ends[0].outputTokens).toBe(0);
   });
 });

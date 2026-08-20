@@ -86,6 +86,64 @@ function readJsonl(filePath: string): SerializedTokenUsageRecord[] {
   });
 }
 
+type ProviderManagerStub = {
+  getActiveProvider: unknown;
+};
+
+/** Type predicate: the mock provider manager shape used across this file. */
+function isProviderManagerStub(
+  manager: unknown,
+): manager is ProviderManagerStub {
+  return (
+    typeof manager === 'object' &&
+    manager !== null &&
+    'getActiveProvider' in manager
+  );
+}
+
+function providerAdapterFromStub(manager: unknown) {
+  if (!isProviderManagerStub(manager)) {
+    throw new Error('provider manager stub must expose getActiveProvider()');
+  }
+  return createProviderAdapterFromManager(manager);
+}
+
+/**
+ * Builds the runtime-context view every test in this file uses: a ChatSession
+ * facing the given provider stub, backed by the token-sync fixture services.
+ */
+function buildTokenSyncView(
+  fixture: ReturnType<typeof createTokenSyncTestFixture>,
+  mockProvider: unknown,
+  sessionId: string,
+) {
+  const { mockConfig, historyService, providerRuntimeSnapshot } = fixture;
+  const runtimeState: AgentRuntimeState = createAgentRuntimeState({
+    runtimeId: fixture.runtimeSetup.runtime.runtimeId,
+    provider: 'anthropic',
+    model: 'claude-3-5-sonnet-20241022',
+    sessionId,
+  });
+  const providerManager = {
+    getActiveProvider: vi.fn(() => mockProvider),
+  };
+  mockConfig.getProviderManager = vi.fn().mockReturnValue(providerManager);
+  return createAgentRuntimeContext({
+    state: runtimeState,
+    history: historyService,
+    settings: {
+      compressionThreshold: 0.8,
+      contextLimit: 200000,
+      preserveThreshold: 0.2,
+      telemetry: { enabled: true, target: null },
+    },
+    provider: providerAdapterFromStub(mockConfig.getProviderManager()),
+    telemetry: createTelemetryAdapterFromConfig(mockConfig),
+    tools: createToolRegistryViewFromRegistry(),
+    providerRuntime: providerRuntimeSnapshot,
+  });
+}
+
 describe('TokenUsageLogger integration — ChatSession streaming', () => {
   let logFile: string;
 
@@ -105,17 +163,8 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
 
   it('pairs estimate with actual after a normal streaming turn', async () => {
     const fixture = createTokenSyncTestFixture();
-    const mockConfig = fixture.mockConfig;
-    const providerRuntimeSnapshot = fixture.providerRuntimeSnapshot;
     const mockContentGenerator = fixture.mockContentGenerator;
     const historyService = fixture.historyService;
-
-    const runtimeState: AgentRuntimeState = createAgentRuntimeState({
-      runtimeId: fixture.runtimeSetup.runtime.runtimeId,
-      provider: 'anthropic',
-      model: 'claude-3-5-sonnet-20241022',
-      sessionId: 'int-test-session',
-    });
 
     historyService.add(
       {
@@ -152,27 +201,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       }),
     };
 
-    const providerManager = {
-      getActiveProvider: vi.fn(() => mockProvider),
-    };
-    mockConfig.getProviderManager = vi.fn().mockReturnValue(providerManager);
-
-    const view = createAgentRuntimeContext({
-      state: runtimeState,
-      history: historyService,
-      settings: {
-        compressionThreshold: 0.8,
-        contextLimit: 200000,
-        preserveThreshold: 0.2,
-        telemetry: { enabled: true, target: null },
-      },
-      provider: createProviderAdapterFromManager(
-        mockConfig.getProviderManager() as never,
-      ),
-      telemetry: createTelemetryAdapterFromConfig(mockConfig),
-      tools: createToolRegistryViewFromRegistry(),
-      providerRuntime: providerRuntimeSnapshot,
-    });
+    const view = buildTokenSyncView(fixture, mockProvider, 'int-test-session');
 
     const chat = new ChatSession(view, mockContentGenerator, {}, []);
 
@@ -210,17 +239,8 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
 
   it('records cached_tokens and effective_actual_tokens for cached turns', async () => {
     const fixture = createTokenSyncTestFixture();
-    const mockConfig = fixture.mockConfig;
-    const providerRuntimeSnapshot = fixture.providerRuntimeSnapshot;
     const mockContentGenerator = fixture.mockContentGenerator;
     const historyService = fixture.historyService;
-
-    const runtimeState: AgentRuntimeState = createAgentRuntimeState({
-      runtimeId: fixture.runtimeSetup.runtime.runtimeId,
-      provider: 'anthropic',
-      model: 'claude-3-5-sonnet-20241022',
-      sessionId: 'int-test-session-2',
-    });
 
     historyService.add(
       {
@@ -259,27 +279,11 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       }),
     };
 
-    const providerManager = {
-      getActiveProvider: vi.fn(() => mockProvider),
-    };
-    mockConfig.getProviderManager = vi.fn().mockReturnValue(providerManager);
-
-    const view = createAgentRuntimeContext({
-      state: runtimeState,
-      history: historyService,
-      settings: {
-        compressionThreshold: 0.8,
-        contextLimit: 200000,
-        preserveThreshold: 0.2,
-        telemetry: { enabled: true, target: null },
-      },
-      provider: createProviderAdapterFromManager(
-        mockConfig.getProviderManager() as never,
-      ),
-      telemetry: createTelemetryAdapterFromConfig(mockConfig),
-      tools: createToolRegistryViewFromRegistry(),
-      providerRuntime: providerRuntimeSnapshot,
-    });
+    const view = buildTokenSyncView(
+      fixture,
+      mockProvider,
+      'int-test-session-2',
+    );
 
     const chat = new ChatSession(view, mockContentGenerator, {}, []);
 
@@ -319,17 +323,8 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
   // matching promptId. End-to-end through a real ChatSession, not mocks.
   it('AC-12 bidirectional join: turn record keys match history content promptId', async () => {
     const fixture = createTokenSyncTestFixture();
-    const mockConfig = fixture.mockConfig;
-    const providerRuntimeSnapshot = fixture.providerRuntimeSnapshot;
     const mockContentGenerator = fixture.mockContentGenerator;
     const historyService = fixture.historyService;
-
-    const runtimeState: AgentRuntimeState = createAgentRuntimeState({
-      runtimeId: fixture.runtimeSetup.runtime.runtimeId,
-      provider: 'anthropic',
-      model: 'claude-3-5-sonnet-20241022',
-      sessionId: 'ac12-join-session',
-    });
 
     const mockProvider = {
       name: 'anthropic',
@@ -357,27 +352,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       }),
     };
 
-    const providerManager = {
-      getActiveProvider: vi.fn(() => mockProvider),
-    };
-    mockConfig.getProviderManager = vi.fn().mockReturnValue(providerManager);
-
-    const view = createAgentRuntimeContext({
-      state: runtimeState,
-      history: historyService,
-      settings: {
-        compressionThreshold: 0.8,
-        contextLimit: 200000,
-        preserveThreshold: 0.2,
-        telemetry: { enabled: true, target: null },
-      },
-      provider: createProviderAdapterFromManager(
-        mockConfig.getProviderManager() as never,
-      ),
-      telemetry: createTelemetryAdapterFromConfig(mockConfig),
-      tools: createToolRegistryViewFromRegistry(),
-      providerRuntime: providerRuntimeSnapshot,
-    });
+    const view = buildTokenSyncView(fixture, mockProvider, 'ac12-join-session');
 
     const chat = new ChatSession(view, mockContentGenerator, {}, []);
 
@@ -410,7 +385,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
 
     // AC-1 join keys must be present
     expect(record.session_id).toBe('ac12-join-session');
-    expect(record.runtime_id).toBe(runtimeState.runtimeId);
+    expect(record.runtime_id).toBe(fixture.runtimeSetup.runtime.runtimeId);
     // Main agent: no parent runtime, no subagent name
     expect(record.parent_runtime_id).toBeNull();
     expect(record.subagent_name).toBeNull();
@@ -436,17 +411,8 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
   // legacy cached_tokens / effective_actual_tokens must remain unchanged.
   it('AC-12 cached turn: records cache_read_tokens and cache_write_tokens with legacy fields intact', async () => {
     const fixture = createTokenSyncTestFixture();
-    const mockConfig = fixture.mockConfig;
-    const providerRuntimeSnapshot = fixture.providerRuntimeSnapshot;
     const mockContentGenerator = fixture.mockContentGenerator;
     const historyService = fixture.historyService;
-
-    const runtimeState: AgentRuntimeState = createAgentRuntimeState({
-      runtimeId: fixture.runtimeSetup.runtime.runtimeId,
-      provider: 'anthropic',
-      model: 'claude-3-5-sonnet-20241022',
-      sessionId: 'ac12-cached-session',
-    });
 
     historyService.add(
       {
@@ -486,27 +452,11 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       }),
     };
 
-    const providerManager = {
-      getActiveProvider: vi.fn(() => mockProvider),
-    };
-    mockConfig.getProviderManager = vi.fn().mockReturnValue(providerManager);
-
-    const view = createAgentRuntimeContext({
-      state: runtimeState,
-      history: historyService,
-      settings: {
-        compressionThreshold: 0.8,
-        contextLimit: 200000,
-        preserveThreshold: 0.2,
-        telemetry: { enabled: true, target: null },
-      },
-      provider: createProviderAdapterFromManager(
-        mockConfig.getProviderManager() as never,
-      ),
-      telemetry: createTelemetryAdapterFromConfig(mockConfig),
-      tools: createToolRegistryViewFromRegistry(),
-      providerRuntime: providerRuntimeSnapshot,
-    });
+    const view = buildTokenSyncView(
+      fixture,
+      mockProvider,
+      'ac12-cached-session',
+    );
 
     const chat = new ChatSession(view, mockContentGenerator, {}, []);
 
@@ -557,17 +507,8 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
   // transport is a fake whose generator sleeps between token-bearing chunks.
   it('records ttft/generation/provider_request/chunk_count for a timed streaming turn (#3257)', async () => {
     const fixture = createTokenSyncTestFixture();
-    const mockConfig = fixture.mockConfig;
-    const providerRuntimeSnapshot = fixture.providerRuntimeSnapshot;
     const mockContentGenerator = fixture.mockContentGenerator;
     const historyService = fixture.historyService;
-
-    const runtimeState: AgentRuntimeState = createAgentRuntimeState({
-      runtimeId: fixture.runtimeSetup.runtime.runtimeId,
-      provider: 'anthropic',
-      model: 'claude-3-5-sonnet-20241022',
-      sessionId: 'timing-stream-session',
-    });
 
     const providerOptions: Array<{
       metadata?: Record<string, unknown>;
@@ -598,27 +539,11 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
         }),
     };
 
-    const providerManager = {
-      getActiveProvider: vi.fn(() => mockProvider),
-    };
-    mockConfig.getProviderManager = vi.fn().mockReturnValue(providerManager);
-
-    const view = createAgentRuntimeContext({
-      state: runtimeState,
-      history: historyService,
-      settings: {
-        compressionThreshold: 0.8,
-        contextLimit: 200000,
-        preserveThreshold: 0.2,
-        telemetry: { enabled: true, target: null },
-      },
-      provider: createProviderAdapterFromManager(
-        mockConfig.getProviderManager() as never,
-      ),
-      telemetry: createTelemetryAdapterFromConfig(mockConfig),
-      tools: createToolRegistryViewFromRegistry(),
-      providerRuntime: providerRuntimeSnapshot,
-    });
+    const view = buildTokenSyncView(
+      fixture,
+      mockProvider,
+      'timing-stream-session',
+    );
 
     const chat = new ChatSession(view, mockContentGenerator, {}, []);
 
@@ -662,17 +587,8 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
   // ttft/generation are omitted while request duration + chunk count remain.
   it('omits ttft/generation for a usage-only stream but keeps provider_request/chunk_count (#3257)', async () => {
     const fixture = createTokenSyncTestFixture();
-    const mockConfig = fixture.mockConfig;
-    const providerRuntimeSnapshot = fixture.providerRuntimeSnapshot;
     const mockContentGenerator = fixture.mockContentGenerator;
     const historyService = fixture.historyService;
-
-    const runtimeState: AgentRuntimeState = createAgentRuntimeState({
-      runtimeId: fixture.runtimeSetup.runtime.runtimeId,
-      provider: 'anthropic',
-      model: 'claude-3-5-sonnet-20241022',
-      sessionId: 'usage-only-session',
-    });
 
     const mockProvider = {
       name: 'anthropic',
@@ -691,27 +607,11 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       }),
     };
 
-    const providerManager = {
-      getActiveProvider: vi.fn(() => mockProvider),
-    };
-    mockConfig.getProviderManager = vi.fn().mockReturnValue(providerManager);
-
-    const view = createAgentRuntimeContext({
-      state: runtimeState,
-      history: historyService,
-      settings: {
-        compressionThreshold: 0.8,
-        contextLimit: 200000,
-        preserveThreshold: 0.2,
-        telemetry: { enabled: true, target: null },
-      },
-      provider: createProviderAdapterFromManager(
-        mockConfig.getProviderManager() as never,
-      ),
-      telemetry: createTelemetryAdapterFromConfig(mockConfig),
-      tools: createToolRegistryViewFromRegistry(),
-      providerRuntime: providerRuntimeSnapshot,
-    });
+    const view = buildTokenSyncView(
+      fixture,
+      mockProvider,
+      'usage-only-session',
+    );
 
     const chat = new ChatSession(view, mockContentGenerator, {}, []);
 
@@ -762,17 +662,8 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
   // success record must carry its own fresh timing, not attempt 1's.
   it('records partial timing on an abandoned stream attempt and fresh timing on the retry (#3257)', async () => {
     const fixture = createTokenSyncTestFixture();
-    const mockConfig = fixture.mockConfig;
-    const providerRuntimeSnapshot = fixture.providerRuntimeSnapshot;
     const mockContentGenerator = fixture.mockContentGenerator;
     const historyService = fixture.historyService;
-
-    const runtimeState: AgentRuntimeState = createAgentRuntimeState({
-      runtimeId: fixture.runtimeSetup.runtime.runtimeId,
-      provider: 'anthropic',
-      model: 'claude-3-5-sonnet-20241022',
-      sessionId: 'abandoned-timing-session',
-    });
 
     let attempt = 0;
     const mockProvider = {
@@ -811,27 +702,11 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       }),
     };
 
-    const providerManager = {
-      getActiveProvider: vi.fn(() => mockProvider),
-    };
-    mockConfig.getProviderManager = vi.fn().mockReturnValue(providerManager);
-
-    const view = createAgentRuntimeContext({
-      state: runtimeState,
-      history: historyService,
-      settings: {
-        compressionThreshold: 0.8,
-        contextLimit: 200000,
-        preserveThreshold: 0.2,
-        telemetry: { enabled: true, target: null },
-      },
-      provider: createProviderAdapterFromManager(
-        mockConfig.getProviderManager() as never,
-      ),
-      telemetry: createTelemetryAdapterFromConfig(mockConfig),
-      tools: createToolRegistryViewFromRegistry(),
-      providerRuntime: providerRuntimeSnapshot,
-    });
+    const view = buildTokenSyncView(
+      fixture,
+      mockProvider,
+      'abandoned-timing-session',
+    );
 
     const chat = new ChatSession(view, mockContentGenerator, {}, []);
 
@@ -885,5 +760,76 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     expect(success.provider_request_ms).toBeGreaterThanOrEqual(0);
     // Fresh attempt-2 timing wins: three chunks, not attempt 1's single one.
     expect(success.chunk_count).toBe(3);
+  });
+
+  // #3257: EmptyStreamError is thrown outside _convertIContentStream's catch
+  // (eager first-chunk pull), so partial timing must attach at that seam too.
+  // The unbilled empty attempt writes no record by design; the retry's
+  // success record must carry the SECOND attempt's fresh timing.
+  it('retries a zero-chunk stream and records fresh timing on the retry (#3257)', async () => {
+    const fixture = createTokenSyncTestFixture();
+    const { mockContentGenerator, historyService } = fixture;
+    let attempt = 0;
+    const mockProvider = {
+      name: 'anthropic',
+      generateChatCompletion: vi.fn().mockImplementation(async function* () {
+        attempt++;
+        if (attempt === 1) {
+          return; // zero chunks: eager first-chunk pull throws EmptyStreamError
+        }
+        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'Hi ' }] };
+        await Bun.sleep(15);
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'there.' }],
+          metadata: {
+            usage: {
+              promptTokens: 5100,
+              completionTokens: 15,
+              totalTokens: 5115,
+            },
+          },
+        };
+      }),
+    };
+    const view = buildTokenSyncView(
+      fixture,
+      mockProvider,
+      'empty-stream-session',
+    );
+    const chat = new ChatSession(view, mockContentGenerator, {}, []);
+    const realLogger = new TokenUsageLogger(true, logFile);
+    chat.setTokenUsageLoggerForTesting(realLogger);
+    const promptId = 'empty-stream-prompt';
+    realLogger.recordEstimate(promptId, {
+      provider: 'anthropic',
+      model: 'claude-3-5-sonnet-20241022',
+      estimatedTokens: 150,
+      estimator: 'anthropic-char',
+      tiktokenTokens: 140,
+    });
+    const stream = await chat.sendMessageStream(
+      { message: [{ text: 'Say hi' }] },
+      promptId,
+    );
+    for await (const _event of stream) {
+      // consume
+    }
+    await historyService.waitForTokenUpdates();
+
+    expect(attempt).toBe(2);
+    const records = readJsonl(logFile);
+    expect(records).toHaveLength(1);
+    const success = records[0];
+    // The retry happens inside retryWithBackoff, below turn-attempt
+    // accounting: the unbilled empty attempt is invisible here.
+    expect(success.attempt_index).toBe(0);
+    expect(success.attempt_outcome).toBe('success');
+    expect(success.chunk_count).toBe(2);
+    expect(typeof success.ttft_ms).toBe('number');
+    expect(success.ttft_ms).toBeGreaterThanOrEqual(0);
+    expect(success.generation_ms).toBeGreaterThan(0);
+    expect(typeof success.provider_request_ms).toBe('number');
+    expect(success.provider_request_ms).toBeGreaterThanOrEqual(0);
   });
 });

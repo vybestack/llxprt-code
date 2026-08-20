@@ -669,11 +669,9 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
       attempt.latestTokenUsage = latestTokenUsage;
     }
 
-    const tokenCounts = this.resolveTokenCounts(
-      attempt.latestTokenUsage,
-      attempt.streamedText,
-    );
-
+    // Zero info counts: onAttemptEnd's guarded resolution is the single
+    // resolution point for every lifecycle shape, so malformed usage on
+    // this path cannot throw before the fail-open boundary (#3257).
     this.onAttemptEnd({
       attemptId: '',
       attemptIndex: attempt.attemptIndex,
@@ -684,13 +682,11 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
       status,
       providerName: this.providerName,
       modelName,
-      inputTokens: tokenCounts.input_token_count,
-      outputTokens: tokenCounts.output_token_count,
-      cachedTokens: tokenCounts.cached_content_token_count,
-      thoughtsTokens: tokenCounts.thoughts_token_count,
-      toolTokens: tokenCounts.tool_token_count,
-      cacheReads: tokenCounts.cache_read_input_tokens,
-      cacheWrites: tokenCounts.cache_creation_input_tokens,
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedTokens: 0,
+      thoughtsTokens: 0,
+      toolTokens: 0,
       finishReasons: attempt.finishReasons,
       errorMessage,
     });

@@ -177,6 +177,24 @@ describe('TokenUsageLogger turn-record timing (issue #3257)', () => {
     expect(record.chunk_count).toBe(3);
   });
 
+  it('omits non-finite timing values instead of serializing them as null', async () => {
+    const logger = new TokenUsageLogger(true, logFilePath);
+    const record = await recordTurnWithTiming(logger, 'timing-nonfinite', {
+      // JSON.stringify would write NaN/Infinity as null, which the schema
+      // forbids: these must be omitted from the record entirely.
+      ttftMs: Number.NaN,
+      lastTokenMs: Number.POSITIVE_INFINITY,
+      providerRequestMs: 1500,
+      chunkCount: Number.NaN,
+    });
+
+    expect('ttft_ms' in record).toBe(false);
+    expect('generation_ms' in record).toBe(false);
+    expect('chunk_count' in record).toBe(false);
+    // Finite values on the same record still serialize.
+    expect(record.provider_request_ms).toBe(1500);
+  });
+
   it('emits none of the timing fields when no timing was attached', async () => {
     const logger = new TokenUsageLogger(true, logFilePath);
     const record = await recordTurnWithTiming(logger, 'timing-absent');
@@ -216,8 +234,9 @@ describe('TokenUsageLogger turn-record timing (issue #3257)', () => {
       chunk_count: 10,
     };
     const parsedTimed = parseTokenUsageLogRecord(timedRecord);
-    expect(parsedTimed).not.toBeNull();
-    if (parsedTimed?.record_type !== 'turn') return;
+    if (parsedTimed === null || parsedTimed.record_type !== 'turn') {
+      throw new Error('expected a parseable turn record with timing fields');
+    }
     expect(parsedTimed.ttft_ms).toBe(200);
     expect(parsedTimed.generation_ms).toBe(1000);
     expect(parsedTimed.provider_request_ms).toBe(1500);

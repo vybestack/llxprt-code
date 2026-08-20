@@ -116,6 +116,11 @@ export async function logStreamTelemetry(
   tokenUsageLogger: TokenUsageLogger | null | undefined,
   timing?: StreamTimingMeasurement,
 ): Promise<void> {
+  // An empty stream (no chunks) still carries elapsed provider time; the
+  // caller throws EmptyStreamError after this returns, outside the
+  // generator's catch, so this is the only attach point for that failed
+  // attempt (#3257).
+  attachStreamTiming(tokenUsageLogger, telemetry, timing);
   if (telemetry === undefined || lastIContent === undefined) return;
   try {
     await emitStreamTelemetry(
@@ -123,7 +128,6 @@ export async function logStreamTelemetry(
       telemetry,
       lastIContent,
       tokenUsageLogger,
-      timing,
     );
   } catch (error) {
     // Fail-open boundary: this runs on the completion path of a real turn, so
@@ -171,7 +175,6 @@ async function emitStreamTelemetry(
   telemetry: { promptId: string; startTime: number; attemptIndex?: number },
   lastIContent: IContent,
   tokenUsageLogger: TokenUsageLogger | null | undefined,
-  timing: StreamTimingMeasurement | undefined,
 ): Promise<void> {
   const durationMs = Date.now() - telemetry.startTime;
   const usage = lastIContent.metadata?.usage;
@@ -184,7 +187,6 @@ async function emitStreamTelemetry(
     usage ? { ...usage } : undefined,
     safeJsonStringify(lastIContent),
   );
-  attachStreamTiming(tokenUsageLogger, telemetry, timing);
   await recordActualTokenUsage(
     tokenUsageLogger,
     telemetry.promptId,
