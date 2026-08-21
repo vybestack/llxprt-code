@@ -112,7 +112,7 @@ export class FileTokenStorage extends BaseTokenStorage {
     ) {
       throw new Error('Token file corrupted');
     }
-    const entries: [string, MCPOAuthCredentials][] = [];
+    const entries: Array<[string, MCPOAuthCredentials]> = [];
     for (const [key, value] of Object.entries(parsed)) {
       if (value === null || typeof value !== 'object' || Array.isArray(value)) {
         throw new Error('Token file corrupted');
