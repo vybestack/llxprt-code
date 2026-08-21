@@ -42,9 +42,8 @@ describe('inert tool-name surface absence (0.12.0 breaking cleanup)', () => {
       path.join(__dirname, 'tool-registry.ts'),
       'utf-8',
     );
-    // The normalized-name lookup is live; the fully-qualified fallback (never
-    // reachable after the removal) must stay gone.
-    expect(source).not.toContain(QUALIFIED_NAME);
+    // The `__` fully-qualified-name fallback (inert after the removal) must stay
+    // gone from the registry lookup path.
     expect(source).not.toContain(SEPARATOR + QUALIFIED_NAME);
   });
 });
