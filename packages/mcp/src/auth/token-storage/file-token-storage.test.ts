@@ -256,7 +256,10 @@ describe('FileTokenStorage (envelope-only)', () => {
       // Seed a real v:2 envelope with an existing entry so the update path
       // proves merge-and-preserve rather than create-from-ENOENT.
       mockFs.readFile.mockResolvedValue(
-        await buildV2Envelope({ 'test-server': existingCredentials }),
+        await buildV2Envelope({
+          'other-server': existingCredentials,
+          'test-server': existingCredentials,
+        }),
       );
       mockFs.writeFile.mockResolvedValue(undefined);
 
@@ -278,6 +281,7 @@ describe('FileTokenStorage (envelope-only)', () => {
       // overwrites instead of merging would be caught here).
       const writeCall = mockFs.writeFile.mock.calls[0];
       const stored = await decryptWrittenEnvelope(writeCall[1] as string);
+      expect(stored['other-server']).toStrictEqual(existingCredentials);
       expect(stored['test-server'].token.accessToken).toBe('new-token');
     });
 
@@ -368,24 +372,22 @@ describe('FileTokenStorage (envelope-only)', () => {
     });
 
     it('should delete file when last credential is removed', async () => {
-      mockFs.readFile.mockResolvedValue(
-        await buildV2Envelope({ 'test-server': existingCredentials }),
-      );
-      mockFs.writeFile.mockResolvedValue(undefined);
-      mockFs.unlink.mockResolvedValue(undefined);
-      mockFs.chmod.mockResolvedValue(undefined);
-
-      await storage.setCredentials({
+      const singleCredential: MCPOAuthCredentials = {
         serverName: 'test-server',
         token: {
           accessToken: 'access-token',
           tokenType: 'Bearer',
         },
         updatedAt: Date.now(),
-      });
+      };
+      mockFs.readFile.mockResolvedValue(
+        await buildV2Envelope({ 'test-server': singleCredential }),
+      );
+      mockFs.writeFile.mockResolvedValue(undefined);
+      mockFs.unlink.mockResolvedValue(undefined);
+      mockFs.chmod.mockResolvedValue(undefined);
 
-      // A file now exists: setCredentials wrote one. Delete it; after the last
-      // credential is removed the file is deleted.
+      // Deleting the only credential must remove the file.
       await storage.deleteCredentials('test-server');
       expect(mockFs.unlink).toHaveBeenCalledWith(
         path.join(CONFIG_HOME, 'mcp-oauth-tokens-v2.json'),
