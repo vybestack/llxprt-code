@@ -70,9 +70,7 @@ import {
   type RequestDumpMetadata,
   bestEffortDump,
 } from '../utils/dumpSDKContext.js';
-import {
-  buildResponsesHeaders,
-} from './openAIResponsesHttpStream.js';
+import { buildResponsesHeaders } from './openAIResponsesHttpStream.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 
 /**

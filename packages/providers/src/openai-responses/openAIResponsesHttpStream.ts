@@ -45,10 +45,7 @@ import {
   bestEffortDump,
   type RequestDumpMetadata,
 } from '../utils/dumpSDKContext.js';
-import {
-  redactSensitiveHeaders,
-  type DumpMode,
-} from '../utils/dumpContext.js';
+import { redactSensitiveHeaders, type DumpMode } from '../utils/dumpContext.js';
 import type { ResponsesExecutorDeps } from './openAIResponsesExecutor.js';
 import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';
 
