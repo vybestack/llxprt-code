@@ -371,3 +371,29 @@ NO_ASSERT findings.
 | `FileTokenStorage` legacy hex-colon read | `file-token-storage.ts` | grep `legacyEncryptionKey`/`scryptSync` → 0 |
 | `lb_circuit_breaker_*` doc keys | `docs/cli/profiles.md` | grep → 0 |
 | Test stubs for the three LB accessors | CLI config/parity test files | grep → 0 in `packages/cli/src` |
+
+## Review ledger (deepthinker + OCR)
+
+Independent deep review (fresh eyes, full verification cycle): verdict PASS on all five
+compliance items (identifiers absent; retained surfaces byte-unchanged; absence test is a
+disjoint-source litmus that fails against the pre-removal source; docs/scope clean; typecheck
+green). No HIGH findings. Review-driven fixes applied in follow-up commits:
+
+- Normalize malformed JSON inside a decryptable v:2 envelope to `Token file corrupted` by
+  treating `SyntaxError` like `EnvelopeCodecError` in `loadTokens` (fails closed without
+  leaking raw parse details).
+- Per-entry payload validation rejects null/array entries before casting, preserving the fail-closed
+  contract for structurally bad rows.
+- Restore v:2-envelope seeds for the update/delete-with-survivor tests so the retained
+  behaviors are actually exercised.
+- Drop UNUSED legacy-hex derivation in the fail-closed fixture (only the hex-colon shape
+  matters now); relax the secret-loader call-count assertion (`>= 1`).
+- Registry absence litmus asserts the bare `getFullyQualifiedName` name (the `__`+name token
+  is not how a re-introduced fallback would read); hoist the envelope-codec import in the
+  behavior test.
+- OCR `__dirname`-undefined warning was NOT a bug: the absence test runs green under the repo's
+  bun:test ts runtime (documented in repo rules); no die.
+- Currently unassigned OCR "legacy fail-closed is data loss / behavior change" note: retains the
+  `v:2` read path exactly as this issue specifies (removal of the legacy hex-colon read is the
+  issue intent); CHANGELOG documents the breaking cleanup; the behavior test proves missing-secret
+  mutation never rewrites the v:2 file (byte-identical).
