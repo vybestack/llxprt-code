@@ -132,6 +132,31 @@ describe('useGitBranchInfo', () => {
     expect(result.current).toEqual({ branchName: 'main', isDirty: true });
   });
 
+  it('runs every git command with a bounded buffer and timeout', async () => {
+    setupExec((cmd, cb) => {
+      if (cmd === 'git status --porcelain') cb(null, '', '');
+      else cb(null, 'main', '');
+    });
+
+    const { result, rerender } = renderHook(() => useGitBranchInfo(CWD));
+
+    await act(async () => {
+      await Promise.resolve();
+      rerender();
+    });
+
+    expect(result.current).toEqual({ branchName: 'main', isDirty: false });
+    const statusCall = mockExec.mock.calls.find(
+      (call: unknown[]) => call[0] === 'git status --porcelain',
+    );
+    const statusOpts = statusCall?.[1] as {
+      maxBuffer?: number;
+      timeout?: number;
+    };
+    expect(statusOpts.maxBuffer).toBeGreaterThan(1024 * 1024);
+    expect(statusOpts.timeout).toBeGreaterThan(0);
+  });
+
   it('reports undefined branch and clean work tree on git errors', async () => {
     setupExec((cmd, cb) => {
       cb(new Error('not a repo'), '', '');

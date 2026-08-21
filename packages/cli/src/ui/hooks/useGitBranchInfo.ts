@@ -37,6 +37,19 @@ const GIT_WATCH_POLL_MS = 3000;
 /** Exposed for tests so timing assertions track the production constant. */
 export { FETCH_DEBOUNCE_MS, GIT_WATCH_POLL_MS };
 
+/**
+ * `git status --porcelain` can exceed `exec`'s 1 MiB default buffer on very
+ * large trees, which would error out and misread a dirty tree as clean (no
+ * star). A larger buffer plus a timeout keep one slow or hung git invocation
+ * from wedging the in-flight refresh guard.
+ */
+const GIT_EXEC_MAX_BUFFER = 20 * 1024 * 1024;
+const GIT_EXEC_TIMEOUT_MS = 10_000;
+
+function gitExecOptions(cwd: string) {
+  return { cwd, maxBuffer: GIT_EXEC_MAX_BUFFER, timeout: GIT_EXEC_TIMEOUT_MS };
+}
+
 export interface GitBranchInfo {
   branchName: string | undefined;
   /**
@@ -79,28 +92,36 @@ function fetchGitInfo(
     });
   };
 
-  exec('git rev-parse --abbrev-ref HEAD', { cwd }, (error, stdout) => {
-    if (error) {
-      branchFailed = true;
-      branchSettled = true;
-      settle();
-      return;
-    }
-    const branch = stdout.toString().trim();
-    if (branch && branch !== 'HEAD') {
-      branchName = branch;
-      branchSettled = true;
-      settle();
-      return;
-    }
-    exec('git rev-parse --short HEAD', { cwd }, (error, stdout) => {
-      if (error) branchFailed = true;
-      else branchName = stdout.toString().trim();
-      branchSettled = true;
-      settle();
-    });
-  });
-  exec('git status --porcelain', { cwd }, (error, stdout) => {
+  exec(
+    'git rev-parse --abbrev-ref HEAD',
+    gitExecOptions(cwd),
+    (error, stdout) => {
+      if (error) {
+        branchFailed = true;
+        branchSettled = true;
+        settle();
+        return;
+      }
+      const branch = stdout.toString().trim();
+      if (branch && branch !== 'HEAD') {
+        branchName = branch;
+        branchSettled = true;
+        settle();
+        return;
+      }
+      exec(
+        'git rev-parse --short HEAD',
+        gitExecOptions(cwd),
+        (error, stdout) => {
+          if (error) branchFailed = true;
+          else branchName = stdout.toString().trim();
+          branchSettled = true;
+          settle();
+        },
+      );
+    },
+  );
+  exec('git status --porcelain', gitExecOptions(cwd), (error, stdout) => {
     statusSettled = true;
     if (error) statusFailed = true;
     else isDirty = stdout.toString().trim() !== '';
@@ -222,12 +243,12 @@ function watchGitMetadata(cwd: string, onChange: () => void): () => void {
     void (async () => {
       try {
         await fsPromises.access(file, fs.constants.F_OK);
+        if (disposed) return;
+        fs.watchFile(file, { interval: GIT_WATCH_POLL_MS }, onGitChange);
       } catch {
-        // Missing or inaccessible metadata is handled by the periodic poll.
-        return;
+        // Missing metadata or a synchronous watchFile failure falls back to
+        // the periodic poll, which drives the same refreshes.
       }
-      if (disposed) return;
-      fs.watchFile(file, { interval: GIT_WATCH_POLL_MS }, onGitChange);
     })();
   };
 
