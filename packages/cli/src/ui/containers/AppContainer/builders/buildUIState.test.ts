@@ -104,6 +104,7 @@ const makeParams = (): UIStateParams => ({
   llxprtMdFileCount: 0,
   coreMemoryFileCount: 0,
   branchName: undefined,
+  branchIsDirty: false,
   errorCount: 0,
 
   // Console and messages

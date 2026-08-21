@@ -111,6 +111,7 @@ const defaultFooterProps = {
   showErrorDetails: false,
   historyTokenCount: 0,
   nightly: true,
+  branchIsDirty: false,
   isPaidMode: false,
 };
 
