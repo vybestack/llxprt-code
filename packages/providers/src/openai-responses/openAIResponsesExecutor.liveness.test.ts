@@ -351,8 +351,10 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
     expect(Array.isArray(dumpedBody.input)).toBe(true);
 
     const dumpedRequest = await readDumpedEnvelope();
-    expect(dumpedRequest.url).toContain('wss://');
-    expect(dumpedRequest.method).not.toBe('POST');
+    expect(dumpedRequest.url).toBe(
+      'wss://chatgpt.com/backend-api/codex/responses',
+    );
+    expect(dumpedRequest.method).toBe('SEND');
     expect(dumpedRequest.transport).toStrictEqual({
       type: 'websocket',
       frameType: 'response.create',
