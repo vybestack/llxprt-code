@@ -9,11 +9,40 @@ import {
   shouldDump,
   dumpRequestContext,
   dumpResponseContext,
+  type DumpRequest,
   type DumpRequestResult,
 } from './dumpContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
 const logger = new DebugLogger('llxprt:core:dumpSDKContext');
+
+/**
+ * Transport that carried the SDK request being dumped (#3159). The shared
+ * helper synthesizes HTTP-like defaults when no real transport is observed, so an
+ * explicit WebSocket marker is the only way a dump can say "this was a Codex
+ * WebSocket frame, not an HTTP POST".
+ */
+type RequestDumpTransport =
+  | { type: 'http' }
+  | { type: 'websocket'; frameType: string };
+
+/** Optional observed request metadata recorded verbatim (credentials redacted on write). */
+export interface RequestDumpMetadata {
+  headers?: Record<string, string>;
+  transport?: RequestDumpTransport;
+}
+
+function redactableHeaders(
+  metadata: RequestDumpMetadata | undefined,
+): Record<string, string> {
+  if (metadata?.headers !== undefined) {
+    return metadata.headers;
+  }
+  return {
+    'Content-Type': 'application/json',
+    'User-Agent': 'llxprt-code',
+  };
+}
 
 function buildSDKDumpUrl(
   providerName: string,
@@ -73,16 +102,15 @@ export async function dumpSDKContext(
   response: unknown,
   isError: boolean,
   baseURL?: string,
+  metadata?: RequestDumpMetadata,
 ): Promise<string> {
   const url = buildSDKDumpUrl(providerName, endpoint, baseURL);
 
-  const request = {
+  const request: DumpRequest = {
     url,
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'User-Agent': 'llxprt-code',
-    },
+    method: metadata?.transport?.type === 'websocket' ? 'SEND' : 'POST',
+    headers: redactableHeaders(metadata),
+    ...(metadata?.transport ? { transport: metadata.transport } : {}),
     body: requestParams,
   };
 
@@ -115,16 +143,15 @@ export async function dumpSDKRequestContext(
   endpoint: string,
   requestParams: unknown,
   baseURL?: string,
+  metadata?: RequestDumpMetadata,
 ): Promise<DumpRequestResult> {
   const url = buildSDKDumpUrl(providerName, endpoint, baseURL);
 
-  const request = {
+  const request: DumpRequest = {
     url,
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'User-Agent': 'llxprt-code',
-    },
+    method: metadata?.transport?.type === 'websocket' ? 'SEND' : 'POST',
+    headers: redactableHeaders(metadata),
+    ...(metadata?.transport ? { transport: metadata.transport } : {}),
     body: requestParams,
   };
 
@@ -251,9 +278,10 @@ export async function dumpSDKErrorRequestResponse(
   baseURL?: string,
   dumpRequest: typeof dumpSDKRequestContext = dumpSDKRequestContext,
   dumpResponse: typeof dumpSDKResponseContext = dumpSDKResponseContext,
+  metadata?: RequestDumpMetadata,
 ): Promise<void> {
   const reqResult = await bestEffortDump('error-request', providerName, () =>
-    dumpRequest(providerName, endpoint, requestParams, baseURL),
+    dumpRequest(providerName, endpoint, requestParams, baseURL, metadata),
   );
 
   await bestEffortDump('error-response', providerName, () =>
@@ -274,6 +302,7 @@ export function wrapStreamWithSDKErrorDump<T>(
   baseURL: string | undefined,
   dumpRequest: typeof dumpSDKRequestContext = dumpSDKRequestContext,
   dumpResponse: typeof dumpSDKResponseContext = dumpSDKResponseContext,
+  metadata?: RequestDumpMetadata,
 ): AsyncIterable<T> {
   const accumulated: T[] = [];
 
@@ -297,6 +326,7 @@ export function wrapStreamWithSDKErrorDump<T>(
         baseURL,
         dumpRequest,
         dumpResponse,
+        metadata,
       );
       throw error;
     }

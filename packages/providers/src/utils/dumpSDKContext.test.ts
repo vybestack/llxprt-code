@@ -17,6 +17,157 @@ import {
   wrapStreamWithSDKErrorDump,
 } from './dumpSDKContext.js';
 
+describe('dumpSDKContext metadata @issue:3159', () => {
+  const dumpDir = path.join(Storage.getGlobalCacheDir(), 'dumps');
+  const createdFiles: string[] = [];
+
+  afterEach(async () => {
+    for (const file of createdFiles.splice(0)) {
+      await fs.rm(path.join(dumpDir, file), { force: true });
+    }
+    vi.restoreAllMocks();
+  });
+
+  it('records real headers with credential values redacted and WebSocket transport', async () => {
+    const result = await dumpSDKRequestContext(
+      'openai',
+      '/responses',
+      { model: 'gpt-5', input: [] },
+      'wss://chatgpt.com/backend-api/codex',
+      {
+        headers: {
+          Authorization: 'Bearer sk-secret',
+          'ChatGPT-Account-ID': 'acct-secret',
+          'OpenAI-Beta': 'responses_websockets=2026-02-06',
+          session_id: 'session-123',
+          'X-Debug': 'yes',
+        },
+        transport: { type: 'websocket', frameType: 'response.create' },
+      },
+    );
+
+    const content = await fs.readFile(
+      path.join(result.dumpDir, result.requestFilename),
+      'utf-8',
+    );
+    const dump = JSON.parse(content) as {
+      request: {
+        url: string;
+        method: string;
+        transport?: { type: string; frameType?: string };
+        headers?: Record<string, string>;
+      };
+    };
+
+    expect(dump.request.url).toBe('wss://chatgpt.com/backend-api/codex/responses');
+    expect(dump.request.method).not.toBe('POST');
+    expect(dump.request.transport).toStrictEqual({
+      type: 'websocket',
+      frameType: 'response.create',
+    });
+    expect(dump.request.headers).toStrictEqual({
+      Authorization: '[REDACTED]',
+      'ChatGPT-Account-ID': '[REDACTED]',
+      'OpenAI-Beta': 'responses_websockets=2026-02-06',
+      session_id: 'session-123',
+      'X-Debug': 'yes',
+    });
+  });
+
+  it('uses synthesized defaults and no transport when metadata omitted', async () => {
+    const result = await dumpSDKRequestContext(
+      'openai',
+      '/responses',
+      { model: 'gpt-5', input: [] },
+      'https://api.openai.com/v1',
+    );
+
+    const content = await fs.readFile(
+      path.join(result.dumpDir, result.requestFilename),
+      'utf-8',
+    );
+    const dump = JSON.parse(content) as {
+      request: {
+        method: string;
+        transport?: unknown;
+        headers?: Record<string, string>;
+      };
+    };
+
+    expect(dump.request.method).toBe('POST');
+    expect(dump.request.transport).toBeUndefined();
+    expect(dump.request.headers).toStrictEqual({
+      'Content-Type': 'application/json',
+      'User-Agent': 'llxprt-code',
+    });
+  });
+
+  it('threads metadata through dumpSDKContext to the written request file', async () => {
+    const baseId = await dumpSDKContext(
+      'openai',
+      '/responses',
+      { model: 'x' },
+      { id: 'r' },
+      false,
+      'https://api.openai.com/v1',
+      {
+        headers: { Authorization: 'Bearer secret', 'X-Debug': '1' },
+        transport: { type: 'http' },
+      },
+    );
+
+    const content = await fs.readFile(
+      path.join(dumpDir, `${baseId}-request.json`),
+      'utf-8',
+    );
+    const dump = JSON.parse(content) as {
+      request: { headers?: Record<string, string>; transport?: { type: string } };
+    };
+
+    expect(dump.request.headers).toStrictEqual({
+      Authorization: '[REDACTED]',
+      'X-Debug': '1',
+    });
+    expect(dump.request.transport).toStrictEqual({ type: 'http' });
+  });
+
+  it('forwards metadata to dumpSDKRequestContext via dumpSDKErrorRequestResponse', async () => {
+    const dumpSDKRequestContextSpy = vi
+      .spyOn(dumpSDKContextModule, 'dumpSDKRequestContext')
+      .mockResolvedValue({
+        baseId: 'b',
+        requestFilename: 'b-request.json',
+        dumpDir: '/tmp',
+      });
+    const dumpSDKResponseContextSpy = vi
+      .spyOn(dumpSDKContextModule, 'dumpSDKResponseContext')
+      .mockResolvedValue('b-response.json');
+    const metadata = {
+      headers: { Authorization: 'x' },
+      transport: { type: 'http' as const },
+    };
+
+    await dumpSDKContextModule.dumpSDKErrorRequestResponse(
+      'openai',
+      '/chat/completions',
+      { model: 'x' },
+      { error: 'boom' },
+      'https://api.openai.com/v1',
+      dumpSDKRequestContextSpy,
+      dumpSDKResponseContextSpy,
+      metadata,
+    );
+
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledWith(
+      'openai',
+      '/chat/completions',
+      { model: 'x' },
+      'https://api.openai.com/v1',
+      metadata,
+    );
+  });
+});
+
 describe('dumpSDKContext', () => {
   const dumpDir = path.join(Storage.getGlobalCacheDir(), 'dumps');
   const createdFiles: string[] = [];
@@ -87,6 +238,7 @@ describe('dumpSDKErrorRequestResponse', () => {
       'https://api.openai.com/v1',
       dumpSDKRequestContextSpy,
       dumpSDKResponseContextSpy,
+      undefined,
     );
 
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
@@ -237,6 +389,7 @@ describe('wrapStreamWithDump', () => {
       'https://api.openai.com/v1',
       dumpSDKRequestContextSpy,
       dumpSDKResponseContextSpy,
+      undefined,
     );
     const received: unknown[] = [];
 
@@ -255,6 +408,7 @@ describe('wrapStreamWithDump', () => {
       '/chat/completions',
       requestBody,
       'https://api.openai.com/v1',
+      undefined,
     );
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
