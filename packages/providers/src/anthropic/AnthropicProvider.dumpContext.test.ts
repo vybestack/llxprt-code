@@ -275,6 +275,12 @@ describe('AnthropicProvider dumpContext integration', () => {
         model: 'claude-sonnet-4-5-20250929',
       }),
       'https://api.anthropic.com',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'anthropic-beta': 'extended-cache-ttl-2025-04-11',
+        }),
+        transport: { type: 'http' },
+      }),
     );
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(

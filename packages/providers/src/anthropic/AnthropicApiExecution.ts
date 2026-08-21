@@ -177,6 +177,7 @@ export interface ApiExecutionParams {
   baseURL: string;
   requestBody: Record<string, unknown>;
   streamingEnabled: boolean;
+  headers?: Record<string, string>;
   rateLimitLogger: { debug: (fn: () => string) => void };
 }
 
@@ -205,6 +206,10 @@ async function dumpAnthropicRequest(
         '/v1/messages',
         params.requestBody,
         params.baseURL,
+        {
+          headers: params.headers,
+          transport: { type: 'http' },
+        },
       ),
     params.rateLimitLogger,
   );
@@ -240,6 +245,10 @@ async function dumpAnthropicApiError(
     params.baseURL,
     dumpSDKRequestContext,
     dumpSDKResponseContext,
+    {
+      headers: params.headers,
+      transport: { type: 'http' },
+    },
   );
 }
 
@@ -276,6 +285,10 @@ async function handleAnthropicSuccessDump(
       params.baseURL,
       dumpSDKRequestContext,
       dumpSDKResponseContext,
+      {
+        headers: params.headers,
+        transport: { type: 'http' },
+      },
     );
   }
   return response;

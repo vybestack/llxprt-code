@@ -682,6 +682,7 @@ export class AnthropicProvider extends BaseProvider {
         { ...requestContext, requestBody: effectiveRequestBody },
         apiCallWithResponse,
         rateLimitLogger,
+        customHeaders,
       );
       response = result.response;
       rateLimitInfo = result.rateLimitInfo;
@@ -784,6 +785,7 @@ export class AnthropicProvider extends BaseProvider {
         options.invocation.signal,
       ),
       rateLimitLogger,
+      customHeaders,
     );
     return {
       response: retryResult.response,
@@ -903,6 +905,7 @@ export class AnthropicProvider extends BaseProvider {
       response: Response | undefined;
     }>,
     rateLimitLogger: { debug: (fn: () => string) => void },
+    headers: Record<string, string> | undefined,
   ) {
     const dumpMode = options.invocation.ephemerals.dumpcontext as
       | DumpMode
@@ -919,6 +922,7 @@ export class AnthropicProvider extends BaseProvider {
       baseURL,
       requestBody: requestContext.requestBody,
       streamingEnabled: requestContext.streamingEnabled,
+      headers,
       rateLimitLogger,
     });
   }
