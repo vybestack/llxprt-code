@@ -47,6 +47,7 @@ interface ErrorContext {
   shouldDumpError: boolean;
   requestBaseId: string | undefined;
   baseURL: string | undefined;
+  mergedHeaders: Record<string, string> | undefined;
   model: string;
   formattedTools: OpenAITool[] | undefined;
   streamingEnabled: boolean;
@@ -86,6 +87,7 @@ async function dumpOpenAIErrorContext(
       resolvedBaseURL ?? 'https://api.openai.com/v1',
       dumpSDKRequestContext,
       dumpSDKResponseContext,
+      { headers: ctx.mergedHeaders ?? undefined, transport: { type: 'http' } },
     );
   }
 }
@@ -189,6 +191,7 @@ async function executeStreamingRequest(
           '/chat/completions',
           requestBody,
           baseURL ?? 'https://api.openai.com/v1',
+          { headers: mergedHeaders ?? undefined, transport: { type: 'http' } },
         ),
       opts.logger,
     );
@@ -219,6 +222,7 @@ async function executeStreamingRequest(
         baseURL ?? 'https://api.openai.com/v1',
         dumpSDKRequestContext,
         dumpSDKResponseContext,
+        { headers: mergedHeaders ?? undefined, transport: { type: 'http' } },
       );
     }
 
@@ -232,6 +236,7 @@ async function executeStreamingRequest(
       shouldDumpError,
       requestBaseId,
       baseURL,
+      mergedHeaders: opts.mergedHeaders,
       model: opts.model,
       formattedTools: opts.formattedTools,
       streamingEnabled: opts.streamingEnabled,
@@ -277,6 +282,7 @@ async function executeNonStreamingRequest(
           '/chat/completions',
           requestBody,
           baseURL ?? 'https://api.openai.com/v1',
+          { headers: mergedHeaders ?? undefined, transport: { type: 'http' } },
         ),
       opts.logger,
     );
@@ -318,6 +324,7 @@ async function executeNonStreamingRequest(
       shouldDumpError,
       requestBaseId,
       baseURL,
+      mergedHeaders: opts.mergedHeaders,
       model: opts.model,
       formattedTools: opts.formattedTools,
       streamingEnabled: opts.streamingEnabled,

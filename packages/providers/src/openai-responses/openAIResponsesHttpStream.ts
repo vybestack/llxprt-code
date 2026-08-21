@@ -39,14 +39,15 @@ import { tryConsumeTransportAttempt } from '../transportAttemptBudget.js';
 import { getDelayDuration, hasRetryAfterHeader } from '../retryDelayPolicy.js';
 import {
   shouldDumpSDKContext,
+  dumpSDKRequestContext,
   dumpSDKResponseContext,
   dumpSDKErrorRequestResponse,
   bestEffortDump,
+  type RequestDumpMetadata,
 } from '../utils/dumpSDKContext.js';
 import {
   redactSensitiveHeaders,
   type DumpMode,
-  type RequestDumpMetadata,
 } from '../utils/dumpContext.js';
 import type { ResponsesExecutorDeps } from './openAIResponsesExecutor.js';
 import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';

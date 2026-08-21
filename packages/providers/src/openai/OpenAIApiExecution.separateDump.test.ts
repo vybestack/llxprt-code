@@ -384,6 +384,7 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
       '/chat/completions',
       opts.requestBody,
       'https://api.cerebras.ai/v1',
+      { headers: undefined, transport: { type: 'http' } },
     );
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledOnce();
   });
@@ -429,6 +430,7 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
       '/chat/completions',
       opts.requestBody,
       'https://api.cerebras.ai/v1',
+      { headers: undefined, transport: { type: 'http' } },
     );
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
@@ -481,6 +483,7 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
       '/chat/completions',
       opts.requestBody,
       'https://api.cerebras.ai/v1',
+      { headers: undefined, transport: { type: 'http' } },
     );
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledOnce();
   });
