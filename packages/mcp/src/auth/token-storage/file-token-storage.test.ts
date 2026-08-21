@@ -52,19 +52,16 @@ async function decryptWrittenEnvelope(
 }
 
 /**
- * Builds legacy `iv:authTag:ciphertext` (hex) content so read tests can
- * assert that legacy content FAILS CLOSED now that the legacy read path is
- * gone.
+ * Builds a legacy-shaped `iv:authTag:ciphertext` (hex) string so read tests can
+ * assert that legacy-shaped content FAILS CLOSED now that the legacy read path is
+ * gone; the components only need to be hex-shaped because readEnvelopeVersion
+ * rejects any non-envelope content.
  */
 function buildLegacyHexColon(plaintext: string): string {
-  const salt = `test-host-test-user-llxprt-cli`;
-  const key = crypto.scryptSync('llxprt-cli-oauth', salt, 32);
-  const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-  let encrypted = cipher.update(plaintext, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-  const authTag = cipher.getAuthTag();
-  return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
+  const iv = crypto.randomBytes(16).toString('hex');
+  const authTag = crypto.randomBytes(16).toString('hex');
+  const ciphertext = crypto.randomBytes(32).toString('hex');
+  return `${iv}:${authTag}:${ciphertext}`;
 }
 
 /**
