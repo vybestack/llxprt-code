@@ -868,43 +868,53 @@ async function dumpFinalizedRequest(
   requestContext: RequestContext,
   invocationEphemerals: Record<string, unknown>,
   deps: ResponsesExecutorDeps,
-  options?: NormalizedGenerateChatOptions,
+  options: NormalizedGenerateChatOptions,
 ): Promise<DumpFinalizedResult> {
   const dumpMode = invocationEphemerals['dumpcontext'] as DumpMode | undefined;
   if (!shouldDumpSDKContext(dumpMode, false)) {
     return { dumpMode };
   }
   const transportActive = deps.isWebSocketTransportActive?.() ?? false;
-  const metadata: RequestDumpMetadata =
-    transportActive && options !== undefined
-      ? {
-          headers: await buildWebSocketHandshakeHeaders(
-            {
-              ...requestContext,
-              normalizedOptions: options,
-              maxStreamingAttempts: 1,
-              streamRetryInitialDelayMs: 0,
-            },
-            deps,
-          ),
-          transport: { type: 'websocket', frameType: 'response.create' },
-        }
-      : {
-          headers: await buildResponsesHeaders(
-            requestContext.apiKey,
-            requestContext.isCodex
-              ? 'application/json'
-              : 'application/json; charset=utf-8',
-            requestContext.isCodex,
-            options ?? requestContext.request,
-            deps,
-          ),
-          transport: { type: 'http' },
-        };
-  const baseURLForDump =
-    transportActive && options !== undefined
-      ? toWebSocketDumpURL(requestContext.baseURL)
-      : requestContext.baseURL;
+  let dumpMetadata: RequestDumpMetadata;
+  let baseURLForDump: string;
+  try {
+    if (transportActive) {
+      dumpMetadata = {
+        headers: await buildWebSocketHandshakeHeaders(
+          {
+            ...requestContext,
+            normalizedOptions: options,
+            maxStreamingAttempts: 1,
+            streamRetryInitialDelayMs: 0,
+          },
+          deps,
+        ),
+        transport: { type: 'websocket', frameType: 'response.create' },
+      };
+      baseURLForDump = toWebSocketDumpURL(requestContext.baseURL);
+    } else {
+      dumpMetadata = {
+        headers: await buildResponsesHeaders(
+          requestContext.apiKey,
+          requestContext.isCodex
+            ? 'application/json'
+            : 'application/json; charset=utf-8',
+          requestContext.isCodex,
+          options,
+          deps,
+        ),
+        transport: { type: 'http' },
+      };
+      baseURLForDump = requestContext.baseURL;
+    }
+  } catch (error) {
+    deps.logger.debug(
+      () =>
+        `Best-effort dump metadata failed for ${deps.providerName}: ${String(error)}`,
+    );
+    dumpMetadata = { transport: { type: 'http' } };
+    baseURLForDump = requestContext.baseURL;
+  }
   const result = await bestEffortDump(
     'request',
     deps.providerName,
@@ -914,7 +924,7 @@ async function dumpFinalizedRequest(
         '/responses',
         requestContext.request,
         baseURLForDump,
-        metadata,
+        dumpMetadata,
       ),
     deps.logger,
   );
