@@ -231,7 +231,7 @@ describe('FileTokenStorage (envelope-only)', () => {
       expect(stored['new-server'].token.accessToken).toBe('new-token');
     });
 
-    it('should return expired credentials unpassthrough for the OAuth layer to refresh', async () => {
+    it('should return expired credentials unchanged for the OAuth layer to refresh', async () => {
       // Expired persisted credentials are returned as-is rather than filtered; the
       // OAuth layer decides whether to refresh. Seed a v:2 envelope with an
       // expired token and assert getCredentials returns it unchanged.
