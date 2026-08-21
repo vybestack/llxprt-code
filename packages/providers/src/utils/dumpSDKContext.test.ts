@@ -15,7 +15,31 @@ import {
   dumpSDKRequestContext,
   wrapStreamWithDump,
   wrapStreamWithSDKErrorDump,
+  type RequestDumpMetadata,
 } from './dumpSDKContext.js';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/** Parse a written request dump file without type assertions (RULES.md). */
+function parseDumpedRequest(content: string): {
+  url: unknown;
+  method: unknown;
+  transport: unknown;
+  headers: unknown;
+} {
+  const parsed: unknown = JSON.parse(content);
+  if (!isRecord(parsed) || !isRecord(parsed.request)) {
+    throw new Error('dump envelope missing request object');
+  }
+  return {
+    url: parsed.request.url,
+    method: parsed.request.method,
+    transport: parsed.request.transport,
+    headers: parsed.request.headers,
+  };
+}
 
 describe('dumpSDKContext metadata @issue:3159', () => {
   const dumpDir = path.join(Storage.getGlobalCacheDir(), 'dumps');
@@ -51,24 +75,15 @@ describe('dumpSDKContext metadata @issue:3159', () => {
       path.join(result.dumpDir, result.requestFilename),
       'utf-8',
     );
-    const dump = JSON.parse(content) as {
-      request: {
-        url: string;
-        method: string;
-        transport?: { type: string; frameType?: string };
-        headers?: Record<string, string>;
-      };
-    };
+    const dump = parseDumpedRequest(content);
 
-    expect(dump.request.url).toBe(
-      'wss://chatgpt.com/backend-api/codex/responses',
-    );
-    expect(dump.request.method).not.toBe('POST');
-    expect(dump.request.transport).toStrictEqual({
+    expect(dump.url).toBe('wss://chatgpt.com/backend-api/codex/responses');
+    expect(dump.method).toBe('SEND');
+    expect(dump.transport).toStrictEqual({
       type: 'websocket',
       frameType: 'response.create',
     });
-    expect(dump.request.headers).toStrictEqual({
+    expect(dump.headers).toStrictEqual({
       Authorization: '[REDACTED]',
       'ChatGPT-Account-ID': '[REDACTED]',
       'OpenAI-Beta': 'responses_websockets=2026-02-06',
@@ -90,17 +105,11 @@ describe('dumpSDKContext metadata @issue:3159', () => {
       path.join(result.dumpDir, result.requestFilename),
       'utf-8',
     );
-    const dump = JSON.parse(content) as {
-      request: {
-        method: string;
-        transport?: unknown;
-        headers?: Record<string, string>;
-      };
-    };
+    const dump = parseDumpedRequest(content);
 
-    expect(dump.request.method).toBe('POST');
-    expect(dump.request.transport).toBeUndefined();
-    expect(dump.request.headers).toStrictEqual({
+    expect(dump.method).toBe('POST');
+    expect(dump.transport).toBeUndefined();
+    expect(dump.headers).toStrictEqual({
       'Content-Type': 'application/json',
       'User-Agent': 'llxprt-code',
     });
@@ -125,18 +134,13 @@ describe('dumpSDKContext metadata @issue:3159', () => {
       path.join(dumpDir, `${baseId}-request.json`),
       'utf-8',
     );
-    const dump = JSON.parse(content) as {
-      request: {
-        headers?: Record<string, string>;
-        transport?: { type: string };
-      };
-    };
+    const dump = parseDumpedRequest(content);
 
-    expect(dump.request.headers).toStrictEqual({
+    expect(dump.headers).toStrictEqual({
       Authorization: '[REDACTED]',
       'X-Debug': '1',
     });
-    expect(dump.request.transport).toStrictEqual({ type: 'http' });
+    expect(dump.transport).toStrictEqual({ type: 'http' });
   });
 
   it('forwards metadata to dumpSDKRequestContext via dumpSDKErrorRequestResponse', async () => {
@@ -150,9 +154,9 @@ describe('dumpSDKContext metadata @issue:3159', () => {
     const dumpSDKResponseContextSpy = vi
       .spyOn(dumpSDKContextModule, 'dumpSDKResponseContext')
       .mockResolvedValue('b-response.json');
-    const metadata = {
+    const metadata: RequestDumpMetadata = {
       headers: { Authorization: 'x' },
-      transport: { type: 'http' as const },
+      transport: { type: 'http' },
     };
 
     await dumpSDKContextModule.dumpSDKErrorRequestResponse(
@@ -218,12 +222,12 @@ describe('dumpSDKContext', () => {
       path.join(result.dumpDir, result.requestFilename),
       'utf-8',
     );
-    const dump = JSON.parse(content) as { request: { url: string } };
+    const dump = parseDumpedRequest(content);
 
-    expect(dump.request.url).toBe('https://ollama.com/v1/chat/completions');
+    expect(dump.url).toBe('https://ollama.com/v1/chat/completions');
   });
 
-  it('should tolerate an empty metadata headers map (no crash, synthesized defaults survive)', async () => {
+  it('should redact a lowercase authorization header value at write time', async () => {
     const result = await dumpSDKRequestContext(
       'openai',
       '/chat/completions',

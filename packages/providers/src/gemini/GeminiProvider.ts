@@ -411,15 +411,31 @@ export class GeminiProvider extends BaseProvider {
     );
   }
 
+  /** #3159: the SDK sends the Gemini API key as x-goog-api-key; record the
+   * header NAME in dump metadata (value redacted at write time). A
+   * caller-supplied header always wins over the synthesized one.
+   */
+  private withApiKeyHeader(
+    headers: Record<string, string>,
+    authMode: GeminiAuthMode,
+    authToken: string,
+  ): Record<string, string> {
+    if (authMode !== 'gemini-api-key' || 'x-goog-api-key' in headers) {
+      return headers;
+    }
+    return { ...headers, 'x-goog-api-key': authToken };
+  }
+
   private async executeGeneration(
     options: NormalizedGenerateChatOptions,
     setup: GeminiGenerationSetup,
     streamingEnabled: boolean,
   ): Promise<GeminiGenerationResult> {
-    const dumpHeaders: Record<string, string> =
-      setup.authMode === 'gemini-api-key'
-        ? { ...setup.httpOptions.headers, 'x-goog-api-key': setup.authToken }
-        : setup.httpOptions.headers;
+    const dumpHeaders = this.withApiKeyHeader(
+      setup.httpOptions.headers,
+      setup.authMode,
+      setup.authToken,
+    );
     return executeNonOAuthGeneration(
       options,
       this.globalConfig,

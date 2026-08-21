@@ -46,19 +46,28 @@ export interface ApiExecutionOptions {
 /** #3159: the OpenAI SDK sends Authorization from the client api key; record
  * the header NAME in dump metadata (shared redaction replaces the value).
  */
+function hasHeaderName(headers: Record<string, string>, name: string): boolean {
+  const target = name.toLowerCase();
+  return Object.keys(headers).some((key) => key.toLowerCase() === target);
+}
+
 function chatDumpMetadata(
   mergedHeaders: Record<string, string> | undefined,
   apiKey: string | undefined,
 ): RequestDumpMetadata {
-  if (apiKey === undefined) {
+  // The SDK sends Authorization from the client api key; synthesize the
+  // header for the dump unless the caller already supplied one (#3159).
+  if (
+    apiKey === undefined ||
+    (mergedHeaders !== undefined &&
+      hasHeaderName(mergedHeaders, 'Authorization'))
+  ) {
     return { headers: mergedHeaders, transport: { type: 'http' } };
   }
-  const authorization = `Bearer ${apiKey}`;
-  const headers =
-    mergedHeaders === undefined
-      ? { Authorization: authorization }
-      : { ...mergedHeaders, Authorization: authorization };
-  return { headers, transport: { type: 'http' } };
+  return {
+    headers: { ...mergedHeaders, Authorization: `Bearer ${apiKey}` },
+    transport: { type: 'http' },
+  };
 }
 
 interface ErrorContext {

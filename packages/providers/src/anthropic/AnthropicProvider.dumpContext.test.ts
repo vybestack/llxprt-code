@@ -278,6 +278,9 @@ describe('AnthropicProvider dumpContext integration', () => {
       expect.objectContaining({
         headers: expect.objectContaining({
           'anthropic-beta': 'extended-cache-ttl-2025-04-11',
+          // SDK-generated credential header must be recorded by name (value
+          // redacted at write time by the shared redaction).
+          'x-api-key': 'sk-ant-test-key',
         }),
         transport: { type: 'http' },
       }),
@@ -290,6 +293,26 @@ describe('AnthropicProvider dumpContext integration', () => {
       true,
     );
     expect(dumpContextSpy).not.toHaveBeenCalled();
+  });
+
+  it('should keep a caller-supplied credential header over the synthesized one (issue #3159)', () => {
+    expect(
+      provider['withCredentialHeader'](
+        { Authorization: 'Bearer caller-token' },
+        true,
+        'sk-ant-oauth',
+      ),
+    ).toStrictEqual({ Authorization: 'Bearer caller-token' });
+    expect(
+      provider['withCredentialHeader'](
+        { 'x-api-key': 'caller-key' },
+        false,
+        'sk-ant-test-key',
+      ),
+    ).toStrictEqual({ 'x-api-key': 'caller-key' });
+    expect(
+      provider['withCredentialHeader'](undefined, false, 'sk-ant-key'),
+    ).toStrictEqual({ 'x-api-key': 'sk-ant-key' });
   });
 
   it('should not dump context in provider when mode is now', async () => {

@@ -66,6 +66,11 @@ import {
 } from './AnthropicImageSanitizer.js';
 import { tryConsumeTransportAttempt } from '../transportAttemptBudget.js';
 
+function hasHeaderName(headers: Record<string, string>, name: string): boolean {
+  const target = name.toLowerCase();
+  return Object.keys(headers).some((key) => key.toLowerCase() === target);
+}
+
 export class AnthropicProvider extends BaseProvider {
   // @plan PLAN-20251023-STATELESS-HARDENING.P08
   // All properties are stateless - no runtime/client caches or constructor-captured config
@@ -938,7 +943,8 @@ export class AnthropicProvider extends BaseProvider {
 
   /** #3159: the SDK generates the credential header (x-api-key for an API key,
    * Authorization: Bearer for OAuth). Record the NAME in dump metadata;
-   * shared redaction replaces the value with [REDACTED].
+   * shared redaction replaces the value with [REDACTED]. A caller-supplied
+   * credential header always wins over the synthesized one.
    */
   private withCredentialHeader(
     headers: Record<string, string> | undefined,
@@ -946,6 +952,9 @@ export class AnthropicProvider extends BaseProvider {
     authToken: string,
   ): Record<string, string> | undefined {
     const name = isOAuth ? 'Authorization' : 'x-api-key';
+    if (headers !== undefined && hasHeaderName(headers, name)) {
+      return headers;
+    }
     const value = isOAuth ? `Bearer ${authToken}` : authToken;
     return headers === undefined
       ? { [name]: value }

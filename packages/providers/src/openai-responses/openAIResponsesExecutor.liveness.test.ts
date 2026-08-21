@@ -182,6 +182,76 @@ describe('executeOpenAIResponsesRequest onStreamLiveness threading @issue:2607',
   });
 });
 
+interface DumpedEnvelope {
+  url: string;
+  method: string;
+  transport?: { type: string; frameType?: string };
+  headers?: Record<string, string>;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return isPlainRecord(value) && Object.values(value).every(isString);
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === 'string';
+}
+
+function isDumpedTransport(
+  value: unknown,
+): value is { type: string; frameType?: string } {
+  return (
+    isPlainRecord(value) &&
+    isString(value['type']) &&
+    (value['frameType'] === undefined || isString(value['frameType']))
+  );
+}
+
+function isDumpedEnvelope(value: unknown): value is DumpedEnvelope {
+  if (!isPlainRecord(value)) {
+    return false;
+  }
+  if (!isString(value['url']) || !isString(value['method'])) {
+    return false;
+  }
+  if (
+    value['transport'] !== undefined &&
+    !isDumpedTransport(value['transport'])
+  ) {
+    return false;
+  }
+  return value['headers'] === undefined || isStringRecord(value['headers']);
+}
+
+function parseDumpEnvelope(raw: string): DumpedEnvelope {
+  const parsed: unknown = JSON.parse(raw);
+  if (isPlainRecord(parsed)) {
+    const request: unknown = parsed['request'];
+    if (isDumpedEnvelope(request)) {
+      return request;
+    }
+  }
+  throw new Error(`malformed dump envelope: ${raw.slice(0, 80)}`);
+}
+
+/** A WebSocket stream that fails before producing any output, forcing the
+ * executor onto the HTTP fallback path. */
+function immediatelyFailingStream(): AsyncIterableIterator<IContent> {
+  const iterator: AsyncIterableIterator<IContent> = {
+    next: () => Promise.reject(new Error('websocket unavailable')),
+    return: () => Promise.resolve({ done: true, value: undefined }),
+    throw: (reason?: unknown) => Promise.reject(reason),
+    [Symbol.asyncIterator]() {
+      return iterator;
+    },
+  };
+  return iterator;
+}
+
 describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
   let tempDumpDir: string;
   const originalConfigHome = process.env['LLXPRT_CONFIG_HOME'];
@@ -244,23 +314,21 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
     transport?: { type: string; frameType?: string };
     headers?: Record<string, string>;
   }> {
+    const envelopes = await readAllDumpedEnvelopes();
+    expect(envelopes).toHaveLength(1);
+    return envelopes[0];
+  }
+
+  async function readAllDumpedEnvelopes(): Promise<DumpedEnvelope[]> {
     const dumpDir = path.join(tempDumpDir, 'dumps');
     const entries = await fsp.readdir(dumpDir);
     const requestFiles = entries.filter((f) => f.endsWith('-request.json'));
-    expect(requestFiles).toHaveLength(1);
-    const raw = await fsp.readFile(
-      path.join(dumpDir, requestFiles[0]),
-      'utf-8',
-    );
-    const parsed = JSON.parse(raw) as {
-      request: {
-        url: string;
-        method: string;
-        transport?: { type: string; frameType?: string };
-        headers?: Record<string, string>;
-      };
-    };
-    return parsed.request;
+    const envelopes: DumpedEnvelope[] = [];
+    for (const file of requestFiles) {
+      const raw = await fsp.readFile(path.join(dumpDir, file), 'utf-8');
+      envelopes.push(parseDumpEnvelope(raw));
+    }
+    return envelopes;
   }
 
   it('A3: emits finalized request dump at common pre-transport seam (HTTP)', async () => {
@@ -364,5 +432,129 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
     );
     expect(dumpedRequest.headers?.['Authorization']).toBe('[REDACTED]');
     expect(dumpedRequest.headers?.['ChatGPT-Account-ID']).toBe('[REDACTED]');
+  });
+
+  it('A3/3159: records the physical HTTP send when the WebSocket falls back mid-turn', async () => {
+    const lf = String.fromCharCode(10);
+    const sseBody = encodeSse([
+      `data: {"type":"response.output_text.delta","delta":"OK"}${lf}${lf}`,
+      `data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}${lf}${lf}`,
+      `data: [DONE]${lf}${lf}`,
+    ]);
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, body: sseBody });
+    setGlobal('fetch', fetchMock);
+
+    const options = buildNormalizedOptions({
+      ephemerals: { dumpcontext: 'on' },
+      resolved: {
+        model: 'gpt-5.6-sol',
+        baseURL: 'https://chatgpt.com/backend-api/codex',
+        authToken: 'codex-token',
+      },
+    });
+
+    const wsTransport: WebSocketTransport = {
+      streamResponse: vi.fn().mockReturnValue(immediatelyFailingStream()),
+      close: vi.fn(),
+    };
+
+    const iterator = executeOpenAIResponsesRequest(
+      options,
+      buildDeps({
+        isCodexBaseURL: () => true,
+        getWebSocketTransport: () => wsTransport,
+        isWebSocketTransportActive: () => true,
+      }),
+    );
+    const consumed: IContent[] = [];
+    for await (const chunk of iterator) {
+      consumed.push(chunk);
+    }
+    // Text delta plus the response.completed finish-metadata chunk.
+    expect(consumed).toHaveLength(2);
+    expect(consumed[0]).toStrictEqual({
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'OK' }],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Two honest request dumps: the WebSocket attempt and the physical HTTP
+    // fallback that actually carried the turn.
+    const envelopes = await readAllDumpedEnvelopes();
+    expect(envelopes).toHaveLength(2);
+    const wsDump = envelopes.find((e) => e.method === 'SEND');
+    const httpDump = envelopes.find((e) => e.method === 'POST');
+    expect(wsDump?.url).toBe('wss://chatgpt.com/backend-api/codex/responses');
+    expect(wsDump?.transport).toStrictEqual({
+      type: 'websocket',
+      frameType: 'response.create',
+    });
+    expect(httpDump?.url).toBe(
+      'https://chatgpt.com/backend-api/codex/responses',
+    );
+    expect(httpDump?.transport).toStrictEqual({ type: 'http' });
+    expect(httpDump?.headers?.['Authorization']).toBe('[REDACTED]');
+  });
+
+  it('A3/3159: keeps the WebSocket transport in the dump when header observation fails', async () => {
+    const wsTransport: WebSocketTransport = {
+      streamResponse: vi.fn().mockReturnValue(
+        (async function* () {
+          yield {
+            speaker: 'ai' as const,
+            blocks: [{ type: 'text' as const, text: 'OK' }],
+          };
+        })(),
+      ),
+      close: vi.fn(),
+    };
+    const fetchMock = vi.fn();
+    setGlobal('fetch', fetchMock);
+
+    const options = buildNormalizedOptions({
+      ephemerals: { dumpcontext: 'on' },
+      resolved: {
+        model: 'gpt-5.6-sol',
+        baseURL: 'https://chatgpt.com/backend-api/codex',
+        authToken: 'codex-token',
+      },
+    });
+
+    // First getCodexAccountId call (dump metadata) fails; the second (real
+    // handshake) succeeds so the request still goes over the WebSocket.
+    let codexAccountIdCalls = 0;
+    const iterator = executeOpenAIResponsesRequest(
+      options,
+      buildDeps({
+        isCodexBaseURL: () => true,
+        getWebSocketTransport: () => wsTransport,
+        isWebSocketTransportActive: () => true,
+        getCodexAccountId: async () => {
+          codexAccountIdCalls += 1;
+          if (codexAccountIdCalls === 1) {
+            throw new Error('account id unavailable');
+          }
+          return 'codex-account';
+        },
+      }),
+    );
+    const consumed: IContent[] = [];
+    for await (const chunk of iterator) {
+      consumed.push(chunk);
+    }
+    expect(consumed).toHaveLength(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // The transport was known (WebSocket) even though header observation
+    // failed; the dump must not relabel the request as HTTP.
+    const dumpedRequest = await readDumpedEnvelope();
+    expect(dumpedRequest.method).toBe('SEND');
+    expect(dumpedRequest.url).toBe(
+      'wss://chatgpt.com/backend-api/codex/responses',
+    );
+    expect(dumpedRequest.transport).toStrictEqual({
+      type: 'websocket',
+      frameType: 'response.create',
+    });
   });
 });

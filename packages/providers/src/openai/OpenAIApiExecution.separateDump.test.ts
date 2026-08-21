@@ -11,8 +11,9 @@ import {
   type ApiExecutionOptions,
 } from './OpenAIApiExecution.js';
 
-function createMockClient(response: unknown) {
+function createMockClient(response: unknown, apiKey?: string) {
   return {
+    apiKey,
     chat: {
       completions: {
         create: vi.fn().mockResolvedValue(response),
@@ -558,19 +559,36 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
   });
 
   it('should record the SDK-generated Authorization header name in dump metadata (value redacted on write)', async () => {
-    const client = createMockClient({ id: 'chatcmpl-auth', choices: [] });
-    (client as { apiKey?: string }).apiKey = 'sk-dump3159';
-    const create = client.chat.completions.create as ReturnType<typeof vi.fn>;
-    create.mockResolvedValue({ id: 'chatcmpl-auth', choices: [] });
+    const client = createMockClient(
+      { id: 'chatcmpl-auth', choices: [] },
+      'sk-dump3159',
+    );
     const opts = createBaseOptions({ client, dumpMode: 'on' });
 
     await executeApiRequest(opts);
 
-    const metadata = dumpSDKRequestContextSpy.mock.calls[0][4] as {
-      headers?: Record<string, string> | undefined;
-    };
-    expect(metadata.headers?.['Authorization']).toBe('Bearer sk-dump3159');
+    const metadata = dumpSDKRequestContextSpy.mock.calls[0][4];
+    expect(metadata?.headers?.['Authorization']).toBe('Bearer sk-dump3159');
     void dumpSDKContextSpy;
+  });
+
+  it('should keep a caller-supplied Authorization header over the synthesized one (issue #3159)', async () => {
+    const client = createMockClient(
+      { id: 'chatcmpl-auth', choices: [] },
+      'sk-dump3159',
+    );
+    const opts = createBaseOptions({
+      client,
+      dumpMode: 'on',
+      mergedHeaders: { Authorization: 'Bearer caller-token' },
+    });
+
+    await executeApiRequest(opts);
+
+    const metadata = dumpSDKRequestContextSpy.mock.calls[0][4];
+    expect(metadata?.headers).toStrictEqual({
+      Authorization: 'Bearer caller-token',
+    });
   });
 
   it('should not dump on success when mode is error', async () => {

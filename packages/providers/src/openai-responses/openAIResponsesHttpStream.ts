@@ -67,7 +67,6 @@ export interface StreamResponsesParams {
   request: OpenAIResponsesRequest;
   includeThinkingInResponse: boolean;
   responsesStored: boolean;
-  headers?: Record<string, string>;
   abortSignal?: AbortSignal;
   maxStreamingAttempts: number;
   streamRetryInitialDelayMs: number;
@@ -388,4 +387,41 @@ async function dumpErrorOnFailure(
       { headers, transport: { type: 'http' } },
     );
   });
+}
+
+/**
+ * Records the physical HTTP send when the WebSocket transport falls back
+ * mid-turn (#3159). The pre-transport dump already recorded the WebSocket
+ * attempt; this best-effort dump makes the fallback visible with the real
+ * HTTP headers and the body actually carried (the stateless rebuild when
+ * one was needed). Gated to success-dump mode: error mode already writes an
+ * honest HTTP error dump via dumpErrorOnFailure.
+ */
+export async function dumpFallbackHttpRequest(
+  params: StreamResponsesParams,
+  deps: ResponsesExecutorDeps,
+): Promise<void> {
+  if (!shouldDumpSDKContext(params.dumpMode, false)) {
+    return;
+  }
+  await bestEffortDump('request', deps.providerName, async () =>
+    dumpSDKRequestContext(
+      deps.providerName,
+      '/responses',
+      params.request,
+      params.baseURL,
+      {
+        headers: await buildResponsesHeaders(
+          params.apiKey,
+          params.isCodex
+            ? 'application/json'
+            : 'application/json; charset=utf-8',
+          params.isCodex,
+          params.normalizedOptions,
+          deps,
+        ),
+        transport: { type: 'http' },
+      },
+    ),
+  );
 }

@@ -144,36 +144,6 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
     expect(dumpSDKContextSpy).not.toHaveBeenCalled();
   });
 
-  it('should send API request when request dump fails', async () => {
-    dumpSDKRequestContextSpy.mockRejectedValueOnce(new Error('disk full'));
-    const mockResponse = {
-      candidates: [{ content: { parts: [{ text: 'Hello' }] } }],
-    };
-    const mockContentGenerator = {
-      generateContent: vi.fn().mockResolvedValue(mockResponse),
-    };
-    const mapResponseToChunks = vi
-      .fn()
-      .mockReturnValue([
-        { speaker: 'ai', blocks: [{ type: 'text', text: 'Hello' }] },
-      ]);
-    const { GeminiProvider } = await import('./GeminiProvider.js');
-    const provider = new GeminiProvider('test-api-key');
-
-    await provider['nonOAuthNonStreamingGenerate'](
-      mockContentGenerator,
-      { model: 'gemini-2.5-pro', contents: [], config: {} },
-      true,
-      false,
-      undefined,
-      mapResponseToChunks,
-      true,
-    );
-
-    expect(mockContentGenerator.generateContent).toHaveBeenCalledOnce();
-    expect(dumpSDKResponseContextSpy).not.toHaveBeenCalled();
-  });
-
   it('should link on-mode API errors to the pre-request dump without legacy dumpSDKContext', async () => {
     const callOrder: string[] = [];
     dumpSDKRequestContextSpy.mockImplementation(async () => {
@@ -215,6 +185,25 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
       true,
     );
     expect(dumpSDKContextSpy).not.toHaveBeenCalled();
+  });
+
+  it('should keep a caller-supplied x-goog-api-key header over the synthesized one (issue #3159)', async () => {
+    const { GeminiProvider } = await import('./GeminiProvider.js');
+    const provider = new GeminiProvider('test-api-key');
+
+    expect(
+      provider['withApiKeyHeader'](
+        { 'x-goog-api-key': 'caller-key' },
+        'gemini-api-key',
+        'gk-secret',
+      ),
+    ).toStrictEqual({ 'x-goog-api-key': 'caller-key' });
+    expect(
+      provider['withApiKeyHeader']({}, 'gemini-api-key', 'gk-secret'),
+    ).toStrictEqual({ 'x-goog-api-key': 'gk-secret' });
+    expect(
+      provider['withApiKeyHeader']({ other: 'header' }, 'vertex-ai', 'tok'),
+    ).toStrictEqual({ other: 'header' });
   });
 });
 

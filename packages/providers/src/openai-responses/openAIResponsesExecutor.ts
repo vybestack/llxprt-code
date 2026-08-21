@@ -70,7 +70,10 @@ import {
   type RequestDumpMetadata,
   bestEffortDump,
 } from '../utils/dumpSDKContext.js';
-import { buildResponsesHeaders } from './openAIResponsesHttpStream.js';
+import {
+  buildResponsesHeaders,
+  dumpFallbackHttpRequest,
+} from './openAIResponsesHttpStream.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 
 /**
@@ -912,8 +915,16 @@ async function dumpFinalizedRequest(
       () =>
         `Best-effort dump metadata failed for ${deps.providerName}: ${String(error)}`,
     );
-    dumpMetadata = { transport: { type: 'http' } };
-    baseURLForDump = requestContext.baseURL;
+    // Header observation failed, but the selected transport is still known;
+    // keep recording it honestly instead of relabeling the request as HTTP.
+    dumpMetadata = {
+      transport: transportActive
+        ? { type: 'websocket', frameType: 'response.create' }
+        : { type: 'http' },
+    };
+    baseURLForDump = transportActive
+      ? toWebSocketDumpURL(requestContext.baseURL)
+      : requestContext.baseURL;
   }
   const result = await bestEffortDump(
     'request',
@@ -969,6 +980,7 @@ async function* streamResponses(
  * resolve that parent (it rejects the request, since nothing is stored
  * server-side), so replaying the WebSocket request here would fail and lose
  * the trimmed-away context. Re-derive a stateless request instead (#3134).
+ * The physical HTTP send is recorded via dumpFallbackHttpRequest (#3159).
  */
 async function* streamOverHttpWithoutStatefulness(
   params: StreamResponsesParams,
@@ -978,6 +990,7 @@ async function* streamOverHttpWithoutStatefulness(
     params.rebuildStateless === undefined ||
     params.request.previous_response_id === undefined
   ) {
+    await dumpFallbackHttpRequest(params, deps);
     yield* streamOverHttp(params, deps);
     return;
   }
@@ -985,7 +998,9 @@ async function* streamOverHttpWithoutStatefulness(
     () =>
       'Codex WebSocket fallback: rebuilding the request without previous_response_id for HTTP.',
   );
-  yield* streamOverHttp(await params.rebuildStateless(), deps);
+  const stateless = await params.rebuildStateless();
+  await dumpFallbackHttpRequest(stateless, deps);
+  yield* streamOverHttp(stateless, deps);
 }
 
 async function buildWebSocketHandshakeHeaders(
