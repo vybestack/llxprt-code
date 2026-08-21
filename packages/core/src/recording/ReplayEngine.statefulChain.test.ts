@@ -114,6 +114,60 @@ describe('ReplayEngine stateful-chain stripping @issue:3160', () => {
     expect(ai.metadata?.model).toBe('gpt-5.6-sol');
   });
 
+  it('leaves an explicit responsesStored: false in place', async () => {
+    const lines = [
+      sessionStartLine(1),
+      contentLine(2, {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'not stored' }],
+        metadata: { id: 'resp_false', responsesStored: false },
+      }),
+    ];
+    const filePath = await replayFrom(lines);
+
+    const result = await replaySession(filePath, PROJECT_HASH);
+
+    assertReplayOk(result);
+    // Only `true` marks a chainable parent, so `false` is not a stale marker and
+    // is left exactly as recorded rather than being rewritten.
+    expect(result.history[0].metadata?.responsesStored).toBe(false);
+    expect(result.history[0].metadata?.id).toBe('resp_false');
+  });
+
+  it('replays a tool entry carrying responsesStored unchanged', async () => {
+    const lines = [
+      sessionStartLine(1),
+      contentLine(2, {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'call_1',
+            toolName: 'read_file',
+            result: 'file contents',
+          },
+        ],
+        metadata: { responsesStored: true },
+      }),
+    ];
+    const filePath = await replayFrom(lines);
+
+    const result = await replaySession(filePath, PROJECT_HASH);
+
+    assertReplayOk(result);
+    expect(result.history[0].speaker).toBe('tool');
+    expect(result.history[0].metadata?.responsesStored).toBe(true);
+  });
+
+  it('returns an empty history for a recording with no content events', async () => {
+    const filePath = await replayFrom([sessionStartLine(1)]);
+
+    const result = await replaySession(filePath, PROJECT_HASH);
+
+    assertReplayOk(result);
+    expect(result.history).toStrictEqual([]);
+  });
+
   it('replays a human entry carrying responsesStored unchanged', async () => {
     const lines = [
       sessionStartLine(1),

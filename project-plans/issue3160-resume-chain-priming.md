@@ -54,15 +54,22 @@ real regression risk. Not implemented; recorded here so the decision is visible.
 
 ### 3. Prewarm the socket with a `generate=false` `response.create` — DEFER
 
-Prewarming does not deliver the issue's stated goal. Codex CLI's prewarm carries
-no conversation input, so the response it establishes is not a parent that holds
-the transcript; the first real turn must still send the full history. Sending the
-full history *in* the prewarm would spend the same bytes plus an extra request.
-The measurable win is handshake latency (the transport's 15 s connect budget),
-not payload size. It also requires a new public `prewarm` method on the
-`WebSocketTransport` interface and an unverified `generate: false` request field.
-Adding a public abstraction for a benefit the issue did not ask for is outside
-the accepted scope. Not implemented.
+Prewarming does not deliver the issue's stated goal, which is removing one large
+request. Either the prewarm carries the transcript, in which case those bytes are
+spent anyway and an extra round trip is added on top, or it carries no input, in
+which case the response it establishes is not a parent that holds the transcript
+and the first real turn must still send the full history. Neither branch removes
+the payload.
+
+What prewarming can buy is latency: the connection handshake (a 15 s connect
+budget in the transport) and, if the transcript is uploaded during the warmup,
+request preparation moved off the generated turn. That is a real but different
+optimization with a different success metric, and it needs measurement rather
+than assumption. It also requires a new public `prewarm` method on the
+`WebSocketTransport` interface and a `generate: false` request field this
+codebase does not currently send. Adding a public abstraction for a benefit the
+issue did not ask for is outside the accepted scope. Not implemented; worth its
+own issue if first-turn latency after resume is measured and found to matter.
 
 ## Accepted behavior
 
@@ -147,6 +154,54 @@ marker returned by reference). It returns `readonly IContent[]`; `ReplayResult.h
 is `IContent[]`, so the result is spread into a fresh mutable array.
 
 No provider-side change. No new public abstraction. No new dependency.
+
+## Review triage
+
+Findings from the design review, and what was done with each.
+
+**Accepted and fixed**
+
+- The doc comment on `invalidateResponsesStatefulChain` claimed its only two
+  call sites never write through the returned entries. `finalizeReplay` is a
+  third call site whose consumers *do* install the entries into a
+  `HistoryService`, whose chronology stamper writes `metadata` in place. That is
+  safe here only because the aliased array (the replay accumulator) is discarded
+  when `finalizeReplay` returns. The comment now says so, and warns the next
+  caller.
+- The provider tests were all controls: they hand-built history and never
+  invoked replay, so they passed with the production change reverted. Replaced
+  with a real recording → `replaySession` → executor test that fails with
+  `previous_response_id: "resp_from_previous_process"` when the strip is removed.
+- The full-history assertion checked only the human turns. It now names every
+  turn, human and AI.
+- The turn-1 → turn-2 test used two transports, which contradicts the
+  connection-scoped premise. It now reuses one transport and one socket and
+  asserts the second frame on that socket.
+- The parent-id comparison could pass with both ids `undefined`. It now proves
+  the id is a non-empty string first.
+- The `responsesStored: false`, tool-entry, and empty-history boundaries listed
+  above were missing. Added.
+- The prewarm deferral above rested on a claim about Codex CLI's internals that
+  was not verifiable from this repository. Rewritten to rest on the payload
+  argument, which holds either way.
+
+**Deferred, with reasons**
+
+- *The strip is not Codex-only.* A non-Codex Responses parent is stored durably
+  server-side and can outlive the process, so stripping it costs an opt-in
+  non-Codex user one full-history request on resume. Narrowing is not obviously
+  right: `responsesStored` conflates "durably stored" with "chainable on this
+  socket" (see `buildRequestContext`, which sets it for Codex even though
+  `store` is false), and a recording carries nothing that separates them, nor
+  anything about the retention window. Distinguishing them properly means a new
+  metadata field, which is a public-surface change beyond this issue. The
+  trade-off is now stated at the call site. Worth its own issue.
+- *Checkpoint forks can discard a parent that is still live in-process.* A fork
+  taken at or near the current head can carry a parent that the still-open
+  socket would resolve, so the strip costs one full-history request there.
+  Preserving it means plumbing live transport identity from the provider into
+  the session transition service, which is a new cross-package coupling.
+  Fail-safe invalidation is kept.
 
 ## Out of scope
 

@@ -587,6 +587,15 @@ function finalizeReplay(acc: ReplayAccumulators): ReplayResult {
   // `responsesStored` marker restored from a persisted session recording (or a
   // checkpoint fork replay) points at a dead parent by construction. Strip it so the
   // resumed session starts a fresh chain (#3160).
+  //
+  // The strip is deliberately unconditional rather than Codex-only. `responsesStored`
+  // conflates two different lifetimes — "durably stored server-side" (non-Codex,
+  // store=true) and "chainable on this socket" (Codex, store=false; see
+  // buildRequestContext in openAIResponsesExecutor.ts) — and a recording carries
+  // nothing that tells them apart, nor whether a durable parent is still inside its
+  // retention window. A parent that cannot be shown to be live is treated as dead.
+  // The cost of being wrong is one full-history request, which the next turn
+  // re-chains from; the cost of guessing wrong the other way is a refused request.
   const history = invalidateResponsesStatefulChain(acc.history);
   return {
     ok: true,

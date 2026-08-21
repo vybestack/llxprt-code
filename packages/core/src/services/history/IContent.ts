@@ -542,11 +542,19 @@ export function stampAiTurnModel(
  * every entry was considered and rejected: a shallow `{...entry}` would still
  * share `blocks` and `metadata`, so it would advertise immutability it does not
  * provide, and a deep clone would be real cost on every compression for a
- * hazard no caller exhibits. Both call sites — `applyCompressionWithAnchor` and
- * `applyDensityMutations` — use the result as a replacement history and never
- * write through it. Sharing entry references is also the established
+ * hazard no caller exhibits. Sharing entry references is also the established
  * convention here: `HistoryService.getCurated()` and the compression
  * strategies' `history.slice(...)` hand out the same objects.
+ *
+ * Call sites and why each is safe:
+ * - `applyCompressionWithAnchor` and `applyDensityMutations` use the result as
+ *   a replacement history and never write through it.
+ * - `finalizeReplay` returns the result as `ReplayResult.history` (#3160). Its
+ *   consumers DO install those entries into a `HistoryService`, whose
+ *   chronology stamper writes `metadata` in place. That is safe here only
+ *   because the array it aliases — the replay accumulator — is discarded when
+ *   `finalizeReplay` returns, so no second owner can observe the mutation.
+ *   Any future caller that keeps its input array alive must clone first.
  */
 export function invalidateResponsesStatefulChain(
   history: readonly IContent[],
