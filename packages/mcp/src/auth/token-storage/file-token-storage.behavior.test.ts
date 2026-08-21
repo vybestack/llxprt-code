@@ -312,7 +312,7 @@ describe('FileTokenStorage — v:2 envelope behavior', () => {
   });
 
   it('normalizes a malformed non-envelope file to "Token file corrupted"', async () => {
-    // Any content that is not a versioned v:2 envelope (legacy hex-colon,
+    // Any content that is not a supported versioned envelope (legacy hex-colon,
     // garbage, or malformed JSON) is rejected as "Token file corrupted".
     // ReadEnvelopeVersion returns null for all of these, so the envelope-only
     // read path fails closed uniformly without routing non-envelope bytes into the

@@ -8,12 +8,13 @@
  * Envelope-only (no legacy hex-colon read) mock-fs unit tests for
  * FileTokenStorage CRUD edge cases.
  *
- * FileTokenStorage is envelope-only: every write produces a v:2 envelope and
- * any content that is not a versioned envelope (including legacy hex-colon
- * content) fails closed as "Token file corrupted". The v:2 envelope security
- * behavior is covered by `file-token-storage.behavior.test.ts` using real
- * temp directories. This file retains mock-fs coverage for filesystem edge
- * cases (ENOENT, mkdir/write errors, path construction).
+ * FileTokenStorage is envelope-only: every write produces a versioned envelope
+ * (v:2 when a machine secret is available, v:1 otherwise) and any content that
+ * is not a versioned envelope (including legacy hex-colon content) fails closed as
+ * "Token file corrupted". The envelope security behavior is covered by
+ * `file-token-storage.behavior.test.ts` using real temp directories. This file
+ * retains mock-fs coverage for filesystem edge cases (ENOENT, mkdir/write
+ * errors, path construction).
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';

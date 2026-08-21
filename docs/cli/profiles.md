@@ -209,7 +209,7 @@ Configure before saving a load balancer profile with `/set`:
 | `failover_retry_delay_ms`    | 0                     | Delay between retries (ms)                |
 | `failover_on_network_errors` | true                  | Failover on TCP/network errors            |
 | `failover_status_codes`      | [429,500,502,503,504] | HTTP codes that trigger failover          |
-| `lb_tpm_failover_threshold`  | —                     | Min TPM before triggering failover        |
+| `tpm_threshold`              | —                     | Min TPM before triggering failover        |
 
 ## Viewing Stats
 
