@@ -161,6 +161,7 @@ export interface UIState {
   llxprtMdFileCount: number;
   coreMemoryFileCount: number;
   branchName: string | undefined;
+  branchIsDirty: boolean;
   errorCount: number;
   activeHooks?: ActiveHook[];
 

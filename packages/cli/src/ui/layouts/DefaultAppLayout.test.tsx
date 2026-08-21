@@ -197,6 +197,7 @@ function createBaseUIState() {
     shellModeActive: false,
     thought: undefined,
     branchName: undefined,
+    branchIsDirty: false,
     debugMessage: '',
     errorCount: 0,
     historyTokenCount: 0,

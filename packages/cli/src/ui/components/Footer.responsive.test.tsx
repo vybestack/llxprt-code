@@ -59,6 +59,7 @@ describe('Footer Responsive Behavior', () => {
     model: 'gemini-2.5-pro',
     targetDir: '/home/user/projects/long-project-name',
     branchName: 'feature/very-long-branch-name-that-needs-truncation',
+    branchIsDirty: true,
     debugMode: false,
     debugMessage: '',
     errorCount: 0,
