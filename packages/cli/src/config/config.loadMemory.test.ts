@@ -272,9 +272,6 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
     setActiveToolFormatOverride: vi.fn(),
     getActiveProviderMetrics: vi.fn(() => undefined),
     getSessionTokenUsage: vi.fn(() => undefined),
-    getLoadBalancerStats: vi.fn(() => undefined),
-    getLoadBalancerLastSelected: vi.fn(() => undefined),
-    getAllLoadBalancerStats: vi.fn(() => ({})),
     assembleCliProviderRuntime: vi.fn(
       (input: {
         settingsService: unknown;

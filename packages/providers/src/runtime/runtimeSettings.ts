@@ -55,12 +55,6 @@ export {
 export type { RuntimeScopeValue } from './runtimeContextFactory.js';
 
 export {
-  getLoadBalancerStats,
-  getLoadBalancerLastSelected,
-  getAllLoadBalancerStats,
-} from './profileApplication.js';
-
-export {
   configureCliStatelessHardening,
   getCliStatelessHardeningOverride,
   getCliStatelessHardeningPreference,

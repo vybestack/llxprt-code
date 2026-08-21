@@ -9,8 +9,8 @@
  *
  * These tests exercise the real file system (temp directories) and inject a
  * machine-secret loader so that the v:2 envelope root of trust is exercised
- * end-to-end without mock theater. Legacy hex-colon read compatibility and
- * fail-closed behavior are also covered.
+ * end-to-end without mock theater. Legacy hex-colon content is not readable and
+ * fails closed.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
@@ -57,23 +57,6 @@ function makeCredentials(serverName: string): MCPOAuthCredentials {
     },
     updatedAt: Date.now(),
   };
-}
-
-/**
- * Builds legacy `iv:authTag:ciphertext` (hex) file content using the same
- * derivation the old FileTokenStorage used, for backward-compatible read
- * tests. The legacy derivation uses the hard-coded password
- * 'llxprt-cli-oauth' (not the serviceName) with a hostname/username salt.
- */
-function buildLegacyHexColonCiphertext(plaintext: string): string {
-  const salt = `${os.hostname()}-${os.userInfo().username}-llxprt-cli`;
-  const key = crypto.scryptSync('llxprt-cli-oauth', salt, 32);
-  const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-  let encrypted = cipher.update(plaintext, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-  const authTag = cipher.getAuthTag();
-  return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -187,32 +170,6 @@ describe('FileTokenStorage — v:2 envelope behavior', () => {
     await expect(reader.getCredentials('loader-fault')).rejects.toThrow(
       /keyring exploded/,
     );
-  });
-
-  it('reads legacy hex-colon files (backward compatibility)', async () => {
-    // Build a legacy file using the old derivation. The legacy salt/password
-    // must match what the old FileTokenStorage used so the legacy decrypt
-    // path can read it.
-    const legacyCreds: Record<string, MCPOAuthCredentials> = {
-      'legacy-server': makeCredentials('legacy-server'),
-    };
-    const legacyContent = buildLegacyHexColonCiphertext(
-      JSON.stringify(legacyCreds),
-    );
-    await fs.mkdir(path.dirname(tokenFilePath), {
-      recursive: true,
-      mode: 0o700,
-    });
-    await fs.writeFile(tokenFilePath, legacyContent, { mode: 0o600 });
-
-    const reader = new FileTokenStorage(SERVICE_NAME, {
-      tokenFilePath,
-      machineSecretLoader: secretLoaderA(),
-    });
-    const result = await reader.getCredentials('legacy-server');
-    expect(result).not.toBeNull();
-    expect(result!.serverName).toBe('legacy-server');
-    expect(result!.token.accessToken).toBe('access-legacy-server');
   });
 
   it('fail-closed-on-read prevents overwrite of existing v:2 file with unavailable secret', async () => {

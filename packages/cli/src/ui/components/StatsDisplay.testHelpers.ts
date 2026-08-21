@@ -185,9 +185,6 @@ export function createMockRuntimeApi(
       total: 0,
     })),
     getCliRuntimeServices: vi.fn(() => null),
-    getLoadBalancerStats: vi.fn(() => null),
-    getLoadBalancerLastSelected: vi.fn(() => null),
-    getAllLoadBalancerStats: vi.fn(() => []),
     enterRuntimeScope: vi.fn(() => {}),
     runWithRuntimeScope: vi.fn(<T>(cb: () => T): T => cb()),
     setProvider: vi.fn(async () => ({

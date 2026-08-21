@@ -505,7 +505,6 @@ export {
   MCPOAuthProvider,
   MCPOAuthTokenStorage,
   BaseTokenStore,
-  FileTokenStore,
   OAuthUtils,
   getMcpServerOAuthStatus,
 } from '@vybestack/llxprt-code-mcp';
