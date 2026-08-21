@@ -23,9 +23,8 @@ after earlier migrations:
    `circuitBreakerFailureWindowMs`, `circuitBreakerRecoveryTimeoutMs` config
    flags (defaults false/3/60000/30000), the `CircuitBreakerState` interface,
    the commented-out `circuitBreakerStates` field ("reserved for future
-   implementation"), the RETRY_EPHEMERAL_KEYS circuit entries that are never read,
-   and the "3. Circuit breaker pattern (optional)" doc bullet. The authoritative
-   live circuit breaker is the load balancer's `CircuitBreakerManager`
+   implementation"), and the "3. Circuit breaker pattern (optional)" doc bullet. The
+   authoritative live circuit breaker is the load balancer's `CircuitBreakerManager`
    (`packages/providers/src/loadBalancing/circuitBreakerManager.ts`), which
    stays fully in place.
 
@@ -98,9 +97,10 @@ after earlier migrations:
    `LoadBalancingProvider.getStats()` (kept). These are deleted, including their
    `runtimeSettings.ts` re-export and `RuntimeContext.tsx` entries and every mock stub.
 
-5. `docs/cli/profiles.md:211-214` lists `lb_circuit_breaker_threshold` /
-   `lb_circuit_breaker_timeout_ms` / `lb_tpm_failover_threshold` keys that
-   exist in NO code. `docs/reference/ephemerals.md:188-194` documents the real
+5. `docs/cli/profiles.md:211-213` lists `lb_circuit_breaker_threshold` /
+   `lb_circuit_breaker_timeout_ms` (which exist in NO code) while the retained
+   `lb_tpm_failover_threshold` row stays; the PR removes only the two
+   circuit-breaker rows. `docs/reference/ephemerals.md:188-194` documents the real
    `circuit_breaker_*` keys legitimately. `docs/reference/ephemerals.md` does not
    document FileTokenStore anywhere. The PR adds a `CHANGELOG.md` "Removed
    (0.12.0 breaking cleanup)" entry naming:
@@ -260,9 +260,10 @@ implementation fails the tests with PR nonexports; the PR leaves no forwarding w
   retitle/trim the legacy-hex-colon + fail-closed-on-read cases to the new
   envelope-only contract (no legacy-read → fail-closed "Token file corrupted")
 - `packages/mcp/src/auth/token-storage/file-token-storage.test.ts` — delete
-  legacy-hex-colon seeding and corrupt→"Token file corrupted" cases; keep v:2
-  CRUD + chmod tests and the retained `existingEnvelopeVersion` anti-downgrade
-  coverage (now in `file-token-storage.behavior.test.ts`)
+  legacy-hex-colon seeding; keep the legacy-hex-colon/non-envelope
+  corrupt→"Token file corrupted" cases, v:2 CRUD + chmod tests, and the
+  retained `existingEnvelopeVersion` anti-downgrade coverage (now in
+  `file-token-storage.behavior.test.ts`)
 - `packages/providers/src/RetryOrchestrator.ts` — remove the four config
   fields, `CircuitBreakerState` interface, `// private circuitBreakerStates` map,
   "3. Circuit breaker pattern (optional)" bullet

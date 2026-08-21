@@ -231,37 +231,55 @@ describe('FileTokenStorage (envelope-only)', () => {
       expect(stored['new-server'].token.accessToken).toBe('new-token');
     });
 
-    it.skipIf(process.platform === 'win32')(
-      'should update existing credentials',
-      async () => {
-        // Seed a real v:2 envelope with an existing entry so the update path
-        // proves merge-and-preserve rather than create-from-ENOENT.
-        mockFs.readFile.mockResolvedValue(
-          await buildV2Envelope({ 'test-server': existingCredentials }),
-        );
-        mockFs.writeFile.mockResolvedValue(undefined);
+    it('should return expired credentials unpassthrough for the OAuth layer to refresh', async () => {
+      // Expired persisted credentials are returned as-is rather than filtered; the
+      // OAuth layer decides whether to refresh. Seed a v:2 envelope with an
+      // expired token and assert getCredentials returns it unchanged.
+      const expiredCredentials: MCPOAuthCredentials = {
+        serverName: 'test-server',
+        token: {
+          accessToken: 'expired-token',
+          tokenType: 'Bearer',
+          expiresAt: Date.now() - 3600000,
+        },
+        updatedAt: Date.now(),
+      };
+      mockFs.readFile.mockResolvedValue(
+        await buildV2Envelope({ 'test-server': expiredCredentials }),
+      );
 
-        const newCredentials: MCPOAuthCredentials = {
-          serverName: 'test-server',
-          token: {
-            accessToken: 'new-token',
-            tokenType: 'Bearer',
-          },
-          updatedAt: Date.now(),
-        };
+      const result = await storage.getCredentials('test-server');
+      expect(result).toStrictEqual(expiredCredentials);
+    });
 
-        await storage.setCredentials(newCredentials);
+    it('should update existing credentials', async () => {
+      // Seed a real v:2 envelope with an existing entry so the update path
+      // proves merge-and-preserve rather than create-from-ENOENT.
+      mockFs.readFile.mockResolvedValue(
+        await buildV2Envelope({ 'test-server': existingCredentials }),
+      );
+      mockFs.writeFile.mockResolvedValue(undefined);
 
-        expect(mockFs.writeFile).toHaveBeenCalled();
+      const newCredentials: MCPOAuthCredentials = {
+        serverName: 'test-server',
+        token: {
+          accessToken: 'new-token',
+          tokenType: 'Bearer',
+        },
+        updatedAt: Date.now(),
+      };
 
-        // Decrypt the written v:2 envelope and verify the merge: the pre-existing
-        // entry is preserved AND the new entry is added (a broken merge that
-        // overwrites instead of merging would be caught here).
-        const writeCall = mockFs.writeFile.mock.calls[0];
-        const stored = await decryptWrittenEnvelope(writeCall[1] as string);
-        expect(stored['test-server'].token.accessToken).toBe('new-token');
-      },
-    );
+      await storage.setCredentials(newCredentials);
+
+      expect(mockFs.writeFile).toHaveBeenCalled();
+
+      // Decrypt the written v:2 envelope and verify the merge: the pre-existing
+      // entry is preserved AND the new entry is added (a broken merge that
+      // overwrites instead of merging would be caught here).
+      const writeCall = mockFs.writeFile.mock.calls[0];
+      const stored = await decryptWrittenEnvelope(writeCall[1] as string);
+      expect(stored['test-server'].token.accessToken).toBe('new-token');
+    });
 
     it('should fail closed when no machine secret can read a v:2 file', async () => {
       // This store has no machine-secret loader. Read of the v:2 envelope then
