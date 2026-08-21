@@ -24,7 +24,7 @@ export type {
   MCPOAuthToken as MCPOAuthTokenInterface,
   MCPOAuthCredentials as MCPOAuthCredentialsInterface,
 } from './token-store.js';
-export { FileTokenStore } from './file-token-store.js';
+
 export { OAuthUtils, ResourceMismatchError } from './oauth-utils.js';
 export type {
   OAuthAuthorizationServerMetadata,
