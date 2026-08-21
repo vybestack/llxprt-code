@@ -67,8 +67,12 @@ import {
 import {
   shouldDumpSDKContext,
   dumpSDKRequestContext,
+  type RequestDumpMetadata,
   bestEffortDump,
 } from '../utils/dumpSDKContext.js';
+import {
+  buildResponsesHeaders,
+} from './openAIResponsesHttpStream.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 
 /**
@@ -232,6 +236,7 @@ export async function* executeOpenAIResponsesRequest(
     requestContext,
     invocationEphemerals,
     deps,
+    options,
   );
 
   const streamParams: StreamResponsesParams = {
@@ -325,6 +330,7 @@ async function* retryWithoutStatefulness(
     recoveryContext,
     invocationEphemerals,
     deps,
+    options,
   );
   // Note: if both the initial and the recovery attempt fall back from the
   // WebSocket, `onWebSocketFallback` fires twice for a single turn. That is
@@ -835,6 +841,15 @@ function applyPromptCaching(
   if (!isCodex) request.prompt_cache_retention = '24h';
 }
 
+/**
+ * Convert an https/http base URL to its WebSocket scheme for the dump so the
+ * recorded URL reveals the WebSocket transport even when the WebSocket handshake
+ * itself does not surface a URL (#3159).
+ */
+function toWebSocketDumpURL(httpsURL: string): string {
+  return httpsURL.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:');
+}
+
 interface DumpFinalizedResult {
   baseId?: string;
   dumpMode?: DumpMode;
@@ -843,6 +858,9 @@ interface DumpFinalizedResult {
 /**
  * Dumps the finalized Responses request at the common pre-transport seam when
  * context dumping is enabled, matching OpenAI Chat and Anthropic parity.
+ * Records the REAL headers the transport will send (credentials redacted on
+ * write) and a transport discriminator so WebSocket dumps are distinguishable
+ * from HTTP POSTs (issue #3159).
  * Best-effort: failures are logged and never block the request.
  * Returns the dump base id and resolved mode so the transport can write a
  * linked error-response dump on failure (issue #3140).
@@ -851,11 +869,43 @@ async function dumpFinalizedRequest(
   requestContext: RequestContext,
   invocationEphemerals: Record<string, unknown>,
   deps: ResponsesExecutorDeps,
+  options?: NormalizedGenerateChatOptions,
 ): Promise<DumpFinalizedResult> {
   const dumpMode = invocationEphemerals['dumpcontext'] as DumpMode | undefined;
   if (!shouldDumpSDKContext(dumpMode, false)) {
     return { dumpMode };
   }
+  const transportActive = deps.isWebSocketTransportActive?.() ?? false;
+  const metadata: RequestDumpMetadata =
+    transportActive && options !== undefined
+      ? {
+          headers: await buildWebSocketHandshakeHeaders(
+            {
+              ...requestContext,
+              normalizedOptions: options,
+              maxStreamingAttempts: 1,
+              streamRetryInitialDelayMs: 0,
+            },
+            deps,
+          ),
+          transport: { type: 'websocket', frameType: 'response.create' },
+        }
+      : {
+          headers: await buildResponsesHeaders(
+            requestContext.apiKey,
+            requestContext.isCodex
+              ? 'application/json'
+              : 'application/json; charset=utf-8',
+            requestContext.isCodex,
+            options ?? requestContext.request,
+            deps,
+          ),
+          transport: { type: 'http' },
+        };
+  const baseURLForDump =
+    transportActive && options !== undefined
+      ? toWebSocketDumpURL(requestContext.baseURL)
+      : requestContext.baseURL;
   const result = await bestEffortDump(
     'request',
     deps.providerName,
@@ -864,7 +914,8 @@ async function dumpFinalizedRequest(
         deps.providerName,
         '/responses',
         requestContext.request,
-        requestContext.baseURL,
+        baseURLForDump,
+        metadata,
       ),
     deps.logger,
   );

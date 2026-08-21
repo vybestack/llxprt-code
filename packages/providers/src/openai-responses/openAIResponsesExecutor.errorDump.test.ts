@@ -135,6 +135,7 @@ function buildNormalizedOptions(
 function buildDeps(): ResponsesExecutorDeps {
   return {
     providerName: 'openai-responses',
+    isWebSocketTransportActive: () => false,
     logger: {
       debug: () => undefined,
     } as unknown as ResponsesExecutorDeps['logger'],

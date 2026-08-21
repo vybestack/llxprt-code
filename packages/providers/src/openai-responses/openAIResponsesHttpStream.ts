@@ -43,7 +43,11 @@ import {
   dumpSDKErrorRequestResponse,
   bestEffortDump,
 } from '../utils/dumpSDKContext.js';
-import { redactSensitiveHeaders, type DumpMode } from '../utils/dumpContext.js';
+import {
+  redactSensitiveHeaders,
+  type DumpMode,
+  type RequestDumpMetadata,
+} from '../utils/dumpContext.js';
 import type { ResponsesExecutorDeps } from './openAIResponsesExecutor.js';
 import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';
 
@@ -376,12 +380,29 @@ async function dumpErrorOnFailure(
         true,
       );
     } else {
+      const contentType = params.isCodex
+        ? 'application/json'
+        : 'application/json; charset=utf-8';
+      const headers = await buildResponsesHeaders(
+        params.apiKey,
+        contentType,
+        params.isCodex,
+        params.normalizedOptions,
+        deps,
+      );
+      const metadata: RequestDumpMetadata = {
+        headers,
+        transport: { type: 'http' },
+      };
       await dumpSDKErrorRequestResponse(
         deps.providerName,
         '/responses',
         params.request,
         payload,
         params.baseURL,
+        dumpSDKRequestContext,
+        dumpSDKResponseContext,
+        metadata,
       );
     }
   });
