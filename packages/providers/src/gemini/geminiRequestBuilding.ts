@@ -5,7 +5,7 @@
  */
 
 import { Type, type Schema, type Part } from '@google/genai';
-import { isGemini3Model } from '@vybestack/llxprt-code-core/config/models.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { type NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { convertHistoryToGeminiFormat } from './GeminiMessageConverter.js';
 import {
@@ -18,9 +18,9 @@ import {
 } from './geminiSchemaHelpers.js';
 import {
   type ReasoningConfig,
-  mapReasoningEffortToThinkingLevel,
   type StripPolicy,
 } from './geminiReasoningConfig.js';
+import { applyGeminiReasoningTranslation } from './geminiReasoningTranslation.js';
 
 export interface GeminiToolsResult {
   geminiTools:
@@ -103,39 +103,13 @@ export function resolveServerTools(
     : ['web_search', 'web_fetch'];
 }
 
-/** Apply thinking config to request config based on model version and reasoning settings. */
-export function applyThinkingConfig(
-  requestConfig: Record<string, unknown>,
-  reasoningConfig: Pick<ReasoningConfig, 'enabled' | 'effort' | 'maxTokens'>,
-  currentModel: string,
-): void {
-  if (!reasoningConfig.enabled) {
-    return;
-  }
-  // @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006
-  if (isGemini3Model(currentModel)) {
-    const thinkingLevel = mapReasoningEffortToThinkingLevel(
-      reasoningConfig.effort,
-    );
-    const thinkingConfig: Record<string, unknown> = { includeThoughts: true };
-    if (thinkingLevel !== undefined) {
-      thinkingConfig.thinkingLevel = thinkingLevel;
-    }
-    requestConfig.thinkingConfig = thinkingConfig;
-  } else {
-    requestConfig.thinkingConfig = {
-      includeThoughts: true,
-      thinkingBudget: reasoningConfig.maxTokens ?? -1,
-    };
-  }
-}
-
 /** Build request config from options, tools, and reasoning settings. */
 export function buildRequestConfig(
   options: NormalizedGenerateChatOptions,
   geminiTools: GeminiToolsResult['geminiTools'],
   reasoningConfig: ReasoningConfig,
   currentModel: string,
+  logger: DebugLogger,
 ): Record<string, unknown> {
   const directOverridesRaw = (
     options.metadata as { geminiDirectOverrides?: unknown }
@@ -172,7 +146,12 @@ export function buildRequestConfig(
   if (toolConfigOverride !== undefined) {
     requestConfig.toolConfig = toolConfigOverride;
   }
-  applyThinkingConfig(requestConfig, reasoningConfig, currentModel);
+  applyGeminiReasoningTranslation({
+    requestConfig,
+    reasoningConfig,
+    model: currentModel,
+    logger,
+  });
   return requestConfig;
 }
 

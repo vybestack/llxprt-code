@@ -6,6 +6,7 @@
 
 import { type Part, type GenerateContentResponse } from '@google/genai';
 import { type Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { type NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { type ResponseToChunksMapper } from './geminiResponseMapper.js';
@@ -55,6 +56,7 @@ export async function buildGenerationSetup(
   }>,
   createHttpOptions: () => HttpOptions,
   getBaseURL: () => string | undefined,
+  logger: DebugLogger,
 ): Promise<GeminiGenerationSetup> {
   const { contents: content, tools } = options;
   const { authMode, token: authToken } = await resolveAuth();
@@ -87,6 +89,7 @@ export async function buildGenerationSetup(
       geminiTools,
       reasoningConfig,
       currentModel,
+      logger,
     ),
     baseURL: options.resolved.baseURL ?? getBaseURL(),
     httpOptions: createHttpOptions(),

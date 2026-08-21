@@ -11,7 +11,6 @@
  * @issue #1572 - Decomposing AnthropicProvider (Step 5)
  */
 
-import { supportsAdaptiveThinking } from './AnthropicModelData.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -25,10 +24,14 @@ import { convertToolsToAnthropic } from './schemaConverter.js';
 import {
   buildAnthropicSystemPrompt,
   attachPromptCaching,
-  buildThinkingConfig,
   buildAnthropicRequestBody,
   sortObjectKeys,
 } from './AnthropicRequestBuilder.js';
+import {
+  buildAnthropicNativeReasoningConfig,
+  readAnthropicReasoningSettings,
+  type AnthropicReasoningSettings,
+} from './anthropic-reasoning-config.js';
 import { getRetryConfig } from './AnthropicRateLimitHandler.js';
 import {
   isAnthropicOAuthBaseURL,
@@ -79,20 +82,6 @@ export interface PrepareRequestParams {
 }
 
 /**
- * Helper to resolve model behavior settings with fallback to options.settings
- */
-function resolveModelBehavior<T>(
-  options: NormalizedGenerateChatOptions,
-  key: string,
-): T | undefined {
-  const fromBehavior =
-    typeof options.invocation.getModelBehavior === 'function'
-      ? options.invocation.getModelBehavior(key)
-      : undefined;
-  return (fromBehavior ?? options.settings.get(key)) as T | undefined;
-}
-
-/**
  * Helper to resolve CLI settings with fallback to options.settings
  */
 function resolveCliSetting<T>(
@@ -107,23 +96,23 @@ function resolveCliSetting<T>(
 }
 
 /**
+ * Legacy normalized-option fixtures can omit the invocation modelBehavior
+ * record; a missing record reads as empty so the options.settings fallbacks
+ * supply the reasoning values.
+ */
+function readInvocationRecord(
+  record: Readonly<Record<string, unknown>> | undefined,
+): Readonly<Record<string, unknown>> {
+  return record ?? {};
+}
+
+/**
  * Reasoning settings resolved from invocation
  */
-interface ReasoningSettings {
-  reasoningEnabled: boolean | undefined;
-  reasoningBudgetTokens: number | undefined;
+interface ReasoningSettings extends AnthropicReasoningSettings {
   stripFromContext: 'all' | 'allButLast' | 'none' | undefined;
   includeInContext: boolean | undefined;
   includeInResponse: boolean | undefined;
-  adaptiveThinking: boolean | undefined;
-  rawEffort:
-    | 'minimal'
-    | 'low'
-    | 'medium'
-    | 'high'
-    | 'xhigh'
-    | 'max'
-    | undefined;
 }
 
 /**
@@ -175,13 +164,18 @@ interface SystemContextResult {
 function resolveReasoningSettings(
   options: NormalizedGenerateChatOptions,
 ): ReasoningSettings {
-  const reasoningEnabled = resolveModelBehavior<boolean>(
-    options,
-    'reasoning.enabled',
-  );
-  const reasoningBudgetTokens = resolveModelBehavior<number>(
-    options,
-    'reasoning.budgetTokens',
+  const nativeReasoning = readAnthropicReasoningSettings(
+    readInvocationRecord(options.invocation.modelBehavior),
+    {
+      enabled: options.settings.get('reasoning.enabled'),
+      effort: options.settings.get('reasoning.effort'),
+      budgetTokens: options.settings.get('reasoning.budgetTokens'),
+      adaptiveThinking: options.settings.get('reasoning.adaptiveThinking'),
+      effortWireFormat: options.settings.get('reasoning.effortWireFormat'),
+      enabledWireFormat: options.settings.get('reasoning.enabledWireFormat'),
+      effortMap: options.settings.get('reasoning.effortMap'),
+      enabledMap: options.settings.get('reasoning.enabledMap'),
+    },
   );
   const stripFromContext = resolveCliSetting<'all' | 'allButLast' | 'none'>(
     options,
@@ -195,22 +189,12 @@ function resolveReasoningSettings(
     options,
     'reasoning.includeInResponse',
   );
-  const adaptiveThinking = resolveModelBehavior<boolean>(
-    options,
-    'reasoning.adaptiveThinking',
-  );
-  const rawEffort = resolveModelBehavior<
-    'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
-  >(options, 'reasoning.effort');
 
   return {
-    reasoningEnabled,
-    reasoningBudgetTokens,
+    ...nativeReasoning,
     stripFromContext,
     includeInContext,
     includeInResponse,
-    adaptiveThinking,
-    rawEffort,
   };
 }
 
@@ -442,54 +426,14 @@ function buildSystemContext(params: {
   return { systemField, messages };
 }
 
-function mapEffortLevel(
-  rawEffort:
-    | 'minimal'
-    | 'low'
-    | 'medium'
-    | 'high'
-    | 'xhigh'
-    | 'max'
-    | undefined,
-  currentModel: string,
-): 'low' | 'medium' | 'high' | 'max' | undefined {
-  if (!rawEffort) {
-    return undefined;
-  }
-
-  const adaptiveCapable = supportsAdaptiveThinking(currentModel);
-
-  if (rawEffort === 'minimal' || rawEffort === 'low') {
-    return 'low';
-  } else if (rawEffort === 'medium') {
-    return 'medium';
-  } else if (rawEffort === 'high') {
-    return 'high';
-  } else if (rawEffort === 'xhigh') {
-    return adaptiveCapable ? 'max' : 'high';
-  }
-
-  // rawEffort is 'max' here
-  return adaptiveCapable ? 'max' : 'high';
-}
-
 /**
  * Build thinking configuration and request body
  */
 function buildThinkingAndRequestBody(params: {
   currentModel: string;
-  rawEffort:
-    | 'minimal'
-    | 'low'
-    | 'medium'
-    | 'high'
-    | 'xhigh'
-    | 'max'
-    | undefined;
-  shouldIncludeThinking: boolean;
-  reasoningBudgetTokens: number | undefined;
-  adaptiveThinking: boolean | undefined;
-  includeInResponse: boolean | undefined;
+  reasoningSettings: ReasoningSettings;
+  providerName: string;
+  logger: DebugLogger;
   anthropicMessages: AnthropicMessage[];
   systemField:
     | string
@@ -506,46 +450,31 @@ function buildThinkingAndRequestBody(params: {
   streamingEnabled: boolean;
   requestOverrides: Record<string, unknown>;
 }): Record<string, unknown> {
-  const {
-    currentModel,
-    rawEffort,
-    shouldIncludeThinking,
-    reasoningBudgetTokens,
-    adaptiveThinking,
-    includeInResponse,
-    anthropicMessages,
-    systemField,
-    anthropicTools,
-    getMaxTokensForModel,
-    streamingEnabled,
-    requestOverrides,
-  } = params;
-
-  const mappedEffort = mapEffortLevel(rawEffort, currentModel);
-
-  const thinkingConfig = buildThinkingConfig({
-    reasoningEnabled: shouldIncludeThinking,
-    reasoningBudgetTokens,
-    adaptiveThinking,
-    includeInResponse,
-    thinkingEffort: mappedEffort,
-    model: currentModel,
+  const nativeReasoning = buildAnthropicNativeReasoningConfig({
+    settings: params.reasoningSettings,
+    modelParams: params.requestOverrides,
+    model: params.currentModel,
+    providerName: params.providerName,
+    includeInResponse: params.reasoningSettings.includeInResponse,
+    logger: params.logger,
   });
 
   return buildAnthropicRequestBody({
-    model: currentModel,
-    messages: anthropicMessages,
-    system: systemField,
+    model: params.currentModel,
+    messages: params.anthropicMessages,
+    system: params.systemField,
     tools:
-      anthropicTools && anthropicTools.length > 0 ? anthropicTools : undefined,
+      params.anthropicTools && params.anthropicTools.length > 0
+        ? params.anthropicTools
+        : undefined,
     maxTokens: resolveRequestMaxTokens(
-      getMaxTokensForModel(currentModel),
-      requestOverrides,
+      params.getMaxTokensForModel(params.currentModel),
+      params.requestOverrides,
     ),
-    streamingEnabled,
-    modelParams: requestOverrides,
-    thinking: thinkingConfig.thinking,
-    outputConfig: thinkingConfig.output_config,
+    streamingEnabled: params.streamingEnabled,
+    modelParams: params.requestOverrides,
+    thinking: nativeReasoning.thinking,
+    outputConfig: nativeReasoning.outputConfig,
   });
 }
 
@@ -584,7 +513,7 @@ function convertMessagesAndTools(params: {
     isOAuth: params.isOAuth,
     stripFromContext: reasoningSettings.stripFromContext,
     includeInContext: reasoningSettings.includeInContext,
-    reasoningEnabled: reasoningSettings.reasoningEnabled as boolean,
+    reasoningEnabled: reasoningSettings.enabled === true,
     config,
     currentModel,
     currentBaseURL,
@@ -669,7 +598,7 @@ function buildRequestContext(params: {
     | undefined;
   systemContext: SystemContextResult;
   getMaxTokensForModel: (model: string) => number;
-  shouldIncludeThinking: boolean;
+  providerName: string;
   cacheLogger: { debug: (fn: () => string) => void };
   toolsLogger: DebugLogger;
   logger: DebugLogger;
@@ -681,7 +610,7 @@ function buildRequestContext(params: {
     anthropicTools,
     systemContext,
     getMaxTokensForModel,
-    shouldIncludeThinking,
+    providerName,
     cacheLogger,
     toolsLogger,
     logger,
@@ -711,11 +640,9 @@ function buildRequestContext(params: {
 
   const requestBody = buildThinkingAndRequestBody({
     currentModel: requestSettings.currentModel,
-    rawEffort: reasoningSettings.rawEffort,
-    shouldIncludeThinking,
-    reasoningBudgetTokens: reasoningSettings.reasoningBudgetTokens,
-    adaptiveThinking: reasoningSettings.adaptiveThinking,
-    includeInResponse: reasoningSettings.includeInResponse,
+    reasoningSettings,
+    providerName,
+    logger,
     anthropicMessages: systemContext.messages,
     systemField: systemContext.systemField,
     anthropicTools,
@@ -760,7 +687,7 @@ export async function prepareAnthropicRequest(
 
   params.logger.debug(
     () =>
-      `[AnthropicProvider] Reasoning settings from invocation.modelBehavior (fallback to options.settings): enabled=${String(reasoningSettings.reasoningEnabled)}, budgetTokens=${String(reasoningSettings.reasoningBudgetTokens)}, stripFromContext=${String(reasoningSettings.stripFromContext)}, includeInContext=${String(reasoningSettings.includeInContext)}`,
+      `[AnthropicProvider] Reasoning settings from invocation.modelBehavior (fallback to options.settings): enabled=${String(reasoningSettings.enabled)}, budgetTokens=${String(reasoningSettings.budgetTokens)}, stripFromContext=${String(reasoningSettings.stripFromContext)}, includeInContext=${String(reasoningSettings.includeInContext)}`,
   );
 
   const configForMessages = params.config ?? params.options.runtime?.config;
@@ -836,7 +763,7 @@ export async function prepareAnthropicRequest(
     anthropicTools,
     systemContext,
     getMaxTokensForModel: params.getMaxTokensForModel,
-    shouldIncludeThinking: reasoningSettings.reasoningEnabled === true,
+    providerName: params.providerName,
     cacheLogger: params.cacheLogger,
     toolsLogger: params.toolsLogger,
     logger: params.logger,

@@ -54,10 +54,47 @@ export interface ModelParams {
   [key: string]: unknown;
 }
 
+export type ReasoningEffortWireFormat =
+  | 'auto'
+  | 'openai'
+  | 'openai-responses'
+  | 'anthropic'
+  | 'anthropic-budget'
+  | 'openrouter'
+  | 'gemini'
+  | 'template-kwargs'
+  | 'none';
+
+export type ReasoningEnabledWireFormat =
+  | 'auto'
+  | 'openai'
+  | 'openai-responses'
+  | 'openrouter'
+  | 'thinking'
+  | 'gemini'
+  | 'template-kwargs'
+  | 'none';
+
+export type ReasoningEffort =
+  | 'minimal'
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'xhigh'
+  | 'max';
+
+export type ReasoningEffortMap = Readonly<
+  Partial<Record<ReasoningEffort, string | number | null>>
+>;
+
+export type ReasoningEnabledMap = Readonly<
+  Partial<Record<'true' | 'false', string | boolean | null>>
+>;
+
 /**
  * Settings that affect client behavior, not sent to API
  */
-export interface EphemeralSettings {
+export interface ProfileEphemeralSettings {
   'context-limit'?: number;
   'compression-threshold'?: number;
   'auth-key'?: string;
@@ -122,7 +159,11 @@ export interface EphemeralSettings {
   dumponerror?: 'enabled' | 'disabled';
   emojifilter?: 'allowed' | 'auto' | 'warn' | 'error';
   'reasoning.enabled'?: boolean;
-  'reasoning.effort'?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  'reasoning.effort'?: ReasoningEffort;
+  'reasoning.effortWireFormat'?: ReasoningEffortWireFormat;
+  'reasoning.enabledWireFormat'?: ReasoningEnabledWireFormat;
+  'reasoning.effortMap'?: ReasoningEffortMap;
+  'reasoning.enabledMap'?: ReasoningEnabledMap;
   'reasoning.maxTokens'?: number;
   'reasoning.budgetTokens'?: number;
   'reasoning.adaptiveThinking'?: boolean;
@@ -144,6 +185,8 @@ export interface EphemeralSettings {
   'stream-idle-timeout-ms'?: number;
   streamIdleTimeoutMs?: number;
 }
+
+export type EphemeralSettings = ProfileEphemeralSettings;
 
 /**
  * Sub-profile configuration for load balancing

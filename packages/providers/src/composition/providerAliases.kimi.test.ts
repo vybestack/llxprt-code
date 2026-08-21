@@ -27,17 +27,20 @@ describe('builtin kimi provider alias', () => {
     expect(ephemerals?.['user-agent']).toBe('RooCode/1.0');
   });
 
-  it('has modelDefaults with a broad rule plus kimi-k3 and k3-256k overrides', () => {
+  it('has modelDefaults with shared, K2.7, kimi-k3, and k3-256k rules', () => {
     const entries = loadProviderAliasEntries();
     const entry = entries.find((candidate) => candidate.alias === 'kimi');
 
     expect(entry?.config.modelDefaults).toBeDefined();
     expect(Array.isArray(entry?.config.modelDefaults)).toBe(true);
-    expect(entry?.config.modelDefaults).toHaveLength(3);
+    expect(entry?.config.modelDefaults).toHaveLength(4);
 
-    // The broad rule MUST come before the kimi-k3/k3-256k rules so
+    // The shared rule MUST come before the model-family rules so
     // array-order precedence lets the specific keys win for those models.
     const patterns = (entry?.config.modelDefaults ?? []).map((r) => r.pattern);
+    expect(patterns.indexOf('^kimi|^k3-256k$')).toBeLessThan(
+      patterns.indexOf('^kimi-for-coding(?:-highspeed)?$'),
+    );
     expect(patterns.indexOf('^kimi|^k3-256k$')).toBeLessThan(
       patterns.indexOf('kimi-k3'),
     );
@@ -52,7 +55,7 @@ describe('builtin kimi provider alias', () => {
     expect(broadRule).toBeDefined();
 
     const broadDefaults = broadRule?.ephemeralSettings;
-    expect(broadDefaults?.['reasoning.effort']).toBe('medium');
+    expect(broadDefaults).not.toHaveProperty('reasoning.effort');
     expect(broadDefaults?.['reasoning.enabled']).toBe(true);
     expect(broadDefaults?.['reasoning.includeInResponse']).toBe(true);
     expect(broadDefaults?.['reasoning.includeInContext']).toBe(true);
@@ -93,6 +96,22 @@ describe('builtin kimi provider alias', () => {
     expect(new RegExp(rule!.pattern).test('k3-256k')).toBe(true);
     expect(rule!.ephemeralSettings.max_tokens).toBe(131072);
     expect(rule!.ephemeralSettings['context-limit']).toBe(262144);
+  });
+
+  it('ships a K2.7-specific thinking rule without an effort default', () => {
+    const entry = loadProviderAliasEntries().find(
+      (candidate) => candidate.alias === 'kimi',
+    );
+    const rule = entry?.config.modelDefaults?.find(
+      (candidate) => candidate.pattern === '^kimi-for-coding(?:-highspeed)?$',
+    );
+
+    expect(rule?.ephemeralSettings).toMatchObject({
+      'reasoning.effortWireFormat': 'none',
+      'reasoning.enabledWireFormat': 'thinking',
+      'reasoning.enabledMap': { true: 'enabled', false: null },
+    });
+    expect(rule?.ephemeralSettings).not.toHaveProperty('reasoning.effort');
   });
 
   it('ships staticModels so the dialog lists real Kimi models, not API fallbacks', () => {

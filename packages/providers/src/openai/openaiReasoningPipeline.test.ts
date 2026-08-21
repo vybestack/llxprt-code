@@ -126,10 +126,19 @@ describe('issue #2896 settings-to-request pipeline', () => {
       expect(body['reasoning']).toStrictEqual({ effort: 'high' });
     });
 
-    it('sends only the thinking dialect to z.ai', async () => {
+    it('sends the coordinated thinking and effort fields to z.ai', async () => {
       const body = await bodyFor(settings, 'https://api.z.ai/api/paas/v4');
-      expect(reasoningKeysIn(body)).toStrictEqual(['thinking']);
-      expect(body['thinking']).toStrictEqual({ type: 'enabled' });
+      expect(reasoningKeysIn(body)).toStrictEqual([
+        'thinking',
+        'reasoning_effort',
+      ]);
+      expect({
+        thinking: body['thinking'],
+        reasoningEffort: body['reasoning_effort'],
+      }).toStrictEqual({
+        thinking: { type: 'enabled' },
+        reasoningEffort: 'high',
+      });
     });
   });
 

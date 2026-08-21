@@ -79,6 +79,12 @@ export type {
   LoadBalancerProfile,
   ModelParams,
   EphemeralSettings,
+  ProfileEphemeralSettings,
+  ReasoningEffort,
+  ReasoningEffortWireFormat,
+  ReasoningEnabledWireFormat,
+  ReasoningEffortMap,
+  ReasoningEnabledMap,
   AuthConfig,
 } from './profiles/types.js';
 export {

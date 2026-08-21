@@ -30,6 +30,9 @@ For providers without an alias, or custom endpoints:
 /model model-name
 ```
 
+If the endpoint needs a model-specific reasoning request shape, see
+[Reasoning Wire Formats](./reasoning-wire-formats.md).
+
 ## Built-in provider aliases
 
 LLxprt Code ships with these aliases. Use `/provider <alias>` to switch. The
@@ -193,12 +196,12 @@ Or Claude Code OAuth (Claude.ai subscription):
 
 #### OpenAI transport selection (Responses vs. Chat Completions)
 
-OpenAI models can use two transports — the newer **Responses API** and the
-classic **Chat Completions API** — and LLxprt Code picks one automatically:
+OpenAI models can use the newer **Responses API** or the classic **Chat
+Completions API**. LLxprt Code picks one automatically:
 
 - **GPT-5.6 and later** (bare model IDs like `gpt-5.6` and durable-tier IDs
   like `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`) use the **Responses
-  transport** when pointed at the canonical `api.openai.com` endpoint. Chat
+  transport** when pointed at the official `api.openai.com` endpoint. Chat
   Completions is not available for these on that endpoint.
 - **Custom OpenAI-compatible endpoints** (proxies, gateways, self-hosted
   servers, or any non-`api.openai.com` base URL) **default to Chat
@@ -220,8 +223,8 @@ You can also set it permanently in a profile via the `apiMode` or
 `responsesMode` provider setting, or globally via the `responses-mode`
 ephemeral setting. When forced to `responses`, a custom endpoint uses Responses
 for models that support it; when forced to `chat`, Chat Completions is used
-unless the model requires Responses on canonical OpenAI (GPT-5.6+), where Chat
-is unavailable and the override is ignored.
+unless the model requires Responses on the official OpenAI endpoint (GPT-5.6+),
+where Chat is unavailable and the override is ignored.
 
 ### Qwen
 

@@ -6,6 +6,107 @@
 
 import type { SettingSpec, ValidationResult } from './registry-types.js';
 
+const REASONING_EFFORT_KEYS = new Set([
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+]);
+
+const REASONING_ENABLED_KEYS = new Set(['true', 'false']);
+
+/** Numeric effort-map values are explicit budgets with a hard floor. */
+const MIN_MAPPED_BUDGET_TOKENS = 1024;
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+/**
+ * Plain JSON objects only: arrays and class/Map/Set instances (whose
+ * entries do not serialize as JSON keys) fail validation instead of being
+ * silently accepted as reasoning maps.
+ */
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === null || prototype === Object.prototype;
+}
+
+function isReasoningEffortMapValue(value: unknown): boolean {
+  if (value === null || isNonEmptyString(value)) {
+    return true;
+  }
+  return (
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= MIN_MAPPED_BUDGET_TOKENS
+  );
+}
+
+function isReasoningEnabledMapValue(value: unknown): boolean {
+  return (
+    value === null || typeof value === 'boolean' || isNonEmptyString(value)
+  );
+}
+
+function validateReasoningEffortMap(value: unknown): ValidationResult {
+  if (!isJsonObject(value)) {
+    return {
+      success: false,
+      message: 'reasoning.effortMap must be a JSON object',
+    };
+  }
+
+  for (const [key, mappedValue] of Object.entries(value)) {
+    if (!REASONING_EFFORT_KEYS.has(key)) {
+      return {
+        success: false,
+        message: `reasoning.effortMap contains unsupported key '${key}'`,
+      };
+    }
+    if (!isReasoningEffortMapValue(mappedValue)) {
+      return {
+        success: false,
+        message: `reasoning.effortMap values must be non-empty strings, integer budgets of at least ${MIN_MAPPED_BUDGET_TOKENS}, or null`,
+      };
+    }
+  }
+
+  return { success: true, value };
+}
+
+function validateReasoningEnabledMap(value: unknown): ValidationResult {
+  if (!isJsonObject(value)) {
+    return {
+      success: false,
+      message: 'reasoning.enabledMap must be a JSON object',
+    };
+  }
+
+  for (const [key, mappedValue] of Object.entries(value)) {
+    if (!REASONING_ENABLED_KEYS.has(key)) {
+      return {
+        success: false,
+        message: `reasoning.enabledMap contains unsupported key '${key}'`,
+      };
+    }
+    if (!isReasoningEnabledMapValue(mappedValue)) {
+      return {
+        success: false,
+        message:
+          'reasoning.enabledMap values must be non-empty strings, booleans, or null',
+      };
+    }
+  }
+
+  return { success: true, value };
+}
+
 export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'auth-key',
@@ -177,6 +278,57 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
     type: 'enum',
     enumValues: ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
     persistToProfile: true,
+  },
+  {
+    key: 'reasoning.effortWireFormat',
+    category: 'model-behavior',
+    description: 'Request wire format for generic reasoning effort',
+    type: 'enum',
+    enumValues: [
+      'auto',
+      'openai',
+      'openai-responses',
+      'anthropic',
+      'anthropic-budget',
+      'openrouter',
+      'gemini',
+      'template-kwargs',
+      'none',
+    ],
+    persistToProfile: true,
+  },
+  {
+    key: 'reasoning.enabledWireFormat',
+    category: 'model-behavior',
+    description: 'Request wire format for generic reasoning enablement',
+    type: 'enum',
+    enumValues: [
+      'auto',
+      'openai',
+      'openai-responses',
+      'openrouter',
+      'thinking',
+      'gemini',
+      'template-kwargs',
+      'none',
+    ],
+    persistToProfile: true,
+  },
+  {
+    key: 'reasoning.effortMap',
+    category: 'model-behavior',
+    description: 'Model-specific mapping from generic reasoning effort values',
+    type: 'json',
+    persistToProfile: true,
+    validate: validateReasoningEffortMap,
+  },
+  {
+    key: 'reasoning.enabledMap',
+    category: 'model-behavior',
+    description: 'Model-specific mapping from generic reasoning enablement',
+    type: 'json',
+    persistToProfile: true,
+    validate: validateReasoningEnabledMap,
   },
   {
     key: 'reasoning.maxTokens',

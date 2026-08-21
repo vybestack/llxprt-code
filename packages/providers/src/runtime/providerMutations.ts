@@ -21,6 +21,11 @@ import type { Config } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import type { ModelDefaultRule } from '../composition/index.js';
 import { getCliRuntimeServices, _internal } from './runtimeAccessors.js';
+import {
+  getModelDefaultOwnedKeys,
+  getProviderDefaultOwnedEntries,
+  recordModelDefaultOwnedKeys,
+} from './modelDefaultOwnership.js';
 
 const logger = new DebugLogger('llxprt:runtime:providerMutations');
 
@@ -216,8 +221,15 @@ export interface ModelChangeResult {
 
 /**
  * Helper for setActiveModel: recomputes and applies model defaults diff.
- * Clears stale defaults (old but not new) and applies new defaults,
- * protecting user-set values that differ from old defaults.
+ * Replaces departing model-owned keys with the provider alias default when
+ * one exists (provider alias default > auto) and otherwise clears them.
+ *
+ * Ownership decides what default application may change (issue #3255): keys
+ * recorded as model- or provider-default-owned are replaced or restored
+ * wholesale, while keys set through the session/profile path survive
+ * unchanged. Alias entries are reparsed into fresh objects on every load,
+ * and an explicit value can equal a default, so value equality and object
+ * identity are both unreliable classifiers here.
  */
 function recomputeAndApplyModelDefaultsDiff(
   config: Config,
@@ -230,28 +242,39 @@ function recomputeAndApplyModelDefaultsDiff(
     : {};
 
   const newDefaults = computeModelDefaults(newModel, modelDefaultRules);
+  const ownedKeys = getModelDefaultOwnedKeys(config);
+  const providerOwnedDefaults = getProviderDefaultOwnedEntries(config);
 
-  // Clear keys in old defaults but NOT in new defaults,
-  // only if current value matches the old default (model-defaulted, not user-set).
-  for (const [key, oldValue] of Object.entries(oldDefaults)) {
-    if (!(key in newDefaults)) {
-      const currentValue = config.getEphemeralSetting(key);
-      if (currentValue === oldValue) {
-        config.setEphemeralSetting(key, undefined);
-      }
+  // Replace keys the departing model supplied and the new model does not,
+  // but only while default application still owns them: restore the
+  // provider alias default when one was recorded, otherwise clear.
+  for (const key of Object.keys(oldDefaults)) {
+    if (key in newDefaults || !ownedKeys.has(key)) {
+      continue;
     }
+    config.setEphemeralSetting(
+      key,
+      providerOwnedDefaults.has(key)
+        ? providerOwnedDefaults.get(key)
+        : undefined,
+    );
   }
 
-  // Apply new defaults: only if key is undefined or current value matches old default.
+  // Apply new defaults where no explicit value exists, and replace values
+  // default application owns (model default > provider alias default).
+  const appliedKeys: string[] = [];
   for (const [key, newValue] of Object.entries(newDefaults)) {
     const currentValue = config.getEphemeralSetting(key);
     if (
       currentValue === undefined ||
-      (key in oldDefaults && currentValue === oldDefaults[key])
+      ownedKeys.has(key) ||
+      providerOwnedDefaults.has(key)
     ) {
       config.setEphemeralSetting(key, newValue);
+      appliedKeys.push(key);
     }
   }
+  recordModelDefaultOwnedKeys(config, appliedKeys);
 }
 
 export async function updateActiveProviderApiKey(

@@ -33,6 +33,12 @@ import {
 import { ensureOAuthProviderRegistered } from '../composition/index.js';
 import { configureProviderRuntimeFactories } from '../composition/index.js';
 import { getActiveProfileName } from './profileSnapshot.js';
+import {
+  isUserOwnedReasoningSetting,
+  recordModelDefaultOwnedKeys,
+  recordProviderDefaultOwnedEntries,
+  REASONING_OBJECT_VALUED_EPHEMERAL_KEYS,
+} from './modelDefaultOwnership.js';
 
 const logger = new DebugLogger('llxprt:runtime:settings');
 
@@ -167,15 +173,21 @@ function isScalarAliasEphemeralValue(
   );
 }
 
+/**
+ * Alias ephemeral keys that accept object values (issue #3255): the
+ * registered reasoning maps. Only these keys may carry objects; a malformed
+ * map is not validated here; the provider reasoning config that owns the
+ * key rejects invalid shapes at resolution/request time.
+ */
 function applyAliasEphemeralSetting(
   context: ProviderSwitchContext,
   protectedAliasEphemeralKeys: ReadonlySet<string>,
   rawKey: string,
   rawValue: unknown,
-): void {
+): boolean {
   const key = rawKey.trim();
   if (key === '') {
-    return;
+    return false;
   }
 
   const normalizedKey = key.toLowerCase();
@@ -184,30 +196,40 @@ function applyAliasEphemeralSetting(
       () =>
         `[cli-runtime] Skipping protected alias ephemeral setting '${key}' for provider '${context.name}'.`,
     );
-    return;
+    return false;
   }
 
   if (context.config.getEphemeralSetting(key) !== undefined) {
-    return;
+    return false;
   }
 
-  if (!isScalarAliasEphemeralValue(rawValue)) {
-    logger.warn(
-      () =>
-        `[cli-runtime] Skipping non-scalar alias ephemeral setting '${key}' for provider '${context.name}'.`,
-    );
-    return;
+  if (isScalarAliasEphemeralValue(rawValue)) {
+    if (typeof rawValue === 'number' && !Number.isFinite(rawValue)) {
+      logger.warn(
+        () =>
+          `[cli-runtime] Skipping non-finite alias ephemeral setting '${key}' for provider '${context.name}'.`,
+      );
+      return false;
+    }
+
+    context.config.setEphemeralSetting(key, rawValue);
+    return true;
   }
 
-  if (typeof rawValue === 'number' && !Number.isFinite(rawValue)) {
-    logger.warn(
-      () =>
-        `[cli-runtime] Skipping non-finite alias ephemeral setting '${key}' for provider '${context.name}'.`,
-    );
-    return;
+  if (
+    REASONING_OBJECT_VALUED_EPHEMERAL_KEYS.has(key) &&
+    typeof rawValue === 'object' &&
+    rawValue !== null
+  ) {
+    context.config.setEphemeralSetting(key, rawValue);
+    return true;
   }
 
-  context.config.setEphemeralSetting(key, rawValue);
+  logger.warn(
+    () =>
+      `[cli-runtime] Skipping non-scalar alias ephemeral setting '${key}' for provider '${context.name}'.`,
+  );
+  return false;
 }
 
 function resetBucketFailoverHandler(config: Config): void {
@@ -285,11 +307,14 @@ function clearEphemeralsForSwitch(
     // not per-provider ephemerals. They must survive a provider switch —
     // clearing currentProfile here would wipe the profile name set by
     // applyProfileSnapshot, causing the UI to lose the active profile
-    // identity (issue #2501).
+    // identity (issue #2501). A user-owned issue #3255 reasoning setting
+    // survives too; default-owned values are cleared so the target
+    // provider's defaults apply.
     const shouldPreserve =
       key === 'activeProvider' ||
       key === 'currentProfile' ||
-      context.preserveEphemerals.includes(key);
+      context.preserveEphemerals.includes(key) ||
+      isUserOwnedReasoningSetting(context.config, key);
     if (!shouldPreserve) {
       context.config.setEphemeralSetting(key, undefined);
     }
@@ -654,41 +679,48 @@ function applyClaudeCodeOAuthDefaults(context: ProviderSwitchContext): void {
 }
 
 function applyAliasEphemeralSettings(context: ProviderSwitchContext): void {
+  const appliedAliasEntries: Array<[string, unknown]> = [];
   const aliasEphemeralSettings = context.aliasConfig?.ephemeralSettings;
   if (
-    !aliasEphemeralSettings ||
-    typeof aliasEphemeralSettings !== 'object' ||
-    Array.isArray(aliasEphemeralSettings)
+    aliasEphemeralSettings &&
+    typeof aliasEphemeralSettings === 'object' &&
+    !Array.isArray(aliasEphemeralSettings)
   ) {
-    return;
+    const protectedAliasEphemeralKeys = new Set([
+      'activeprovider',
+      'base-url',
+      'baseurl',
+      'base_url',
+      'model',
+      'auth-key',
+      'auth-keyfile',
+      'authkey',
+      'authkeyfile',
+      'api-key',
+      'api-keyfile',
+      'api_key',
+      'api_keyfile',
+      'apikey',
+      'apikeyfile',
+    ]);
+
+    Object.entries(aliasEphemeralSettings).forEach(([rawKey, rawValue]) => {
+      if (
+        applyAliasEphemeralSetting(
+          context,
+          protectedAliasEphemeralKeys,
+          rawKey,
+          rawValue,
+        )
+      ) {
+        appliedAliasEntries.push([rawKey.trim(), rawValue]);
+      }
+    });
   }
-
-  const protectedAliasEphemeralKeys = new Set([
-    'activeprovider',
-    'base-url',
-    'baseurl',
-    'base_url',
-    'model',
-    'auth-key',
-    'auth-keyfile',
-    'authkey',
-    'authkeyfile',
-    'api-key',
-    'api-keyfile',
-    'api_key',
-    'api_keyfile',
-    'apikey',
-    'apikeyfile',
-  ]);
-
-  Object.entries(aliasEphemeralSettings).forEach(([rawKey, rawValue]) => {
-    applyAliasEphemeralSetting(
-      context,
-      protectedAliasEphemeralKeys,
-      rawKey,
-      rawValue,
-    );
-  });
+  // Only alias keys actually applied become provider-owned defaults; a
+  // missing or invalid alias surface records the empty set, dropping any
+  // ownership left over from the previous provider (issue #3255).
+  recordProviderDefaultOwnedEntries(context.config, appliedAliasEntries);
 }
 
 function applyModelDefaults(context: ProviderSwitchContext): void {
@@ -697,6 +729,10 @@ function applyModelDefaults(context: ProviderSwitchContext): void {
     !context.modelToApply ||
     !context.aliasConfig?.modelDefaults
   ) {
+    // Alias application above is the only default source on this path, and
+    // the switch cleared the previous provider's ephemerals, so any earlier
+    // model ownership is stale (issue #3255).
+    recordModelDefaultOwnedKeys(context.config, []);
     return;
   }
 
@@ -705,11 +741,14 @@ function applyModelDefaults(context: ProviderSwitchContext): void {
     context.aliasConfig.modelDefaults,
   );
 
+  const appliedKeys: string[] = [];
   for (const [key, value] of Object.entries(modelDefaults)) {
     if (!context.preAliasEphemeralKeys.has(key)) {
       context.config.setEphemeralSetting(key, value);
+      appliedKeys.push(key);
     }
   }
+  recordModelDefaultOwnedKeys(context.config, appliedKeys);
 }
 
 function addProviderInfoMessages(context: ProviderSwitchContext): void {

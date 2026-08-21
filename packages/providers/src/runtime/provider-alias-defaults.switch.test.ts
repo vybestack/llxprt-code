@@ -6,6 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
+import type { Profile } from '@vybestack/llxprt-code-settings';
 
 const realProviderAliasesModule = {
   ...(await import('../composition/providerAliases.js')),
@@ -237,9 +238,12 @@ void vi.mock('@vybestack/llxprt-code-core', () => {
 
 const {
   switchActiveProvider,
+  setActiveModel,
+  setEphemeralSetting,
   setCliRuntimeContext,
   registerCliProviderInfrastructure,
 } = await import('./runtimeSettings.js');
+const { applyProfileWithGuards } = await import('./profileApplication.js');
 
 const mockOAuthManager = {
   isOAuthEnabled: vi.fn(() => false),
@@ -604,7 +608,168 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     });
   });
 
-  // --- --set interaction tests ---
+  // --- Provider alias default fallback (issue #3255 precedence) ---
+
+  describe('provider alias default fallback (issue #3255 precedence)', () => {
+    it('applies provider-level reasoning map alias defaults when no model rule supplies them', async () => {
+      pushAnthropicAlias({
+        defaultModel: 'claude-sonnet-4-5-20250929',
+        ephemeralSettings: {
+          maxOutputTokens: 40000,
+          'reasoning.effortMap': { high: 'provider-high' },
+          'reasoning.enabledMap': { true: 'enabled', false: null },
+        },
+      });
+      await switchActiveProvider('anthropic');
+      activeProviderName = 'anthropic';
+
+      // The broad sonnet rule sets no maps, so the provider-level maps are
+      // the effective defaults for the session.
+      expect(
+        stubConfig.getEphemeralSetting('reasoning.effortMap'),
+      ).toStrictEqual({ high: 'provider-high' });
+      expect(
+        stubConfig.getEphemeralSetting('reasoning.enabledMap'),
+      ).toStrictEqual({ true: 'enabled', false: null });
+    });
+
+    it('overrides a provider-level reasoning map with a matching model map and restores it when leaving that model', async () => {
+      pushAnthropicAlias({
+        ephemeralSettings: {
+          maxOutputTokens: 40000,
+          'reasoning.effortMap': { high: 'provider-high' },
+          'reasoning.enabledMap': { true: 'enabled', false: null },
+        },
+        modelDefaults: [
+          {
+            pattern: 'claude-opus-4-6',
+            ephemeralSettings: {
+              'reasoning.effortMap': { high: 'model-high' },
+            },
+          },
+        ],
+      });
+      await switchActiveProvider('anthropic');
+      activeProviderName = 'anthropic';
+
+      // Model default > provider alias default while the rule matches.
+      expect(
+        stubConfig.getEphemeralSetting('reasoning.effortMap'),
+      ).toStrictEqual({ high: 'model-high' });
+      // No model rule owns enabledMap, so the provider map stays in force.
+      expect(
+        stubConfig.getEphemeralSetting('reasoning.enabledMap'),
+      ).toStrictEqual({ true: 'enabled', false: null });
+
+      await setActiveModel('gpt-4o');
+
+      // Leaving the matching model rule restores the provider alias default.
+      expect(
+        stubConfig.getEphemeralSetting('reasoning.effortMap'),
+      ).toStrictEqual({ high: 'provider-high' });
+      expect(
+        stubConfig.getEphemeralSetting('reasoning.enabledMap'),
+      ).toStrictEqual({ true: 'enabled', false: null });
+    });
+
+    it('a new matching model default overrides a provider-owned value and the provider default is restored when leaving', async () => {
+      pushAnthropicAlias({
+        defaultModel: 'claude-sonnet-4-5-20250929',
+        ephemeralSettings: {
+          maxOutputTokens: 40000,
+          'reasoning.effort': 'medium',
+        },
+      });
+      await switchActiveProvider('anthropic');
+      activeProviderName = 'anthropic';
+
+      // The sonnet rule sets no effort, so the provider default owns the key.
+      expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('medium');
+
+      // The opus rule starts matching: model default > provider alias default.
+      await setActiveModel('claude-opus-4-6');
+      expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('high');
+
+      // Leaving the opus rule restores the provider alias default.
+      await setActiveModel('gpt-4o');
+      expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('medium');
+    });
+
+    it('keeps a session value equal to the provider default when a model default starts matching', async () => {
+      pushAnthropicAlias({
+        defaultModel: 'claude-sonnet-4-5-20250929',
+        ephemeralSettings: {
+          maxOutputTokens: 40000,
+          'reasoning.effort': 'medium',
+        },
+      });
+      await switchActiveProvider('anthropic');
+      activeProviderName = 'anthropic';
+
+      // Explicit session write carrying the same value as the provider
+      // default: the session owns the key from here on, regardless of value.
+      setEphemeralSetting('reasoning.effort', 'medium');
+
+      await setActiveModel('claude-opus-4-6');
+
+      // The explicit session value survives the matching model default.
+      expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('medium');
+    });
+
+    it('keeps a profile map equal to the provider default through later model changes', async () => {
+      pushAnthropicAlias({
+        ephemeralSettings: {
+          maxOutputTokens: 40000,
+          'reasoning.effortMap': { high: 'provider-high' },
+        },
+        modelDefaults: [
+          {
+            pattern: 'claude-opus-4-6',
+            ephemeralSettings: {
+              'reasoning.effortMap': { high: 'model-high' },
+            },
+          },
+        ],
+      });
+      const profile: Profile = {
+        version: 1,
+        provider: 'anthropic',
+        model: 'claude-sonnet-4-5-20250929',
+        modelParams: {},
+        ephemeralSettings: {
+          'reasoning.effortMap': { high: 'provider-high' },
+        },
+      };
+
+      await applyProfileWithGuards(profile, {
+        profileName: 'profile-equals-provider-default',
+      });
+      activeProviderName = 'anthropic';
+
+      await setActiveModel('claude-opus-4-6');
+
+      // The explicit profile map survives even though its content equals the
+      // provider default and a model default now matches.
+      expect(
+        stubConfig.getEphemeralSetting('reasoning.effortMap'),
+      ).toStrictEqual({ high: 'provider-high' });
+    });
+
+    it('still skips object alias ephemerals for non-reasoning-map keys', async () => {
+      pushAnthropicAlias({
+        ephemeralSettings: {
+          maxOutputTokens: 40000,
+          'context-limit': { limit: 200000 },
+        },
+      });
+      await switchActiveProvider('anthropic');
+
+      // Object values are only permitted for the registered reasoning map
+      // keys; every other object ephemeral is still rejected.
+      expect(stubConfig.getEphemeralSetting('context-limit')).toBeUndefined();
+      expect(stubConfig.getEphemeralSetting('maxOutputTokens')).toBe(40000);
+    });
+  });
 
   describe('--set interaction tests with switchActiveProvider', () => {
     it('--set reasoning.effort=low preserved in preserveEphemerals survives provider switch', async () => {

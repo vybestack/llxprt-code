@@ -274,13 +274,37 @@ export function attachPromptCaching(
   }
 }
 
+export type AnthropicEffortLiteral = 'low' | 'medium' | 'high' | 'max';
+
+/**
+ * The `thinking` parameter value: either a translated config or an explicit
+ * native record passed through from modelParams. The shape is deliberately
+ * broad (any object with a non-empty `type` string) so future or
+ * non-enumerated native thinking modes reach the wire unchanged. The known
+ * translated shapes ({type:'adaptive'}, {type:'enabled', budget_tokens},
+ * {type:'disabled'}) are assignable to this record, so they document the
+ * translation outputs rather than forming a separate union arm that the
+ * record arm would subsume anyway (issue #3255).
+ */
+export type AnthropicThinkingParameter = Readonly<Record<string, unknown>> & {
+  readonly type: string;
+};
+
+/**
+ * The `output_config` parameter value. A translated config carries
+ * `effort: AnthropicEffortLiteral`; an explicit native record keeps
+ * arbitrary members. The generic record admits both, so no separate
+ * translated arm is declared (issue #3255).
+ */
+export type AnthropicOutputConfigParameter = Readonly<Record<string, unknown>>;
+
 type AnthropicThinkingConfig = {
   thinking?: {
-    type: 'adaptive' | 'enabled';
+    type: 'adaptive' | 'enabled' | 'disabled';
     budget_tokens?: number;
     display?: 'summarized' | 'omitted';
   };
-  output_config?: { effort: 'low' | 'medium' | 'high' | 'max' };
+  output_config?: { effort: AnthropicEffortLiteral };
 };
 
 /**
@@ -308,6 +332,31 @@ function buildAdaptiveConfig(
     config.output_config = { effort: thinkingEffort };
   }
   return config;
+}
+
+/**
+ * Legacy default budget for budgeted thinking when no explicit
+ * reasoning.budgetTokens is configured. Not a public default: only the two
+ * legacy manual-budget sites in this package use it (issue #3255).
+ */
+export const ANTHROPIC_LEGACY_DEFAULT_BUDGET_TOKENS = 10000;
+
+/**
+ * Adaptive-capable models have no legacy budget default: request preparation
+ * must fail before transport instead of fabricating one. No effort-to-budget
+ * conversion is invented (issue #3255); a directly configured
+ * reasoning.budgetTokens remains the explicit compatibility path.
+ */
+export function assertAdaptiveManualBudget(
+  model: string,
+  budgetTokens: number | undefined,
+): void {
+  if (budgetTokens !== undefined || !supportsAdaptiveThinking(model)) {
+    return;
+  }
+  throw new Error(
+    `Model '${model}' supports adaptive thinking: budgeted thinking requires an explicit reasoning.budgetTokens. Set reasoning.budgetTokens, remove reasoning.adaptiveThinking=false, or map reasoning.enabledMap.true to 'adaptive'.`,
+  );
 }
 
 /**
@@ -354,10 +403,13 @@ export function buildThinkingConfig(options: {
     return buildAdaptiveConfig(options.thinkingEffort, display);
   }
 
+  assertAdaptiveManualBudget(options.model, options.reasoningBudgetTokens);
+
   const config: AnthropicThinkingConfig = {
     thinking: {
       type: 'enabled' as const,
-      budget_tokens: options.reasoningBudgetTokens ?? 10000,
+      budget_tokens:
+        options.reasoningBudgetTokens ?? ANTHROPIC_LEGACY_DEFAULT_BUDGET_TOKENS,
       ...(options.includeInResponse === false
         ? { display: 'omitted' as const }
         : {}),
@@ -400,12 +452,8 @@ export function buildAnthropicRequestBody(options: {
   maxTokens: number;
   streamingEnabled: boolean;
   modelParams: Record<string, unknown>;
-  thinking?: {
-    type: 'adaptive' | 'enabled';
-    budget_tokens?: number;
-    display?: 'summarized' | 'omitted';
-  };
-  outputConfig?: { effort: 'low' | 'medium' | 'high' | 'max' };
+  thinking?: AnthropicThinkingParameter;
+  outputConfig?: AnthropicOutputConfigParameter;
 }): Record<string, unknown> {
   const requestBody: Record<string, unknown> = {
     model: options.model,

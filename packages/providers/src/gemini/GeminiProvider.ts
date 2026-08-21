@@ -391,6 +391,7 @@ export class GeminiProvider extends BaseProvider {
       () => this.determineBestAuth(),
       () => this.createHttpOptions(),
       () => this.getBaseURL(),
+      this.getLogger(),
     );
     const result = await this.executeGeneration(
       options,

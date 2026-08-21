@@ -22,11 +22,7 @@ import { resolveToolFormat } from '../utils/toolFormatDetection.js';
 import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
 import { extractModelParamsFromOptions } from './OpenAIClientFactory.js';
 import { sanitizePromptCacheKey } from '../openai-responses/sanitizePromptCacheKey.js';
-import {
-  resolveReasoningDialect,
-  applyReasoningDialect,
-  hasExplicitReasoningField,
-} from './openaiReasoningDialect.js';
+import { applyOpenAIChatReasoning } from './openai-chat-reasoning.js';
 import { type Config } from '@vybestack/llxprt-code-core/config/config.js';
 
 export interface RequestContext {
@@ -82,70 +78,56 @@ function convertAndGuardTools(
   return formattedTools;
 }
 
-type OpenAIInvocationRuntime = {
-  ephemerals?: Record<string, unknown>;
-  modelBehavior?: Record<string, unknown>;
-};
+type OpenAIChatRequestBody = OpenAI.Chat.ChatCompletionCreateParams &
+  Record<string, unknown>;
 
-type RequestBodyWithThinking = OpenAI.Chat.ChatCompletionCreateParams & {
-  thinking?: { type: 'enabled' | 'disabled' };
-  reasoning?: Record<string, unknown>;
-};
+/**
+ * The invocation context is required; only a legacy subrecord (modelBehavior,
+ * ephemerals) can be explicitly undefined in fixtures built before the
+ * invocation contract hardened, and a missing subrecord reads as empty at the
+ * transport boundary.
+ */
+function readInvocationRecord(
+  record: Readonly<Record<string, unknown>> | undefined,
+): Readonly<Record<string, unknown>> {
+  return record ?? {};
+}
 
 function resolveReasoningConfig(
-  requestBody: OpenAI.Chat.ChatCompletionCreateParams,
+  requestBody: OpenAIChatRequestBody,
   options: NormalizedGenerateChatOptions,
-  ephemeralSettings: Record<string, unknown>,
+  ephemeralSettings: Readonly<Record<string, unknown>>,
+  model: string,
+  providerName: string,
+  logger: DebugLogger,
 ): void {
-  const body = requestBody as RequestBodyWithThinking;
-
-  // Short-circuit: if the user already set a reasoning field explicitly (via
-  // modelParams, which are Object.assigned into the body just before this
-  // call), do not auto-inject anything — the user value wins and stays the
-  // only reasoning representation on the wire.
-  if (hasExplicitReasoningField(body)) {
-    return;
-  }
-
-  const invocation = options.invocation as OpenAIInvocationRuntime;
-  const reasoningEnabled = invocation.modelBehavior?.['reasoning.enabled'] as
-    | boolean
-    | undefined;
-  const reasoningEffort = invocation.modelBehavior?.['reasoning.effort'] as
-    | string
-    | undefined;
-
   const baseUrl =
     options.resolved.baseURL ??
     (typeof ephemeralSettings['base-url'] === 'string'
       ? ephemeralSettings['base-url']
       : undefined);
 
-  const dialect = resolveReasoningDialect(baseUrl);
-  const applied = applyReasoningDialect(dialect, {
-    enabled: reasoningEnabled,
-    effort: reasoningEffort,
+  applyOpenAIChatReasoning({
+    body: requestBody,
+    modelBehavior: readInvocationRecord(options.invocation.modelBehavior),
+    baseUrl,
+    model,
+    providerName,
+    logger,
   });
-  if (applied === null) {
-    return;
-  }
-
-  if (applied.key === 'thinking') {
-    body.thinking = applied.value;
-  } else {
-    body.reasoning = applied.value;
-  }
 }
 
 /**
  * Apply reasoning, max-tokens, and stream-options to the request body.
  */
 function applyRequestBodyOverrides(
-  requestBody: OpenAI.Chat.ChatCompletionCreateParams,
+  requestBody: OpenAIChatRequestBody,
   options: NormalizedGenerateChatOptions,
-  ephemeralSettings: Record<string, unknown>,
+  ephemeralSettings: Readonly<Record<string, unknown>>,
+  model: string,
   maxTokens: number | undefined,
   streamingEnabled: boolean,
+  providerName: string,
   logger: DebugLogger,
 ): void {
   // Apply request overrides, sanitizing prompt_cache_key at the transport
@@ -168,7 +150,14 @@ function applyRequestBodyOverrides(
     }
   }
 
-  resolveReasoningConfig(requestBody, options, ephemeralSettings);
+  resolveReasoningConfig(
+    requestBody,
+    options,
+    ephemeralSettings,
+    model,
+    providerName,
+    logger,
+  );
 
   if (typeof maxTokens === 'number' && Number.isFinite(maxTokens)) {
     requestBody.max_tokens = maxTokens;
@@ -213,6 +202,16 @@ function sanitizeOverridesCacheKey(
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
+function resolveMaxTokens(
+  metadataValue: unknown,
+  ephemeralValue: unknown,
+): number | undefined {
+  if (typeof metadataValue === 'number') {
+    return metadataValue;
+  }
+  return typeof ephemeralValue === 'number' ? ephemeralValue : undefined;
+}
+
 /**
  * Prepare OpenAI API request from normalized options
  * Extracts all the request preparation logic from generateChatCompletionImpl
@@ -226,8 +225,7 @@ export async function prepareRequest(
 ): Promise<RequestContext> {
   const { contents, tools, metadata } = options;
   const model = options.resolved.model || defaultModel;
-  const invocation = options.invocation as OpenAIInvocationRuntime;
-  const ephemeralSettings = invocation.ephemerals ?? {};
+  const ephemeralSettings = readInvocationRecord(options.invocation.ephemerals);
 
   // Detect the tool format to use BEFORE building messages
   // Check for provider toolFormat override before auto-detecting
@@ -282,12 +280,13 @@ export async function prepareRequest(
     ...messages,
   ];
 
-  const maxTokens =
-    (metadata.maxTokens as number | undefined) ??
-    (ephemeralSettings['max-tokens'] as number | undefined);
+  const maxTokens = resolveMaxTokens(
+    metadata.maxTokens,
+    ephemeralSettings['max-tokens'],
+  );
 
   // Build request
-  const requestBody: OpenAI.Chat.ChatCompletionCreateParams = {
+  const requestBody: OpenAIChatRequestBody = {
     model,
     messages: messagesWithSystem,
     stream: streamingEnabled,
@@ -303,8 +302,10 @@ export async function prepareRequest(
     requestBody,
     options,
     ephemeralSettings,
+    model,
     maxTokens,
     streamingEnabled,
+    resolvedProviderName,
     logger,
   );
 

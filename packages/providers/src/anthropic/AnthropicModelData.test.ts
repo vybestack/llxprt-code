@@ -102,6 +102,23 @@ describe('AnthropicModelData Claude Sonnet 5 @issue:2289', () => {
       expect(isSonnet5('claude-opus-4-8')).toBe(false);
       expect(isSonnet5('gpt-5.5')).toBe(false);
     });
+
+    it('returns false for complete-prefix near-misses like claude-sonnet-50 and claude-sonnet-5-mini', () => {
+      expect(isSonnet5('claude-sonnet-50')).toBe(false);
+      expect(isSonnet5('claude-sonnet-50-20260630')).toBe(false);
+      expect(isSonnet5('claude-sonnet-5-mini')).toBe(false);
+      expect(isSonnet5('claude-sonnet-5-extended')).toBe(false);
+    });
+
+    it('returns false for vendor-prefixed compat ids (issue #3255)', () => {
+      expect(isSonnet5('vendor-claude-sonnet-5')).toBe(false);
+    });
+
+    it('is case-insensitive for accepted ids', () => {
+      expect(isSonnet5('Claude-Sonnet-5')).toBe(true);
+      expect(isSonnet5('Claude-Sonnet-5-Latest')).toBe(true);
+      expect(isSonnet5('Claude-Sonnet-5-20260630')).toBe(true);
+    });
   });
 
   describe('supportsAdaptiveThinking', () => {

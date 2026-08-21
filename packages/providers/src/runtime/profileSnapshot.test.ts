@@ -307,7 +307,7 @@ describe('buildRuntimeProfileSnapshot', () => {
     vi.clearAllMocks();
   });
 
-  it('excludes internal settings from persisted ephemeralSettings', () => {
+  it('includes registered reasoning wire settings while excluding internal settings', () => {
     (
       getCliRuntimeServices as Mock<typeof getCliRuntimeServices>
     ).mockReturnValue({
@@ -317,6 +317,10 @@ describe('buildRuntimeProfileSnapshot', () => {
           currentProfile: 'glm',
           tools: { disabled: ['read_file'] },
           'context-limit': 190000,
+          'reasoning.effortWireFormat': 'openai-responses',
+          'reasoning.enabledWireFormat': 'openrouter',
+          'reasoning.effortMap': { minimal: 'none', high: 'high' },
+          'reasoning.enabledMap': { false: null },
         }),
       },
       settingsService: { setCurrentProfileName: vi.fn() },
@@ -339,6 +343,10 @@ describe('buildRuntimeProfileSnapshot', () => {
 
     expect(snapshot.ephemeralSettings).toMatchObject({
       'context-limit': 190000,
+      'reasoning.effortWireFormat': 'openai-responses',
+      'reasoning.enabledWireFormat': 'openrouter',
+      'reasoning.effortMap': { minimal: 'none', high: 'high' },
+      'reasoning.enabledMap': { false: null },
     });
     expect(snapshot.ephemeralSettings).not.toHaveProperty('activeProvider');
     expect(snapshot.ephemeralSettings).not.toHaveProperty('currentProfile');

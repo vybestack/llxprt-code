@@ -130,9 +130,11 @@ describe('providerMutations', () => {
       expect(result['reasoning.stripFromContext']).toBe('none');
     });
 
-    it('keeps K2.x geometry for kimi-for-coding (default model unchanged)', () => {
+    it('keeps K2.x geometry without inheriting a K3 effort default', () => {
       const result = computeModelDefaults('kimi-for-coding', kimiRules());
-      expect(result['reasoning.effort']).toBe('medium');
+      expect(result['reasoning.effort']).toBeUndefined();
+      expect(result['reasoning.effortWireFormat']).toBe('none');
+      expect(result['reasoning.enabledWireFormat']).toBe('thinking');
       expect(result.max_tokens).toBe(32768);
       expect(result['context-limit']).toBe(262144);
     });
