@@ -59,7 +59,9 @@ describe('dumpSDKContext metadata @issue:3159', () => {
       };
     };
 
-    expect(dump.request.url).toBe('wss://chatgpt.com/backend-api/codex/responses');
+    expect(dump.request.url).toBe(
+      'wss://chatgpt.com/backend-api/codex/responses',
+    );
     expect(dump.request.method).not.toBe('POST');
     expect(dump.request.transport).toStrictEqual({
       type: 'websocket',
@@ -121,7 +123,10 @@ describe('dumpSDKContext metadata @issue:3159', () => {
       'utf-8',
     );
     const dump = JSON.parse(content) as {
-      request: { headers?: Record<string, string>; transport?: { type: string } };
+      request: {
+        headers?: Record<string, string>;
+        transport?: { type: string };
+      };
     };
 
     expect(dump.request.headers).toStrictEqual({
