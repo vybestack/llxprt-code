@@ -270,6 +270,7 @@ describe('RecordingIntegration duplicate content guard @issue:3132', () => {
   afterEach(async () => {
     harness.integration.dispose();
     await harness.recordingService.dispose();
+    harness.historyService.dispose();
     await fs.rm(harness.tempDir, { recursive: true, force: true });
   });
 
