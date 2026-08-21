@@ -65,6 +65,18 @@ const PROJECT_HASH = 'issue3160projecthash';
  * "full history was sent" assertion can name every entry rather than only
  * the human ones.
  */
+function partText(part: unknown): string {
+  if (typeof part !== 'object' || part === null) return '';
+  const text = (part as { text?: unknown }).text;
+  return text === undefined || text === null ? '' : String(text);
+}
+
+function contentText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return content.map(partText).join('');
+}
+
 function assistantTextsOf(input: unknown): string[] {
   if (!Array.isArray(input)) {
     throw new Error('Expected a Responses "input" array');
@@ -74,19 +86,7 @@ function assistantTextsOf(input: unknown): string[] {
     { role?: string; content?: unknown } | null | undefined
   >) {
     if (item?.role !== 'assistant') continue;
-    const content = item.content;
-    const text =
-      typeof content === 'string'
-        ? content
-        : Array.isArray(content)
-          ? content
-              .map((part) =>
-                typeof part === 'object' && part !== null
-                  ? String((part as { text?: unknown }).text ?? '')
-                  : '',
-              )
-              .join('')
-          : '';
+    const text = contentText(item.content);
     if (text !== '') texts.push(text);
   }
   return texts;

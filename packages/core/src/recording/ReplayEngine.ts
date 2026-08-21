@@ -599,6 +599,9 @@ function finalizeReplay(acc: ReplayAccumulators): ReplayResult {
   const history = invalidateResponsesStatefulChain(acc.history);
   return {
     ok: true,
+    // The helper returns `readonly IContent[]`; the spread widens it to the
+    // mutable `IContent[]` this result type declares. It is a type conversion,
+    // not a defensive copy — the entries are still shared by reference.
     history: [...history],
     metadata: acc.metadata,
     lastSeq: acc.lastSeq,
