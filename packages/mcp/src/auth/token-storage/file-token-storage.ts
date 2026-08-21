@@ -14,6 +14,7 @@ import {
   encryptEnvelopeString,
   readEnvelopeVersion,
   EnvelopeCodecError,
+  type EnvelopeCodecOptions,
 } from '@vybestack/llxprt-code-storage/storage/envelope-codec.js';
 
 /**
@@ -40,10 +41,7 @@ export interface FileTokenStorageOptions {
 
 export class FileTokenStorage extends BaseTokenStorage {
   private readonly tokenFilePath: string;
-  private readonly codecOptions: {
-    machineSecretLoader?: () => Promise<Buffer | null>;
-    machineSecretPath?: string;
-  };
+  private readonly codecOptions: EnvelopeCodecOptions;
 
   constructor(serviceName: string, options?: FileTokenStorageOptions) {
     super(serviceName);

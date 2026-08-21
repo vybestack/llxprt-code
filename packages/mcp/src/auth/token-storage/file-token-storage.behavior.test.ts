@@ -297,7 +297,8 @@ describe('FileTokenStorage — v:2 envelope behavior', () => {
 
     await expect(
       flakyWriter.setCredentials(makeCredentials('downgrade')),
-    ).rejects.toThrow(/Token file corrupted|Refusing to overwrite/);
+    ).rejects.toThrow(/Refusing to overwrite an existing v:2 envelope/);
+    expect(calls).toBe(2);
 
     // The existing v:2 file must be byte-identical and still version 2.
     const afterContent = await fs.readFile(tokenFilePath, 'utf-8');

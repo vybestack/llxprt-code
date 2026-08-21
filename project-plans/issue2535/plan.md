@@ -129,7 +129,9 @@ hex-colon / plaintext read-back path (the `iv:authTag:ciphertext` decrypt, its
 `isLegacyHexColonFormat` probe and the `os`/`crypto` legacy KDF helpers) and
 its test cases proving legacy-hex-colon read compatibility (delete
 `file-token-storage.behavior.test.ts` legacy tests and `file-token-storage.test.ts`
-legacy tests). New writes remain v:2 envelope-only through the codec; malformed/unknown
+legacy tests). New writes remain versioned-envelope-only through the codec: normally v:2,
+with the retained v:1 fallback only when no machine secret is available and no v:2 file is
+being overwritten (the existingEnvelopeVersion guard refuses v:2 → v:1). Malformed/unknown
 files keep failing closed with "Token file corrupted". The RETAINED `FileTokenStorage`
 remains the keychain fallback class; `MCPOAuthTokenStorage`, `HybridTokenStorage`,
 `KeychainTokenStorage`, `oauth-provider.ts`, `oauth-status.ts`, `diagnosticsTokens.ts`
