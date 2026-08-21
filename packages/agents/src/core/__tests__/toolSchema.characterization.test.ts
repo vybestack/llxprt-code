@@ -13,7 +13,6 @@
  * uppercase Type enum values with standard lowercase JSON Schema values).
  *
  * Covers:
- *  - Executor tool declarations (buildCompleteTaskDeclaration)
  *  - Subagent tool declarations (getScopeLocalFuncDefs, convertMetadataToFunctionDeclaration)
  *  - Property-based tests for any valid type mapping
  */
@@ -22,7 +21,6 @@ import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import type { OutputConfig } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 
-import { buildCompleteTaskDeclaration } from '../../agents/executor-tool-dispatch.js';
 import {
   getScopeLocalFuncDefs,
   convertMetadataToFunctionDeclaration,
@@ -31,34 +29,6 @@ import {
 const outputConfigWithOutputs: OutputConfig = {
   outputs: { result: 'The final result' },
 };
-
-// ---------------------------------------------------------------------------
-// Executor tool declarations
-// ---------------------------------------------------------------------------
-
-describe('toolSchema characterization — executor (buildCompleteTaskDeclaration)', () => {
-  it('produces lowercase "object" for the complete_task parameters type', () => {
-    const decl = buildCompleteTaskDeclaration(undefined);
-    const schema = decl.parametersJsonSchema as Record<string, unknown>;
-
-    expect(schema['type']).toBe('object');
-  });
-
-  it('produces correct JSON-schema properties and required array', () => {
-    const decl = buildCompleteTaskDeclaration(undefined);
-    const schema = decl.parametersJsonSchema as Record<string, unknown>;
-
-    expect(schema['properties']).toStrictEqual({});
-    expect(schema['required']).toStrictEqual([]);
-  });
-
-  it('preserves the tool name and description', () => {
-    const decl = buildCompleteTaskDeclaration(undefined);
-
-    expect(decl.name).toBe('complete_task');
-    expect(decl.description).toContain('complete');
-  });
-});
 
 // ---------------------------------------------------------------------------
 // Subagent tool declarations

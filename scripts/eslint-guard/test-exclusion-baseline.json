@@ -3,13 +3,6 @@
   "configs": {
     "packages/a2a-server/tsconfig.json": [],
     "packages/agents/tsconfig.json": [
-      "src/agents/__tests__/executorRun.characterization.test.ts",
-      "src/agents/executor.execution.test.ts",
-      "src/agents/executor.recovery.test.ts",
-      "src/agents/executor.stream-idle-timeout.test.ts",
-      "src/agents/executor.termination-conditions.test.ts",
-      "src/agents/executor.test.ts",
-      "src/agents/invocation.test.ts",
       "src/api/__tests__/activationPreflightState.behavior.test.ts",
       "src/api/__tests__/agent-bootstrap.spec.ts",
       "src/api/__tests__/agentUnconfigured.behavior.test.ts",
