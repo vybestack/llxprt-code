@@ -172,6 +172,25 @@ describe('FileTokenStorage — v:2 envelope behavior', () => {
     );
   });
 
+  it('a SyntaxError from the machine-secret loader is NOT mislabeled as corruption', async () => {
+    const writer = new FileTokenStorage(SERVICE_NAME, {
+      tokenFilePath,
+      machineSecretLoader: secretLoaderA(),
+    });
+    await writer.setCredentials(makeCredentials('syntax-loader'));
+
+    const reader = new FileTokenStorage(SERVICE_NAME, {
+      tokenFilePath,
+      machineSecretLoader: async () => {
+        throw new SyntaxError('keyring payload parse failed');
+      },
+    });
+
+    await expect(reader.getCredentials('syntax-loader')).rejects.toThrow(
+      /keyring payload parse failed/,
+    );
+  });
+
   it('fail-closed-on-read prevents overwrite of existing v:2 file with unavailable secret', async () => {
     const writer = new FileTokenStorage(SERVICE_NAME, {
       tokenFilePath,
@@ -202,6 +221,41 @@ describe('FileTokenStorage — v:2 envelope behavior', () => {
     // Original secret still reads the original value.
     const result = await writer.getCredentials('protected');
     expect(result?.token.accessToken).toBe('access-protected');
+  });
+
+  it('refuses to downgrade an existing v:2 file when the secret fails only on write', async () => {
+    const writer = new FileTokenStorage(SERVICE_NAME, {
+      tokenFilePath,
+      machineSecretLoader: secretLoaderA(),
+    });
+    await writer.setCredentials(makeCredentials('downgrade'));
+
+    const beforeContent = await fs.readFile(tokenFilePath, 'utf-8');
+    const beforeEnvelope = JSON.parse(beforeContent) as { v: number };
+    expect(beforeEnvelope.v).toBe(2);
+
+    // The loader serves the secret for the read (decrypt) but returns null for
+    // the write (encrypt). The saveTokens anti-downgrade probe must refuse to
+    // overwrite the v:2 file with a weaker v:1 envelope.
+    let calls = 0;
+    const flakyLoader = async (): Promise<Buffer | null> => {
+      calls += 1;
+      return calls === 1 ? MACHINE_SECRET_A : null;
+    };
+    const flakyWriter = new FileTokenStorage(SERVICE_NAME, {
+      tokenFilePath,
+      machineSecretLoader: flakyLoader,
+    });
+
+    await expect(
+      flakyWriter.setCredentials(makeCredentials('downgrade')),
+    ).rejects.toThrow(/Token file corrupted|Refusing to overwrite/);
+
+    // The existing v:2 file must be byte-identical and still version 2.
+    const afterContent = await fs.readFile(tokenFilePath, 'utf-8');
+    expect(afterContent).toBe(beforeContent);
+    const afterEnvelope = JSON.parse(afterContent) as { v: number };
+    expect(afterEnvelope.v).toBe(2);
   });
 
   it('getCredentials returns null when no token file exists (ENOENT)', async () => {

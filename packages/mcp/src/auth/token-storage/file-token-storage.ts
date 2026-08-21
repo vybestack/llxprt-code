@@ -81,27 +81,33 @@ export class FileTokenStorage extends BaseTokenStorage {
       throw new Error('Token file corrupted');
     }
 
+    let plaintext: string;
     try {
-      const plaintext = await decryptEnvelopeString(
+      plaintext = await decryptEnvelopeString(
         data,
         this.serviceName,
         this.codecOptions,
       );
-      const tokens = JSON.parse(plaintext) as Record<
-        string,
-        MCPOAuthCredentials
-      >;
-      return new Map(Object.entries(tokens));
     } catch (error) {
-      if (error instanceof EnvelopeCodecError || error instanceof SyntaxError) {
-        // v:2 missing/different secret, tampering, malformed envelope, or
-        // malformed token JSON inside a decryptable envelope — fail closed
-        // consistently with the non-envelope path so raw crypto/parse details
-        // do not leak and callers observe a uniform error.
+      if (error instanceof EnvelopeCodecError) {
+        // v:2 missing/different secret, tampering, or malformed envelope —
+        // fail closed consistently with the non-envelope path so raw crypto
+        // details do not leak and callers observe a uniform error.
         throw new Error('Token file corrupted', { cause: error });
       }
+      // Rejecting machine-secret loader errors propagate unchanged.
       throw error;
     }
+
+    let tokens: Record<string, MCPOAuthCredentials>;
+    try {
+      tokens = JSON.parse(plaintext) as Record<string, MCPOAuthCredentials>;
+    } catch (error) {
+      // Decryptable envelope whose payload is not valid JSON — fail closed
+      // so malformed content does not surface parse internals.
+      throw new Error('Token file corrupted', { cause: error });
+    }
+    return new Map(Object.entries(tokens));
   }
 
   private async saveTokens(
@@ -109,13 +115,26 @@ export class FileTokenStorage extends BaseTokenStorage {
   ): Promise<void> {
     await this.ensureDirectoryExists();
 
+    // Anti-downgrade: when overwriting an existing v:2 envelope with the
+    // machine secret temporarily unavailable, refuse to write a weaker v:1
+    // envelope instead of silently rotating the storage format.
+    let existingEnvelopeVersion: number | null = null;
+    try {
+      const existing = await fs.readFile(this.tokenFilePath, 'utf-8');
+      existingEnvelopeVersion = readEnvelopeVersion(existing);
+    } catch (error: unknown) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+
     const data = Object.fromEntries(tokens);
     const json = JSON.stringify(data, null, 2);
-    const encrypted = await encryptEnvelopeString(
-      json,
-      this.serviceName,
-      this.codecOptions,
-    );
+    const encrypted = await encryptEnvelopeString(json, this.serviceName, {
+      ...this.codecOptions,
+      existingEnvelopeVersion,
+    });
 
     await fs.writeFile(this.tokenFilePath, encrypted, { mode: 0o600 });
     // writeFile's `mode` only applies on creation; overwriting a pre-existing

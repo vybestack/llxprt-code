@@ -245,11 +245,13 @@ implementation fails the tests with PR nonexports; the PR leaves no forwarding w
 - `packages/mcp/src/auth/index.ts` — remove `FileTokenStore` export
 - `packages/core/src/index.ts` — remove `FileTokenStore` from the mcp re-export
 - `packages/mcp/src/auth/token-storage/file-token-storage.ts` — remove
-  `legacyEncryptionKey`/`getLegacyEncryptionKey`/`decrypt`/`isLegacyHexColonFormat`,
-  collapse `loadTokens` to envelope-only undefined→"Token file corrupted", remove
-  `existingEnvelopeVersion` and the `saveTokens` anti-downgrade read,
-  remove `FileTokenStorageOptions.machineSecretLoader/machineSecretPath/tokenFilePath`
-  (drop now-unused `os`/`crypto` imports)
+  `legacyEncryptionKey`/`getLegacyEncryptionKey`/`decrypt`/`isLegacyHexColonFormat`
+  (drop now-unused `os`/`crypto` imports) and collapse `loadTokens` to
+  envelope-only (non-envelope → "Token file corrupted"). Keep the live v:2 codec
+  surface: `existingEnvelopeVersion` anti-downgrade guard in `saveTokens` and
+  `FileTokenStorageOptions.machineSecretLoader/machineSecretPath/tokenFilePath` are
+  RETAINED (they are part of the current v:2 security behavior used by tests, not
+  legacy compatibility; `machineSecretPath` remains in the FileTokenStorageOptions type).
 - `packages/mcp/src/auth/token-storage/file-token-storage.behavior.test.ts` —
   retitle/trim the legacy-hex-colon + fail-closed-on-read cases to the new
   envelope-only contract (no legacy-read → fail-closed "Token file corrupted")
