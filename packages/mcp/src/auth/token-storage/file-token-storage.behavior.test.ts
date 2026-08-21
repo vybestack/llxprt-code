@@ -20,6 +20,7 @@ import * as os from 'node:os';
 import * as crypto from 'node:crypto';
 import { FileTokenStorage } from './file-token-storage.js';
 import { isValidEnvelope } from '@vybestack/llxprt-code-storage';
+import { encryptEnvelopeString } from '@vybestack/llxprt-code-storage/storage/envelope-codec.js';
 import type { MCPOAuthCredentials } from '../token-store.js';
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
@@ -227,9 +228,6 @@ describe('FileTokenStorage — v:2 envelope behavior', () => {
     // Encrypt token-store-shaped JSON that is not valid JSON (here, trailing
     // garbage). The envelope decrypts fine but the payload must be rejected as
     // "Token file corrupted" rather than surfacing a raw parse error.
-    const { encryptEnvelopeString } = await import(
-      '@vybestack/llxprt-code-storage/storage/envelope-codec.js'
-    );
     const invalidPayload = '{"server-a": {"not": "closed"';
     const encrypted = await encryptEnvelopeString(
       invalidPayload,
@@ -251,9 +249,6 @@ describe('FileTokenStorage — v:2 envelope behavior', () => {
   });
 
   it('a decryptable envelope whose payload is JSON null fails closed', async () => {
-    const { encryptEnvelopeString } = await import(
-      '@vybestack/llxprt-code-storage/storage/envelope-codec.js'
-    );
     const encrypted = await encryptEnvelopeString('null', SERVICE_NAME, {
       machineSecretLoader: secretLoaderA(),
     });
