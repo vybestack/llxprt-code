@@ -93,10 +93,11 @@ export class FileTokenStorage extends BaseTokenStorage {
       >;
       return new Map(Object.entries(tokens));
     } catch (error) {
-      if (error instanceof EnvelopeCodecError) {
-        // v:2 missing/different secret, tampering, or malformed envelope —
-        // fail closed consistently with the non-envelope path so raw crypto
-        // details do not leak and callers observe a uniform error.
+      if (error instanceof EnvelopeCodecError || error instanceof SyntaxError) {
+        // v:2 missing/different secret, tampering, malformed envelope, or
+        // malformed token JSON inside a decryptable envelope — fail closed
+        // consistently with the non-envelope path so raw crypto/parse details
+        // do not leak and callers observe a uniform error.
         throw new Error('Token file corrupted', { cause: error });
       }
       throw error;

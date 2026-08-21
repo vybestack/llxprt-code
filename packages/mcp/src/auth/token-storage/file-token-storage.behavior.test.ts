@@ -184,11 +184,9 @@ describe('FileTokenStorage — v:2 envelope behavior', () => {
     expect(beforeEnvelope.v).toBe(2);
 
     // Attempt to mutate with no machine secret — must reject and leave the
-    // existing v:2 file intact. setCredentials reads-then-writes, so the read
-    // fails closed on the v:2 envelope before any downgraded write can occur.
-    // The explicit write-path anti-downgrade guard in saveTokens (passing
-    // existingEnvelopeVersion to encryptEnvelopeString) is a defense-in-depth
-    // measure and is unit-tested directly in envelope-codec.test.ts.
+    // existing v:2 file intact. Every mutation reads-then-writes: the read
+    // fails closed on the v:2 envelope (missing secret) before any write can
+    // occur, so the existing v:2 file is never overwritten.
     const degradedWriter = new FileTokenStorage(SERVICE_NAME, {
       tokenFilePath,
       machineSecretLoader: nullSecretLoader(),
@@ -215,13 +213,12 @@ describe('FileTokenStorage — v:2 envelope behavior', () => {
     expect(result).toBeNull();
   });
 
-  it('normalizes a malformed legacy hex-colon file to "Token file corrupted"', async () => {
-    // A legacy-shaped `iv:authTag:ciphertext` string whose components are
-    // well-formed hex but cryptographically invalid (random bytes). The legacy
-    // decrypt path raises a raw crypto error ("Unsupported state or unable to
-    // authenticate data" or similar); the store must normalize ALL such
-    // failures to a single fail-closed message rather than leaking crypto
-    // internals.
+  it('normalizes a malformed non-envelope file to "Token file corrupted"', async () => {
+    // Any content that is not a versioned v:2 envelope (legacy hex-colon,
+    // garbage, or malformed JSON) is rejected as "Token file corrupted".
+    // ReadEnvelopeVersion returns null for all of these, so the envelope-only
+    // read path fails closed uniformly without routing non-envelope bytes into the
+    // codec.
     const iv = crypto.randomBytes(16).toString('hex');
     const authTag = crypto.randomBytes(16).toString('hex');
     const ciphertext = crypto.randomBytes(32).toString('hex');

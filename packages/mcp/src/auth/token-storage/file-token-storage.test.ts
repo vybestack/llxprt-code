@@ -122,7 +122,7 @@ describe('FileTokenStorage (envelope-only)', () => {
     chmod: ReturnType<typeof vi.fn>;
   };
   const existingCredentials: MCPOAuthCredentials = {
-    serverName: 'existing-server',
+    serverName: 'test-server',
     token: {
       accessToken: 'existing-token',
       tokenType: 'Bearer',
@@ -234,7 +234,11 @@ describe('FileTokenStorage (envelope-only)', () => {
     it.skipIf(process.platform === 'win32')(
       'should update existing credentials',
       async () => {
-        mockFs.readFile.mockRejectedValue({ code: 'ENOENT' });
+        // Seed a real v:2 envelope with an existing entry so the update path
+        // proves merge-and-preserve rather than create-from-ENOENT.
+        mockFs.readFile.mockResolvedValue(
+          await buildV2Envelope({ 'test-server': existingCredentials }),
+        );
         mockFs.writeFile.mockResolvedValue(undefined);
 
         const newCredentials: MCPOAuthCredentials = {
@@ -370,15 +374,8 @@ describe('FileTokenStorage (envelope-only)', () => {
       );
     });
 
-    it('should update file when other credentials remain', async () => {
-      mockFs.readFile.mockResolvedValue(
-        await buildV2Envelope({ 'test-server': existingCredentials }),
-      );
-      mockFs.writeFile.mockResolvedValue(undefined);
-      mockFs.unlink.mockResolvedValue(undefined);
-      mockFs.chmod.mockResolvedValue(undefined);
-
-      const credentials2: MCPOAuthCredentials = {
+    it('should update the file when deleting one of several credentials', async () => {
+      const otherCredentials: MCPOAuthCredentials = {
         serverName: 'server2',
         token: {
           accessToken: 'token2',
@@ -386,8 +383,17 @@ describe('FileTokenStorage (envelope-only)', () => {
         },
         updatedAt: Date.now(),
       };
+      mockFs.readFile.mockResolvedValue(
+        await buildV2Envelope({
+          'test-server': existingCredentials,
+          server2: otherCredentials,
+        }),
+      );
+      mockFs.writeFile.mockResolvedValue(undefined);
+      mockFs.unlink.mockResolvedValue(undefined);
+      mockFs.chmod.mockResolvedValue(undefined);
 
-      await storage.setCredentials(credentials2);
+      await storage.deleteCredentials('test-server');
 
       expect(mockFs.writeFile).toHaveBeenCalled();
       expect(mockFs.unlink).not.toHaveBeenCalled();
@@ -397,12 +403,8 @@ describe('FileTokenStorage (envelope-only)', () => {
       // that writes back the deleted entry or drops the survivor is caught).
       const writeCall = mockFs.writeFile.mock.calls[0];
       const stored = await decryptWrittenEnvelope(writeCall[1] as string);
-      expect(Object.keys(stored).sort()).toStrictEqual(
-        ['test-server', 'server2'].sort(),
-      );
-      expect(stored['test-server']).toStrictEqual(existingCredentials);
-      expect(stored['server2'].serverName).toBe('server2');
-      expect(stored['server2'].token).toStrictEqual(credentials2.token);
+      expect(Object.keys(stored)).toStrictEqual(['server2']);
+      expect(stored['server2']).toStrictEqual(otherCredentials);
     });
   });
 
