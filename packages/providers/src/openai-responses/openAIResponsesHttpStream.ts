@@ -118,7 +118,7 @@ export async function* streamOverHttp(
       deps,
     );
   } catch (error) {
-    await dumpErrorOnFailure(error, params, deps);
+    await dumpErrorOnFailure(error, params, deps, headers);
     throw error;
   }
 }
@@ -360,6 +360,7 @@ async function dumpErrorOnFailure(
   error: unknown,
   params: StreamResponsesParams,
   deps: ResponsesExecutorDeps,
+  headers: Record<string, string>,
 ): Promise<void> {
   // A user cancellation is not a request failure; dumping it would write a
   // full-prompt request file on every abort without diagnostic value.
@@ -384,7 +385,7 @@ async function dumpErrorOnFailure(
       params.baseURL,
       dumpSDKRequestContext,
       dumpSDKResponseContext,
-      { headers: params.headers, transport: { type: 'http' } },
+      { headers, transport: { type: 'http' } },
     );
   });
 }
