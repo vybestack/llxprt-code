@@ -187,12 +187,19 @@ describe('wire-format selector validation', () => {
     expect(readEffortWireFormat(undefined)).toBe('auto');
   });
 
-  it.each(['openai', 'openai-responses', 'anthropic', 'anthropic-budget'])(
-    'accepts the effort wire format %s',
-    (format) => {
-      expect(readEffortWireFormat(format)).toBe(format);
-    },
-  );
+  it.each([
+    'auto',
+    'openai',
+    'openai-responses',
+    'anthropic',
+    'anthropic-budget',
+    'openrouter',
+    'gemini',
+    'template-kwargs',
+    'none',
+  ])('accepts the effort wire format %s', (format) => {
+    expect(readEffortWireFormat(format)).toBe(format);
+  });
 
   it.each(['custom', 'OpenAI', 7])(
     'rejects an invalid effort wire format %s',
@@ -207,12 +214,18 @@ describe('wire-format selector validation', () => {
     expect(readEnabledWireFormat(undefined)).toBe('auto');
   });
 
-  it.each(['openai', 'openai-responses', 'openrouter', 'thinking'])(
-    'accepts the enabled wire format %s',
-    (format) => {
-      expect(readEnabledWireFormat(format)).toBe(format);
-    },
-  );
+  it.each([
+    'auto',
+    'openai',
+    'openai-responses',
+    'openrouter',
+    'thinking',
+    'gemini',
+    'template-kwargs',
+    'none',
+  ])('accepts the enabled wire format %s', (format) => {
+    expect(readEnabledWireFormat(format)).toBe(format);
+  });
 
   it.each(['custom', 'Thinking', null])(
     'rejects an invalid enabled wire format %s',

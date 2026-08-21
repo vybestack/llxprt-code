@@ -551,6 +551,21 @@ describe('Anthropic reasoning wire translation (issue #3255)', () => {
     expect(JSON.stringify(logger.warnings)).not.toContain('do-not-log');
   });
 
+  it('treats a vendor-prefixed claude-sonnet-5 id as a non-adaptive compat model', async () => {
+    const { body } = await prepare({
+      model: 'vendor-claude-sonnet-5',
+      modelBehavior: {
+        'reasoning.enabled': true,
+        'reasoning.effortWireFormat': 'anthropic',
+        'reasoning.enabledWireFormat': 'thinking',
+      },
+    });
+
+    expect(reasoningFields(body)).toStrictEqual({
+      thinking: { type: 'enabled' },
+    });
+  });
+
   it('lets an explicit adaptive enabled map override adaptiveThinking=false', async () => {
     const { body } = await prepare({
       model: 'claude-opus-5',

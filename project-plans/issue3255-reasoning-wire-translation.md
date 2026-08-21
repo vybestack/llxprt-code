@@ -542,6 +542,23 @@ RED evidence was reconstructed in a detached temporary worktree at the pushed pr
 
 The remediated candidate passed the corresponding focused suites: Anthropic 44/44, Gemini 45/45, OpenAI Chat 51/51, and alias defaults 26/26. Related regression suites also passed, including Fable, Anthropic thinking, Gemini thinking levels, shared resolver, issue #2896, reasoning dialect, model-default precedence, and ownership tests.
 
+### Post-push PR feedback
+
+The first remediation commit, `14b3ac047`, passed remote CI with 36 successful checks, no failed or pending checks, and the mergeability gates satisfied. The final permitted OCR run and CodeRabbit produced 18 unresolved inline threads. Each finding was checked against the accepted behavior and the current request paths. Six were classified `In-scope-Fix`; twelve were classified `Reject`. No post-push finding was classified `Blocker-Fix` or `Defer`.
+
+The accepted fixes cover these behaviors and test-contract gaps:
+
+- Claude Sonnet 5 capability detection now accepts only the bare alias, `-latest`, and dated snapshots. Vendor-prefixed identifiers and near-matches such as `claude-sonnet-50` or `claude-sonnet-5-mini` do not receive adaptive-thinking behavior.
+- Disabled Gemini reasoning reports a configured `reasoning.maxTokens` value that cannot be emitted.
+- Shared parser tests cover every public enabled and effort wire format.
+- Settings registry tests reject whitespace-padded formats, reject nullish maps, and compare complete boolean-map results.
+
+Request-level Sonnet RED evidence first exposed the vendor-prefix mismatch. Predicate-level RED evidence then exposed the initial prefix matcher’s near-match bug. The corrected anchored predicate passed 46 model-data tests and 45 Anthropic request tests. Gemini disabled-budget RED evidence produced two failures before the warning change and passed 47 tests afterward. The parser passed 70 tests, the shared resolver passed 88, and the settings registry issue suite passed 15.
+
+The rejected findings relied on behavior contradicted by exact request tests or the accepted contract. They included remapping effort a second time, treating `enabled` as a native Responses reasoning field, accepting incompatible Gemini values, weakening case-sensitive setting semantics, replacing passing test fixtures without a behavioral defect, and mass docstring changes. Duplicate mapped-effort findings retain separate thread replies with the same evidence.
+
+The three non-inline OCR suggestions were also classified `Reject`: a resolver scenario already rejects only when an enabled map creates a contradictory emitted representation; mixed internal own-property helper style is behaviorally equivalent and lint-clean; and project-wide docstring expansion is outside this issue.
+
 ### Candidate-head verification
 
 Before PR creation, the candidate passed the complete repository test command under the controlled test environment with serialized Agents tests. The command exited 0. Workspace summaries included Tools 126/126, Storage 37/37, Auth 43/43, Settings 18/18, Telemetry 42/42, IDE integration 10/10, Policy 12/12, MCP 43/43, Core 393/393, LSP 13/13, Providers 578/578, Agents 374/374 plus 6/6 isolated files, CLI 713/713, A2A 22/22, test-utils 13/13, and VS Code companion 7/7.
@@ -550,15 +567,17 @@ Two earlier full runs exposed three unrelated load-sensitive failures. Each fail
 
 The first PR-remediation aggregate completed every workspace with one load-sensitive Agents timeout and no issue-related failure. Providers passed 579/579 and CLI passed 713/713. The sole failing file, `mutationCoverage.behavior.test.ts`, then passed 22/22 with 38 assertions in 10.12 seconds under the same unchanged 30-second timeout when run in isolation. A second aggregate likewise completed every other workspace but timed out in the unchanged Agents `cli-turn-parity.spec.ts`; that complete file passed 3/3 in 3.35 seconds under the same unchanged 30-second timeout when run in isolation.
 
-The final serialized aggregate used Agents concurrency 1 and exited 0. It passed Core 393/393, LSP 13/13, Providers 579/579, Agents 375/375 plus 6/6 isolated files, CLI 713/713, A2A 22/22, test-utils 13/13, and VS Code companion 7/7. No test timeout or failure remained.
+The serialized PR-remediation aggregate used Agents concurrency 1 and exited 0. It passed Core 393/393, LSP 13/13, Providers 579/579, Agents 375/375 plus 6/6 isolated files, CLI 713/713, A2A 22/22, test-utils 13/13, and VS Code companion 7/7. No test timeout or failure remained.
 
-The final candidate-wide test audit scanned 2,695 files, 36,138 tests, and 77,855 assertions with no scanner errors. Issue-added ownership-transition and provider/model fallback tests produced nine new `DUP_ASSERT` reports. Those equal-value before-and-after assertions are intentional evidence that user-owned values persist and provider/model-owned values release or restore across transitions. No issue test produced a new mock-mirror, no-assert, always-true, self-confirming, or weak-oracle finding.
+Post-push remediation received another complete root aggregate. Tools 126/126, Storage 37/37, Auth 43/43, Settings 18/18, Telemetry 42/42, IDE integration 10/10, Policy 12/12, MCP 43/43, Core 393/393, LSP 13/13, Providers 579/579, CLI 713/713, A2A 22/22, test-utils 13/13, and VS Code companion 7/7 passed. Agents passed 374/375; the only failure was an unchanged 30-second timeout in `cli-turn-parity.spec.ts`, whose complete file then passed 3/3 in 2.63 seconds under the unchanged timeout. A second root aggregate passed Core, LSP, and Providers before a different unchanged 30-second Agents timeout in `cli-turn-parity.early.spec.ts` made a clean aggregate impossible. That task was cancelled, and the complete early-parity file passed 3/3 in 1.73 seconds under the unchanged timeout. A standalone serialized Agents package run then exited 0 with 375/375 files plus 6/6 isolated files.
 
-The final candidate passed full lint, CI lint, standalone typecheck, build, the ESLint policy guard, provider-neutral naming tests, Prettier checks, documentation link and placement guards, settings synchronization, copyright-year validation, the no-new-JavaScript guard, the no-Vitest guard, secret scans, prohibited-marker and prose scans, and `git diff --check`.
+The candidate-wide post-push audit completed without scanner errors. Its `findings.tsv` contains no entry for any of the five modified test files, so the remediation added no audit finding. The large repository-wide finding set is pre-existing.
 
-Live evidence is externally blocked for the required profiles `synthetic_gpt56`, `antigravity-claude-sonnet-4-5-thinking`, `antigravity-gemini-3-pro`, `codex_gpt56`, and `gemini_gemini3`. Safe filename and reference searches found none in the configured profile locations. The requested `$HOME/.bun/bin/llxprt` executable is also unavailable. Attempts through the installed `llxprt` executable failed with the sanitized classification "missing profile." The separate `stepfun-37` smoke completed with a valid haiku, but it is recorded only as general startup evidence and not as a substitute for the five requested profiles.
+The exact post-push candidate passed full lint, CI lint, standalone typecheck, build, the ESLint policy guard, provider-neutral naming tests, Prettier checks, documentation link and placement guards, settings synchronization, copyright-year validation, the no-new-JavaScript guard, the no-Vitest guard, secret scans, prohibited-marker and prose scans, and `git diff --check`.
 
-Local implementation, deep review, and both permitted local OCR rounds are complete. PR review is classified and the accepted findings are remediated. The remediation commit, thread replies, updated ancestry checks, remote CI, and final mergeability verification remain pending.
+Live evidence is externally blocked for the required profiles `synthetic_gpt56`, `antigravity-claude-sonnet-4-5-thinking`, `antigravity-gemini-3-pro`, `codex_gpt56`, and `gemini_gemini3`. Safe filename and reference searches found none in the configured profile locations. The requested `$HOME/.bun/bin/llxprt` executable is also unavailable. Attempts through the installed `llxprt` executable failed with the sanitized classification "missing profile." The exact-current `stepfun-37` smoke exited 0 with nonempty output and no error marker, but it is recorded only as general startup evidence and not as a substitute for the five requested profiles.
+
+Local implementation, deep review, both permitted local OCR rounds, post-push finding classification, accepted remediation, and exact-current local verification are complete. The post-push remediation commit, 18 thread replies and resolutions, updated ancestry check, remote CI, and final mergeability verification remain pending.
 
 ## Completion conditions
 

@@ -58,6 +58,12 @@ export function applyGeminiReasoningTranslation(
       resolved.effortFormat,
       resolved.effort,
     );
+    // A configured maxTokens budget is equally unreachable while disabled:
+    // no disablement representation can carry a thinking budget (issue
+    // #3255).
+    if (input.reasoningConfig.maxTokens !== undefined) {
+      warnDropped(input, 'reasoning.maxTokens', 'gemini', 'reasoning-disabled');
+    }
     applyDisabledThinking(input, resolved);
     return;
   }

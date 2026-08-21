@@ -74,6 +74,15 @@ describe('reasoning wire settings registry contract', () => {
     ).toMatchObject({ success: false });
   });
 
+  it('rejects whitespace-padded wire formats without trimming', () => {
+    expect(
+      validateSetting('reasoning.effortWireFormat', ' openai '),
+    ).toMatchObject({ success: false });
+    expect(
+      validateSetting('reasoning.enabledWireFormat', ' thinking '),
+    ).toMatchObject({ success: false });
+  });
+
   it('parses and validates an effort map with every allowed key and value type', () => {
     const parsed = parseSetting(
       'reasoning.effortMap',
@@ -95,6 +104,8 @@ describe('reasoning wire settings registry contract', () => {
 
   it('rejects invalid effort maps', () => {
     const invalidMaps: readonly unknown[] = [
+      null,
+      undefined,
       [],
       { ultra: 'high' },
       { low: '' },
@@ -143,11 +154,16 @@ describe('reasoning wire settings registry contract', () => {
     });
     expect(
       validateSetting('reasoning.enabledMap', { true: true, false: false }),
-    ).toMatchObject({ success: true });
+    ).toStrictEqual({
+      success: true,
+      value: { true: true, false: false },
+    });
   });
 
   it('rejects invalid enabled maps', () => {
     const invalidMaps: readonly unknown[] = [
+      null,
+      undefined,
       [],
       { enabled: true },
       { true: 1 },

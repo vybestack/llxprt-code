@@ -378,6 +378,68 @@ describe('Gemini issue 3255 reasoning request translation', () => {
     expect(thinkingConfig(config)).toStrictEqual({ thinkingBudget: 0 });
   });
 
+  it('warns when a disabled Gemini 2 configuration drops maxTokens', () => {
+    const result = build({
+      model: 'gemini-2.5-flash',
+      modelBehavior: {
+        'reasoning.enabled': false,
+        'reasoning.maxTokens': 4096,
+      },
+    });
+
+    expect(thinkingConfig(result.config)).toStrictEqual({
+      thinkingBudget: 0,
+    });
+    expect(result.logger.warnings).toStrictEqual([
+      {
+        message:
+          "Gemini omitted configured reasoning.maxTokens for model gemini-2.5-flash using format 'gemini' because reasoning-disabled",
+        metadata: {
+          provider: 'gemini',
+          model: 'gemini-2.5-flash',
+          format: 'gemini',
+          genericSetting: 'reasoning.maxTokens',
+          reason: 'reasoning-disabled',
+        },
+      },
+    ]);
+  });
+
+  it('warns when a disabled Gemini 3 configuration drops maxTokens', () => {
+    const result = build({
+      modelBehavior: {
+        'reasoning.enabled': false,
+        'reasoning.maxTokens': 4096,
+      },
+    });
+
+    expect(result.config).not.toHaveProperty('thinkingConfig');
+    expect(result.logger.warnings).toStrictEqual([
+      {
+        message:
+          "Gemini omitted configured reasoning.maxTokens for model gemini-3-flash-preview using format 'gemini' because reasoning-disabled",
+        metadata: {
+          provider: 'gemini',
+          model: 'gemini-3-flash-preview',
+          format: 'gemini',
+          genericSetting: 'reasoning.maxTokens',
+          reason: 'reasoning-disabled',
+        },
+      },
+      {
+        message:
+          "Gemini omitted configured reasoning.enabled for model gemini-3-flash-preview using format 'gemini' because gemini-3-disablement-unrepresentable",
+        metadata: {
+          provider: 'gemini',
+          model: 'gemini-3-flash-preview',
+          format: 'gemini',
+          genericSetting: 'reasoning.enabled',
+          reason: 'gemini-3-disablement-unrepresentable',
+        },
+      },
+    ]);
+  });
+
   it('warns that configured effort was suppressed when Gemini 2 is disabled', () => {
     const result = build({
       model: 'gemini-2.5-pro',

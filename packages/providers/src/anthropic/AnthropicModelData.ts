@@ -167,12 +167,24 @@ export function isOpus46Plus(modelId: string): boolean {
 }
 
 /**
+ * Anchored Sonnet 5 identifier: matches the bare `claude-sonnet-5` alias, the
+ * `claude-sonnet-5-latest` pointer, and dated snapshots
+ * (`claude-sonnet-5-YYYYMMDD`), but NOT near-misses like `claude-sonnet-50`,
+ * `claude-sonnet-5-mini`, or vendor-prefixed compat IDs. An anchored regex is
+ * used instead of a prefix test so version boundaries are exact.
+ */
+const SONNET_5_PATTERN = /^claude-sonnet-5(-latest|-\d{8})?$/i;
+
+/**
  * Whether the model is Claude Sonnet 5 (supports adaptive thinking via the
- * effort parameter, 128K max output). Matches the bare alias and dated
- * snapshot variants (e.g. claude-sonnet-5-YYYYMMDD).
+ * effort parameter, 128K max output). Matches the bare alias, the
+ * `claude-sonnet-5-latest` pointer, and dated snapshot variants
+ * (e.g. claude-sonnet-5-YYYYMMDD). Vendor-prefixed compat IDs are not
+ * adaptive-capable Claude models: budget attachment gates on the exact
+ * identifier (issue #3255).
  */
 export function isSonnet5(modelId: string): boolean {
-  return modelId.toLowerCase().includes('claude-sonnet-5');
+  return SONNET_5_PATTERN.test(modelId);
 }
 
 /**
