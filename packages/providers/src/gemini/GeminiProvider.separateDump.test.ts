@@ -85,10 +85,21 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
       undefined,
       mapResponseToChunks,
       true,
+      { 'x-goog-api-key': 'gk-secret' },
     );
 
     expect(callOrder).toStrictEqual(['requestDump', 'apiCall']);
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledWith(
+      'gemini',
+      '/v1/models/generateContent',
+      apiRequest,
+      'https://generativelanguage.googleapis.com',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'x-goog-api-key': 'gk-secret' }),
+        transport: { type: 'http' },
+      }),
+    );
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledOnce();
     expect(dumpSDKContextSpy).not.toHaveBeenCalled();
     expect(result.chunks).toBeDefined();

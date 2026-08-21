@@ -430,6 +430,7 @@ export class GeminiProvider extends BaseProvider {
       setup.reasoningConfig.includeInResponse,
       () => this.createNonOAuthGenerator(setup),
       setup.baseURL,
+      setup.httpOptions.headers,
     );
   }
 
@@ -461,6 +462,7 @@ export class GeminiProvider extends BaseProvider {
     baseURL: string | undefined,
     mapResponseToChunks: GeminiGenerationSetup['mapResponseToChunks'],
     reasoningIncludeInResponse: boolean,
+    headers?: Record<string, string>,
   ): Promise<GeminiGenerationResult> {
     return executeNonOAuthNonStreamingGenerate(
       contentGenerator,
@@ -470,6 +472,7 @@ export class GeminiProvider extends BaseProvider {
       baseURL,
       mapResponseToChunks,
       reasoningIncludeInResponse,
+      headers,
     );
   }
 
@@ -479,6 +482,7 @@ export class GeminiProvider extends BaseProvider {
     shouldDumpSuccess: boolean,
     shouldDumpError: boolean,
     baseURL: string | undefined,
+    headers?: Record<string, string>,
   ): Promise<GeminiGenerationResult> {
     return executeNonOAuthStreamingGenerate(
       contentGenerator,
@@ -488,6 +492,7 @@ export class GeminiProvider extends BaseProvider {
       baseURL,
       () => [],
       false,
+      headers,
     );
   }
 

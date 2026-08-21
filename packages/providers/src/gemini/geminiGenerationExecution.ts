@@ -38,6 +38,7 @@ async function dumpError(
   request: GenerateContentParameters,
   baseURL: string,
   error: unknown,
+  headers?: Record<string, string>,
 ): Promise<void> {
   if (!shouldDumpError) {
     return;
@@ -62,6 +63,7 @@ async function dumpError(
     baseURL,
     dumpSDKRequestContext,
     dumpSDKResponseContext,
+    { headers, transport: { type: 'http' } },
   );
 }
 
@@ -72,6 +74,7 @@ function wrapGeminiStreamForDump(
   shouldDumpError: boolean,
   requestBaseId: string | undefined,
   baseURL: string,
+  headers?: Record<string, string>,
 ): AsyncIterable<GenerateContentResponse> {
   if (shouldDumpSuccess && requestBaseId) {
     return wrapStreamWithDump(
@@ -90,6 +93,7 @@ function wrapGeminiStreamForDump(
       baseURL,
       dumpSDKRequestContext,
       dumpSDKResponseContext,
+      { headers, transport: { type: 'http' } },
     );
   }
   return stream;
@@ -122,6 +126,7 @@ export async function executeNonOAuthGeneration(
   reasoningIncludeInResponse: boolean,
   createContentGenerator: () => Promise<NonOAuthContentGenerator>,
   baseURL: string | undefined,
+  headers?: Record<string, string>,
 ): Promise<GeminiGenerationResult> {
   const contentGenerator = await createContentGenerator();
   // Issue #3136: the agent layer owns system-prompt assembly. The provider
@@ -145,6 +150,7 @@ export async function executeNonOAuthGeneration(
       baseURL,
       mapResponseToChunks,
       reasoningIncludeInResponse,
+      headers,
     );
   }
   return nonOAuthNonStreamingGenerate(
@@ -155,6 +161,7 @@ export async function executeNonOAuthGeneration(
     baseURL,
     mapResponseToChunks,
     reasoningIncludeInResponse,
+    headers,
   );
 }
 
@@ -166,6 +173,7 @@ export async function nonOAuthNonStreamingGenerate(
   baseURL: string | undefined,
   mapResponseToChunks: ResponseToChunksMapper,
   reasoningIncludeInResponse: boolean,
+  headers?: Record<string, string>,
 ): Promise<GeminiGenerationResult> {
   let requestBaseId: string | undefined;
 
@@ -176,6 +184,7 @@ export async function nonOAuthNonStreamingGenerate(
         '/v1/models/generateContent',
         apiRequest,
         baseURL ?? DEFAULT_BASE_URL,
+        { headers, transport: { type: 'http' } },
       ),
     );
     requestBaseId = reqResult?.baseId;
@@ -201,6 +210,7 @@ export async function nonOAuthNonStreamingGenerate(
       apiRequest,
       baseURL ?? DEFAULT_BASE_URL,
       error,
+      headers,
     );
     throw error;
   }
@@ -214,6 +224,7 @@ export async function nonOAuthStreamingGenerate(
   baseURL: string | undefined,
   _mapResponseToChunks: ResponseToChunksMapper,
   _reasoningIncludeInResponse: boolean,
+  headers?: Record<string, string>,
 ): Promise<GeminiGenerationResult> {
   let requestBaseId: string | undefined;
 
@@ -224,6 +235,7 @@ export async function nonOAuthStreamingGenerate(
         '/v1/models/streamGenerateContent',
         apiRequest,
         baseURL ?? DEFAULT_BASE_URL,
+        { headers, transport: { type: 'http' } },
       ),
     );
     requestBaseId = reqResult?.baseId;
@@ -238,6 +250,7 @@ export async function nonOAuthStreamingGenerate(
       shouldDumpError,
       requestBaseId,
       baseURL ?? DEFAULT_BASE_URL,
+      headers,
     );
     return { stream: streamForReturn, emitted: false };
   } catch (error) {
@@ -248,6 +261,7 @@ export async function nonOAuthStreamingGenerate(
       apiRequest,
       baseURL ?? DEFAULT_BASE_URL,
       error,
+      headers,
     );
     throw error;
   }
