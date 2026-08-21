@@ -43,7 +43,6 @@ import {
   dumpSDKResponseContext,
   dumpSDKErrorRequestResponse,
   bestEffortDump,
-  type RequestDumpMetadata,
 } from '../utils/dumpSDKContext.js';
 import { redactSensitiveHeaders, type DumpMode } from '../utils/dumpContext.js';
 import type { ResponsesExecutorDeps } from './openAIResponsesExecutor.js';
@@ -68,6 +67,7 @@ export interface StreamResponsesParams {
   request: OpenAIResponsesRequest;
   includeThinkingInResponse: boolean;
   responsesStored: boolean;
+  headers?: Record<string, string>;
   abortSignal?: AbortSignal;
   maxStreamingAttempts: number;
   streamRetryInitialDelayMs: number;
@@ -105,9 +105,6 @@ export async function* streamOverHttp(
     params.isCodex,
     params.normalizedOptions,
     deps,
-  );
-  deps.logger.debug(
-    () => `Request body keys: ${JSON.stringify(Object.keys(params.request))}`,
   );
   try {
     yield* fetchStreamWithRetries(
@@ -377,31 +374,17 @@ async function dumpErrorOnFailure(
         payload,
         true,
       );
-    } else {
-      const contentType = params.isCodex
-        ? 'application/json'
-        : 'application/json; charset=utf-8';
-      const headers = await buildResponsesHeaders(
-        params.apiKey,
-        contentType,
-        params.isCodex,
-        params.normalizedOptions,
-        deps,
-      );
-      const metadata: RequestDumpMetadata = {
-        headers,
-        transport: { type: 'http' },
-      };
-      await dumpSDKErrorRequestResponse(
-        deps.providerName,
-        '/responses',
-        params.request,
-        payload,
-        params.baseURL,
-        dumpSDKRequestContext,
-        dumpSDKResponseContext,
-        metadata,
-      );
+      return;
     }
+    await dumpSDKErrorRequestResponse(
+      deps.providerName,
+      '/responses',
+      params.request,
+      payload,
+      params.baseURL,
+      dumpSDKRequestContext,
+      dumpSDKResponseContext,
+      { headers: params.headers, transport: { type: 'http' } },
+    );
   });
 }

@@ -380,6 +380,7 @@ async function buildStatelessTurn(
     context,
     invocationEphemerals,
     deps,
+    options,
   );
   return buildStreamParams(
     context,
