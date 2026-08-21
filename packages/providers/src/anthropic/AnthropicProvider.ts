@@ -671,35 +671,18 @@ export class AnthropicProvider extends BaseProvider {
       options.invocation.signal,
     );
 
-    let response:
-      | Anthropic.Message
-      | AsyncIterable<Anthropic.MessageStreamEvent>;
-    let rateLimitInfo: AnthropicRateLimitInfo | undefined;
-
-    try {
-      const result = await this.executeApiCall(
-        options,
-        { ...requestContext, requestBody: effectiveRequestBody },
-        apiCallWithResponse,
-        rateLimitLogger,
-        customHeaders,
-      );
-      response = result.response;
-      rateLimitInfo = result.rateLimitInfo;
-    } catch (error) {
-      // Issue #3216: one-shot reactive recovery for poisoned history.
-      const recovered = await this.executeImageDimensionRecovery(
-        error,
-        requestContext,
-        options,
-        initialClient,
-        customHeaders,
-        rateLimitLogger,
-      );
-      if (recovered === undefined) throw error;
-      response = recovered.response;
-      rateLimitInfo = recovered.rateLimitInfo;
-    }
+    const executed = await this.executeWithImageRecovery(
+      options,
+      requestContext,
+      effectiveRequestBody,
+      apiCallWithResponse,
+      initialClient,
+      customHeaders,
+      rateLimitLogger,
+      isOAuth,
+      authToken,
+    );
+    const { response, rateLimitInfo } = executed;
 
     if (rateLimitInfo) {
       this.lastRateLimitInfo = rateLimitInfo;
@@ -712,6 +695,58 @@ export class AnthropicProvider extends BaseProvider {
       isOAuth,
       rateLimitLogger,
     );
+  }
+
+  /**
+   * Issue #3216: run the API call, falling back once to image-dimension
+   * recovery for poisoned history when the initial call fails. Returns the
+   * executed response plus rate-limit info; rethrows when recovery does not
+   * apply. Never loops.
+   */
+  private async executeWithImageRecovery(
+    options: NormalizedGenerateChatOptions,
+    requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
+    effectiveRequestBody: Awaited<
+      ReturnType<typeof prepareAnthropicRequest>
+    >['requestBody'],
+    apiCallWithResponse: () => Promise<{
+      data: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
+      response: Response | undefined;
+    }>,
+    initialClient: Parameters<typeof createAnthropicApiCall>[0],
+    customHeaders: Parameters<typeof createAnthropicApiCall>[2],
+    rateLimitLogger: { debug: (fn: () => string) => void },
+    isOAuth: boolean,
+    authToken: string,
+  ): Promise<{
+    response: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
+    rateLimitInfo: AnthropicRateLimitInfo | undefined;
+  }> {
+    try {
+      const result = await this.executeApiCall(
+        options,
+        { ...requestContext, requestBody: effectiveRequestBody },
+        apiCallWithResponse,
+        rateLimitLogger,
+        customHeaders,
+        isOAuth,
+        authToken,
+      );
+      return { response: result.response, rateLimitInfo: result.rateLimitInfo };
+    } catch (error) {
+      const recovered = await this.executeImageDimensionRecovery(
+        error,
+        requestContext,
+        options,
+        initialClient,
+        customHeaders,
+        rateLimitLogger,
+        isOAuth,
+        authToken,
+      );
+      if (recovered === undefined) throw error;
+      return recovered;
+    }
   }
 
   /**
@@ -737,6 +772,8 @@ export class AnthropicProvider extends BaseProvider {
     initialClient: Parameters<typeof createAnthropicApiCall>[0],
     customHeaders: Parameters<typeof createAnthropicApiCall>[2],
     rateLimitLogger: { debug: (fn: () => string) => void },
+    isOAuth: boolean,
+    authToken: string,
   ): Promise<
     | {
         response:
@@ -786,6 +823,8 @@ export class AnthropicProvider extends BaseProvider {
       ),
       rateLimitLogger,
       customHeaders,
+      isOAuth,
+      authToken,
     );
     return {
       response: retryResult.response,
@@ -897,6 +936,22 @@ export class AnthropicProvider extends BaseProvider {
     }
   }
 
+  /** #3159: the SDK generates the credential header (x-api-key for an API key,
+   * Authorization: Bearer for OAuth). Record the NAME in dump metadata;
+   * shared redaction replaces the value with [REDACTED].
+   */
+  private withCredentialHeader(
+    headers: Record<string, string> | undefined,
+    isOAuth: boolean,
+    authToken: string,
+  ): Record<string, string> | undefined {
+    const name = isOAuth ? 'Authorization' : 'x-api-key';
+    const value = isOAuth ? `Bearer ${authToken}` : authToken;
+    return headers === undefined
+      ? { [name]: value }
+      : { ...headers, [name]: value };
+  }
+
   private async executeApiCall(
     options: NormalizedGenerateChatOptions,
     requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
@@ -906,7 +961,11 @@ export class AnthropicProvider extends BaseProvider {
     }>,
     rateLimitLogger: { debug: (fn: () => string) => void },
     headers: Record<string, string> | undefined,
+    isOAuth: boolean,
+    authToken: string,
   ) {
+    const dumpHeaders: Record<string, string> | undefined =
+      this.withCredentialHeader(headers, isOAuth, authToken);
     const dumpMode = options.invocation.ephemerals.dumpcontext as
       | DumpMode
       | undefined;
@@ -922,7 +981,7 @@ export class AnthropicProvider extends BaseProvider {
       baseURL,
       requestBody: requestContext.requestBody,
       streamingEnabled: requestContext.streamingEnabled,
-      headers,
+      headers: dumpHeaders,
       rateLimitLogger,
     });
   }

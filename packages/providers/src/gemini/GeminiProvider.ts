@@ -416,6 +416,10 @@ export class GeminiProvider extends BaseProvider {
     setup: GeminiGenerationSetup,
     streamingEnabled: boolean,
   ): Promise<GeminiGenerationResult> {
+    const dumpHeaders: Record<string, string> =
+      setup.authMode === 'gemini-api-key'
+        ? { ...setup.httpOptions.headers, 'x-goog-api-key': setup.authToken }
+        : setup.httpOptions.headers;
     return executeNonOAuthGeneration(
       options,
       this.globalConfig,
@@ -430,7 +434,7 @@ export class GeminiProvider extends BaseProvider {
       setup.reasoningConfig.includeInResponse,
       () => this.createNonOAuthGenerator(setup),
       setup.baseURL,
-      setup.httpOptions.headers,
+      dumpHeaders,
     );
   }
 

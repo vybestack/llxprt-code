@@ -24,6 +24,7 @@ import {
   wrapStreamWithSDKErrorDump,
   bestEffortDump,
   dumpSDKErrorRequestResponse,
+  type RequestDumpMetadata,
 } from '../utils/dumpSDKContext.js';
 import { type DumpMode } from '../utils/dumpContext.js';
 import { type OpenAITool } from './schemaConverter.js';
@@ -42,12 +43,31 @@ export interface ApiExecutionOptions {
   getBaseURL: () => string | undefined;
 }
 
+/** #3159: the OpenAI SDK sends Authorization from the client api key; record
+ * the header NAME in dump metadata (shared redaction replaces the value).
+ */
+function chatDumpMetadata(
+  mergedHeaders: Record<string, string> | undefined,
+  apiKey: string | undefined,
+): RequestDumpMetadata {
+  if (apiKey === undefined) {
+    return { headers: mergedHeaders, transport: { type: 'http' } };
+  }
+  const authorization = `Bearer ${apiKey}`;
+  const headers =
+    mergedHeaders === undefined
+      ? { Authorization: authorization }
+      : { ...mergedHeaders, Authorization: authorization };
+  return { headers, transport: { type: 'http' } };
+}
+
 interface ErrorContext {
   requestBody: OpenAI.Chat.ChatCompletionCreateParams;
   shouldDumpError: boolean;
   requestBaseId: string | undefined;
   baseURL: string | undefined;
   mergedHeaders: Record<string, string> | undefined;
+  apiKey: string | undefined;
   model: string;
   formattedTools: OpenAITool[] | undefined;
   streamingEnabled: boolean;
@@ -87,7 +107,7 @@ async function dumpOpenAIErrorContext(
       resolvedBaseURL ?? 'https://api.openai.com/v1',
       dumpSDKRequestContext,
       dumpSDKResponseContext,
-      { headers: ctx.mergedHeaders ?? undefined, transport: { type: 'http' } },
+      chatDumpMetadata(ctx.mergedHeaders, ctx.apiKey),
     );
   }
 }
@@ -191,7 +211,7 @@ async function executeStreamingRequest(
           '/chat/completions',
           requestBody,
           baseURL ?? 'https://api.openai.com/v1',
-          { headers: mergedHeaders ?? undefined, transport: { type: 'http' } },
+          chatDumpMetadata(mergedHeaders, client.apiKey),
         ),
       opts.logger,
     );
@@ -222,7 +242,7 @@ async function executeStreamingRequest(
         baseURL ?? 'https://api.openai.com/v1',
         dumpSDKRequestContext,
         dumpSDKResponseContext,
-        { headers: mergedHeaders ?? undefined, transport: { type: 'http' } },
+        chatDumpMetadata(mergedHeaders, client.apiKey),
       );
     }
 
@@ -237,6 +257,7 @@ async function executeStreamingRequest(
       requestBaseId,
       baseURL,
       mergedHeaders: opts.mergedHeaders,
+      apiKey: opts.client.apiKey,
       model: opts.model,
       formattedTools: opts.formattedTools,
       streamingEnabled: opts.streamingEnabled,
@@ -282,7 +303,7 @@ async function executeNonStreamingRequest(
           '/chat/completions',
           requestBody,
           baseURL ?? 'https://api.openai.com/v1',
-          { headers: mergedHeaders ?? undefined, transport: { type: 'http' } },
+          chatDumpMetadata(mergedHeaders, client.apiKey),
         ),
       opts.logger,
     );
@@ -325,6 +346,7 @@ async function executeNonStreamingRequest(
       requestBaseId,
       baseURL,
       mergedHeaders: opts.mergedHeaders,
+      apiKey: opts.client.apiKey,
       model: opts.model,
       formattedTools: opts.formattedTools,
       streamingEnabled: opts.streamingEnabled,

@@ -222,6 +222,24 @@ describe('dumpSDKContext', () => {
 
     expect(dump.request.url).toBe('https://ollama.com/v1/chat/completions');
   });
+
+  it('should tolerate an empty metadata headers map (no crash, synthesized defaults survive)', async () => {
+    const result = await dumpSDKRequestContext(
+      'openai',
+      '/chat/completions',
+      { model: 'test-model', messages: [] },
+      'https://api.openai.com/v1',
+      { headers: { authorization: 'Bearer sk-abc' } },
+    );
+    createdFiles.push(result.requestFilename);
+    const content = await fs.readFile(
+      path.join(result.dumpDir, result.requestFilename),
+      'utf-8',
+    );
+    expect(content).toContain('authorization');
+    expect(content).toContain('[REDACTED]');
+    expect(content).not.toContain('sk-abc');
+  });
 });
 
 describe('dumpSDKErrorRequestResponse', () => {

@@ -557,6 +557,22 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
     expect(dumpSDKContextSpy).not.toHaveBeenCalled();
   });
 
+  it('should record the SDK-generated Authorization header name in dump metadata (value redacted on write)', async () => {
+    const client = createMockClient({ id: 'chatcmpl-auth', choices: [] });
+    (client as { apiKey?: string }).apiKey = 'sk-dump3159';
+    const create = client.chat.completions.create as ReturnType<typeof vi.fn>;
+    create.mockResolvedValue({ id: 'chatcmpl-auth', choices: [] });
+    const opts = createBaseOptions({ client, dumpMode: 'on' });
+
+    await executeApiRequest(opts);
+
+    const metadata = dumpSDKRequestContextSpy.mock.calls[0][4] as {
+      headers?: Record<string, string> | undefined;
+    };
+    expect(metadata.headers?.['Authorization']).toBe('Bearer sk-dump3159');
+    void dumpSDKContextSpy;
+  });
+
   it('should not dump on success when mode is error', async () => {
     const opts = createBaseOptions({ dumpMode: 'error' });
     await executeApiRequest(opts);

@@ -32,7 +32,7 @@ export interface RequestDumpMetadata {
   transport?: RequestDumpTransport;
 }
 
-function redactableHeaders(
+function resolveDumpHeaders(
   metadata: RequestDumpMetadata | undefined,
 ): Record<string, string> {
   if (metadata?.headers !== undefined) {
@@ -109,7 +109,7 @@ export async function dumpSDKContext(
   const request: DumpRequest = {
     url,
     method: metadata?.transport?.type === 'websocket' ? 'SEND' : 'POST',
-    headers: redactableHeaders(metadata),
+    headers: resolveDumpHeaders(metadata),
     ...(metadata?.transport ? { transport: metadata.transport } : {}),
     body: requestParams,
   };
@@ -150,7 +150,7 @@ export async function dumpSDKRequestContext(
   const request: DumpRequest = {
     url,
     method: metadata?.transport?.type === 'websocket' ? 'SEND' : 'POST',
-    headers: redactableHeaders(metadata),
+    headers: resolveDumpHeaders(metadata),
     ...(metadata?.transport ? { transport: metadata.transport } : {}),
     body: requestParams,
   };
