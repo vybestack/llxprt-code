@@ -41,7 +41,10 @@ import {
   type SessionForkedPayload,
   type SessionRecordLine,
 } from './types.js';
-import { type IContent } from '../services/history/IContent.js';
+import {
+  invalidateResponsesStatefulChain,
+  type IContent,
+} from '../services/history/IContent.js';
 
 // ---------------------------------------------------------------------------
 // Private replay accumulators
@@ -580,9 +583,14 @@ function finalizeReplay(acc: ReplayAccumulators): ReplayResult {
   const folded = foldCheckpointMetadata(acc.rawMetadataEvents);
   const sessionName = deriveSessionName(acc.rawMetadataEvents);
   const ancestry = deriveAncestry(acc.rawMetadataEvents);
+  // A Codex parent id is scoped to the WebSocket connection that produced it, so a
+  // `responsesStored` marker restored from a persisted session recording (or a
+  // checkpoint fork replay) points at a dead parent by construction. Strip it so the
+  // resumed session starts a fresh chain (#3160).
+  const history = invalidateResponsesStatefulChain(acc.history);
   return {
     ok: true,
-    history: acc.history,
+    history: [...history],
     metadata: acc.metadata,
     lastSeq: acc.lastSeq,
     sequenceCorrupt: acc.sequenceCorrupt,
