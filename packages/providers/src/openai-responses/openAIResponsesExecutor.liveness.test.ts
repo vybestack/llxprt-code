@@ -228,10 +228,39 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
     );
     const parsed = JSON.parse(raw) as {
       request: {
+        url: string;
+        method: string;
+        transport?: { type: string; frameType?: string };
+        headers?: Record<string, string>;
         body: { model?: string; input?: unknown[]; instructions?: string };
       };
     };
     return parsed.request.body;
+  }
+
+  async function readDumpedEnvelope(): Promise<{
+    url: string;
+    method: string;
+    transport?: { type: string; frameType?: string };
+    headers?: Record<string, string>;
+  }> {
+    const dumpDir = path.join(tempDumpDir, 'dumps');
+    const entries = await fsp.readdir(dumpDir);
+    const requestFiles = entries.filter((f) => f.endsWith('-request.json'));
+    expect(requestFiles).toHaveLength(1);
+    const raw = await fsp.readFile(
+      path.join(dumpDir, requestFiles[0]),
+      'utf-8',
+    );
+    const parsed = JSON.parse(raw) as {
+      request: {
+        url: string;
+        method: string;
+        transport?: { type: string; frameType?: string };
+        headers?: Record<string, string>;
+      };
+    };
+    return parsed.request;
   }
 
   it('A3: emits finalized request dump at common pre-transport seam (HTTP)', async () => {
@@ -260,6 +289,15 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
     expect(dumpedBody.model).toBe('gpt-5.6-sol');
     expect(Array.isArray(dumpedBody.input)).toBe(true);
     expect(dumpedBody.instructions).toBe('test system prompt');
+
+    const dumpedRequest = await readDumpedEnvelope();
+    expect(dumpedRequest.url).toBe('https://api.openai.com/v1/responses');
+    expect(dumpedRequest.method).toBe('POST');
+    expect(dumpedRequest.transport).toStrictEqual({ type: 'http' });
+    expect(dumpedRequest.headers?.['Content-Type']).toBe(
+      'application/json; charset=utf-8',
+    );
+    expect(dumpedRequest.headers?.['Authorization']).toBe('[REDACTED]');
   });
 
   it('A3: emits finalized request dump when Codex WebSocket path is selected', async () => {
@@ -292,6 +330,7 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
       buildDeps({
         isCodexBaseURL: () => true,
         getWebSocketTransport: () => wsTransport,
+        isWebSocketTransportActive: () => true,
       }),
     );
     const consumed: IContent[] = [];
@@ -310,5 +349,18 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
     const dumpedBody = await readDumpedRequest();
     expect(dumpedBody.model).toBe('gpt-5.6-sol');
     expect(Array.isArray(dumpedBody.input)).toBe(true);
+
+    const dumpedRequest = await readDumpedEnvelope();
+    expect(dumpedRequest.url).toContain('wss://');
+    expect(dumpedRequest.method).not.toBe('POST');
+    expect(dumpedRequest.transport).toStrictEqual({
+      type: 'websocket',
+      frameType: 'response.create',
+    });
+    expect(dumpedRequest.headers?.['OpenAI-Beta']).toBe(
+      'responses_websockets=2026-02-06',
+    );
+    expect(dumpedRequest.headers?.['Authorization']).toBe('[REDACTED]');
+    expect(dumpedRequest.headers?.['ChatGPT-Account-ID']).toBe('[REDACTED]');
   });
 });

@@ -45,6 +45,7 @@ describe('dumpSDKContext metadata @issue:3159', () => {
         transport: { type: 'websocket', frameType: 'response.create' },
       },
     );
+    createdFiles.push(result.requestFilename);
 
     const content = await fs.readFile(
       path.join(result.dumpDir, result.requestFilename),
@@ -83,6 +84,7 @@ describe('dumpSDKContext metadata @issue:3159', () => {
       { model: 'gpt-5', input: [] },
       'https://api.openai.com/v1',
     );
+    createdFiles.push(result.requestFilename);
 
     const content = await fs.readFile(
       path.join(result.dumpDir, result.requestFilename),
@@ -117,6 +119,7 @@ describe('dumpSDKContext metadata @issue:3159', () => {
         transport: { type: 'http' },
       },
     );
+    createdFiles.push(`${baseId}-request.json`, `${baseId}-response.json`);
 
     const content = await fs.readFile(
       path.join(dumpDir, `${baseId}-request.json`),
