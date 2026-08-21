@@ -57,7 +57,7 @@ async function decryptWrittenEnvelope(
  * gone; the components only need to be hex-shaped because readEnvelopeVersion
  * rejects any non-envelope content.
  */
-function buildLegacyHexColon(plaintext: string): string {
+function buildLegacyHexColon(): string {
   const iv = crypto.randomBytes(16).toString('hex');
   const authTag = crypto.randomBytes(16).toString('hex');
   const ciphertext = crypto.randomBytes(32).toString('hex');
@@ -162,19 +162,7 @@ describe('FileTokenStorage (envelope-only)', () => {
     });
 
     it('should fail closed with "Token file corrupted" for a legacy hex-colon file', async () => {
-      const credentials: MCPOAuthCredentials = {
-        serverName: 'test-server',
-        token: {
-          accessToken: 'access-token',
-          tokenType: 'Bearer',
-          expiresAt: Date.now() + 3600000,
-        },
-        updatedAt: Date.now(),
-      };
-
-      const encryptedData = buildLegacyHexColon(
-        JSON.stringify({ 'test-server': credentials }),
-      );
+      const encryptedData = buildLegacyHexColon();
       mockFs.readFile.mockResolvedValue(encryptedData);
 
       await expect(storage.getCredentials('test-server')).rejects.toThrow(
@@ -283,8 +271,9 @@ describe('FileTokenStorage (envelope-only)', () => {
     });
 
     it('should fail closed when no machine secret can read a v:2 file', async () => {
-      // This store has no machine-secret loader. Read of the v:2 envelope then
-      // fails closed through the codec because no secret is available.
+      // This store has a machine-secret loader that YIELDS NO secret. Read of the
+      // v:2 envelope then fails closed through the codec because no secret is
+      // available.
       const reader = new FileTokenStorage('test-storage', {
         machineSecretLoader: async () => null,
       });

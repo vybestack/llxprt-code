@@ -25,7 +25,6 @@ const MCP_SRC = path.join(__dirname, '../../../mcp/src/client/mcp-tool.ts');
 const QUALIFIED_NAME = 'getFully' + 'Qualified' + 'Name';
 const QUALIFIED_PREFIX = 'getFully' + 'Qualified' + 'Prefix';
 const QUALIFIED_TOOL = 'asFully' + 'Qualified' + 'Tool';
-const SEPARATOR = '__';
 
 describe('inert tool-name surface absence (0.12.0 breaking cleanup)', () => {
   it('does not re-introduce the removed MCP tool name helpers', async () => {
@@ -37,13 +36,14 @@ describe('inert tool-name surface absence (0.12.0 breaking cleanup)', () => {
     expect(source).not.toContain(QUALIFIED_TOOL);
   });
 
-  it('does not re-introduce the underscore-pair fallback in the tool registry', async () => {
+  it('does not re-introduce the fully-qualified fallback in the tool registry', async () => {
     const source = await readFile(
       path.join(__dirname, 'tool-registry.ts'),
       'utf-8',
     );
-    // The `__` fully-qualified-name fallback (inert after the removal) must stay
-    // gone from the registry lookup path.
-    expect(source).not.toContain(SEPARATOR + QUALIFIED_NAME);
+    // The `__`-pair fully-qualified-name fallback keyed on the bare method
+    // name (inert after the removal) must stay gone from the registry lookup
+    // path.
+    expect(source).not.toContain(QUALIFIED_NAME);
   });
 });
