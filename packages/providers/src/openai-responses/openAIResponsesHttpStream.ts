@@ -393,18 +393,18 @@ async function dumpErrorOnFailure(
  * Records the physical HTTP send when the WebSocket transport falls back
  * mid-turn (#3159). The pre-transport dump already recorded the WebSocket
  * attempt; this best-effort dump makes the fallback visible with the real
- * HTTP headers and the body actually carried (the stateless rebuild when
- * one was needed). Gated to success-dump mode: error mode already writes an
- * honest HTTP error dump via dumpErrorOnFailure.
+ * HTTP headers and the body actually carried. Gated to success-dump mode:
+ * error mode already writes an honest HTTP error dump via dumpErrorOnFailure.
+ * Returns the dump base id so response/error dumps link to the HTTP request.
  */
 export async function dumpFallbackHttpRequest(
   params: StreamResponsesParams,
   deps: ResponsesExecutorDeps,
-): Promise<void> {
+): Promise<string | undefined> {
   if (!shouldDumpSDKContext(params.dumpMode, false)) {
-    return;
+    return undefined;
   }
-  await bestEffortDump('request', deps.providerName, async () =>
+  const result = await bestEffortDump('request', deps.providerName, async () =>
     dumpSDKRequestContext(
       deps.providerName,
       '/responses',
@@ -424,4 +424,5 @@ export async function dumpFallbackHttpRequest(
       },
     ),
   );
+  return result?.baseId;
 }

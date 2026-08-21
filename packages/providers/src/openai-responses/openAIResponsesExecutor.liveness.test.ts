@@ -227,15 +227,33 @@ function isDumpedEnvelope(value: unknown): value is DumpedEnvelope {
   return value['headers'] === undefined || isStringRecord(value['headers']);
 }
 
-function parseDumpEnvelope(raw: string): DumpedEnvelope {
+interface DumpedRequest {
+  filename: string;
+  envelope: DumpedEnvelope;
+  body: unknown;
+}
+
+function parseDumpRequest(filename: string, raw: string): DumpedRequest {
   const parsed: unknown = JSON.parse(raw);
   if (isPlainRecord(parsed)) {
     const request: unknown = parsed['request'];
-    if (isDumpedEnvelope(request)) {
-      return request;
+    if (
+      isDumpedEnvelope(request) &&
+      isPlainRecord(request) &&
+      'body' in request
+    ) {
+      return { filename, envelope: request, body: request['body'] };
     }
   }
-  throw new Error(`malformed dump envelope: ${raw.slice(0, 80)}`);
+  throw new Error(`malformed dump request: ${raw.slice(0, 80)}`);
+}
+
+/** A WebSocket stream that yields exactly one text chunk. */
+function textChunkStream(text: string): AsyncIterableIterator<IContent> {
+  async function* generate(): AsyncIterableIterator<IContent> {
+    yield { speaker: 'ai', blocks: [{ type: 'text', text }] };
+  }
+  return generate();
 }
 
 /** A WebSocket stream that fails before producing any output, forcing the
@@ -320,15 +338,20 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
   }
 
   async function readAllDumpedEnvelopes(): Promise<DumpedEnvelope[]> {
+    const requests = await readAllDumpedRequests();
+    return requests.map((request) => request.envelope);
+  }
+
+  async function readAllDumpedRequests(): Promise<DumpedRequest[]> {
     const dumpDir = path.join(tempDumpDir, 'dumps');
     const entries = await fsp.readdir(dumpDir);
     const requestFiles = entries.filter((f) => f.endsWith('-request.json'));
-    const envelopes: DumpedEnvelope[] = [];
+    const requests: DumpedRequest[] = [];
     for (const file of requestFiles) {
       const raw = await fsp.readFile(path.join(dumpDir, file), 'utf-8');
-      envelopes.push(parseDumpEnvelope(raw));
+      requests.push(parseDumpRequest(file, raw));
     }
-    return envelopes;
+    return requests;
   }
 
   it('A3: emits finalized request dump at common pre-transport seam (HTTP)', async () => {
@@ -382,14 +405,7 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
     });
 
     const wsTransport: WebSocketTransport = {
-      streamResponse: vi.fn().mockReturnValue(
-        (async function* () {
-          yield {
-            speaker: 'ai' as const,
-            blocks: [{ type: 'text' as const, text: 'OK' }],
-          };
-        })(),
-      ),
+      streamResponse: vi.fn().mockReturnValue(textChunkStream('OK')),
       close: vi.fn(),
     };
 
@@ -496,16 +512,149 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
     expect(httpDump?.headers?.['Authorization']).toBe('[REDACTED]');
   });
 
+  it('A3/3159: a stateful WebSocket fallback records exactly one honest HTTP send', async () => {
+    const lf = String.fromCharCode(10);
+    const sseBody = encodeSse([
+      `data: {"type":"response.output_text.delta","delta":"OK"}${lf}${lf}`,
+      `data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}${lf}${lf}`,
+      `data: [DONE]${lf}${lf}`,
+    ]);
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, body: sseBody });
+    setGlobal('fetch', fetchMock);
+
+    // A stored parent makes the WebSocket request stateful
+    // (previous_response_id set), so the HTTP fallback must rebuild the
+    // turn without the parent before sending it over HTTP.
+    const options = buildNormalizedOptions({
+      contents: [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'first question' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'first answer' }],
+          metadata: {
+            id: 'resp_parent',
+            responsesStored: true,
+            providerBaseURL: 'https://chatgpt.com/backend-api/codex',
+          },
+        },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'second question' }],
+        },
+      ],
+      ephemerals: { dumpcontext: 'on' },
+      resolved: {
+        model: 'gpt-5.6-sol',
+        baseURL: 'https://chatgpt.com/backend-api/codex',
+        authToken: 'codex-token',
+      },
+    });
+
+    const wsTransport: WebSocketTransport = {
+      streamResponse: vi.fn().mockReturnValue(immediatelyFailingStream()),
+      close: vi.fn(),
+    };
+
+    const iterator = executeOpenAIResponsesRequest(
+      options,
+      buildDeps({
+        isCodexBaseURL: () => true,
+        getWebSocketTransport: () => wsTransport,
+        isWebSocketTransportActive: () => true,
+      }),
+    );
+    const consumed: IContent[] = [];
+    for await (const chunk of iterator) {
+      consumed.push(chunk);
+    }
+    expect(consumed).toHaveLength(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Exactly two request dumps: the real WebSocket attempt and the rebuilt
+    // stateless HTTP send. The rebuild must not be recorded as another
+    // WebSocket frame when it physically went over HTTP.
+    const requests = await readAllDumpedRequests();
+    expect(requests).toHaveLength(2);
+    const wsRequest = requests.find((r) => r.envelope.method === 'SEND');
+    const httpRequest = requests.find(
+      (r) =>
+        r.envelope.method === 'POST' && r.envelope.transport?.type === 'http',
+    );
+    expect(wsRequest).toBeDefined();
+    expect(httpRequest).toBeDefined();
+    expect(
+      isPlainRecord(wsRequest?.body) &&
+        wsRequest.body['previous_response_id'] === 'resp_parent',
+    ).toBe(true);
+    expect(
+      isPlainRecord(httpRequest?.body) &&
+        httpRequest.body['previous_response_id'] === undefined,
+    ).toBe(true);
+    expect(httpRequest?.envelope.transport).toStrictEqual({ type: 'http' });
+  });
+
+  it('A3/3159: links a failed HTTP fallback response to the HTTP request dump', async () => {
+    const lf = String.fromCharCode(10);
+    const sseBody = encodeSse([
+      `data: {"error":{"message":"boom","type":"server_error"}}${lf}${lf}`,
+    ]);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: false, status: 400, body: sseBody });
+    setGlobal('fetch', fetchMock);
+
+    const options = buildNormalizedOptions({
+      ephemerals: { dumpcontext: 'on' },
+      resolved: {
+        model: 'gpt-5.6-sol',
+        baseURL: 'https://chatgpt.com/backend-api/codex',
+        authToken: 'codex-token',
+      },
+    });
+
+    const wsTransport: WebSocketTransport = {
+      streamResponse: vi.fn().mockReturnValue(immediatelyFailingStream()),
+      close: vi.fn(),
+    };
+
+    let caught: unknown;
+    try {
+      const iterator = executeOpenAIResponsesRequest(
+        options,
+        buildDeps({
+          isCodexBaseURL: () => true,
+          getWebSocketTransport: () => wsTransport,
+          isWebSocketTransportActive: () => true,
+        }),
+      );
+      for await (const chunk of iterator) {
+        void chunk;
+      }
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+
+    // The error response must link to the HTTP request dump — the request
+    // that actually failed — not to the earlier WebSocket attempt.
+    const requests = await readAllDumpedRequests();
+    expect(requests).toHaveLength(2);
+    const httpRequest = requests.find((r) => r.envelope.method === 'POST');
+    expect(httpRequest).toBeDefined();
+    const httpBaseId = httpRequest?.filename.replace('-request.json', '');
+    const dumpDir = path.join(tempDumpDir, 'dumps');
+    const entries = await fsp.readdir(dumpDir);
+    const responseFiles = entries.filter((f) => f.endsWith('-response.json'));
+    expect(responseFiles).toHaveLength(1);
+    expect(responseFiles[0].startsWith(`${httpBaseId}-`)).toBe(true);
+  });
+
   it('A3/3159: keeps the WebSocket transport in the dump when header observation fails', async () => {
     const wsTransport: WebSocketTransport = {
-      streamResponse: vi.fn().mockReturnValue(
-        (async function* () {
-          yield {
-            speaker: 'ai' as const,
-            blocks: [{ type: 'text' as const, text: 'OK' }],
-          };
-        })(),
-      ),
+      streamResponse: vi.fn().mockReturnValue(textChunkStream('OK')),
       close: vi.fn(),
     };
     const fetchMock = vi.fn();
@@ -556,5 +705,8 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
       type: 'websocket',
       frameType: 'response.create',
     });
+    // Observation failed, so no headers may be claimed — not even the
+    // legacy synthesized defaults.
+    expect(dumpedRequest.headers).toStrictEqual({});
   });
 });

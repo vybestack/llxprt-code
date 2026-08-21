@@ -384,6 +384,8 @@ async function buildStatelessTurn(
     invocationEphemerals,
     deps,
     options,
+    // The rebuilt turn is always carried over HTTP (#3159).
+    true,
   );
   return buildStreamParams(
     context,
@@ -872,12 +874,18 @@ async function dumpFinalizedRequest(
   invocationEphemerals: Record<string, unknown>,
   deps: ResponsesExecutorDeps,
   options: NormalizedGenerateChatOptions,
+  sentOverHttp = false,
 ): Promise<DumpFinalizedResult> {
   const dumpMode = invocationEphemerals['dumpcontext'] as DumpMode | undefined;
   if (!shouldDumpSDKContext(dumpMode, false)) {
     return { dumpMode };
   }
-  const transportActive = deps.isWebSocketTransportActive?.() ?? false;
+  // A stateless rebuild only exists to be sent over HTTP (the WebSocket
+  // fallback path), so it must be dumped with HTTP transport metadata even
+  // while the WebSocket transport is still the active choice for fresh
+  // requests (#3159).
+  const transportActive =
+    !sentOverHttp && (deps.isWebSocketTransportActive?.() ?? false);
   let dumpMetadata: RequestDumpMetadata;
   let baseURLForDump: string;
   try {
@@ -917,7 +925,11 @@ async function dumpFinalizedRequest(
     );
     // Header observation failed, but the selected transport is still known;
     // keep recording it honestly instead of relabeling the request as HTTP.
+    // An explicitly empty header map means "nothing observed" — passing no
+    // headers here would make the dump synthesize legacy default headers
+    // the transport never sent.
     dumpMetadata = {
+      headers: {},
       transport: transportActive
         ? { type: 'websocket', frameType: 'response.create' }
         : { type: 'http' },
@@ -990,8 +1002,15 @@ async function* streamOverHttpWithoutStatefulness(
     params.rebuildStateless === undefined ||
     params.request.previous_response_id === undefined
   ) {
-    await dumpFallbackHttpRequest(params, deps);
-    yield* streamOverHttp(params, deps);
+    // Link later response/error dumps to the HTTP request that was actually
+    // sent, not to the WebSocket attempt that preceded it (#3159).
+    const fallbackBaseId = await dumpFallbackHttpRequest(params, deps);
+    yield* streamOverHttp(
+      fallbackBaseId === undefined
+        ? params
+        : { ...params, dumpBaseId: fallbackBaseId },
+      deps,
+    );
     return;
   }
   deps.logger.debug(
@@ -999,7 +1018,8 @@ async function* streamOverHttpWithoutStatefulness(
       'Codex WebSocket fallback: rebuilding the request without previous_response_id for HTTP.',
   );
   const stateless = await params.rebuildStateless();
-  await dumpFallbackHttpRequest(stateless, deps);
+  // The rebuild already dumped itself as an HTTP request at the seam
+  // (with its base id threaded through), so no second dump here.
   yield* streamOverHttp(stateless, deps);
 }
 

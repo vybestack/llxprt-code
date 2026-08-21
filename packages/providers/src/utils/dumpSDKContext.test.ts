@@ -12,10 +12,10 @@ import { Storage } from '@vybestack/llxprt-code-storage';
 import * as dumpSDKContextModule from './dumpSDKContext.js';
 import {
   dumpSDKContext,
+  dumpSDKErrorRequestResponse,
   dumpSDKRequestContext,
   wrapStreamWithDump,
   wrapStreamWithSDKErrorDump,
-  type RequestDumpMetadata,
 } from './dumpSDKContext.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -143,40 +143,102 @@ describe('dumpSDKContext metadata @issue:3159', () => {
     expect(dump.transport).toStrictEqual({ type: 'http' });
   });
 
-  it('forwards metadata to dumpSDKRequestContext via dumpSDKErrorRequestResponse', async () => {
-    const dumpSDKRequestContextSpy = vi
-      .spyOn(dumpSDKContextModule, 'dumpSDKRequestContext')
-      .mockResolvedValue({
-        baseId: 'b',
-        requestFilename: 'b-request.json',
-        dumpDir: '/tmp',
-      });
-    const dumpSDKResponseContextSpy = vi
-      .spyOn(dumpSDKContextModule, 'dumpSDKResponseContext')
-      .mockResolvedValue('b-response.json');
-    const metadata: RequestDumpMetadata = {
-      headers: { Authorization: 'x' },
-      transport: { type: 'http' },
-    };
+  it('forwards metadata to the real request dumper via dumpSDKErrorRequestResponse', async () => {
+    const before = await fs.readdir(dumpDir).catch(() => [] as string[]);
 
-    await dumpSDKContextModule.dumpSDKErrorRequestResponse(
+    await dumpSDKErrorRequestResponse(
       'openai',
       '/chat/completions',
       { model: 'x' },
       { error: 'boom' },
       'https://api.openai.com/v1',
-      dumpSDKRequestContextSpy,
-      dumpSDKResponseContextSpy,
-      metadata,
+      undefined,
+      undefined,
+      {
+        headers: { Authorization: 'Bearer secret', 'X-Debug': '1' },
+        transport: { type: 'http' },
+      },
     );
 
-    expect(dumpSDKRequestContextSpy).toHaveBeenCalledWith(
+    const created = (await fs.readdir(dumpDir)).filter(
+      (file) => !before.includes(file),
+    );
+    createdFiles.push(...created);
+    expect(created).toHaveLength(2);
+
+    const requestName = created.find((file) => file.endsWith('-request.json'));
+    const responseName = created.find((file) =>
+      file.endsWith('-response.json'),
+    );
+    if (requestName === undefined || responseName === undefined) {
+      throw new Error('expected both request and error-response dumps');
+    }
+    expect(responseName).toBe(
+      requestName.replace('-request.json', '-response.json'),
+    );
+
+    const dump = parseDumpedRequest(
+      await fs.readFile(path.join(dumpDir, requestName), 'utf-8'),
+    );
+    expect(dump.url).toBe('https://api.openai.com/v1/chat/completions');
+    expect(dump.method).toBe('POST');
+    expect(dump.transport).toStrictEqual({ type: 'http' });
+    expect(dump.headers).toStrictEqual({
+      Authorization: '[REDACTED]',
+      'X-Debug': '1',
+    });
+
+    const responseContent = await fs.readFile(
+      path.join(dumpDir, responseName),
+      'utf-8',
+    );
+    expect(responseContent).toContain('boom');
+  });
+
+  it('writes the metadata-bearing request dump when a wrapped stream fails mid-iteration', async () => {
+    const before = await fs.readdir(dumpDir).catch(() => [] as string[]);
+    const stream = (async function* () {
+      yield { text: 'partial' };
+      throw new Error('stream failed');
+    })();
+
+    const wrapped = wrapStreamWithSDKErrorDump(
+      stream,
       'openai',
       '/chat/completions',
       { model: 'x' },
       'https://api.openai.com/v1',
-      metadata,
+      undefined,
+      undefined,
+      {
+        headers: { Authorization: 'Bearer secret' },
+        transport: { type: 'http' },
+      },
     );
+
+    await expect(
+      (async () => {
+        for await (const _chunk of wrapped) {
+          void _chunk;
+        }
+      })(),
+    ).rejects.toThrow('stream failed');
+
+    const created = (await fs.readdir(dumpDir)).filter(
+      (file) => !before.includes(file),
+    );
+    createdFiles.push(...created);
+    expect(created).toHaveLength(2);
+
+    const requestName = created.find((file) => file.endsWith('-request.json'));
+    if (requestName === undefined) {
+      throw new Error('expected the failure request dump');
+    }
+    const dump = parseDumpedRequest(
+      await fs.readFile(path.join(dumpDir, requestName), 'utf-8'),
+    );
+    expect(dump.headers).toStrictEqual({ Authorization: '[REDACTED]' });
+    expect(dump.transport).toStrictEqual({ type: 'http' });
   });
 });
 

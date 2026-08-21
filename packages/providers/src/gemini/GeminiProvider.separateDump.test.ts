@@ -6,6 +6,9 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import * as dumpSDKContextModule from '../utils/dumpSDKContext.js';
+import * as geminiGenerationExecutionModule from './geminiGenerationExecution.js';
+import type { GeminiGenerationSetup } from './geminiGenerationSetup.js';
+import type { ReasoningConfig } from './geminiReasoningConfig.js';
 
 describe('Gemini non-OAuth non-streaming generate separate dump', () => {
   let dumpSDKRequestContextSpy: ReturnType<typeof vi.spyOn>;
@@ -144,6 +147,36 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
     expect(dumpSDKContextSpy).not.toHaveBeenCalled();
   });
 
+  it('should send API request when request dump fails', async () => {
+    dumpSDKRequestContextSpy.mockRejectedValueOnce(new Error('disk full'));
+    const mockResponse = {
+      candidates: [{ content: { parts: [{ text: 'Hello' }] } }],
+    };
+    const mockContentGenerator = {
+      generateContent: vi.fn().mockResolvedValue(mockResponse),
+    };
+    const mapResponseToChunks = vi
+      .fn()
+      .mockReturnValue([
+        { speaker: 'ai', blocks: [{ type: 'text', text: 'Hello' }] },
+      ]);
+    const { GeminiProvider } = await import('./GeminiProvider.js');
+    const provider = new GeminiProvider('test-api-key');
+
+    await provider['nonOAuthNonStreamingGenerate'](
+      mockContentGenerator,
+      { model: 'gemini-2.5-pro', contents: [], config: {} },
+      true,
+      false,
+      undefined,
+      mapResponseToChunks,
+      true,
+    );
+
+    expect(mockContentGenerator.generateContent).toHaveBeenCalledOnce();
+    expect(dumpSDKResponseContextSpy).not.toHaveBeenCalled();
+  });
+
   it('should link on-mode API errors to the pre-request dump without legacy dumpSDKContext', async () => {
     const callOrder: string[] = [];
     dumpSDKRequestContextSpy.mockImplementation(async () => {
@@ -198,12 +231,69 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
         'gk-secret',
       ),
     ).toStrictEqual({ 'x-goog-api-key': 'caller-key' });
+    // Header names are case-insensitive: a caller-supplied variant spelling
+    // must also suppress the synthesized lowercase entry.
+    expect(
+      provider['withApiKeyHeader'](
+        { 'X-Goog-Api-Key': 'caller-key' },
+        'gemini-api-key',
+        'gk-secret',
+      ),
+    ).toStrictEqual({ 'X-Goog-Api-Key': 'caller-key' });
     expect(
       provider['withApiKeyHeader']({}, 'gemini-api-key', 'gk-secret'),
     ).toStrictEqual({ 'x-goog-api-key': 'gk-secret' });
     expect(
       provider['withApiKeyHeader']({ other: 'header' }, 'vertex-ai', 'tok'),
     ).toStrictEqual({ other: 'header' });
+  });
+
+  it('should thread the synthesized API-key header through executeGeneration into the generation call (issue #3159)', async () => {
+    const generationSpy = vi
+      .spyOn(geminiGenerationExecutionModule, 'executeNonOAuthGeneration')
+      .mockResolvedValue({ stream: null, emitted: false });
+    const { createProviderCallOptions } = await import(
+      '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js'
+    );
+    const { GeminiProvider } = await import('./GeminiProvider.js');
+    const provider = new GeminiProvider('test-api-key');
+
+    const reasoningConfig: ReasoningConfig = {
+      enabled: undefined,
+      includeInResponse: false,
+      stripFromContext: 'all',
+      effort: undefined,
+      maxTokens: undefined,
+      effortWireFormat: 'none',
+      enabledWireFormat: 'none',
+      effortMap: undefined,
+      enabledMap: undefined,
+    };
+    const setup: GeminiGenerationSetup = {
+      authMode: 'gemini-api-key',
+      authToken: 'gk-secret',
+      currentModel: 'gemini-2.5-pro',
+      contentsWithSignatures: [],
+      requestConfig: {},
+      baseURL: 'https://generativelanguage.googleapis.com/v1beta',
+      httpOptions: { headers: {} },
+      mapResponseToChunks: () => [],
+      reasoningConfig,
+      toolNamesForPrompt: undefined,
+      shouldDumpSuccess: true,
+      shouldDumpError: true,
+    };
+
+    await provider['executeGeneration'](
+      createProviderCallOptions({ providerName: 'gemini', contents: [] }),
+      setup,
+      false,
+    );
+
+    expect(generationSpy).toHaveBeenCalledOnce();
+    expect(generationSpy.mock.calls[0][13]).toStrictEqual({
+      'x-goog-api-key': 'gk-secret',
+    });
   });
 });
 

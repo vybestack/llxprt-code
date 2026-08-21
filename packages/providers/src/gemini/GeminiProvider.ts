@@ -58,6 +58,11 @@ import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacemen
  * and server-tool invocation are delegated to cohesive submodules in this
  * package to keep the provider class thin and within lint budgets.
  */
+function hasHeaderName(headers: Record<string, string>, name: string): boolean {
+  const target = name.toLowerCase();
+  return Object.keys(headers).some((key) => key.toLowerCase() === target);
+}
+
 export class GeminiProvider extends BaseProvider {
   constructor(apiKey?: string, baseURL?: string, config?: Config) {
     const baseConfig: BaseProviderConfig = {
@@ -420,7 +425,12 @@ export class GeminiProvider extends BaseProvider {
     authMode: GeminiAuthMode,
     authToken: string,
   ): Record<string, string> {
-    if (authMode !== 'gemini-api-key' || 'x-goog-api-key' in headers) {
+    // Header names are case-insensitive; a caller-supplied variant spelling
+    // must win over the synthesized entry (#3159).
+    if (
+      authMode !== 'gemini-api-key' ||
+      hasHeaderName(headers, 'x-goog-api-key')
+    ) {
       return headers;
     }
     return { ...headers, 'x-goog-api-key': authToken };
