@@ -237,9 +237,12 @@ implementation fails the tests with PR nonexports; the PR leaves no forwarding w
   circuit config + `CircuitBreakerState`, the three `profileApplication.ts` accessors,
   their `runtimeSettings.ts`/`RuntimeContext.tsx`/mock-stub references, and the
   `mcp-tool.ts` methods + `tool-registry.ts` registry pieces.
+
+## Files to add
+
 - `packages/tools/src/tools/tool-registry.inert-surfaces.bun.test.ts` (NEW
-  absence-contract test — the deletion-litmus for REQ-2535-3; the ONLY new
-  file in the diff besides the changelog/docs edits)
+  absence-contract test — the deletion-litmus for REQ-2535-3; the only new
+  test file in the diff besides the changelog/docs and this plan)
 
 ## Files to modify
 
