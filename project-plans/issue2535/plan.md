@@ -125,10 +125,9 @@ after earlier migrations:
 (`packages/mcp/src/auth/file-token-store.ts`) along with its barrel export
 (`packages/mcp/src/auth/index.ts`), its `packages/core/src/index.ts` re-export,
 and its dedicated `file-token-store.test.ts`. Remove the `FileTokenStorage` legacy
-hex-colon / plaintext read-back path (the `iv:authTag:ciphertext` decrypt,
-`isLegacyHexColonFormat`, the `existingEnvelopeVersion` anti-downgrade read, the
-`FileTokenStorageOptions` machine-secret overrides and the `os`/`crypto` legacy KDF)
-and its test cases proving legacy-hex-colon read compatibility (delete
+hex-colon / plaintext read-back path (the `iv:authTag:ciphertext` decrypt, its
+`isLegacyHexColonFormat` probe and the `os`/`crypto` legacy KDF helpers) and
+its test cases proving legacy-hex-colon read compatibility (delete
 `file-token-storage.behavior.test.ts` legacy tests and `file-token-storage.test.ts`
 legacy tests). New writes remain v:2 envelope-only through the codec; malformed/unknown
 files keep failing closed with "Token file corrupted". The RETAINED `FileTokenStorage`
@@ -256,8 +255,9 @@ implementation fails the tests with PR nonexports; the PR leaves no forwarding w
   retitle/trim the legacy-hex-colon + fail-closed-on-read cases to the new
   envelope-only contract (no legacy-read → fail-closed "Token file corrupted")
 - `packages/mcp/src/auth/token-storage/file-token-storage.test.ts` — delete
-  legacy-hex-colon seeding, corrupt→"Token file corrupted", and
-  existingEnvelopeVersion tests; keep v:2 CRUD + chmod tests
+  legacy-hex-colon seeding and corrupt→"Token file corrupted" cases; keep v:2
+  CRUD + chmod tests and the retained `existingEnvelopeVersion` anti-downgrade
+  coverage (now in `file-token-storage.behavior.test.ts`)
 - `packages/providers/src/RetryOrchestrator.ts` — remove the four config
   fields, `CircuitBreakerState` interface, `// private circuitBreakerStates` map,
   "3. Circuit breaker pattern (optional)" bullet

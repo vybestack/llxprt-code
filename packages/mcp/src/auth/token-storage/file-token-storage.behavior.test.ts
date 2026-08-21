@@ -223,6 +223,54 @@ describe('FileTokenStorage — v:2 envelope behavior', () => {
     expect(result?.token.accessToken).toBe('access-protected');
   });
 
+  it('a decryptable envelope whose payload is malformed JSON fails closed', async () => {
+    // Encrypt token-store-shaped JSON that is not valid JSON (here, trailing
+    // garbage). The envelope decrypts fine but the payload must be rejected as
+    // "Token file corrupted" rather than surfacing a raw parse error.
+    const { encryptEnvelopeString } = await import(
+      '@vybestack/llxprt-code-storage/storage/envelope-codec.js'
+    );
+    const invalidPayload = '{"server-a": {"not": "closed"';
+    const encrypted = await encryptEnvelopeString(
+      invalidPayload,
+      SERVICE_NAME,
+      { machineSecretLoader: secretLoaderA() },
+    );
+    await fs.mkdir(path.dirname(tokenFilePath), {
+      recursive: true,
+      mode: 0o700,
+    });
+    await fs.writeFile(tokenFilePath, encrypted, { mode: 0o600 });
+
+    const reader = new FileTokenStorage(SERVICE_NAME, {
+      tokenFilePath,
+      machineSecretLoader: secretLoaderA(),
+    });
+
+    await expect(reader.listServers()).rejects.toThrow('Token file corrupted');
+  });
+
+  it('a decryptable envelope whose payload is JSON null fails closed', async () => {
+    const { encryptEnvelopeString } = await import(
+      '@vybestack/llxprt-code-storage/storage/envelope-codec.js'
+    );
+    const encrypted = await encryptEnvelopeString('null', SERVICE_NAME, {
+      machineSecretLoader: secretLoaderA(),
+    });
+    await fs.mkdir(path.dirname(tokenFilePath), {
+      recursive: true,
+      mode: 0o700,
+    });
+    await fs.writeFile(tokenFilePath, encrypted, { mode: 0o600 });
+
+    const reader = new FileTokenStorage(SERVICE_NAME, {
+      tokenFilePath,
+      machineSecretLoader: secretLoaderA(),
+    });
+
+    await expect(reader.listServers()).rejects.toThrow('Token file corrupted');
+  });
+
   it('refuses to downgrade an existing v:2 file when the secret fails only on write', async () => {
     const writer = new FileTokenStorage(SERVICE_NAME, {
       tokenFilePath,

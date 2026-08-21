@@ -99,15 +99,24 @@ export class FileTokenStorage extends BaseTokenStorage {
       throw error;
     }
 
-    let tokens: Record<string, MCPOAuthCredentials>;
+    let parsed: unknown;
     try {
-      tokens = JSON.parse(plaintext) as Record<string, MCPOAuthCredentials>;
+      parsed = JSON.parse(plaintext);
     } catch (error) {
       // Decryptable envelope whose payload is not valid JSON — fail closed
       // so malformed content does not surface parse internals.
       throw new Error('Token file corrupted', { cause: error });
     }
-    return new Map(Object.entries(tokens));
+    if (
+      parsed === null ||
+      typeof parsed !== 'object' ||
+      Array.isArray(parsed)
+    ) {
+      throw new Error('Token file corrupted');
+    }
+    return new Map(
+      Object.entries(parsed as Record<string, MCPOAuthCredentials>),
+    );
   }
 
   private async saveTokens(
