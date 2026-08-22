@@ -209,6 +209,22 @@ describe.skipIf(isWindows)('verifyBunWorkspaceLinks', () => {
     expect(failures[0]).toMatch(/@fixture\/core/);
   });
 
+  it('rejects a path-shaped workspace package name before alias resolution', () => {
+    const dir = buildFixture({
+      specs: [
+        { path: 'packages/core', name: '../packages/core', link: 'missing' },
+      ],
+    });
+
+    const failures = runIn(dir);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toStartWith(
+      'Declared workspace(s) have invalid or unreadable package metadata:',
+    );
+    expect(failures[0]).toMatch(/invalid package name/);
+    expect(failures[0]).toMatch(/packages\/core/);
+  });
+
   it('rejects a same-named registry copy that is not the local workspace', () => {
     // A bare existence check would accept this; the realpath comparison must
     // detect that node_modules/<name> resolves to a registry copy instead of
@@ -251,7 +267,9 @@ describe.skipIf(isWindows)('verifyBunWorkspaceLinks', () => {
 
     const failures = runIn(dir);
     expect(failures).toHaveLength(1);
-    expect(failures[0]).toMatch(/Could not parse package\.json/);
+    expect(failures[0]).toStartWith(
+      'Declared workspace(s) have invalid or unreadable package metadata:',
+    );
     expect(failures[0]).toMatch(/packages\/core/);
   });
 });

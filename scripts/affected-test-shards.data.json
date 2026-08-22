@@ -78,7 +78,7 @@
     "vscode-ide-companion": ["ide-integration"]
   },
   "testOnlyEdges": {
-    "agents": ["storage"],
+    "agents": ["mcp", "storage"],
     "core": ["providers", "test-utils"],
     "tools": ["storage", "test-utils"],
     "auth": ["test-utils"],

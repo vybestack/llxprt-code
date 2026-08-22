@@ -20,9 +20,54 @@
  */
 
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { argv } from 'node:process';
 import { fileURLToPath } from 'node:url';
+
+const PACKAGE_NAME_PATTERN =
+  /^(?:@[A-Za-z0-9][A-Za-z0-9._-]*\/)?[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+function escapesDirectory(parent: string, candidate: string): boolean {
+  const relativePath = relative(parent, candidate);
+  return (
+    relativePath === '' ||
+    relativePath === '..' ||
+    relativePath.startsWith(`..${sep}`) ||
+    isAbsolute(relativePath)
+  );
+}
+
+function invalidWorkspacePath(
+  workspace: string,
+  repoRoot: string,
+  realRepoRoot: string,
+): string | undefined {
+  if (workspace.trim() === '') {
+    return `${JSON.stringify(workspace)} is empty`;
+  }
+  if (isAbsolute(workspace)) {
+    return `${JSON.stringify(workspace)} is absolute`;
+  }
+
+  const workspacePath = resolve(repoRoot, workspace);
+  if (escapesDirectory(resolve(repoRoot), workspacePath)) {
+    return `${JSON.stringify(workspace)} does not name a child of the repository`;
+  }
+
+  try {
+    const realWorkspacePath = realpathSync(workspacePath);
+    if (escapesDirectory(realRepoRoot, realWorkspacePath)) {
+      return (
+        `${JSON.stringify(workspace)} resolves outside the repository to ` +
+        realWorkspacePath
+      );
+    }
+  } catch {
+    // Missing and broken workspace paths receive the existing precise
+    // package.json/link diagnostics below.
+  }
+  return undefined;
+}
 
 /**
  * Parses the root manifest once, runs every workspace-link check, and returns
@@ -32,7 +77,7 @@ import { fileURLToPath } from 'node:url';
  *
  * @returns {{ failures: string[], workspaceCount: number }}
  */
-function collectWorkspaceLinkResults() {
+function collectWorkspaceLinkResults(repoRoot: string) {
   // The authoritative set verified here is every workspace DECLARED in
   // package.json's `workspaces` array (an explicit list of paths, no globs).
   // Each declared workspace must be locally linked by the package manager.
@@ -42,7 +87,7 @@ function collectWorkspaceLinkResults() {
   // unhandled SyntaxError/ENOENT that crashes with a raw stack trace.
   let root;
   try {
-    root = JSON.parse(readFileSync('package.json', 'utf8'));
+    root = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
   } catch (err) {
     return {
       failures: [
@@ -92,7 +137,32 @@ function collectWorkspaceLinkResults() {
     };
   }
 
-  const results = workspaces.map((ws) => classifyWorkspaceLink(ws));
+  let realRepoRoot: string;
+  try {
+    realRepoRoot = realpathSync(repoRoot);
+  } catch (err) {
+    return {
+      failures: [
+        'Could not resolve repository root: ' +
+          (err instanceof Error ? err.message : String(err)),
+      ],
+      workspaceCount: workspaces.length,
+    };
+  }
+  const invalidPaths = workspaces
+    .map((workspace) => invalidWorkspacePath(workspace, repoRoot, realRepoRoot))
+    .filter((problem): problem is string => problem !== undefined);
+  if (invalidPaths.length > 0) {
+    return {
+      failures: [
+        'package.json `workspaces` must name concrete directories inside the repository:\n  - ' +
+          invalidPaths.join('\n  - '),
+      ],
+      workspaceCount: workspaces.length,
+    };
+  }
+
+  const results = workspaces.map((ws) => classifyWorkspaceLink(ws, repoRoot));
   return summarizeLinkResults(results, workspaces.length);
 }
 
@@ -106,8 +176,11 @@ function collectWorkspaceLinkResults() {
  * @param {string} ws - A workspace directory path declared in package.json.
  * @returns {{ category: string, detail: string }}
  */
-function classifyWorkspaceLink(ws: string): WorkspaceLinkResult {
-  const wpkgPath = `${ws}/package.json`;
+function classifyWorkspaceLink(
+  ws: string,
+  repoRoot: string,
+): WorkspaceLinkResult {
+  const wpkgPath = resolve(repoRoot, ws, 'package.json');
   if (!existsSync(wpkgPath)) {
     return { category: 'missingPkgJson', detail: ws };
   }
@@ -115,7 +188,7 @@ function classifyWorkspaceLink(ws: string): WorkspaceLinkResult {
   // entry/workspace directory, can throw (corrupt JSON, broken symlink,
   // ELOOP). Funnel those into the diagnostic list so the verifier keeps its
   // "collect failures -> exit 1" contract instead of throwing mid-loop.
-  let wpkg;
+  let wpkg: unknown;
   try {
     wpkg = JSON.parse(readFileSync(wpkgPath, 'utf8'));
   } catch (err) {
@@ -124,20 +197,33 @@ function classifyWorkspaceLink(ws: string): WorkspaceLinkResult {
       detail: `${ws}: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
-  const entry = `node_modules/${wpkg.name}`;
+  const packageName =
+    typeof wpkg === 'object' && wpkg !== null
+      ? Reflect.get(wpkg, 'name')
+      : undefined;
+  if (
+    typeof packageName !== 'string' ||
+    !PACKAGE_NAME_PATTERN.test(packageName)
+  ) {
+    return {
+      category: 'malformed',
+      detail: `${ws}: invalid package name ${JSON.stringify(packageName)}`,
+    };
+  }
+  const entry = resolve(repoRoot, 'node_modules', packageName);
   if (!existsSync(entry)) {
-    return { category: 'missing', detail: `${ws} (${wpkg.name})` };
+    return { category: 'missing', detail: `${ws} (${packageName})` };
   }
   let actual;
   let expected;
   try {
     actual = realpathSync(entry);
-    expected = realpathSync(resolve(ws));
+    expected = realpathSync(resolve(repoRoot, ws));
   } catch (err) {
     return {
       category: 'notLinked',
       detail:
-        `${ws} (${wpkg.name}): could not resolve the node_modules link ` +
+        `${ws} (${packageName}): could not resolve the node_modules link ` +
         `(${err instanceof Error ? err.message : String(err)})`,
     };
   }
@@ -145,7 +231,7 @@ function classifyWorkspaceLink(ws: string): WorkspaceLinkResult {
     return {
       category: 'notLinked',
       detail:
-        `${ws} (${wpkg.name}): node_modules entry resolves to ${actual}, ` +
+        `${ws} (${packageName}): node_modules entry resolves to ${actual}, ` +
         `expected the local workspace at ${expected}`,
     };
   }
@@ -226,7 +312,7 @@ function summarizeLinkResults(
   }
   if (grouped.malformed.length > 0) {
     failures.push(
-      'Could not parse package.json for declared workspace(s):\n  - ' +
+      'Declared workspace(s) have invalid or unreadable package metadata:\n  - ' +
         grouped.malformed.join('\n  - '),
     );
   }
@@ -250,8 +336,8 @@ function summarizeLinkResults(
  * @returns {string[]} A list of human-readable failure messages. Empty when
  *   every declared workspace is locally linked.
  */
-export function verifyBunWorkspaceLinks() {
-  return collectWorkspaceLinkResults().failures;
+export function verifyBunWorkspaceLinks(repoRoot = process.cwd()): string[] {
+  return collectWorkspaceLinkResults(repoRoot).failures;
 }
 
 /**
@@ -260,7 +346,9 @@ export function verifyBunWorkspaceLinks() {
  * the pure check can be unit-tested without spawning a process.
  */
 function main() {
-  const { failures, workspaceCount } = collectWorkspaceLinkResults();
+  const { failures, workspaceCount } = collectWorkspaceLinkResults(
+    process.cwd(),
+  );
   if (failures.length > 0) {
     console.error(failures.join('\n'));
     process.exitCode = 1;
