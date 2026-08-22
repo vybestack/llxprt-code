@@ -22,6 +22,7 @@ import {
   wrapStreamWithSDKErrorDump,
   bestEffortDump,
   dumpSDKErrorRequestResponse,
+  type RequestDumpMetadata,
 } from '../utils/dumpSDKContext.js';
 import {
   type AnthropicRateLimitInfo,
@@ -177,6 +178,7 @@ export interface ApiExecutionParams {
   baseURL: string;
   requestBody: Record<string, unknown>;
   streamingEnabled: boolean;
+  headers?: Record<string, string>;
   rateLimitLogger: { debug: (fn: () => string) => void };
 }
 
@@ -187,6 +189,20 @@ export interface ApiExecutionResult {
   response: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
   responseHeaders: Headers | undefined;
   rateLimitInfo?: AnthropicRateLimitInfo;
+}
+
+/**
+ * Dump metadata for every Anthropic dump site: the request is always sent over
+ * plain HTTP with the observed header map (#3159). Kept in one helper so the
+ * transport discriminator and header shape cannot drift between sites.
+ */
+function anthropicDumpMetadata(
+  params: ApiExecutionParams,
+): RequestDumpMetadata {
+  return {
+    headers: params.headers,
+    transport: { type: 'http' },
+  };
 }
 
 async function dumpAnthropicRequest(
@@ -205,6 +221,7 @@ async function dumpAnthropicRequest(
         '/v1/messages',
         params.requestBody,
         params.baseURL,
+        anthropicDumpMetadata(params),
       ),
     params.rateLimitLogger,
   );
@@ -240,6 +257,7 @@ async function dumpAnthropicApiError(
     params.baseURL,
     dumpSDKRequestContext,
     dumpSDKResponseContext,
+    anthropicDumpMetadata(params),
   );
 }
 
@@ -276,6 +294,7 @@ async function handleAnthropicSuccessDump(
       params.baseURL,
       dumpSDKRequestContext,
       dumpSDKResponseContext,
+      anthropicDumpMetadata(params),
     );
   }
   return response;

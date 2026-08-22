@@ -135,6 +135,7 @@ function buildNormalizedOptions(
 function buildDeps(): ResponsesExecutorDeps {
   return {
     providerName: 'openai-responses',
+    isWebSocketTransportActive: () => false,
     logger: {
       debug: () => undefined,
     } as unknown as ResponsesExecutorDeps['logger'],
@@ -276,7 +277,11 @@ describe('OpenAI Responses error-response dump @issue:3140', () => {
     const written = await listDumpFiles();
     const requestFile = written.find((f) => f.endsWith('-request.json'));
     const responseFile = written.find((f) => f.endsWith('-response.json'));
-    expect(requestFile).toBeDefined();
+    if (requestFile === undefined) {
+      throw new Error(
+        `No -request.json dump written; dump dir contents: ${JSON.stringify(written)}`,
+      );
+    }
     expect(responseFile).toBeDefined();
 
     const responseDump = await readJsonDump(responseFile!);

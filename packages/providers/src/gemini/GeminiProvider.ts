@@ -58,6 +58,11 @@ import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacemen
  * and server-tool invocation are delegated to cohesive submodules in this
  * package to keep the provider class thin and within lint budgets.
  */
+function hasHeaderName(headers: Record<string, string>, name: string): boolean {
+  const target = name.toLowerCase();
+  return Object.keys(headers).some((key) => key.toLowerCase() === target);
+}
+
 export class GeminiProvider extends BaseProvider {
   constructor(apiKey?: string, baseURL?: string, config?: Config) {
     const baseConfig: BaseProviderConfig = {
@@ -411,11 +416,36 @@ export class GeminiProvider extends BaseProvider {
     );
   }
 
+  /** #3159: the SDK sends the Gemini API key as x-goog-api-key; record the
+   * header NAME in dump metadata (value redacted at write time). A
+   * caller-supplied header always wins over the synthesized one.
+   */
+  private withApiKeyHeader(
+    headers: Record<string, string>,
+    authMode: GeminiAuthMode,
+    authToken: string,
+  ): Record<string, string> {
+    // Header names are case-insensitive; a caller-supplied variant spelling
+    // must win over the synthesized entry (#3159).
+    if (
+      authMode !== 'gemini-api-key' ||
+      hasHeaderName(headers, 'x-goog-api-key')
+    ) {
+      return headers;
+    }
+    return { ...headers, 'x-goog-api-key': authToken };
+  }
+
   private async executeGeneration(
     options: NormalizedGenerateChatOptions,
     setup: GeminiGenerationSetup,
     streamingEnabled: boolean,
   ): Promise<GeminiGenerationResult> {
+    const dumpHeaders = this.withApiKeyHeader(
+      setup.httpOptions.headers,
+      setup.authMode,
+      setup.authToken,
+    );
     return executeNonOAuthGeneration(
       options,
       this.globalConfig,
@@ -430,6 +460,7 @@ export class GeminiProvider extends BaseProvider {
       setup.reasoningConfig.includeInResponse,
       () => this.createNonOAuthGenerator(setup),
       setup.baseURL,
+      dumpHeaders,
     );
   }
 
@@ -461,6 +492,7 @@ export class GeminiProvider extends BaseProvider {
     baseURL: string | undefined,
     mapResponseToChunks: GeminiGenerationSetup['mapResponseToChunks'],
     reasoningIncludeInResponse: boolean,
+    headers?: Record<string, string>,
   ): Promise<GeminiGenerationResult> {
     return executeNonOAuthNonStreamingGenerate(
       contentGenerator,
@@ -470,6 +502,7 @@ export class GeminiProvider extends BaseProvider {
       baseURL,
       mapResponseToChunks,
       reasoningIncludeInResponse,
+      headers,
     );
   }
 
@@ -479,6 +512,7 @@ export class GeminiProvider extends BaseProvider {
     shouldDumpSuccess: boolean,
     shouldDumpError: boolean,
     baseURL: string | undefined,
+    headers?: Record<string, string>,
   ): Promise<GeminiGenerationResult> {
     return executeNonOAuthStreamingGenerate(
       contentGenerator,
@@ -488,6 +522,7 @@ export class GeminiProvider extends BaseProvider {
       baseURL,
       () => [],
       false,
+      headers,
     );
   }
 

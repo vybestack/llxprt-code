@@ -19,6 +19,10 @@ export interface DumpRequest {
   method: string;
   headers?: Record<string, string>;
   body?: unknown;
+  /** How the request was carried. Present only when a caller observed the real
+   * transport (for example the Codex WebSocket) rather than synthesized HTTP
+   * defaults (#3159). */
+  transport?: { type: 'http' } | { type: 'websocket'; frameType: string };
 }
 
 export interface DumpResponse {
@@ -56,6 +60,7 @@ const SENSITIVE_HEADER_NAMES = new Set([
   'api-key',
   'cookie',
   'set-cookie',
+  'chatgpt-account-id',
 ]);
 
 /**
