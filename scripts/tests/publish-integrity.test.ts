@@ -15,6 +15,8 @@ import {
   createRealProtocolResolver,
   deriveShippedWorkspaceDirs,
   detectRootDuplicateDependencies,
+  isProtocolSpecifier,
+  iterateDeclaredWorkspaceDependencies,
   iterateWorkspaceDependencies,
 } from './publish-dependency-helpers.ts';
 import {
@@ -508,6 +510,55 @@ describe('published package no-compile runtime contract (S6)', () => {
     // gitCommitInfo loader. The root prepack hook must generate it so
     // `npm pack` always includes it.
     expect(packed.has('packages/cli/src/generated/git-commit.json')).toBe(true);
+  });
+
+  it('targets every declared internal dependency at its exact workspace', () => {
+    const rootPackage = asRecord(
+      JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf-8')),
+    );
+    const declaredWorkspaces = Reflect.get(rootPackage, 'workspaces');
+    if (!Array.isArray(declaredWorkspaces)) {
+      throw new Error('Root package.json must declare workspaces.');
+    }
+    const workspaceDirs = declaredWorkspaces.map(asString);
+    const packageNameToDir = buildPackageNameToWorkspaceMap(
+      repoRoot,
+      workspaceDirs,
+    );
+    const protocolResolver = createRealProtocolResolver(
+      repoRoot,
+      packageNameToDir,
+    );
+
+    const mismatches = workspaceDirs.flatMap((workspaceDir) => {
+      const manifest = asRecord(
+        JSON.parse(
+          readFileSync(join(repoRoot, workspaceDir, 'package.json'), 'utf-8'),
+        ),
+      );
+      return Array.from(iterateDeclaredWorkspaceDependencies(manifest))
+        .filter(({ name }) => packageNameToDir.has(name))
+        .flatMap(({ name, version, section }) => {
+          if (!isProtocolSpecifier(version)) {
+            return [
+              `${workspaceDir} ${section}.${name} must use a local protocol; found "${version}"`,
+            ];
+          }
+          const resolution = protocolResolver(name, version, workspaceDir);
+          return resolution.resolved
+            ? []
+            : [
+                `${workspaceDir} ${section}.${name} does not resolve to ${packageNameToDir.get(name)}`,
+              ];
+        });
+    });
+
+    expect(
+      mismatches,
+      'Declared internal dependencies must resolve from each consumer to the ' +
+        'exact workspace whose manifest declares the dependency name:\n  - ' +
+        mismatches.join('\n  - '),
+    ).toEqual([]);
   });
 
   it('declares runtime dependencies needed by shipped workspace source', () => {

@@ -23,6 +23,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { messageOf } from './utils/error-guards.ts';
 import { isDeclarationsOnly } from './build_package.ts';
+import { prepareWorkspaceBuild } from './prepare-workspace-build.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
@@ -124,6 +125,22 @@ function sandboxAvailable(): boolean {
   }
 }
 
+export interface CoordinatedWorkspaceBuildOperations {
+  prepare(): void;
+  generate(): void;
+  compile(): void;
+  verify(): void;
+}
+
+export function runCoordinatedWorkspaceBuild(
+  operations: CoordinatedWorkspaceBuildOperations,
+): void {
+  operations.prepare();
+  operations.generate();
+  operations.compile();
+  operations.verify();
+}
+
 function main(): void {
   // npm install if node_modules was removed (e.g. via npm run clean or
   // scripts/clean.ts)
@@ -132,11 +149,29 @@ function main(): void {
   }
 
   // build all workspaces/packages
-  execSync('npm run generate', { stdio: 'inherit', cwd: root });
-  execSync(`npm run build ${workspaceBuildSelector()}`, {
-    stdio: 'inherit',
-    cwd: root,
-  });
+  if (isDeclarationsOnly()) {
+    execSync('npm run generate', { stdio: 'inherit', cwd: root });
+    execSync(`npm run build ${workspaceBuildSelector()}`, {
+      stdio: 'inherit',
+      cwd: root,
+    });
+  } else {
+    runCoordinatedWorkspaceBuild({
+      prepare: () => prepareWorkspaceBuild(root),
+      generate: () =>
+        execSync('npm run generate', { stdio: 'inherit', cwd: root }),
+      compile: () =>
+        execSync(`npm run build ${workspaceBuildSelector()}`, {
+          stdio: 'inherit',
+          cwd: root,
+        }),
+      verify: () =>
+        execSync('bun scripts/verify-lazy-mcp-build-coherence.ts', {
+          stdio: 'inherit',
+          cwd: root,
+        }),
+    });
+  }
 
   // also build container image if sandboxing is enabled
   // skip (-s) npm install + build since we did that above

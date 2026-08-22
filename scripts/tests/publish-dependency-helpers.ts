@@ -42,6 +42,7 @@ import { join, resolve } from 'node:path';
 /** The dependency sections of a package.json manifest. */
 export interface ManifestDependencies {
   readonly dependencies?: Record<string, string>;
+  readonly devDependencies?: Record<string, string>;
   readonly optionalDependencies?: Record<string, string>;
   readonly peerDependencies?: Record<string, string>;
 }
@@ -227,13 +228,42 @@ export interface WorkspaceDependencyEntry {
   readonly kind: DependencyKind;
 }
 
+export type DeclaredDependencySection =
+  | 'dependencies'
+  | 'devDependencies'
+  | 'optionalDependencies'
+  | 'peerDependencies';
+
+export interface DeclaredWorkspaceDependencyEntry {
+  readonly name: string;
+  readonly version: string;
+  readonly section: DeclaredDependencySection;
+}
+
+export function* iterateDeclaredWorkspaceDependencies(
+  manifest: ManifestDependencies,
+): Generator<DeclaredWorkspaceDependencyEntry> {
+  const sections: ReadonlyArray<
+    readonly [DeclaredDependencySection, Record<string, string>]
+  > = [
+    ['dependencies', manifest.dependencies ?? {}],
+    ['devDependencies', manifest.devDependencies ?? {}],
+    ['optionalDependencies', manifest.optionalDependencies ?? {}],
+    ['peerDependencies', manifest.peerDependencies ?? {}],
+  ];
+  for (const [section, dependencies] of sections) {
+    for (const [name, version] of Object.entries(dependencies)) {
+      yield { name, version, section };
+    }
+  }
+}
+
 /**
  * Shared manifest-derived internal dependency iterator (F11).
  *
- * Yields every dependency declared in a workspace manifest — both mandatory
- * (`dependencies`) and optional (`optionalDependencies`) — without any naming
- * prefix filtering. Callers that need to identify internal packages must do so
- * against a manifest-derived set, never by name prefix.
+ * Yields every runtime dependency declared in a workspace manifest without any
+ * naming prefix filtering. Callers that need to identify internal packages must
+ * do so against a manifest-derived set, never by name prefix.
  *
  * This replaces the duplicated per-section loops in checkWorkspaceDependencies
  * with a single cohesive abstraction.
