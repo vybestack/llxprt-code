@@ -90,12 +90,6 @@ export async function bestEffortDump<T>(
 }
 
 /**
- * Dumps SDK-level request/response data by synthesizing HTTP-like structure
- * This captures the actual SDK parameters and responses, which is more useful
- * for debugging than raw HTTP dumps.
- * Returns the shared dump base id, not a dump filename.
- */
-/**
  * Builds the request envelope shared by both dump writers (#3159): the
  * transport decides the method (WebSocket frames are SEND, HTTP is POST) and
  * the header map; keeping this in one builder stops the two paths from
@@ -115,6 +109,12 @@ function buildSDKDumpRequest(
   };
 }
 
+/**
+ * Dumps SDK-level request/response data by synthesizing HTTP-like structure
+ * This captures the actual SDK parameters and responses, which is more useful
+ * for debugging than raw HTTP dumps.
+ * Returns the shared dump base id, not a dump filename.
+ */
 export async function dumpSDKContext(
   providerName: string,
   endpoint: string,

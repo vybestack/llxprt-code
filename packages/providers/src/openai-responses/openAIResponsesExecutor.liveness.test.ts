@@ -187,6 +187,7 @@ interface DumpedEnvelope {
   method: string;
   transport?: { type: string; frameType?: string };
   headers?: Record<string, string>;
+  body?: unknown;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -237,11 +238,9 @@ function parseDumpRequest(filename: string, raw: string): DumpedRequest {
   const parsed: unknown = JSON.parse(raw);
   if (isPlainRecord(parsed)) {
     const request: unknown = parsed['request'];
-    if (
-      isDumpedEnvelope(request) &&
-      isPlainRecord(request) &&
-      'body' in request
-    ) {
+    // isDumpedEnvelope already guarantees a plain record, so only the
+    // payload key still needs checking here.
+    if (isDumpedEnvelope(request) && 'body' in request) {
       return { filename, envelope: request, body: request['body'] };
     }
   }

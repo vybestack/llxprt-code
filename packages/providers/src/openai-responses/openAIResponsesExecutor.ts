@@ -892,12 +892,7 @@ async function dumpFinalizedRequest(
     if (transportActive) {
       dumpMetadata = {
         headers: await buildWebSocketHandshakeHeaders(
-          {
-            ...requestContext,
-            normalizedOptions: options,
-            maxStreamingAttempts: 1,
-            streamRetryInitialDelayMs: 0,
-          },
+          { apiKey: requestContext.apiKey, normalizedOptions: options },
           deps,
         ),
         transport: { type: 'websocket', frameType: 'response.create' },
@@ -1020,7 +1015,7 @@ async function* streamOverHttpWithoutStatefulness(
 }
 
 async function buildWebSocketHandshakeHeaders(
-  params: StreamResponsesParams,
+  params: Pick<StreamResponsesParams, 'apiKey' | 'normalizedOptions'>,
   deps: ResponsesExecutorDeps,
 ): Promise<Record<string, string>> {
   const headers: Record<string, string> = {

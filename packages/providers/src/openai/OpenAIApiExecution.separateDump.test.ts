@@ -590,6 +590,25 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
     });
   });
 
+  it('should keep a lowercase caller-supplied authorization header over the synthesized one (issue #3159)', async () => {
+    const client = createMockClient(
+      { id: 'chatcmpl-auth', choices: [] },
+      'sk-dump3159',
+    );
+    const opts = createBaseOptions({
+      client,
+      dumpMode: 'on',
+      mergedHeaders: { authorization: 'Bearer caller-token' },
+    });
+
+    await executeApiRequest(opts);
+
+    const metadata = dumpSDKRequestContextSpy.mock.calls[0][4];
+    expect(metadata?.headers).toStrictEqual({
+      authorization: 'Bearer caller-token',
+    });
+  });
+
   it('should not dump on success when mode is error', async () => {
     const opts = createBaseOptions({ dumpMode: 'error' });
     await executeApiRequest(opts);

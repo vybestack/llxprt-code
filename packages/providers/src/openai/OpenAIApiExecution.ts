@@ -57,8 +57,10 @@ function chatDumpMetadata(
 ): RequestDumpMetadata {
   // The SDK sends Authorization from the client api key; synthesize the
   // header for the dump unless the caller already supplied one (#3159).
+  // A null/empty key means the SDK sends no Authorization header, so the
+  // dump must not invent one.
   if (
-    apiKey === undefined ||
+    !apiKey ||
     (mergedHeaders !== undefined &&
       hasHeaderName(mergedHeaders, 'Authorization'))
   ) {
