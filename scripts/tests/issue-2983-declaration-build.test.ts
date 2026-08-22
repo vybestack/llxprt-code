@@ -277,9 +277,9 @@ describe('issue #2983 — entry-point execution contract', () => {
 
   it('still runs build.ts when it is the entry point', () => {
     // build.ts has no cwd guard — it anchors on import.meta.url and would run
-    // a real build. Emptying PATH makes its first action, `npm run generate`,
-    // fail immediately, so reaching that failure proves `main()` ran without
-    // building anything.
+    // a real build. Declaration mode avoids the full-build preclean, while an
+    // empty PATH makes `npm run generate` fail immediately. Reaching that
+    // failure proves `main()` ran without mutating shared workspace output.
     const emptyPath = mkdtempSync(join(tmpdir(), 'issue-2983-nopath-'));
     try {
       const result = spawnSync(
@@ -288,7 +288,12 @@ describe('issue #2983 — entry-point execution contract', () => {
         {
           cwd: REPO_ROOT,
           encoding: 'utf8',
-          env: { ...process.env, PATH: emptyPath, Path: emptyPath },
+          env: {
+            ...process.env,
+            [DECLARATIONS_ONLY_ENV]: '1',
+            PATH: emptyPath,
+            Path: emptyPath,
+          },
           timeout: 120_000,
         },
       );

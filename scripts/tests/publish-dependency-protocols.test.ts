@@ -17,6 +17,7 @@ import { describe, it, expect } from 'bun:test';
 import {
   checkDependencyCoverage,
   checkWorkspaceDependencies,
+  iterateDeclaredWorkspaceDependencies,
   iterateWorkspaceDependencies,
   detectRootDuplicateDependencies,
   isRootSectionAdequate,
@@ -213,6 +214,42 @@ describe('#2352 F6: detectRootDuplicateDependencies — duplicate root dependenc
     const dups = detectRootDuplicateDependencies(root);
     expect(dups).toHaveLength(1);
     expect(dups[0].sections.length).toBe(3);
+  });
+});
+
+describe('#3269: declared internal workspace dependency coverage', () => {
+  it('iterates dependencies, devDependencies, optionalDependencies, and peerDependencies', () => {
+    const manifest: ManifestDependencies = {
+      dependencies: { '@fixture/runtime': 'file:../runtime' },
+      devDependencies: { '@fixture/test-utils': 'file:../test-utils' },
+      optionalDependencies: { '@fixture/optional': 'file:../optional' },
+      peerDependencies: { '@fixture/peer': 'file:../peer' },
+    };
+
+    const entries = Array.from(iterateDeclaredWorkspaceDependencies(manifest));
+
+    expect(entries).toEqual([
+      {
+        name: '@fixture/runtime',
+        version: 'file:../runtime',
+        section: 'dependencies',
+      },
+      {
+        name: '@fixture/test-utils',
+        version: 'file:../test-utils',
+        section: 'devDependencies',
+      },
+      {
+        name: '@fixture/optional',
+        version: 'file:../optional',
+        section: 'optionalDependencies',
+      },
+      {
+        name: '@fixture/peer',
+        version: 'file:../peer',
+        section: 'peerDependencies',
+      },
+    ]);
   });
 });
 

@@ -15,7 +15,7 @@
  */
 
 import type { Mock } from 'bun:test';
-import { vi } from 'bun:test';
+import { afterEach, vi } from 'bun:test';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -47,6 +47,19 @@ import type {
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 
+const mockConfigs = new Set<Config>();
+
+afterEach(async () => {
+  const configs = Array.from(mockConfigs);
+  mockConfigs.clear();
+  await Promise.all(configs.map((config) => config.dispose()));
+});
+
+export async function disposeMockConfig(config: Config): Promise<void> {
+  mockConfigs.delete(config);
+  await config.dispose();
+}
+
 export function createCompletedToolCallResponse(params: {
   callId: string;
   responseParts?: ContentBlock[];
@@ -76,8 +89,12 @@ export function createCompletedToolCallResponse(params: {
   };
 }
 
+type ToolRegistryMethodOverrides = Partial<
+  Pick<ToolRegistry, 'getTool' | 'getFunctionDeclarationsFiltered'>
+>;
+
 export async function createMockConfig(
-  toolRegistryMocks = {},
+  toolRegistryMethods: ToolRegistryMethodOverrides = {},
 ): Promise<{ config: Config; toolRegistry: ToolRegistry }> {
   const settingsService = new SettingsService();
   setActiveProviderRuntimeContext(
@@ -93,6 +110,7 @@ export async function createMockConfig(
   };
   const config = new Config(configParams);
   await initializeTestConfig(config);
+  mockConfigs.add(config);
 
   await config.refreshAuth();
 
@@ -100,14 +118,15 @@ export async function createMockConfig(
     model: DEFAULT_GEMINI_MODEL,
   });
 
-  const mockToolRegistry = {
-    getTool: vi.fn(),
-    getFunctionDeclarationsFiltered: vi.fn().mockReturnValue([]),
-    ...toolRegistryMocks,
-  } as unknown as ToolRegistry;
+  const toolRegistry = config.getToolRegistry();
+  vi.spyOn(toolRegistry, 'getTool').mockImplementation(
+    toolRegistryMethods.getTool ?? (() => undefined),
+  );
+  vi.spyOn(toolRegistry, 'getFunctionDeclarationsFiltered').mockImplementation(
+    toolRegistryMethods.getFunctionDeclarationsFiltered ?? (() => []),
+  );
 
-  vi.spyOn(config, 'getToolRegistry').mockReturnValue(mockToolRegistry);
-  return { config, toolRegistry: mockToolRegistry };
+  return { config, toolRegistry };
 }
 
 export function createMockStream(
