@@ -39,9 +39,11 @@ import { tryConsumeTransportAttempt } from '../transportAttemptBudget.js';
 import { getDelayDuration, hasRetryAfterHeader } from '../retryDelayPolicy.js';
 import {
   shouldDumpSDKContext,
+  dumpSDKRequestContext,
   dumpSDKResponseContext,
   dumpSDKErrorRequestResponse,
   bestEffortDump,
+  type RequestDumpMetadata,
 } from '../utils/dumpSDKContext.js';
 import { redactSensitiveHeaders, type DumpMode } from '../utils/dumpContext.js';
 import type { ResponsesExecutorDeps } from './openAIResponsesExecutor.js';
@@ -87,13 +89,41 @@ interface FetchStreamParams {
   onStreamLiveness?: NormalizedGenerateChatOptions['onStreamLiveness'];
 }
 
+function resolveResponsesContentType(params: { isCodex: boolean }): string {
+  return params.isCodex
+    ? 'application/json'
+    : 'application/json; charset=utf-8';
+}
+
+/**
+ * HTTP dump metadata shared by the pre-transport seam dump and the
+ * WebSocket-fallback dump (#3159): both record the same physical HTTP send
+ * shape, so both call sites must build headers identically.
+ */
+export async function buildHttpDumpMetadata(
+  params: Pick<
+    StreamResponsesParams,
+    'apiKey' | 'isCodex' | 'normalizedOptions'
+  >,
+  deps: ResponsesExecutorDeps,
+): Promise<RequestDumpMetadata> {
+  return {
+    headers: await buildResponsesHeaders(
+      params.apiKey,
+      resolveResponsesContentType(params),
+      params.isCodex,
+      params.normalizedOptions,
+      deps,
+    ),
+    transport: { type: 'http' },
+  };
+}
+
 export async function* streamOverHttp(
   params: StreamResponsesParams,
   deps: ResponsesExecutorDeps,
 ): AsyncIterableIterator<IContent> {
-  const contentType = params.isCodex
-    ? 'application/json'
-    : 'application/json; charset=utf-8';
+  const contentType = resolveResponsesContentType(params);
   const bodyBlob = new Blob([JSON.stringify(params.request)], {
     type: contentType,
   });
@@ -103,9 +133,6 @@ export async function* streamOverHttp(
     params.isCodex,
     params.normalizedOptions,
     deps,
-  );
-  deps.logger.debug(
-    () => `Request body keys: ${JSON.stringify(Object.keys(params.request))}`,
   );
   try {
     yield* fetchStreamWithRetries(
@@ -119,7 +146,7 @@ export async function* streamOverHttp(
       deps,
     );
   } catch (error) {
-    await dumpErrorOnFailure(error, params, deps);
+    await dumpErrorOnFailure(error, params, deps, headers);
     throw error;
   }
 }
@@ -361,6 +388,7 @@ async function dumpErrorOnFailure(
   error: unknown,
   params: StreamResponsesParams,
   deps: ResponsesExecutorDeps,
+  headers: Record<string, string>,
 ): Promise<void> {
   // A user cancellation is not a request failure; dumping it would write a
   // full-prompt request file on every abort without diagnostic value.
@@ -375,14 +403,44 @@ async function dumpErrorOnFailure(
         payload,
         true,
       );
-    } else {
-      await dumpSDKErrorRequestResponse(
-        deps.providerName,
-        '/responses',
-        params.request,
-        payload,
-        params.baseURL,
-      );
+      return;
     }
+    await dumpSDKErrorRequestResponse(
+      deps.providerName,
+      '/responses',
+      params.request,
+      payload,
+      params.baseURL,
+      dumpSDKRequestContext,
+      dumpSDKResponseContext,
+      { headers, transport: { type: 'http' } },
+    );
   });
+}
+
+/**
+ * Records the physical HTTP send when the WebSocket transport falls back
+ * mid-turn (#3159). The pre-transport dump already recorded the WebSocket
+ * attempt; this best-effort dump makes the fallback visible with the real
+ * HTTP headers and the body actually carried. Gated to success-dump mode:
+ * error mode already writes an honest HTTP error dump via dumpErrorOnFailure.
+ * Returns the dump base id so response/error dumps link to the HTTP request.
+ */
+export async function dumpFallbackHttpRequest(
+  params: StreamResponsesParams,
+  deps: ResponsesExecutorDeps,
+): Promise<string | undefined> {
+  if (!shouldDumpSDKContext(params.dumpMode, false)) {
+    return undefined;
+  }
+  const result = await bestEffortDump('request', deps.providerName, async () =>
+    dumpSDKRequestContext(
+      deps.providerName,
+      '/responses',
+      params.request,
+      params.baseURL,
+      await buildHttpDumpMetadata(params, deps),
+    ),
+  );
+  return result?.baseId;
 }

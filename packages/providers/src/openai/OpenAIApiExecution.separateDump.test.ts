@@ -11,8 +11,9 @@ import {
   type ApiExecutionOptions,
 } from './OpenAIApiExecution.js';
 
-function createMockClient(response: unknown) {
+function createMockClient(response: unknown, apiKey?: string) {
   return {
+    apiKey,
     chat: {
       completions: {
         create: vi.fn().mockResolvedValue(response),
@@ -384,6 +385,7 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
       '/chat/completions',
       opts.requestBody,
       'https://api.cerebras.ai/v1',
+      { headers: undefined, transport: { type: 'http' } },
     );
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledOnce();
   });
@@ -429,6 +431,7 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
       '/chat/completions',
       opts.requestBody,
       'https://api.cerebras.ai/v1',
+      { headers: undefined, transport: { type: 'http' } },
     );
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
@@ -481,6 +484,7 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
       '/chat/completions',
       opts.requestBody,
       'https://api.cerebras.ai/v1',
+      { headers: undefined, transport: { type: 'http' } },
     );
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledOnce();
   });
@@ -552,6 +556,57 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
       true,
     );
     expect(dumpSDKContextSpy).not.toHaveBeenCalled();
+  });
+
+  it('should record the SDK-generated Authorization header name in dump metadata (value redacted on write)', async () => {
+    const client = createMockClient(
+      { id: 'chatcmpl-auth', choices: [] },
+      'sk-dump3159',
+    );
+    const opts = createBaseOptions({ client, dumpMode: 'on' });
+
+    await executeApiRequest(opts);
+
+    const metadata = dumpSDKRequestContextSpy.mock.calls[0][4];
+    expect(metadata?.headers?.['Authorization']).toBe('Bearer sk-dump3159');
+  });
+
+  it('should keep a caller-supplied Authorization header over the synthesized one (issue #3159)', async () => {
+    const client = createMockClient(
+      { id: 'chatcmpl-auth', choices: [] },
+      'sk-dump3159',
+    );
+    const opts = createBaseOptions({
+      client,
+      dumpMode: 'on',
+      mergedHeaders: { Authorization: 'Bearer caller-token' },
+    });
+
+    await executeApiRequest(opts);
+
+    const metadata = dumpSDKRequestContextSpy.mock.calls[0][4];
+    expect(metadata?.headers).toStrictEqual({
+      Authorization: 'Bearer caller-token',
+    });
+  });
+
+  it('should keep a lowercase caller-supplied authorization header over the synthesized one (issue #3159)', async () => {
+    const client = createMockClient(
+      { id: 'chatcmpl-auth', choices: [] },
+      'sk-dump3159',
+    );
+    const opts = createBaseOptions({
+      client,
+      dumpMode: 'on',
+      mergedHeaders: { authorization: 'Bearer caller-token' },
+    });
+
+    await executeApiRequest(opts);
+
+    const metadata = dumpSDKRequestContextSpy.mock.calls[0][4];
+    expect(metadata?.headers).toStrictEqual({
+      authorization: 'Bearer caller-token',
+    });
   });
 
   it('should not dump on success when mode is error', async () => {
