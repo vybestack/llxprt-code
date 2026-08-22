@@ -16,8 +16,10 @@ import {
   type CallableTool,
 } from '@vybestack/llxprt-code-tools';
 import { syncActivateMcpServerTool } from '../packages/core/src/config/mcp-lazy-tool-sync.ts';
+import { isErrnoException, messageOf } from './utils/error-guards.ts';
 
 const SERVER_NAME = 'coherence-server';
+const COMPILED_CHECK_TIMEOUT_MS = 120_000;
 
 function createCallableTool(): CallableTool {
   return {
@@ -82,7 +84,10 @@ export async function verifySourceLazyMcpCoherence(): Promise<void> {
   }
 }
 
-function verifyCompiledLazyMcpCoherence(repoRoot: string): void {
+export function verifyCompiledLazyMcpCoherence(
+  repoRoot: string,
+  timeoutMs = COMPILED_CHECK_TIMEOUT_MS,
+): void {
   const syncModuleUrl = pathToFileURL(
     resolve(repoRoot, 'packages/core/dist/src/config/mcp-lazy-tool-sync.js'),
   ).href;
@@ -129,9 +134,30 @@ function verifyCompiledLazyMcpCoherence(repoRoot: string): void {
   const result = spawnSync('node', ['--input-type=module', '--eval', program], {
     cwd: repoRoot,
     encoding: 'utf8',
+    timeout: timeoutMs,
   });
   if (result.error !== undefined) {
-    throw result.error;
+    const signal = result.signal ?? 'none';
+    if (isErrnoException(result.error, 'ETIMEDOUT')) {
+      throw new Error(
+        `Compiled lazy-MCP coherence check timed out after ${timeoutMs} ms (signal ${signal})`,
+        { cause: result.error },
+      );
+    }
+    throw new Error(
+      `Failed to start compiled lazy-MCP coherence check: ${messageOf(result.error)} (signal ${signal})`,
+      { cause: result.error },
+    );
+  }
+  if (result.signal !== null) {
+    throw new Error(
+      `Compiled lazy-MCP coherence check was terminated by signal ${result.signal}`,
+    );
+  }
+  if (result.status === null) {
+    throw new Error(
+      'Compiled lazy-MCP coherence check exited without a status code',
+    );
   }
   if (result.status !== 0) {
     throw new Error(

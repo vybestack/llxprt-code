@@ -214,6 +214,20 @@ The candidate was checked sequentially to avoid concurrent commands cleaning or 
 
 A complete local `npm run test` finished nonzero for three files outside this change. `packages/core/test/utils/ripgrepPathResolver.test.ts` had four Darwin failures because the implementation found `/opt/homebrew/bin/rg` despite the test's filesystem reassignment. The same file reproduced those four failures in isolation, with 10 tests passing and 4 failing. `packages/agents/src/api/__tests__/core-conversation.spec.ts` and `packages/agents/src/api/__tests__/displayCallbacks.behavior.test.ts` reached their 180-second suite timeout in the complete run; those two files passed together in isolation, with 13 tests passing in 1.96 seconds. A later full-suite rerun reproduced the core ripgrep failure and was stopped once the overall command was guaranteed to remain nonzero. This record does not classify those failures as pre-existing without comparison evidence from `main`. No issue-owned focused test failed. CI on the candidate head remains the completion check for the repository-wide suite.
 
+### Pull request CI and review remediation
+
+The first CI run passed every Linux test shard and failed only JavaScript lint plus its aggregate. The affected-test graph drift guard found the new agents test-only MCP import. Adding `mcp` to `testOnlyEdges.agents` made the exact guard and its 37-test behavioral suite pass.
+
+The pull request OCR posted one actionable finding. It is classified `In-scope-Fix`: the compiled coherence subprocess could block a build indefinitely. A real subprocess regression first failed because no bounded compiled-check API existed. The compiled check now has a 120-second deadline and reports timeout, spawn, signal, and missing-status failures explicitly. The regression confirms that a child exceeding a short test deadline is terminated and diagnosed. The post-format focused run, including CI remediation coverage, passed 143 tests across 10 files with 294 assertions.
+
+CodeRabbit passed without an actionable inline thread. Its remaining observations are classified as follows:
+
+1. `Reject`: adding docstrings to reach an automated 80% threshold conflicts with the repository rule to add comments sparingly. The touched internal helpers and tests have descriptive names and behavioral coverage.
+2. `Reject`: the Windows symlink concern does not match the fixtures, which explicitly request junctions on Windows rather than privileged directory symlinks.
+3. `Defer`: aggregating multiple disposal failures could improve test-cleanup diagnostics, but it is separate from preserving a complete initialized registry and disposing every test-owned configuration.
+
+Remediation verification was run sequentially. The changed-test audit scanned 2,699 files, 36,166 tests, and 77,909 assertions without an error or finding on the changed coherence test. Lint, typecheck, format, the coordinated build, and the required `stepfun-37` startup smoke passed. The build ended with source and compiled lazy-MCP coherence success. A fresh complete-suite attempt reproduced the same four Darwin ripgrep resolver failures, so the run was stopped once its result was guaranteed nonzero. No issue-owned test failed before the stop.
+
 ## Completion Gate
 
 The issue is complete only when every acceptance criterion has behavioral evidence, focused and full local verification pass on the candidate head, allowed reviews are complete and triaged, all `Blocker-Fix` and `In-scope-Fix` findings are resolved, CI passes on that same head, CodeRabbit threads are resolved, and the pull request is conflict-free with correct ancestry.
