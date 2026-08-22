@@ -95,6 +95,26 @@ export async function bestEffortDump<T>(
  * for debugging than raw HTTP dumps.
  * Returns the shared dump base id, not a dump filename.
  */
+/**
+ * Builds the request envelope shared by both dump writers (#3159): the
+ * transport decides the method (WebSocket frames are SEND, HTTP is POST) and
+ * the header map; keeping this in one builder stops the two paths from
+ * drifting apart.
+ */
+function buildSDKDumpRequest(
+  url: string,
+  requestParams: unknown,
+  metadata: RequestDumpMetadata | undefined,
+): DumpRequest {
+  return {
+    url,
+    method: metadata?.transport?.type === 'websocket' ? 'SEND' : 'POST',
+    headers: resolveDumpHeaders(metadata),
+    ...(metadata?.transport ? { transport: metadata.transport } : {}),
+    body: requestParams,
+  };
+}
+
 export async function dumpSDKContext(
   providerName: string,
   endpoint: string,
@@ -106,13 +126,7 @@ export async function dumpSDKContext(
 ): Promise<string> {
   const url = buildSDKDumpUrl(providerName, endpoint, baseURL);
 
-  const request: DumpRequest = {
-    url,
-    method: metadata?.transport?.type === 'websocket' ? 'SEND' : 'POST',
-    headers: resolveDumpHeaders(metadata),
-    ...(metadata?.transport ? { transport: metadata.transport } : {}),
-    body: requestParams,
-  };
+  const request = buildSDKDumpRequest(url, requestParams, metadata);
 
   const dumpResponse = {
     status: isError ? 500 : 200,
@@ -147,13 +161,7 @@ export async function dumpSDKRequestContext(
 ): Promise<DumpRequestResult> {
   const url = buildSDKDumpUrl(providerName, endpoint, baseURL);
 
-  const request: DumpRequest = {
-    url,
-    method: metadata?.transport?.type === 'websocket' ? 'SEND' : 'POST',
-    headers: resolveDumpHeaders(metadata),
-    ...(metadata?.transport ? { transport: metadata.transport } : {}),
-    body: requestParams,
-  };
+  const request = buildSDKDumpRequest(url, requestParams, metadata);
 
   logger.debug(
     () =>

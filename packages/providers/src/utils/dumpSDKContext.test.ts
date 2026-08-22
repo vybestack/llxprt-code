@@ -144,10 +144,14 @@ describe('dumpSDKContext metadata @issue:3159', () => {
   });
 
   it('forwards metadata to the real request dumper via dumpSDKErrorRequestResponse', async () => {
+    // Distinctive provider token: filenames embed it, so the created-file
+    // diff below stays deterministic even if other dumps land in the shared
+    // global cache dir while this test runs.
+    const provider = 'dumpsdk3159';
     const before = await fs.readdir(dumpDir).catch(() => [] as string[]);
 
     await dumpSDKErrorRequestResponse(
-      'openai',
+      provider,
       '/chat/completions',
       { model: 'x' },
       { error: 'boom' },
@@ -161,7 +165,7 @@ describe('dumpSDKContext metadata @issue:3159', () => {
     );
 
     const created = (await fs.readdir(dumpDir)).filter(
-      (file) => !before.includes(file),
+      (file) => !before.includes(file) && file.includes(`-${provider}-`),
     );
     createdFiles.push(...created);
     expect(created).toHaveLength(2);
@@ -196,6 +200,9 @@ describe('dumpSDKContext metadata @issue:3159', () => {
   });
 
   it('writes the metadata-bearing request dump when a wrapped stream fails mid-iteration', async () => {
+    // Distinctive provider token keeps the created-file diff deterministic
+    // (see the dumpSDKErrorRequestResponse test above).
+    const provider = 'dumpsdk3159';
     const before = await fs.readdir(dumpDir).catch(() => [] as string[]);
     const stream = (async function* () {
       yield { text: 'partial' };
@@ -204,7 +211,7 @@ describe('dumpSDKContext metadata @issue:3159', () => {
 
     const wrapped = wrapStreamWithSDKErrorDump(
       stream,
-      'openai',
+      provider,
       '/chat/completions',
       { model: 'x' },
       'https://api.openai.com/v1',
@@ -225,7 +232,7 @@ describe('dumpSDKContext metadata @issue:3159', () => {
     ).rejects.toThrow('stream failed');
 
     const created = (await fs.readdir(dumpDir)).filter(
-      (file) => !before.includes(file),
+      (file) => !before.includes(file) && file.includes(`-${provider}-`),
     );
     createdFiles.push(...created);
     expect(created).toHaveLength(2);

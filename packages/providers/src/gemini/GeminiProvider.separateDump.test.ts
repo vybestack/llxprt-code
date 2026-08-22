@@ -291,7 +291,9 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
     );
 
     expect(generationSpy).toHaveBeenCalledOnce();
-    expect(generationSpy.mock.calls[0][13]).toStrictEqual({
+    // headers is the trailing parameter of executeNonOAuthGeneration
+    const args = generationSpy.mock.calls[0];
+    expect(args.at(-1)).toStrictEqual({
       'x-goog-api-key': 'gk-secret',
     });
   });

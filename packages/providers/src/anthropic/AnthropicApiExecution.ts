@@ -22,6 +22,7 @@ import {
   wrapStreamWithSDKErrorDump,
   bestEffortDump,
   dumpSDKErrorRequestResponse,
+  type RequestDumpMetadata,
 } from '../utils/dumpSDKContext.js';
 import {
   type AnthropicRateLimitInfo,
@@ -190,6 +191,20 @@ export interface ApiExecutionResult {
   rateLimitInfo?: AnthropicRateLimitInfo;
 }
 
+/**
+ * Dump metadata for every Anthropic dump site: the request is always sent over
+ * plain HTTP with the observed header map (#3159). Kept in one helper so the
+ * transport discriminator and header shape cannot drift between sites.
+ */
+function anthropicDumpMetadata(
+  params: ApiExecutionParams,
+): RequestDumpMetadata {
+  return {
+    headers: params.headers,
+    transport: { type: 'http' },
+  };
+}
+
 async function dumpAnthropicRequest(
   params: ApiExecutionParams,
   shouldDumpSuccess: boolean,
@@ -206,10 +221,7 @@ async function dumpAnthropicRequest(
         '/v1/messages',
         params.requestBody,
         params.baseURL,
-        {
-          headers: params.headers,
-          transport: { type: 'http' },
-        },
+        anthropicDumpMetadata(params),
       ),
     params.rateLimitLogger,
   );
@@ -245,10 +257,7 @@ async function dumpAnthropicApiError(
     params.baseURL,
     dumpSDKRequestContext,
     dumpSDKResponseContext,
-    {
-      headers: params.headers,
-      transport: { type: 'http' },
-    },
+    anthropicDumpMetadata(params),
   );
 }
 
@@ -285,10 +294,7 @@ async function handleAnthropicSuccessDump(
       params.baseURL,
       dumpSDKRequestContext,
       dumpSDKResponseContext,
-      {
-        headers: params.headers,
-        transport: { type: 'http' },
-      },
+      anthropicDumpMetadata(params),
     );
   }
   return response;

@@ -71,7 +71,7 @@ import {
   bestEffortDump,
 } from '../utils/dumpSDKContext.js';
 import {
-  buildResponsesHeaders,
+  buildHttpDumpMetadata,
   dumpFallbackHttpRequest,
 } from './openAIResponsesHttpStream.js';
 import type { DumpMode } from '../utils/dumpContext.js';
@@ -904,18 +904,14 @@ async function dumpFinalizedRequest(
       };
       baseURLForDump = toWebSocketDumpURL(requestContext.baseURL);
     } else {
-      dumpMetadata = {
-        headers: await buildResponsesHeaders(
-          requestContext.apiKey,
-          requestContext.isCodex
-            ? 'application/json'
-            : 'application/json; charset=utf-8',
-          requestContext.isCodex,
-          options,
-          deps,
-        ),
-        transport: { type: 'http' },
-      };
+      dumpMetadata = await buildHttpDumpMetadata(
+        {
+          apiKey: requestContext.apiKey,
+          isCodex: requestContext.isCodex,
+          normalizedOptions: options,
+        },
+        deps,
+      );
       baseURLForDump = requestContext.baseURL;
     }
   } catch (error) {

@@ -569,7 +569,6 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
 
     const metadata = dumpSDKRequestContextSpy.mock.calls[0][4];
     expect(metadata?.headers?.['Authorization']).toBe('Bearer sk-dump3159');
-    void dumpSDKContextSpy;
   });
 
   it('should keep a caller-supplied Authorization header over the synthesized one (issue #3159)', async () => {

@@ -43,6 +43,7 @@ import {
   dumpSDKResponseContext,
   dumpSDKErrorRequestResponse,
   bestEffortDump,
+  type RequestDumpMetadata,
 } from '../utils/dumpSDKContext.js';
 import { redactSensitiveHeaders, type DumpMode } from '../utils/dumpContext.js';
 import type { ResponsesExecutorDeps } from './openAIResponsesExecutor.js';
@@ -88,13 +89,41 @@ interface FetchStreamParams {
   onStreamLiveness?: NormalizedGenerateChatOptions['onStreamLiveness'];
 }
 
+function resolveResponsesContentType(params: { isCodex: boolean }): string {
+  return params.isCodex
+    ? 'application/json'
+    : 'application/json; charset=utf-8';
+}
+
+/**
+ * HTTP dump metadata shared by the pre-transport seam dump and the
+ * WebSocket-fallback dump (#3159): both record the same physical HTTP send
+ * shape, so both call sites must build headers identically.
+ */
+export async function buildHttpDumpMetadata(
+  params: Pick<
+    StreamResponsesParams,
+    'apiKey' | 'isCodex' | 'normalizedOptions'
+  >,
+  deps: ResponsesExecutorDeps,
+): Promise<RequestDumpMetadata> {
+  return {
+    headers: await buildResponsesHeaders(
+      params.apiKey,
+      resolveResponsesContentType(params),
+      params.isCodex,
+      params.normalizedOptions,
+      deps,
+    ),
+    transport: { type: 'http' },
+  };
+}
+
 export async function* streamOverHttp(
   params: StreamResponsesParams,
   deps: ResponsesExecutorDeps,
 ): AsyncIterableIterator<IContent> {
-  const contentType = params.isCodex
-    ? 'application/json'
-    : 'application/json; charset=utf-8';
+  const contentType = resolveResponsesContentType(params);
   const bodyBlob = new Blob([JSON.stringify(params.request)], {
     type: contentType,
   });
@@ -410,18 +439,7 @@ export async function dumpFallbackHttpRequest(
       '/responses',
       params.request,
       params.baseURL,
-      {
-        headers: await buildResponsesHeaders(
-          params.apiKey,
-          params.isCodex
-            ? 'application/json'
-            : 'application/json; charset=utf-8',
-          params.isCodex,
-          params.normalizedOptions,
-          deps,
-        ),
-        transport: { type: 'http' },
-      },
+      await buildHttpDumpMetadata(params, deps),
     ),
   );
   return result?.baseId;
