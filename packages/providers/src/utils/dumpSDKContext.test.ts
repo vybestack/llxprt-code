@@ -46,10 +46,16 @@ describe('dumpSDKContext metadata @issue:3159', () => {
   const createdFiles: string[] = [];
 
   afterEach(async () => {
-    for (const file of createdFiles.splice(0)) {
-      await fs.rm(path.join(dumpDir, file), { force: true });
-    }
+    // Restore mocks first so a cleanup failure cannot leave spies installed
+    // for the next test; dump file removal stays best-effort.
     vi.restoreAllMocks();
+    for (const file of createdFiles.splice(0)) {
+      try {
+        await fs.rm(path.join(dumpDir, file), { force: true });
+      } catch {
+        // A leftover dump file must not fail the test run.
+      }
+    }
   });
 
   it('records real headers with credential values redacted and WebSocket transport', async () => {
