@@ -15,6 +15,15 @@ import os from 'os';
 import path from 'path';
 import { Storage } from '../Storage.js';
 
+/**
+ * Name of the storage guard's escape hatch. Spelled out rather than imported
+ * because this workspace resolves `@vybestack/llxprt-code-storage` through its
+ * built declarations, which lag a source-only change. The constant itself is
+ * exported as `REAL_STORAGE_OPT_IN_ENV` and pinned by
+ * packages/storage/src/config/assertTestStorageIsolation.test.ts.
+ */
+const REAL_STORAGE_OPT_IN_ENV = 'LLXPRT_ALLOW_REAL_STORAGE_IN_TESTS';
+
 async function makeTempDir(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), 'llxprt-storage-test-'));
 }
@@ -25,11 +34,18 @@ describe('Storage — static path methods', () => {
   const originalCacheHome = process.env['LLXPRT_CACHE_HOME'];
   const originalLogHome = process.env['LLXPRT_LOG_HOME'];
 
+  const originalOptIn = process.env[REAL_STORAGE_OPT_IN_ENV];
+
   beforeEach(() => {
     delete process.env['LLXPRT_CONFIG_HOME'];
     delete process.env['LLXPRT_DATA_HOME'];
     delete process.env['LLXPRT_CACHE_HOME'];
     delete process.env['LLXPRT_LOG_HOME'];
+    // The platform default IS the subject of this block, so it opts out of the
+    // guard that otherwise refuses to resolve an unredirected root in a test
+    // process. These cases compute paths and assert on their shape; the ones
+    // that write use their own temp directory.
+    process.env[REAL_STORAGE_OPT_IN_ENV] = 'true';
   });
 
   afterEach(() => {
@@ -38,6 +54,7 @@ describe('Storage — static path methods', () => {
       LLXPRT_DATA_HOME: originalDataHome,
       LLXPRT_CACHE_HOME: originalCacheHome,
       LLXPRT_LOG_HOME: originalLogHome,
+      [REAL_STORAGE_OPT_IN_ENV]: originalOptIn,
     })) {
       if (original !== undefined) {
         process.env[key] = original;

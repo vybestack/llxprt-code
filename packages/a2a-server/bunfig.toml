@@ -1,2 +1,5 @@
 [test]
-preload = ["../../scripts/tests/browser-launch-guard.ts"]
+preload = [
+  "./bun-preload-storage-isolation.ts",
+  "../../scripts/tests/browser-launch-guard.ts",
+]

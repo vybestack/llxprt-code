@@ -27,6 +27,7 @@ import {
   LLXPRT_PLATFORM_PATHS,
 } from './path-resolver.js';
 import { Storage } from './storage.js';
+import { REAL_STORAGE_OPT_IN_ENV } from './assertTestStorageIsolation.js';
 
 const ENV_KEYS = [
   'LLXPRT_CONFIG_HOME',
@@ -114,11 +115,18 @@ describe('shared path-resolver', () => {
 describe('Storage delegates to the shared path-resolver (single implementation)', () => {
   const saved: Record<string, string | undefined> = {};
 
+  let savedOptIn: string | undefined;
+
   beforeEach(() => {
     for (const key of ENV_KEYS) {
       saved[key] = process.env[key];
       delete process.env[key];
     }
+    // The platform default IS the subject here, so this block opts out of the
+    // guard that otherwise refuses to resolve an unredirected root in a test
+    // process. Nothing below writes; the cases only compare resolved paths.
+    savedOptIn = process.env[REAL_STORAGE_OPT_IN_ENV];
+    process.env[REAL_STORAGE_OPT_IN_ENV] = 'true';
   });
 
   afterEach(() => {
@@ -128,6 +136,11 @@ describe('Storage delegates to the shared path-resolver (single implementation)'
       } else {
         process.env[key] = saved[key];
       }
+    }
+    if (savedOptIn === undefined) {
+      delete process.env[REAL_STORAGE_OPT_IN_ENV];
+    } else {
+      process.env[REAL_STORAGE_OPT_IN_ENV] = savedOptIn;
     }
   });
 

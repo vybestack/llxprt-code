@@ -152,9 +152,11 @@ export const BUN_TEST_ROOTS: readonly BunTestRoot[] = [
   {
     root: 'agents',
     directories: ['test-bun'],
+    preload: ['test-setup-storage-isolation.ts'],
   },
   {
     root: 'providers',
+    preload: ['test-setup-storage-isolation.ts'],
   },
   {
     root: 'tools',
@@ -181,6 +183,7 @@ export const BUN_TEST_ROOTS: readonly BunTestRoot[] = [
   },
   {
     root: 'test-utils',
+    preload: ['test-setup-storage-isolation.ts'],
   },
   {
     root: 'settings',
@@ -197,15 +200,20 @@ export const BUN_TEST_ROOTS: readonly BunTestRoot[] = [
   },
   {
     root: 'policy',
+    preload: ['test-setup-storage-isolation.ts'],
   },
   {
     root: 'lsp',
+    preload: ['test-setup-storage-isolation.ts'],
   },
   {
     root: 'scripts-tests',
     cwd: '.',
     directories: ['scripts/tests'],
-    preload: ['scripts/tests/test-setup.ts'],
+    preload: [
+      'scripts/tests/storage-isolation-guard.ts',
+      'scripts/tests/test-setup.ts',
+    ],
     timeoutOverrides: [
       { pattern: /issue-2603-release-install\.test\.ts$/, timeout: 300_000 },
     ],

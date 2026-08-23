@@ -15,6 +15,7 @@ import {
   resolveGlobalLogDir as resolveGlobalLogDirShared,
   resolveEnvOverride,
 } from './path-resolver.js';
+import { assertTestConfigIsolation } from './assertTestStorageIsolation.js';
 
 export const LLXPRT_DIR = '.llxprt';
 export const AGENTS_DIR = '.agents';
@@ -62,9 +63,12 @@ export class Storage {
    * Linux: `~/.config/llxprt-code`
    * macOS: `~/Library/Preferences/llxprt-code`
    * Windows: `%APPDATA%\llxprt-code\Config`
+   *
+   * Throws in a test process that has not redirected this root away from the
+   * real user directory; see {@link assertTestConfigIsolation}.
    */
   static getGlobalConfigDir(): string {
-    return resolveGlobalConfigDirShared();
+    return assertTestConfigIsolation(resolveGlobalConfigDirShared());
   }
 
   /**

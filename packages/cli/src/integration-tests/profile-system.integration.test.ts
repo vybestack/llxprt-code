@@ -36,8 +36,9 @@ describe('Profile Save/Load Cycle Integration Tests', () => {
     process.env.HOME = tempDir;
     process.env.LLXPRT_CONFIG_HOME = path.join(tempDir, '.llxprt');
 
-    // Create a new ProfileManager instance (will use our temp config root)
-    profileManager = new ProfileManager();
+    profileManager = new ProfileManager(
+      path.join(tempDir, '.llxprt', 'profiles'),
+    );
   });
 
   afterEach(async () => {

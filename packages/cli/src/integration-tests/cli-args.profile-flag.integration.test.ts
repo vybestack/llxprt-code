@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import * as path from 'node:path';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import {
@@ -15,22 +16,32 @@ import {
 import { runCli } from './cli-args-test-helpers.js';
 import { testRegex } from '../test-utils/regex.js';
 
-async function saveProfile(name: string, profile: Profile): Promise<void> {
-  await new ProfileManager().saveProfile(name, profile);
-}
-
 function expectGeminiProviderAttempt(output: string): void {
   expect(output).toContain('Error when talking to gemini API');
 }
 
 describe('CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12', () => {
   let tempDir: string;
+  let profileManager: ProfileManager;
   let originalHome: string | undefined;
+  let originalConfigHome: string | undefined;
+
+  async function saveProfile(name: string, profile: Profile): Promise<void> {
+    await profileManager.saveProfile(name, profile);
+  }
 
   beforeEach(async () => {
     tempDir = await createTempDirectory();
+    const configHome = path.join(tempDir, 'config');
     originalHome = process.env.HOME;
+    originalConfigHome = process.env.LLXPRT_CONFIG_HOME;
+    // LLXPRT_CONFIG_HOME is what steers Storage, and therefore ProfileManager's
+    // default directory. HOME does not: the platform paths come from env-paths,
+    // which is evaluated once at module load. runCli forwards this variable to
+    // the spawned CLI, so both sides see the same profiles.
     process.env.HOME = tempDir;
+    process.env.LLXPRT_CONFIG_HOME = configHome;
+    profileManager = new ProfileManager(path.join(configHome, 'profiles'));
   });
 
   afterEach(async () => {
@@ -38,6 +49,11 @@ describe('CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12', () 
       delete process.env.HOME;
     } else {
       process.env.HOME = originalHome;
+    }
+    if (originalConfigHome === undefined) {
+      delete process.env.LLXPRT_CONFIG_HOME;
+    } else {
+      process.env.LLXPRT_CONFIG_HOME = originalConfigHome;
     }
     await cleanupTempDirectory(tempDir);
   });
