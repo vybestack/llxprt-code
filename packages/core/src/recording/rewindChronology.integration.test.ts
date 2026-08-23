@@ -71,9 +71,17 @@ function makeDensityResult(
   return { removals, replacements, metadata: makeDensityMetadata() };
 }
 
+/**
+ * Project the first text block, or '' for a blockless or non-text entry.
+ * The length check precedes the index because `blocks[0]` is not typed as
+ * possibly-undefined, so an `undefined` guard trips no-unnecessary-condition.
+ */
 function textOf(content: IContent): string {
+  if (content.blocks.length === 0) {
+    return '';
+  }
   const block = content.blocks[0];
-  return block !== undefined && block.type === 'text' ? block.text : '';
+  return block.type === 'text' ? block.text : '';
 }
 
 function textsOf(history: readonly IContent[]): string[] {
