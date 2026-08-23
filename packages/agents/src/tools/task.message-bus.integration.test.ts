@@ -175,14 +175,16 @@ describe('TaskTool runtime MessageBus integration', () => {
     const tool = new TaskTool(runtimeConfig, {
       messageBus: sessionMessageBus,
       isInteractiveEnvironment: () => false,
-      orchestratorFactory: (coreSchedulerMessageBus) =>
-        new SubagentOrchestrator({
+      orchestratorFactory: (coreSchedulerMessageBus) => {
+        expect(coreSchedulerMessageBus).toBe(sessionMessageBus);
+        return new SubagentOrchestrator({
           subagentManager,
           profileManager,
           foregroundConfig: runtimeConfig,
           runtimeLoader: vi.fn().mockResolvedValue(runtimeBundle),
           messageBus: coreSchedulerMessageBus,
-        }),
+        });
+      },
     });
 
     await tool
