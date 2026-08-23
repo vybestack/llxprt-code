@@ -19,7 +19,11 @@ import { describe, it, expect } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ToolFormatter } from './ToolFormatter.js';
-import type { FormatterTool, ToolFormat } from './IToolFormatter.js';
+import type {
+  FormatterTool,
+  ToolCallBlock,
+  ToolFormat,
+} from './IToolFormatter.js';
 
 function makeDeclarations(
   overrides: Partial<{
@@ -382,5 +386,337 @@ describe('ToolFormatter public method surface', () => {
         ),
       ),
     ).toBe(true);
+  });
+});
+
+describe('ToolFormatter streaming argument accumulation', () => {
+  const formatter = new ToolFormatter();
+
+  it('concatenates chunks split mid-key and mid-value into parsed parameters', () => {
+    const blocks: ToolCallBlock[] = [];
+    formatter.accumulateStreamingToolCall(
+      { index: 0, id: 'call_1', function: { name: 'get_weather' } },
+      blocks,
+      'openai',
+    );
+    formatter.accumulateStreamingToolCall(
+      { index: 0, function: { arguments: '{"ci' } },
+      blocks,
+      'openai',
+    );
+    formatter.accumulateStreamingToolCall(
+      { index: 0, function: { arguments: 'ty":"SF' } },
+      blocks,
+      'openai',
+    );
+    formatter.accumulateStreamingToolCall(
+      { index: 0, function: { arguments: '"}' } },
+      blocks,
+      'openai',
+    );
+
+    expect(blocks[0]?.parameters).toEqual({ city: 'SF' });
+  });
+
+  it('leaves no _argumentsString own property on the block during or after accumulation', () => {
+    const blocks: ToolCallBlock[] = [];
+    formatter.accumulateStreamingToolCall(
+      { index: 0, id: 'call_2', function: { name: 'get_weather' } },
+      blocks,
+      'openai',
+    );
+    formatter.accumulateStreamingToolCall(
+      { index: 0, function: { arguments: '{"city' } },
+      blocks,
+      'openai',
+    );
+    expect(blocks[0]).toBeDefined();
+    expect(
+      Object.prototype.hasOwnProperty.call(blocks[0], '_argumentsString'),
+    ).toBe(false);
+    expect(Object.keys(blocks[0] ?? {}).sort()).toEqual([
+      'id',
+      'name',
+      'parameters',
+      'type',
+    ]);
+    formatter.accumulateStreamingToolCall(
+      { index: 0, function: { arguments: '":"SF"}' } },
+      blocks,
+      'openai',
+    );
+    expect(
+      Object.prototype.hasOwnProperty.call(blocks[0], '_argumentsString'),
+    ).toBe(false);
+    expect(Object.keys(blocks[0] ?? {}).sort()).toEqual([
+      'id',
+      'name',
+      'parameters',
+      'type',
+    ]);
+  });
+
+  it('accumulates arguments that arrive before the tool name is known', () => {
+    const blocks: ToolCallBlock[] = [];
+    formatter.accumulateStreamingToolCall(
+      { index: 0, id: 'call_3', function: { arguments: '{"ci' } },
+      blocks,
+      'openai',
+    );
+    formatter.accumulateStreamingToolCall(
+      { index: 0, function: { name: 'get_weather' } },
+      blocks,
+      'openai',
+    );
+    formatter.accumulateStreamingToolCall(
+      { index: 0, function: { arguments: 'ty":"SF"}' } },
+      blocks,
+      'openai',
+    );
+
+    expect(blocks[0]?.name).toBe('get_weather');
+    expect(blocks[0]?.parameters).toEqual({ city: 'SF' });
+    expect(
+      Object.prototype.hasOwnProperty.call(blocks[0], '_argumentsString'),
+    ).toBe(false);
+  });
+
+  it('ignores a delta with no index, creating no state', () => {
+    const blocks: ToolCallBlock[] = [];
+    formatter.accumulateStreamingToolCall(
+      {
+        id: 'no-index',
+        function: { name: 'get_weather', arguments: '{"a":1}' },
+      },
+      blocks,
+      'openai',
+    );
+    expect(blocks).toHaveLength(0);
+  });
+
+  it('keeps an indexed block while ignoring a delta with no index', () => {
+    const blocks: ToolCallBlock[] = [];
+    formatter.accumulateStreamingToolCall(
+      { index: 0, id: 'call_indexed', function: { name: 'get_weather' } },
+      blocks,
+      'openai',
+    );
+    formatter.accumulateStreamingToolCall(
+      { index: 0, function: { arguments: '{"a":1}' } },
+      blocks,
+      'openai',
+    );
+    formatter.accumulateStreamingToolCall(
+      {
+        id: 'no-index',
+        function: { name: 'get_weather', arguments: '{"b":2}' },
+      },
+      blocks,
+      'openai',
+    );
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]?.parameters).toEqual({ a: 1 });
+  });
+
+  it('keeps initial parameters untouched when only whitespace chunks arrive', () => {
+    const sentinel = { seeded: true };
+    const blocks: ToolCallBlock[] = [
+      {
+        type: 'tool_call',
+        id: 'call_4',
+        name: 'get_weather',
+        parameters: sentinel,
+      },
+    ];
+    formatter.accumulateStreamingToolCall(
+      { index: 0, function: { arguments: ' ' } },
+      blocks,
+      'openai',
+    );
+    formatter.accumulateStreamingToolCall(
+      { index: 0, function: { arguments: '  ' } },
+      blocks,
+      'openai',
+    );
+
+    expect(blocks[0]?.parameters).toBe(sentinel);
+  });
+
+  it('keeps independently accumulating interleaved tool calls without cross-talk', () => {
+    const blocks: ToolCallBlock[] = [];
+    formatter.accumulateStreamingToolCall(
+      { index: 0, id: 'call_a', function: { name: 'get_weather' } },
+      blocks,
+      'openai',
+    );
+    formatter.accumulateStreamingToolCall(
+      { index: 1, id: 'call_b', function: { name: 'set_temperature' } },
+      blocks,
+      'openai',
+    );
+    formatter.accumulateStreamingToolCall(
+      { index: 0, function: { arguments: '{"ci' } },
+      blocks,
+      'openai',
+    );
+    formatter.accumulateStreamingToolCall(
+      { index: 1, function: { arguments: '{"tem' } },
+      blocks,
+      'openai',
+    );
+    formatter.accumulateStreamingToolCall(
+      { index: 0, function: { arguments: 'ty":"SF' } },
+      blocks,
+      'openai',
+    );
+    formatter.accumulateStreamingToolCall(
+      { index: 1, function: { arguments: 'p":72}' } },
+      blocks,
+      'openai',
+    );
+    formatter.accumulateStreamingToolCall(
+      { index: 0, function: { arguments: '"}' } },
+      blocks,
+      'openai',
+    );
+
+    expect(blocks[0]?.parameters).toEqual({ city: 'SF' });
+    expect(blocks[1]?.parameters).toEqual({ temp: 72 });
+  });
+
+  it('keeps the fully concatenated raw string when arguments never become valid JSON', () => {
+    const blocks: ToolCallBlock[] = [];
+    formatter.accumulateStreamingToolCall(
+      { index: 0, id: 'call_5', function: { name: 'get_weather' } },
+      blocks,
+      'openai',
+    );
+    expect(() =>
+      formatter.accumulateStreamingToolCall(
+        { index: 0, function: { arguments: '{"a":' } },
+        blocks,
+        'openai',
+      ),
+    ).not.toThrow();
+    expect(() =>
+      formatter.accumulateStreamingToolCall(
+        { index: 0, function: { arguments: 'oops}' } },
+        blocks,
+        'openai',
+      ),
+    ).not.toThrow();
+
+    expect(blocks[0]).toBeDefined();
+    expect(
+      Object.prototype.hasOwnProperty.call(blocks[0], '_argumentsString'),
+    ).toBe(false);
+    expect(blocks[0]?.parameters).toEqual('{"a":oops}');
+  });
+
+  it('swallows a throw on an incomplete fragment and still completes from the buffer', () => {
+    const initial = { before: true };
+    const target: ToolCallBlock = {
+      type: 'tool_call',
+      id: 'call_5b',
+      name: 'get_weather',
+      parameters: initial,
+    };
+    let parametersWrites = 0;
+    const proxied: ToolCallBlock = new Proxy(target, {
+      set(tgt, property, value) {
+        if (property === 'parameters') {
+          parametersWrites += 1;
+          if (parametersWrites === 1) {
+            throw new Error('simulated parse failure');
+          }
+        }
+        return Reflect.set(tgt, property, value);
+      },
+    });
+    const blocks = [proxied];
+
+    expect(() =>
+      formatter.accumulateStreamingToolCall(
+        { index: 0, function: { arguments: '{"a":' } },
+        blocks,
+        'openai',
+      ),
+    ).not.toThrow();
+    expect(blocks[0]?.parameters).toBe(initial);
+
+    formatter.accumulateStreamingToolCall(
+      { index: 0, function: { arguments: '1}' } },
+      blocks,
+      'openai',
+    );
+    expect(blocks[0]?.parameters).toEqual({ a: 1 });
+  });
+
+  it('repairs a qwen double-escaped payload delivered in a single chunk', () => {
+    const full = '"{\\"city\\":\\"SF\\"}"';
+    const blocks: ToolCallBlock[] = [];
+    formatter.accumulateStreamingToolCall(
+      { index: 0, id: 'call_6', function: { name: 'get_weather' } },
+      blocks,
+      'qwen',
+    );
+    formatter.accumulateStreamingToolCall(
+      { index: 0, function: { arguments: full } },
+      blocks,
+      'qwen',
+    );
+
+    expect(blocks[0]?.parameters).toEqual({ city: 'SF' });
+  });
+
+  it('repairs a qwen double-escaped payload split across chunks', () => {
+    const c1 = '"{\\"city';
+    const c2 = '\\":\\"SF\\"}"';
+    const blocks: ToolCallBlock[] = [];
+    formatter.accumulateStreamingToolCall(
+      { index: 0, id: 'call_7', function: { name: 'get_weather' } },
+      blocks,
+      'qwen',
+    );
+    formatter.accumulateStreamingToolCall(
+      { index: 0, function: { arguments: c1 } },
+      blocks,
+      'qwen',
+    );
+    formatter.accumulateStreamingToolCall(
+      { index: 0, function: { arguments: c2 } },
+      blocks,
+      'qwen',
+    );
+
+    expect(blocks[0]?.parameters).toEqual({ city: 'SF' });
+  });
+
+  it('keeps buffering across separate ToolFormatter instances for the same block', () => {
+    const blocks: ToolCallBlock[] = [];
+    const first = new ToolFormatter();
+    const second = new ToolFormatter();
+    first.accumulateStreamingToolCall(
+      { index: 0, id: 'call_8', function: { name: 'get_weather' } },
+      blocks,
+      'openai',
+    );
+    first.accumulateStreamingToolCall(
+      { index: 0, function: { arguments: '{"ci' } },
+      blocks,
+      'openai',
+    );
+    second.accumulateStreamingToolCall(
+      { index: 0, function: { arguments: 'ty":"SF' } },
+      blocks,
+      'openai',
+    );
+    first.accumulateStreamingToolCall(
+      { index: 0, function: { arguments: '"}' } },
+      blocks,
+      'openai',
+    );
+
+    expect(blocks[0]?.parameters).toEqual({ city: 'SF' });
   });
 });
