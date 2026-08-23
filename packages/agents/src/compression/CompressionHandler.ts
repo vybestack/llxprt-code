@@ -93,6 +93,7 @@ export class CompressionHandler {
   private _suppressDensityDirty: boolean = false;
   private _suppressDensityDirtyDepth: number = 0;
   private activeTodosProvider?: () => Promise<string | undefined>;
+  private transcriptPathProvider?: () => string | undefined;
   lastPromptTokenCount: number | null = null;
   tokenUsageLogger: TokenUsageLogger | null = null;
 
@@ -1068,6 +1069,7 @@ export class CompressionHandler {
       this.historyService,
       (profileName?) => Promise.resolve(this.providerResolver(profileName)),
       this.activeTodosProvider,
+      this.transcriptPathProvider,
       this.logger,
     );
   }
@@ -1092,6 +1094,17 @@ export class CompressionHandler {
    */
   setActiveTodosProvider(provider: () => Promise<string | undefined>): void {
     this.activeTodosProvider = provider;
+  }
+
+  /**
+   * Set the session-journal path provider callback.
+   *
+   * The provider is invoked on every compression so it observes the live
+   * recording service; it returns undefined whenever no file is materialized
+   * (issue #2933).
+   */
+  setTranscriptPathProvider(provider: () => string | undefined): void {
+    this.transcriptPathProvider = provider;
   }
 
   /**

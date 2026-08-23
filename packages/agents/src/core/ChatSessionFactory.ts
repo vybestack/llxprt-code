@@ -328,6 +328,13 @@ async function buildChatFromRuntime(
     return active.map((t) => `- [${t.status}] ${t.content}`).join('\n');
   });
 
+  // Resolved off Config on every call rather than captured here: recording can
+  // be enabled, disabled, or swapped for a different service by a resume, and
+  // the path is null until the JSONL file materializes (issue #2933).
+  chat.setTranscriptPathProvider(
+    () => config.getSessionRecordingService()?.getFilePath() ?? undefined,
+  );
+
   return chat;
 }
 

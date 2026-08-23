@@ -17,6 +17,11 @@ import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 /**
  * Build CompressionContext for compression strategies.
  *
+ * `transcriptPathProvider` reports where the session journal is being written.
+ * It is a provider rather than a value because recording is optional, starts
+ * unmaterialized, and can be swapped by a resume; the key is omitted whenever
+ * no file exists so the strategies degrade silently.
+ *
  * @plan PLAN-20260211-HIGHDENSITY.P14
  * @requirement REQ-CS-001.6
  */
@@ -28,6 +33,7 @@ export async function buildCompressionContext(
     profileName?: string,
   ) => Promise<CompressionProviderResult>,
   activeTodosProvider: (() => Promise<string | undefined>) | undefined,
+  transcriptPathProvider: (() => string | undefined) | undefined,
   logger: DebugLogger,
 ): Promise<CompressionContext> {
   const promptResolver = new PromptResolver();
@@ -41,6 +47,10 @@ export async function buildCompressionContext(
       logger.debug('Failed to fetch active todos for compression', error);
     }
   }
+
+  // Resolved on every build so a recording service that is enabled, disabled,
+  // or swapped mid-session (resume) is reflected at the next compression.
+  const transcriptPath = transcriptPathProvider?.();
 
   const config = runtimeContext.providerRuntime.config;
 
@@ -61,6 +71,7 @@ export async function buildCompressionContext(
     },
     promptId,
     ...(activeTodos ? { activeTodos } : {}),
+    ...(transcriptPath ? { transcriptPath } : {}),
     compressionVerification:
       runtimeContext.ephemerals.compressionVerification(),
     ...(config ? { config } : {}),
