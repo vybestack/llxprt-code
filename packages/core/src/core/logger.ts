@@ -74,6 +74,9 @@ export class Logger {
   // cannot interleave at an await and reuse the same messageId (the old sync
   // write path was implicitly serialized because it never yielded).
   private _writeQueue: Promise<unknown> = Promise.resolve();
+  // In-flight initialize() so close() can drain it before clearing state —
+  // otherwise a late commit could resurrect a closed logger.
+  private _initPromise: Promise<void> | undefined;
 
   constructor(
     sessionId: string,
@@ -469,6 +472,10 @@ export class Logger {
         const { entries, legacy } = await this._loadFromDisk();
         this.logs = entries;
         this._diskIsLegacy = legacy;
+        // Disk state changed under us, so the counter carried over from
+        // initialize may already be taken by a foreign entry: recompute from
+        // the freshly loaded entries before the append assigns an id.
+        this._recomputeMessageId();
         if (!legacy) {
           // Another process already migrated the file — nothing to rewrite.
           this._formatMigrated = true;
@@ -719,7 +726,25 @@ export class Logger {
     if (this.initialized) {
       return;
     }
+    // Deduplicate concurrent callers and let close() drain the in-flight
+    // initialization before it clears state.
+    const inFlight = this._initPromise;
+    if (inFlight) {
+      await inFlight;
+      return;
+    }
+    const run = this._doInitialize();
+    this._initPromise = run;
+    try {
+      await run;
+    } finally {
+      if (this._initPromise === run) {
+        this._initPromise = undefined;
+      }
+    }
+  }
 
+  private async _doInitialize(): Promise<void> {
     ensureDir(Storage.getGlobalLogDir());
     const llxprtDir = this.storage.getProjectTempDir();
     this.logFilePath = path.join(llxprtDir, LOG_FILE_NAME);
@@ -751,19 +776,29 @@ export class Logger {
             err,
           );
         }
-        const sessionLogs = this.logs.filter(
-          (entry) => entry.sessionId === this.sessionId,
-        );
-        this.messageId =
-          sessionLogs.length > 0
-            ? Math.max(...sessionLogs.map((entry) => entry.messageId)) + 1
-            : 0;
+        this._recomputeMessageId();
         this.initialized = true;
       });
     } catch (err) {
       debugLogger.error('Failed to initialize logger:', err);
       this.initialized = false;
     }
+  }
+
+  /**
+   * Reset the instance's next-id counter to one past the highest id already
+   * on disk for this session. Called whenever `this.logs` is (re)populated
+   * from disk, so a foreign writer that appended while we held a stale
+   * snapshot cannot collide with our next append.
+   */
+  private _recomputeMessageId(): void {
+    const sessionLogs = this.logs.filter(
+      (entry) => entry.sessionId === this.sessionId,
+    );
+    this.messageId =
+      sessionLogs.length > 0
+        ? Math.max(...sessionLogs.map((entry) => entry.messageId)) + 1
+        : 0;
   }
 
   async getPreviousUserMessages(): Promise<string[]> {
@@ -830,6 +865,9 @@ export class Logger {
     // Mark closed first so logMessage calls arriving during the drain do not
     // lazily re-initialize the logger.
     this._closed = true;
+    // An in-flight initialize() must commit (or fail) before state is
+    // cleared, or its late commit would resurrect the closed logger.
+    await this._initPromise?.catch(() => {});
     // Drain pending writes until the queue reference stops changing. A single
     // `await this._writeQueue` would miss a write chained onto a newer queue
     // during the await; that write would resume after state is cleared and

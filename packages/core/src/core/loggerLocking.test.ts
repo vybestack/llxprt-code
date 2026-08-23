@@ -26,8 +26,8 @@ const TMP_DIR_NAME = 'tmp';
 const LOG_FILE_NAME = 'logs.json';
 const LOCK_FILE_SUFFIX = '.lock';
 
-// From this test file (packages/core/src/core) the repo root is three levels up.
-const REPO_ROOT = path.resolve(import.meta.dir, '../../..');
+// From this test file (packages/core/src/core) the repo root is four levels up.
+const REPO_ROOT = path.resolve(import.meta.dir, '../../../..');
 // Generated child-process drivers live in the repo's gitignored tmp/ so bare
 // imports of @vybestack/llxprt-code-settings resolve from node_modules.
 const DRIVER_DIR = path.join(REPO_ROOT, 'tmp');
@@ -397,6 +397,11 @@ describe('Logger inter-process locking', () => {
         'foreign-append',
         'retry-append',
       ]);
+      // The retried append must not reuse the id the foreign writer already
+      // took: the counter is recomputed from the reloaded entries.
+      expect(onDisk.map((e) => e.messageId)).toStrictEqual([0, 1, 2]);
+      const idPairs = onDisk.map((e) => `${e.sessionId}:${e.messageId}`);
+      expect(new Set(idPairs).size).toBe(idPairs.length);
     } finally {
       copySpy.mockRestore();
       await victim.close();
@@ -461,6 +466,47 @@ describe('Logger inter-process locking', () => {
     expect((await readLogFile()).map((e) => e.message)).toStrictEqual([
       'prune-check',
     ]);
+  });
+
+  it('REQ-LOCK-009: close() drains an in-flight initialize before clearing state', async () => {
+    // Block initialization behind a held lock so it is still in flight when
+    // close() arrives.
+    await fs.writeFile(
+      TEST_LOCK_FILE_PATH,
+      JSON.stringify({ pid: 999999, timestamp: Date.now() }),
+      'utf-8',
+    );
+    const seed: LogEntry = {
+      sessionId: testSessionId,
+      messageId: 0,
+      timestamp: new Date('2026-01-01T10:00:00.000Z').toISOString(),
+      type: MessageSenderType.USER,
+      message: 'seed',
+    };
+    await fs.writeFile(
+      TEST_LOG_FILE_PATH,
+      JSON.stringify(seed) + String.fromCharCode(10),
+      'utf-8',
+    );
+
+    const racer = new Logger(testSessionId, new Storage(process.cwd()));
+    const initPromise = racer.initialize();
+    // Let initialize() reach its acquire loop before closing.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const closePromise = racer.close();
+    // Let close() reach its in-flight-init drain before releasing the lock.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await fs.rm(TEST_LOCK_FILE_PATH, { force: true });
+
+    await Promise.all([initPromise, closePromise]);
+    // The initialization committed, then close cleared state: the logger must
+    // end closed with no resurrected fields.
+    expect(racer['initialized']).toBe(false);
+    expect(racer['sessionId']).toBeUndefined();
+    expect(racer['logs']).toStrictEqual([]);
+    expect(racer['messageId']).toBe(0);
+    await racer.logMessage(MessageSenderType.USER, 'must-not-land');
+    expect((await readLogFile()).map((e) => e.message)).toStrictEqual(['seed']);
   });
 
   it('REQ-LOCK-005: leaves no lock residue and same-process instances can interleave without deadlock', async () => {
