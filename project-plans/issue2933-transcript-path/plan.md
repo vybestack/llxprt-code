@@ -125,6 +125,20 @@ both strategies in `packages/agents`).
      when none is installed, and returns the new path after Config swaps the
      service (AB3 at the wiring seam).
 
+## Review triage
+
+Findings from the design review and from Open Code Review, with disposition.
+
+| Finding | Disposition |
+| --- | --- |
+| A recorder deactivated by a write failure still returns its old path, so `transcriptPath` kept advertising a dead journal | **Blocker-Fix.** Acceptance criterion 2 names this case. Resolution moved into `resolveTranscriptPath`, which requires `isActive()`; covered by a real-recorder test and a factory test. |
+| The direct core subpath imported by both strategies was missing from `packages/core/package.json` exports | **Blocker-Fix.** Added, matching the `continuationDirective.js` entry. |
+| `ChatSession.setTranscriptPathProvider` sat between two tested halves without being tested itself | **In-scope-Fix.** Added a test driving a real `ChatSession` through `performCompression` and asserting the path reaches the strategy's context. |
+| Wrap `transcriptPathProvider?.()` in try/catch for symmetry with `activeTodosProvider` | **Reject.** `activeTodosProvider` is guarded because it reads a todo snapshot from disk. This provider reads a field off Config and cannot throw; adding a swallow contradicts the project's fail-fast preference and would hide a real bug. |
+| `ChatSessionFactory.test.ts` adds `setTranscriptPathProvider` to its chat double without asserting on it | **Reject.** `ChatSessionFactory.transcriptPath.test.ts` captures the installed provider and invokes it, which is a stronger check than asserting the setter was called. |
+| The hoisted `vi.mock` of `@vybestack/llxprt-code-settings` in the context test risks a TDZ error and interacts badly with `restoreAllMocks` | **In-scope-Fix by removal.** The mock was unnecessary; the tests pass against the real `Storage.getGlobalConfigDir()`. |
+| Type assertions in the new tests | **Reject.** The `as unknown as` fixtures match the established convention in the neighbouring test files. The nullable-path assertions were removed in favour of a narrowing helper. |
+
 ## Out of scope
 
 - What the session journal records.

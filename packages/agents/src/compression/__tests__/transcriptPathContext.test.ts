@@ -38,15 +38,6 @@ import { resolveTranscriptPath } from '../../core/ChatSessionFactory.js';
 import { ChatSession } from '../../core/chatSession.js';
 import * as compressionFactory from '../compressionStrategyFactory.js';
 
-const original = { ...(await import('@vybestack/llxprt-code-settings')) };
-void vi.mock('@vybestack/llxprt-code-settings', () => ({
-  ...original,
-  Storage: {
-    ...original.Storage,
-    getGlobalConfigDir: vi.fn(() => '/tmp/llxprt-test-config'),
-  },
-}));
-
 function makeHandler(historyService: HistoryService): CompressionHandler {
   const runtimeContext: AgentRuntimeContext = buildRuntimeContext(
     historyService,
