@@ -212,8 +212,8 @@ async function runScript(
 describe('Post walkthrough comment github-script behavior', () => {
   const script = postStepScript();
   const requireFn = makeRequire();
-  let tempDir: string;
-  let commentFile: string;
+  let tempDir: string | undefined;
+  let commentFile: string | undefined;
   let previousCommentFile: string | undefined;
   let previousCommentMarker: string | undefined;
 
@@ -228,7 +228,9 @@ describe('Post walkthrough comment github-script behavior', () => {
   });
 
   afterEach(() => {
-    rmSync(tempDir, { recursive: true, force: true });
+    if (tempDir !== undefined) {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
     if (previousCommentFile === undefined) {
       delete process.env.COMMENT_FILE;
     } else {
@@ -481,6 +483,9 @@ describe('Post walkthrough comment github-script behavior', () => {
   });
 
   it('skips with zero API calls when the comment file is missing', async () => {
+    if (tempDir === undefined) {
+      throw new Error('tempDir should be created in beforeEach');
+    }
     process.env.COMMENT_FILE = join(tempDir, 'missing.md');
     const { github, calls } = makeGithub({});
     const { core, info, failures } = makeCore();

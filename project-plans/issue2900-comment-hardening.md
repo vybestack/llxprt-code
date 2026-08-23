@@ -171,3 +171,13 @@ function object, not a promise).
 Local OCR count against the two-file diff: 2 (both within cap). Findings:
 the env-restore issue (fixed above) and the two rejected suggestions. No
 further local OCR rounds.
+
+### PR OCR (1 round, within cap)
+
+PR #3287 head b4ef65d3: 1 finding — bug/medium, resource-cleanup
+error-masking in the test lifecycle (if `mkdtempSync` throws in beforeEach,
+afterEach's `rmSync(undefined)` throws a TypeError that masks the setup
+error). Classified In-scope-Fix and fixed: teardown now only runs when the
+temp dir was created (`tempDir` is `string | undefined`, guarded); targeted
+gates re-verified (92/92 tests, prettier/eslint/tsc clean). CodeRabbit
+produced zero actionable comments.
