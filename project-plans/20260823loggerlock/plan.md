@@ -292,5 +292,5 @@ src/core/logger.test.ts src/core/loggerJsonl.test.ts`.
 | 2 GREEN impl | P2 | done | O_EXCL + rename-guard + pinned-inode ownership + heartbeat |
 | 2b review round 1 | P2b | done | deepthinker: 2 HIGH (TOCTOU break, no lease) + leak + test gaps — all fixed |
 | 2c review round 2 | P2c | done | architect: HIGH acquire-loop deadline bypass + MEDIUM stale-snapshot migration wipe — fixed with 003b/002b regressions; LOW items triaged (see Known limitations) |
-| 3 verification + review | P3 | in progress | targeted suites green ×3 runs; full cycle pending machine load |
+| 3 verification + review | P3 | done | lint/typecheck/format/build/smoke all exit 0. Full `npm run test` exit 1 with 23 failures, all attributed: 5 grep/ripgrep stash-proven pre-existing; agents 180s/5s wall-clock timeouts — hookAdmin/mutationCoverage/core-tools recover in isolation (load 200-260), session.spec checkpoint + providerActivation fail IDENTICALLY on unmodified main (temp-worktree proof). Logger suites 34/34 on final commit. |
 | 3b OCR round 1 (local) | P3b | done | 4 findings: 2 fixed (debug-string loosened, TEST_CONFIG_HOME cleanup), seam gated to NODE_ENV=test, 1 medium rejected with rationale (hardlink-less FS boundary — documented in Known limitations) |
