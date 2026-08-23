@@ -479,6 +479,14 @@ jobs:
         with:
           driver: docker-container
 
+      # Emulation for the arm64 candidate smoke below (the runner itself is
+      # amd64). The CLI bundles platform-conditional natives (sharp,
+      # @lydell/node-pty-*, @napi-rs/keyring), so every published platform
+      # must actually be executed, not just built.
+      - name: Set up QEMU
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # ratchet:docker/setup-qemu-action@v4
+
       - name: Build sandbox image candidate
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # ratchet:docker/build-push-action@v7
@@ -506,6 +514,28 @@ jobs:
         env:
           SANDBOX_SMOKE_IMAGE: ${{ env.REGISTRY }}/${{ env.SANDBOX_IMAGE_NAME }}:${{ steps.version.outputs.RELEASE_VERSION }}
         run: docker run --rm "$SANDBOX_SMOKE_IMAGE" llxprt --version
+
+      # Second candidate for the other published platform; loading it under
+      # the same local tags replaces the amd64 image locally, which is fine
+      # because the push build below rebuilds both platforms from cache.
+      - name: Build sandbox image candidate (arm64)
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # ratchet:docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          platforms: linux/arm64
+          tags: ${{ steps.sandbox_meta.outputs.tags }}
+          labels: ${{ steps.sandbox_meta.outputs.labels }}
+          build-args: |
+            CLI_VERSION_ARG=${{ steps.version.outputs.RELEASE_VERSION }}
+
+      - name: Smoke test sandbox image (arm64)
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
+        env:
+          SANDBOX_SMOKE_IMAGE: ${{ env.REGISTRY }}/${{ env.SANDBOX_IMAGE_NAME }}:${{ steps.version.outputs.RELEASE_VERSION }}
+        run: docker run --rm --platform linux/arm64 "$SANDBOX_SMOKE_IMAGE" llxprt --version
 
       - name: Build and push sandbox image
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
