@@ -51,12 +51,28 @@ const TEST_LLXPRT_DIR = path.join(
 const TEST_LOG_FILE_PATH = path.join(TEST_LLXPRT_DIR, LOG_FILE_NAME);
 const TEST_LOCK_FILE_PATH = `${TEST_LOG_FILE_PATH}${LOCK_FILE_SUFFIX}`;
 
-async function cleanupLogFiles() {
+async function cleanupLogFiles(): Promise<void> {
   try {
     await fs.rm(TEST_LLXPRT_DIR, { recursive: true, force: true });
   } catch {
     // Directory may not exist — cleanup is best-effort.
   }
+}
+
+/**
+ * Poll `cond` until it becomes truthy or `timeoutMs` elapses. Used to observe
+ * the logger mid-critical-section so a test can manipulate the lock deterministically.
+ */
+async function waitUntil(
+  cond: () => Promise<boolean> | boolean,
+  timeoutMs = 2_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await cond()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('waitUntil timed out');
 }
 
 async function readLogFile(): Promise<LogEntry[]> {
@@ -100,6 +116,19 @@ async function settledWithin<T>(
   );
   await new Promise((resolve) => setTimeout(resolve, ms));
   return settled;
+}
+
+/**
+ * Resolve to whether a path currently exists on disk. Failed stats (including ENOENT)
+ * resolve to false, matching node:fs promises semantics.
+ */
+async function exists(target: string): Promise<boolean> {
+  try {
+    await fs.stat(target);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 describe('Logger inter-process locking', () => {
@@ -218,14 +247,13 @@ describe('Logger inter-process locking', () => {
     await logger.logMessage(MessageSenderType.USER, 'pre-stale');
 
     // A crashed holder left a lock file behind; backdate its mtime past the
-    // 10s staleness threshold (mtime granularity on both APFS and ext4 is
-    // sub-second, so 11s back is unambiguous).
+    // 30s staleness threshold (60s back is unambiguous on both APFS and ext4).
     await fs.writeFile(
       TEST_LOCK_FILE_PATH,
       JSON.stringify({ pid: 999999, timestamp: Date.now() - 60_000 }),
       'utf-8',
     );
-    const old = new Date(Date.now() - 11_000);
+    const old = new Date(Date.now() - 60_000);
     await fs.utimes(TEST_LOCK_FILE_PATH, old, old);
 
     // No manual release — staleness recovery must break the deadlock.
@@ -234,6 +262,15 @@ describe('Logger inter-process locking', () => {
     const onDisk = await readLogFile();
     expect(onDisk).toHaveLength(2);
     expect(onDisk[1].message).toBe('after-stale-recovery');
+
+    // The broken lock must be gone after recovery: no live lock file remains and
+    // no .brk/.rel guard junk survives this clean single-breaker path.
+    const dirFiles = await fs.readdir(TEST_LLXPRT_DIR);
+    expect(
+      dirFiles.filter(
+        (f) => f.includes('.lock') || f.includes('.brk') || f.includes('.rel'),
+      ),
+    ).toStrictEqual([]);
   });
 
   it('REQ-LOCK-003: times out without throwing, without advancing messageId, without writing; initialize completes uninitialized', async () => {
@@ -303,7 +340,63 @@ describe('Logger inter-process locking', () => {
     ]);
   });
 
-  it('REQ-LOCK-006: legacy entries survive and all writers land on a valid JSONL file across child processes', async () => {
+  it('REQ-LOCK-005b: a stale-broken holder release never deletes the successor lock', async () => {
+    // Delay every append by 300ms (infrastructure mock only — the real write still
+    // runs) so the holder is observable mid-critical-section while its fairly-attained
+    // lock is frozen on disk, letting the test manufacture the invalidation.
+    const realAppendFile = fs.appendFile;
+    const appendSpy = vi
+      .spyOn(fs, 'appendFile')
+      .mockImplementation(async (...args) => {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        return realAppendFile(...args);
+      });
+    try {
+      const pending = logger.logMessage(
+        MessageSenderType.USER,
+        'release-ownership',
+      );
+      // The holder now owns the lock; wait until its lock file exists so the
+      // takeover below can be applied at a deterministic point.
+      await waitUntil(() => exists(TEST_LOCK_FILE_PATH));
+
+      // Simulate the holder being stale-broken and a successor winning the path:
+      // remove the holder's lock, then plant a fresh lock with a different token.
+      await fs.rm(TEST_LOCK_FILE_PATH, { force: true });
+      const successorPayload = JSON.stringify({
+        pid: 999999,
+        token: 'successor-token',
+        timestamp: Date.now(),
+      });
+      await fs.writeFile(TEST_LOCK_FILE_PATH, successorPayload, 'utf-8');
+
+      // The slowed append completes; the holder's finally-release must now run
+      // against the successor's lock.
+      await pending;
+
+      // The release detected the token mismatch and restored the successor's lock via
+      // a hard link rather than deleting it (no partial write may be observed).
+      expect(await fs.readFile(TEST_LOCK_FILE_PATH, 'utf-8')).toBe(
+        successorPayload,
+      );
+
+      // The holder's entry still landed, proving the release is what was at risk.
+      const onDisk = await readLogFile();
+      expect(onDisk).toHaveLength(1);
+      expect(onDisk[0].message).toBe('release-ownership');
+    } finally {
+      // Clean up the successor lock, then restore the real append.
+      await fs.rm(TEST_LOCK_FILE_PATH, { force: true });
+      appendSpy.mockRestore();
+    }
+    // No .brk/.rel guard junk may remain (the successor's lock is gone above).
+    const dirFiles = await fs.readdir(TEST_LLXPRT_DIR);
+    expect(
+      dirFiles.filter((f) => f.includes('.brk') || f.includes('.rel')),
+    ).toStrictEqual([]);
+  });
+
+  it('REQ-LOCK-006: concurrent parent/child migration and writes all land on a valid JSONL file', async () => {
     const sessionId = 'e2e-cross-process-session';
     const legacyEntries: LogEntry[] = [
       {
@@ -336,17 +429,21 @@ describe('Logger inter-process locking', () => {
 
     const parent = new Logger(sessionId, new Storage(process.cwd()));
     try {
-      // Eagerly migrate the legacy array under the lock before children start, so
-      // the parent's initialize and the children's all serialize on the same file.
-      await parent.initialize();
-
+      // Children go first so all three processes contend on the still-legacy file:
+      // each child runs initialize → migrate-or-load → 3 appends, while the
+      // parent's initialize and appends race the same lock below.
       const childA = runChildDriver(driverPath, sessionId, 'A');
       const childB = runChildDriver(driverPath, sessionId, 'B');
 
       try {
+        // Parent work starts concurrently with the children; one of the three
+        // processes wins the first migration and the rest load the migrated file.
+        const parentInit = parent.initialize();
+        await parentInit;
         await parent.logMessage(MessageSenderType.USER, 'parent-0');
         await parent.logMessage(MessageSenderType.USER, 'parent-1');
       } finally {
+        // Never leave children dangling if the parent leg throws.
         await Promise.all([childA, childB]);
       }
     } finally {

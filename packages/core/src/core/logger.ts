@@ -17,9 +17,16 @@ const BACKUP_RETENTION_DAYS = 30;
 // file-mutating sequences serialized across processes; the lock file is deleted on
 // release and recovered when its mtime proves the holder crashed.
 const LOCK_FILE_SUFFIX = '.lock';
-const LOCK_STALE_MS = 10_000;
+const LOCK_STALE_MS = 30_000;
 const LOCK_BACKOFF_MS = 25;
+// Lease refresh while holding: the holder re-stamps its own lock mtime so a long
+// critical section (large legacy migration, slow FS) cannot age past the staleness
+// threshold and get broken by a waiter.
+const LOCK_HEARTBEAT_MS = 10_000;
 const DEFAULT_LOCK_TIMEOUT_MS = 5_000;
+// Monotonic per-process counter keeps transition-guard names unique inside one
+// millisecond so two mutations in this process can never target the same guard file.
+let lockMutationCounter = 0;
 
 export enum MessageSenderType {
   USER = 'user',
@@ -95,22 +102,21 @@ export class Logger {
   /**
    * Acquire the per-log-file lock via the O_EXCL pattern (`fs.open 'wx'`).
    * Retries with a small fixed backoff until it either wins the race, recovers a
-   * stale lock (holder's mtime older than the staleness threshold), or hits the
-   * acquisition deadline. Stale-lock unlink races are safe: only one waiter's
-   * subsequent `open 'wx'` can succeed.
+   * stale lock (via an atomic rename-guard claim, so a stale break can never
+   * bare-unlink a successor's live lock), or hits the acquisition deadline.
+   * The exclusive descriptor stays open for the whole critical section: it pins
+   * the lock file's inode so ownership can later be verified by inode identity
+   * without reading any file content.
    */
-  private async _acquireLogLock(): Promise<void> {
-    const lockPath = this._lockFilePath();
+  private async _acquireLogLock(lockPath: string): Promise<fs.FileHandle> {
     const deadline = Date.now() + this._lockTimeoutMs();
     for (;;) {
-      const acquired = await this._tryAcquireLogLock(lockPath);
-      if (acquired) {
-        return;
+      const handle = await this._tryAcquireLogLock(lockPath);
+      if (handle !== null) {
+        return handle;
       }
-      if (await this._lockBecameStale(lockPath)) {
-        // The holder crashed or released between our failed open and the stat;
-        // remove any leftover file and retry immediately.
-        await fs.unlink(lockPath).catch(() => {});
+      if (await this._tryBreakStaleLock(lockPath)) {
+        // A confirmed break (or an observed disappearance) — retry the open now.
         continue;
       }
       if (Date.now() >= deadline) {
@@ -121,64 +127,164 @@ export class Logger {
   }
 
   /**
-   * Create the lock file and write a debug payload. Returns true when this process
-   * now owns it, false when another process holds it (EEXIST).
+   * Create the lock file, write a diagnostic payload ({pid, timestamp}), and
+   * keep the descriptor open as the ownership proof. Returns the handle when
+   * this process now owns the lock, null when another process holds it (EEXIST).
+   * If the exclusive create won but finalizing failed, the just-created lock
+   * file has no owner and must not be left behind for waiters to trip on.
    */
-  private async _tryAcquireLogLock(lockPath: string): Promise<boolean> {
+  private async _tryAcquireLogLock(
+    lockPath: string,
+  ): Promise<fs.FileHandle | null> {
+    let handle: fs.FileHandle | undefined;
     try {
-      const handle = await fs.open(lockPath, 'wx');
-      try {
-        // Payload is only for debugging crashed-holder artifacts.
-        await handle.writeFile(
-          JSON.stringify({ pid: process.pid, timestamp: Date.now() }),
-          'utf-8',
-        );
-      } finally {
-        await handle.close();
-      }
+      handle = await fs.open(lockPath, 'wx');
+      await handle.writeFile(
+        JSON.stringify({ pid: process.pid, timestamp: Date.now() }),
+        'utf-8',
+      );
+      return handle;
     } catch (error) {
+      if (handle !== undefined) {
+        await handle.close().catch(() => {});
+        await fs.unlink(lockPath).catch(() => {});
+      }
       const nodeError = error as NodeJS.ErrnoException;
       if (nodeError.code !== 'EEXIST') {
         throw error;
       }
+      return null;
+    }
+  }
+
+  /**
+   * Try to break a lock whose mtime is past the staleness threshold without ever
+   * bare-unlinking the live lock path (POSIX rename overwrites, so a blind unlink
+   * could delete a successor's fresh lock). The live name is atomically moved to a
+   * unique guard — only one contender can win the rename — then re-verified as
+   * stale. A fresh file that was moved by mistake is restored with a hard link
+   * (link fails EEXIST rather than overwriting) rather than deleted.
+   */
+  private async _tryBreakStaleLock(lockPath: string): Promise<boolean> {
+    let lockStat: Awaited<ReturnType<typeof fs.stat>>;
+    try {
+      lockStat = await fs.stat(lockPath);
+    } catch {
+      // The lock vanished between our failed open and this stat — retry the open.
+      return true;
+    }
+    if (Date.now() - lockStat.mtimeMs <= LOCK_STALE_MS) {
       return false;
     }
-    return true;
-  }
-
-  /**
-   * True when the lock file no longer exists (the holder released it mid-race) or
-   * its mtime is past the staleness threshold (the holder crashed).
-   */
-  private async _lockBecameStale(lockPath: string): Promise<boolean> {
+    const guardPath = this._guardPath(lockPath, 'brk');
     try {
-      const stat = await fs.stat(lockPath);
-      return Date.now() - stat.mtimeMs > LOCK_STALE_MS;
-    } catch (error) {
-      const nodeError = error as NodeJS.ErrnoException;
-      return nodeError.code === 'ENOENT';
+      await fs.rename(lockPath, guardPath);
+    } catch {
+      // Another waiter claimed the stale lock first — retry the open.
+      return true;
     }
+    try {
+      const guardStat = await fs.stat(guardPath);
+      if (Date.now() - guardStat.mtimeMs > LOCK_STALE_MS) {
+        await fs.unlink(guardPath).catch(() => {});
+        return true;
+      }
+    } catch {
+      // The moved guard file vanished — retry the open.
+      return true;
+    }
+    // The renamed file is younger than the threshold: the holder refreshed it or a
+    // successor acquired between our stat and rename. Restore it without clobbering
+    // a lock that may have been re-created at the live path in the meantime.
+    try {
+      await fs.link(guardPath, lockPath);
+      await fs.unlink(guardPath);
+    } catch {
+      debugLogger.debug(
+        `Lock replaced while breaking stale lock; inert guard left behind: ${guardPath}`,
+      );
+    }
+    return false;
   }
 
   /**
-   * Run `fn` while this process owns `logFilePath`'s advisory lock and release
-   * it in `finally`, so reader/writer sequences cannot interleave with other
-   * processes. Never nested: no code inside the wrapped callbacks acquires again.
+   * Run `fn` while this process owns `logFilePath`'s advisory lock and release it
+   * in `finally`, so reader/writer sequences cannot interleave with other processes.
+   * A heartbeat re-stamps the held descriptor's inode (not the lock path, so a
+   * broken holder can never refresh a successor's lock) to keep the lease alive
+   * during long critical sections such as a slow legacy migration. Never nested:
+   * no code inside the wrapped callbacks acquires again.
    */
   private async _withLogLock<T>(fn: () => Promise<T>): Promise<T> {
-    await this._acquireLogLock();
+    const lockPath = this._lockFilePath();
+    const handle = await this._acquireLogLock(lockPath);
+    const heartbeat = setInterval(() => {
+      const now = new Date();
+      // Best-effort lease refresh: futimes on our own descriptor touches only
+      // the inode we pinned, even if the lock path has since been taken over.
+      void handle.utimes(now, now).catch(() => {});
+    }, LOCK_HEARTBEAT_MS);
+    heartbeat.unref();
     try {
       return await fn();
     } finally {
-      try {
-        await fs.unlink(this._lockFilePath());
-      } catch (error) {
-        const nodeError = error as NodeJS.ErrnoException;
-        if (nodeError.code !== 'ENOENT') {
-          debugLogger.debug(`Failed to remove log lock file:`, error);
-        }
-      }
+      clearInterval(heartbeat);
+      await this._releaseLogLock(lockPath, handle);
     }
+  }
+
+  /**
+   * Release the lock without a bare unlink and without reading any file
+   * content (steady-state appends must stay read-free). The live name is moved
+   * to a unique guard; the guard's inode is compared against the descriptor we
+   * have pinned since acquisition, which proves ownership race-free. Only our
+   * own inode is ever unlinked — a mismatched guard (our lock was broken and a
+   * successor owns the path) is restored via a hard link, which fails EEXIST
+   * rather than clobbering a newer lock.
+   */
+  private async _releaseLogLock(
+    lockPath: string,
+    handle: fs.FileHandle,
+  ): Promise<void> {
+    const guardPath = this._guardPath(lockPath, 'rel');
+    try {
+      await fs.rename(lockPath, guardPath);
+    } catch (error) {
+      // ENOENT: the lock was already broken or removed — nothing to release.
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        debugLogger.debug('Failed to remove log lock file:', error);
+      }
+      await handle.close().catch(() => {});
+      return;
+    }
+    try {
+      const [guardStat, ownStat] = await Promise.all([
+        fs.stat(guardPath),
+        handle.stat(),
+      ]);
+      if (guardStat.ino === ownStat.ino && guardStat.dev === ownStat.dev) {
+        await fs.unlink(guardPath).catch((error: unknown) => {
+          debugLogger.debug('Failed to remove log lock file:', error);
+        });
+        return;
+      }
+      // Not our inode: we were broken mid-hold and renamed away a successor's
+      // live lock. Restore it without clobbering a lock that may already have
+      // been re-created at the live path.
+      await fs.link(guardPath, lockPath);
+      await fs.unlink(guardPath);
+    } catch {
+      debugLogger.debug(
+        `Lock replaced during release; inert guard left behind: ${guardPath}`,
+      );
+    } finally {
+      await handle.close().catch(() => {});
+    }
+  }
+
+  private _guardPath(lockPath: string, kind: 'brk' | 'rel'): string {
+    lockMutationCounter++;
+    return `${lockPath}.${kind}.${process.pid}.${Date.now()}.${lockMutationCounter}`;
   }
 
   private _parseLegacyJsonArray(trimmed: string): LogEntry[] | null {

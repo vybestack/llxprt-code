@@ -63,10 +63,12 @@ never spin hot and never block the event loop.
 ### REQ-LOCK-004: stale lock recovery
 
 - GIVEN: a lock file left behind by a crashed holder whose mtime is older than
-  the staleness threshold (default 10000 ms)
+  the staleness threshold (default 30000 ms)
 - WHEN: any Logger operation tries to acquire
-- THEN: the stale lock is removed (unlink races are safe: only one waiter's
-  subsequent `open('wx')` succeeds) and the operation proceeds.
+- THEN: the stale lock is broken safely (atomic rename to a unique guard, the
+  moved file re-verified as stale, then removed — never a bare unlink of the
+  live name, which could delete a successor's fresh lock in a POSIX
+  rename/unlink race) and the operation proceeds.
 
 ### REQ-LOCK-005: lock hygiene and liveness
 
@@ -86,10 +88,11 @@ never spin hot and never block the event loop.
 
 - GIVEN: a legacy JSON-array log file and two real child bun processes plus
   the parent, all constructing `Logger` on the same project log dir, each
-  initializing and logging messages
+  initializing and logging messages, all contending on the still-legacy file
 - THEN: every legacy entry survives, the final file is valid JSONL (does not
   start with `[`), and the total line count equals legacy + all writers'
-  messages with every line parsing as a valid `LogEntry`.
+  messages (2 legacy + 8 new entries = 10 lines) with every line parsing
+  as a valid `LogEntry`.
 
 ## Inputs and boundary cases
 
@@ -145,7 +148,9 @@ processes are real `bun` processes.
    post-append disk state (6, since both direct entries count), proving the
    read happens under the lock.
 3. REQ-LOCK-004: backdate the lock mtime past the staleness threshold via
-   `fs.utimes`; `logMessage` completes without manual release; entry on disk.
+   `fs.utimes`; `logMessage` completes without manual release; entry on
+   disk; the broken lock is gone and no `.brk`/`.rel` guard junk
+   remains in the log dir (stale-file-removal assertion).
 4. REQ-LOCK-003: fresh lock + `LLXPRT_LOG_LOCK_TIMEOUT_MS=250`;
    `logMessage` resolves without throwing, messageId unchanged, nothing
    appended, debug-logged; `initialize` completes with `initialized === false`.
@@ -154,12 +159,21 @@ processes are real `bun` processes.
    no `.lock` file; two same-process instances interleaving logMessage calls
    both complete (existing loggerJsonl test already covers the 0,0,1,1
    semantics — this adds lock-file cleanup assertions).
-6. REQ-LOCK-006 e2e: seed legacy pretty-printed array with 2 entries; spawn
-   two child bun processes (driver) each logging 3 messages with the same
-   session id while the parent logs 2; assert file: starts with `{` (JSONL),
-   2 legacy + 5 new entries = 7 lines, all parse, legacy messages present in
-   order, all 5 new messages present.
-7. Regression: existing logger/loggerJsonl suites unchanged and green.
+6. REQ-LOCK-005b (release-ownership): slow `fs.appendFile` with a 300ms
+   pass-through delay; start a `logMessage` without awaiting; wait for its lock
+   file; unlink the holder's lock and plant a fresh lock with a different
+   token (successor); await the log; the successor's lock still exists with its
+   exact original content (the release detected the inode mismatch and restored it via
+   a hard link), the entry landed on disk, and no `.brk`/`.rel` guard
+   junk remains.
+7. REQ-LOCK-006 e2e: seed legacy pretty-printed array with 2 entries;
+   spawn both child bun processes (driver) each doing initialize → migrate-or-load
+   → 3 appends; then run the parent's `initialize` + 2 appends while the
+   children run, so all three processes contend on the still-legacy file without
+   any pre-migration; assert file: starts with `{` (JSONL), 2 legacy +
+   8 new entries = 10 lines, all parse, legacy messages present in order, all
+   8 new messages present exactly once.
+8. Regression: existing logger/loggerJsonl suites unchanged and green.
 
 The test suite uses REAL timers (no `vi.useFakeTimers`) since it exercises
 real backoff/polling.
@@ -169,15 +183,36 @@ real backoff/polling.
 All changes in `packages/core/src/core/logger.ts` (module-private; no new
 exports, no new files in production code):
 
-- Constants: `LOCK_FILE_SUFFIX = '.lock'`, `LOCK_STALE_MS = 10_000`,
-  `LOCK_BACKOFF_MS = 25`, default `LOCK_TIMEOUT_MS = 5_000` overridable via
+- Constants: `LOCK_FILE_SUFFIX = '.lock'`, `LOCK_STALE_MS = 30_000`,
+  `LOCK_HEARTBEAT_MS = 10_000`, `LOCK_BACKOFF_MS = 25`, default
+  `LOCK_TIMEOUT_MS = 5_000` overridable via
   `process.env.LLXPRT_LOG_LOCK_TIMEOUT_MS` read at acquire time.
 - Private `async _withLogLock<T>(fn: () => Promise<T>): Promise<T>`: acquire
-  (open 'wx' → write `{pid, ts}` payload → close; on EEXIST: stat → ENOENT
-  retry immediately, mtime stale → unlink + retry; deadline check → throw
-  descriptive Error; else `await delay(LOCK_BACKOFF_MS)`), run `fn`, release
-  (unlink, ignore ENOENT) in `finally`. Use a local sleep helper or
-  `utils/delay.js` if its shape fits (verify before importing).
+  (hardened protocol below), run `fn`, release in `finally`, and run a 10s
+  heartbeat that re-stamps the held lock so a long critical section (large
+  legacy migration, slow FS) cannot age past the staleness threshold.
+- Hardened acquire. Each contender creates the lock with `open('wx')` (O_EXCL),
+  writes a `{pid, timestamp}` diagnostic payload, and KEEPS THE DESCRIPTOR OPEN
+  for the whole critical section: the pinned inode is the ownership proof, it
+  cannot be recycled while the descriptor is open, and the steady-state append
+  path stays read-free (no payload read-back — the O(1) contract the existing
+  suites assert via `fs.readFile` spies). The heartbeat refreshes the lease with
+  `handle.utimes()`, which touches only our pinned inode, never the lock path,
+  so a broken holder can never extend a successor's lease. A stale lock (mtime
+  older than `LOCK_STALE_MS`) is broken WITHOUT a bare unlink of the live path:
+  the name is atomically renamed to a unique `.brk` guard (renames are atomic
+  and only one waiter can win), the moved file is re-verified as stale after
+  the rename, and only then removed; a file that proved fresh is restored with
+  a hard link (`link` fails on EEXIST rather than overwriting) so a waiter can
+  never clobber a successor's lock the POSIX rename/unlink way. If acquisition
+  created the lock but finalizing failed, the just-created lock is removed so
+  waiters never trip on an ownerless file.
+- Hardened release. The lock is never bare-unlinked while releasing either: the
+  name is renamed to a unique `.rel` guard and the guard's inode compared with
+  the pinned descriptor's `fstat` inode — an exact identity check that needs no
+  file read and no TOCTOU window. Only our own inode is unlinked; a mismatched
+  guard (our lock was broken and a successor owns it) is restored at the live
+  path via a hard link.
 - Wrap `initialize()`'s `_loadFromDisk` → `_ensureJsonlFormat` → messageId
   computation block.
 - Wrap `_appendEntry()`'s body (`_ensureJsonlFormat` → id assign → dup check →
