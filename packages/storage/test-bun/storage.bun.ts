@@ -346,14 +346,27 @@ describe('Storage – log/state-category methods resolve under log dir', () => {
 });
 
 describe('Storage – default platform paths (no overrides)', () => {
+  const savedOptIn = process.env['LLXPRT_ALLOW_REAL_STORAGE_IN_TESTS'];
+
   beforeEach(() => {
     delete process.env['LLXPRT_CONFIG_HOME'];
     delete process.env['LLXPRT_DATA_HOME'];
     delete process.env['LLXPRT_CACHE_HOME'];
     delete process.env['LLXPRT_LOG_HOME'];
+    // The platform default IS the subject of this block, so it opts out of the
+    // guard that otherwise refuses to resolve an unredirected config root in an
+    // isolated test process. These cases only inspect the computed path.
+    process.env['LLXPRT_ALLOW_REAL_STORAGE_IN_TESTS'] = 'true';
   });
 
-  afterEach(restoreEnv);
+  afterEach(() => {
+    restoreEnv();
+    if (savedOptIn === undefined) {
+      delete process.env['LLXPRT_ALLOW_REAL_STORAGE_IN_TESTS'];
+    } else {
+      process.env['LLXPRT_ALLOW_REAL_STORAGE_IN_TESTS'] = savedOptIn;
+    }
+  });
 
   it('getGlobalConfigDir returns the platform config path without override', () => {
     const result = Storage.getGlobalConfigDir();

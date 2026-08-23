@@ -243,3 +243,43 @@ Separately pre-existing and unrelated to this change: the five
 - `scripts/tests/storage-isolation-workspace-config.test.ts`: 33 pass / 0 fail.
 - `npm run typecheck`, `npm run lint`, `npm run build`, and the `stepfun-37`
   startup smoke all pass.
+
+
+## CI round 1: the guard's gate was wrong, and CI proved why
+
+PR #3290's first run failed two shards, both for the same reason, and the
+mechanism is worth recording because it is not obvious.
+
+`Bun`'s `spawnSync` with an inherited environment snapshots the process's
+ORIGINAL environment; `process.env` mutations made after startup are dropped.
+Verified directly:
+
+```
+process.env.LLXPRT_PROBE_VAR = 'set-at-runtime';
+spawnSync(bun, ['-e', 'print process.env.LLXPRT_PROBE_VAR'])                  -> "undefined"
+spawnSync(bun, ['-e', '...'], { env: { ...process.env } })                    -> "set-at-runtime"
+```
+
+`LLXPRT_RUNNING_TESTS` is exported before a test process execs, so it reaches
+inherited-env children. `LLXPRT_CONFIG_HOME` is assigned by the isolation
+preload afterwards, so it does not. Gating the guard on the test marker
+therefore fired inside the real CLI whenever a suite spawned it as a product
+smoke check, over a config root that child was entitled to read:
+
+- `scripts/tests/issue-2342.test.ts` — `bun run start --version`
+- `scripts/tests/publish-integrity.test.ts` — the checked-in launcher
+
+The guard is now gated on `LLXPRT_TEST_STORAGE_ISOLATED`, which
+`isolateStorageRoots()` sets in the same pass that redirects the roots. It
+propagates exactly as far as the redirect does, so it can only fire inside the
+test process that set it. The split of responsibilities is now:
+
+- an isolated test process that clears the redirect and reaches the real config
+  root -> the runtime guard throws;
+- a test ROOT that never isolates at all -> the spawned-probe suite fails.
+
+Also fixed from the same CI run: `packages/storage/test-bun/storage.bun.ts`
+clears the overrides because the platform default is its subject, so it takes
+the `LLXPRT_ALLOW_REAL_STORAGE_IN_TESTS` opt-in like the other three such
+blocks. It passed locally on macOS and failed on Linux only because the
+concurrent local run happened to leave the override set.
