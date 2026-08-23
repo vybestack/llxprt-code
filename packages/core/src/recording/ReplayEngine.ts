@@ -241,7 +241,54 @@ function handleCompressed(
   }
 }
 
-/** @pseudocode line 100-112: rewind — validate and apply rewind or record malformed. */
+/**
+ * Locate the entry the rewind cut at, identified by its chronology `seq`.
+ *
+ * The match is exact. A neighbouring marker is NOT evidence of where the cut
+ * belongs: an entry with no marker can sit on either side of it, so inferring
+ * the cut from the next marked entry mis-cuts a history whose entries are only
+ * partly marked — a session resumed from a file recorded before chronology
+ * markers existed, or one whose `compressed` summary reached the journal
+ * unmarked.
+ *
+ * Returns `null` when no entry carries the recorded seq, which happens when the
+ * cut entry predates markers or was destroyed by a `compressed` event. The
+ * caller then falls back to the recorded count.
+ *
+ * @issue #2934
+ */
+function findChronologyCutIndex(
+  history: readonly IContent[],
+  cutSeq: number,
+): number | null {
+  for (let index = 0; index < history.length; index++) {
+    // `cutSeq` is already a validated sequence number, so equality alone
+    // rejects both a missing marker and a nonsensical one.
+    if (history[index].metadata?.chronology?.seq === cutSeq) {
+      return index;
+    }
+  }
+  return null;
+}
+
+/** Legacy behaviour: drop `itemsToRemove` entries from the end. */
+function applyCountRewind(
+  acc: ReplayAccumulators,
+  itemsToRemove: number,
+): void {
+  acc.history =
+    itemsToRemove >= acc.history.length
+      ? []
+      : acc.history.slice(0, acc.history.length - itemsToRemove);
+}
+
+/**
+ * @pseudocode line 100-112: rewind — validate and apply rewind or record malformed.
+ *
+ * A resolvable `cutSeq` marker takes precedence over the item count: the count
+ * is measured against live history, which diverges from the journal whenever an
+ * unjournalled mutation (density optimization) shrinks it (#2934).
+ */
 function handleRewind(
   payload: Record<string, unknown>,
   acc: ReplayAccumulators,
@@ -254,11 +301,28 @@ function handleRewind(
     acc.warnings.push(`Line ${lineNumber}: malformed rewind event, skipping`);
     return;
   }
-  if (itemsToRemove >= acc.history.length) {
-    acc.history = [];
-  } else {
-    acc.history = acc.history.slice(0, acc.history.length - itemsToRemove);
+
+  // An unreadable cut marker does not invalidate the count beside it. Dropping
+  // the whole event would leave the removed turns in the replayed history,
+  // which is the very symptom this marker exists to prevent, so the corruption
+  // is reported and the rewind still applies by count.
+  const cutSeq = rewindPayload.cutSeq;
+  if (cutSeq !== undefined && !isValidSequence(cutSeq)) {
+    acc.malformedCount++;
+    acc.warnings.push(
+      `Line ${lineNumber}: malformed rewind cut marker, falling back to item count`,
+    );
+    applyCountRewind(acc, itemsToRemove);
+    return;
   }
+
+  const cutIndex =
+    cutSeq === undefined ? null : findChronologyCutIndex(acc.history, cutSeq);
+  if (cutIndex === null) {
+    applyCountRewind(acc, itemsToRemove);
+    return;
+  }
+  acc.history = acc.history.slice(0, cutIndex);
 }
 
 /** @pseudocode line 114-120: provider_switch — update metadata or record malformed. */

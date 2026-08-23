@@ -17,9 +17,13 @@ import {
   contentLine,
   assertReplayError,
   makeContentWithToolCall,
+  makeMarkedContent,
+  compressedLine,
+  rewindLine,
   writeJsonlFile,
   createValidFile,
 } from './replay-test-helpers.js';
+import { type IContent } from '../services/history/IContent.js';
 
 describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
   let tempDir: string;
@@ -275,6 +279,162 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
         type: 'text',
         text: 'post 2',
       });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Rewind by chronology marker (#2934)
+  // -------------------------------------------------------------------------
+
+  describe('Rewind by chronology marker @issue:2934', () => {
+    const textsOf = (history: readonly IContent[]): string[] =>
+      history.map((item) =>
+        item.blocks[0].type === 'text' ? item.blocks[0].text : '',
+      );
+
+    /**
+     * The recorded count is measured against live history, which an
+     * unjournalled density pass has already shortened. The marker is measured
+     * against identity, so it survives that divergence.
+     */
+    it('cuts at the entry carrying the recorded chronology seq, not at the recorded offset', async () => {
+      const lines = [
+        sessionStartLine(1),
+        contentLine(2, makeMarkedContent('kept 1', 'human', 1)),
+        contentLine(3, makeMarkedContent('kept 2', 'ai', 2)),
+        contentLine(4, makeMarkedContent('removed 1', 'human', 3)),
+        contentLine(5, makeMarkedContent('removed 2', 'ai', 4)),
+        // The count is stale — it was computed after density pruned an entry
+        // from live history — so it would remove one item too few.
+        rewindLine(6, 1, 3),
+      ];
+      const filePath = path.join(chatsDir, 'marker-rewind.jsonl');
+      await writeJsonlFile(filePath, lines);
+
+      const result = await replaySession(filePath, PROJECT_HASH);
+
+      assertReplayOk(result);
+      expect(textsOf(result.history)).toStrictEqual(['kept 1', 'kept 2']);
+    });
+
+    /**
+     * A session recorded before chronology markers existed and then resumed
+     * has unmarked entries followed by marked ones. The cut sits in the
+     * unmarked prefix, where no marker can identify it. Cutting at the nearest
+     * later marker would leave the removed turns in place, so the recorded
+     * count is used instead.
+     */
+    it('falls back to the recorded count when the cut entry predates chronology markers', async () => {
+      const lines = [
+        sessionStartLine(1),
+        contentLine(2, makeContent('Q1', 'human')),
+        contentLine(3, makeContent('A1', 'ai')),
+        contentLine(4, makeContent('Q2', 'human')),
+        contentLine(5, makeContent('A2', 'ai')),
+        contentLine(6, makeMarkedContent('Q3', 'human', 5)),
+        contentLine(7, makeMarkedContent('A3', 'ai', 6)),
+        // Live history stamped the resumed entries in memory only, so seq 3
+        // names an entry the journal never marked.
+        rewindLine(8, 4, 3),
+      ];
+      const filePath = path.join(chatsDir, 'marker-rewind-legacy-prefix.jsonl');
+      await writeJsonlFile(filePath, lines);
+
+      const result = await replaySession(filePath, PROJECT_HASH);
+
+      assertReplayOk(result);
+      expect(textsOf(result.history)).toStrictEqual(['Q1', 'A1']);
+    });
+
+    /**
+     * A `compressed` event destroys the entries it replaces, so a later rewind
+     * can name an entry that is no longer in the replayed history. Cutting at
+     * the nearest later marker would strand the summary; the recorded count
+     * clears it.
+     */
+    it('falls back to the recorded count when a compressed event destroyed the cut entry', async () => {
+      const lines = [
+        sessionStartLine(1),
+        contentLine(2, makeMarkedContent('Q1', 'human', 1)),
+        contentLine(3, makeMarkedContent('A1', 'ai', 2)),
+        // The summary reached the journal without a marker.
+        compressedLine(4, makeContent('Summary', 'ai'), 2),
+        contentLine(5, makeMarkedContent('Q2', 'human', 4)),
+        // Restore-all: the cut is the summary, stamped seq 3 in live history.
+        rewindLine(6, 2, 3),
+      ];
+      const filePath = path.join(chatsDir, 'marker-rewind-compressed.jsonl');
+      await writeJsonlFile(filePath, lines);
+
+      const result = await replaySession(filePath, PROJECT_HASH);
+
+      assertReplayOk(result);
+      expect(result.history).toStrictEqual([]);
+    });
+
+    it('falls back to the recorded count when no entry carries a marker at all', async () => {
+      const lines = [
+        sessionStartLine(1),
+        contentLine(2, makeContent('kept', 'human')),
+        contentLine(3, makeContent('dropped 1', 'ai')),
+        contentLine(4, makeContent('dropped 2', 'human')),
+        rewindLine(5, 2, 7),
+      ];
+      const filePath = path.join(chatsDir, 'marker-rewind-unmarked.jsonl');
+      await writeJsonlFile(filePath, lines);
+
+      const result = await replaySession(filePath, PROJECT_HASH);
+
+      assertReplayOk(result);
+      expect(textsOf(result.history)).toStrictEqual(['kept']);
+    });
+
+    it('leaves an already-empty history empty', async () => {
+      const lines = [sessionStartLine(1), rewindLine(2, 3, 1)];
+      const filePath = path.join(chatsDir, 'marker-rewind-empty.jsonl');
+      await writeJsonlFile(filePath, lines);
+
+      const result = await replaySession(filePath, PROJECT_HASH);
+
+      assertReplayOk(result);
+      expect(result.history).toStrictEqual([]);
+    });
+
+    it('retains an unmarked prefix when the cut entry itself is marked', async () => {
+      const lines = [
+        sessionStartLine(1),
+        contentLine(2, makeContent('legacy prefix', 'human')),
+        contentLine(3, makeMarkedContent('kept', 'ai', 5)),
+        contentLine(4, makeMarkedContent('dropped', 'human', 6)),
+        rewindLine(5, 1, 6),
+      ];
+      const filePath = path.join(chatsDir, 'marker-rewind-mixed.jsonl');
+      await writeJsonlFile(filePath, lines);
+
+      const result = await replaySession(filePath, PROJECT_HASH);
+
+      assertReplayOk(result);
+      expect(textsOf(result.history)).toStrictEqual(['legacy prefix', 'kept']);
+    });
+
+    it('does not match a content marker whose seq is not a valid sequence number', async () => {
+      const lines = [
+        sessionStartLine(1),
+        contentLine(2, makeMarkedContent('kept', 'human', 1)),
+        contentLine(3, makeMarkedContent('nonsense marker', 'ai', -2)),
+        contentLine(4, makeMarkedContent('dropped', 'human', 3)),
+        rewindLine(5, 1, 3),
+      ];
+      const filePath = path.join(chatsDir, 'marker-rewind-bad-marker.jsonl');
+      await writeJsonlFile(filePath, lines);
+
+      const result = await replaySession(filePath, PROJECT_HASH);
+
+      assertReplayOk(result);
+      expect(textsOf(result.history)).toStrictEqual([
+        'kept',
+        'nonsense marker',
+      ]);
     });
   });
 

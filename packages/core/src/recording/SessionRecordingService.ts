@@ -613,14 +613,22 @@ export class SessionRecordingService {
   }
 
   /**
-   * Record a rewind event — last N items removed from history.
+   * Record a rewind event — history cut from `cutSeq` onwards, which removed
+   * `itemsRemoved` items from live history.
+   *
+   * `cutSeq` is the chronology `seq` of the first removed item and is omitted
+   * entirely when the caller could not resolve one, keeping the event
+   * byte-identical to a legacy count-only rewind (#2934).
    *
    * @plan PLAN-20260211-SESSIONRECORDING.P05
    * @requirement REQ-REC-002
    * @pseudocode session-recording-service.md lines 198-200
    */
-  recordRewind(itemsRemoved: number): void {
-    this.enqueue('rewind', { itemsRemoved });
+  recordRewind(itemsRemoved: number, cutSeq?: number): void {
+    this.enqueue(
+      'rewind',
+      cutSeq === undefined ? { itemsRemoved } : { itemsRemoved, cutSeq },
+    );
   }
 
   /**

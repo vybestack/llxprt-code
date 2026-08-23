@@ -736,6 +736,59 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
     });
 
     /**
+     * An unreadable cut marker is reported, but the count beside it is still
+     * applied: discarding the whole rewind would put the removed turns back
+     * into the conversation, which is the symptom the marker exists to
+     * prevent, and the count is what a journal without a marker already
+     * replays by.
+     *
+     * @issue #2934
+     */
+    it.each([
+      ['negative', -1],
+      ['fractional', 1.5],
+      ['string', 'three'],
+      ['null', null],
+      ['boolean', true],
+    ])(
+      'rewind with a malformed %s cutSeq warns and still applies the item count',
+      async (label, cutSeq) => {
+        const badRewind = JSON.stringify({
+          v: 1,
+          seq: 4,
+          ts: new Date().toISOString(),
+          type: 'rewind',
+          payload: { itemsRemoved: 1, cutSeq },
+        });
+        const lines = [
+          sessionStartLine(1),
+          contentLine(2, makeContent('msg 1', 'human')),
+          contentLine(3, makeContent('msg 2', 'ai')),
+          badRewind,
+        ];
+        const filePath = path.join(
+          chatsDir,
+          `bad-rewind-cutseq-${label}.jsonl`,
+        );
+        await writeJsonlFile(filePath, lines);
+
+        const result = await replaySession(filePath, PROJECT_HASH);
+
+        assertReplayOk(result);
+        expect(
+          result.history.map((item) =>
+            item.blocks[0].type === 'text' ? item.blocks[0].text : '',
+          ),
+        ).toStrictEqual(['msg 1']);
+        expect(
+          result.warnings.some((warning) =>
+            warning.includes('malformed rewind cut marker'),
+          ),
+        ).toBe(true);
+      },
+    );
+
+    /**
      * Test 35: Malformed provider_switch (missing provider).
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-005
