@@ -31,6 +31,14 @@ import {
 
 const JOURNAL_PATH = '/tmp/llxprt-chats/session-2026-08-22-abcd1234.jsonl';
 
+/**
+ * The notice text that precedes the path, derived from the builder rather than
+ * hard-coded, so the absence checks stay tied to the real contract instead of
+ * to a generic word that unrelated prompt text could contain.
+ */
+const NOTICE_PREFIX =
+  buildTranscriptPathNotice(JOURNAL_PATH).split(JOURNAL_PATH)[0];
+
 interface Strategy {
   compress(context: CompressionContext): Promise<unknown>;
 }
@@ -115,7 +123,9 @@ describe('session journal notice injection (#2933)', () => {
     );
 
     expect(noticeIn(requestText)).toBeUndefined();
-    expect(requestText.some((text) => text.includes('journal'))).toBe(false);
+    expect(requestText.some((text) => text.includes(NOTICE_PREFIX))).toBe(
+      false,
+    );
   });
 
   it('MiddleOutStrategy sends no journal notice when no path is present', async () => {
@@ -125,6 +135,8 @@ describe('session journal notice injection (#2933)', () => {
     );
 
     expect(noticeIn(requestText)).toBeUndefined();
-    expect(requestText.some((text) => text.includes('journal'))).toBe(false);
+    expect(requestText.some((text) => text.includes(NOTICE_PREFIX))).toBe(
+      false,
+    );
   });
 });
