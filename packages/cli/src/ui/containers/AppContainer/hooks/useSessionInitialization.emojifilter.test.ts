@@ -44,7 +44,10 @@ const RESUMED_HISTORY: IContent[] = [
   { speaker: 'ai', blocks: [{ type: 'text', text: 'Done \u2705' }] },
 ];
 
-async function seedWith(emojiMode: string | undefined) {
+async function seedWith(
+  emojiMode: string | undefined,
+  resumedHistory: IContent[] = RESUMED_HISTORY,
+) {
   const loadHistory = vi.fn();
   renderHook(() =>
     useSessionInitialization({
@@ -52,7 +55,7 @@ async function seedWith(emojiMode: string | undefined) {
       agent: makeAgent(),
       addItem: vi.fn(),
       loadHistory,
-      resumedHistory: RESUMED_HISTORY,
+      resumedHistory,
     }),
   );
   await act(async () => {
@@ -108,5 +111,32 @@ describe('useSessionInitialization emoji filtering (#2888)', () => {
     expect(loadHistory).toHaveBeenCalledWith(
       iContentToHistoryItems(RESUMED_HISTORY, 'warn'),
     );
+  });
+
+  it('seeds thinking blocks with blanked thoughts in error mode', async () => {
+    // Thought-only emoji does not block the turn (blocking is decided by
+    // main text, mirroring the live pipeline): the gemini item is kept and
+    // the thought renders blanked.
+    const withThinking: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
+      {
+        speaker: 'ai',
+        blocks: [
+          { type: 'thinking', thought: 'hmm \u2705' },
+          { type: 'text', text: 'Answer' },
+        ],
+      },
+    ];
+    const loadHistory = await seedWith('error', withThinking);
+
+    expect(loadHistory).toHaveBeenCalledWith([
+      { id: -1, type: 'user', text: 'hi' },
+      {
+        id: -2,
+        type: 'gemini',
+        text: 'Answer',
+        thinkingBlocks: [{ type: 'thinking', thought: '' }],
+      },
+    ]);
   });
 });
