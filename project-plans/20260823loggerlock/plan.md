@@ -211,6 +211,19 @@ real backoff/polling.
   locking suite uses real timers; the legacy suites are single-instance and
   `_writeQueue`-serialized), but future tests must not combine fake timers
   with lock contention.
+- The restoring hard link assumes hardlink support. On filesystems where
+  `link(2)` fails for reasons other than EEXIST (FAT/exFAT, some CIFS/NFS
+  mounts) a restore can never succeed; a kidnapped lock stays at its guard
+  path and the live path is left vacant until waiters re-acquire. The lock
+  lives under the user's global log dir (APFS/ext4/zfs/btrfs in practice),
+  all of which support hardlinks, so this is an accepted boundary, not a
+  handled case. A link-retry loop cannot succeed on such mounts and
+  rename-back could clobber a successor, so no blind fallback exists.
+- If a broken holder releases in the window between a breaker's guard rename
+  and the breaker's restoring link, the restore can resurrect an ownerless
+  lock at the live path with a fresh mtime. Waiters then stall until it ages
+  past `LOCK_STALE_MS` (30s) and is reclaimed. Bounded self-healing: no
+  exclusion break, no data loss.
 
 ## Implementation sketch (for the implementer)
 
@@ -220,7 +233,9 @@ exports, no new files in production code):
 - Constants: `LOCK_FILE_SUFFIX = '.lock'`, `LOCK_STALE_MS = 30_000`,
   `LOCK_HEARTBEAT_MS = 10_000`, `LOCK_BACKOFF_MS = 25`, default
   `LOCK_TIMEOUT_MS = 5_000` overridable via
-  `process.env.LLXPRT_LOG_LOCK_TIMEOUT_MS` read at acquire time.
+  `process.env.LLXPRT_LOG_LOCK_TIMEOUT_MS` read at acquire time (test-only:
+  gated on `NODE_ENV === 'test'` so it cannot silently degrade production
+  appends).
 - Private `async _withLogLock<T>(fn: () => Promise<T>): Promise<T>`: acquire
   (hardened protocol below), run `fn`, release in `finally`, and run a 10s
   heartbeat that re-stamps the held lock so a long critical section (large
@@ -278,3 +293,4 @@ src/core/logger.test.ts src/core/loggerJsonl.test.ts`.
 | 2b review round 1 | P2b | done | deepthinker: 2 HIGH (TOCTOU break, no lease) + leak + test gaps — all fixed |
 | 2c review round 2 | P2c | done | architect: HIGH acquire-loop deadline bypass + MEDIUM stale-snapshot migration wipe — fixed with 003b/002b regressions; LOW items triaged (see Known limitations) |
 | 3 verification + review | P3 | in progress | targeted suites green ×3 runs; full cycle pending machine load |
+| 3b OCR round 1 (local) | P3b | done | 4 findings: 2 fixed (debug-string loosened, TEST_CONFIG_HOME cleanup), seam gated to NODE_ENV=test, 1 medium rejected with rationale (hardlink-less FS boundary — documented in Known limitations) |

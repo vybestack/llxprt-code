@@ -77,11 +77,16 @@ export class Logger {
   }
 
   /**
-   * Acquisition deadline for the advisory log-file lock, read at acquire time so
-   * tests can shorten it via the internal `LLXPRT_LOG_LOCK_TIMEOUT_MS` seam
-   * without restarting the process.
+   * Acquisition deadline for the advisory log-file lock. The
+   * `LLXPRT_LOG_LOCK_TIMEOUT_MS` override is deliberately gated to test runs
+   * (bun sets NODE_ENV=test): as an undocumented production knob it could
+   * silently degrade every contended append, so production always uses the
+   * default.
    */
   private _lockTimeoutMs(): number {
+    if (process.env['NODE_ENV'] !== 'test') {
+      return DEFAULT_LOCK_TIMEOUT_MS;
+    }
     const raw = process.env['LLXPRT_LOG_LOCK_TIMEOUT_MS'];
     if (raw !== undefined && raw.trim().length > 0) {
       const parsed = Number(raw);

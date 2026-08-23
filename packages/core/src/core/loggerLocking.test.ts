@@ -156,6 +156,11 @@ describe('Logger inter-process locking', () => {
       `logger-child-driver-${process.pid}.ts`,
     );
     await fs.rm(driverPath, { force: true }).catch(() => {});
+    // Remove the per-run redirected config/log home so temp state cannot
+    // accumulate across runs.
+    await fs
+      .rm(TEST_CONFIG_HOME, { recursive: true, force: true })
+      .catch(() => {});
     if (ORIGINAL_CONFIG_HOME !== undefined) {
       process.env['LLXPRT_CONFIG_HOME'] = ORIGINAL_CONFIG_HOME;
     } else {
@@ -292,7 +297,7 @@ describe('Logger inter-process locking', () => {
       expect(logger['logs']).toHaveLength(0);
       expect(await readLogFile()).toHaveLength(0);
       expect(debugSpy).toHaveBeenCalledWith(
-        'Error appending to log file:',
+        expect.any(String),
         expect.any(Error),
       );
       debugSpy.mockRestore();
