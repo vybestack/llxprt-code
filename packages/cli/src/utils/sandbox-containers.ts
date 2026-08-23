@@ -453,16 +453,22 @@ export function assignContainerName(
   image: string,
 ): string {
   const imageName = parseImageName(image);
-  let index = 0;
   const containerNameCheck = execSync(
     `${config.command} ps -a --format "{{.Names}}"`,
   )
     .toString()
     .trim();
-  while (containerNameCheck.includes(`${imageName}-${index}`)) {
-    index++;
+  // Concurrent sandbox launches (e.g. several agents started at once) all
+  // observe the same `ps -a` snapshot and would race to the same indexed
+  // name; the loser aborts with "name already in use by <container id>".
+  // The PID discriminator makes each concurrent launch claim a distinct
+  // name, while the suffix loop still skips names held by stale containers
+  // left over from a previous process that reused the PID.
+  let containerName = `${imageName}-${process.pid}`;
+  let suffix = 0;
+  while (containerNameCheck.includes(containerName)) {
+    containerName = `${imageName}-${process.pid}-${++suffix}`;
   }
-  const containerName = `${imageName}-${index}`;
   args.push('--name', containerName, '--hostname', containerName);
   return containerName;
 }

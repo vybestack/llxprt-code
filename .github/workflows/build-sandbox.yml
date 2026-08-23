@@ -95,3 +95,12 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      # Execute the bundled CLI inside the published image: the image's npm
+      # tree layout can differ from host installs (nested vs hoisted deps),
+      # so a broken module resolution only reproduces here.
+      - name: Smoke test image
+        run: |
+          IMAGE="$(echo "${{ steps.meta.outputs.tags }}" | head -n 1)"
+          echo "Smoke testing $IMAGE"
+          docker run --rm "$IMAGE" llxprt --version

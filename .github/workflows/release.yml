@@ -491,6 +491,18 @@ jobs:
           build-args: |
             CLI_VERSION_ARG=${{ steps.version.outputs.RELEASE_VERSION }}
 
+      # The image's npm tree layout can differ from any host install (nested
+      # vs hoisted deps), so the bundled CLI must be executed inside the
+      # published image before the release is announced. A missing
+      # undeclared-but-imported module only reproduces here (issue: sandbox
+      # CLI crashed with "Cannot find module '@ast-grep/napi'" while the same
+      # version worked on hosts).
+      - name: Smoke test sandbox image
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
+        env:
+          SANDBOX_SMOKE_IMAGE: ${{ env.REGISTRY }}/${{ env.SANDBOX_IMAGE_NAME }}:${{ steps.version.outputs.RELEASE_VERSION }}
+        run: docker run --rm "$SANDBOX_SMOKE_IMAGE" llxprt --version
+
       - name: Create GitHub Release and Tag
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         env:
