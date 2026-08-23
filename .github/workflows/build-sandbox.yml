@@ -88,19 +88,34 @@ jobs:
           npm pack -w @vybestack/llxprt-code-agents --pack-destination ./packages/agents/dist
           npm pack -w @vybestack/llxprt-code --pack-destination ./packages/cli/dist
 
-      - name: Build and push Docker image
+      - name: Build candidate image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # ratchet:docker/build-push-action@v7
+        with:
+          context: .
+          # Loaded locally (not pushed) so the smoke gate can validate the
+          # candidate before any tag becomes pullable in the registry.
+          push: false
+          load: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      # Execute the bundled CLI inside the built image: the image's npm
+      # tree layout can differ from host installs (nested vs hoisted deps),
+      # so a broken module resolution only reproduces here.
+      - name: Smoke test image
+        env:
+          # Thread through env (not inline expansion) so tag values are
+          # never interpolated into the shell command.
+          SANDBOX_SMOKE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          IMAGE="$(echo "$SANDBOX_SMOKE_TAGS" | head -n 1)"
+          echo "Smoke testing $IMAGE"
+          docker run --rm "$IMAGE" llxprt --version
+
+      - name: Push image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # ratchet:docker/build-push-action@v7
         with:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-
-      # Execute the bundled CLI inside the published image: the image's npm
-      # tree layout can differ from host installs (nested vs hoisted deps),
-      # so a broken module resolution only reproduces here.
-      - name: Smoke test image
-        run: |
-          IMAGE="$(echo "${{ steps.meta.outputs.tags }}" | head -n 1)"
-          echo "Smoke testing $IMAGE"
-          docker run --rm "$IMAGE" llxprt --version

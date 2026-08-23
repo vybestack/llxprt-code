@@ -466,7 +466,11 @@ export function assignContainerName(
   // left over from a previous process that reused the PID.
   let containerName = `${imageName}-${process.pid}`;
   let suffix = 0;
-  while (containerNameCheck.includes(containerName)) {
+  // Exact-match lookup: a substring check would treat the existing
+  // `sandbox-0.11.0-111` as occupying `sandbox-0.11.0-11` too.
+  const containerNames = containerNameCheck.split('\n').filter(Boolean);
+  const existingNames = new Set(containerNames);
+  while (existingNames.has(containerName)) {
     containerName = `${imageName}-${process.pid}-${++suffix}`;
   }
   args.push('--name', containerName, '--hostname', containerName);

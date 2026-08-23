@@ -70,6 +70,15 @@ describe('assignContainerName', () => {
     expect(name).toBe(`sandbox-0.11.0-${pid}-1`);
   });
 
+  it('claims the exact base name when only a longer prefix-sharing name exists', () => {
+    // A substring check would see `sandbox-0.11.0-111` as occupying
+    // `sandbox-0.11.0-11` and needlessly flee to the -2 suffix.
+    stubPid(11);
+    stubContainerNames(['sandbox-0.11.0-111', 'unrelated']);
+    const name = assignContainerName([], config, config.image);
+    expect(name).toBe('sandbox-0.11.0-11');
+  });
+
   it('passes the claimed name as both --name and --hostname', () => {
     stubContainerNames([]);
     const args: string[] = [];

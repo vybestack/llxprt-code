@@ -479,6 +479,34 @@ jobs:
         with:
           driver: docker-container
 
+      - name: Build sandbox image candidate
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # ratchet:docker/build-push-action@v7
+        with:
+          context: .
+          # Single-platform local build (load requires one platform): it
+          # exists to let the smoke gate validate the candidate before any
+          # tag is pushed. The push build below reuses these cached layers.
+          push: false
+          load: true
+          platforms: linux/amd64
+          tags: ${{ steps.sandbox_meta.outputs.tags }}
+          labels: ${{ steps.sandbox_meta.outputs.labels }}
+          build-args: |
+            CLI_VERSION_ARG=${{ steps.version.outputs.RELEASE_VERSION }}
+
+      # The image's npm tree layout can differ from any host install (nested
+      # vs hoisted deps), so the bundled CLI must be executed inside the
+      # built image before the release is announced. A missing
+      # undeclared-but-imported module only reproduces here (issue: sandbox
+      # CLI crashed with "Cannot find module '@ast-grep/napi'" while the same
+      # version worked on hosts).
+      - name: Smoke test sandbox image
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
+        env:
+          SANDBOX_SMOKE_IMAGE: ${{ env.REGISTRY }}/${{ env.SANDBOX_IMAGE_NAME }}:${{ steps.version.outputs.RELEASE_VERSION }}
+        run: docker run --rm "$SANDBOX_SMOKE_IMAGE" llxprt --version
+
       - name: Build and push sandbox image
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # ratchet:docker/build-push-action@v7
@@ -490,18 +518,6 @@ jobs:
           labels: ${{ steps.sandbox_meta.outputs.labels }}
           build-args: |
             CLI_VERSION_ARG=${{ steps.version.outputs.RELEASE_VERSION }}
-
-      # The image's npm tree layout can differ from any host install (nested
-      # vs hoisted deps), so the bundled CLI must be executed inside the
-      # published image before the release is announced. A missing
-      # undeclared-but-imported module only reproduces here (issue: sandbox
-      # CLI crashed with "Cannot find module '@ast-grep/napi'" while the same
-      # version worked on hosts).
-      - name: Smoke test sandbox image
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        env:
-          SANDBOX_SMOKE_IMAGE: ${{ env.REGISTRY }}/${{ env.SANDBOX_IMAGE_NAME }}:${{ steps.version.outputs.RELEASE_VERSION }}
-        run: docker run --rm "$SANDBOX_SMOKE_IMAGE" llxprt --version
 
       - name: Create GitHub Release and Tag
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
