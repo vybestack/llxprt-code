@@ -107,10 +107,13 @@ export function assertTestConfigIsolation(resolved: string): string {
   }
 
   const resolvedPath = path.resolve(resolved);
-  if (
-    resolvedPath !== path.resolve(LLXPRT_PLATFORM_PATHS.config) ||
-    isTempSandboxed(resolvedPath)
-  ) {
+  // Descendants count: pointing LLXPRT_CONFIG_HOME at, say,
+  // `<platformConfig>/profiles` is still the developer's live tree.
+  const platformConfig = path.resolve(LLXPRT_PLATFORM_PATHS.config);
+  const insidePlatformConfig =
+    resolvedPath === platformConfig ||
+    resolvedPath.startsWith(`${platformConfig}${path.sep}`);
+  if (!insidePlatformConfig || isTempSandboxed(resolvedPath)) {
     return resolved;
   }
 

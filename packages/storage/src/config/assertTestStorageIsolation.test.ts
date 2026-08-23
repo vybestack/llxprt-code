@@ -39,6 +39,14 @@ const originalEnv = new Map<string, string | undefined>(
   MANAGED_ENV_KEYS.map((key) => [key, process.env[key]]),
 );
 
+/** A redirect assigned after startup, which an inherited child must not see. */
+const afterStartupConfigHome = path.join(
+  path.sep,
+  'tmp',
+  'llxprt-isolated-after-startup',
+  'config',
+);
+
 const storageModuleUrl = pathToFileURL(
   path.join(path.dirname(fileURLToPath(import.meta.url)), 'storage.ts'),
 ).href;
@@ -106,6 +114,19 @@ describe('Storage config root inside an isolated test process', () => {
     expect(Storage.getGlobalLogDir()).toBe(LLXPRT_PLATFORM_PATHS.log);
   });
 
+  it('throws for a directory beneath the real config root', () => {
+    setEnv(ISOLATION_MARKER_ENV, '1');
+    // A redirect that stays inside the developer's live tree is not isolation.
+    setEnv(
+      'LLXPRT_CONFIG_HOME',
+      path.join(LLXPRT_PLATFORM_PATHS.config, 'profiles'),
+    );
+
+    expect(() => Storage.getGlobalConfigDir()).toThrow(
+      LLXPRT_PLATFORM_PATHS.config,
+    );
+  });
+
   it('returns an isolated directory unchanged', () => {
     setEnv(ISOLATION_MARKER_ENV, '1');
     const isolated = path.join(path.sep, 'tmp', 'llxprt-isolated', 'config');
@@ -153,10 +174,7 @@ describe('Storage config root outside an isolated test process', () => {
    */
   it('lets a child spawned with an inherited environment resolve it', () => {
     setEnv(ISOLATION_MARKER_ENV, '1');
-    setEnv(
-      'LLXPRT_CONFIG_HOME',
-      path.join(path.sep, 'tmp', 'llxprt-isolated', 'config'),
-    );
+    setEnv('LLXPRT_CONFIG_HOME', afterStartupConfigHome);
 
     const probe = spawnSync(
       process.execPath,
@@ -177,6 +195,10 @@ process.stdout.write(Storage.getGlobalConfigDir());`,
       `stdout: ${probe.stdout}
 stderr: ${probe.stderr}`,
     ).toBe(0);
-    expect(probe.stdout).toBe(LLXPRT_PLATFORM_PATHS.config);
+    // Not an equality check against the platform default: a developer whose
+    // shell exports LLXPRT_CONFIG_HOME before Bun starts passes it to the child
+    // through the original environment. The property under test is that the
+    // after-startup redirect did NOT reach the child and the guard did not fire.
+    expect(probe.stdout).not.toBe(afterStartupConfigHome);
   });
 });
