@@ -510,8 +510,9 @@ export class HistoryToolNormalization {
     sourceContents: IContent[],
     assembledBlocks: IContent['blocks'],
   ): IContent | undefined {
-    const source = sourceContents[toolCallIndex + 1];
+    const source = sourceContents[toolCallIndex + 1] as IContent | undefined;
     if (
+      source === undefined ||
       source.speaker !== 'tool' ||
       !hasValidBlocks(source) ||
       source.blocks.some(

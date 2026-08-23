@@ -616,5 +616,57 @@ describe('HistoryService issue #3165 adjacency and metadata', () => {
         reason: 'reordered_tool_responses',
       });
     });
+
+    it('repairs a final same-content tool call and response', () => {
+      service.add(createUserMessage('Run the tool'));
+      service.add({
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'call_final_same_content',
+            name: 'read_file',
+            parameters: { path: 'final.txt' },
+          },
+          {
+            type: 'tool_response',
+            callId: 'call_final_same_content',
+            toolName: 'read_file',
+            result: { content: 'final contents' },
+            isComplete: true,
+          },
+        ],
+      });
+
+      expect(() => service.getCuratedForProvider()).not.toThrow();
+      const curated = service.getCuratedForProvider();
+
+      expect(curated).toHaveLength(3);
+      expect(curated[1]).toMatchObject({
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'call_final_same_content',
+          },
+        ],
+      });
+      expect(curated[2]).toMatchObject({
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'call_final_same_content',
+            toolName: 'read_file',
+            result: { content: 'final contents' },
+            isComplete: true,
+          },
+        ],
+        metadata: {
+          synthetic: true,
+          reason: 'reordered_tool_responses',
+        },
+      });
+    });
   });
 });
