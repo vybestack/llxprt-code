@@ -287,10 +287,13 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
   // -------------------------------------------------------------------------
 
   describe('Rewind by chronology marker @issue:2934', () => {
+    // Entries with no blocks, or whose first block is not text, project to ''
+    // rather than throwing, so a fixture using tool calls stays readable.
     const textsOf = (history: readonly IContent[]): string[] =>
-      history.map((item) =>
-        item.blocks[0].type === 'text' ? item.blocks[0].text : '',
-      );
+      history.map((item) => {
+        const block = item.blocks[0];
+        return block !== undefined && block.type === 'text' ? block.text : '';
+      });
 
     /**
      * The recorded count is measured against live history, which an

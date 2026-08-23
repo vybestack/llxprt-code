@@ -73,7 +73,7 @@ function makeDensityResult(
 
 function textOf(content: IContent): string {
   const block = content.blocks[0];
-  return block.type === 'text' ? block.text : '';
+  return block !== undefined && block.type === 'text' ? block.text : '';
 }
 
 function textsOf(history: readonly IContent[]): string[] {
