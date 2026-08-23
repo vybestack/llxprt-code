@@ -709,6 +709,53 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
       expect(await fileExists(tempPath)).toBe(true);
     });
 
+    it('cleanupOrphanedLocks does NOT remove an aged lock temp that names a live owner', async () => {
+      // A retirement capture that could not be restored is parked under this
+      // grammar and may be the only remaining copy of a live lock, so age
+      // alone must not reclaim it.
+      const sessionId = 'parked-live-temp';
+      const tempName = `${sessionId}.lock.550e8400-e29b-41d4-a716-446655440001.locktmp`;
+      const tempPath = path.join(chatsDir, tempName);
+      await fs.writeFile(
+        tempPath,
+        JSON.stringify({
+          pid: process.pid,
+          timestamp: new Date().toISOString(),
+          sessionId,
+          ownerToken: 'parked-live-owner',
+        }),
+        'utf-8',
+      );
+      const old = new Date(Date.now() - 10 * 60 * 1000);
+      await fs.utimes(tempPath, old, old);
+
+      await SessionLockManager.cleanupOrphanedLocks(chatsDir);
+
+      expect(await fileExists(tempPath)).toBe(true);
+    });
+
+    it('cleanupOrphanedLocks removes an aged lock temp whose owner is dead', async () => {
+      const sessionId = 'parked-dead-temp';
+      const tempName = `${sessionId}.lock.550e8400-e29b-41d4-a716-446655440002.locktmp`;
+      const tempPath = path.join(chatsDir, tempName);
+      await fs.writeFile(
+        tempPath,
+        JSON.stringify({
+          pid: DEAD_PID,
+          timestamp: new Date().toISOString(),
+          sessionId,
+          ownerToken: 'parked-dead-owner',
+        }),
+        'utf-8',
+      );
+      const old = new Date(Date.now() - 10 * 60 * 1000);
+      await fs.utimes(tempPath, old, old);
+
+      await SessionLockManager.cleanupOrphanedLocks(chatsDir);
+
+      expect(await fileExists(tempPath)).toBe(false);
+    });
+
     it('cleanupOrphanedLocks does NOT remove unknown files ending in .locktmp', async () => {
       // Does not match the exact grammar (no valid UUID).
       const badName = 'random.locktmp';
