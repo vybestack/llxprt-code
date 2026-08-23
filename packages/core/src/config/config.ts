@@ -265,7 +265,7 @@ export class Config extends ConfigBase {
     // @requirement REQ-INV-001
     this.agentClient = clientFactory(this, this.runtimeState);
 
-    if (this.getJitContextEnabled()) {
+    if (this.isJitContextEnabled()) {
       this.contextManager = new ContextManager(this);
       await this.contextManager.refresh();
     }
@@ -507,7 +507,7 @@ export class Config extends ConfigBase {
   }
 
   getUserMemory(): string {
-    if (this.getJitContextEnabled() && this.contextManager) {
+    if (this.isJitContextEnabled() && this.contextManager) {
       return [
         this.contextManager.getGlobalMemory(),
         this.contextManager.getEnvironmentMemory(),
@@ -685,22 +685,13 @@ export class Config extends ConfigBase {
     };
   }
 
-  getJitContextEnabled(): boolean {
-    // Check settings service first, then fall back to instance value
-    const settingsValue = this.settingsService.get('jitContextEnabled');
-    if (settingsValue !== undefined) {
-      return settingsValue as boolean;
-    }
-    return this.jitContextEnabled ?? false;
-  }
-
   /**
    * Lazily loads JIT subdirectory memory for a given path.
    * Returns formatted memory content from LLXPRT.md files found between
    * the target path and the trusted root, excluding already-loaded paths.
    */
   async getJitMemoryForPath(targetPath: string): Promise<string> {
-    if (!this.getJitContextEnabled()) {
+    if (!this.isJitContextEnabled()) {
       return '';
     }
 
@@ -795,7 +786,7 @@ export class Config extends ConfigBase {
     fileCount: number;
     filePaths: string[];
   }> {
-    if (this.getJitContextEnabled() && this.contextManager) {
+    if (this.isJitContextEnabled() && this.contextManager) {
       await this.contextManager.refresh();
       const memoryContent = this.getUserMemory();
       const fileCount = this.getLlxprtMdFileCount();

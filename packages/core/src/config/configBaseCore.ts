@@ -620,6 +620,17 @@ export abstract class ConfigBaseCore {
   getApprovalMode(): ApprovalMode {
     return this.approvalMode;
   }
+  /**
+   * The single JIT-context predicate. It resolves from the
+   * constructor-assigned `jitContextEnabled` field and nothing else, so every
+   * consumer (the memory accessors, the ContextManager lifecycle, the prompt
+   * builders and the CLI) observes one answer. A second predicate with a
+   * different resolution order would let the workspace memory hierarchy be
+   * sent twice or not at all (issue #3135).
+   *
+   * The user-facing setting is `experimental.jitContext`, resolved by the CLI
+   * and threaded in as `ConfigParameters.jitContextEnabled`.
+   */
   isJitContextEnabled(): boolean {
     return this.jitContextEnabled === true;
   }

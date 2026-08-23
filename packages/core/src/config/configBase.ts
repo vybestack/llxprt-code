@@ -33,7 +33,6 @@ import {
 export abstract class ConfigBase extends ConfigBaseCore {
   // Abstract methods implemented by Config subclass
   abstract initializeContentGeneratorConfig: () => Promise<void>;
-  abstract getJitContextEnabled(): boolean;
   abstract getExcludeTools(): string[] | undefined;
   abstract getAsyncTaskManager(): AsyncTaskManager | undefined;
   abstract getShellJobManager(): ShellJobManager | undefined;
@@ -70,42 +69,42 @@ export abstract class ConfigBase extends ConfigBaseCore {
   }
 
   getGlobalMemory(): string {
-    if (this.getJitContextEnabled() && this.contextManager) {
+    if (this.isJitContextEnabled() && this.contextManager) {
       return this.contextManager.getGlobalMemory();
     }
     return this.userMemory;
   }
 
   getEnvironmentMemory(): string {
-    if (this.getJitContextEnabled() && this.contextManager) {
+    if (this.isJitContextEnabled() && this.contextManager) {
       return this.contextManager.getEnvironmentMemory();
     }
     return '';
   }
 
   getCoreMemory(): string | undefined {
-    if (this.getJitContextEnabled() && this.contextManager) {
+    if (this.isJitContextEnabled() && this.contextManager) {
       return this.contextManager.getCoreMemory();
     }
     return undefined;
   }
 
   getLlxprtMdFileCount(): number {
-    if (this.getJitContextEnabled() && this.contextManager) {
+    if (this.isJitContextEnabled() && this.contextManager) {
       return this.contextManager.getContextFileCount();
     }
     return this.llxprtMdFileCount;
   }
 
   getCoreMemoryFileCount(): number {
-    if (this.getJitContextEnabled() && this.contextManager) {
+    if (this.isJitContextEnabled() && this.contextManager) {
       return this.contextManager.getCoreMemoryFileCount();
     }
     return 0;
   }
 
   getLlxprtMdFilePaths(): string[] {
-    if (this.getJitContextEnabled() && this.contextManager) {
+    if (this.isJitContextEnabled() && this.contextManager) {
       return Array.from(this.contextManager.getLoadedPaths());
     }
     return this.llxprtMdFilePaths;
