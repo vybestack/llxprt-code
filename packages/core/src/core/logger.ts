@@ -13,6 +13,9 @@ import { delay } from '../utils/delay.js';
 
 const LOG_FILE_NAME = 'logs.json';
 const BACKUP_RETENTION_DAYS = 30;
+// Guard files are inert the moment a rename race loses, so they only need a
+// cutoff comfortably beyond any conceivable forensic interest.
+const GUARD_RETENTION_MS = 24 * 60 * 60 * 1000;
 // Advisory inter-process locking via an O_EXCL lockfile (fs.open 'wx'). Keep the
 // file-mutating sequences serialized across processes; the lock file is deleted on
 // release and recovered when its mtime proves the holder crashed.
@@ -60,6 +63,9 @@ export class Logger {
   private sessionId: string | undefined;
   private messageId = 0; // Instance-specific counter for the next messageId
   private initialized = false;
+  // Set by close(): a closed logger must stay dead instead of lazily
+  // re-initializing on the next logMessage.
+  private _closed = false;
   private logs: LogEntry[] = []; // In-memory cache, ideally reflects the last known state of the file
   private _formatMigrated = false; // True once legacy format check/migration has run
   private _diskIsLegacy = false; // True when the on-disk file is still legacy JSON-array at load
@@ -695,7 +701,7 @@ export class Logger {
       // logs.json.lock.<brk|rel>.<pid>.<ts>.<counter>
       const guardMatch = entry.match(/\.lock\.(?:brk|rel)\.\d+\.(\d+)\.\d+$/);
       if (guardMatch !== null) {
-        return Number(guardMatch[1]) < cutoffMs;
+        return Number(guardMatch[1]) < Date.now() - GUARD_RETENTION_MS;
       }
       return false;
     });
@@ -776,6 +782,21 @@ export class Logger {
   }
 
   async logMessage(type: MessageSenderType, message: string): Promise<void> {
+    // A lock timeout during initialize() must not wedge logging for the whole
+    // session: the blocking lock becomes breakable once it ages past the
+    // staleness threshold, so an uninitialized (but not closed) logger lazily
+    // retries initialization here.
+    if (this._closed) {
+      // Closed loggers must stay dead; same message as below keeps the
+      // observable contract for post-close callers unchanged.
+      debugLogger.debug(
+        'Logger not initialized or session ID missing. Cannot log message.',
+      );
+      return;
+    }
+    if (!this.initialized) {
+      await this.initialize();
+    }
     if (!this.initialized || this.sessionId === undefined) {
       debugLogger.debug(
         'Logger not initialized or session ID missing. Cannot log message.',
@@ -806,6 +827,9 @@ export class Logger {
   }
 
   async close(): Promise<void> {
+    // Mark closed first so logMessage calls arriving during the drain do not
+    // lazily re-initialize the logger.
+    this._closed = true;
     // Drain pending writes until the queue reference stops changing. A single
     // `await this._writeQueue` would miss a write chained onto a newer queue
     // during the await; that write would resume after state is cleared and

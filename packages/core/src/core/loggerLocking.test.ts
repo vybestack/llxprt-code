@@ -403,6 +403,66 @@ describe('Logger inter-process locking', () => {
     }
   });
 
+  it('REQ-LOCK-007: logging self-heals after an initialize lock timeout, but stays dead after close', async () => {
+    // Simulate a crashed holder whose lock is not yet stale: initialize must
+    // time out and leave the logger uninitialized.
+    await fs.writeFile(
+      TEST_LOCK_FILE_PATH,
+      JSON.stringify({ pid: 999999, timestamp: Date.now() }),
+      'utf-8',
+    );
+    process.env['LLXPRT_LOG_LOCK_TIMEOUT_MS'] = '250';
+    const fresh = new Logger(testSessionId, new Storage(process.cwd()));
+    try {
+      await fresh.initialize();
+      expect(fresh['initialized']).toBe(false);
+
+      // The blocker goes away (crash cleanup, stale break, or holder exit).
+      await fs.rm(TEST_LOCK_FILE_PATH, { force: true });
+
+      // A later logMessage must retry initialization instead of dropping
+      // messages for the rest of the session.
+      await fresh.logMessage(MessageSenderType.USER, 'self-healed');
+      expect(fresh['initialized']).toBe(true);
+      const onDisk = await readLogFile();
+      expect(onDisk).toHaveLength(1);
+      expect(onDisk[0].message).toBe('self-healed');
+
+      // After close the logger must stay dead: no lazy resurrection.
+      await fresh.close();
+      await fresh.logMessage(MessageSenderType.USER, 'post-close');
+      expect(await readLogFile()).toHaveLength(1);
+    } finally {
+      delete process.env['LLXPRT_LOG_LOCK_TIMEOUT_MS'];
+      await fresh.close().catch(() => {});
+    }
+  });
+
+  it('REQ-LOCK-008: aged guard junk is pruned by initialization, fresh guards survive', async () => {
+    const oldTs = Date.now() - 48 * 60 * 60 * 1000;
+    const freshTs = Date.now();
+    const agedGuard = `${TEST_LOG_FILE_PATH}.lock.brk.424242.${oldTs}.1`;
+    const freshGuard = `${TEST_LOG_FILE_PATH}.lock.rel.424243.${freshTs}.1`;
+    await fs.writeFile(agedGuard, '{}', 'utf-8');
+    await fs.writeFile(freshGuard, '{}', 'utf-8');
+
+    // A fresh instance runs the full initialize path, including the prune
+    // pass (the suite logger is already initialized and would early-return).
+    const pruner = new Logger(testSessionId, new Storage(process.cwd()));
+    await pruner.initialize();
+    await pruner.logMessage(MessageSenderType.USER, 'prune-check');
+    await pruner.close();
+
+    const files = await fs.readdir(TEST_LLXPRT_DIR);
+    expect(files).not.toContain(path.basename(agedGuard));
+    expect(files).toContain(path.basename(freshGuard));
+    // The live .lock must never be touched by guard pruning.
+    expect(files).not.toContain(LOG_FILE_NAME + LOCK_FILE_SUFFIX);
+    expect((await readLogFile()).map((e) => e.message)).toStrictEqual([
+      'prune-check',
+    ]);
+  });
+
   it('REQ-LOCK-005: leaves no lock residue and same-process instances can interleave without deadlock', async () => {
     await logger.logMessage(MessageSenderType.USER, 'm0');
     await logger.logMessage(MessageSenderType.USER, 'm1');
@@ -642,7 +702,9 @@ async function runChildDriver(
       LLXPRT_LOCK_E2E_SESSION: sessionId,
       LLXPRT_LOCK_E2E_TAG: tag,
     },
-    stdout: 'pipe',
+    // Nothing asserts on child stdout; leaving it piped-but-undrained could
+    // block the child on a full pipe buffer if the driver ever prints.
+    stdout: 'ignore',
     stderr: 'pipe',
   });
   let killTimer: ReturnType<typeof setTimeout> | undefined;
