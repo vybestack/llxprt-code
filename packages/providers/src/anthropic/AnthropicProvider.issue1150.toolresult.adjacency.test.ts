@@ -12,6 +12,7 @@ import type {
   ToolCallBlock,
   ToolResponseBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 import {
   createProviderWithRuntime,
@@ -54,6 +55,68 @@ void vi.mock('@anthropic-ai/sdk', () => ({
     },
   })),
 }));
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object';
+}
+
+function getRequestMessages(request: unknown): unknown[] {
+  if (!isRecord(request)) {
+    throw new Error('Anthropic request did not contain messages');
+  }
+
+  const messages = request.messages;
+  if (!Array.isArray(messages)) {
+    throw new Error('Anthropic request did not contain messages');
+  }
+
+  return messages;
+}
+
+function messageContainsBlockType(
+  message: unknown,
+  role: 'assistant' | 'user',
+  blockType: 'tool_use' | 'tool_result',
+): boolean {
+  if (!isRecord(message) || message.role !== role) {
+    return false;
+  }
+
+  const content = message.content;
+  if (!Array.isArray(content)) {
+    return false;
+  }
+
+  for (const block of content) {
+    if (isRecord(block) && block.type === blockType) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function hasCacheableToolResult(message: unknown): boolean {
+  if (!isRecord(message)) {
+    return false;
+  }
+
+  const content = message.content;
+  if (!Array.isArray(content)) {
+    return false;
+  }
+
+  for (const block of content) {
+    if (!isRecord(block) || block.type !== 'tool_result') {
+      continue;
+    }
+    if ('cache_control' in block) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () => {
   let provider: AnthropicProvider;
@@ -756,6 +819,78 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
           expect(hasMatchingResult).toBe(true);
         }
       }
+    });
+
+    it('keeps curated anchored tool results adjacent and cacheable in the request', async () => {
+      settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'Response' }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      });
+      const historyService = new HistoryService();
+      const contents: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Read the file' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'anchored_tool_request',
+              name: 'read_file',
+              parameters: { path: 'file.txt' },
+            },
+          ],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'anchored_tool_request',
+              toolName: 'read_file',
+              result: 'contents',
+              isComplete: true,
+            },
+          ],
+          metadata: { cacheAnchor: true },
+        },
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'The file was read' }],
+        },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Continue' }],
+        },
+      ];
+      for (const content of contents) {
+        historyService.add(content);
+      }
+      const curated = historyService.getCuratedForProvider();
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(curated),
+      );
+      await generator.next();
+
+      const requestValue: unknown = mockMessagesCreate.mock.calls[0]?.[0];
+      const requestMessages = getRequestMessages(requestValue);
+      const toolUseIndex = requestMessages.findIndex((message) =>
+        messageContainsBlockType(message, 'assistant', 'tool_use'),
+      );
+      expect(toolUseIndex).toBeGreaterThan(-1);
+
+      const resultMessage = requestMessages[toolUseIndex + 1];
+      if (!isRecord(resultMessage)) {
+        throw new Error('Anthropic request did not contain an adjacent result');
+      }
+
+      expect(resultMessage.role).toBe('user');
+      expect(hasCacheableToolResult(resultMessage)).toBe(true);
+      expect(JSON.stringify(requestValue)).not.toContain('cacheAnchor');
     });
   });
 });

@@ -20,13 +20,16 @@ import type {
   ToolCallBlock,
   ToolResponseBlock,
 } from './IContent.js';
-import type { DebugLogger } from '../../debug/index.js';
 
 /**
- * Deep clone content arrays and remove circular references so the result is
- * safe to serialize and send to providers.
+ * Sanitize provider history for serialization while cloning its top-level data.
+ * The copy isolates content and block references because getCurated() returns
+ * stored contents directly and in-process BeforeModel hooks may mutate them.
+ * Metadata retains its existing shallow-copy behavior.
  */
-export function deepCloneWithoutCircularRefs(contents: IContent[]): IContent[] {
+export function sanitizeProviderHistoryForSerialization(
+  contents: IContent[],
+): IContent[] {
   return contents.map((content) => ({
     speaker: content.speaker,
     blocks: content.blocks.map(cloneBlock),
@@ -99,20 +102,4 @@ export function sanitizeParams(params: unknown): unknown {
       _note: 'Parameters contained circular references and were sanitized',
     };
   }
-}
-
-/** Sanitize and log on error (for callers that want logging). */
-export function sanitizeParamsWithLogger(
-  params: unknown,
-  logger: DebugLogger,
-): unknown {
-  const sanitized = sanitizeParams(params);
-  if (
-    typeof sanitized === 'object' &&
-    sanitized !== null &&
-    '_note' in sanitized
-  ) {
-    logger.debug('Parameters were sanitized due to serialization issues');
-  }
-  return sanitized;
 }

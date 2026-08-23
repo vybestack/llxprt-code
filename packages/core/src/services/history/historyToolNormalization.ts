@@ -313,8 +313,8 @@ export class HistoryToolNormalization {
 
     return HistoryToolNormalization.reassembleAdjacencyResult(
       strippedContents,
-      maps.responsesByToolCallIndex,
-      maps.mediaBlocksByToolCallIndex,
+      contents,
+      maps,
     );
   }
 
@@ -504,11 +504,34 @@ export class HistoryToolNormalization {
     return toolCallIndex;
   }
 
+  /** Return the source only when the output exactly retains one adjacent tool content. */
+  private static retainedAdjacentSource(
+    toolCallIndex: number,
+    sourceContents: IContent[],
+    assembledBlocks: IContent['blocks'],
+  ): IContent | undefined {
+    const source = sourceContents[toolCallIndex + 1];
+    if (
+      source.speaker !== 'tool' ||
+      !hasValidBlocks(source) ||
+      source.blocks.some(
+        (block) => block.type !== 'tool_response' && block.type !== 'media',
+      )
+    ) {
+      return undefined;
+    }
+
+    const retainsOrderedBlocks =
+      assembledBlocks.length === source.blocks.length &&
+      assembledBlocks.every((block, index) => block === source.blocks[index]);
+    return retainsOrderedBlocks ? source : undefined;
+  }
+
   /** Reassemble stripped contents with tool responses after their tool-call messages. */
   private static reassembleAdjacencyResult(
     strippedContents: Array<IContent | null>,
-    responsesByToolCallIndex: Map<number, ToolResponseBlock[]>,
-    mediaBlocksByToolCallIndex: Map<number, MediaBlock[]>,
+    sourceContents: IContent[],
+    maps: ReassignMaps,
   ): IContent[] {
     const result: IContent[] = [];
 
@@ -518,16 +541,24 @@ export class HistoryToolNormalization {
         result.push(content);
       }
 
-      const responses = responsesByToolCallIndex.get(i);
+      const responses = maps.responsesByToolCallIndex.get(i);
       if (responses && responses.length > 0) {
-        const mediaForThisIndex = mediaBlocksByToolCallIndex.get(i) ?? [];
+        const mediaForThisIndex = maps.mediaBlocksByToolCallIndex.get(i) ?? [];
+        const assembledBlocks = [...responses, ...mediaForThisIndex];
+        const retainedSource = HistoryToolNormalization.retainedAdjacentSource(
+          i,
+          sourceContents,
+          assembledBlocks,
+        );
         result.push({
           speaker: 'tool',
-          blocks: [...responses, ...mediaForThisIndex],
-          metadata: {
-            synthetic: true,
-            reason: 'reordered_tool_responses',
-          },
+          blocks: assembledBlocks,
+          metadata: retainedSource
+            ? retainedSource.metadata
+            : {
+                synthetic: true,
+                reason: 'reordered_tool_responses',
+              },
         });
       }
     }

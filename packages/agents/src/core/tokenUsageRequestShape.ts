@@ -262,13 +262,12 @@ function hasToolBlock(content: IContent): boolean {
  *   4. history   — everything else
  *
  * Tool content is classified structurally, ahead of the `synthetic` flag,
- * because the provider pipeline rebuilds tool turns through
- * `ensureToolResponseAdjacency` and stamps `synthetic: true` with
- * `reason: 'reordered_tool_responses'` on every one of them — even when nothing
- * was actually reordered. Trusting the flag put all tool results into
- * `injected_tokens` and left `history_tokens` excluding them, which inverted
- * what both fields mean. A tool round-trip is conversation history; genuine
- * injections (IDE context, system reminders) carry no tool blocks.
+ * because genuinely rebuilt or reordered tool turns carry `synthetic: true`
+ * with `reason: 'reordered_tool_responses'`. Those tool results remain part of
+ * the conversation history. Trusting the flag alone put them in
+ * `injected_tokens` and excluded them from `history_tokens`, which inverted what
+ * both fields mean. Genuine injections such as IDE context and system reminders
+ * carry no tool blocks.
  */
 type ContentBucket = 'injected' | 'media' | 'history';
 

@@ -93,6 +93,62 @@ describe('applyCompressionWithAnchor — cacheAnchor marker (#3070)', () => {
     expect(rebuilt[topPreserved - 1].metadata?.chronology?.seq).toBeDefined();
   });
 
+  it('anchors the preserved-head tool content after a complete tool round-trip', () => {
+    const historyService = new HistoryService();
+    const toolCallId = 'compression-tool-call';
+    const roundTrip: IContent[] = [
+      human('Read the file'),
+      {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: toolCallId,
+            name: 'read_file',
+            parameters: { path: 'file.txt' },
+          },
+        ],
+      },
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: toolCallId,
+            toolName: 'read_file',
+            result: 'contents',
+            isComplete: true,
+          },
+        ],
+      },
+      ai('The file was read'),
+    ];
+    for (const content of roundTrip) {
+      historyService.add(content, 'test-model');
+    }
+    const stamped = historyService.getAll();
+
+    apply(
+      historyService,
+      [
+        stamped[0],
+        stamped[1],
+        stamped[2],
+        summary('compressed remainder'),
+        human('tail'),
+      ],
+      3,
+    );
+
+    const rebuilt = historyService.getAll();
+    const anchored = rebuilt.filter(
+      (content) => content.metadata?.cacheAnchor === true,
+    );
+    expect(anchored).toHaveLength(1);
+    expect(anchored[0].speaker).toBe('tool');
+    expect(anchored[0].blocks[0].type).toBe('tool_response');
+  });
+
   it('clears stale markers so exactly one entry carries the marker after a second compression', () => {
     const historyService = new HistoryService();
     for (const c of [human('seed1'), ai('seed2')]) {

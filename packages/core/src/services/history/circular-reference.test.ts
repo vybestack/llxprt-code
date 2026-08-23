@@ -313,4 +313,67 @@ describe('Circular Reference Bug', () => {
     // The main goal of this test is that circular references are properly cleaned up
     expect(() => JSON.stringify(curatedForProvider)).not.toThrow();
   });
+
+  it('sanitizes cyclic tool call parameters without mutating stored history', () => {
+    interface CyclicValue {
+      label: string;
+      self?: CyclicValue;
+    }
+    const parameters: CyclicValue = { label: 'parameters' };
+    parameters.self = parameters;
+    historyService.add({
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'tool_call',
+          id: 'cyclic-parameters',
+          name: 'cyclic_tool',
+          parameters,
+        },
+      ],
+    });
+
+    const first = historyService.getCuratedForProvider();
+    const second = historyService.getCuratedForProvider();
+
+    expect(JSON.stringify(first)).toContain('"_circular":true');
+    expect(JSON.stringify(second)).toBe(JSON.stringify(first));
+    expect(parameters.self).toBe(parameters);
+  });
+
+  it('sanitizes cyclic tool response results before provider serialization', () => {
+    interface CyclicValue {
+      label: string;
+      self?: CyclicValue;
+    }
+    const result: CyclicValue = { label: 'result' };
+    result.self = result;
+    historyService.add({
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'tool_call',
+          id: 'cyclic-result',
+          name: 'cyclic_tool',
+          parameters: {},
+        },
+      ],
+    });
+    historyService.add({
+      speaker: 'tool',
+      blocks: [
+        {
+          type: 'tool_response',
+          callId: 'cyclic-result',
+          toolName: 'cyclic_tool',
+          result,
+        },
+      ],
+    });
+
+    const curated = historyService.getCuratedForProvider();
+
+    expect(JSON.stringify(curated)).toContain('"_circular":true');
+    expect(result.self).toBe(result);
+  });
 });
