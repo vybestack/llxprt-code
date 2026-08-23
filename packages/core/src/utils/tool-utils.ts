@@ -83,7 +83,7 @@ function matchesToolPattern(
     if (!('command' in invocation.params)) {
       return false;
     }
-    command = String((invocation.params as { command: string }).command);
+    command = String((invocation.params as { command?: unknown }).command);
   }
 
   // PowerShell command resolution is case-insensitive; Bash is case-sensitive.
@@ -138,6 +138,8 @@ export function isShellInvocationAllowlisted(
     return true;
   }
 
+  // AnyToolInvocation.params is an intentionally shape-less `object` boundary, so
+  // widen to unknown before structural checks.
   const params = invocation.params as unknown;
   if (typeof params !== 'object' || params === null || !('command' in params)) {
     return false;

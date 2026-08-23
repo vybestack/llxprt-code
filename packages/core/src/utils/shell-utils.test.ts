@@ -640,6 +640,36 @@ describe('shell-utils', () => {
       ).toBe(true);
     });
 
+    it('should fail closed when params are malformed', () => {
+      const allowlist = ['run_shell_command(git)'];
+
+      const missingCommand = { params: {} } as unknown as AnyToolInvocation;
+      expect(isShellInvocationAllowlisted(missingCommand, allowlist)).toBe(
+        false,
+      );
+
+      const nonStringCommand = {
+        params: { command: 42 },
+      } as unknown as AnyToolInvocation;
+      expect(isShellInvocationAllowlisted(nonStringCommand, allowlist)).toBe(
+        false,
+      );
+
+      const objectCommand = {
+        params: { command: { nested: 'git' } },
+      } as unknown as AnyToolInvocation;
+      expect(isShellInvocationAllowlisted(objectCommand, allowlist)).toBe(
+        false,
+      );
+
+      const whitespaceCommand = {
+        params: { command: '   ' },
+      } as unknown as AnyToolInvocation;
+      expect(isShellInvocationAllowlisted(whitespaceCommand, allowlist)).toBe(
+        false,
+      );
+    });
+
     it('should treat piped commands as separate segments that must be allowlisted', () => {
       const invocation = createInvocation('git status | tail -n 1');
       expect(

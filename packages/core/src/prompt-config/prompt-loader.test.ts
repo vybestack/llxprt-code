@@ -168,17 +168,11 @@ describe('PromptLoader', () => {
     });
 
     it('should return error for null or undefined file path', async () => {
-      const resultNull = await loader.loadFile(
-        null as unknown as string,
-        false,
-      );
+      const resultNull = await loader.loadFile(null, false);
       expect(resultNull.success).toBe(false);
       expect(resultNull.error).toBe('Invalid file path');
 
-      const resultUndefined = await loader.loadFile(
-        undefined as unknown as string,
-        false,
-      );
+      const resultUndefined = await loader.loadFile(undefined, false);
       expect(resultUndefined.success).toBe(false);
       expect(resultUndefined.error).toBe('Invalid file path');
     });
@@ -253,7 +247,7 @@ describe('PromptLoader', () => {
 
     it('should handle empty content', () => {
       expect(loader.compressContent('')).toBe('');
-      expect(loader.compressContent(null as unknown as string)).toBe('');
+      expect(loader.compressContent(null)).toBe('');
     });
 
     it('should remove excessive whitespace', () => {
@@ -316,23 +310,29 @@ describe('PromptLoader', () => {
       expect(result.has(file2)).toBe(false);
     });
 
-    it('should return empty map for null or empty inputs', async () => {
-      const resultNull = await loader.loadAllFiles(
-        null as unknown as string,
+    it('should return empty map for null, undefined, or empty inputs', async () => {
+      const nullBaseDir = await loader.loadAllFiles(null, ['file.md'], false);
+      expect(nullBaseDir.size).toBe(0);
+
+      const undefinedBaseDir = await loader.loadAllFiles(
+        undefined,
         ['file.md'],
         false,
       );
-      expect(resultNull.size).toBe(0);
+      expect(undefinedBaseDir.size).toBe(0);
 
-      const resultEmpty = await loader.loadAllFiles(tempDir, [], false);
-      expect(resultEmpty.size).toBe(0);
+      const emptyList = await loader.loadAllFiles(tempDir, [], false);
+      expect(emptyList.size).toBe(0);
 
-      const resultNullFiles = await loader.loadAllFiles(
+      const nullList = await loader.loadAllFiles(tempDir, null, false);
+      expect(nullList.size).toBe(0);
+
+      const undefinedList = await loader.loadAllFiles(
         tempDir,
-        null as unknown as string[],
+        undefined,
         false,
       );
-      expect(resultNullFiles.size).toBe(0);
+      expect(undefinedList.size).toBe(0);
     });
 
     it('should apply compression when requested', async () => {
