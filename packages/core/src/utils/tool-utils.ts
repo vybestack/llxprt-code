@@ -83,7 +83,11 @@ function matchesToolPattern(
     if (!('command' in invocation.params)) {
       return false;
     }
-    command = String((invocation.params as { command?: unknown }).command);
+    const commandValue = (invocation.params as { command?: unknown }).command;
+    if (typeof commandValue !== 'string') {
+      return false;
+    }
+    command = commandValue;
   }
 
   // PowerShell command resolution is case-insensitive; Bash is case-sensitive.

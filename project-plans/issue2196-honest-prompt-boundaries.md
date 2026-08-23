@@ -124,3 +124,40 @@ review (max 2 rounds).
     runtime-visible change is a behavior-preserving guard split plus a
     type-only cast).
 - Main worktree removed after evidence capture.
+
+## PR remediation (CodeRabbit, 2026-08-23)
+
+- PR #3280 CI fully green (37 pass / 0 fail / 3 by-design skips), CodeRabbit
+  check SUCCESS, CI OpenCodeReview: 0 findings (PR OCR round 1 of 2).
+- One actionable CodeRabbit thread (tool-utils.ts `matchesToolPattern`):
+  `String(...)` coerced a malformed non-string `params.command` (e.g. `42`)
+  into matching `ShellTool(42)` via the exported `doesToolInvocationMatch`,
+  bypassing `isShellInvocationAllowlisted`'s non-string rejection. Classified
+  In-scope-Fix (line touched by this PR; same boundary-honesty root cause;
+  sibling path already rejects non-strings; fail-closed).
+- Fix: `matchesToolPattern` now reads `params.command` as `unknown` and
+  returns `false` for non-strings instead of coercing; regression test added
+  in `tool-utils.test.ts` (`{ params: { command: 42 } }` vs `ShellTool(42)`
+  → `false`).
+- Round-2 verification: targeted tests 121 pass / 1 Windows skip / 0 fail
+  (prompt-loader, shell-utils, tool-utils test files); typecheck EXIT=0
+  (re-run sequentially after build — a concurrent build/typecheck run
+  produces transient `Cannot find module '@vybestack/llxprt-code-ide-integration'`
+  errors from dist being rebuilt); format EXIT=0 no changes; build EXIT=0;
+  stepfun-37 smoke PASS; full lint + full suite re-run on the remediated
+  head. No new OCR local round needed for this small guard change; the CI
+  OpenCodeReview on the new head covers it (PR OCR round 2 of 2).
+- Round-2 full suite: 31 failing tests, none in changed files (targeted
+  runs of all three touched test files: 121 pass / 1 Windows skip / 0 fail).
+  Failure triage: 4 ripgrepPathResolver (byte-identical on origin/main,
+  proven round 1); agents 180s/30s-timeout specs plus GrepTool 60s and
+  provider-liveness 150ms timing tests (load-sensitive — this run shared
+  the machine with concurrent lint/typecheck/build). Proof of flakiness at
+  the merge-base 38d9fb9f7 (fixed commit, no PR changes present):
+  config-injection.spec.ts + core-history.spec.ts combined standalone →
+  1 fail (config-injection T1, 30s timeout) then 0 fail on immediate
+  re-run, and a third repetition failed T1 again; on the remediated branch
+  the same T1/T6 fail the same way. Full-suite round-1 worktree evidence
+  (identical ripgrep failures, standalone-passing timing tests on both
+  trees) plus this round's merge-base flake proof cover all 31.
+- Main worktree removed after evidence capture.
