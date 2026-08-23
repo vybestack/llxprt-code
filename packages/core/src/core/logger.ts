@@ -111,17 +111,20 @@ export class Logger {
   private async _acquireLogLock(lockPath: string): Promise<fs.FileHandle> {
     const deadline = Date.now() + this._lockTimeoutMs();
     for (;;) {
+      // Deadline first, so no branch below can bypass it: a persistently
+      // failing stale-break (e.g. a dangling symlink at the lock path, or a
+      // non-writable directory) must time out like any other contention,
+      // never hot-loop and wedge the caller's write queue and close().
+      if (Date.now() >= deadline) {
+        throw new Error(`Timed out waiting for log lock ${lockPath}`);
+      }
       const handle = await this._tryAcquireLogLock(lockPath);
       if (handle !== null) {
         return handle;
       }
-      if (await this._tryBreakStaleLock(lockPath)) {
-        // A confirmed break (or an observed disappearance) — retry the open now.
-        continue;
-      }
-      if (Date.now() >= deadline) {
-        throw new Error(`Timed out waiting for log lock ${lockPath}`);
-      }
+      await this._tryBreakStaleLock(lockPath);
+      // Always back off between attempts — including after a confirmed break —
+      // so a persistent failure can never spin hot.
       await delay(LOCK_BACKOFF_MS);
     }
   }
@@ -251,8 +254,13 @@ export class Logger {
       await fs.rename(lockPath, guardPath);
     } catch (error) {
       // ENOENT: the lock was already broken or removed — nothing to release.
+      // Any other errno abandons the path on purpose: a blind unlink could
+      // delete a successor's live lock. Waiters recover via staleness.
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        debugLogger.debug('Failed to remove log lock file:', error);
+        debugLogger.debug(
+          `Failed to claim log lock for release (${(error as NodeJS.ErrnoException).code}); leaving it for stale recovery:`,
+          error,
+        );
       }
       await handle.close().catch(() => {});
       return;
@@ -440,6 +448,22 @@ export class Logger {
       return;
     }
     if (this._diskIsLegacy) {
+      if (this.initialized) {
+        // Append-time retry: initialize's eager migration failed and was
+        // swallowed, so this.logs may be a stale snapshot — another process
+        // may have migrated the file and appended since. Re-read inside this
+        // same lock hold so the rewrite below cannot destroy those entries.
+        // Never reached in steady state (only while migration is pending) and
+        // never during initialize's eager pass (initialized is still false).
+        const { entries, legacy } = await this._loadFromDisk();
+        this.logs = entries;
+        this._diskIsLegacy = legacy;
+        if (!legacy) {
+          // Another process already migrated the file — nothing to rewrite.
+          this._formatMigrated = true;
+          return;
+        }
+      }
       const backedUp = await this._backupCorruptedLogFile('pre_migration');
       if (!backedUp) {
         // Fail fast: never append JSONL onto a still-legacy file, which would
@@ -660,6 +684,13 @@ export class Logger {
       if (entry.endsWith('.tmp')) {
         const match = entry.match(/\.(\d+)\.tmp$/);
         return match !== null && Number(match[1]) < cutoffMs;
+      }
+      // Inert guard files left by lost rename-guard races: they never sit at
+      // the live .lock path, but prune them so they cannot accumulate.
+      // logs.json.lock.<brk|rel>.<pid>.<ts>.<counter>
+      const guardMatch = entry.match(/\.lock\.(?:brk|rel)\.\d+\.(\d+)\.\d+$/);
+      if (guardMatch !== null) {
+        return Number(guardMatch[1]) < cutoffMs;
       }
       return false;
     });

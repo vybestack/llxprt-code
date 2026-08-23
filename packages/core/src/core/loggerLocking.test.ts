@@ -281,13 +281,14 @@ describe('Logger inter-process locking', () => {
     );
     process.env['LLXPRT_LOG_LOCK_TIMEOUT_MS'] = '250';
     try {
-      const startMessageId = logger['messageId'];
       const debugSpy = vi
         .spyOn(debugLogger, 'debug')
         .mockImplementation(() => {});
 
       await logger.logMessage(MessageSenderType.USER, 'timeout-message');
-      expect(logger['messageId']).toBe(startMessageId);
+      // beforeEach initialized this logger over an empty dir, so the counter
+      // starts at 0 and a failed append must leave it exactly there.
+      expect(logger['messageId']).toBe(0);
       expect(logger['logs']).toHaveLength(0);
       expect(await readLogFile()).toHaveLength(0);
       expect(debugSpy).toHaveBeenCalledWith(
@@ -305,6 +306,98 @@ describe('Logger inter-process locking', () => {
     }
   });
 
+  it('REQ-LOCK-003b: acquisition stays bounded when the lock path is a dangling symlink', async () => {
+    // open(path, 'wx') fails EEXIST on a dangling symlink while stat() reports
+    // ENOENT — a persistent acquire-loop failure that must still respect the
+    // deadline. Before the deadline was hoisted to the top of the loop this
+    // hot-looped forever and wedged close().
+    await fs.symlink(
+      path.join(TEST_LLXPRT_DIR, 'nonexistent-lock-target'),
+      TEST_LOCK_FILE_PATH,
+    );
+    process.env['LLXPRT_LOG_LOCK_TIMEOUT_MS'] = '250';
+    try {
+      const start = Date.now();
+      // Must settle (not hang), not throw, and not write anything.
+      await logger.logMessage(MessageSenderType.USER, 'symlink-case');
+      const elapsed = Date.now() - start;
+      expect(logger['messageId']).toBe(0);
+      expect(await readLogFile()).toHaveLength(0);
+      // Bounded by the deadline plus overhead, well under the suite budget.
+      expect(elapsed).toBeLessThan(10_000);
+    } finally {
+      delete process.env['LLXPRT_LOG_LOCK_TIMEOUT_MS'];
+      // rm removes the symlink itself, never the (nonexistent) target.
+      await fs.rm(TEST_LOCK_FILE_PATH, { force: true }).catch(() => {});
+    }
+  });
+
+  it('REQ-LOCK-002b: append-time migration retry reloads disk instead of rewriting a stale snapshot', async () => {
+    const sessionId = 'migration-retry-session';
+    const legacyEntries: LogEntry[] = [
+      {
+        sessionId,
+        messageId: 0,
+        timestamp: new Date('2026-01-01T10:00:00.000Z').toISOString(),
+        type: MessageSenderType.USER,
+        message: 'legacy-0',
+      },
+    ];
+    await fs.writeFile(
+      TEST_LOG_FILE_PATH,
+      JSON.stringify(legacyEntries, null, 2),
+      'utf-8',
+    );
+
+    // Fail the pre-migration backup exactly once so initialize's eager
+    // migration is swallowed (infrastructure fault injection; later backups
+    // pass through to the real copyFile).
+    const copySpy = vi
+      .spyOn(fs, 'copyFile')
+      .mockRejectedValueOnce(
+        Object.assign(new Error('injected backup failure'), { code: 'EACCES' }),
+      );
+
+    const victim = new Logger(sessionId, new Storage(process.cwd()));
+    try {
+      await victim.initialize();
+      copySpy.mockRestore();
+      // Init succeeded but the file is still legacy and migration is pending.
+      expect(victim['initialized']).toBe(true);
+      expect(victim['_diskIsLegacy']).toBe(true);
+
+      // Another process migrates the file and appends its own entry while the
+      // victim holds a pre-migration snapshot.
+      const foreign: LogEntry = {
+        sessionId,
+        messageId: 1,
+        timestamp: new Date('2026-01-01T10:00:02.000Z').toISOString(),
+        type: MessageSenderType.USER,
+        message: 'foreign-append',
+      };
+      const migrated =
+        legacyEntries.map((e) => JSON.stringify(e)).join('\n') +
+        '\n' +
+        JSON.stringify(foreign) +
+        '\n';
+      await fs.writeFile(TEST_LOG_FILE_PATH, migrated, 'utf-8');
+
+      // The retry must re-read inside its lock hold and adopt the migrated
+      // file rather than rewriting it from the stale snapshot.
+      await victim.logMessage(MessageSenderType.USER, 'retry-append');
+
+      const onDisk = await readLogFile();
+      expect(onDisk.map((e) => e.message)).toStrictEqual([
+        'legacy-0',
+        'foreign-append',
+        'retry-append',
+      ]);
+    } finally {
+      copySpy.mockRestore();
+      await victim.close();
+    }
+  });
+
   it('REQ-LOCK-005: leaves no lock residue and same-process instances can interleave without deadlock', async () => {
     await logger.logMessage(MessageSenderType.USER, 'm0');
     await logger.logMessage(MessageSenderType.USER, 'm1');
@@ -312,6 +405,7 @@ describe('Logger inter-process locking', () => {
 
     const l1 = new Logger(testSessionId, new Storage(process.cwd()));
     const l2 = new Logger(testSessionId, new Storage(process.cwd()));
+
     await l1.initialize();
     await l2.initialize();
     await Promise.all([
@@ -374,8 +468,9 @@ describe('Logger inter-process locking', () => {
       // against the successor's lock.
       await pending;
 
-      // The release detected the token mismatch and restored the successor's lock via
-      // a hard link rather than deleting it (no partial write may be observed).
+      // The release detected the inode mismatch (guard vs. its pinned acquire
+      // descriptor) and restored the successor's lock via a hard link rather
+      // than deleting it.
       expect(await fs.readFile(TEST_LOCK_FILE_PATH, 'utf-8')).toBe(
         successorPayload,
       );
@@ -545,22 +640,29 @@ async function runChildDriver(
     stdout: 'pipe',
     stderr: 'pipe',
   });
-  const exitCode = await Promise.race([
-    proc.exited,
-    new Promise<never>((_, reject) => {
-      setTimeout(() => {
-        proc.kill();
-        reject(
-          new Error(`child driver ${tag} did not exit within 60s (killed)`),
-        );
-      }, 60_000);
-    }),
-  ]);
-  if (exitCode !== 0) {
-    const stderr = await new Response(proc.stderr).text();
-    throw new Error(
-      `child driver ${tag} exited with code ${exitCode}: ${stderr}`,
-    );
+  let killTimer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const exitCode = await Promise.race([
+      proc.exited,
+      new Promise<never>((_, reject) => {
+        killTimer = setTimeout(() => {
+          proc.kill();
+          reject(
+            new Error(`child driver ${tag} did not exit within 60s (killed)`),
+          );
+        }, 60_000);
+      }),
+    ]);
+    if (exitCode !== 0) {
+      const stderr = await new Response(proc.stderr).text();
+      throw new Error(
+        `child driver ${tag} exited with code ${exitCode}: ${stderr}`,
+      );
+    }
+    return exitCode;
+  } finally {
+    if (killTimer !== undefined) {
+      clearTimeout(killTimer);
+    }
   }
-  return exitCode;
 }

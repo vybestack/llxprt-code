@@ -173,10 +173,44 @@ processes are real `bun` processes.
    any pre-migration; assert file: starts with `{` (JSONL), 2 legacy +
    8 new entries = 10 lines, all parse, legacy messages present in order, all
    8 new messages present exactly once.
-8. Regression: existing logger/loggerJsonl suites unchanged and green.
+8. REQ-LOCK-003b (bounded loop under persistent failure): plant a dangling
+   symlink at the lock path (`open('wx')` fails EEXIST while `stat` reports
+   ENOENT) with `LLXPRT_LOG_LOCK_TIMEOUT_MS=250`; `logMessage` settles within
+   a bounded time (no hot loop), does not throw, writes nothing, and leaves
+   messageId unchanged. Regression for the acquire loop that once bypassed its
+   deadline via `continue` and wedged `close()`.
+9. REQ-LOCK-002b (migration-retry reload): fail the pre-migration backup
+   exactly once (`fs.copyFile` one-shot fault injection) so initialize's
+   eager migration is swallowed while `_diskIsLegacy` stays true; another
+   process migrates the file and appends a foreign entry; the victim's
+   `logMessage` retries migration under a new lock hold and must re-read
+   disk inside that hold and adopt the migrated file — the foreign entry
+   survives (a stale-snapshot rewrite would destroy it).
+10. Regression: existing logger/loggerJsonl suites unchanged and green.
 
 The test suite uses REAL timers (no `vi.useFakeTimers`) since it exercises
 real backoff/polling.
+
+## Known limitations (accepted design boundaries)
+
+- The lease is unfenced: a holder starved past `LOCK_STALE_MS` without a
+  heartbeat landing (laptop sleep, event-loop starvation, SIGSTOP) can be
+  broken while still mid-critical-section, and the mechanism cannot inform
+  it. Inherent to timeout-based advisory lockfiles (proper-lockfile's
+  `onCompromised` exists for the same reason). Release detects the takeover
+  after the fact and restores the successor's lock.
+- Between the guard rename and the restoring hard link (in both the stale
+  break and the release), the live lock path is transiently absent. A third
+  contender entering that two-syscall window — after a stale break has
+  already occurred — can leave two processes believing they hold the lock.
+  Guard junk files left by that race are inert (never at the `.lock` path)
+  and are pruned by `_pruneOldBackups`.
+- Under `vi.useFakeTimers` with a frozen system clock, a CONTENDED acquire
+  would never reach its deadline (Date.now frozen) nor fire its backoff
+  (setTimeout frozen). No existing test contends under fake timers (the
+  locking suite uses real timers; the legacy suites are single-instance and
+  `_writeQueue`-serialized), but future tests must not combine fake timers
+  with lock contention.
 
 ## Implementation sketch (for the implementer)
 
@@ -237,8 +271,10 @@ src/core/logger.test.ts src/core/loggerJsonl.test.ts`.
 
 ## Execution tracker
 
-| Phase | ID | Status |
-|---|---|---|
-| 1 RED tests | P1 | pending |
-| 2 GREEN impl | P2 | pending |
-| 3 verification + review | P3 | pending |
+| Phase | ID | Status | Notes |
+|---|---|---|---|
+| 1 RED tests | P1 | done | 10 locking tests incl. 005b release-ownership |
+| 2 GREEN impl | P2 | done | O_EXCL + rename-guard + pinned-inode ownership + heartbeat |
+| 2b review round 1 | P2b | done | deepthinker: 2 HIGH (TOCTOU break, no lease) + leak + test gaps — all fixed |
+| 2c review round 2 | P2c | done | architect: HIGH acquire-loop deadline bypass + MEDIUM stale-snapshot migration wipe — fixed with 003b/002b regressions; LOW items triaged (see Known limitations) |
+| 3 verification + review | P3 | in progress | targeted suites green ×3 runs; full cycle pending machine load |
