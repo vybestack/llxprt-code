@@ -88,7 +88,12 @@ import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentG
 import type { TodoContinuationService } from './TodoContinuationService.js';
 
 interface RecordingServiceStub {
+  isActive: () => boolean;
   getFilePath: () => string | null;
+}
+
+function activeRecording(filePath: string | null): RecordingServiceStub {
+  return { isActive: () => true, getFilePath: () => filePath };
 }
 
 function makeConfig(
@@ -179,28 +184,37 @@ describe('createChatSession transcript path wiring (#2933)', () => {
   });
 
   it('resolves no path while the recording has not materialized a file', async () => {
-    const resolvePath = await wireProvider(() => ({ getFilePath: () => null }));
+    const resolvePath = await wireProvider(() => activeRecording(null));
+
+    expect(resolvePath()).toBeUndefined();
+  });
+
+  it('resolves no path from a recorder that stopped on a write failure', async () => {
+    const resolvePath = await wireProvider(() => ({
+      isActive: () => false,
+      getFilePath: () => '/chats/session-one.jsonl',
+    }));
 
     expect(resolvePath()).toBeUndefined();
   });
 
   it('resolves the materialized path of the installed recording', async () => {
-    const resolvePath = await wireProvider(() => ({
-      getFilePath: () => '/chats/session-one.jsonl',
-    }));
+    const resolvePath = await wireProvider(() =>
+      activeRecording('/chats/session-one.jsonl'),
+    );
 
     expect(resolvePath()).toBe('/chats/session-one.jsonl');
   });
 
   it('follows a resume that swaps the recording service, then a stop', async () => {
-    let installed: RecordingServiceStub | undefined = {
-      getFilePath: () => '/chats/session-one.jsonl',
-    };
+    let installed: RecordingServiceStub | undefined = activeRecording(
+      '/chats/session-one.jsonl',
+    );
     const resolvePath = await wireProvider(() => installed);
 
     expect(resolvePath()).toBe('/chats/session-one.jsonl');
 
-    installed = { getFilePath: () => '/chats/resumed-session.jsonl' };
+    installed = activeRecording('/chats/resumed-session.jsonl');
     expect(resolvePath()).toBe('/chats/resumed-session.jsonl');
 
     installed = undefined;

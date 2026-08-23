@@ -333,6 +333,10 @@
       "bun": "./src/core/compression/continuationDirective.ts",
       "import": "./dist/src/core/compression/continuationDirective.js"
     },
+    "./core/compression/transcriptPathNotice.js": {
+      "bun": "./src/core/compression/transcriptPathNotice.ts",
+      "import": "./dist/src/core/compression/transcriptPathNotice.js"
+    },
     "./core/compression/types.js": {
       "bun": "./src/core/compression/types.ts",
       "import": "./dist/src/core/compression/types.js"
