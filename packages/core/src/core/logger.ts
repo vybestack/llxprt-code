@@ -9,9 +9,17 @@ import { promises as fs } from 'node:fs';
 import { ensureDir } from '../utils/paths.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { debugLogger } from '../utils/debugLogger.js';
+import { delay } from '../utils/delay.js';
 
 const LOG_FILE_NAME = 'logs.json';
 const BACKUP_RETENTION_DAYS = 30;
+// Advisory inter-process locking via an O_EXCL lockfile (fs.open 'wx'). Keep the
+// file-mutating sequences serialized across processes; the lock file is deleted on
+// release and recovered when its mtime proves the holder crashed.
+const LOCK_FILE_SUFFIX = '.lock';
+const LOCK_STALE_MS = 10_000;
+const LOCK_BACKOFF_MS = 25;
+const DEFAULT_LOCK_TIMEOUT_MS = 5_000;
 
 export enum MessageSenderType {
   USER = 'user',
@@ -59,6 +67,118 @@ export class Logger {
     private readonly storage: Storage,
   ) {
     this.sessionId = sessionId;
+  }
+
+  /**
+   * Acquisition deadline for the advisory log-file lock, read at acquire time so
+   * tests can shorten it via the internal `LLXPRT_LOG_LOCK_TIMEOUT_MS` seam
+   * without restarting the process.
+   */
+  private _lockTimeoutMs(): number {
+    const raw = process.env['LLXPRT_LOG_LOCK_TIMEOUT_MS'];
+    if (raw !== undefined && raw.trim().length > 0) {
+      const parsed = Number(raw);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+    return DEFAULT_LOCK_TIMEOUT_MS;
+  }
+
+  private _lockFilePath(): string {
+    if (!this.logFilePath) {
+      throw new Error('Log file path not set during lock operation.');
+    }
+    return `${this.logFilePath}${LOCK_FILE_SUFFIX}`;
+  }
+
+  /**
+   * Acquire the per-log-file lock via the O_EXCL pattern (`fs.open 'wx'`).
+   * Retries with a small fixed backoff until it either wins the race, recovers a
+   * stale lock (holder's mtime older than the staleness threshold), or hits the
+   * acquisition deadline. Stale-lock unlink races are safe: only one waiter's
+   * subsequent `open 'wx'` can succeed.
+   */
+  private async _acquireLogLock(): Promise<void> {
+    const lockPath = this._lockFilePath();
+    const deadline = Date.now() + this._lockTimeoutMs();
+    for (;;) {
+      const acquired = await this._tryAcquireLogLock(lockPath);
+      if (acquired) {
+        return;
+      }
+      if (await this._lockBecameStale(lockPath)) {
+        // The holder crashed or released between our failed open and the stat;
+        // remove any leftover file and retry immediately.
+        await fs.unlink(lockPath).catch(() => {});
+        continue;
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(`Timed out waiting for log lock ${lockPath}`);
+      }
+      await delay(LOCK_BACKOFF_MS);
+    }
+  }
+
+  /**
+   * Create the lock file and write a debug payload. Returns true when this process
+   * now owns it, false when another process holds it (EEXIST).
+   */
+  private async _tryAcquireLogLock(lockPath: string): Promise<boolean> {
+    try {
+      const handle = await fs.open(lockPath, 'wx');
+      try {
+        // Payload is only for debugging crashed-holder artifacts.
+        await handle.writeFile(
+          JSON.stringify({ pid: process.pid, timestamp: Date.now() }),
+          'utf-8',
+        );
+      } finally {
+        await handle.close();
+      }
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException;
+      if (nodeError.code !== 'EEXIST') {
+        throw error;
+      }
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * True when the lock file no longer exists (the holder released it mid-race) or
+   * its mtime is past the staleness threshold (the holder crashed).
+   */
+  private async _lockBecameStale(lockPath: string): Promise<boolean> {
+    try {
+      const stat = await fs.stat(lockPath);
+      return Date.now() - stat.mtimeMs > LOCK_STALE_MS;
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException;
+      return nodeError.code === 'ENOENT';
+    }
+  }
+
+  /**
+   * Run `fn` while this process owns `logFilePath`'s advisory lock and release
+   * it in `finally`, so reader/writer sequences cannot interleave with other
+   * processes. Never nested: no code inside the wrapped callbacks acquires again.
+   */
+  private async _withLogLock<T>(fn: () => Promise<T>): Promise<T> {
+    await this._acquireLogLock();
+    try {
+      return await fn();
+    } finally {
+      try {
+        await fs.unlink(this._lockFilePath());
+      } catch (error) {
+        const nodeError = error as NodeJS.ErrnoException;
+        if (nodeError.code !== 'ENOENT') {
+          debugLogger.debug(`Failed to remove log lock file:`, error);
+        }
+      }
+    }
   }
 
   private _parseLegacyJsonArray(trimmed: string): LogEntry[] | null {
@@ -381,28 +501,33 @@ export class Logger {
       throw new Error('Log file path not set during update attempt.');
     }
 
-    await this._ensureJsonlFormat();
+    // Hold the cross-process lock across the whole mutate sequence (format-ensure,
+    // id assignment, duplicate check, newline-fix + append) so it cannot
+    // interleave with another process's append or legacy migration rewrite.
+    return this._withLogLock(async () => {
+      await this._ensureJsonlFormat();
 
-    entryToAppend.messageId = this.messageId;
+      entryToAppend.messageId = this.messageId;
 
-    const entryExists = this.logs.some(
-      (e) =>
-        e.sessionId === entryToAppend.sessionId &&
-        e.messageId === entryToAppend.messageId &&
-        e.timestamp === entryToAppend.timestamp &&
-        e.message === entryToAppend.message,
-    );
-
-    if (entryExists) {
-      debugLogger.debug(
-        `Duplicate log entry detected and skipped: session ${entryToAppend.sessionId}, messageId ${entryToAppend.messageId}`,
+      const entryExists = this.logs.some(
+        (e) =>
+          e.sessionId === entryToAppend.sessionId &&
+          e.messageId === entryToAppend.messageId &&
+          e.timestamp === entryToAppend.timestamp &&
+          e.message === entryToAppend.message,
       );
-      return null;
-    }
 
-    await this._appendJsonl(entryToAppend);
-    this.logs.push(entryToAppend);
-    return entryToAppend;
+      if (entryExists) {
+        debugLogger.debug(
+          `Duplicate log entry detected and skipped: session ${entryToAppend.sessionId}, messageId ${entryToAppend.messageId}`,
+        );
+        return null;
+      }
+
+      await this._appendJsonl(entryToAppend);
+      this.logs.push(entryToAppend);
+      return entryToAppend;
+    });
   }
 
   private async _pruneOldBackups(): Promise<void> {
@@ -464,27 +589,29 @@ export class Logger {
     await this._pruneOldBackups();
 
     try {
-      const { entries, legacy } = await this._loadFromDisk();
-      this.logs = entries;
-      this._diskIsLegacy = legacy;
-      // Eagerly migrate a legacy file to JSONL so the write path stays O(1)
-      // (no read). Migration failure here is non-fatal: writes will retry.
-      try {
-        await this._ensureJsonlFormat();
-      } catch (err) {
-        debugLogger.debug(
-          'Non-fatal legacy migration failure during init:',
-          err,
+      await this._withLogLock(async () => {
+        const { entries, legacy } = await this._loadFromDisk();
+        this.logs = entries;
+        this._diskIsLegacy = legacy;
+        // Eagerly migrate a legacy file to JSONL so the write path stays O(1)
+        // (no read). Migration failure here is non-fatal: writes will retry.
+        try {
+          await this._ensureJsonlFormat();
+        } catch (err) {
+          debugLogger.debug(
+            'Non-fatal legacy migration failure during init:',
+            err,
+          );
+        }
+        const sessionLogs = this.logs.filter(
+          (entry) => entry.sessionId === this.sessionId,
         );
-      }
-      const sessionLogs = this.logs.filter(
-        (entry) => entry.sessionId === this.sessionId,
-      );
-      this.messageId =
-        sessionLogs.length > 0
-          ? Math.max(...sessionLogs.map((entry) => entry.messageId)) + 1
-          : 0;
-      this.initialized = true;
+        this.messageId =
+          sessionLogs.length > 0
+            ? Math.max(...sessionLogs.map((entry) => entry.messageId)) + 1
+            : 0;
+        this.initialized = true;
+      });
     } catch (err) {
       debugLogger.error('Failed to initialize logger:', err);
       this.initialized = false;
