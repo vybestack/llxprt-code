@@ -177,6 +177,18 @@ Only after the tests above are red.
 
 No production changes outside `packages/core/src/config`.
 
+## Test-harness note
+
+`buildSystemInstruction.workspaceMemoryOnce.test.ts` initializes the prompt
+system against its own `LLXPRT_PROMPTS_DIR`, the same pattern
+`ChatSessionFactory.byteCompatibility.test.ts` uses. The prompt registry is a
+process global, so running those two files in one `bun test` invocation makes
+whichever `afterAll` runs first pull the directory out from under the other
+("Core prompt not found"). `scripts/run_bun_tests.ts` executes each file in its
+own process, so this does not affect `npm run test` or CI. Forcing
+re-initialization per file would be defensive plumbing around a shared global
+and is not done here.
+
 ## Deferred follow-up (out of scope for #3135)
 
 Review raised one LOW finding that is deliberately not addressed here. The

@@ -141,8 +141,15 @@ interface ChannelBreakdown {
   readonly environmentIsPrefix: boolean;
   readonly environmentOccurrences: number;
   readonly promptBodyOccurrences: number;
+  readonly totalOccurrences: number;
 }
 
+/**
+ * The two channel counts plus the whole-instruction count. Asserting all three
+ * together makes the split self-validating: if the prefix partition ever stops
+ * matching how buildSystemInstruction joins the parts, the numbers no longer
+ * add up and the assertion fails instead of quietly misattributing a copy.
+ */
 function breakDownChannels(
   assembled: AssembledRequest,
   marker: string,
@@ -153,6 +160,7 @@ function breakDownChannels(
     ),
     environmentOccurrences: occurrencesOf(assembled.environmentContext, marker),
     promptBodyOccurrences: occurrencesOf(assembled.promptBody, marker),
+    totalOccurrences: occurrencesOf(assembled.full, marker),
   };
 }
 
@@ -205,10 +213,16 @@ describe('assembled system instruction carries workspace memory exactly once (is
 
   afterEach(async () => {
     const configs = openConfigs.splice(0, openConfigs.length);
-    await Promise.all(configs.map((config) => config.dispose()));
     const dirs = tempDirs.splice(0, tempDirs.length);
-    for (const dir of dirs) {
-      fs.rmSync(dir, { recursive: true, force: true });
+    // A rejecting dispose still propagates, but the temp directories are
+    // removed either way so a disposal failure cannot leak them into later
+    // tests.
+    try {
+      await Promise.all(configs.map((config) => config.dispose()));
+    } finally {
+      for (const dir of dirs) {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
     }
   });
 
@@ -235,6 +249,7 @@ describe('assembled system instruction carries workspace memory exactly once (is
       environmentIsPrefix: true,
       environmentOccurrences: 1,
       promptBodyOccurrences: 0,
+      totalOccurrences: 1,
     });
   });
 
@@ -250,6 +265,7 @@ describe('assembled system instruction carries workspace memory exactly once (is
       environmentIsPrefix: true,
       environmentOccurrences: 0,
       promptBodyOccurrences: 1,
+      totalOccurrences: 1,
     });
   });
 });
