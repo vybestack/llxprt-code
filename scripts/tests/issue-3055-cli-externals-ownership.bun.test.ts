@@ -135,10 +135,15 @@ describe('sandbox-image defect class: shared EXTERNALS are owned or explicitly e
   // justified exemption above.
   it('every EXTERNALS entry is a direct dependency of packages/cli or explicitly exempt', () => {
     const cliPackage = readPackageJson('packages/cli/package.json');
-    const cliDeps = new Set(Object.keys(cliPackage.dependencies ?? {}));
-    const owned = EXTERNALS.filter(
-      (e) => !EXTERNALS_NOT_OWNED_BY_CLI.has(e),
-    );
+    // Optional dependencies install by default and satisfy runtime
+    // resolution the same way mandatory ones do; the publish-integrity
+    // (S6) contract requires platform-conditional natives (node-pty,
+    // @napi-rs/keyring) to stay optional, mirroring the root manifest.
+    const cliDeps = new Set([
+      ...Object.keys(cliPackage.dependencies ?? {}),
+      ...Object.keys(cliPackage.optionalDependencies ?? {}),
+    ]);
+    const owned = EXTERNALS.filter((e) => !EXTERNALS_NOT_OWNED_BY_CLI.has(e));
     expect(owned.length).toBeGreaterThan(0);
 
     const violations = findOwnershipViolations(owned, cliDeps);
