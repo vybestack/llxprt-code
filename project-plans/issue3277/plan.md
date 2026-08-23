@@ -369,7 +369,7 @@ capture can briefly be the only copy.
 
 | # | Finding | Disposition |
 | --- | --- | --- |
-| 1 | On the restore-failure path both `retireStaleLock` and `retireGuardIf` unlinked the capture, destroying what could be a live lock or claim. | **In-scope-Fix.** The capture is now left parked instead of deleted when it cannot be restored. |
+| 1 | On the restore-failure path both `retireStaleLock` and `retireGuardIf` unlinked the capture, destroying what could be a live lock or claim. | **In-scope-Fix**, later refined (see 6.7). The capture is parked rather than deleted when restoration fails for a reason other than the path already being occupied. |
 | 2 | `cleanupStaleLockTemp` reclaims `.locktmp` files on age alone, so it would destroy a parked live lock five minutes later, or one left behind by a crash between the rename and the restore. | **In-scope-Fix.** The sweep is now payload-aware: an aged temp whose payload names a live owner is kept. Content that does not parse, or that carries no usable pid, is still a partial publication artifact and is still reclaimed, so the existing sweep behaviour is unchanged for the artifacts it was written for. |
 
 Two behavioural tests were added in `SessionLockManager.test.ts` next to the
@@ -413,6 +413,35 @@ claimant, several concurrent processes and a specific stall.
 
 Closing the remainder means a real locking primitive — an OS file lock or a
 fencing/generation protocol — which is a separate piece of work.
+
+### 6.7 CI review: parking is only correct when restoration was actually possible
+
+The OpenCodeReview job on the PR pointed out that parking on every restore
+failure leaks a temp file for the lifetime of the owning process, because
+`namesLiveOwner` then refuses to sweep it. **In-scope-Fix**, and the reviewer is
+right on the substance, though the leak is bounded by the owner's process
+lifetime rather than permanent.
+
+Resolving it needed the question the earlier round had not asked: is a parked
+capture ever read back? It is not. Capture and probe names are single-use UUIDs
+that nothing records, and no code path restores a `.locktmp` into service. So
+parking buys recovery for nobody; the actual protection against destroying a
+live lock is the restore attempt itself.
+
+Restoration fails for two different reasons, and they deserve different
+answers:
+
+- **EEXIST.** Another lock or guard already occupies the well-known path. The
+  captured object is superseded and unreachable — its owner's `ownsLock()`
+  already reports false, and a superseded claimant can no longer pass
+  verification. Discarding it loses nothing, and parking it would leak.
+- **Anything else** (ENOSPC, EPERM, and friends). The path may well be empty and
+  the capture may be the only copy, so it stays parked and the payload-aware
+  sweep reclaims it once its owner is gone.
+
+`namesLiveOwner` stays, because it still governs that second case and crash
+leftovers, but the leak is now confined to genuine I/O failures rather than
+occurring on every lost race.
 
 ## 7. Follow-ups (not in this change)
 

@@ -591,12 +591,19 @@ async function retireStaleLock(
     // Not the lock we judged — restore it instead of destroying it.
     try {
       await fs.link(capturePath, lockPath);
-    } catch {
-      // Another lock already occupies the path, so it cannot be put back.
-      // Leave the capture parked rather than deleting what may be the only
-      // remaining copy of a live lock; {@link cleanupStaleLockTemp} reclaims
-      // it once its owner is gone.
-      return false;
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+        // Restoration failed for some reason other than the path being taken,
+        // so the capture may still be the only copy of a live lock.  Leave it
+        // parked; {@link cleanupStaleLockTemp} reclaims it once its owner is
+        // gone.
+        return false;
+      }
+      // Another lock already occupies the path.  The captured one is therefore
+      // superseded and unreachable — no code path ever reads a capture back,
+      // and its owner's `ownsLock()` already reports false — so discarding it
+      // loses nothing, while parking it would leak a file for the lifetime of
+      // that owner's process.
     }
     await safeUnlink(capturePath);
     return false;
@@ -987,12 +994,18 @@ async function retireGuardIf(
     // it back rather than displacing a claimant we never inspected.
     try {
       await fs.link(capturePath, guardPath);
-    } catch {
-      // Another guard already occupies the path.  Leave the capture parked
-      // rather than deleting what may be the only remaining copy of a live
-      // claim; {@link cleanupStaleLockTemp} reclaims it once its claimant is
-      // gone.
-      return false;
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+        // Restoration failed for some reason other than the path being taken,
+        // so the capture may still be the only copy of a live claim.  Leave it
+        // parked; {@link cleanupStaleLockTemp} reclaims it once its claimant is
+        // gone.
+        return false;
+      }
+      // Another guard already occupies the path, so the captured claim is
+      // superseded: its holder can no longer pass verification and will abort
+      // without mutating.  Discarding it loses nothing, while parking it would
+      // leak a file for the lifetime of that claimant's process.
     }
     await safeUnlink(capturePath);
     return false;
