@@ -22,6 +22,7 @@ import {
   DEFAULT_HEARTBEAT_INTERVAL_MS,
 } from './taskHeartbeat.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { LiveOutputUpdate } from '@vybestack/llxprt-code-tools';
@@ -96,6 +97,7 @@ function buildTool(scope: PendingScope): TaskTool {
   });
   const orchestrator = { launch } as unknown as SubagentOrchestrator;
   return new TaskTool(createConfig(), {
+    messageBus: new MessageBus(),
     orchestratorFactory: () => orchestrator,
     isInteractiveEnvironment: () => true,
   });
@@ -510,6 +512,7 @@ describe('TaskTool heartbeat integration', () => {
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(createConfig(), {
+      messageBus: new MessageBus(),
       orchestratorFactory: () => orchestrator,
       isInteractiveEnvironment: () => false,
     });

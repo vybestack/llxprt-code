@@ -14,7 +14,7 @@ import { TaskTool, type TaskToolParams } from './task.js';
 import { DEFAULT_TASK_TIMEOUT_SECONDS } from './taskAbortHelpers.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
   ContextState,
   SubagentTerminateMode,
@@ -22,11 +22,13 @@ import {
 
 describe('TaskTool', () => {
   let config: Config;
+  let messageBus: MessageBus;
 
   beforeEach(() => {
     config = {
       getSessionId: () => 'session-123',
     } as unknown as Config;
+    messageBus = new MessageBus();
   });
 
   function createMockOrchestrator(agentId: string) {
@@ -98,6 +100,7 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       orchestratorFactory: () => orchestrator,
+      messageBus,
       isInteractiveEnvironment: () => true,
     });
     const params: TaskToolParams = {
@@ -153,12 +156,14 @@ describe('TaskTool', () => {
     expect(result.error).toBeUndefined();
   });
 
-  it('passes the invocation messageBus into injected orchestrator factories', async () => {
-    const messageBus = {} as MessageBus;
+  it('passes the exact runtime MessageBus into injected orchestrator factories', async () => {
     const { orchestrator, scope } = createMockOrchestrator('agent-messagebus');
-    const orchestratorFactory = vi.fn(() => orchestrator);
+    let receivedMessageBus: MessageBus | undefined;
     const tool = new TaskTool(config, {
-      orchestratorFactory,
+      orchestratorFactory: (coreSchedulerMessageBus) => {
+        receivedMessageBus = coreSchedulerMessageBus;
+        return orchestrator;
+      },
       isInteractiveEnvironment: () => true,
       messageBus,
     });
@@ -170,31 +175,15 @@ describe('TaskTool', () => {
 
     await invocation.execute(new AbortController().signal, undefined);
 
-    expect(orchestratorFactory).toHaveBeenCalledWith(messageBus);
+    expect(receivedMessageBus).toBe(messageBus);
     expect(scope.runInteractive).toHaveBeenCalledTimes(1);
     expect(scope.runNonInteractive).not.toHaveBeenCalled();
   });
 
-  it('passes undefined messageBus when no messageBus is configured', async () => {
-    const { orchestrator, scope } = createMockOrchestrator(
-      'agent-without-messagebus',
+  it('rejects malformed construction without a concrete runtime messageBus', () => {
+    expect(() => Reflect.construct(TaskTool, [config, {}])).toThrow(
+      'TaskTool requires a concrete session/runtime MessageBus.',
     );
-    const orchestratorFactory = vi.fn(() => orchestrator);
-    const tool = new TaskTool(config, {
-      orchestratorFactory,
-      isInteractiveEnvironment: () => true,
-    });
-
-    const invocation = tool.build({
-      subagent_name: 'helper',
-      goal_prompt: 'Ship the feature',
-    });
-
-    await invocation.execute(new AbortController().signal, undefined);
-
-    expect(orchestratorFactory).toHaveBeenCalledWith(undefined);
-    expect(scope.runInteractive).toHaveBeenCalledTimes(1);
-    expect(scope.runNonInteractive).not.toHaveBeenCalled();
   });
 
   it('filters explicit tool_whitelist against enabled registry tools', async () => {
@@ -237,6 +226,7 @@ describe('TaskTool', () => {
 
     const tool = new TaskTool(configWithRegistry, {
       orchestratorFactory: () => orchestrator,
+      messageBus,
       isInteractiveEnvironment: () => true,
     });
 
@@ -296,6 +286,7 @@ describe('TaskTool', () => {
 
     const tool = new TaskTool(configWithRegistry, {
       orchestratorFactory: () => orchestrator,
+      messageBus,
       isInteractiveEnvironment: () => true,
     });
 
@@ -355,6 +346,7 @@ describe('TaskTool', () => {
 
     const tool = new TaskTool(configWithRegistry, {
       orchestratorFactory: () => orchestrator,
+      messageBus,
       isInteractiveEnvironment: () => true,
     });
 
@@ -413,6 +405,7 @@ describe('TaskTool', () => {
 
     const tool = new TaskTool(configWithRegistry, {
       orchestratorFactory: () => orchestrator,
+      messageBus,
       isInteractiveEnvironment: () => true,
     });
 
@@ -469,6 +462,7 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       orchestratorFactory: () => orchestrator,
+      messageBus,
       isInteractiveEnvironment: () => true,
     });
 
@@ -519,6 +513,7 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       orchestratorFactory: () => orchestrator,
+      messageBus,
       isInteractiveEnvironment: () => true,
     });
 
@@ -573,6 +568,7 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(configWithoutSessionId, {
       orchestratorFactory: () => orchestrator,
+      messageBus,
       isInteractiveEnvironment: () => true,
     });
 
@@ -610,6 +606,7 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       orchestratorFactory: () => orchestrator,
+      messageBus,
       isInteractiveEnvironment: () => false,
     });
     const invocation = tool.build({
@@ -650,6 +647,7 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       orchestratorFactory: () => orchestrator,
+      messageBus,
       isInteractiveEnvironment: () => true,
       schedulerFactoryProvider: () => schedulerFactory,
     });
@@ -671,6 +669,7 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       orchestratorFactory: () => orchestrator,
+      messageBus,
       isInteractiveEnvironment: () => true,
     });
 
@@ -714,6 +713,7 @@ describe('TaskTool', () => {
 
     const tool = new TaskTool(config, {
       orchestratorFactory: () => orchestrator,
+      messageBus,
       isInteractiveEnvironment: () => false,
     });
 
@@ -752,6 +752,7 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       orchestratorFactory: () => orchestrator,
+      messageBus,
       isInteractiveEnvironment: () => true,
     });
     const invocation = tool.build({
@@ -819,6 +820,7 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       orchestratorFactory: () => orchestrator,
+      messageBus,
     });
     const invocation = tool.build({
       subagent_name: 'helper',

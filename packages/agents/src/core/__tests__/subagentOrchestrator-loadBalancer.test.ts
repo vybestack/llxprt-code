@@ -26,6 +26,7 @@ import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubAgentScope } from '../subagent.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import {
   makeForegroundConfig,
@@ -119,6 +120,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
     return { orchestrator, runtimeLoader };
   }
@@ -143,6 +145,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     // Before the fix this rejected with RuntimeStateError: provider.missing.
@@ -181,6 +184,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     const result = await orchestrator.launch({
@@ -223,6 +227,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     await expect(

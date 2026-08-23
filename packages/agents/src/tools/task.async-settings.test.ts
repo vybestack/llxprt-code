@@ -16,14 +16,17 @@ import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 
 describe('TaskTool', () => {
   let config: Config;
+  let messageBus: MessageBus;
 
   beforeEach(() => {
     config = {
       getSessionId: () => 'session-123',
     } as unknown as Config;
+    messageBus = new MessageBus();
   });
 
   describe('async mode settings', () => {
@@ -43,6 +46,7 @@ describe('TaskTool', () => {
       } as unknown as Config;
       const tool = new TaskTool(configWithDisabledGlobalAsync, {
         orchestratorFactory: () => ({}) as SubagentOrchestrator,
+        messageBus,
         getAsyncTaskManager: () =>
           mockAsyncTaskManager as unknown as AsyncTaskManager,
       });
@@ -80,6 +84,7 @@ describe('TaskTool', () => {
       } as unknown as Config;
       const tool = new TaskTool(configWithDisabledProfileAsync, {
         orchestratorFactory: () => ({}) as SubagentOrchestrator,
+        messageBus,
         getAsyncTaskManager: () =>
           mockAsyncTaskManager as unknown as AsyncTaskManager,
       });
@@ -132,6 +137,7 @@ describe('TaskTool', () => {
       const tool = new TaskTool(configWithEnabledAsync, {
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        messageBus,
         getAsyncTaskManager: () =>
           mockAsyncTaskManager as unknown as AsyncTaskManager,
         isInteractiveEnvironment: () => false,
@@ -176,6 +182,7 @@ describe('TaskTool', () => {
       const tool = new TaskTool(configWithoutSettings, {
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        messageBus,
         getAsyncTaskManager: () =>
           mockAsyncTaskManager as unknown as AsyncTaskManager,
         isInteractiveEnvironment: () => false,
