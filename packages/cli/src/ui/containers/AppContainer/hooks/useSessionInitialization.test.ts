@@ -9,15 +9,16 @@ import { act } from 'react';
 import { renderHook } from '../../../../test-utils/render.js';
 import { useSessionInitialization } from './useSessionInitialization.js';
 import type { IContent } from '@vybestack/llxprt-code-core';
+import { iContentToHistoryItems } from '../../../utils/iContentToHistoryItems.js';
 
 // #2378: the hook drives SessionStart through the Agent's own hooks surface
 // (agent.hooks.triggerSessionStart), so the raw core triggerSessionStartHook is
 // no longer imported by the SUT and does not need to be mocked here.
-
-const iContentToHistoryItemsMock = vi.fn().mockReturnValue([]);
-void vi.mock('../../../utils/iContentToHistoryItems.js', () => ({
-  iContentToHistoryItems: iContentToHistoryItemsMock,
-}));
+//
+// The history converter (iContentToHistoryItems) is intentionally NOT mocked:
+// bun's vi.mock is not scoped per test file, so mocking it here would leak
+// into useSessionInitialization.emojifilter.test.ts, which verifies the same
+// seeding path behaviorally against the real converter.
 
 interface ConfigStub {
   hooks: Record<string, unknown>;
@@ -27,6 +28,9 @@ interface ConfigStub {
   };
   agentClientSource: {
     getAgentClient: ReturnType<typeof vi.fn>;
+  };
+  ephemeral: {
+    getEphemeralSetting: ReturnType<typeof vi.fn>;
   };
 }
 
@@ -43,6 +47,9 @@ const makeConfig = (
     },
     agentClientSource: {
       getAgentClient: vi.fn().mockReturnValue(null),
+    },
+    ephemeral: {
+      getEphemeralSetting: vi.fn().mockReturnValue(undefined),
     },
   };
 };
@@ -106,9 +113,6 @@ describe('useSessionInitialization', () => {
     const resumedHistory: IContent[] = [
       { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
     ];
-    const fakeHistoryItems = [{ id: 1, type: 'user' as const, text: 'hello' }];
-
-    iContentToHistoryItemsMock.mockReturnValue(fakeHistoryItems);
 
     renderHook(() =>
       useSessionInitialization({
@@ -124,7 +128,11 @@ describe('useSessionInitialization', () => {
       await Promise.resolve();
     });
 
-    expect(loadHistory).toHaveBeenCalledWith(fakeHistoryItems);
+    // Assert against the converter's real output (the stub config resolves
+    // no emojifilter setting → 'auto') instead of hard-coding its ID scheme.
+    expect(loadHistory).toHaveBeenCalledWith(
+      iContentToHistoryItems(resumedHistory, 'auto'),
+    );
   });
 
   it('does not call loadHistory when resumedHistory is empty', async () => {
@@ -248,9 +256,6 @@ describe('useSessionInitialization', () => {
     const resumedHistory: IContent[] = [
       { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
     ];
-    const fakeHistoryItems = [{ id: 1, type: 'user' as const, text: 'hi' }];
-
-    iContentToHistoryItemsMock.mockReturnValue(fakeHistoryItems);
 
     const { rerender } = renderHook(() =>
       useSessionInitialization({

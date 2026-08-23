@@ -310,6 +310,50 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
     });
   });
 
+  it('restore payload carries model thinking blocks through to replay (#2888)', async () => {
+    const aiTurn: IContent = {
+      speaker: 'ai',
+      blocks: [
+        { type: 'thinking', thought: 'pondering \u2705' },
+        { type: 'text', text: 'B' },
+      ],
+    };
+    const history = [
+      content('human', 'A'),
+      aiTurn,
+      content('human', 'C'),
+      content('ai', 'D'),
+    ];
+    Object.assign(context.services.config, {
+      getAgentClient: () => ({
+        hasChatInitialized: () => true,
+        getChat: () => ({
+          getHistory: () => history,
+        }),
+      }),
+    });
+    recording.recordContent(content('human', 'C'));
+    recording.recordContent(content('ai', 'D'));
+    await recording.flush();
+
+    const result = await command('restore').action?.(context, '1');
+
+    // The display payload keeps raw thinking blocks; the load_history
+    // handler filters them with the same emoji rule as the text.
+    expect(result).toStrictEqual({
+      type: 'load_history',
+      history: [
+        { type: MessageType.USER, text: 'A' },
+        {
+          type: MessageType.AI,
+          text: 'B',
+          thinkingBlocks: [{ type: 'thinking', thought: 'pondering \u2705' }],
+        },
+      ],
+      clientHistory: history.slice(0, 2),
+    });
+  });
+
   it('completes checkpoint names for /chat resume', async () => {
     await command('save').action?.(context, 'alpha');
     await command('save').action?.(context, 'beta');

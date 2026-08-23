@@ -24,6 +24,7 @@ import {
   type IContent,
   type SessionRecordingService,
   type TextBlock,
+  type ThinkingBlock,
 } from '@vybestack/llxprt-code-core';
 import type {
   ChatDetail,
@@ -535,16 +536,24 @@ const restoreHistory = async (
   }
 
   // Convert to UI history items for display. The slash-command result handler
-  // applies the client history exactly once after durable persistence succeeds.
+  // applies the client history exactly once after durable persistence
+  // succeeds. Model thinking blocks ride along raw here; the load_history
+  // handler filters them with the same emoji rule as the text (#2888).
   const uiHistory: HistoryItemWithoutId[] = result.remainingHistory.map(
     (content: IContent) => {
       const textBlocks = content.blocks.filter(
         (b): b is TextBlock => b.type === 'text',
       );
       const text = textBlocks.map((b) => b.text).join('');
+      const thinkingBlocks = content.blocks.filter(
+        (b): b is ThinkingBlock => b.type === 'thinking',
+      );
       return {
         type: content.speaker === 'human' ? MessageType.USER : MessageType.AI,
         text,
+        ...(content.speaker === 'ai' && thinkingBlocks.length > 0
+          ? { thinkingBlocks }
+          : {}),
       };
     },
   );

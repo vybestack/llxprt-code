@@ -22,7 +22,10 @@ import {
   type PerformResumeResult,
   type ResumeContext,
 } from '../../services/performResume.js';
-import { iContentToHistoryItems } from '../utils/iContentToHistoryItems.js';
+import {
+  iContentToHistoryItems,
+  resolveEmojiFilterMode,
+} from '../utils/iContentToHistoryItems.js';
 // import { LoopDetectionConfirmation } from './LoopDetectionConfirmation.js'; // NOTE: Not yet ported from upstream
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 import { WelcomeDialog } from './WelcomeOnboarding/WelcomeDialog.js';
@@ -134,7 +137,10 @@ function useSessionBrowserHandler(
       for (const warning of resumeResult.warnings) {
         addItem({ type: 'info', text: `Warning: ${warning}` });
       }
-      const uiHistory = iContentToHistoryItems(resumeResult.history);
+      const uiHistory = iContentToHistoryItems(
+        resumeResult.history,
+        resolveEmojiFilterMode(config),
+      );
       commandContext.ui.clear();
       uiHistory.forEach((item, index) => {
         commandContext.ui.addItem(item, index);

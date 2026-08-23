@@ -23,6 +23,10 @@ import {
   GitService,
 } from '@vybestack/llxprt-code-core';
 import { type HistoryItemWithoutId, MessageType } from '../../types.js';
+import {
+  EMOJI_BLOCKED_ERROR_TEXT,
+  resolveEmojiFilterMode,
+} from '../../utils/iContentToHistoryItems.js';
 import { useStateAndRef } from '../useStateAndRef.js';
 import { useLogger } from '../useLogger.js';
 import { type QueuedSubmission } from './types.js';
@@ -77,10 +81,7 @@ export interface UseStreamStateReturn {
 }
 
 function useEmojiFilterMode(runtime: StreamRuntime): EmojiFilterMode {
-  const rawMode = runtime.ephemeral.getEphemeralSetting('emojifilter');
-  return typeof rawMode === 'string' && rawMode.length > 0
-    ? (rawMode as EmojiFilterMode)
-    : 'auto';
+  return resolveEmojiFilterMode(runtime.ephemeral);
 }
 
 /**
@@ -192,7 +193,7 @@ function commitAiPendingItem(
     addItem(
       {
         type: MessageType.ERROR,
-        text: '[Error: Response blocked due to emoji detection]',
+        text: EMOJI_BLOCKED_ERROR_TEXT,
       },
       timestamp,
     );

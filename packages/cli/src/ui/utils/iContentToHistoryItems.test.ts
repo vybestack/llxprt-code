@@ -1,7 +1,13 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, vi } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core';
-import { ToolCallStatus } from '../types.js';
-import { iContentToHistoryItems } from './iContentToHistoryItems.js';
+import { ToolCallStatus, type HistoryItemWithoutId } from '../types.js';
+import {
+  createEmojiFilter,
+  EMOJI_BLOCKED_ERROR_TEXT,
+  filterHistoryItems,
+  iContentToHistoryItems,
+  resolveEmojiFilterMode,
+} from './iContentToHistoryItems.js';
 import { assertHasType } from '../../test-utils/assertions.js';
 
 describe('iContentToHistoryItems', () => {
@@ -314,5 +320,260 @@ describe('iContentToHistoryItems', () => {
     ];
     // Orphan responses are indexed but produce no visible items
     expect(iContentToHistoryItems(input)).toStrictEqual([]);
+  });
+});
+
+describe('iContentToHistoryItems emoji filtering (#2888)', () => {
+  // Emojis are written as escapes (U+2705 check mark, U+1F44D thumbs up) so
+  // the source stays ASCII-stable.
+  it('filters replayed model text by default (auto)', () => {
+    const input: IContent[] = [
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'Done \u2705' }] },
+    ];
+
+    const output = iContentToHistoryItems(input);
+
+    assertHasType(output[0], 'gemini');
+    expect(output[0].text).toBe('Done [OK]');
+  });
+
+  it('replays user text verbatim by default', () => {
+    // The live path never filters user input, so replayed user text must
+    // stay verbatim for the resumed view to match what rendered live.
+    const input: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'nice \u{1F44D}' }] },
+    ];
+
+    const output = iContentToHistoryItems(input);
+
+    assertHasType(output[0], 'user');
+    expect(output[0].text).toBe('nice \u{1F44D}');
+  });
+
+  it('replays model text verbatim in allowed mode', () => {
+    const input: IContent[] = [
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'Done \u2705' }] },
+    ];
+
+    const output = iContentToHistoryItems(input, 'allowed');
+
+    assertHasType(output[0], 'gemini');
+    expect(output[0].text).toBe('Done \u2705');
+  });
+
+  it('replaces blocked model text with the live error item in error mode', () => {
+    const input: IContent[] = [
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'Done \u2705' }] },
+    ];
+
+    const output = iContentToHistoryItems(input, 'error');
+
+    // Mirrors commitAiPendingItem: blocked turns render the same error item
+    // the live path renders instead of a blank model item.
+    expect(output).toHaveLength(1);
+    expect(output[0]).toMatchObject({
+      type: 'error',
+      text: EMOJI_BLOCKED_ERROR_TEXT,
+    });
+  });
+
+  it('appends the warn-mode feedback as an info item', () => {
+    const input: IContent[] = [
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'Done \u2705' }] },
+    ];
+
+    const output = iContentToHistoryItems(input, 'warn');
+
+    expect(output).toHaveLength(2);
+    assertHasType(output[0], 'gemini');
+    expect(output[0].text).toBe('Done [OK]');
+    expect(output[1]).toMatchObject({
+      type: 'info',
+      text: 'Emojis were detected and removed. Please avoid using emojis.',
+    });
+  });
+
+  it('filters thinking block text alongside model text', () => {
+    const input: IContent[] = [
+      {
+        speaker: 'ai',
+        blocks: [
+          { type: 'thinking', thought: 'hmm \u2705' },
+          { type: 'text', text: 'Answer \u2705' },
+        ],
+      },
+    ];
+
+    const output = iContentToHistoryItems(input);
+
+    assertHasType(output[0], 'gemini');
+    const thinking = output[0].thinkingBlocks?.[0];
+    expect(thinking?.thought).toBe('hmm [OK]');
+  });
+
+  it('leaves tool group items untouched', () => {
+    const input: IContent[] = [
+      {
+        speaker: 'ai',
+        blocks: [
+          { type: 'tool_call', id: 'c1', name: 'read_file', parameters: {} },
+        ],
+      },
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'c1',
+            toolName: 'read_file',
+            result: '\u2705 data',
+          },
+        ],
+      },
+    ];
+
+    const output = iContentToHistoryItems(input);
+
+    assertHasType(output[0], 'tool_group');
+    expect(output[0].tools[0].resultDisplay).toBe('\u2705 data');
+  });
+});
+
+describe('resolveEmojiFilterMode', () => {
+  it('returns the non-empty string setting', () => {
+    const getEphemeralSetting = vi.fn().mockReturnValue('error');
+    expect(resolveEmojiFilterMode({ getEphemeralSetting })).toBe('error');
+    expect(getEphemeralSetting).toHaveBeenCalledWith('emojifilter');
+  });
+
+  it('defaults to auto for missing, empty, or non-string values', () => {
+    expect(
+      resolveEmojiFilterMode({ getEphemeralSetting: () => undefined }),
+    ).toBe('auto');
+    expect(resolveEmojiFilterMode({ getEphemeralSetting: () => '' })).toBe(
+      'auto',
+    );
+    expect(resolveEmojiFilterMode({ getEphemeralSetting: () => 42 })).toBe(
+      'auto',
+    );
+  });
+
+  it('defaults to auto for unrecognized mode strings (validated like nonInteractiveCli)', () => {
+    expect(
+      resolveEmojiFilterMode({ getEphemeralSetting: () => 'alowed' }),
+    ).toBe('auto');
+    expect(
+      resolveEmojiFilterMode({ getEphemeralSetting: () => 'strict' }),
+    ).toBe('auto');
+  });
+
+  it('defaults to auto when no settings source is available', () => {
+    expect(resolveEmojiFilterMode(null)).toBe('auto');
+    expect(resolveEmojiFilterMode(undefined)).toBe('auto');
+  });
+});
+
+describe('createEmojiFilter', () => {
+  it('builds an auto-mode filter when the mode is absent', () => {
+    expect(createEmojiFilter(undefined)).toBeDefined();
+  });
+
+  it('builds no filter in allowed mode', () => {
+    expect(createEmojiFilter('allowed')).toBeUndefined();
+  });
+});
+
+describe('filterHistoryItems', () => {
+  const autoFilter = createEmojiFilter('auto');
+
+  it('filters model text', () => {
+    const output = filterHistoryItems(
+      [{ type: 'gemini', text: 'Done \u2705' }],
+      autoFilter,
+    );
+    expect(output).toEqual([{ type: 'gemini', text: 'Done [OK]' }]);
+  });
+
+  it('passes user text through untouched', () => {
+    const item: HistoryItemWithoutId = { type: 'user', text: 'nice \u{1F44D}' };
+    expect(filterHistoryItems([item], autoFilter)).toEqual([item]);
+  });
+
+  it('passes items without text through untouched', () => {
+    const item: HistoryItemWithoutId = { type: 'tool_group', tools: [] };
+    expect(filterHistoryItems([item], autoFilter)).toEqual([item]);
+  });
+
+  it('replaces blocked model text with error and feedback items', () => {
+    const errorFilter = createEmojiFilter('error');
+    const output = filterHistoryItems(
+      [{ type: 'gemini', text: 'Done \u2705' }],
+      errorFilter,
+    );
+    expect(output).toEqual([{ type: 'error', text: EMOJI_BLOCKED_ERROR_TEXT }]);
+  });
+
+  it('appends warn-mode feedback after the filtered item', () => {
+    const warnFilter = createEmojiFilter('warn');
+    const output = filterHistoryItems(
+      [{ type: 'gemini', text: 'Done \u2705' }],
+      warnFilter,
+    );
+    expect(output).toEqual([
+      { type: 'gemini', text: 'Done [OK]' },
+      {
+        type: 'info',
+        text: 'Emojis were detected and removed. Please avoid using emojis.',
+      },
+    ]);
+  });
+
+  it('filters thinking blocks and blanks them when blocked', () => {
+    // Live thought handling (applyThoughtToState) blanks a blocked thought
+    // without affecting the turn itself; only main-text blocking replaces
+    // the turn with the error item.
+    const errorFilter = createEmojiFilter('error');
+    const output = filterHistoryItems(
+      [
+        {
+          type: 'gemini',
+          text: 'no emoji',
+          thinkingBlocks: [{ type: 'thinking', thought: 'hmm \u2705' }],
+        },
+      ],
+      errorFilter,
+    );
+    expect(output).toEqual([
+      {
+        type: 'gemini',
+        text: 'no emoji',
+        thinkingBlocks: [{ type: 'thinking', thought: '' }],
+      },
+    ]);
+
+    const autoOutput = filterHistoryItems(
+      [
+        {
+          type: 'gemini',
+          text: 'ok',
+          thinkingBlocks: [{ type: 'thinking', thought: 'hmm \u2705' }],
+        },
+      ],
+      autoFilter,
+    );
+    expect(autoOutput).toEqual([
+      {
+        type: 'gemini',
+        text: 'ok',
+        thinkingBlocks: [{ type: 'thinking', thought: 'hmm [OK]' }],
+      },
+    ]);
+  });
+
+  it('passes all items through when no filter is configured', () => {
+    const items: HistoryItemWithoutId[] = [
+      { type: 'gemini', text: 'Done \u2705' },
+    ];
+    expect(filterHistoryItems(items, undefined)).toBe(items);
   });
 });
