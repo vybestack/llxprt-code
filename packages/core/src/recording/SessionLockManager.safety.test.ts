@@ -1006,8 +1006,8 @@ describe('SessionLockManager — transition guard identity (Issue #3277)', () =>
     const sessionId = 'no-artifacts';
     const handle = await SessionLockManager.acquire(chatsDir, sessionId);
 
-    // While held, the transition guard has already been released at the end of
-    // acquire and no temp files remain.
+    // Fresh publication competes only through exclusive creation and never
+    // installs a transition guard, so no guard or temp files exist while held.
     let entries = await fs.readdir(chatsDir);
     expect(entries.filter((f) => f.endsWith('.tguard'))).toEqual([]);
     expect(entries.filter((f) => f.endsWith('.locktmp'))).toEqual([]);
