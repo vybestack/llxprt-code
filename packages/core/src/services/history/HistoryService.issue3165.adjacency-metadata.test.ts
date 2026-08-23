@@ -642,6 +642,8 @@ describe('HistoryService issue #3165 adjacency and metadata', () => {
       const curated = service.getCuratedForProvider();
 
       expect(curated).toHaveLength(3);
+      expect(curated[1].blocks).toHaveLength(1);
+      expect(curated[2].blocks).toHaveLength(1);
       expect(curated[1]).toMatchObject({
         speaker: 'ai',
         blocks: [
