@@ -61,8 +61,10 @@ async function expectFatalSandbox(
   try {
     await loadSandboxConfig(settings, argv);
   } catch (error) {
-    expect(error).toBeInstanceOf(FatalSandboxError);
-    return error as FatalSandboxError;
+    if (!(error instanceof FatalSandboxError)) {
+      throw new Error(`expected FatalSandboxError, got: ${String(error)}`);
+    }
+    return error;
   }
   throw new Error('expected loadSandboxConfig to throw');
 }
@@ -132,6 +134,21 @@ describe('nested SANDBOX detection (issue #2943)', () => {
     const message = String((warnSpy.mock.calls[0] ?? [])[0] ?? '');
     expect(message).toContain('SANDBOX=sandbox-exec');
     expect(message).toContain('--sandbox');
+  });
+
+  it('AC2: nested --sandbox with no engine available stays a clean undefined without probing', async () => {
+    const warnSpy = silenceWarn();
+    process.env.SANDBOX = 'sandbox-exec';
+    commandSyncMock.mockClear();
+    enginesAvailable();
+    const config = await loadSandboxConfig(makeSettings(undefined), {
+      sandbox: true,
+    });
+    // Suppression must run before engine detection: an engine-less nested
+    // launch neither throws FatalSandboxError nor probes for a command.
+    expect(config).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(commandSyncMock).not.toHaveBeenCalled();
   });
 
   it('AC2: container-name SANDBOX suppresses settings.sandbox with warning', async () => {
