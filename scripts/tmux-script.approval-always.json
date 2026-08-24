@@ -17,8 +17,11 @@
       "contains": "Type your message",
       "timeoutMs": 30000
     },
-    { "type": "capture", "label": "initial-ui", "scope": "screen" },
-
+    {
+      "type": "capture",
+      "label": "initial-ui",
+      "scope": "screen"
+    },
     {
       "type": "line",
       "text": "Run the always-allow test command.",
@@ -37,10 +40,16 @@
       "contains": "Allow for this session",
       "timeoutMs": 30000
     },
-    { "type": "capture", "label": "approval-dialog", "scope": "screen" },
+    {
+      "type": "capture",
+      "label": "approval-dialog",
+      "scope": "screen"
+    },
     {
       "type": "approveTool",
-      "confirmation": { "contains": "Allow execution of:" },
+      "confirmation": {
+        "contains": "Allow execution of:"
+      },
       "choice": "always",
       "timeoutMs": 30000
     },
@@ -62,7 +71,11 @@
       "contains": "ALWAYS-5 of always-allow test",
       "equals": 2
     },
-    { "type": "capture", "label": "after-cascade", "scope": "screen" },
+    {
+      "type": "capture",
+      "label": "after-cascade",
+      "scope": "screen"
+    },
     {
       "type": "waitFor",
       "scope": "scrollback",
@@ -72,14 +85,14 @@
     {
       "type": "waitFor",
       "scope": "scrollback",
-      "regex": "(ALWAYS-5 of always-allow test[\\s\\S]*){3}",
+      "regex": "(ALWAYS3RD-5 of always-allow test)",
       "timeoutMs": 30000
     },
     {
       "type": "expectCount",
       "scope": "scrollback",
-      "contains": "ALWAYS-5 of always-allow test",
-      "equals": 3
+      "contains": "ALWAYS3RD-5 of always-allow test",
+      "equals": 1
     },
     {
       "type": "waitForNot",
@@ -87,11 +100,31 @@
       "contains": "Allow execution of:",
       "timeoutMs": 30000
     },
-    { "type": "capture", "label": "final", "scope": "screen" },
-    { "type": "key", "key": "Escape" },
-    { "type": "key", "key": "C-c" },
-    { "type": "key", "key": "C-c" },
-    { "type": "line", "text": "/quit", "submitKeys": ["Enter"] },
-    { "type": "waitForExit", "timeoutMs": 15000 }
+    {
+      "type": "capture",
+      "label": "final",
+      "scope": "screen"
+    },
+    {
+      "type": "key",
+      "key": "Escape"
+    },
+    {
+      "type": "key",
+      "key": "C-c"
+    },
+    {
+      "type": "key",
+      "key": "C-c"
+    },
+    {
+      "type": "line",
+      "text": "/quit",
+      "submitKeys": ["Enter"]
+    },
+    {
+      "type": "waitForExit",
+      "timeoutMs": 15000
+    }
   ]
 }
