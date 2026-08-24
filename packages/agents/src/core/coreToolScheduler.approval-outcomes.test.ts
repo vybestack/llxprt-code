@@ -193,22 +193,25 @@ async function confirmCall(
   call: ToolCall,
   outcome: ToolConfirmationOutcome,
 ): Promise<void> {
-  await (
-    call as {
-      confirmationDetails: { onConfirm: (o: unknown) => Promise<void> };
-    }
-  ).confirmationDetails.onConfirm(outcome);
+  if (call.status !== 'awaiting_approval') {
+    throw new Error(`expected awaiting_approval call, got ${call.status}`);
+  }
+  const details = call.confirmationDetails;
+  if (!('onConfirm' in details)) {
+    throw new Error('confirmationDetails carries no onConfirm callback');
+  }
+  await details.onConfirm(outcome);
 }
 
 function cancelledReason(call: ToolCall): string {
-  const part = (
-    call as {
-      response?: {
-        responseParts?: Array<{ result?: { error?: string } }>;
-      };
-    }
-  ).response?.responseParts?.[0];
-  return part?.result?.error ?? '';
+  if (call.status !== 'cancelled') {
+    throw new Error(`expected cancelled call, got ${call.status}`);
+  }
+  const part = call.response.responseParts[0];
+  if (part.type === 'tool_response' && part.result?.error !== undefined) {
+    return part.result.error;
+  }
+  return '';
 }
 
 describe('CoreToolScheduler approval outcomes', () => {

@@ -433,10 +433,8 @@ export async function executeApproveToolStep(
         `Requested choice "always" but no "Allow for this session" option is visible`,
       );
     }
-    await sendKeys(['Down', 'Enter']);
-  } else {
-    await sendApprovalChoice(choice, sendKeys);
   }
+  await sendApprovalChoice(choice, sendKeys);
 
   if (step.expectClose) {
     await waitForNot({

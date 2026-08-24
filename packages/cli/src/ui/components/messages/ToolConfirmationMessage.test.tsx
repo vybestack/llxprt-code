@@ -601,6 +601,13 @@ describe('ToolConfirmationMessage', () => {
         />,
       );
 
+      // Wait for the dialog to be rendered before driving keys, so the
+      // negative assertion below can only pass if the component actually
+      // received and ignored the cancel keys.
+      await waitFor(() => {
+        expect(lastFrame() ?? '').toContain('Allow once');
+      });
+
       act(() => {
         stdin.write(KITTY_ESCAPE_SEQUENCE);
       });
@@ -608,12 +615,9 @@ describe('ToolConfirmationMessage', () => {
         stdin.write('\x03');
       });
 
-      // The dialog remaining rendered is the observable negative: had the
-      // unfocused component reacted to either cancel key, the confirmation
-      // UI would have closed and onConfirm would have been invoked.
-      await waitFor(() => {
-        expect(lastFrame() ?? '').toContain('Allow once');
-      });
+      // The component is rendered standalone, so no parent unmounts the
+      // dialog on cancel; the meaningful negative is that the unfocused
+      // component never invoked onConfirm for either cancel key.
       expect(onConfirm).not.toHaveBeenCalled();
     });
   });
