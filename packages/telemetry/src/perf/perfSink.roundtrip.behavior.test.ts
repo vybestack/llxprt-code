@@ -246,20 +246,28 @@ describe('PerfSink exclusive create (AC-1)', () => {
     }
   });
 
-  it('creates the file with 0600 permissions', async () => {
-    const sink = new PerfSink({
-      dir,
-      runUuid: '00000000-0000-4000-8000-000000000005',
-    });
-    await sink.write(operationRecord());
-    await sink.dispose();
+  // POSIX-only. NTFS does not implement Unix permission bits, so Node reports
+  // a synthesised mode on Windows and `stat.mode & 0o777` can never equal
+  // 0o600 there no matter what the sink requests. The 0600 request itself is
+  // still exercised on Linux and macOS, which is where the guarantee means
+  // anything.
+  it.skipIf(process.platform === 'win32')(
+    'creates the file with 0600 permissions',
+    async () => {
+      const sink = new PerfSink({
+        dir,
+        runUuid: '00000000-0000-4000-8000-000000000005',
+      });
+      await sink.write(operationRecord());
+      await sink.dispose();
 
-    const files = fs.readdirSync(dir);
-    const stat = fs.statSync(path.join(dir, files[0]));
-    // Mask to permission bits only.
-    const mode = stat.mode & 0o777;
-    expect(mode).toBe(0o600);
-  });
+      const files = fs.readdirSync(dir);
+      const stat = fs.statSync(path.join(dir, files[0]));
+      // Mask to permission bits only.
+      const mode = stat.mode & 0o777;
+      expect(mode).toBe(0o600);
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------
