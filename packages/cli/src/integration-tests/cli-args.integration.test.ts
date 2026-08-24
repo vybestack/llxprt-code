@@ -30,15 +30,23 @@ function expectVersionOutput(stdout: string): void {
 
 describe('CLI --profile-load Integration Tests', () => {
   let tempDir: string;
+  let configHome: string;
   let profileManager: ProfileManager;
   let originalHome: string | undefined;
+  let originalConfigHome: string | undefined;
 
   beforeEach(async () => {
     tempDir = await createTempDirectory();
+    configHome = path.join(tempDir, 'config');
     originalHome = process.env.HOME;
-    // Set HOME to temp directory for isolated testing
+    originalConfigHome = process.env.LLXPRT_CONFIG_HOME;
+    // LLXPRT_CONFIG_HOME is what steers Storage, and therefore ProfileManager's
+    // default directory. HOME does not: the platform paths come from env-paths,
+    // which is evaluated once at module load. runCli forwards this variable to
+    // the spawned CLI, so both sides see the same profiles.
     process.env.HOME = tempDir;
-    profileManager = new ProfileManager();
+    process.env.LLXPRT_CONFIG_HOME = configHome;
+    profileManager = new ProfileManager(path.join(configHome, 'profiles'));
   });
 
   afterEach(async () => {
@@ -47,6 +55,11 @@ describe('CLI --profile-load Integration Tests', () => {
       delete process.env.HOME;
     } else {
       process.env.HOME = originalHome;
+    }
+    if (originalConfigHome === undefined) {
+      delete process.env.LLXPRT_CONFIG_HOME;
+    } else {
+      process.env.LLXPRT_CONFIG_HOME = originalConfigHome;
     }
     await cleanupTempDirectory(tempDir);
   });

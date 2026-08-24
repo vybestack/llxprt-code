@@ -4,5 +4,8 @@
 linker = "hoisted"
 
 [test]
-preload = ["./scripts/tests/browser-launch-guard.ts"]
+preload = [
+  "./scripts/tests/storage-isolation-guard.ts",
+  "./scripts/tests/browser-launch-guard.ts",
+]
 

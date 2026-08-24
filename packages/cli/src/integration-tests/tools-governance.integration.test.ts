@@ -12,7 +12,6 @@ import {
   ProfileManager,
   SettingsService,
 } from '@vybestack/llxprt-code-settings';
-import { Storage } from '@vybestack/llxprt-code-storage';
 import { toolsCommand } from '../ui/commands/toolsCommand.js';
 import { createMockCommandContext } from '../test-utils/mockCommandContext.js';
 import type { Config } from '@vybestack/llxprt-code-core';
@@ -29,10 +28,10 @@ describe('tools governance integration', () => {
     originalHome = process.env.HOME;
     tempHome = await fs.mkdtemp(path.join(os.tmpdir(), 'tools-governance-'));
     process.env.HOME = tempHome;
-    // Profiles live under the isolated storage root, not $HOME/.llxprt: the
-    // test preload points LLXPRT_CONFIG_HOME at a per-process directory and
-    // ProfileManager resolves Storage.getGlobalConfigDir().
-    profilesDir = path.join(Storage.getGlobalConfigDir(), 'profiles');
+    // An explicit per-test profiles directory. Neither $HOME nor the ambient
+    // global config root decides where these profiles land, so the case cannot
+    // read or overwrite the developer's own.
+    profilesDir = path.join(tempHome, 'profiles');
     await fs.mkdir(profilesDir, { recursive: true });
   });
 
@@ -68,7 +67,7 @@ describe('tools governance integration', () => {
     );
 
     const settings = new SettingsService();
-    const profileManager = new ProfileManager();
+    const profileManager = new ProfileManager(profilesDir);
     const loadedProfile = await profileManager.loadProfile(PROFILE_NAME);
     expect(loadedProfile.ephemeralSettings['tools.disabled']).toStrictEqual([
       'code-editor',

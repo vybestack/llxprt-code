@@ -53,11 +53,13 @@ describe('Profile with Keyfile Integration Tests', () => {
     // Create a temporary directory for our test
     tempDir = await createTempDirectory();
 
-    // Set HOME to our temp directory so ProfileManager uses it
+    // HOME still steers the home-relative roots (~/.llxprt, ~/.agents), which
+    // have no environment override. It does NOT steer ProfileManager: the
+    // platform paths come from env-paths, evaluated once at module load, so the
+    // no-argument constructor resolves the ambient global config root. Hence
+    // the explicit per-test directory below.
     process.env.HOME = tempDir;
-
-    // Create a new ProfileManager instance (will use our temp HOME)
-    profileManager = new ProfileManager();
+    profileManager = new ProfileManager(path.join(tempDir, 'profiles'));
   });
 
   afterEach(async () => {

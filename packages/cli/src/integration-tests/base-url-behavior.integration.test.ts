@@ -11,6 +11,7 @@
  */
 
 import { beforeEach, afterEach, describe, expect, it } from 'bun:test';
+import * as path from 'node:path';
 import type { Profile, SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
@@ -87,7 +88,10 @@ describe('Base URL Runtime Helper Integration', () => {
       metadata: { source: 'base-url-test' },
     });
 
-    profileManager = new ProfileManager();
+    // Explicit per-test directory: the no-argument constructor resolves the
+    // ambient global config root, which is the developer's own on a machine
+    // where the suite runs without storage isolation.
+    profileManager = new ProfileManager(path.join(tempDir, 'profiles'));
   });
 
   afterEach(async () => {

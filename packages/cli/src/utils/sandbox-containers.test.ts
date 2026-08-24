@@ -655,6 +655,16 @@ const CANONICAL_CONFIG_MOUNT_ENV_KEYS = [
   'LLXPRT_LOG_HOME',
 ] as const;
 
+/**
+ * Escape hatch for the storage guard. These blocks clear the storage overrides
+ * on purpose: the host's own config directory is what gets mounted, so the
+ * unredirected platform default IS the subject. Spelled out rather than
+ * imported because this workspace resolves `@vybestack/llxprt-code-storage`
+ * through its built declarations. Nothing here writes to that directory; the
+ * cases only assemble container arguments.
+ */
+const REAL_STORAGE_OPT_IN_ENV = 'LLXPRT_ALLOW_REAL_STORAGE_IN_TESTS';
+
 describe('#3081 canonical config mount + env pinning', () => {
   let environmentSnapshot: NodeJS.ProcessEnv;
   let fixturePath = '';
@@ -673,6 +683,7 @@ describe('#3081 canonical config mount + env pinning', () => {
     for (const key of CANONICAL_CONFIG_MOUNT_ENV_KEYS) {
       if (key !== 'SANDBOX_SET_UID_GID') delete process.env[key];
     }
+    process.env[REAL_STORAGE_OPT_IN_ENV] = 'true';
     delete process.env.SANDBOX_ENV;
   });
 
@@ -846,6 +857,7 @@ describe('#3081 current-user container-home agreement', () => {
     for (const key of CANONICAL_CONFIG_MOUNT_ENV_KEYS) {
       if (key !== 'SANDBOX_SET_UID_GID') delete process.env[key];
     }
+    process.env[REAL_STORAGE_OPT_IN_ENV] = 'true';
     delete process.env.SANDBOX_ENV;
   });
 
