@@ -131,6 +131,18 @@ afterAll(() => {
 
 describe('Interactive UI (tmux harness)', () => {
   runTmuxE2E(
+    'clean startup renders a non-blank first frame with the composer',
+    () => {
+      const result = runHarness(
+        'tmux-script.startup-smoke.json',
+        'startup-smoke',
+      );
+      assertHarnessSuccess(result);
+    },
+    300_000,
+  );
+
+  runTmuxE2E(
     'slash autocomplete opens, navigates, and dismisses',
     () => {
       const result = runHarness(
