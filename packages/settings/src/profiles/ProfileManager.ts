@@ -19,6 +19,7 @@ import {
   isPlainObject,
   parseLoadBalancerProfile,
   parseProfile,
+  parseProfileJson,
   parsePromptCaching,
 } from '../settings/validation.js';
 
@@ -107,6 +108,27 @@ export class ProfileManager {
     );
   }
 
+  /**
+   * Parse raw profile file content through the single shared parse boundary
+   * so load/reference/scan paths produce identical results. Malformed JSON
+   * and prototype-pollution documents surface as typed parse errors before any
+   * schema validation.
+   */
+  private static parseProfileContent(content: string): unknown {
+    const parsed = parseProfileJson(content);
+    if (parsed.kind === 'invalid-json') {
+      // Chain the original parse error so position information
+      // ("Unexpected token } ... at position 42") is not lost.
+      throw new SyntaxError('profile JSON is malformed', {
+        cause: parsed.error,
+      });
+    }
+    if (parsed.kind === 'unsafe') {
+      throw parsed.error;
+    }
+    return parsed.value;
+  }
+
   async saveLoadBalancerProfile(name: string, profile: unknown): Promise<void> {
     const loadBalancerProfile = parseLoadBalancerProfile(name, profile);
 
@@ -127,7 +149,8 @@ export class ProfileManager {
         referencedProfilePath,
         'utf8',
       );
-      const referencedProfileData: unknown = JSON.parse(referencedContent);
+      const referencedProfileData: unknown =
+        ProfileManager.parseProfileContent(referencedContent);
 
       if (referencedProfileIsLoadBalancer(referencedProfileData)) {
         throw new Error(
@@ -173,7 +196,8 @@ export class ProfileManager {
         referencedProfilePath,
         'utf8',
       );
-      const referencedProfileData: unknown = JSON.parse(referencedContent);
+      const referencedProfileData: unknown =
+        ProfileManager.parseProfileContent(referencedContent);
 
       if (referencedProfileIsLoadBalancer(referencedProfileData)) {
         throw new Error(
@@ -194,7 +218,7 @@ export class ProfileManager {
     try {
       const content = await fs.readFile(filePath, 'utf8');
 
-      const parsed: unknown = JSON.parse(content);
+      const parsed = ProfileManager.parseProfileContent(content);
       const profile =
         isPlainObject(parsed) && parsed.type === 'loadbalancer'
           ? parseLoadBalancerProfile(profileName, parsed)
@@ -257,7 +281,7 @@ export class ProfileManager {
         try {
           const filePath = path.join(this.profilesDir, `${name}.json`);
           const content = await fs.readFile(filePath, 'utf8');
-          const parsed: unknown = JSON.parse(content);
+          const parsed = ProfileManager.parseProfileContent(content);
           if (
             isPlainObject(parsed) &&
             parsed.type === 'loadbalancer' &&

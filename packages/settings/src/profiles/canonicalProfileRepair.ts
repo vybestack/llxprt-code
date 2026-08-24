@@ -8,7 +8,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Profile } from './types.js';
 import { isLoadBalancerProfile } from './types.js';
-import { parseProfile } from '../settings/validation.js';
+import { parseProfile, parseProfileJson } from '../settings/validation.js';
 import {
   hasErrnoCode,
   acquireProfilesLockSync,
@@ -160,12 +160,15 @@ function readAndParseProfile(filePath: string):
   if (result.kind === 'error') {
     return { kind: 'error', error: result.error };
   }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(result.content);
-  } catch {
+  const parsedJson = parseProfileJson(result.content);
+  if (parsedJson.kind !== 'parsed') {
+    // Malformed JSON and prototype-pollution rejections are deliberately
+    // collapsed here: both make the file unreadable as a profile, and repair
+    // eligibility only needs "not parseable". The distinction is surfaced at
+    // the user-facing boundary in validateReplacementFile.
     return { kind: 'invalid-json' };
   }
+  const parsed: unknown = parsedJson.value;
   let profile: Profile;
   try {
     profile = parseProfile(parsed);
@@ -206,12 +209,11 @@ function validateLegacyReplacement(legacyPath: string): string | null {
     return null;
   }
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(result.content);
-  } catch {
+  const parsedJson = parseProfileJson(result.content);
+  if (parsedJson.kind !== 'parsed') {
     return null;
   }
+  const parsed = parsedJson.value;
 
   if (!isRawObject(parsed)) {
     return null;
@@ -459,7 +461,16 @@ function cleanupTemp(tmpPath: string): void {
 
 function validateReplacementFile(filePath: string): void {
   const content = fs.readFileSync(filePath, 'utf-8');
-  const parsed: unknown = JSON.parse(content);
+  const parsedJson = parseProfileJson(content);
+  if (parsedJson.kind !== 'parsed') {
+    // Distinguish malformed JSON from a prototype-pollution rejection; both
+    // block the repair but a user needs to know which one they hit.
+    throw new Error(
+      `replacement file is not valid profile JSON (${parsedJson.kind}): ${parsedJson.error.message}`,
+      { cause: parsedJson.error },
+    );
+  }
+  const parsed = parsedJson.value;
   // The replacement must not still match the corrupt structural signature.
   if (isCorruptStandardProfileFromRaw(parsed)) {
     throw new Error('replacement file still has the corrupt defect signature');

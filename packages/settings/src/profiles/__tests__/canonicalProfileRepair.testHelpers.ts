@@ -9,10 +9,31 @@ import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { beforeEach, afterEach } from 'bun:test';
 import { CORRUPT_PROVIDER } from '../canonicalProfileRepair.js';
 
 export async function makeTempDir(): Promise<string> {
   return fsp.mkdtemp(path.join(os.tmpdir(), 'llxprt-canonical-repair-test-'));
+}
+
+/**
+ * Shared lazy temp-directory accessor for behavioral profile tests.
+ *
+ * Registers bun's `beforeEach`/`afterEach` internally so every test runs
+ * against a fresh directory that is removed afterwards. Call it ONCE at
+ * module scope and call the returned accessor inside a test / `beforeEach`
+ * to get the current directory. This keeps a fresh isolated directory per test
+ * without copy-pasting setup/teardown in every describe block.
+ */
+export function withTempDir(prefix = 'llxprt-profile-test-'): () => string {
+  let dir = '';
+  beforeEach(async () => {
+    dir = await fsp.mkdtemp(path.join(os.tmpdir(), prefix));
+  });
+  afterEach(async () => {
+    await fsp.rm(dir, { recursive: true, force: true }).catch(() => {});
+  });
+  return () => dir;
 }
 
 /**

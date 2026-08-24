@@ -189,25 +189,6 @@ export interface ProfileEphemeralSettings {
 export type EphemeralSettings = ProfileEphemeralSettings;
 
 /**
- * Sub-profile configuration for load balancing
- */
-export interface LoadBalancerSubProfileConfig {
-  name: string;
-  provider: string;
-  model?: string;
-  baseURL?: string;
-  apiKey?: string;
-}
-
-/**
- * Load balancer configuration
- */
-export interface LoadBalancerConfig {
-  strategy: 'round-robin';
-  subProfiles: LoadBalancerSubProfileConfig[];
-}
-
-/**
  * Standard profile configuration (single model)
  */
 export interface StandardProfile {
@@ -217,7 +198,6 @@ export interface StandardProfile {
   model: string;
   modelParams: ModelParams;
   ephemeralSettings: EphemeralSettings;
-  loadBalancer?: LoadBalancerConfig;
   auth?: AuthConfig;
 }
 

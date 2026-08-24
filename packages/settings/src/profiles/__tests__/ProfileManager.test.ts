@@ -771,7 +771,7 @@ describe('ProfileManager — parse boundary rejects unsafe object shapes', () =>
     );
 
     await expect(pm.loadProfile('polluted-modelparams')).rejects.toThrow(
-      'missing required fields',
+      'dangerous fields',
     );
   });
 
@@ -784,7 +784,7 @@ describe('ProfileManager — parse boundary rejects unsafe object shapes', () =>
     );
 
     await expect(pm.loadProfile('polluted-ephemeral')).rejects.toThrow(
-      'missing required fields',
+      'dangerous fields',
     );
   });
 });

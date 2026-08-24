@@ -112,6 +112,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
     key: 'auth-key',
     aliases: ['apiKey', 'api-key'],
     category: 'provider-config',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
     description: 'Provider API authentication key',
     type: 'string',
     persistToProfile: true,
@@ -121,6 +123,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
     key: 'auth-keyfile',
     aliases: ['apiKeyfile', 'api-keyfile'],
     category: 'provider-config',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
     description: 'Path to file containing API key',
     type: 'string',
     persistToProfile: true,
@@ -128,6 +132,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'auth-key-name',
     category: 'provider-config',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
     description:
       'Name of a saved API key in the keyring (resolved via /key save)',
     type: 'string',
@@ -136,6 +142,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'base-url',
     category: 'provider-config',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
     description: 'Provider API base URL',
     type: 'string',
     persistToProfile: true,
@@ -143,6 +151,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'sandbox-base-url',
     category: 'provider-config',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
     description:
       'Base URL override used when running inside a container sandbox (Docker/Podman)',
     type: 'string',
@@ -151,6 +161,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'requires-auth',
     category: 'provider-config',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
     description:
       'Whether the provider requires API key authentication (set to false for local providers)',
     type: 'boolean',
@@ -159,6 +171,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'model',
     category: 'provider-config',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
     description: 'Default model name',
     type: 'string',
     persistToProfile: true,
@@ -166,6 +180,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'defaultModel',
     category: 'provider-config',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
     description: 'Fallback model if primary unavailable',
     type: 'string',
     persistToProfile: true,
@@ -173,6 +189,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'enabled',
     category: 'provider-config',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
     description: 'Enable/disable provider',
     type: 'boolean',
     persistToProfile: true,
@@ -181,6 +199,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
     key: 'toolFormat',
     aliases: ['tool-format'],
     category: 'provider-config',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
     description: 'Tool format preference',
     type: 'enum',
     enumValues: [
@@ -201,6 +221,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
     key: 'toolFormatOverride',
     aliases: ['tool-format-override'],
     category: 'provider-config',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
     description: 'Force specific tool format',
     type: 'enum',
     enumValues: [
@@ -220,6 +242,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'api-version',
     category: 'cli-behavior',
+    owner: 'provider-connection',
+    propagation: 'next-turn',
     description: 'API version to use',
     type: 'string',
     persistToProfile: true,
@@ -227,6 +251,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'apiMode',
     category: 'provider-config',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
     description:
       'Preferred OpenAI transport mode (responses/chat); chat is ignored for models that require the Responses API',
     type: 'enum',
@@ -236,6 +262,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'responsesMode',
     category: 'provider-config',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
     description:
       'Fallback transport mode for the OpenAI provider (responses/chat)',
     type: 'enum',
@@ -243,8 +271,13 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
     persistToProfile: true,
   },
   {
+    // Sibling of apiMode / responsesMode / openaiResponsesEnabled: all four
+    // feed the same transport resolution in openaiModelPolicy.ts, so they must
+    // share one propagation class.
     key: 'responses-mode',
     category: 'cli-behavior',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
     description:
       'Global fallback transport mode for OpenAI when apiMode and responsesMode are unset (responses/chat)',
     type: 'enum',
@@ -254,6 +287,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'openaiResponsesEnabled',
     category: 'provider-config',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
     description:
       'Force-enable the OpenAI Responses API on non-canonical base URLs',
     type: 'boolean',
@@ -262,6 +297,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'reasoning.enabled',
     category: 'model-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Enable thinking/reasoning for models that support it',
     type: 'boolean',
     persistToProfile: true,
@@ -273,6 +310,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'reasoning.effort',
     category: 'model-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description:
       'How much the model should think before responding (minimal/low/medium/high/xhigh/max)',
     type: 'enum',
@@ -282,6 +321,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'reasoning.effortWireFormat',
     category: 'model-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Request wire format for generic reasoning effort',
     type: 'enum',
     enumValues: [
@@ -300,6 +341,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'reasoning.enabledWireFormat',
     category: 'model-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Request wire format for generic reasoning enablement',
     type: 'enum',
     enumValues: [
@@ -317,6 +360,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'reasoning.effortMap',
     category: 'model-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Model-specific mapping from generic reasoning effort values',
     type: 'json',
     persistToProfile: true,
@@ -325,6 +370,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'reasoning.enabledMap',
     category: 'model-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Model-specific mapping from generic reasoning enablement',
     type: 'json',
     persistToProfile: true,
@@ -333,6 +380,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'reasoning.maxTokens',
     category: 'model-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Maximum token budget for reasoning',
     type: 'number',
     persistToProfile: true,
@@ -340,6 +389,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'reasoning.budgetTokens',
     category: 'model-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Token budget for reasoning (Anthropic-specific)',
     type: 'number',
     persistToProfile: true,
@@ -347,6 +398,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'reasoning.adaptiveThinking',
     category: 'model-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description:
       'Enable adaptive thinking for Anthropic Opus 4.6+ (true/false)',
     type: 'boolean',
@@ -355,6 +408,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'reasoning.includeInResponse',
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Show thinking blocks in UI output',
     type: 'boolean',
     persistToProfile: true,
@@ -362,6 +417,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'reasoning.includeInContext',
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Keep thinking in conversation history',
     type: 'boolean',
     persistToProfile: true,
@@ -369,6 +426,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'reasoning.stripFromContext',
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Remove thinking blocks from context (all/allButLast/none)',
     type: 'enum',
     enumValues: ['all', 'allButLast', 'none'],
@@ -377,6 +436,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'reasoning.format',
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'API format for reasoning (native/field)',
     type: 'enum',
     enumValues: ['native', 'field'],
@@ -385,6 +446,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'reasoning.fieldName',
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description:
       'Reasoning field name in streaming delta (reasoning_content for OpenAI/vLLM, reasoning for Ollama)',
     type: 'string',
@@ -393,6 +456,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'reasoning.summary',
     category: 'model-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description:
       'OpenAI Responses API reasoning summary mode (auto/concise/detailed/none)',
     type: 'enum',
@@ -402,6 +467,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'text.verbosity',
     category: 'model-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description:
       'OpenAI Responses API text verbosity for thinking output (low/medium/high)',
     type: 'enum',
@@ -411,6 +478,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'prompt-caching',
     category: 'model-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Enable prompt caching (off/5m/1h/24h)',
     type: 'enum',
     enumValues: ['off', '5m', '1h', '24h'],
@@ -419,6 +488,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'responses-stateful',
     category: 'model-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description:
       'Enable Responses API stateful conversations using previous_response_id (true/false)',
     type: 'boolean',
@@ -427,6 +498,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'media.pdf.enabled',
     category: 'model-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description:
       'Send PDF files as native input_file data to the model (true/false); when false, PDFs are replaced with a text notice',
     type: 'boolean',
@@ -435,6 +508,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'rate-limit-throttle',
     category: 'model-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Enable proactive rate limit throttling (on/off)',
     type: 'enum',
     enumValues: ['on', 'off'],
@@ -443,6 +518,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'rate-limit-throttle-threshold',
     category: 'model-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Percentage threshold for rate limit throttling (1-100)',
     type: 'number',
     persistToProfile: true,
@@ -450,6 +527,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'rate-limit-max-wait',
     category: 'model-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Maximum wait time in milliseconds for rate limit throttling',
     type: 'number',
     persistToProfile: true,
@@ -457,6 +536,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'shell-replacement',
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Command substitution mode for shell tool',
     type: 'string',
     enumValues: ['allowlist', 'all', 'none', 'true', 'false'],
@@ -465,6 +546,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'streaming',
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Enable/disable streaming (enabled/disabled)',
     type: 'enum',
     enumValues: ['enabled', 'disabled'],
@@ -492,6 +575,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'context-limit',
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Maximum number of tokens for the context window',
     type: 'number',
     hint: 'positive integer (e.g., 100000)',
@@ -509,6 +594,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'compression-threshold',
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description:
       'Fraction of context limit that triggers compression (0.0-1.0)',
     type: 'number',
@@ -528,6 +615,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'tool-output-max-items',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description: 'Maximum number of items/files/matches returned by tools',
     type: 'number',
     persistToProfile: true,
@@ -544,6 +633,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'file-read-max-lines',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description:
       'Default maximum lines to read from text files when no explicit limit is provided (default: 2000)',
     type: 'number',
@@ -561,6 +652,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'image-resize.enabled',
     category: 'cli-behavior',
+    owner: 'model',
+    propagation: 'next-turn',
     description: 'Enable automatic model-aware resizing for image file reads',
     type: 'boolean',
     persistToProfile: true,
@@ -582,6 +675,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
     ({ key, description }): SettingSpec => ({
       key,
       category: 'cli-behavior',
+      owner: 'model',
+      propagation: 'next-turn',
       description,
       type: 'number',
       hint: 'positive integer pixels',
@@ -612,6 +707,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
     ({ key, description }): SettingSpec => ({
       key,
       category: 'model-behavior',
+      owner: 'model',
+      propagation: 'next-turn',
       description,
       type: 'number',
       hint: 'positive integer pixels',
@@ -630,6 +727,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'tool-output-max-tokens',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description: 'Maximum tokens in tool output',
     type: 'number',
     persistToProfile: true,
@@ -637,6 +736,8 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'tool-output-truncate-mode',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description: 'How to handle exceeding limits (warn/truncate/sample)',
     type: 'enum',
     enumValues: ['warn', 'truncate', 'sample'],

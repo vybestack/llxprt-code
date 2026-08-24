@@ -9,6 +9,7 @@ import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import {
   getProtectedSettingKeys,
   isInternalSettingKey,
+  MIN_LOAD_BALANCER_MEMBERS,
   type LoadBalancerProfile,
 } from '@vybestack/llxprt-code-settings';
 import { createTokenStore } from '@vybestack/llxprt-code-providers/auth.js';
@@ -343,11 +344,14 @@ export async function saveLoadBalancerProfile(
     (p) => p.length > 0,
   );
 
+  // The interactive save path requires >= 2 members (the load path accepts
+  // >= MIN_LOAD_BALANCER_MEMBERS so existing single-member files keep
+  // loading).
   if (selectedProfiles.length < 2) {
     return {
       type: 'message',
       messageType: 'error',
-      content: 'Load balancer profile requires at least 2 profiles',
+      content: `Load balancer profile requires at least 2 profiles (minimum allowed: ${Math.max(MIN_LOAD_BALANCER_MEMBERS, 2)})`,
     };
   }
 
