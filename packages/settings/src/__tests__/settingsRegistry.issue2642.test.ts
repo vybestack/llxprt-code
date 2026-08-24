@@ -97,6 +97,26 @@ describe('settings registry — owner / propagation metadata (#2642)', () => {
     }
   });
 
+  it('the three application keys declare persistToProfile: false in the registry', () => {
+    // Asserting the registry data directly, not just the derived list: if
+    // getProfilePersistableKeys() ever excluded these for an unrelated reason
+    // the exclusion test above would still pass while the data stayed wrong.
+    for (const key of ['emojifilter', 'dumponerror', 'dumpcontext']) {
+      const spec = SETTINGS_REGISTRY.find((s) => s.key === key);
+      expect(spec).toBeDefined();
+      expect(spec?.owner).toBe('application');
+      expect(spec?.persistToProfile).toBe(false);
+    }
+  });
+
+  it('getProfilePersistableKeys matches exactly the specs flagged persistToProfile', () => {
+    // End-to-end contract: the derived list is the flag, nothing more.
+    const expected = SETTINGS_REGISTRY.filter((s) => s.persistToProfile).map(
+      (s) => s.key,
+    );
+    expect(getProfilePersistableKeys().sort()).toEqual(expected.sort());
+  });
+
   it('persistence follows the per-spec flag, not a blanket owner rule', () => {
     // `token-usage-log` is application-owned but explicitly persists. A blanket
     // `owner !== 'application'` filter would silently drop it and contradict

@@ -31,7 +31,19 @@ export function withTempDir(prefix = 'llxprt-profile-test-'): () => string {
     dir = await fsp.mkdtemp(path.join(os.tmpdir(), prefix));
   });
   afterEach(async () => {
-    await fsp.rm(dir, { recursive: true, force: true }).catch(() => {});
+    try {
+      await fsp.rm(dir, { recursive: true, force: true });
+    } catch (error) {
+      // Do not fail the test on cleanup, but do not hide a real I/O problem
+      // either: a silent catch turns disk-full/permission failures into
+      // invisible temp-directory leaks. process.emitWarning rather than
+      // console.* because the repo bans console statements.
+      process.emitWarning(
+        `withTempDir: failed to remove ${dir}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   });
   return () => dir;
 }

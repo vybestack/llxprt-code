@@ -161,11 +161,14 @@ function readAndParseProfile(filePath: string):
     return { kind: 'error', error: result.error };
   }
   const parsedJson = parseProfileJson(result.content);
-  if (parsedJson.kind !== 'parsed') {
-    // Malformed JSON and prototype-pollution rejections are deliberately
-    // collapsed here: both make the file unreadable as a profile, and repair
-    // eligibility only needs "not parseable". The distinction is surfaced at
-    // the user-facing boundary in validateReplacementFile.
+  // Only malformed JSON blocks inspection. A document carrying dangerous keys
+  // is still INSPECTED here, because repair is the mechanism that recognises
+  // and replaces such a file — refusing to look at it would strand the user
+  // with the bad profile forever. Reading is safe: JSON.parse materialises
+  // `__proto__` as an own property rather than invoking the setter, and
+  // nothing here writes the parsed object back out. The write boundary
+  // (validateReplacementFile) still refuses to install an unsafe replacement.
+  if (parsedJson.kind === 'invalid-json') {
     return { kind: 'invalid-json' };
   }
   const parsed: unknown = parsedJson.value;
@@ -210,6 +213,9 @@ function validateLegacyReplacement(legacyPath: string): string | null {
   }
 
   const parsedJson = parseProfileJson(result.content);
+  // Both 'invalid-json' and 'unsafe' disqualify a REPLACEMENT. Unlike the
+  // inspection path above, this document is about to be installed as the
+  // canonical profile, so a dangerous-key document must never be promoted.
   if (parsedJson.kind !== 'parsed') {
     return null;
   }

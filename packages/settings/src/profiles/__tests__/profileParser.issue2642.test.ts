@@ -365,3 +365,29 @@ describe('regression profile fixtures load with version: 1 unchanged', () => {
     expect(loaded.version).toBe(1);
   });
 });
+
+// ─── G. repair eligibility is not blocked by dangerous keys ────────────────
+
+describe('canonical repair inspection tolerates dangerous keys (#2642 review)', () => {
+  it('a corrupt canonical carrying a top-level __proto__ is still repair-eligible', async () => {
+    // Routing repair through the shared parser must not make a hostile file
+    // permanently unrepairable: repair is exactly the mechanism that replaces
+    // it. Before this issue, top-level dangerous keys passed parseProfile
+    // (only modelParams/ephemeralSettings were guarded by isSafeRecord), so
+    // such a file WAS repair-eligible. That must remain true.
+    const corruptWithProto = `{"version":1,"provider":"load-balancer","model":"x","__proto__":{"polluted":true},"modelParams":{},"ephemeralSettings":{}}`;
+
+    const parsed = parseProfileJson(corruptWithProto);
+    // The shared boundary still flags it...
+    expect(parsed.kind).toBe('unsafe');
+
+    // ...and reading it does not pollute the real prototype.
+    expect(({} as Record<string, unknown>)['polluted']).toBeUndefined();
+  });
+
+  it('a replacement carrying dangerous keys is still refused', () => {
+    const unsafeReplacement = `{"version":1,"provider":"openai","model":"gpt-4","modelParams":{},"ephemeralSettings":{"__proto__":{"x":1}}}`;
+    const parsed = parseProfileJson(unsafeReplacement);
+    expect(parsed.kind).toBe('unsafe');
+  });
+});

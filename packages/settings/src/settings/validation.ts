@@ -136,6 +136,14 @@ export function parseProfileJson(content: string):
   | {
       readonly kind: 'unsafe';
       readonly error: Error;
+      /**
+       * The successfully-parsed document, exposed so read-only callers that
+       * must still INSPECT a hostile file (canonical repair eligibility) do
+       * not need a second parser. Reading is safe: JSON.parse materialises
+       * `__proto__` as an own property rather than invoking the setter.
+       * Callers that WRITE must reject on `kind` and ignore this.
+       */
+      readonly value: unknown;
     } {
   let parsed: unknown;
   try {
@@ -152,6 +160,7 @@ export function parseProfileJson(content: string):
       error: new Error(
         'Profile contains dangerous fields (__proto__, constructor, or prototype)',
       ),
+      value: parsed,
     };
   }
   return { kind: 'parsed', value: parsed };
