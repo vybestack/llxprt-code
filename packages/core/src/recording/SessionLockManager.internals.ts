@@ -37,19 +37,41 @@
  * - Stale takeover re-reads the lock before unlinking to avoid removing a
  *   replacement live lock; the final create uses atomic exclusive creation.
  * - Release unlinks only when the on-disk owner token still matches.
- * - A per-session filesystem transition guard serializes ALL pathname
- *   mutations — acquire, stale takeover, removeStaleLock, orphan cleanup,
- *   and release — so a stale checker can never unlink a replacement live
- *   lock.  The guard is an **atomic hard-link claim** tied to the current
- *   lock inode: `link(lockPath, guardPath)` succeeds for exactly one
- *   contender (EEXIST means another owns it).  A crashed claim is safe to
- *   remove because unlinking a hard link only decrements a link count and
- *   cannot remove/replace the live lock.  Every mutator verifies that the
- *   guard and lock path still share the same inode before touching
- *   lockPath.  Guard crash recovery preserves the live-PID/EPERM and
- *   48-hour PID-reuse semantics.
+ * - A per-session filesystem transition guard serializes the destructive
+ *   pathname mutations — stale takeover, removeStaleLock, orphan cleanup,
+ *   and release — so a stale checker does not unlink a replacement live
+ *   lock.  The guard is an **identity-bearing claim file** at
+ *   `<lockPath>.tguard` whose payload records the claimant's pid, a
+ *   timestamp, a random claimToken, and the dev/ino of the lock observed
+ *   at claim time.  It is installed exclusively via temp-file + hard-link
+ *   (EEXIST means another process holds it), reclaimed only when its own
+ *   payload indicates abandonment, and a reclaimer never displaces a live
+ *   claimant: abandonment is judged against a hard-link probe, so a guard
+ *   that is still held is never renamed or unlinked.  Every mutator
+ *   verifies via {@link verifyTransitionClaim} that the guard still
+ *   carries its own claimToken and the lock still has the recorded dev/ino
+ *   before touching lockPath.  Release is ownership-checked.  Guard crash
+ *   recovery preserves the live-PID/EPERM and 48-hour PID-reuse
+ *   semantics.
+ * - Retiring a stale lock is an atomic `rename` out of the well-known path
+ *   ({@link retireStaleLock}), not a bare `unlink`.  Exactly one contender
+ *   can win that rename, so contention over a stale lock resolves to a
+ *   single owner independently of the guard, and a contender that captures
+ *   a replacement live lock restores it instead of destroying it.
  * - Destructive janitor ownership is verified through the token-bound
  *   {@link LockHandle.ownsLock} immediately before mutation.
+ *
+ * What this protocol does not promise.  POSIX offers no compare-and-swap
+ * unlink or rename, so between any check and any subsequent pathname
+ * mutation there is a window.  Ownership is therefore carried by the
+ * atomic primitives themselves — exclusive creation for publication and
+ * `rename` for retirement — and the guard reduces, rather than eliminates,
+ * the interleavings that reach those primitives.  Fresh publication in
+ * {@link acquire} deliberately does not take the guard: it competes only
+ * through exclusive creation, so it can lose but cannot destroy.  The
+ * protocol also assumes a local filesystem; `link`, `rename` and `O_EXCL`
+ * are not dependable over NFS or SMB, and `process.kill(pid, 0)` is
+ * host-local while a lock carries no hostname.
  */
 
 import * as fs from 'node:fs/promises';
@@ -139,6 +161,44 @@ export async function acquire(
 }
 
 /**
+ * Build a fresh single-use artifact path next to `lockPath`.
+ *
+ * The name matches the `<safeSessionId>.lock.<uuid>.locktmp` grammar, so the
+ * existing {@link cleanupStaleLockTemp} sweep reclaims anything a crash leaves
+ * behind and no additional cleanup path is needed.
+ */
+function makeLockTempPath(lockPath: string): string {
+  return lockPath + '.' + crypto.randomUUID() + LOCK_TEMP_SUFFIX;
+}
+
+/** dev/ino identity of a filesystem entry, as exact decimal strings. */
+interface FileIdentity {
+  readonly dev: string;
+  readonly ino: string;
+}
+
+/**
+ * Read the dev/ino identity of `filePath`, or `null` when it does not exist.
+ *
+ * `bigint: true` is required rather than cosmetic: Windows file IDs are 64-bit
+ * and inode numbers on some filesystems exceed `Number.MAX_SAFE_INTEGER`, so
+ * the default number-valued `stat` would round two distinct files to the same
+ * identity and let a replaced file pass verification.
+ *
+ * Errors other than ENOENT propagate.  A transient stat failure must not be
+ * mistaken for "this path does not exist".
+ */
+async function statIdentity(filePath: string): Promise<FileIdentity | null> {
+  try {
+    const s = await fs.stat(filePath, { bigint: true });
+    return { dev: s.dev.toString(), ino: s.ino.toString() };
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+/**
  * Write the complete lock payload to a temp file (O_EXCL) and sync it.
  * Returns true on success, false for a retryable collision (EEXIST) or a
  * missing parent directory (ENOENT).  All other errors (ENOSPC, EACCES,
@@ -200,7 +260,7 @@ async function tryCreateLock(
   lockPath: string,
   lockContent: string,
 ): Promise<boolean> {
-  const tempPath = lockPath + '.' + crypto.randomUUID() + '.locktmp';
+  const tempPath = makeLockTempPath(lockPath);
 
   let written = await writeTempLockFile(tempPath, lockContent);
   if (!written) {
@@ -230,7 +290,8 @@ async function tryStaleTakeover(
   lockPath: string,
   lockContent: string,
 ): Promise<boolean> {
-  if (!(await acquireTransitionGuard(lockPath))) {
+  const claim = await acquireTransitionGuard(lockPath);
+  if (!claim) {
     return false; // Another process is transitioning — busy.
   }
   try {
@@ -261,26 +322,24 @@ async function tryStaleTakeover(
       return await tryCreateLock(lockPath, lockContent);
     }
 
-    // Verify the transition claim still identifies the same inode as
-    // the lock before unlinking.  If the lock was replaced by another
-    // process, the inodes will differ and we must skip.
-    if (!(await verifyTransitionClaim(lockPath))) {
+    // Verify the transition claim still identifies the same lock inode as
+    // was observed at claim time and still carries this claim's token.  If the
+    // lock was replaced by another process, the inodes will differ and we must skip.
+    if (!(await verifyTransitionClaim(lockPath, claim))) {
       return false;
     }
 
-    // Unlink the stale lock.
-    try {
-      await fs.unlink(lockPath);
-    } catch (error: unknown) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code !== 'ENOENT') return false;
+    // Retire the stale lock.  Exactly one process can win the rename, so the
+    // takeover resolves to a single owner even if the guard were bypassed.
+    if (!(await retireStaleLock(lockPath, originalContent))) {
+      return false;
     }
 
     // Atomically create our lock.  If another process won the race between
-    // our unlink and this create, the link fails with EEXIST and we lose.
+    // the retirement and this create, the link fails with EEXIST and we lose.
     return await tryCreateLock(lockPath, lockContent);
   } finally {
-    await releaseTransitionGuard(lockPath);
+    await releaseTransitionGuard(claim);
   }
 }
 
@@ -433,7 +492,8 @@ async function tryRemoveStaleLock(
   if (!isValidSafeSessionId(lockSessionId)) return false;
 
   // Acquire the transition guard to serialize this mutation.
-  if (!(await acquireTransitionGuard(lockPath))) {
+  const claim = await acquireTransitionGuard(lockPath);
+  if (!claim) {
     return false; // Another process is transitioning — busy.
   }
   try {
@@ -480,21 +540,77 @@ async function tryRemoveStaleLock(
       return false; // Vanished — benign.
     }
 
-    // Verify the transition claim still identifies the same inode as
-    // the lock before unlinking.
-    if (!(await verifyTransitionClaim(lockPath))) {
+    // Verify the transition claim still identifies the same lock inode as
+    // was observed at claim time before unlinking.
+    if (!(await verifyTransitionClaim(lockPath, claim))) {
       return false;
     }
 
-    try {
-      await fs.unlink(lockPath);
-      return true;
-    } catch {
-      return false; // Best-effort.
-    }
+    return await retireStaleLock(lockPath, originalContent);
   } finally {
-    await releaseTransitionGuard(lockPath);
+    await releaseTransitionGuard(claim);
   }
+}
+
+/**
+ * Retire a lock whose content has been judged stale, by atomically renaming it
+ * out of the well-known path.
+ *
+ * `rename` is the only pathname primitive POSIX offers that removes a name and
+ * tells exactly one caller that it did so.  That is what makes contention over
+ * a stale lock resolve to a single owner: every other contender's rename fails
+ * with ENOENT.  A bare `unlink` cannot distinguish "I removed the stale lock"
+ * from "I removed the replacement that somebody else just published".
+ *
+ * A caller that captures a lock whose content is not the payload it judged
+ * stale has captured a replacement live lock.  It puts that lock back and
+ * reports failure rather than destroying it, preserving the invariant that no
+ * process unlinks another process's lock.
+ *
+ * Returns true when this call retired the stale lock.
+ */
+async function retireStaleLock(
+  lockPath: string,
+  expectedContent: string,
+): Promise<boolean> {
+  const capturePath = makeLockTempPath(lockPath);
+  try {
+    await fs.rename(lockPath, capturePath);
+  } catch {
+    return false; // Lost the race, or the lock is already gone.
+  }
+
+  let capturedContent: string | null = null;
+  try {
+    capturedContent = await fs.readFile(capturePath, 'utf-8');
+  } catch {
+    // Unreadable: we cannot prove this is the lock we judged stale.
+  }
+
+  if (capturedContent !== expectedContent) {
+    // Not the lock we judged — restore it instead of destroying it.
+    try {
+      await fs.link(capturePath, lockPath);
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+        // Restoration failed for some reason other than the path being taken,
+        // so the capture may still be the only copy of a live lock.  Leave it
+        // parked; {@link cleanupStaleLockTemp} reclaims it once its owner is
+        // gone.
+        return false;
+      }
+      // Another lock already occupies the path.  The captured one is therefore
+      // superseded and unreachable — no code path ever reads a capture back,
+      // and its owner's `ownsLock()` already reports false — so discarding it
+      // loses nothing, while parking it would leak a file for the lifetime of
+      // that owner's process.
+    }
+    await safeUnlink(capturePath);
+    return false;
+  }
+
+  await safeUnlink(capturePath);
+  return true;
 }
 
 /** @pseudocode concurrency-lifecycle.md lines 290-346 */
@@ -592,7 +708,8 @@ async function releaseIfOwned(
   lockPath: string,
   ownerToken: string,
 ): Promise<void> {
-  if (!(await acquireTransitionGuard(lockPath))) {
+  const claim = await acquireTransitionGuard(lockPath);
+  if (!claim) {
     return; // Can't acquire guard — best-effort, leave lock in place.
   }
   try {
@@ -602,16 +719,16 @@ async function releaseIfOwned(
       // We don't own this lock anymore — don't remove it.
       return;
     }
-    // Verify the transition claim still identifies the same inode as
-    // the lock before unlinking.
-    if (!(await verifyTransitionClaim(lockPath))) {
+    // Verify the transition claim still identifies the same lock inode as
+    // was observed at claim time before unlinking.
+    if (!(await verifyTransitionClaim(lockPath, claim))) {
       return;
     }
     await fs.unlink(lockPath);
   } catch {
     // Best-effort release.
   } finally {
-    await releaseTransitionGuard(lockPath);
+    await releaseTransitionGuard(claim);
   }
 }
 
@@ -619,103 +736,344 @@ async function releaseIfOwned(
 // Per-session transition guard (root safety fix 1)
 // -----------------------------------------------------------------------
 
+/**
+ * Identity of a transition claim held by this process.
+ *
+ * The guard is a distinct file (not a hard link of the lock inode) whose
+ * payload records who claimed it, so reclaimability and verification always read
+ * the **claimant's** own state rather than the victim lock's.
+ */
+interface TransitionClaim {
+  /** Path of the guard file this claim installed. */
+  readonly guardPath: string;
+  /** Random token unique to this claim; a thief relinking the lock inode
+   *  cannot forge it. */
+  readonly claimToken: string;
+  /** dev/ino of the lock as observed when this claim was installed, or null
+   *  when no lock existed at claim time. */
+  readonly lockIdentity: FileIdentity | null;
+}
+
+/**
+ * Outcome of attempting to install a transition claim.
+ *
+ * `contended` and `failed` are kept apart because only contention implies an
+ * incumbent claim whose liveness is worth consulting; a genuine I/O failure
+ * leaves nothing to reclaim.
+ */
+type GuardInstallResult =
+  | { readonly outcome: 'installed'; readonly claim: TransitionClaim }
+  | { readonly outcome: 'contended' }
+  | { readonly outcome: 'failed' };
+
 /** Return the guard path for a given lock path. */
 function getGuardPath(lockPath: string): string {
   return lockPath + TRANSITION_GUARD_SUFFIX;
 }
 
 /**
- * Acquire the per-session transition claim by atomically hard-linking
- * the **current lock inode** to the guard path.
+ * Write the guard payload to a temp file (O_EXCL), sync it, then
+ * exclusively hard-link the temp to the guard path.  The temp name reuses the
+ * existing `<safeSessionId>.lock.<uuid>.locktmp` grammar so the existing
+ * `cleanupStaleLockTemp` orphan sweep already covers guard temps.
  *
- * Unlike a separate-owner guard (which has its own PID and suffers a
- * check-stale-then-unlink race), the hard-link claim is tied to the lock
- * inode itself:
- *
- * - `link(lockPath, guardPath)` succeeds for exactly one contender; others
- *   get EEXIST and fail/skip.
- * - ENOENT means the lock does not exist — fresh creates use exclusive
- *   link/create so no claim is needed.
- * - A crashed claim is a hard link, so removing it only decrements a link
- *   count and **cannot remove or replace the live lock** at lockPath.
- * - If claim recovery races, every mutator must re-establish and validate
- *   its own claim via {@link verifyTransitionClaim} before touching
- *   lockPath.
- *
- * Returns true when the claim is held (or no lock exists to guard).
+ * Reports `installed` with the claim, `contended` when another process already
+ * holds the guard, or `failed` for a genuine I/O error.  None of these throw:
+ * guard acquisition has never thrown, and `release()` and the janitor sweep
+ * are best-effort callers whose error surface must stay unchanged.
  */
-async function acquireTransitionGuard(lockPath: string): Promise<boolean> {
+async function installTransitionGuard(
+  lockPath: string,
+): Promise<GuardInstallResult> {
   const guardPath = getGuardPath(lockPath);
 
-  // Atomically claim the lock inode.
+  // Capture the lock's dev/ino before writing the payload so verification can
+  // detect the lock being replaced between claim time and mutation.  A missing
+  // lock is a null identity — the guard is still installed, which is strictly
+  // stronger serialization and removes the "release a guard we never created"
+  // bug.  A stat failure that is NOT "absent" must report busy instead: a null
+  // identity fails verification, which would make `releaseIfOwned` silently
+  // leave a lock this process still owns.
+  let lockIdentity: FileIdentity | null;
   try {
-    await fs.link(lockPath, guardPath);
-    return true; // Claimed the lock inode.
-  } catch (error: unknown) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') {
-      // Lock does not exist — no inode to claim.
-      return true;
-    }
-    if (code !== 'EEXIST') return false;
+    lockIdentity = await statIdentity(lockPath);
+  } catch {
+    return { outcome: 'failed' };
   }
 
-  // Another transition owns the claim. Attempt conservative recovery.
+  const claimToken = crypto.randomUUID();
+  const payload = JSON.stringify({
+    pid: process.pid,
+    timestamp: new Date().toISOString(),
+    claimToken,
+    lockDev: lockIdentity?.dev ?? null,
+    lockIno: lockIdentity?.ino ?? null,
+  });
+
+  const tempPath = makeLockTempPath(lockPath);
+  let fd: fs.FileHandle | undefined;
+  try {
+    fd = await fs.open(tempPath, 'wx');
+    await fd.writeFile(payload, 'utf-8');
+    await fd.sync();
+    await fd.close();
+    fd = undefined;
+    await fs.link(tempPath, guardPath);
+  } catch (error: unknown) {
+    // EEXIST is contention: another process holds the guard, and recovery
+    // should consult that claimant's liveness.  Anything else (ENOSPC, EACCES,
+    // EROFS, EDQUOT, EMFILE, ...) is a genuine I/O failure, where there is no
+    // incumbent claim to reason about.  Neither throws: guard acquisition has
+    // never thrown, and `release()` and the janitor sweep are best-effort and
+    // must not start surfacing I/O errors.
+    const code = (error as NodeJS.ErrnoException).code;
+    return { outcome: code === 'EEXIST' ? 'contended' : 'failed' };
+  } finally {
+    await fd?.close().catch(() => {});
+    await safeUnlink(tempPath);
+  }
+  return {
+    outcome: 'installed',
+    claim: { guardPath, claimToken, lockIdentity },
+  };
+}
+
+/**
+ * Acquire the per-session transition claim by installing a distinct guard file
+ * whose payload identifies this claim (pid, timestamp, claimToken, and the
+ * dev/ino of the lock observed at claim time).
+ *
+ * - A guard is installed exclusively via temp-file + hard-link; EEXIST means
+ *   another process holds it, and recovery consults the incumbent claim's OWN
+ *   liveness before touching it.
+ * - A guard is installed even when the lock does not exist — strictly stronger
+ *   serialization — and is released only by the claim that installed it.
+ * - Any failure to install yields `null` (busy) instead of throwing, so the
+ *   error surface of `release()` and the janitor sweep is unchanged.
+ *
+ * Returns the installed claim, or `null` meaning "busy — caller must not mutate".
+ */
+async function acquireTransitionGuard(
+  lockPath: string,
+): Promise<TransitionClaim | null> {
+  const installed = await installTransitionGuard(lockPath);
+  if (installed.outcome === 'installed') return installed.claim;
+  // A genuine I/O failure leaves no incumbent claim to reason about, so there
+  // is nothing to reclaim; report busy.
+  if (installed.outcome === 'failed') return null;
+  // Another process holds the claim — attempt conservative recovery.
   return tryReclaimGuard(lockPath);
+}
+
+/**
+ * Decide whether the guard at `guardPath` has been abandoned by its claimant.
+ *
+ * Reclaim depends on the **claimant's** liveness, never on the staleness of
+ * the lock being taken over.  A guard is only attributable to a claimant when
+ * its payload carries a `claimToken`, which is the marker this implementation
+ * writes.  Anything else — corrupt content, or a guard written by an older
+ * revision that hard-linked the lock inode and therefore describes the victim
+ * lock rather than the claimant — has no discoverable claimant, so it is
+ * treated as busy and reclaimable only once it passes the age bound.  Without
+ * that gate a legacy guard over a stale lock reads as abandoned to every
+ * contender at once, which is the defect in issue #3277.
+ *
+ * Orphaned legacy guards still converge: the janitor's {@link cleanupStaleGuard}
+ * sweep removes safe-grammar guards whose payload PID is dead.
+ */
+async function isGuardAbandoned(guardPath: string): Promise<boolean> {
+  let claimToken: unknown;
+  try {
+    const parsed = JSON.parse(await fs.readFile(guardPath, 'utf-8')) as Record<
+      string,
+      unknown
+    >;
+    claimToken = parsed.claimToken;
+  } catch {
+    // Unreadable or corrupt — no claimant identity.
+    return isOlderThanBound(guardPath);
+  }
+  if (typeof claimToken !== 'string' || claimToken.length === 0) {
+    return isOlderThanBound(guardPath);
+  }
+  // Our own format: the payload's pid/timestamp describe the claimant, so the
+  // existing PID-reuse staleness rules answer "has the claimant gone away?".
+  return checkStaleWithPidReuse(guardPath);
 }
 
 /**
  * Conservatively reclaim a stale transition claim.
  *
- * The guard is a hard link to a lock inode, so its content IS the lock
- * content.  When the lock content indicates staleness (dead PID or past
- * the 48-hour PID-reuse bound), the claim owner has crashed and the guard
- * is safe to remove — it only decrements a link count.
+ * The guard now carries the claimant's own payload, so its staleness is the
+ * claimant's liveness (dead PID, or an alive PID past the 48-hour PID-reuse
+ * bound, or a guard with no discoverable claimant that is older than that
+ * bound) — never the victim lock's staleness.
+ *
+ * Retirement is non-displacing (see {@link retireGuardIf}) and installation
+ * then goes through the exclusive {@link installTransitionGuard} path, so we
+ * may still lose to a racer and report `null`.
  */
-async function tryReclaimGuard(lockPath: string): Promise<boolean> {
+async function tryReclaimGuard(
+  lockPath: string,
+): Promise<TransitionClaim | null> {
   const guardPath = getGuardPath(lockPath);
-
-  if (!(await checkStaleWithPidReuse(guardPath))) {
-    return false; // Guard content indicates a live transition owner.
+  if (!(await retireGuardIf(lockPath, guardPath, isGuardAbandoned))) {
+    return null; // Live or unattributable claimant -> busy.
   }
+  const installed = await installTransitionGuard(lockPath);
+  return installed.outcome === 'installed' ? installed.claim : null;
+}
 
+/**
+ * Retire the guard at `guardPath`, but only when `isRetirable` says its own
+ * payload shows the claimant has gone away.
+ *
+ * The decision is made against a **hard-link probe** rather than against
+ * `guardPath` itself.  That is the point: a guard belonging to a live claimant
+ * is never renamed, unlinked, or even momentarily absent from the well-known
+ * path, so deciding "busy" costs a live claimant nothing.  Deciding against the
+ * well-known path instead would mean a slow decision could be followed by
+ * renaming away whichever guard had since replaced the one it inspected.
+ *
+ * Only a guard that was proved retirable is retired, and retirement is an
+ * atomic `rename` whose captured inode must equal the probed inode.  A
+ * different guard installed between the probe and the rename is restored
+ * rather than discarded.  `rename` also means exactly one of several
+ * concurrent reclaimers retires a given guard; the rest see ENOENT.
+ *
+ * The probe deliberately carries the guard's own mtime, because `isRetirable`
+ * may fall back to an age bound.  The post-rename check is an inode comparison
+ * precisely so it does not depend on mtime, which `rename` preserves.
+ *
+ * Returns true when this call retired the guard.
+ */
+async function retireGuardIf(
+  lockPath: string,
+  guardPath: string,
+  isRetirable: (probePath: string) => Promise<boolean>,
+): Promise<boolean> {
+  const probePath = makeLockTempPath(lockPath);
+  let probeIdentity: FileIdentity | null;
   try {
-    await fs.unlink(guardPath);
+    await fs.link(guardPath, probePath);
+    probeIdentity = await statIdentity(probePath);
   } catch {
-    return false; // Can't reclaim — busy.
+    await safeUnlink(probePath);
+    return false; // No guard, or we cannot inspect one — treat as busy.
   }
 
-  // Retry the claim. The lock inode may have changed during recovery.
+  let retirable: boolean;
   try {
-    await fs.link(lockPath, guardPath);
-    return true;
-  } catch (error: unknown) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') return true; // Lock vanished — no claim needed.
+    retirable = await isRetirable(probePath);
+  } catch {
+    retirable = false;
+  } finally {
+    await safeUnlink(probePath);
+  }
+  if (!retirable || probeIdentity === null) return false;
+
+  const capturePath = makeLockTempPath(lockPath);
+  try {
+    await fs.rename(guardPath, capturePath);
+  } catch {
+    return false; // Another reclaimer retired it first.
+  }
+
+  let capturedIdentity: FileIdentity | null = null;
+  try {
+    capturedIdentity = await statIdentity(capturePath);
+  } catch {
+    // Treated as a mismatch below.
+  }
+  if (
+    capturedIdentity === null ||
+    capturedIdentity.dev !== probeIdentity.dev ||
+    capturedIdentity.ino !== probeIdentity.ino
+  ) {
+    // A different guard was installed between the probe and the rename — put
+    // it back rather than displacing a claimant we never inspected.
+    try {
+      await fs.link(capturePath, guardPath);
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+        // Restoration failed for some reason other than the path being taken,
+        // so the capture may still be the only copy of a live claim.  Leave it
+        // parked; {@link cleanupStaleLockTemp} reclaims it once its claimant is
+        // gone.
+        return false;
+      }
+      // Another guard already occupies the path, so the captured claim is
+      // superseded: its holder can no longer pass verification and will abort
+      // without mutating.  Discarding it loses nothing, while parking it would
+      // leak a file for the lifetime of that claimant's process.
+    }
+    await safeUnlink(capturePath);
+    return false;
+  }
+
+  await safeUnlink(capturePath);
+  return true;
+}
+
+/**
+ * Verify that the on-disk guard still carries this claim's own token and that
+ * the lock path still identifies the inode observed at claim time.  Every
+ * mutator must call this before unlinking lockPath:
+ *
+ * - The token check is what a thief cannot forge by relinking the lock inode.
+ * - The dev/ino check preserves the protection against the lock being replaced
+ *   between claim time and mutation (now recorded in the claim rather than
+ *   inferred from the guard's inode).
+ */
+async function verifyTransitionClaim(
+  lockPath: string,
+  claim: TransitionClaim,
+): Promise<boolean> {
+  if (claim.lockIdentity === null) {
+    return false; // No lock existed at claim time — nothing to mutate.
+  }
+  try {
+    const guardContent = await fs.readFile(claim.guardPath, 'utf-8');
+    const parsed = JSON.parse(guardContent) as Record<string, unknown>;
+    if (parsed.claimToken !== claim.claimToken) {
+      return false; // The guard is not ours anymore.
+    }
+    const lockIdentity = await statIdentity(lockPath);
+    return (
+      lockIdentity !== null &&
+      lockIdentity.dev === claim.lockIdentity.dev &&
+      lockIdentity.ino === claim.lockIdentity.ino
+    );
+  } catch {
     return false;
   }
 }
 
 /**
- * Verify that the transition guard and the lock path still identify the
- * **same inode**.  Every mutator must call this before unlinking lockPath
- * to ensure the lock has not been replaced by another process since the
- * claim was acquired.
+ * Release the transition guard (best-effort, ownership-checked).  Unlinks the
+ * guard only while it still carries this claim's token — a process that never
+ * installed the guard (or whose guard was already reclaimed) never unlinks another
+ * process's guard.
+ *
+ * The token read and the unlink are not one atomic step, so a claim that is
+ * legally retired between them would be unlinked by its predecessor.  Reaching
+ * that requires our own claim to have passed the 48-hour PID-reuse bound while
+ * this process was still alive and mid-release; claims here live for
+ * milliseconds.  Closing it would mean renaming the guard away before reading
+ * it, which reintroduces the displacement that {@link retireGuardIf} exists to
+ * avoid, so the read-then-unlink order is deliberate.
  */
-async function verifyTransitionClaim(lockPath: string): Promise<boolean> {
-  const guardPath = getGuardPath(lockPath);
+async function releaseTransitionGuard(claim: TransitionClaim): Promise<void> {
   try {
-    const lockStat = await fs.stat(lockPath);
-    const guardStat = await fs.stat(guardPath);
-    return lockStat.dev === guardStat.dev && lockStat.ino === guardStat.ino;
+    const content = await fs.readFile(claim.guardPath, 'utf-8');
+    const parsed = JSON.parse(content) as Record<string, unknown>;
+    if (parsed.claimToken !== claim.claimToken) {
+      return; // Not our claim — leave it.
+    }
   } catch {
-    return false;
+    return; // Best-effort.
   }
-}
-
-/** Release the transition guard (best-effort). */
-async function releaseTransitionGuard(lockPath: string): Promise<void> {
-  await safeUnlink(getGuardPath(lockPath));
+  await safeUnlink(claim.guardPath);
 }
 
 /** Best-effort unlink that swallows errors. */
@@ -728,10 +1086,50 @@ async function safeUnlink(filePath: string): Promise<void> {
 }
 
 /**
+ * Return true when the payload at `filePath` names an owner that is still
+ * alive, meaning the file may be the only remaining copy of a live lock or
+ * transition claim and must not be reclaimed on age alone.
+ *
+ * Content that does not parse, or that carries no usable pid, is a partial
+ * publication artifact rather than an owned payload.
+ */
+async function namesLiveOwner(filePath: string): Promise<boolean> {
+  let content: string;
+  try {
+    content = await fs.readFile(filePath, 'utf-8');
+  } catch (error: unknown) {
+    // Cannot read it, so we cannot prove it is disposable.  A file whose
+    // contents are unreadable can still be unlinked through a writable parent
+    // directory, so answering "no owner" here would let a transient EACCES or
+    // EMFILE destroy the only remaining copy of a live lock.  Only a confirmed
+    // absence is safe to treat as "nothing to preserve".
+    return (error as NodeJS.ErrnoException).code !== 'ENOENT';
+  }
+  try {
+    const parsed = JSON.parse(content) as Record<string, unknown>;
+    const pid = parsed.pid;
+    if (typeof pid !== 'number' || !Number.isSafeInteger(pid) || pid <= 0) {
+      return false; // Readable, but names no owner.
+    }
+  } catch {
+    return false; // Readable partial write — a publication artifact.
+  }
+  return !(await checkStaleWithPidReuse(filePath));
+}
+
+/**
  * Safely clean up a single stale lock temp publication artifact.  Only
  * removes the file when it matches the exact generated grammar, is a
- * regular non-symlink direct child of chatsDir, and is older than the
- * conservative age threshold.  Unknown files are never deleted.
+ * regular non-symlink direct child of chatsDir, is older than the
+ * conservative age threshold, and does not name a live owner.  Unknown files
+ * are never deleted.
+ *
+ * The liveness check is not optional.  {@link retireStaleLock} and
+ * {@link retireGuardIf} can park a lock or claim under this grammar when a
+ * capture cannot be restored, and a process can crash between the rename and
+ * the restore, so a file matching this grammar is no longer guaranteed to be a
+ * redundant copy.  Reclaiming on age alone would destroy a live owner's only
+ * remaining copy.
  */
 async function cleanupStaleLockTemp(
   chatsDir: string,
@@ -747,6 +1145,7 @@ async function cleanupStaleLockTemp(
   } catch {
     return; // Can't stat — leave it.
   }
+  if (await namesLiveOwner(filePath)) return;
   await safeUnlink(filePath);
 }
 
@@ -756,6 +1155,13 @@ async function cleanupStaleLockTemp(
  * (`<safeSessionId>.lock.tguard`), it is a regular non-symlink direct child
  * of chatsDir, and its content indicates staleness.  Unknown files and
  * symlinks are never deleted.
+ *
+ * This sweep keeps the {@link checkStaleWithPidReuse} predicate rather than the
+ * stricter {@link isGuardAbandoned}, because it is the escape hatch that lets a
+ * guard with no `claimToken` — one written by an older revision — converge
+ * instead of waiting out the age bound.  It goes through
+ * {@link retireGuardIf} so that classifying a guard stale and removing it can
+ * no longer straddle another process installing a live claim at that path.
  */
 async function cleanupStaleGuard(
   chatsDir: string,
@@ -772,7 +1178,6 @@ async function cleanupStaleGuard(
   } catch {
     return; // Can't stat — leave it.
   }
-  if (await checkStaleWithPidReuse(guardPath)) {
-    await safeUnlink(guardPath);
-  }
+  const lockPath = guardPath.slice(0, -TRANSITION_GUARD_SUFFIX.length);
+  await retireGuardIf(lockPath, guardPath, checkStaleWithPidReuse);
 }
