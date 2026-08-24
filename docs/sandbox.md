@@ -629,10 +629,15 @@ is where you expect.
 
 Do **not** rely on the `SANDBOX` environment variable. LLxprt Code sets
 `SANDBOX` inside the sandboxed process to mark that it has already started one
-layer of containment, and a pre-existing `SANDBOX` value on your host causes
-sandbox startup to be skipped. That means the variable reports "sandboxed" on
-an unsandboxed host and is trivially forgeable — it cannot distinguish
-sandboxed from unsandboxed execution.
+layer of containment. Only the values LLxprt itself writes skip another sandbox
+startup: the Seatbelt launcher sets the literal `sandbox-exec`, and the
+container launcher sets the generated container name (for example
+`sandbox-0.7.0-4242`). When one of those values suppresses an explicit
+sandbox request, the CLI prints a warning that names the value and the request; a
+pre-existing foreign `SANDBOX` value from your host does not suppress an explicit
+request. The variable is still trivially forgeable and reports "sandboxed" on
+an unsandboxed host — it cannot distinguish sandboxed from unsandboxed
+execution.
 
 Instead, check for an observable property of the container environment that a
 host process does not have:

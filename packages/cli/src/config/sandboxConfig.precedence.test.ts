@@ -153,12 +153,17 @@ describe('sandbox precedence (issue #3083)', () => {
     expect(config).toBeUndefined();
   });
 
-  it('AC7: SANDBOX env set yields no nested sandbox', async () => {
-    process.env.SANDBOX = '1';
+  it('AC7: LLxprt-written SANDBOX value yields no nested sandbox (issue #2943)', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    process.env.SANDBOX = 'sandbox-exec';
     const config = await loadSandboxConfig(makeSettings(true), {
       sandbox: true,
     });
     expect(config).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const message = String((warnSpy.mock.calls[0] ?? [])[0] ?? '');
+    expect(message).toContain('SANDBOX=sandbox-exec');
+    expect(message).toContain('--sandbox');
   });
 
   it('AC8: missing-command error names LLXPRT_SANDBOX when env supplied it', async () => {
