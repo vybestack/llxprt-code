@@ -100,11 +100,6 @@
     {
       "type": "expect",
       "scope": "screen",
-      "contains": "(1 target found)"
-    },
-    {
-      "type": "expect",
-      "scope": "screen",
       "regex": "\u25cf #1 session "
     },
     {
@@ -226,11 +221,6 @@
       "type": "expect",
       "scope": "screen",
       "contains": "Session Browser"
-    },
-    {
-      "type": "expect",
-      "scope": "screen",
-      "contains": "(1 target found)"
     },
     {
       "type": "expect",

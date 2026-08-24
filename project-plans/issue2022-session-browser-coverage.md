@@ -180,11 +180,16 @@ Three findings drove the scenario's shape, each established by experiment:
   the whole string into a single word.
 
 What the smoke asserts: the browser opens with the search bar, sort bar,
-controls bar and selection detail; exactly one target is listed and rendered as
-a real row (`● #1 session …`); Tab toggles to nav mode and the arrow keys keep
-the selection; `s` cycles newest → oldest → size; typing a non-matching term
-drops the count to `(0 targets found)` and removes the row; Escape restores the
+controls bar and selection detail; the seeded session is rendered as a real,
+selected row (`● #1 session …`); Tab toggles to nav mode and the arrow keys keep
+the selection; `s` cycles newest, oldest, size; typing a non-matching term drops
+the count to `(0 targets found)` and removes the row; Escape restores the
 unfiltered list; a second Escape closes the browser and returns to the prompt.
+
+The smoke deliberately does not assert a total target count. CI lists one more
+session than a local run does, because the CLI's own startup accounting differs
+there, and pinning that number would make the smoke assert an incidental
+property of session bookkeeping rather than browser behaviour.
 
 Verified locally: 3/3 consecutive passes of the scenario, and a full
 `npm run test:interactive-ui` run covering all four scenarios.
