@@ -85,10 +85,9 @@ describe('escape vs Alt-key disambiguation (AC3)', () => {
     // Same pipeline throughout: this is the disambiguation contract. If the
     // parser kept its escaped state across the flush, the letter would arrive
     // as Alt+b instead of a bare b.
-    expect(keys.map(({ name, meta }) => [name, meta])).toStrictEqual([
-      ['escape', true],
-      ['b', false],
-    ]);
+    expect(keys.map(({ name }) => name)).toStrictEqual(['escape', 'b']);
+    expect(keyMatchers[Command.ESCAPE](keys[0])).toBe(true);
+    expect(keys[1].meta).toBe(false);
     expect(keys[1].sequence).toBe('b');
   });
 
