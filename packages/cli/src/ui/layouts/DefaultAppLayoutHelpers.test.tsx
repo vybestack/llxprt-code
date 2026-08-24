@@ -46,6 +46,7 @@ const settings = new LoadedSettings(
   true,
 );
 
+/** Builds user history items whose ids double as the expected static keys. */
 function buildHistory(...ids: number[]): HistoryItem[] {
   return ids.map((id) => ({ id, type: 'user', text: `item-${id}` }));
 }

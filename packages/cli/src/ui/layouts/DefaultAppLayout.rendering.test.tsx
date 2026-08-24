@@ -108,12 +108,14 @@ const TERMINAL_HEIGHT = 24;
 /** Sentinel supplied as history-item input; never produced by a stub. */
 const HISTORY_SENTINEL = 'static-history-sentinel-2026';
 
+/** Inputs that select the layout branch under test. */
 interface RenderOptions {
   useAlternateBuffer: boolean;
   screenReader?: boolean;
   historyText?: string;
 }
 
+/** What a render exposes to assertions: frame text, geometry, and real Ink refs. */
 interface RenderedLayout {
   frame: string;
   lineCount: number;
@@ -121,6 +123,10 @@ interface RenderedLayout {
   rootUiRef: { current: DOMElement | null };
 }
 
+/**
+ * Minimal runtime source. Only `getScreenReader` varies, because it is the
+ * gate `useLayoutSettings` applies on top of `ui.useAlternateBuffer`.
+ */
 function createConfigSource(screenReader: boolean) {
   return {
     getScreenReader: () => screenReader,
@@ -134,6 +140,7 @@ function createConfigSource(screenReader: boolean) {
   };
 }
 
+/** Settings carrying the buffer choice the layout branches on. */
 function createSettings(useAlternateBuffer: boolean) {
   return {
     merged: {
@@ -150,6 +157,7 @@ function createSettings(useAlternateBuffer: boolean) {
   };
 }
 
+/** UI actions the layout hands to its children; none are asserted on. */
 function createActions() {
   return {
     addItem: vi.fn(),
@@ -162,6 +170,10 @@ function createActions() {
   };
 }
 
+/**
+ * UI state for a render. `rootUiRef` is threaded in so the caller can observe
+ * whether the layout actually mounted its root.
+ */
 function createUIState(
   rootUiRef: { current: DOMElement | null },
   historyText: string | undefined,
@@ -250,6 +262,7 @@ function createUIState(
   };
 }
 
+/** Renders DefaultAppLayout through real Ink and returns what tests assert on. */
 function renderLayout({
   useAlternateBuffer,
   screenReader = false,
