@@ -36,28 +36,33 @@ describe('OAuthCodeDialog', () => {
       />,
     );
 
-    await waitFor(() => {
-      expect(stdout.lastFrame()).toContain(PLACEHOLDER);
-    });
-    await act(async () => {
-      stdin.write('abc');
-    });
-    await waitFor(() => {
-      const frame = stdout.lastFrame();
-      expect(frame).toContain(PLACEHOLDER);
-      expect(frame).not.toContain('abc');
-    });
+    try {
+      await waitFor(() => {
+        expect(stdout.lastFrame()).toContain(PLACEHOLDER);
+      });
+      await act(async () => {
+        stdin.write('abc');
+      });
+      await waitFor(() => {
+        const frame = stdout.lastFrame();
+        expect(frame).toContain(PLACEHOLDER);
+        expect(frame).not.toContain('abc');
+      });
 
-    // Typed input must never arm a submission: Return on the still-empty code
-    // calls neither callback.
-    await act(async () => {
-      stdin.write('\r');
-    });
-    await waitFor(() => {
-      expect(onSubmit).not.toHaveBeenCalled();
-      expect(onClose).not.toHaveBeenCalled();
-    });
-    unmount();
+      // Typed input must never arm a submission: Return on the still-empty code
+      // calls neither callback.
+      await act(async () => {
+        stdin.write('\r');
+      });
+      await waitFor(() => {
+        expect(onSubmit).not.toHaveBeenCalled();
+        expect(onClose).not.toHaveBeenCalled();
+      });
+    } finally {
+      // Cleanup must run even when an assertion fails: a leaked Ink instance
+      // keeps stdin listeners and timers alive and interferes with later tests.
+      unmount();
+    }
   });
 
   it('delivers content from a bracketed paste', async () => {
@@ -71,13 +76,16 @@ describe('OAuthCodeDialog', () => {
       />,
     );
 
-    await paste(stdin, 'ABCd123');
-    await waitFor(() => {
-      const frame = stdout.lastFrame();
-      expect(frame).toContain('ABCd123');
-      expect(frame).not.toContain(PLACEHOLDER);
-    });
-    unmount();
+    try {
+      await paste(stdin, 'ABCd123');
+      await waitFor(() => {
+        const frame = stdout.lastFrame();
+        expect(frame).toContain('ABCd123');
+        expect(frame).not.toContain(PLACEHOLDER);
+      });
+    } finally {
+      unmount();
+    }
   });
 
   it('closes on Escape: onClose once, onSubmit never', async () => {
@@ -91,22 +99,26 @@ describe('OAuthCodeDialog', () => {
         onSubmit={onSubmit}
       />,
     );
-    await act(async () => {
-      await runAllTimersAsync();
-    });
 
-    // A lone ESC byte is only decoded as an "escape" key once the parser hits
-    // its ESC_TIMEOUT flush, so the key arm must advance the clock past that.
-    await act(async () => {
-      stdin.write('\x1B');
-    });
-    await act(async () => {
-      await runAllTimersAsync();
-    });
+    try {
+      await act(async () => {
+        await runAllTimersAsync();
+      });
 
-    expect(onClose).toHaveBeenCalledTimes(1);
-    expect(onSubmit).not.toHaveBeenCalled();
-    unmount();
+      // A lone ESC byte is only decoded as an "escape" key once the parser hits
+      // its ESC_TIMEOUT flush, so the key arm must advance the clock past that.
+      await act(async () => {
+        stdin.write('\x1B');
+      });
+      await act(async () => {
+        await runAllTimersAsync();
+      });
+
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(onSubmit).not.toHaveBeenCalled();
+    } finally {
+      unmount();
+    }
   });
 
   it('submits the trimmed pasted code on Return, then closes', async () => {
@@ -120,19 +132,22 @@ describe('OAuthCodeDialog', () => {
       />,
     );
 
-    await paste(stdin, '  4/Abcde  ');
-    await waitFor(() => {
-      expect(stdout.lastFrame()).toContain('4/Abcde');
-    });
+    try {
+      await paste(stdin, '  4/Abcde  ');
+      await waitFor(() => {
+        expect(stdout.lastFrame()).toContain('4/Abcde');
+      });
 
-    await act(async () => {
-      stdin.write('\r');
-    });
-    await waitFor(() => {
-      expect(onSubmit).toHaveBeenCalledWith('4/Abcde');
-      expect(onClose).toHaveBeenCalledTimes(1);
-    });
-    unmount();
+      await act(async () => {
+        stdin.write('\r');
+      });
+      await waitFor(() => {
+        expect(onSubmit).toHaveBeenCalledWith('4/Abcde');
+        expect(onClose).toHaveBeenCalledTimes(1);
+      });
+    } finally {
+      unmount();
+    }
   });
 
   it('does nothing on Return with an empty code', async () => {
@@ -146,14 +161,17 @@ describe('OAuthCodeDialog', () => {
       />,
     );
 
-    await act(async () => {
-      stdin.write('\r');
-    });
-    await waitFor(() => {
-      expect(onSubmit).not.toHaveBeenCalled();
-      expect(onClose).not.toHaveBeenCalled();
-    });
-    unmount();
+    try {
+      await act(async () => {
+        stdin.write('\r');
+      });
+      await waitFor(() => {
+        expect(onSubmit).not.toHaveBeenCalled();
+        expect(onClose).not.toHaveBeenCalled();
+      });
+    } finally {
+      unmount();
+    }
   });
 
   it('filters invalid characters out of a pasted code', async () => {
@@ -167,16 +185,19 @@ describe('OAuthCodeDialog', () => {
       />,
     );
 
-    await paste(stdin, '4/Ab!@#$%^&*()cde');
-    await waitFor(() => {
-      const frame = stdout.lastFrame();
-      // Allowed set is [a-zA-Z0-9/_#-]: '#' is valid, so only
-      // '!@$%^&*()' are stripped, leaving '4/Ab#cde'.
-      expect(frame).toContain('4/Ab#cde');
-      expect(frame).not.toContain('4/Ab!');
-      expect(frame).not.toContain('@$%^&*()');
-    });
-    unmount();
+    try {
+      await paste(stdin, '4/Ab!@#$%^&*()cde');
+      await waitFor(() => {
+        const frame = stdout.lastFrame();
+        // Allowed set is [a-zA-Z0-9/_#-]: '#' is valid, so only
+        // '!@$%^&*()' are stripped, leaving '4/Ab#cde'.
+        expect(frame).toContain('4/Ab#cde');
+        expect(frame).not.toContain('4/Ab!');
+        expect(frame).not.toContain('@$%^&*()');
+      });
+    } finally {
+      unmount();
+    }
   });
 
   it('keeps the placeholder when a paste contains only invalid characters', async () => {
@@ -190,11 +211,14 @@ describe('OAuthCodeDialog', () => {
       />,
     );
 
-    await paste(stdin, '!!!');
-    await waitFor(() => {
-      expect(stdout.lastFrame()).toContain(PLACEHOLDER);
-    });
-    unmount();
+    try {
+      await paste(stdin, '!!!');
+      await waitFor(() => {
+        expect(stdout.lastFrame()).toContain(PLACEHOLDER);
+      });
+    } finally {
+      unmount();
+    }
   });
 
   it('replaces the previous paste instead of appending', async () => {
@@ -208,17 +232,20 @@ describe('OAuthCodeDialog', () => {
       />,
     );
 
-    await paste(stdin, 'AAAA');
-    await waitFor(() => {
-      expect(stdout.lastFrame()).toContain('AAAA');
-    });
-    await paste(stdin, 'BBBB');
-    await waitFor(() => {
-      const frame = stdout.lastFrame();
-      expect(frame).toContain('BBBB');
-      expect(frame).not.toContain('AAAA');
-    });
-    unmount();
+    try {
+      await paste(stdin, 'AAAA');
+      await waitFor(() => {
+        expect(stdout.lastFrame()).toContain('AAAA');
+      });
+      await paste(stdin, 'BBBB');
+      await waitFor(() => {
+        const frame = stdout.lastFrame();
+        expect(frame).toContain('BBBB');
+        expect(frame).not.toContain('AAAA');
+      });
+    } finally {
+      unmount();
+    }
   });
 
   it('renders provider-specific instructions', async () => {
@@ -231,12 +258,15 @@ describe('OAuthCodeDialog', () => {
         onSubmit={vi.fn()}
       />,
     );
-    await waitFor(() => {
-      const frame = stdout.lastFrame();
-      expect(frame).toContain('Gemini OAuth Authentication');
-      expect(frame).toContain(clipboardLine);
-    });
-    unmount();
+    try {
+      await waitFor(() => {
+        const frame = stdout.lastFrame();
+        expect(frame).toContain('Gemini OAuth Authentication');
+        expect(frame).toContain(clipboardLine);
+      });
+    } finally {
+      unmount();
+    }
 
     const generic = renderWithProviders(
       <OAuthCodeDialog
@@ -245,14 +275,17 @@ describe('OAuthCodeDialog', () => {
         onSubmit={vi.fn()}
       />,
     );
-    await waitFor(() => {
-      const frame = generic.stdout.lastFrame();
-      expect(frame).toContain('Openai OAuth Authentication');
-      expect(frame).toContain(
-        'Please check your browser and authorize the application.',
-      );
-      expect(frame).not.toContain(clipboardLine);
-    });
-    generic.unmount();
+    try {
+      await waitFor(() => {
+        const frame = generic.stdout.lastFrame();
+        expect(frame).toContain('Openai OAuth Authentication');
+        expect(frame).toContain(
+          'Please check your browser and authorize the application.',
+        );
+        expect(frame).not.toContain(clipboardLine);
+      });
+    } finally {
+      generic.unmount();
+    }
   });
 });
