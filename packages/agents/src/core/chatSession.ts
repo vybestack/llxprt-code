@@ -869,6 +869,27 @@ export class ChatSession {
   }
 
   /**
+   * Resolves the base URL of the endpoint that would service the next provider
+   * request: the load balancer's last-selected sub-profile URL when active,
+   * otherwise the runtime base URL (native Anthropic default included).
+   * Returns undefined when no endpoint is resolvable. Used for error
+   * reporting so failures name the actual endpoint (@issue #2231); note that
+   * provider resolution follows the same path a send would (including an
+   * enforced active-provider switch), and resolution failures must never
+   * mask the error being reported.
+   */
+  getResolvedBaseUrl(): string | undefined {
+    try {
+      const provider = this.resolveProviderForRuntime(
+        'ChatSession.getResolvedBaseUrl',
+      );
+      return this.resolveProviderBaseUrl(provider);
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
    * Returns the Config instance from the provider runtime.
    * Used by Turn and other consumers to access ephemeral settings.
    */

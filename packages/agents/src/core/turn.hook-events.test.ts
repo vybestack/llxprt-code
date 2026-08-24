@@ -45,6 +45,7 @@ describe('Turn - hook execution control events', () => {
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
       getConfig: () => undefined,
+      getResolvedBaseUrl: () => undefined,
     };
     turn = new Turn(
       mockChatInstance as unknown as ChatSession,

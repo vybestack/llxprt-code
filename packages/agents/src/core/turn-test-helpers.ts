@@ -24,6 +24,7 @@ export type MockedChatInstance = {
   getConfig: () =>
     | { getEphemeralSetting: (key: string) => unknown }
     | undefined;
+  getResolvedBaseUrl: () => string | undefined;
 };
 
 export function findFinishedEvent(

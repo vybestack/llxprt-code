@@ -583,10 +583,18 @@ export class Turn {
     if (error instanceof UnauthorizedError) {
       throw error;
     }
+    const baseUrl = this.chat.getResolvedBaseUrl();
+    const baseMessage = baseUrl
+      ? `Error when talking to ${this.providerName} (endpoint: ${baseUrl})`
+      : `Error when talking to ${this.providerName} API`;
     await reportError(
       error,
-      `Error when talking to ${this.providerName} API`,
-      buildErrorReportContext(this.chat.getHistory(/*curated*/ true), req),
+      baseMessage,
+      buildErrorReportContext(
+        this.chat.getHistory(/*curated*/ true),
+        req,
+        baseUrl,
+      ),
       'Turn.run-sendMessageStream',
     );
     const structuredError = buildStructuredError(error);

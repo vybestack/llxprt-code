@@ -49,6 +49,7 @@ describe('Turn - debug responses and finished event outcome', () => {
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
       getConfig: () => undefined,
+      getResolvedBaseUrl: () => undefined,
     };
     turn = new Turn(
       mockChatInstance as unknown as ChatSession,

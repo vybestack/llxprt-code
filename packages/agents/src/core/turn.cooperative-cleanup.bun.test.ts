@@ -60,6 +60,7 @@ describe('Turn run - cooperative iterator cleanup (issue #3114)', () => {
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
       getConfig: () => undefined,
+      getResolvedBaseUrl: () => undefined,
     };
     turn = new Turn(
       mockChatInstance as unknown as ChatSession,

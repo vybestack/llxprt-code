@@ -80,6 +80,7 @@ function buildTurn(
     sendMessageStream: mockSendMessageStream,
     getHistory: mockGetHistory,
     getConfig: mockGetConfig,
+    getResolvedBaseUrl: () => undefined,
   } as unknown as MockedChatInstance;
 
   const turn = new Turn(
