@@ -207,7 +207,10 @@ function cancelledReason(call: ToolCall): string {
   if (call.status !== 'cancelled') {
     throw new Error(`expected cancelled call, got ${call.status}`);
   }
-  const part = call.response.responseParts[0];
+  const part = call.response.responseParts[0] as {
+    type: string;
+    result?: { error?: string };
+  };
   if (part.type === 'tool_response' && part.result?.error !== undefined) {
     return part.result.error;
   }
