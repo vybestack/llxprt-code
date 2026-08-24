@@ -84,16 +84,17 @@ describe('interactive-ui.yml: direct harness inputs are included', () => {
     expect(prPaths).toContain('scripts/tests/interactive-ui.test.ts');
   });
 
-  it('includes the three executed scenario JSON files', () => {
+  it('includes every executed scenario JSON file', () => {
     expect(prPaths).toContain('scripts/tmux-script.slash-autocomplete.json');
     expect(prPaths).toContain('scripts/tmux-script.approval-ui.json');
     expect(prPaths).toContain(
       'scripts/tmux-script.issue2208-newlines.fake.json',
     );
+    expect(prPaths).toContain('scripts/tmux-script.session-browser.json');
   });
 
-  it('includes the scenario config fixtures referenced by all three scenarios', () => {
-    // All three executed scenarios set LLXPRT_CODE_WELCOME_CONFIG_PATH and
+  it('includes the scenario config fixtures referenced by the scenarios', () => {
+    // Every executed scenario sets LLXPRT_CODE_WELCOME_CONFIG_PATH and
     // LLXPRT_SYSTEM_SETTINGS_PATH to these direct inputs.
     expect(prPaths).toContain('scripts/fixtures/welcome-completed.json');
     expect(prPaths).toContain('scripts/system-settings.interactive-ui.json');
@@ -104,6 +105,15 @@ describe('interactive-ui.yml: direct harness inputs are included', () => {
     expect(prPaths).toContain(
       'scripts/fixtures/issue2208-newlines.responses.jsonl',
     );
+    expect(prPaths).toContain(
+      'scripts/fixtures/session-browser.responses.jsonl',
+    );
+  });
+
+  it('includes the isolated user settings fixture the session browser scenario seeds', () => {
+    // tmux-script.session-browser.json copies this into its private
+    // LLXPRT_CONFIG_HOME so the browser lists exactly the session it seeds.
+    expect(prPaths).toContain('scripts/fixtures/session-browser-settings.json');
   });
 });
 

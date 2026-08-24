@@ -15,17 +15,20 @@ on:
       # The interactive UI test and its Bun test preload
       - 'scripts/tests/test-setup.ts'
       - 'scripts/tests/interactive-ui.test.ts'
-      # The three scenario JSON files executed by the test
+      # The scenario JSON files executed by the test
       - 'scripts/tmux-script.slash-autocomplete.json'
       - 'scripts/tmux-script.approval-ui.json'
       - 'scripts/tmux-script.issue2208-newlines.fake.json'
-      # Scenario config referenced by ALL three scenarios (welcome banner +
+      - 'scripts/tmux-script.session-browser.json'
+      # Scenario config referenced by the scenarios (welcome banner +
       # system settings env paths set in each scenario)
       - 'scripts/fixtures/welcome-completed.json'
       - 'scripts/system-settings.interactive-ui.json'
       # Fixtures referenced by the executed scenarios
       - 'scripts/fixtures/approval-ui.responses.jsonl'
       - 'scripts/fixtures/issue2208-newlines.responses.jsonl'
+      - 'scripts/fixtures/session-browser.responses.jsonl'
+      - 'scripts/fixtures/session-browser-settings.json'
       # CLI UI layer (dialogs, autocomplete, input handling)
       - 'packages/cli/src/ui/**'
       - 'packages/cli/src/commands/**'
@@ -60,10 +63,13 @@ on:
       - 'scripts/tmux-script.slash-autocomplete.json'
       - 'scripts/tmux-script.approval-ui.json'
       - 'scripts/tmux-script.issue2208-newlines.fake.json'
+      - 'scripts/tmux-script.session-browser.json'
       - 'scripts/fixtures/welcome-completed.json'
       - 'scripts/system-settings.interactive-ui.json'
       - 'scripts/fixtures/approval-ui.responses.jsonl'
       - 'scripts/fixtures/issue2208-newlines.responses.jsonl'
+      - 'scripts/fixtures/session-browser.responses.jsonl'
+      - 'scripts/fixtures/session-browser-settings.json'
       - 'packages/cli/src/ui/**'
       - 'packages/cli/src/commands/**'
       - 'packages/agents/src/scheduler/**'

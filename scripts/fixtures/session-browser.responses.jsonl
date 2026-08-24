@@ -1,0 +1,2 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_sbsmoke_activate","name":"activate_skill","parameters":{"name":"pr-creator"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"SBSMOKE_SEED_REPLY"}],"metadata":{"usage":{"promptTokens":1,"completionTokens":1,"totalTokens":2},"stopReason":"stop"}}]}

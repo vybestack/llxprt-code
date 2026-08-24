@@ -179,4 +179,23 @@ describe('Interactive UI (tmux harness)', () => {
     },
     300_000,
   );
+
+  runTmuxE2E(
+    'session browser opens, navigates, sorts, searches, and closes',
+    () => {
+      const result = runHarness(
+        'tmux-script.session-browser.json',
+        'session-browser-navigation',
+        [],
+        {
+          LLXPRT_FAKE_RESPONSES: path.join(
+            projectRoot,
+            'scripts/fixtures/session-browser.responses.jsonl',
+          ),
+        },
+      );
+      assertHarnessSuccess(result);
+    },
+    300_000,
+  );
 });
