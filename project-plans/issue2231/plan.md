@@ -255,3 +255,13 @@ Final cycle after all review remediation (logs: `/tmp/issue2231-{npm-test4,lint3
 | `npm run build` | EXIT=0 |
 | Smoke: `bun scripts/start.ts --profile-load stepfun-37 "write me a haiku and nothing else"` | EXIT=0 (haiku printed) |
 | Test-audit scanner (`bun scripts/test-audit/scan.ts`) | No new findings vs main baseline on touched files (line-number shifts only) |
+
+## PR review triage (PR #3301)
+
+| Source | Finding | Classification | Action |
+|--------|---------|----------------|--------|
+| LLxprt PR OCR (test/medium) | No test for LB `getLastSelectedBaseUrl()` throwing → `getResolvedBaseUrl()` must return undefined, not propagate (the exact catch that keeps diagnostics from masking the original error) | In-scope-Fix | Added S6 to `chatSession.resolvedBaseUrl.bun.test.ts` (6/6 pass). |
+| CodeRabbit (security/major) | Redact userinfo/query/fragment from the base URL before stderr/report output | Reject | Verified sinks: `reportError` writes only to local `os.tmpdir()` via `fs.writeFile` (errorReporting.ts:401,455) — no network sink; stderr is the local user's terminal. The report already contains the error stack and the last 8 conversation entries by design (T1/T2), strictly more sensitive than a user-configured base URL. The codebase's only URL-redaction facility is the opt-in `telemetry.redactUrls` setting, i.e. redaction applies where data leaves the machine; error reports do not leave the machine. The issue text explicitly requires the resolved base URL in the report. |
+| CodeRabbit (functional/major) | Concurrent sends can race on the LB's mutable last-selected URL — a failure could be attributed to a different turn's endpoint | Defer | Plausible but architectural: per-attempt endpoint capture requires threading selection state through the send path (TurnProcessor/stream plumbing), beyond this issue's scope. This PR's failure-path read is still a strict improvement over provider-name-only attribution (the issue's outage scenario — endpoint down, all requests failing — attributes correctly, since selection converges to the same failing endpoint). Recorded as a known follow-up. |
+
+Known follow-up (deferred): capture the selected endpoint in per-attempt request state at LB-selection time and report that value on failure, with a concurrent two-endpoint regression test.

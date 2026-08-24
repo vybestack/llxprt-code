@@ -170,4 +170,28 @@ describe('ChatSession.getResolvedBaseUrl', () => {
 
     expect(result).toBe('https://runtime.example/v1');
   });
+
+  /**
+   * @plan:PLAN-20260824-ISSUE2231.P01
+   * @requirement:REQ-2231-4
+   */
+  it('S6: returns undefined when the LB last-selection probe throws, instead of propagating', () => {
+    const manager = new TestRuntimeProviderManager();
+    const provider = {
+      ...createProvider('router'),
+      getLastSelectedBaseUrl: () => {
+        throw new Error('probe exploded');
+      },
+    };
+    manager.registerProvider(provider);
+    const chat = createChatSession({
+      manager,
+      providerName: provider.name,
+      baseUrl: 'https://runtime.example/v1',
+    });
+
+    const result = chat.getResolvedBaseUrl();
+
+    expect(result).toBeUndefined();
+  });
 });
