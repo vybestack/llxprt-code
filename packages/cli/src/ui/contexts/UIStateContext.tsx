@@ -24,6 +24,7 @@ import type {
   LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
 import type { ToolInfo } from '@vybestack/llxprt-code-agents';
+import type { Profile } from '@vybestack/llxprt-code-settings';
 import type { SlashCommandRuntime } from '../cliUiRuntime.js';
 import type { QueuedSubmission } from '../hooks/agentStream/types.js';
 import type { SlashCommand, CommandContext } from '../commands/types.js';
@@ -126,7 +127,7 @@ export interface UIState {
     isActive?: boolean;
   }>;
   selectedProfileName: string | null;
-  selectedProfileData: unknown | null;
+  selectedProfileData: Profile | null;
   defaultProfileName: string | null;
   activeProfileName: string | null;
   profileDialogError: string | null;
