@@ -1240,11 +1240,9 @@ jobs:
           EXIT_CODE=$?
           echo "$EXIT_CODE" > "${ACPLINT_DIAG_DIR}/status.txt"
           echo "acplint raw exit status: $EXIT_CODE"
-          if [ "$EXIT_CODE" -ne 0 ]; then
-            echo '::group::acplint log tail'
-            tail -n 200 "${ACPLINT_DIAG_DIR}/acplint.log"
-            echo '::endgroup::'
-          fi
+          echo '::group::acplint log tail'
+          tail -n 200 "${ACPLINT_DIAG_DIR}/acplint.log"
+          echo '::endgroup::'
           exit 0
 
       - name: 'Validate acplint report'

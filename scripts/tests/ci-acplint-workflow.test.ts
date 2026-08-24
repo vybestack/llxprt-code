@@ -5,10 +5,35 @@
  */
 
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
-import { describe, it, expect, beforeAll } from 'bun:test';
+import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { delimiter, dirname, join } from 'node:path';
 import type { WorkflowDocument, WorkflowJob } from './typed-test-helpers.ts';
 import { parseWorkflowYaml, asOptionalRecord } from './typed-test-helpers.ts';
 import { readRootFile, stepNamed } from './ocr-review-workflow-helpers.ts';
+
+const ROOT = dirname(dirname(__dirname));
+
+const tmpDirs: string[] = [];
+
+afterAll(() => {
+  for (const dir of tmpDirs) {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+function makeTmpDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'acplint-workflow-'));
+  tmpDirs.push(dir);
+  return dir;
+}
 
 const ACPLINT_PIN =
   'acplint @ git+https://github.com/rinadelph/acplint.git@e2f4e49b3ba825869a4ecab7e10076d4460f4dcd';
@@ -292,11 +317,61 @@ describe('Issue #2564: acp_conformance CI job', () => {
     expect(runStep.run).toContain('status.txt');
   });
 
-  it('prints the acplint log tail when the raw status is nonzero', () => {
+  it('prints the acplint log tail unconditionally inside a collapsed group', () => {
     const runStep = stepNamed(acpJob, 'Run acplint');
-    expect(runStep.run).toContain('if [ "$EXIT_CODE" -ne 0 ]; then');
+    expect(runStep.run).toContain('::group::acplint log tail');
+    expect(runStep.run).toContain('::endgroup::');
     expect(runStep.run).toContain('tail');
     expect(runStep.run).toContain('acplint.log');
+    expect(runStep.run).not.toContain('if [ "$EXIT_CODE" -ne 0 ]; then');
+  });
+
+  it('executes the Run acplint shell with a fake acplint for both raw statuses', () => {
+    const runStep = stepNamed(acpJob, 'Run acplint');
+    const scripts = runStep.run ?? '';
+    const fakeAcplint = [
+      '#!/bin/bash',
+      "printf '%s' 'FAKE_ACPLINT_LOG_LINE_3095'",
+      'exit $ACPLINT_RAW_STATUS',
+    ].join('\n');
+    for (const rawStatus of ['0', '7']) {
+      const diagDir = makeTmpDir();
+      writeFileSync(join(diagDir, 'acplint.log'), 'ignored\n', 'utf8');
+      const binDir = join(diagDir, 'bin');
+      mkdirSync(binDir);
+      writeFileSync(join(binDir, 'acplint'), fakeAcplint, {
+        mode: 0o755,
+      });
+      const result = spawnSync('bash', ['-c', scripts], {
+        encoding: 'utf8',
+        cwd: ROOT,
+        env: {
+          PATH: `${binDir}${delimiter}${process.env.PATH ?? ''}`,
+          ACPLINT_DIAG_DIR: diagDir,
+          ACPLINT_RAW_STATUS: rawStatus,
+          GITHUB_WORKSPACE: ROOT,
+        },
+      });
+      if (result.error !== undefined) {
+        throw new Error(`failed to spawn the Run acplint shell`, {
+          cause: result.error,
+        });
+      }
+      expect(result.status, result.stderr).toBe(0);
+      const statusText = readFileSync(join(diagDir, 'status.txt'), 'utf8');
+      expect(statusText.trim()).toBe(rawStatus);
+      expect(result.stdout).toContain('acplint raw exit status');
+      expect(result.stdout).toContain('::group::acplint log tail');
+      expect(result.stdout).toContain('::endgroup::');
+      expect(result.stdout).toContain('FAKE_ACPLINT_LOG_LINE_3095');
+    }
+  });
+
+  it('keeps gating validation on the committed validator and always-uploading diagnostics', () => {
+    const validateStep = stepNamed(acpJob, 'Validate acplint report');
+    expect(validateStep.run).toContain('scripts/validate-acplint-report.ts');
+    const uploadStep = stepNamed(acpJob, 'Upload acplint diagnostics');
+    expect(uploadStep.if).toContain('always()');
   });
 
   it('captures the acplint JSON output via --output-file', () => {
