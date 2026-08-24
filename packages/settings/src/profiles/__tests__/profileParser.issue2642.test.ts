@@ -24,6 +24,7 @@ import {
   writeProfile,
 } from './canonicalProfileRepair.testHelpers.js';
 import { getProfilePersistableKeys } from '../../settings/settingsRegistry.js';
+import { repairCanonicalProfiles } from '../canonicalProfileRepair.js';
 
 const tempDir = withTempDir('llxprt-issue2642-parser-');
 const profilesDir = () => path.join(tempDir(), 'profiles');
@@ -368,26 +369,69 @@ describe('regression profile fixtures load with version: 1 unchanged', () => {
 
 // ─── G. repair eligibility is not blocked by dangerous keys ────────────────
 
-describe('canonical repair inspection tolerates dangerous keys (#2642 review)', () => {
-  it('a corrupt canonical carrying a top-level __proto__ is still repair-eligible', async () => {
+describe('canonical repair tolerates dangerous keys (#2642 review)', () => {
+  it('actually repairs a corrupt canonical carrying a top-level __proto__', async () => {
     // Routing repair through the shared parser must not make a hostile file
     // permanently unrepairable: repair is exactly the mechanism that replaces
     // it. Before this issue, top-level dangerous keys passed parseProfile
     // (only modelParams/ephemeralSettings were guarded by isSafeRecord), so
-    // such a file WAS repair-eligible. That must remain true.
-    const corruptWithProto = `{"version":1,"provider":"load-balancer","model":"x","__proto__":{"polluted":true},"modelParams":{},"ephemeralSettings":{}}`;
+    // such a file WAS repair-eligible. This exercises the real repair
+    // function, not just the parse boundary.
+    const canonicalDir = profilesDir();
+    const legacyDir = path.join(tempDir(), 'legacy-profiles');
+    await fsp.mkdir(legacyDir, { recursive: true });
 
-    const parsed = parseProfileJson(corruptWithProto);
-    // The shared boundary still flags it...
-    expect(parsed.kind).toBe('unsafe');
+    // Corrupt canonical: the #2479 signature PLUS a top-level dangerous key.
+    await fsp.writeFile(
+      path.join(canonicalDir, 'victim.json'),
+      '{"version":1,"provider":"load-balancer","model":"gemini-2.5-pro","__proto__":{"polluted":true},"modelParams":{},"ephemeralSettings":{}}',
+      'utf8',
+    );
+    // Valid same-name legacy replacement.
+    await fsp.writeFile(
+      path.join(legacyDir, 'victim.json'),
+      standardProfileJson(),
+      'utf8',
+    );
 
-    // ...and reading it does not pollute the real prototype.
+    const outcome = repairCanonicalProfiles(canonicalDir, legacyDir);
+    expect(outcome.kind).toBe('repaired');
+
+    // The repaired canonical is the legacy content, and loads cleanly.
+    const repaired = await pm().loadProfile('victim');
+    expect(repaired.provider).toBe('openai');
+    expect(repaired.version).toBe(1);
+
+    // Reading the hostile document never polluted the real prototype.
     expect(({} as Record<string, unknown>)['polluted']).toBeUndefined();
   });
 
-  it('a replacement carrying dangerous keys is still refused', () => {
-    const unsafeReplacement = `{"version":1,"provider":"openai","model":"gpt-4","modelParams":{},"ephemeralSettings":{"__proto__":{"x":1}}}`;
-    const parsed = parseProfileJson(unsafeReplacement);
-    expect(parsed.kind).toBe('unsafe');
+  it('refuses to install a REPLACEMENT that carries dangerous keys', async () => {
+    const canonicalDir = profilesDir();
+    const legacyDir = path.join(tempDir(), 'legacy-profiles-2');
+    await fsp.mkdir(legacyDir, { recursive: true });
+
+    await fsp.writeFile(
+      path.join(canonicalDir, 'victim2.json'),
+      '{"version":1,"provider":"load-balancer","model":"gemini-2.5-pro","modelParams":{},"ephemeralSettings":{}}',
+      'utf8',
+    );
+    // Hostile replacement must never be promoted into the canonical slot.
+    await fsp.writeFile(
+      path.join(legacyDir, 'victim2.json'),
+      '{"version":1,"provider":"openai","model":"gpt-4","modelParams":{},"ephemeralSettings":{"__proto__":{"x":1}}}',
+      'utf8',
+    );
+
+    const outcome = repairCanonicalProfiles(canonicalDir, legacyDir);
+    expect(outcome.kind).not.toBe('repaired');
+
+    // The corrupt canonical is left untouched rather than replaced by the
+    // hostile file.
+    const still = await fsp.readFile(
+      path.join(canonicalDir, 'victim2.json'),
+      'utf8',
+    );
+    expect(still).toContain('load-balancer');
   });
 });

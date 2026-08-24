@@ -9,11 +9,19 @@ import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import {
   getProtectedSettingKeys,
   isInternalSettingKey,
-  MIN_LOAD_BALANCER_MEMBERS,
   type LoadBalancerProfile,
 } from '@vybestack/llxprt-code-settings';
 import { createTokenStore } from '@vybestack/llxprt-code-providers/auth.js';
 import { validateBucketName, validateProfileName } from './profileSchemas.js';
+
+/**
+ * Minimum members the INTERACTIVE save path accepts. Deliberately independent
+ * of `MIN_LOAD_BALANCER_MEMBERS` in the settings package, which governs the
+ * load path and stays at 1 so existing hand-authored single-member files keep
+ * loading. Creating a one-member "load balancer" from the UI is a user error,
+ * so this is 2.
+ */
+const MIN_INTERACTIVE_LOAD_BALANCER_MEMBERS = 2;
 
 /** Parsed result of a quoted profile-name argument string. */
 interface QuotedProfileNameParse {
@@ -344,14 +352,15 @@ export async function saveLoadBalancerProfile(
     (p) => p.length > 0,
   );
 
-  // The interactive save path requires >= 2 members (the load path accepts
-  // >= MIN_LOAD_BALANCER_MEMBERS so existing single-member files keep
-  // loading).
-  if (selectedProfiles.length < 2) {
+  // The interactive save path requires >= MIN_INTERACTIVE_LOAD_BALANCER_MEMBERS
+  // (the load path accepts >= MIN_LOAD_BALANCER_MEMBERS so existing
+  // single-member files keep loading). The two thresholds are deliberately
+  // independent, so this one has its own constant rather than being derived.
+  if (selectedProfiles.length < MIN_INTERACTIVE_LOAD_BALANCER_MEMBERS) {
     return {
       type: 'message',
       messageType: 'error',
-      content: `Load balancer profile requires at least 2 profiles (minimum allowed: ${Math.max(MIN_LOAD_BALANCER_MEMBERS, 2)})`,
+      content: `Load balancer profile requires at least ${MIN_INTERACTIVE_LOAD_BALANCER_MEMBERS} profiles`,
     };
   }
 

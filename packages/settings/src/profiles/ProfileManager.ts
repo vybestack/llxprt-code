@@ -124,7 +124,11 @@ export class ProfileManager {
       });
     }
     if (parsed.kind === 'unsafe') {
-      throw parsed.error;
+      // Also a SyntaxError, so loadProfile's "Profile 'X' is corrupted"
+      // wrapping applies uniformly. Throwing a plain Error here made
+      // prototype-pollution surface as a raw message without the profile name
+      // while malformed JSON got the friendly one.
+      throw new SyntaxError(parsed.error.message, { cause: parsed.error });
     }
     return parsed.value;
   }
@@ -234,7 +238,13 @@ export class ProfileManager {
         throw new Error(`Profile '${profileName}' not found`);
       }
       if (error instanceof SyntaxError) {
-        throw new Error(`Profile '${profileName}' is corrupted`);
+        // Name the profile AND say why. Malformed JSON and dangerous-key
+        // documents both arrive here as SyntaxError, and "corrupted" alone
+        // does not tell the user which problem their file has.
+        throw new Error(
+          `Profile '${profileName}' is corrupted: ${error.message}`,
+          { cause: error },
+        );
       }
       if (
         error instanceof Error &&

@@ -247,6 +247,15 @@ export function parseLoadBalancerProfile(
   name: string,
   input: unknown,
 ): LoadBalancerProfile {
+  // Self-protecting: this is an exported entry point, so it does not assume
+  // the caller already routed the document through parseProfileJson. Nested
+  // records are covered by isSafeRecord in the schemas, but a top-level
+  // dangerous key would otherwise pass.
+  if (hasDangerousKey(input)) {
+    throw new Error(
+      `LoadBalancer profile '${name}' contains dangerous fields (__proto__, constructor, or prototype)`,
+    );
+  }
   if (!isPlainObject(input) || input.type !== 'loadbalancer') {
     throw new Error(
       `LoadBalancer profile '${name}' must reference at least one profile`,

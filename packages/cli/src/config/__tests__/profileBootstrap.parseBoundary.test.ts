@@ -58,7 +58,19 @@ describe('parseInlineProfile — same content as the on-disk parse boundary (#26
   });
 
   afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    try {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    } catch (error) {
+      // Do not fail the test on cleanup, but do not hide a real I/O problem
+      // either: a silent catch turns disk-full/permission failures into
+      // invisible temp-directory leaks. process.emitWarning rather than
+      // console.* because the repo bans console statements.
+      process.emitWarning(
+        `parseBoundary test: failed to remove ${tempDir}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   });
 
   it('identical inline --profile JSON and on-disk JSON produce the same provider/model', async () => {
@@ -114,6 +126,31 @@ describe('parseInlineProfile — same content as the on-disk parse boundary (#26
 
     // Direct parse boundary agrees with both.
     expect(parseProfileJson(malformed).kind).toBe('invalid-json');
+  });
+
+  it('the inline --profile path rejects prototype-pollution keys', async () => {
+    // The CLI inline path and the on-disk path must agree on hostile
+    // documents. Without this, a regression re-introducing divergent
+    // validation between profileBootstrap and ProfileManager would be
+    // invisible here.
+    const topLevel =
+      '{"version":1,"provider":"openai","model":"gpt-4","__proto__":{"polluted":true},"modelParams":{},"ephemeralSettings":{}}';
+    const nested =
+      '{"version":1,"provider":"openai","model":"gpt-4","modelParams":{},"ephemeralSettings":{"constructor":{"x":1}}}';
+
+    for (const hostile of [topLevel, nested]) {
+      expect(parseProfileJson(hostile).kind).toBe('unsafe');
+      expect(parseInlineProfile(hostile).error).toBeDefined();
+
+      // The on-disk path rejects the same bytes.
+      await fs.writeFile(path.join(tempDir, 'hostile.json'), hostile, 'utf8');
+      await expect(
+        new ProfileManager(tempDir).loadProfile('hostile'),
+      ).rejects.toThrow('dangerous fields');
+    }
+
+    // Reading hostile documents never polluted the real prototype.
+    expect(({} as Record<string, unknown>)['polluted']).toBeUndefined();
   });
 });
 

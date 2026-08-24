@@ -536,7 +536,7 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
   {
     key: 'shell-replacement',
     category: 'cli-behavior',
-    owner: 'model',
+    owner: 'agent-policy',
     propagation: 'next-turn',
     description: 'Command substitution mode for shell tool',
     type: 'string',
