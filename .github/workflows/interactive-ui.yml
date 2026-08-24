@@ -15,16 +15,25 @@ on:
       # The interactive UI test and its Bun test preload
       - 'scripts/tests/test-setup.ts'
       - 'scripts/tests/interactive-ui.test.ts'
-      # The three scenario JSON files executed by the test
+      # The scenario JSON files executed by the test
       - 'scripts/tmux-script.slash-autocomplete.json'
       - 'scripts/tmux-script.approval-ui.json'
+      - 'scripts/tmux-script.approval-always.json'
+      - 'scripts/tmux-script.approval-deny.json'
+      - 'scripts/tmux-script.approval-escape.json'
+      - 'scripts/tmux-script.approval-long-output.json'
+      - 'scripts/tmux-script.approval-multi.json'
       - 'scripts/tmux-script.issue2208-newlines.fake.json'
-      # Scenario config referenced by ALL three scenarios (welcome banner +
+      # Scenario config referenced by ALL scenarios (welcome banner +
       # system settings env paths set in each scenario)
       - 'scripts/fixtures/welcome-completed.json'
       - 'scripts/system-settings.interactive-ui.json'
       # Fixtures referenced by the executed scenarios
       - 'scripts/fixtures/approval-ui.responses.jsonl'
+      - 'scripts/fixtures/approval-always.responses.jsonl'
+      - 'scripts/fixtures/approval-deny.responses.jsonl'
+      - 'scripts/fixtures/approval-long-output.responses.jsonl'
+      - 'scripts/fixtures/approval-multi.responses.jsonl'
       - 'scripts/fixtures/issue2208-newlines.responses.jsonl'
       # CLI UI layer (dialogs, autocomplete, input handling)
       - 'packages/cli/src/ui/**'
@@ -59,10 +68,19 @@ on:
       - 'scripts/tests/interactive-ui.test.ts'
       - 'scripts/tmux-script.slash-autocomplete.json'
       - 'scripts/tmux-script.approval-ui.json'
+      - 'scripts/tmux-script.approval-always.json'
+      - 'scripts/tmux-script.approval-deny.json'
+      - 'scripts/tmux-script.approval-escape.json'
+      - 'scripts/tmux-script.approval-long-output.json'
+      - 'scripts/tmux-script.approval-multi.json'
       - 'scripts/tmux-script.issue2208-newlines.fake.json'
       - 'scripts/fixtures/welcome-completed.json'
       - 'scripts/system-settings.interactive-ui.json'
       - 'scripts/fixtures/approval-ui.responses.jsonl'
+      - 'scripts/fixtures/approval-always.responses.jsonl'
+      - 'scripts/fixtures/approval-deny.responses.jsonl'
+      - 'scripts/fixtures/approval-long-output.responses.jsonl'
+      - 'scripts/fixtures/approval-multi.responses.jsonl'
       - 'scripts/fixtures/issue2208-newlines.responses.jsonl'
       - 'packages/cli/src/ui/**'
       - 'packages/cli/src/commands/**'

@@ -161,6 +161,103 @@ describe('Interactive UI (tmux harness)', () => {
     300_000,
   );
 
+  // @plan PLAN-20260824-ISSUE2021.P06 @requirement REQ-2021.6: keyboard approval variants (deny, escape,
+  // always-allow, multi-call pending, long-output-then-approval) as real-TTY flows.
+  runTmuxE2E(
+    'tool approval dialog denial via keyboard cancels the call and ends the turn',
+    () => {
+      const result = runHarness(
+        'tmux-script.approval-deny.json',
+        'approval-deny',
+        [],
+        {
+          LLXPRT_FAKE_RESPONSES: path.join(
+            projectRoot,
+            'scripts/fixtures/approval-deny.responses.jsonl',
+          ),
+        },
+      );
+      assertHarnessSuccess(result);
+    },
+    300_000,
+  );
+
+  runTmuxE2E(
+    'escape mid-dialog cancels the pending approval and ends the turn',
+    () => {
+      const result = runHarness(
+        'tmux-script.approval-escape.json',
+        'approval-escape',
+        [],
+        {
+          LLXPRT_FAKE_RESPONSES: path.join(
+            projectRoot,
+            'scripts/fixtures/approval-deny.responses.jsonl',
+          ),
+        },
+      );
+      assertHarnessSuccess(result);
+    },
+    300_000,
+  );
+
+  runTmuxE2E(
+    'always-allow auto-approves the pending sibling and later matching calls without a new dialog',
+    () => {
+      const result = runHarness(
+        'tmux-script.approval-always.json',
+        'approval-always',
+        [],
+        {
+          LLXPRT_FAKE_RESPONSES: path.join(
+            projectRoot,
+            'scripts/fixtures/approval-always.responses.jsonl',
+          ),
+        },
+      );
+      assertHarnessSuccess(result);
+    },
+    300_000,
+  );
+
+  runTmuxE2E(
+    'successive tool calls surface separate approval dialogs and both execute',
+    () => {
+      const result = runHarness(
+        'tmux-script.approval-multi.json',
+        'approval-multi',
+        [],
+        {
+          LLXPRT_FAKE_RESPONSES: path.join(
+            projectRoot,
+            'scripts/fixtures/approval-multi.responses.jsonl',
+          ),
+        },
+      );
+      assertHarnessSuccess(result);
+    },
+    300_000,
+  );
+
+  runTmuxE2E(
+    'long tool output renders and the following approval dialog stays answerable',
+    () => {
+      const result = runHarness(
+        'tmux-script.approval-long-output.json',
+        'approval-long-output',
+        [],
+        {
+          LLXPRT_FAKE_RESPONSES: path.join(
+            projectRoot,
+            'scripts/fixtures/approval-long-output.responses.jsonl',
+          ),
+        },
+      );
+      assertHarnessSuccess(result);
+    },
+    300_000,
+  );
+
   runTmuxE2E(
     'preserves assistant markdown hard line breaks',
     () => {

@@ -9,7 +9,7 @@
  *
  * These read the REAL .github/workflows/interactive-ui.yml through existing
  * typed test helpers and assert:
- *   - direct tmux harness modules, the preload, the test file, its three
+ *   - direct tmux harness modules, the preload, the test file, its
  *     executed scenario JSON files, and their referenced fixtures are
  *     included in the path filter
  *   - unrelated broad script test/fixture/scenario globs are removed
@@ -84,16 +84,21 @@ describe('interactive-ui.yml: direct harness inputs are included', () => {
     expect(prPaths).toContain('scripts/tests/interactive-ui.test.ts');
   });
 
-  it('includes the three executed scenario JSON files', () => {
+  it('includes the executed scenario JSON files', () => {
     expect(prPaths).toContain('scripts/tmux-script.slash-autocomplete.json');
     expect(prPaths).toContain('scripts/tmux-script.approval-ui.json');
+    expect(prPaths).toContain('scripts/tmux-script.approval-always.json');
+    expect(prPaths).toContain('scripts/tmux-script.approval-deny.json');
+    expect(prPaths).toContain('scripts/tmux-script.approval-escape.json');
+    expect(prPaths).toContain('scripts/tmux-script.approval-long-output.json');
+    expect(prPaths).toContain('scripts/tmux-script.approval-multi.json');
     expect(prPaths).toContain(
       'scripts/tmux-script.issue2208-newlines.fake.json',
     );
   });
 
-  it('includes the scenario config fixtures referenced by all three scenarios', () => {
-    // All three executed scenarios set LLXPRT_CODE_WELCOME_CONFIG_PATH and
+  it('includes the scenario config fixtures referenced by all scenarios', () => {
+    // All executed scenarios set LLXPRT_CODE_WELCOME_CONFIG_PATH and
     // LLXPRT_SYSTEM_SETTINGS_PATH to these direct inputs.
     expect(prPaths).toContain('scripts/fixtures/welcome-completed.json');
     expect(prPaths).toContain('scripts/system-settings.interactive-ui.json');
@@ -101,6 +106,16 @@ describe('interactive-ui.yml: direct harness inputs are included', () => {
 
   it('includes the referenced response fixture files', () => {
     expect(prPaths).toContain('scripts/fixtures/approval-ui.responses.jsonl');
+    expect(prPaths).toContain(
+      'scripts/fixtures/approval-always.responses.jsonl',
+    );
+    expect(prPaths).toContain('scripts/fixtures/approval-deny.responses.jsonl');
+    expect(prPaths).toContain(
+      'scripts/fixtures/approval-long-output.responses.jsonl',
+    );
+    expect(prPaths).toContain(
+      'scripts/fixtures/approval-multi.responses.jsonl',
+    );
     expect(prPaths).toContain(
       'scripts/fixtures/issue2208-newlines.responses.jsonl',
     );

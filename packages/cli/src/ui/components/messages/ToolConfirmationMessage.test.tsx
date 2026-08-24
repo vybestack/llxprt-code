@@ -6,6 +6,7 @@
 
 import { describe, it, expect, vi } from 'bun:test';
 import { ToolConfirmationMessage } from './ToolConfirmationMessage.js';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-core';
 import type {
   ToolCallConfirmationDetails,
   Config,
@@ -13,7 +14,9 @@ import type {
 import {
   renderWithProviders,
   createMockSettings,
+  waitFor,
 } from '../../../test-utils/render.js';
+import { act } from 'react';
 
 describe('ToolConfirmationMessage', () => {
   const mockConfig = {
@@ -416,6 +419,202 @@ describe('ToolConfirmationMessage', () => {
         }
       }
       expect(maxConsecutiveBlanks).toBeLessThanOrEqual(1);
+    });
+  });
+
+  // @plan PLAN-20260824-ISSUE2021.P04 @requirement REQ-2021.4: keyboard selection mirroring FolderTrustDialog's stdin pattern
+  describe('keyboard selection', () => {
+    const KITTY_ESCAPE_SEQUENCE = '\u001b[27u';
+
+    const trustedConfig = {
+      isTrustedFolder: () => true,
+      getIdeMode: () => false,
+    } as unknown as Config;
+
+    const createExecConfirmationDetails = (
+      onConfirm: (outcome: ToolConfirmationOutcome) => unknown,
+    ): ToolCallConfirmationDetails => ({
+      type: 'exec',
+      title: 'Confirm Execution',
+      command: 'echo "hello"',
+      rootCommand: 'echo',
+      rootCommands: ['echo'],
+      onConfirm: onConfirm as ToolCallConfirmationDetails['onConfirm'],
+    });
+
+    it('selects the default "Allow once" option with Enter', async () => {
+      // @plan PLAN-20260824-ISSUE2021.P04 @requirement REQ-2021.4
+      const onConfirm = vi.fn();
+      const { lastFrame, stdin } = renderWithProviders(
+        <ToolConfirmationMessage
+          confirmationDetails={createExecConfirmationDetails(onConfirm)}
+          config={trustedConfig}
+          availableTerminalHeight={30}
+          terminalWidth={80}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(lastFrame()).toContain('Allow once');
+      });
+
+      act(() => {
+        stdin.write('\r');
+      });
+
+      await waitFor(() => {
+        expect(onConfirm).toHaveBeenCalledWith(
+          ToolConfirmationOutcome.ProceedOnce,
+        );
+      });
+    });
+
+    it('moves down once and selects "Allow for this session" with Enter', async () => {
+      // @plan PLAN-20260824-ISSUE2021.P04 @requirement REQ-2021.4
+      const onConfirm = vi.fn();
+      const { lastFrame, stdin } = renderWithProviders(
+        <ToolConfirmationMessage
+          confirmationDetails={createExecConfirmationDetails(onConfirm)}
+          config={trustedConfig}
+          availableTerminalHeight={30}
+          terminalWidth={80}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(lastFrame()).toContain('Allow once');
+      });
+
+      act(() => {
+        stdin.write('\u001b[B'); // down arrow
+      });
+      act(() => {
+        stdin.write('\r'); // enter
+      });
+
+      await waitFor(() => {
+        expect(onConfirm).toHaveBeenCalledWith(
+          ToolConfirmationOutcome.ProceedAlways,
+        );
+      });
+    });
+
+    it('moves down twice and cancels with Enter', async () => {
+      // @plan PLAN-20260824-ISSUE2021.P04 @requirement REQ-2021.4
+      const onConfirm = vi.fn();
+      const { lastFrame, stdin } = renderWithProviders(
+        <ToolConfirmationMessage
+          confirmationDetails={createExecConfirmationDetails(onConfirm)}
+          config={trustedConfig}
+          availableTerminalHeight={30}
+          terminalWidth={80}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(lastFrame()).toContain('Allow once');
+      });
+      // Pin the option-list assumption the double-down navigation relies on:
+      // with enablePermanentToolApproval false the order is exactly
+      // Allow once / Allow for this session / Cancel.
+      expect(lastFrame()).toContain('No, suggest changes (esc)');
+      expect(lastFrame()).not.toContain('all future sessions');
+
+      act(() => {
+        stdin.write('\u001b[B'); // down arrow
+      });
+      act(() => {
+        stdin.write('\u001b[B'); // down arrow
+      });
+      act(() => {
+        stdin.write('\r'); // enter
+      });
+
+      await waitFor(() => {
+        expect(onConfirm).toHaveBeenCalledWith(ToolConfirmationOutcome.Cancel);
+      });
+    });
+
+    it('cancels with the kitty escape sequence (matching FolderTrustDialog)', async () => {
+      // @plan PLAN-20260824-ISSUE2021.P04 @requirement REQ-2021.4
+      const onConfirm = vi.fn();
+      const { lastFrame, stdin } = renderWithProviders(
+        <ToolConfirmationMessage
+          confirmationDetails={createExecConfirmationDetails(onConfirm)}
+          config={trustedConfig}
+          availableTerminalHeight={30}
+          terminalWidth={80}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(lastFrame()).toContain('Allow once');
+      });
+
+      act(() => {
+        stdin.write(KITTY_ESCAPE_SEQUENCE);
+      });
+
+      await waitFor(() => {
+        expect(onConfirm).toHaveBeenCalledWith(ToolConfirmationOutcome.Cancel);
+      });
+    });
+
+    it('cancels with ctrl+c', async () => {
+      // @plan PLAN-20260824-ISSUE2021.P04 @requirement REQ-2021.4
+      const onConfirm = vi.fn();
+      const { lastFrame, stdin } = renderWithProviders(
+        <ToolConfirmationMessage
+          confirmationDetails={createExecConfirmationDetails(onConfirm)}
+          config={trustedConfig}
+          availableTerminalHeight={30}
+          terminalWidth={80}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(lastFrame()).toContain('Allow once');
+      });
+
+      act(() => {
+        stdin.write('\x03');
+      });
+
+      await waitFor(() => {
+        expect(onConfirm).toHaveBeenCalledWith(ToolConfirmationOutcome.Cancel);
+      });
+    });
+
+    // isFocused is a real prop on ToolConfirmationMessage and gates the cancel
+    // keypress handler (useCancelKeypress returns early when isFocused !== true),
+    // so the gating behavior is directly testable.
+    it('does not cancel via escape when not focused', async () => {
+      // @plan PLAN-20260824-ISSUE2021.P04 @requirement REQ-2021.4
+      const onConfirm = vi.fn();
+      const { stdin, lastFrame } = renderWithProviders(
+        <ToolConfirmationMessage
+          confirmationDetails={createExecConfirmationDetails(onConfirm)}
+          config={trustedConfig}
+          availableTerminalHeight={30}
+          terminalWidth={80}
+          isFocused={false}
+        />,
+      );
+
+      act(() => {
+        stdin.write(KITTY_ESCAPE_SEQUENCE);
+      });
+      act(() => {
+        stdin.write('\x03');
+      });
+
+      // The dialog remaining rendered is the observable negative: had the
+      // unfocused component reacted to either cancel key, the confirmation
+      // UI would have closed and onConfirm would have been invoked.
+      await waitFor(() => {
+        expect(lastFrame() ?? '').toContain('Allow once');
+      });
+      expect(onConfirm).not.toHaveBeenCalled();
     });
   });
 });
