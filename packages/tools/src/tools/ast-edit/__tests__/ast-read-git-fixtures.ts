@@ -60,6 +60,15 @@ export function gitInit(dir: string): void {
   gitCheck(dir, ['init']);
   gitCheck(dir, ['config', 'user.email', 'test@example.com']);
   gitCheck(dir, ['config', 'user.name', 'Test']);
+  // Some fixtures deliberately generate very long relative paths to force Git
+  // to emit more stdout than a single pipe chunk. Those paths exceed Windows'
+  // 260-character MAX_PATH, and Git refuses them with
+  // "Filename too long", failing the commit rather than the assertion under
+  // test. core.longpaths opts this fixture repository into Git's long-path
+  // support so the byte volume the fixture needs is reachable on Windows too.
+  // It is a no-op on POSIX, so the setting is applied unconditionally rather
+  // than behind a platform branch.
+  gitCheck(dir, ['config', 'core.longpaths', 'true']);
 }
 
 /** Stages and commits every fixture change; returns the resulting commit SHA. */
