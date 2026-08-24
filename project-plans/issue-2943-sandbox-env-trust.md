@@ -166,3 +166,20 @@ bun scripts/start.ts --profile-load stepfun-37 "write me a haiku and nothing els
 - deepthinker compliance review (cap 2 rounds).
 - Open Code Review (cap 2 local + 2 PR rounds).
 - Findings triaged Blocker-Fix / In-scope-Fix / Reject / Defer.
+
+### Post-PR review additions (PR #3304)
+
+Three boundary rows added after CodeRabbit/OCR PR review, pinning accepted
+behavior with tests rather than changing it:
+
+| # | SANDBOX value        | Request                          | Expected                                     |
+|---|---------------------|----------------------------------|----------------------------------------------|
+| 13| `'ci-job-4821'`     | `--sandbox true`                 | undefined + warning (numeric-suffix lookalike; image portion of real names is user-configurable, so no narrower rule distinguishes it — suppression stays loud) |
+| 14| `'sandbox-exec'`    | `--sandbox-engine bogus`         | throws FatalSandboxError (input validation precedes the nested check; invalid input is reported even nested, matching unset-SANDBOX behavior) |
+| 15| `'sandbox-exec'`    | `--sandbox-profile-load missing` | throws FatalSandboxError (profile load precedes the nested check) |
+
+Dispositions: numeric-suffix narrowing and suppression-before-validation both
+Rejected (would restore recursion for custom-image launches and silently
+swallow user errors); hop-test mock-theater concern Rejected (the predicate is
+exercised via the real `loadSandboxConfig` in rows 1-8; the hop test pins the
+removed raw-env guard in `maybeHopIntoSandbox`).

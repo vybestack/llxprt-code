@@ -22,6 +22,16 @@ import type { Settings } from './settings.js';
 
 const commandSyncMock = vi.fn((_command: string) => false);
 
+const defaultProfile = async () => ({
+  engine: 'docker',
+  image: 'ghcr.io/vybestack/llxprt-code/sandbox:0.7.0',
+  resources: { cpus: 2, memory: '4g', pids: 128 },
+  network: 'off',
+  sshAgent: 'on',
+});
+
+const loadSandboxProfileMock = vi.fn(defaultProfile);
+
 void vi.mock('command-exists', () => ({
   default: {
     sync: commandSyncMock,
@@ -30,13 +40,7 @@ void vi.mock('command-exists', () => ({
 
 void vi.mock('./sandboxProfiles.js', () => ({
   ensureDefaultSandboxProfiles: vi.fn(async () => undefined),
-  loadSandboxProfile: vi.fn(async () => ({
-    engine: 'docker',
-    image: 'ghcr.io/vybestack/llxprt-code/sandbox:0.7.0',
-    resources: { cpus: 2, memory: '4g', pids: 128 },
-    network: 'off',
-    sshAgent: 'on',
-  })),
+  loadSandboxProfile: loadSandboxProfileMock,
 }));
 
 const ORIGINAL_ENV = { ...process.env };
@@ -84,6 +88,8 @@ describe('nested SANDBOX detection (issue #2943)', () => {
     delete process.env.LLXPRT_SANDBOX_PIDS;
     delete process.env.LLXPRT_SANDBOX_MOUNTS;
     enginesAvailable('docker');
+    loadSandboxProfileMock.mockReset();
+    loadSandboxProfileMock.mockImplementation(defaultProfile);
   });
 
   afterEach(() => {
@@ -233,5 +239,43 @@ describe('nested SANDBOX detection (issue #2943)', () => {
     });
     expect(error.message).toContain('nosuchcmd');
     expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('boundary: foreign numeric-suffix lookalike suppresses with warning (accepted tradeoff)', async () => {
+    // `ci-job-4821` matches the generated container-name shape. The image
+    // portion of real names is user-configurable, so no narrower rule can
+    // distinguish it; suppression here is loud rather than silent.
+    const warnSpy = silenceWarn();
+    process.env.SANDBOX = 'ci-job-4821';
+    const config = await loadSandboxConfig(makeSettings(undefined), {
+      sandbox: true,
+    });
+    expect(config).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const message = String((warnSpy.mock.calls[0] ?? [])[0] ?? '');
+    expect(message).toContain('SANDBOX=ci-job-4821');
+    expect(message).toContain('--sandbox');
+  });
+
+  it('boundary: nested suppression does not swallow invalid-engine input', async () => {
+    // Input validation runs before the nested check: an invalid engine is a
+    // user error worth reporting even inside a sandbox, matching behavior
+    // when SANDBOX is unset.
+    process.env.SANDBOX = 'sandbox-exec';
+    const error = await expectFatalSandbox(makeSettings(undefined), {
+      sandboxEngine: 'bogus',
+    });
+    expect(error.message).toContain("Invalid sandbox engine 'bogus'");
+  });
+
+  it('boundary: nested suppression does not swallow invalid-profile input', async () => {
+    process.env.SANDBOX = 'sandbox-exec';
+    loadSandboxProfileMock.mockImplementationOnce(async () => {
+      throw new Error('no such profile');
+    });
+    const error = await expectFatalSandbox(makeSettings(undefined), {
+      sandboxProfileLoad: 'missing',
+    });
+    expect(error.message).toContain('Failed to load sandbox profile');
   });
 });
