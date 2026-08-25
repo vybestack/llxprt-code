@@ -99,7 +99,7 @@ Direct ZIP extraction moves to `yauzl@^3.4.0`. The selected release exposes prom
 4. Reject symlink entries based on Unix mode bits.
 5. Canonicalize repeated slash and internal `.` segments, then reject parent traversal, absolute paths, drive-qualified paths, and backslashes. Contained names that merely start with two dots, such as `..valid/file.txt`, remain valid.
 6. Track every complete canonical archive path case-insensitively before writing. Exact duplicates, normalized aliases, nested case-only aliases, and file/directory conflicts fail before publication.
-7. Stream regular file contents into staging through a byte-counting transform that enforces the same per-entry and cumulative ceilings against the bytes actually decompressed, so forged declared sizes cannot bypass the limits.
+7. Stream regular file contents into staging through a byte-counting transform that enforces the same per-entry and cumulative ceilings against the bytes actually decompressed. Reject an entry when its streamed byte count differs from its declared uncompressed size.
 8. Preserve safe regular-file rwx bits from Unix ZIP metadata, default regular files to 0644, and never preserve special bits. Record explicit directory modes while keeping staging directories owner-writable and searchable.
 9. Preserve explicit empty and nested-empty directory entries.
 10. Publish each staged top-level output with filesystem-enforced exclusive creation. Regular files use `copyFile` with `COPYFILE_EXCL`. Directories use non-recursive `mkdir` and remain private at mode 0700 while their staged descendants are copied with the same exclusive operations. Apply archived safe directory modes deepest-first after publication. A lower-cased destination snapshot also rejects case-only top-level collisions on case-sensitive hosts.
@@ -127,7 +127,7 @@ The co-located Bun test uses real ZIP archives and the production extractor. It 
 - absolute return paths for a relative `destDir`;
 - preserved explicit and nested-empty directories, including safe directory modes on POSIX;
 - staging children beneath an explicit directory whose archived final mode is read-only;
-- each practical resource limit: entry count, file-name length, declared per-entry bytes, declared cumulative bytes, actual streamed per-entry bytes, and actual streamed cumulative bytes, each with cleanup assertions;
+- each practical resource limit: entry count, file-name length, declared per-entry bytes, declared cumulative bytes, actual streamed per-entry bytes, and actual streamed cumulative bytes, plus declared-to-streamed size integrity, each with cleanup assertions;
 - an injected rollback/cleanup removal failure proving the primary plus rollback and cleanup errors are retained in an `AggregateError`.
 
 ## Independent review and OCR
@@ -144,6 +144,8 @@ OCR produced three hypotheses:
 2. **Invalid Low:** OCR described `publishRootExclusive` and `copyTreeExclusive` as duplicate recursive publication logic. Root publication already delegates child copying to `copyTreeExclusive`; the remaining root bookkeeping controls rollback ownership and ordering.
 3. **Invalid Low:** OCR described the non-recursive `fs.rmdir(destDir)` call as deprecated by DEP0147. DEP0147 applies to recursive `fs.rmdir`; this call removes only a verified-empty directory and is not affected.
 
+Pull request review produced two additional hypotheses. CodeRabbit identified a valid Medium integrity gap: streamed entry bytes were bounded but not required to equal the declared uncompressed size. A real-ZIP regression failed before the fix, and the extractor now rejects either truncated or padded entries before publication. The GitHub OCR review alleged that calling `close()` after yauzl's `autoClose` would throw and mask failures. The installed yauzl 3.4.0 implementation makes `ZipFile.close()` idempotent by returning immediately when `isOpen` is false, so that finding was rejected against the exact dependency source.
+
 ### Local verification results
 
 - `yauzl` is a mandatory root dependency (`^3.4.0`). `package-lock.json` was regenerated with the repository npm procedure, and `bun.lock` was regenerated from scratch with `rm bun.lock && bun install`.
@@ -151,11 +153,11 @@ OCR produced three hypotheses:
 - `npm run check:lockfile` passes, and the Bun workspace parity suite passes 18 tests with 203 assertions.
 - `extract-zip` is absent from `package-lock.json` and `bun.lock`.
 - `npm audit` reports four Low vulnerabilities and no Moderate, High, or Critical vulnerabilities. The remaining AI SDK advisories require out-of-scope semver-major upgrades. `bun audit` reports one Low advisory from the same dependency family.
-- After the OCR fix, the ZIP suite passes 34 tests with 88 assertions. The broader archive, caller, publication, and ripgrep run passes 217 tests across 10 files with one platform-specific test skipped.
-- The test-audit scanner completed over 2,693 files with no scanner error and no finding for `zipExtract.test.ts`.
-- Full typecheck and build pass after the final OCR remediation. Focused Prettier and ESLint checks pass for the changed ZIP source and test, and `git diff --check` passes apart from Git's existing NOTICES line-ending warning.
-- An earlier full repository lint passed before review remediation. Two final full-lint attempts after remediation reached the 900-second command ceiling without diagnostics and were terminated. Scoped repository lint over every changed TypeScript file passed. This plan does not claim a final completed full-lint run.
-- Four full repository test attempts did not produce a green local result. Different runs timed out in different agents files; a reduced-agents-concurrency run instead timed out in one provider tokenizer file and later in agents. Every implicated agents file passed separately, the full agents package passed 376/376 plus 6/6 isolated files, and the provider tokenizer rerun passed 33/33. The failures vary with loaded workspace execution, but their cause is not established. No security-remediation test failed, and this plan does not claim a green local full-suite run.
+- After review remediation, the ZIP suite passes 35 tests with 90 assertions. The ZIP, skill, and GitHub extension suites pass 75 tests with 147 assertions. The broader archive, caller, publication, and ripgrep run passes 217 tests across 10 files with one platform-specific test skipped.
+- The test-audit scanner completed over 2,706 files with no scanner error and no finding for `zipExtract.test.ts`.
+- Full typecheck and build pass after the pull request review remediation. Focused Prettier and ESLint checks pass for the changed ZIP source and test, and `git diff --check` passes apart from Git's existing NOTICES line-ending warning.
+- An earlier full repository lint passed before review remediation. Three final full-lint attempts after remediation reached the 900-second command ceiling without diagnostics and were terminated. Scoped repository lint over every changed TypeScript file passed. This plan does not claim a final completed full-lint run.
+- Five full repository test attempts did not produce a green local result. Different runs timed out in different agents files; a reduced-agents-concurrency run instead timed out in one provider tokenizer file and later in agents. The post-review attempt passed providers 579/579 and every package after agents, but four agents files hit their existing per-file timeout. Every previously implicated agents file passed separately, the full agents package passed 376/376 plus 6/6 isolated files, and the provider tokenizer rerun passed 33/33. The failures vary with loaded workspace execution, but their cause is not established. No security-remediation test failed, and this plan does not claim a green local full-suite run.
 - The required `stepfun-37` smoke command reached the configured provider but exited with HTTP 400 because the account has no active Step plan subscription. The local environment could not complete the external inference step.
 
 Evidence still required after this update:
@@ -170,7 +172,7 @@ Evidence still required after this update:
 - Both lockfiles contain no affected version named by the in-scope alerts.
 - ZIP extraction does not write through archive symlinks, traversal paths, absolute paths, drive-qualified paths, or preexisting destination symlink directories.
 - Failure preserves preexisting destination content and does not leave newly staged output.
-- ZIP extraction enforces documented entry-count, name-length, per-entry, and cumulative size limits against both declared and streamed bytes.
+- ZIP extraction enforces documented entry-count, name-length, per-entry, and cumulative size limits against both declared and streamed bytes, and rejects entries whose streamed byte count differs from the declared uncompressed size.
 - npm and Bun lockfiles agree with every workspace manifest.
 - Focused security tests, static checks, build, lockfile checks, and scoped lint pass; incomplete full-suite, full-lint, and external smoke results are reported without claiming success.
 - The pull request closes tracking issue 3324 and reports alerts as `Dependabot-N` or `CodeQL-N`, never as bare issue references.

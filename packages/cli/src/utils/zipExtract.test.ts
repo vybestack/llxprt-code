@@ -643,13 +643,32 @@ describe('extractZipSafe', () => {
       await noStagingDirsRemain(dest);
     });
 
+    it('rejects an entry whose streamed bytes differ from its declared size', async () => {
+      const archivePath = await writeZip('size-mismatch.zip', [
+        {
+          name: 'mismatch.bin',
+          content: 'actual content',
+          deflated: true,
+          declaredSize: 5,
+        },
+      ]);
+      const dest = path.join(workspace, 'out');
+
+      await expect(extractZipSafe(archivePath, dest)).rejects.toThrow(
+        /streamed .*bytes.*declared/i,
+      );
+
+      expect(await exists(path.join(dest, 'mismatch.bin'))).toBe(false);
+      await noStagingDirsRemain(dest);
+    });
+
     it('rejects cumulative stream bytes beyond the total limit despite lying declared sizes', async () => {
       const archivePath = await writeZip('bomb-total.zip', [
         {
           name: 'b1.bin',
           content: 'y'.repeat(300),
           deflated: true,
-          declaredSize: 10,
+          declaredSize: 300,
         },
         {
           name: 'b2.bin',

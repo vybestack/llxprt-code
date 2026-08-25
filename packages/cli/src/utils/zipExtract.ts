@@ -218,6 +218,12 @@ async function extractFileEntry(
     },
   });
   await pipeline(readStream, limiter, createWriteStream(target));
+  if (streamed !== entry.uncompressedSize) {
+    throw new Error(
+      `entry "${rawName}" streamed ${streamed} bytes but declared ` +
+        `${entry.uncompressedSize} bytes`,
+    );
+  }
   await fs.chmod(target, safeFileMode(entry));
   filePaths.push(entryName);
   return { declaredTotal, totalStreamed };
