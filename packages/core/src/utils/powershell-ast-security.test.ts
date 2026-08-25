@@ -12,6 +12,7 @@ import {
   parseCommandDetailsForLanguage,
 } from './shell-parser.js';
 import type { Config } from '../config/config.js';
+import { resolvePwshTestPolicyFromEnv } from '../test-utils/pwsh-test-policy.js';
 
 /**
  * Security remediation tests for PR #3198 review findings (#3181).
@@ -20,10 +21,16 @@ import type { Config } from '../config/config.js';
  * Tests are RED before the production fix and GREEN after.
  */
 await initializeParser();
-const pwshAvailable = isParserAvailable('powershell');
-if (!pwshAvailable) {
-  throw new Error('PowerShell grammar failed to load under Bun');
+const pwshPolicy = resolvePwshTestPolicyFromEnv(
+  isParserAvailable('powershell'),
+);
+if (pwshPolicy.failureMessage !== null) {
+  throw new Error(pwshPolicy.failureMessage);
 }
+if (pwshPolicy.skipReason !== null) {
+  process.stderr.write(`${pwshPolicy.skipReason}\n`);
+}
+const describePwsh = describe.skipIf(pwshPolicy.skip);
 
 const mockPlatform = vi.fn();
 void vi.mock('os', () => ({
@@ -49,7 +56,7 @@ function makeConfig(
   } as unknown as Config;
 }
 
-describe.skipIf(!pwshAvailable)(
+describePwsh(
   'PowerShell security: -Command abbreviation payload extraction (#4)',
   () => {
     const blocklist: Config = makeConfig({
@@ -133,7 +140,7 @@ describe.skipIf(!pwshAvailable)(
   },
 );
 
-describe.skipIf(!pwshAvailable)(
+describePwsh(
   'PowerShell security: -EncodedCommand payload decoding (#4)',
   () => {
     const blocklist: Config = makeConfig({
@@ -251,7 +258,7 @@ describe.skipIf(!pwshAvailable)(
   },
 );
 
-describe.skipIf(!pwshAvailable)(
+describePwsh(
   'PowerShell security: empty invocation target fail-closed (#15)',
   () => {
     beforeEach(() => {
@@ -287,7 +294,7 @@ describe.skipIf(!pwshAvailable)(
   },
 );
 
-describe.skipIf(!pwshAvailable)(
+describePwsh(
   'PowerShell security: diagnostic naming references tree-sitter-pwsh (#6)',
   () => {
     beforeEach(() => {
@@ -311,7 +318,7 @@ describe.skipIf(!pwshAvailable)(
   },
 );
 
-describe.skipIf(!pwshAvailable)(
+describePwsh(
   'PowerShell security: dynamic Start-Process targets fail closed (#3)',
   () => {
     // When Start-Process is itself allowlisted, a dynamic (non-static) target
@@ -374,42 +381,39 @@ describe.skipIf(!pwshAvailable)(
   },
 );
 
-describe.skipIf(!pwshAvailable)(
-  'PowerShell path command-name canonicalization',
-  () => {
-    it('normalizes a relative executable path to its basename', () => {
-      const command = String.raw`.\foo.exe --safe`;
-      const result = parseCommandDetailsForLanguage(command, 'powershell');
-      expect(result).toMatchObject({ hasError: false });
-      expect(result?.details).toContainEqual({
-        name: 'foo.exe',
-        text: command,
-        canonicalText: 'foo.exe --safe',
-        nameKind: 'static',
-      });
+describePwsh('PowerShell path command-name canonicalization', () => {
+  it('normalizes a relative executable path to its basename', () => {
+    const command = String.raw`.\foo.exe --safe`;
+    const result = parseCommandDetailsForLanguage(command, 'powershell');
+    expect(result).toMatchObject({ hasError: false });
+    expect(result?.details).toContainEqual({
+      name: 'foo.exe',
+      text: command,
+      canonicalText: 'foo.exe --safe',
+      nameKind: 'static',
     });
+  });
 
-    it('matches relative executable paths by canonical basename', () => {
-      const command = String.raw`.\foo.exe --safe`;
-      expect(
-        isCommandAllowed(
-          command,
-          makeConfig({ coreTools: ['ShellTool(foo.exe)'] }),
-          'powershell',
-        ).allowed,
-      ).toBe(true);
-      expect(
-        isCommandAllowed(
-          command,
-          makeConfig({ excludeTools: ['ShellTool(foo.exe)'] }),
-          'powershell',
-        ).allowed,
-      ).toBe(false);
-    });
-  },
-);
+  it('matches relative executable paths by canonical basename', () => {
+    const command = String.raw`.\foo.exe --safe`;
+    expect(
+      isCommandAllowed(
+        command,
+        makeConfig({ coreTools: ['ShellTool(foo.exe)'] }),
+        'powershell',
+      ).allowed,
+    ).toBe(true);
+    expect(
+      isCommandAllowed(
+        command,
+        makeConfig({ excludeTools: ['ShellTool(foo.exe)'] }),
+        'powershell',
+      ).allowed,
+    ).toBe(false);
+  });
+});
 
-describe.skipIf(!pwshAvailable)(
+describePwsh(
   'PowerShell security: multi-byte text round-trips through AST offsets',
   () => {
     // web-tree-sitter exposes startIndex/endIndex as UTF-16 code-unit offsets

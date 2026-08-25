@@ -15,13 +15,19 @@ import {
   extractCommandNamesForLanguage,
   hasCommandSubstitutionForLanguage,
 } from './shell-parser.js';
+import { resolvePwshTestPolicyFromEnv } from '../test-utils/pwsh-test-policy.js';
 
 await initializeParser();
-const pwshAvailable = isParserAvailable('powershell');
-if (!pwshAvailable) {
-  throw new Error('PowerShell grammar failed to load under Bun');
+const pwshPolicy = resolvePwshTestPolicyFromEnv(
+  isParserAvailable('powershell'),
+);
+if (pwshPolicy.failureMessage !== null) {
+  throw new Error(pwshPolicy.failureMessage);
 }
-const describePwsh = describe.skipIf(!pwshAvailable);
+if (pwshPolicy.skipReason !== null) {
+  process.stderr.write(`${pwshPolicy.skipReason}\n`);
+}
+const describePwsh = describe.skipIf(pwshPolicy.skip);
 
 async function restoreParsers(): Promise<void> {
   const initialized = await initializeParser();
@@ -330,7 +336,7 @@ describePwsh('shell-parser: tree-sitter-pwsh grammar', () => {
   });
 });
 
-describe.skipIf(!pwshAvailable)('shell-parser: pwsh clean lifecycle', () => {
+describePwsh('shell-parser: pwsh clean lifecycle', () => {
   afterAll(restoreParsers);
 
   it('initializes, resets with disposal, and re-initializes cleanly', async () => {
@@ -385,7 +391,7 @@ describe.skipIf(!pwshAvailable)('shell-parser: pwsh clean lifecycle', () => {
  * the tree-sitter-pwsh grammar does NOT produce a syntax error, proving
  * valid PowerShell is no longer hard-denied as malformed.
  */
-describe.skipIf(!pwshAvailable)('saved-corpus construct families', () => {
+describePwsh('saved-corpus construct families', () => {
   const corpus: Array<{ label: string; cmd: string }> = [
     // Family 1: variable assignment + cmdlet
     {
@@ -502,7 +508,7 @@ describe.skipIf(!pwshAvailable)('saved-corpus construct families', () => {
  * The tree-sitter-pwsh grammar classifies them as expression details,
  * which are excluded from command name extraction.
  */
-describe.skipIf(!pwshAvailable)('exact .NET roots', () => {
+describePwsh('exact .NET roots', () => {
   it('static .NET method produces no command names', () => {
     const tree = parseShellCommandForLanguage(
       '[System.Diagnostics.Process]::Start("cmd.exe")',
@@ -543,7 +549,7 @@ describe.skipIf(!pwshAvailable)('exact .NET roots', () => {
  * NEVER interpolated into the script body. ParseInput parses but does not
  * execute the input. This test NEVER executes any corpus command.
  */
-describe.skipIf(process.platform !== 'win32')(
+describe.skipIf(process.platform !== 'win32' || pwshPolicy.skip)(
   'Parser.ParseInput conformance (Windows-only)',
   () => {
     const conformanceSubset = [

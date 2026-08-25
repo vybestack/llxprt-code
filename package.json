@@ -40,7 +40,8 @@
     "@ast-grep/lang-swift",
     "@lvce-editor/ripgrep",
     "bun",
-    "tree-sitter-bash"
+    "tree-sitter-bash",
+    "tree-sitter-pwsh"
   ],
   "private": true,
   "repository": {
