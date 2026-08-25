@@ -684,7 +684,6 @@
     "@ast-grep/lang-cpp",
     "@lvce-editor/ripgrep",
     "bun",
-    "tree-sitter-pwsh",
     "@ast-grep/lang-c",
     "@ast-grep/lang-kotlin",
     "@ast-grep/lang-scala",
