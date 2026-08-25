@@ -380,3 +380,35 @@ eslint + prettier clean.
   ("you have no active step plan subscription", deterministic 400, verified
   twice earlier). Startup/profile-load/client-init path works; documented as
   environmental.
+
+## OCR PR review round 1 (branch diff vs origin/main)
+
+1 finding; triage:
+
+- LOW "the `length` getter is dead code" — REJECTED. The claim is factually
+  wrong: `HistoryService.endCompression()` reads
+  `pendingCount: this.pendingOperations.length` in its debug log
+  (HistoryService.ts:1169), so the getter has a live production caller.
+
+No changes required.
+
+## PR review round (CI + CodeRabbit + PR OCR)
+
+PR #3336. CI: all checks green (all test shards, E2E linux none/docker, all
+lints, CodeQL, smokes, OpenCodeReview, CodeRabbit check, LLxprt review).
+
+Actionable threads (2), both triaged and resolved:
+
+- CodeRabbit Major "preserve the phase of queued additions" (streaming add
+  queued after the rebuild clear classified as rebuild, so unrecorded) —
+  DEFERRED as issue #3338. Verified against main's endCompression (drained
+  the whole FIFO before emitting compressionLockReleased): the recording
+  outcome for that interleaving is identical on main, so it is pre-existing,
+  not a regression; content is applied and ordered correctly either way.
+  The clean fix needs a rebuild-specific HistoryService API (cross-package
+  interface change) beyond #3264's scope. Replied with evidence and resolved.
+- PR OCR inline low "wrap onHighWater in try/catch" — REJECTED. The callback
+  is HistoryService's own logger.error, called unwrapped inline on main too;
+  swallowing an internal diagnostic failure is the defensive-wrapper
+  antipattern the repo's fail-fast preference rules out. Replied and
+  resolved.
