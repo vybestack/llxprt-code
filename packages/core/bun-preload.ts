@@ -18,6 +18,11 @@ import { beforeAll, beforeEach, afterEach } from 'bun:test';
 // Safety: mark environment as CI so that browser-launching code paths
 // (shouldLaunchBrowser) short-circuit. This prevents any test from
 // inadvertently launching a real browser.
+// Preserve the runner's original CI value (empty string when unset) first so
+// tests can distinguish a real CI runner from this safety override (#3309).
+if (process.env.CI_BEFORE_TEST_PRELOAD === undefined) {
+  process.env.CI_BEFORE_TEST_PRELOAD = process.env.CI ?? '';
+}
 process.env.CI = 'true';
 // Block the shouldLaunchBrowser check by setting a blocklisted BROWSER value.
 // This is a second safety net in case CI is unset by a test.

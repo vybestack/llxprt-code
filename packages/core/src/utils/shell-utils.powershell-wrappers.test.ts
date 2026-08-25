@@ -19,13 +19,20 @@ import {
   isCommandAllowed,
 } from './shell-utils.js';
 import { initializeParser, isParserAvailable } from './shell-parser.js';
+import { resolvePwshTestPolicyFromEnv } from '../test-utils/pwsh-test-policy.js';
 import type { Config } from '../config/config.js';
 
 await initializeParser();
-const pwshAvailable = isParserAvailable('powershell');
-if (!pwshAvailable) {
-  throw new Error('PowerShell grammar failed to load under Bun');
+const pwshPolicy = resolvePwshTestPolicyFromEnv(
+  isParserAvailable('powershell'),
+);
+if (pwshPolicy.failureMessage !== null) {
+  throw new Error(pwshPolicy.failureMessage);
 }
+if (pwshPolicy.skipReason !== null) {
+  process.stderr.write(`${pwshPolicy.skipReason}\n`);
+}
+const describePwsh = describe.skipIf(pwshPolicy.skip);
 
 const mockPlatform = vi.fn();
 void vi.mock('os', () => ({
@@ -57,7 +64,7 @@ function makeConfig(
   } as unknown as Config;
 }
 
-describe.skipIf(!pwshAvailable)(
+describePwsh(
   'shell-utils: PowerShell wrapper/evaluator bypass prevention',
   () => {
     beforeAll(() => {

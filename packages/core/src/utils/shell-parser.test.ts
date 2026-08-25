@@ -24,10 +24,22 @@ import {
   resetParser,
   getInitializationError,
   collectCommandDetails,
+  parseShellCommandForLanguage,
 } from './shell-parser.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
+import { resolvePwshTestPolicyFromEnv } from '../test-utils/pwsh-test-policy.js';
 
 let parserInitialized = await initializeParser();
+const pwshPolicy = resolvePwshTestPolicyFromEnv(
+  isParserAvailable('powershell'),
+);
+if (pwshPolicy.failureMessage !== null) {
+  throw new Error(pwshPolicy.failureMessage);
+}
+if (pwshPolicy.skipReason !== null) {
+  process.stderr.write(`${pwshPolicy.skipReason}
+`);
+}
 
 /**
  * Tree-sitter parser tests.
@@ -47,6 +59,31 @@ describe('shell-parser', () => {
   afterAll(() => {
     // Reset for other test suites
     resetParser();
+  });
+
+  describe.skipIf(pwshPolicy.skip)('PowerShell parser unavailable path', () => {
+    // #3309: with the grammar absent the PowerShell parse surface must fail
+    // closed (returning its documented unavailable results) rather than throwing,
+    // and a real re-initialization must restore availability.
+    afterAll(async () => {
+      await initializeParser();
+      expect(isParserAvailable('powershell')).toBe(true);
+    });
+
+    it('fails closed after resetParser and recovers after initializeParser', async () => {
+      resetParser();
+      expect(isParserAvailable('powershell')).toBe(false);
+      expect(parseShellCommandForLanguage('Get-ChildItem', 'powershell')).toBe(
+        null,
+      );
+
+      const reinitialized = await initializeParser();
+      expect(reinitialized).toBe(true);
+      expect(isParserAvailable('powershell')).toBe(true);
+      expect(
+        parseShellCommandForLanguage('Get-ChildItem', 'powershell'),
+      ).not.toBeNull();
+    });
   });
 
   describe('initializeParser', () => {
