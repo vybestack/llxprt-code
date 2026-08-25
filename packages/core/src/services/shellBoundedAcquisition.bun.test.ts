@@ -125,6 +125,21 @@ function producerCommand(
 }
 
 /**
+ * Run `next` only if `first` succeeded, in a way every target shell accepts.
+ *
+ * Windows PowerShell 5.1 — which is what `powershell.exe` resolves to on the
+ * CI runners — has no `&&` operator; it arrived in PowerShell 7. Writing
+ * `a && b` there is a parse error, so the whole command fails with exit 1
+ * before the producer ever runs. Use the `$?` success variable instead, which
+ * expresses the same run-on-success semantics.
+ */
+function chainOnSuccess(first: string, next: string): string {
+  return getShellConfiguration().shell === 'powershell'
+    ? `${first}; if ($?) { ${next} }`
+    : `${first} && ${next}`;
+}
+
+/**
  * Execute a shell command via the child_process fallback and collect the
  * final result.
  *
@@ -174,7 +189,10 @@ describe('Shell bounded acquisition - child_process path (cross-platform)', () =
 
   it('preserves exit code and completes despite bounded output', async () => {
     // Produce output beyond the budget, then write a tail marker.
-    const cmd = `${producerCommand(524288, 'stdout', 'ascii')} && echo END_MARKER_42`;
+    const cmd = chainOnSuccess(
+      producerCommand(524288, 'stdout', 'ascii'),
+      'echo END_MARKER_42',
+    );
     const result = await executeAndCollect(cmd, {
       outputRetentionMaxBytes: 4096,
     });
