@@ -15,6 +15,7 @@ import {
   buildInnerPidMarkerCommand,
   disposeAndCleanupWindowsTest,
   readInnerPidFromMarker,
+  reapAndRemoveWindowsTestDir,
 } from '../../test/utils/shellJobTestCleanup.js';
 
 interface BlockedTaskkillManager {
@@ -169,8 +170,14 @@ describe.skipIf(os.platform() !== 'win32')(
         expect(terminal?.failureReason).toContain('exceeded cap');
         expect(getKillCallCount()).toBe(1);
       } finally {
+        // issue #3323: reap the outer AND inner processes directly instead of
+        // going through manager.dispose(). This test's cap-owned job was
+        // force-finalised while the outer PowerShell was still WaitForExit()-
+        // ing on the inner one, and an outer-rooted tree kill can race and
+        // leave the inner PowerShell (which owns the redirected log handles)
+        // alive, keeping this test file's Bun process from exiting.
         releaseTaskkill();
-        await disposeAndCleanupWindowsTest(dir, manager, [outerPid, innerPid]);
+        await reapAndRemoveWindowsTestDir(dir, manager, [outerPid, innerPid]);
       }
     }, 45_000);
   },
