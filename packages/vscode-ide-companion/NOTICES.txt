@@ -54,7 +54,7 @@ SOFTWARE.
 
 
 ============================================================
-@hono/node-server@1.19.14
+@hono/node-server@1.19.17
 (https://github.com/honojs/node-server.git)
 
 MIT License
@@ -136,7 +136,7 @@ SOFTWARE.
 
 
 ============================================================
-fast-uri@3.1.2
+fast-uri@3.1.6
 (git+https://github.com/fastify/fast-uri.git)
 
 Copyright (c) 2011-2021, Gary Court until https://github.com/garycourt/uri-js/commit/a1acf730b4bba3f1097c9f52e7d9d3aba8cdcaae
@@ -2282,7 +2282,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 ============================================================
-ip-address@10.2.0
+ip-address@10.5.0
 (https://github.com/beaugunderson/ip-address.git)
 
 Copyright (C) 2011 by Beau Gunderson
@@ -2307,7 +2307,7 @@ THE SOFTWARE.
 
 
 ============================================================
-hono@4.12.27
+hono@4.13.4
 (git+https://github.com/honojs/hono.git)
 
 MIT License
@@ -5496,7 +5496,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ============================================================
-undici@7.28.0
+undici@7.29.0
 (git+https://github.com/nodejs/undici.git)
 
 MIT License

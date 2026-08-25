@@ -21,7 +21,7 @@ import {
   loadExtension,
 } from '../extension.js';
 import * as tar from 'tar';
-import extract from 'extract-zip';
+import { extractZipSafe } from '../../utils/zipExtract.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 function getGitHubToken(): string | undefined {
@@ -676,7 +676,7 @@ export async function extractFile(file: string, dest: string): Promise<void> {
       cwd: dest,
     });
   } else if (file.endsWith('.zip')) {
-    await extract(file, { dir: dest });
+    await extractZipSafe(file, dest);
   } else {
     throw new Error(`Unsupported file extension for extraction: ${file}`);
   }
