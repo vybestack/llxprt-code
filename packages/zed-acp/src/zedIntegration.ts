@@ -20,7 +20,6 @@ import {
   type AgentEvent,
 } from '@vybestack/llxprt-code-agents';
 import { randomUUID } from 'crypto';
-import { type LoadedSettings } from '../config/settings.js';
 import { AcpFileSystemService } from './fileSystemService.js';
 import {
   buildAvailableModes,
@@ -86,7 +85,7 @@ import type {
 } from './acp-types.js';
 export { parseZedAuthMethodId } from './zed-helpers.js';
 export { createSessionScopedConfig } from './zed-session-config.js';
-export { runZedIntegration } from './runZedIntegration.js';
+export { runZedIntegration, ZED_ACP_RUNTIME_ID } from './runZedIntegration.js';
 export class ZedAgent {
   private sessions: Map<string, Session> = new Map();
   private clientCapabilities: ClientCapabilitiesWithSession | undefined;
@@ -94,7 +93,6 @@ export class ZedAgent {
   private readonly lifecycle: SessionLifecycle;
   constructor(
     private config: Config,
-    _settings: LoadedSettings,
     private connection: acp.AgentSideConnection,
     private readonly sessionFileLister: ChatSessionFileLister = nodeChatSessionFileLister,
   ) {

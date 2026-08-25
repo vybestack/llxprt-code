@@ -420,6 +420,10 @@ jobs:
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: npm publish --workspace=@vybestack/llxprt-code-agents --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
+      - name: Publish @vybestack/llxprt-code-zed-acp
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
+        run: npm publish --workspace=@vybestack/llxprt-code-zed-acp --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+
       - name: Publish @vybestack/llxprt-code
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: npm publish --workspace=@vybestack/llxprt-code --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}

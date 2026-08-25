@@ -32,7 +32,6 @@ import type * as acp from '@agentclientprotocol/sdk';
 import { RequestError } from '@agentclientprotocol/sdk';
 import type { Config, IContent } from '@vybestack/llxprt-code-core';
 import type { Agent, AgentMessage } from '@vybestack/llxprt-code-agents';
-import type { LoadedSettings } from '../config/settings.js';
 import type { ChatSessionFileLister } from './zed-session-loader.js';
 
 import { RecordingConnection } from './zed-test-helpers.js';
@@ -177,16 +176,6 @@ function buildBaseConfig(): Config {
   } as unknown as Config;
 }
 
-/**
- * Minimal typed LoadedSettings stub (F14): the ZedAgent constructor only stores
- * the settings arg (it is unused by the loadSession/newSession orchestration
- * paths under test), so a typed empty projection avoids an `as never` cast while
- * staying honest about what the code touches.
- */
-function buildStubSettings(): LoadedSettings {
-  return {} as LoadedSettings;
-}
-
 /** Typed InitializeRequest for a client that advertises no capabilities. */
 function buildInitializeRequest(): acp.InitializeRequest {
   return { protocolVersion: 1, clientCapabilities: {} };
@@ -205,7 +194,6 @@ async function makeZedAgent(
   const mod = await import('./zedIntegration.js');
   const zedAgent = new mod.ZedAgent(
     buildBaseConfig(),
-    buildStubSettings(),
     connection as unknown as acp.AgentSideConnection,
     sessionFileLister,
   );
@@ -389,7 +377,6 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     // ZedAgent setup; assert the capability from a fresh initialize() call.
     const zedAgent = new mod.ZedAgent(
       buildBaseConfig(),
-      buildStubSettings(),
       connection as unknown as acp.AgentSideConnection,
     );
     const response = await zedAgent.initialize(buildInitializeRequest());

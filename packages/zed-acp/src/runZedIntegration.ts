@@ -10,9 +10,14 @@ import * as acp from '@agentclientprotocol/sdk';
 import { Readable, Writable } from 'node:stream';
 import * as process from 'node:process';
 import { setCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
-import type { LoadedSettings } from '../config/settings.js';
-import { runExitCleanup } from '../utils/cleanup.js';
 import { ZedAgent } from './zedIntegration.js';
+
+/**
+ * The package-owned runtime id registered by the ACP client when it claims the
+ * foreground runtime slot. Replaces the historical CLI-scoped
+ * `'cli.runtime.zed'`.
+ */
+export const ZED_ACP_RUNTIME_ID = 'zed-acp.runtime';
 
 const DISPOSAL_SIGNALS: readonly NodeJS.Signals[] = ['SIGINT', 'SIGTERM'];
 
@@ -82,9 +87,12 @@ export function installDisposalSignalHandlers(
   };
 }
 
-async function cleanupAgents(
+export type ExitCleanupCallback = () => void | Promise<void>;
+
+export async function cleanupAgents(
   agents: readonly ZedAgent[],
   logger: DebugLogger,
+  onExitCleanup: ExitCleanupCallback | undefined = undefined,
 ): Promise<void> {
   const disposalResults = await Promise.allSettled(
     agents.map((agent) => agent.disposeAll()),
@@ -96,15 +104,28 @@ async function cleanupAgents(
     logger.warn(() => `Zed agent cleanup failed: ${String(result.reason)}`);
   }
   try {
-    await runExitCleanup();
+    await onExitCleanup?.();
   } catch (cleanupError) {
     logger.debug(() => `Exit cleanup failed: ${String(cleanupError)}`);
   }
 }
 
+/**
+ * Registers the ACP client as a foreground runtime in the providers runtime
+ * registry, handing off the default CLI runtime pointer. Extracted and exported
+ * so tests can assert the registration against the real registry.
+ */
+export function registerZedAcpRuntime(config: Config): void {
+  setCliRuntimeContext(config.getSettingsService(), config, {
+    runtimeId: ZED_ACP_RUNTIME_ID,
+    metadata: { source: 'zed-integration', stage: 'bootstrap' },
+    allowDefaultHandoff: true,
+  });
+}
+
 export async function runZedIntegration(
   config: Config,
-  settings: LoadedSettings,
+  options: { onExitCleanup?: ExitCleanupCallback } = {},
 ): Promise<void> {
   const logger = new DebugLogger('llxprt:zed-integration');
   logger.debug(() => 'Starting Zed integration');
@@ -115,11 +136,7 @@ export async function runZedIntegration(
   // observe EOF/abort so connection.closed settles.
   const stdinSource = process.stdin;
   const stdin = Readable.toWeb(stdinSource) as ReadableStream<Uint8Array>;
-  setCliRuntimeContext(config.getSettingsService(), config, {
-    runtimeId: 'cli.runtime.zed',
-    metadata: { source: 'zed-integration', stage: 'bootstrap' },
-    allowDefaultHandoff: true,
-  });
+  registerZedAcpRuntime(config);
   const agents: ZedAgent[] = [];
   const removeSignalHandlers = installDisposalSignalHandlers(
     buildSignalDisposalHandler(stdinSource, logger),
@@ -127,7 +144,7 @@ export async function runZedIntegration(
   try {
     const stream = acp.ndJsonStream(stdout, stdin);
     const connection = new acp.AgentSideConnection((conn) => {
-      const agent = new ZedAgent(config, settings, conn);
+      const agent = new ZedAgent(config, conn);
       agents.push(agent);
       return agent;
     }, stream);
@@ -137,6 +154,6 @@ export async function runZedIntegration(
     throw error;
   } finally {
     removeSignalHandlers();
-    await cleanupAgents(agents, logger);
+    await cleanupAgents(agents, logger, options.onExitCleanup);
   }
 }

@@ -100,7 +100,7 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
   void mock.module('./utils/sessionCleanup.js', () => ({
     cleanupExpiredSessions: async () => {},
   }));
-  void mock.module('./zed-integration/zedIntegration.js', () => ({
+  void mock.module('@vybestack/llxprt-code-zed-acp', () => ({
     runZedIntegration: async () => {},
   }));
   void mock.module('./config/pathMigration.js', () => ({
@@ -434,7 +434,7 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
     void mock.module('./utils/sessionCleanup.js', () => ({
       cleanupExpiredSessions: async () => {},
     }));
-    void mock.module('./zed-integration/zedIntegration.js', () => ({
+    void mock.module('@vybestack/llxprt-code-zed-acp', () => ({
       runZedIntegration: async () => {},
     }));
     void mock.module('./config/pathMigration.js', () => ({

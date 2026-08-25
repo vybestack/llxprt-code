@@ -35,7 +35,7 @@ passed 4/4.
 
 ### Root cause
 
-In `packages/cli/src/zed-integration/zed-session-lifecycle.ts`, `close()`
+In `packages/zed-acp/src/zed-session-lifecycle.ts`, `close()`
 calls `disposeLive()` which removes the session from the live `sessions` Map.
 The subsequent `delete()` finds neither a live session nor a persisted recording
 (because the session was never prompted), so `deleteSessionById` returns

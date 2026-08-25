@@ -207,6 +207,10 @@ export const BUN_TEST_ROOTS: readonly BunTestRoot[] = [
     preload: ['test-setup-storage-isolation.ts'],
   },
   {
+    root: 'zed-acp',
+    preload: ['test-setup-storage-isolation.ts'],
+  },
+  {
     root: 'scripts-tests',
     cwd: '.',
     directories: ['scripts/tests'],

@@ -67,7 +67,7 @@ import {
   runExitCleanup,
   registerSyncCleanup,
 } from './utils/cleanup.js';
-import { runZedIntegration } from './zed-integration/zedIntegration.js';
+import { runZedIntegration } from '@vybestack/llxprt-code-zed-acp';
 import { cleanupExpiredSessions } from './utils/sessionCleanup.js';
 import { existsSync, mkdirSync } from 'fs';
 import { firstNonEmptyString } from './utils/coalesce.js';
@@ -173,7 +173,6 @@ function setupProcessLifecycle(): () => void {
  */
 async function handleZedAcpIntegration(
   config: Config,
-  settings: LoadedSettings,
   cleanupStdio: () => void,
 ): Promise<boolean> {
   if (!config.getExperimentalZedIntegration()) {
@@ -181,7 +180,7 @@ async function handleZedAcpIntegration(
   }
   cleanupStdio();
   ensureAcpProviderActivated(config);
-  await runZedIntegration(config, settings);
+  await runZedIntegration(config, { onExitCleanup: runExitCleanup });
   return true;
 }
 
@@ -401,7 +400,7 @@ export async function main() {
   // ACP/Zed runs its own runtime and constructs per-session Agents via
   // fromConfig internally; it must be handled BEFORE the general
   // non-interactive unconfigured-provider guard.
-  if (await handleZedAcpIntegration(config, settings, cleanupStdio)) {
+  if (await handleZedAcpIntegration(config, cleanupStdio)) {
     return;
   }
 

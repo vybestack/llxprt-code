@@ -75,6 +75,7 @@ export const TEST_SHARDS: readonly ShardDefinition[] = [
   {
     name: 'rest',
     workspaces: [
+      'zed-acp',
       'tools',
       'storage',
       'auth',
