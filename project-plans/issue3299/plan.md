@@ -127,6 +127,17 @@ The two implementation-review rounds and two local OCR rounds produced the follo
 | A post-review read-only inspection found that a scheduled-state helper accepted a caller-provided zero and asserted it unchanged. | **In-scope-Fix** | Removed the parameter and tautological assertion. The tests continue to assert emitted scheduler state and the real per-tool execution counters before and after cancellation. |
 | Bun can leak a mocked `node:fs/promises` module between core policy test files in one process. | **Defer** | The failure reproduces on the base commit and the policy suite passes with process isolation. Changing Bun test isolation is outside AC1 through AC6. |
 
+### PR finding triage
+
+| Finding | Classification | Resolution |
+| --- | --- | --- |
+| CodeRabbit requested an `UPDATE_POLICY` publication before foreground bootstrap as a negative control. | **In-scope-Fix** | The bootstrap test now publishes before startup and observes `ASK_USER`, then publishes after startup and observes `ALLOW` for the matching tool. |
+| CodeRabbit's aggregate docstring-coverage check requested comments on touched test helpers and the short cancellation handler. | **Reject** | The repository favors sparse comments that explain non-obvious intent. Adding docstrings to direct test fixtures and a private three-line handler would not strengthen AC1 through AC6. |
+| LLxprt PR Review reported that `project-plans/issue3299/plan.md` was missing from the change. | **Reject** | The file is present in commit `6466ca638` and in the PR's five-file diff. |
+| The CI OCR comment reported 0/4 changed-file coverage while also reporting no findings. | **Reject** | The review artifact and detached exact-range OCR manifest both show all four eligible code files completed. No code change follows from the inconsistent coverage summary. |
+
+The CI PR OCR and one detached exact-range PR OCR completed with no code findings. These are the two permitted PR OCR rounds; no further PR OCR round is permitted.
+
 ## Local verification record
 
 - Final focused behavior command: `bun test packages/agents/src/core/coreToolScheduler.issue3299.test.ts packages/cli/src/cliAgentBootstrap.test.ts` passed 15 tests with 69 assertions.

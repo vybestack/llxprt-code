@@ -217,6 +217,11 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
   });
 
   it('applies session policy updates from the Agent-owned bus to the Config policy engine', async () => {
+    bus.publish({
+      type: MessageBusType.UPDATE_POLICY,
+      toolName: 'activate_skill',
+      persist: false,
+    });
     expect(engine.evaluate('activate_skill', { name: 'pr-creator' })).toBe(
       PolicyDecision.ASK_USER,
     );
