@@ -364,12 +364,7 @@ describe('extractZipSafe', () => {
     expect(await fs.readFile(path.join(dest, 'README.md'), 'utf8')).toBe(
       'keep',
     );
-    // On case-insensitive file systems `readme.md` is the same entry as
-    // `README.md`; the assertion that matters is that the archive content never
-    // replaced it.
-    expect(await fs.readFile(path.join(dest, 'readme.md'), 'utf8')).toBe(
-      'keep',
-    );
+    expect(await fs.readdir(dest)).toEqual(['README.md']);
     await noStagingDirsRemain(dest);
   });
 
