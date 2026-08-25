@@ -182,6 +182,27 @@ describe('Server Config (config.ts)', () => {
       expect(resolved.outfileMaxFiles).toBe(10);
     });
 
+    it('resolveTelemetrySettings preserves explicit false and zero values (?? not ||)', () => {
+      // Body redaction is opt-in: an explicit logApiBodies:false must survive
+      // resolution, and a falsy-but-valid logApiBodyMaxChars:0 must not be
+      // clobbered by the 4000 default. A || regression would flip both.
+      const config = new Config({
+        ...baseParams,
+        telemetry: {
+          enabled: true,
+          logApiBodies: false,
+          logApiBodyMaxChars: 0,
+          outfileMaxBytes: 4096,
+          outfileMaxFiles: 1,
+        },
+      });
+      const resolved = config.getTelemetrySettings();
+      expect(resolved.logApiBodies).toBe(false);
+      expect(resolved.logApiBodyMaxChars).toBe(0);
+      expect(resolved.outfileMaxBytes).toBe(4096);
+      expect(resolved.outfileMaxFiles).toBe(1);
+    });
+
     it('updateTelemetrySettings merges the new fields', () => {
       const config = new Config({
         ...baseParams,

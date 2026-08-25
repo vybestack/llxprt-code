@@ -341,17 +341,17 @@ export function mergeTelemetrySettings(
  * undefined from callers (e.g. the CLI builder) still materializes the
  * default.
  */
-export const TELEMETRY_OUTFILE_BOUND_DEFAULTS: {
+export const TELEMETRY_OUTFILE_BOUND_DEFAULTS: Readonly<{
   logApiBodies: boolean;
   logApiBodyMaxChars: number;
   outfileMaxBytes: number;
   outfileMaxFiles: number;
-} = {
+}> = Object.freeze({
   logApiBodies: false,
   logApiBodyMaxChars: 4000,
   outfileMaxBytes: 104857600,
   outfileMaxFiles: 10,
-};
+});
 
 export function resolveTelemetrySettings(
   telemetry: TelemetrySettings | undefined,

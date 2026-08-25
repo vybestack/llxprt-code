@@ -305,6 +305,58 @@ describe('loggers', () => {
         'event.timestamp': '2025-01-01T00:00:00.000Z',
       });
     });
+
+    it('should log an API response with body when logApiBodies is enabled', () => {
+      const bodyConfig = {
+        getSessionId: () => 'test-session-id',
+        getTargetDir: () => 'target-dir',
+        getUsageStatisticsEnabled: () => true,
+        getTelemetryEnabled: () => true,
+        getTelemetryLogPromptsEnabled: () => true,
+        getTelemetryLogApiBodiesEnabled: () => true,
+        getTelemetryLogApiBodyMaxChars: () => 10,
+        getTelemetryOutfileMaxBytes: () => 104857600,
+        getTelemetryOutfileMaxFiles: () => 10,
+      } as Config;
+
+      const event = new ApiResponseEvent(
+        'test-model',
+        100,
+        'prompt-id-9',
+        {
+          promptTokenCount: 17,
+          candidatesTokenCount: 50,
+          totalTokenCount: 67,
+        },
+        'a-very-long-response-body-worth-of-text',
+      );
+
+      logApiResponse(bodyConfig, event);
+
+      expect(mockLogger.emit).toHaveBeenCalledWith({
+        body: 'API response from test-model. Status: 200. Duration: 100ms.',
+        attributes: {
+          'session.id': 'test-session-id',
+          'event.name': EVENT_API_RESPONSE,
+          'event.timestamp': '2025-01-01T00:00:00.000Z',
+          [SemanticAttributes.HTTP_STATUS_CODE]: 200,
+          model: 'test-model',
+          status_code: 200,
+          prompt_id: 'prompt-id-9',
+          duration_ms: 100,
+          input_token_count: 17,
+          output_token_count: 50,
+          cached_content_token_count: 0,
+          thoughts_token_count: 0,
+          tool_token_count: 0,
+          total_token_count: 67,
+          error: undefined,
+          finish_reasons: [],
+          response_text: 'a-very-lon',
+          response_chars: 39,
+        },
+      });
+    });
   });
 
   describe('logApiRequest', () => {

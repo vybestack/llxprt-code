@@ -140,7 +140,9 @@ class FileExporter {
       })
       .sort((a, b) => {
         if (a.mtime !== b.mtime) return a.mtime - b.mtime;
-        return a.name < b.name ? -1 : 1;
+        if (a.name < b.name) return -1;
+        if (a.name > b.name) return 1;
+        return 0;
       });
     const excess = rotated.length - this.maxFiles;
     for (let i = 0; i < excess; i++) {

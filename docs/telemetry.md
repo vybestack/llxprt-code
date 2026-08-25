@@ -143,7 +143,10 @@ set it to `false`).
   `logPrompts: false` also keeps conversation content out of
   `llxprt_code.api_request` and `llxprt_code.api_response` events: those
   events carry only `request_chars` and `response_chars` sizes (plus token
-  counts) unless `telemetry.logApiBodies` is enabled. Note: `logPrompts: false`
+  counts) unless `telemetry.logApiBodies` is enabled. Those two events hold
+  no prompt-bearing fields beyond `request_text` and `response_text`, both of
+  which are exported only when `telemetry.logApiBodies` **and**
+  `telemetry.logPrompts` are enabled. Note: `logPrompts: false`
   does **not** redact hook input/output data (the `llxprt_code.hook_call` event
   always includes `hook_input` and `hook_output` fields regardless of this setting).
 

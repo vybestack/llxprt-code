@@ -621,6 +621,9 @@ export function logNextSpeakerCheck(
   emitLogRecord(logRecord);
 }
 
+// SessionConfig (session id only) is the intentional permanent contract:
+// slash-command logging needs no wider Config surface, and the narrower type
+// keeps CLI callers that only carry a session-scoped config type-valid.
 export function logSlashCommand(
   config: SessionConfig,
   event: SlashCommandEvent,

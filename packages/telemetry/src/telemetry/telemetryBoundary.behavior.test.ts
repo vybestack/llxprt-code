@@ -27,7 +27,10 @@ import type { TelemetryConfig } from '../internal/interfaces.js';
 const SENTINEL = 'SENTINEL-PROMPT-CONTENT-3315';
 const directories: string[] = [];
 
-function makeConfig(outfile: string): TelemetryConfig {
+function makeConfig(
+  outfile: string,
+  overrides?: Partial<TelemetryConfig>,
+): TelemetryConfig {
   return {
     getTelemetryEnabled: () => true,
     getTelemetryLogPromptsEnabled: () => false,
@@ -47,6 +50,7 @@ function makeConfig(outfile: string): TelemetryConfig {
     getContentGeneratorConfig: () => undefined,
     getFileFilteringRespectGitIgnore: () => true,
     getMcpServers: () => undefined,
+    ...overrides,
   };
 }
 
@@ -145,5 +149,55 @@ describe('telemetry outfile boundary (REQ-3315.7)', () => {
     expect(apiRequestLine).toBeDefined();
     const parsed = JSON.parse(apiRequestLine!);
     expect(typeof parsed.attributes.request_chars).toBe('number');
+  });
+
+  it('rotates and prunes the real outfile when redacted records exceed a small cap', async () => {
+    const cap = 2048;
+    const maxFiles = 2;
+    const config = makeConfig(outfile, {
+      getTelemetryOutfileMaxBytes: () => cap,
+      getTelemetryOutfileMaxFiles: () => maxFiles,
+    });
+    initializeTelemetry(config);
+    expect(isTelemetrySdkInitialized()).toBe(true);
+
+    // Redacted records are a few hundred bytes each; with a 2 KiB cap this
+    // drives multiple rotations and exercises retention pruning.
+    for (let i = 0; i < 30; i++) {
+      logApiRequest(
+        config,
+        new ApiRequestEvent(
+          'test-model',
+          `prompt-${i}`,
+          SENTINEL + '-' + 'x'.repeat(100 * 1024) + `-${i}`,
+        ),
+      );
+    }
+
+    await flushTelemetry();
+    await shutdownTelemetry(config);
+
+    const base = basename(outfile);
+    const entries = readdirSync(dirname(outfile));
+    const rotated = entries.filter((entry) =>
+      /\.llxprt-rot-\d+-[0-9a-z]{6}$/.test(entry),
+    );
+    // Rotation must actually engage through the real pipeline, and retention
+    // must hold rotated files at maxFiles.
+    expect(rotated.length).toBeGreaterThanOrEqual(1);
+    expect(rotated.length).toBeLessThanOrEqual(maxFiles);
+    expect(entries.filter((e) => e === base).length).toBe(1);
+
+    const files = allTelemetryFiles(dirname(outfile), outfile);
+    expect(files.length).toBeLessThanOrEqual(maxFiles + 1);
+    for (const file of files) {
+      // cap plus at most one in-flight record per write.
+      expect(statSync(file).size).toBeLessThanOrEqual(cap + 4096);
+      const content = readFileSync(file, 'utf-8');
+      expect(content).not.toContain(SENTINEL);
+      for (const line of content.trim().split('\n')) {
+        if (line.length > 0) JSON.parse(line);
+      }
+    }
   });
 });
