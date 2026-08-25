@@ -520,189 +520,199 @@ async function runConcurrentAssign({
   return { results, finalState };
 }
 
-describe('H5: Concurrent same-issue /assign convergence', () => {
-  it('two real processes converge to exactly one deterministic winner', async () => {
-    // Both alice and bob have merged PRs (eligible). Issue #42 starts unassigned.
-    // Two REAL bash processes run concurrently. The file-lock-aware fake-gh
-    // serializes mutations. Deterministic winner election via timeline event
-    // position must converge: exactly ONE assignee, ONE marker, durable history
-    // for the winner only, no unrelated state loss.
-    const { stateFile, pathWithFakeGh } = setupConcurrencyRepo({
-      issues: {
-        42: makeIssue({ number: 42, assignees: [], labels: ['bug'] }),
-      },
-      prs: {
-        100: makePR({ number: 100, author: 'alice', merged: true }),
-        101: makePR({ number: 101, author: 'bob', merged: true }),
-      },
-      labels: {
-        'auto-assigned': {
-          name: 'auto-assigned',
-          color: '0E8A16',
-          description: 'Assigned via /assign automation',
+// These execute the real bash /assign scripts against the fake-gh harness.
+// assign.yml and assign-stale-cleanup.yml run on ubuntu-latest only, and the
+// harness prepends a POSIX-style PATH entry for a shell-script `gh` stub, so on
+// Windows the real gh wins and demands GH_TOKEN. Structural assertions in these
+// files still run everywhere.
+const IS_WINDOWS = process.platform === 'win32';
+
+describe.skipIf(IS_WINDOWS)(
+  'H5: Concurrent same-issue /assign convergence',
+  () => {
+    it('two real processes converge to exactly one deterministic winner', async () => {
+      // Both alice and bob have merged PRs (eligible). Issue #42 starts unassigned.
+      // Two REAL bash processes run concurrently. The file-lock-aware fake-gh
+      // serializes mutations. Deterministic winner election via timeline event
+      // position must converge: exactly ONE assignee, ONE marker, durable history
+      // for the winner only, no unrelated state loss.
+      const { stateFile, pathWithFakeGh } = setupConcurrencyRepo({
+        issues: {
+          42: makeIssue({ number: 42, assignees: [], labels: ['bug'] }),
         },
-      },
-    });
+        prs: {
+          100: makePR({ number: 100, author: 'alice', merged: true }),
+          101: makePR({ number: 101, author: 'bob', merged: true }),
+        },
+        labels: {
+          'auto-assigned': {
+            name: 'auto-assigned',
+            color: '0E8A16',
+            description: 'Assigned via /assign automation',
+          },
+        },
+      });
 
-    const { results, finalState } = await runConcurrentAssign({
-      stateFile,
-      pathWithFakeGh,
-      issueNumber: 42,
-      commenters: ['alice', 'bob'],
-    });
+      const { results, finalState } = await runConcurrentAssign({
+        stateFile,
+        pathWithFakeGh,
+        issueNumber: 42,
+        commenters: ['alice', 'bob'],
+      });
 
-    const issue = stateIssue(finalState, '42');
+      const issue = stateIssue(finalState, '42');
 
-    // Exactly ONE assignee
-    expect(issue._assignees).toHaveLength(1);
+      // Exactly ONE assignee
+      expect(issue._assignees).toHaveLength(1);
 
-    // The winner is the one whose assigned event is earliest in timeline position
-    const timeline42 = asRecord(finalState['timeline'])['42'];
-    const assignedEvents = asRecordArray(timeline42).filter((e) => {
-      const evt = asRecord(e);
-      const actor = asRecord(evt['actor']);
-      return (
-        asString(evt['event']) === 'assigned' &&
-        asString(actor['login']) === 'github-actions[bot]'
+      // The winner is the one whose assigned event is earliest in timeline position
+      const timeline42 = asRecord(finalState['timeline'])['42'];
+      const assignedEvents = asRecordArray(timeline42).filter((e) => {
+        const evt = asRecord(e);
+        const actor = asRecord(evt['actor']);
+        return (
+          asString(evt['event']) === 'assigned' &&
+          asString(actor['login']) === 'github-actions[bot]'
+        );
+      });
+      expect(assignedEvents.length).toBeGreaterThanOrEqual(1);
+
+      // Determine the winner by earliest assigned event position
+      const winnerLogin = issue._assignees[0];
+      expect(['alice', 'bob']).toContain(winnerLogin);
+
+      // Exactly ONE auto-assigned marker
+      const autoLabels = issue._label_names.filter(
+        (l: string) => l === 'auto-assigned',
       );
-    });
-    expect(assignedEvents.length).toBeGreaterThanOrEqual(1);
+      expect(autoLabels).toHaveLength(1);
 
-    // Determine the winner by earliest assigned event position
-    const winnerLogin = issue._assignees[0];
-    expect(['alice', 'bob']).toContain(winnerLogin);
+      // Durable history label for winner only
+      const winnerHistory = `asnhist--${winnerLogin}`;
+      const loserLogin = winnerLogin === 'alice' ? 'bob' : 'alice';
+      const labels = stateLabels(finalState);
+      expect(labels[winnerHistory]).toBeDefined();
+      expect(labels[`asnhist--${loserLogin}`]).toBeUndefined();
 
-    // Exactly ONE auto-assigned marker
-    const autoLabels = issue._label_names.filter(
-      (l: string) => l === 'auto-assigned',
-    );
-    expect(autoLabels).toHaveLength(1);
+      // Unrelated labels preserved
+      expect(issue._label_names).toContain('bug');
 
-    // Durable history label for winner only
-    const winnerHistory = `asnhist--${winnerLogin}`;
-    const loserLogin = winnerLogin === 'alice' ? 'bob' : 'alice';
-    const labels = stateLabels(finalState);
-    expect(labels[winnerHistory]).toBeDefined();
-    expect(labels[`asnhist--${loserLogin}`]).toBeUndefined();
+      // At least one process must succeed (exit 0), the loser exits nonzero
+      const exitCodes = results.map((r) => r.status);
+      expect(exitCodes).toContain(0);
+    }, 60000);
 
-    // Unrelated labels preserved
-    expect(issue._label_names).toContain('bug');
-
-    // At least one process must succeed (exit 0), the loser exits nonzero
-    const exitCodes = results.map((r) => r.status);
-    expect(exitCodes).toContain(0);
-  }, 60000);
-
-  it('three real processes converge to exactly one deterministic winner', async () => {
-    const { stateFile, pathWithFakeGh } = setupConcurrencyRepo({
-      issues: {
-        42: makeIssue({ number: 42, assignees: [], labels: ['bug'] }),
-      },
-      prs: {
-        100: makePR({ number: 100, author: 'alice', merged: true }),
-        101: makePR({ number: 101, author: 'bob', merged: true }),
-        102: makePR({ number: 102, author: 'charlie', merged: true }),
-      },
-      labels: {
-        'auto-assigned': {
-          name: 'auto-assigned',
-          color: '0E8A16',
-          description: 'Assigned via /assign automation',
+    it('three real processes converge to exactly one deterministic winner', async () => {
+      const { stateFile, pathWithFakeGh } = setupConcurrencyRepo({
+        issues: {
+          42: makeIssue({ number: 42, assignees: [], labels: ['bug'] }),
         },
-      },
-    });
+        prs: {
+          100: makePR({ number: 100, author: 'alice', merged: true }),
+          101: makePR({ number: 101, author: 'bob', merged: true }),
+          102: makePR({ number: 102, author: 'charlie', merged: true }),
+        },
+        labels: {
+          'auto-assigned': {
+            name: 'auto-assigned',
+            color: '0E8A16',
+            description: 'Assigned via /assign automation',
+          },
+        },
+      });
 
-    const { results, finalState } = await runConcurrentAssign({
-      stateFile,
-      pathWithFakeGh,
-      issueNumber: 42,
-      commenters: ['alice', 'bob', 'charlie'],
-    });
+      const { results, finalState } = await runConcurrentAssign({
+        stateFile,
+        pathWithFakeGh,
+        issueNumber: 42,
+        commenters: ['alice', 'bob', 'charlie'],
+      });
 
-    const issue = finalState.issues['42'];
+      const issue = finalState.issues['42'];
 
-    // Exactly ONE assignee despite 3 contenders
-    expect(issue._assignees).toHaveLength(1);
+      // Exactly ONE assignee despite 3 contenders
+      expect(issue._assignees).toHaveLength(1);
 
-    const winnerLogin = issue._assignees[0];
-    expect(['alice', 'bob', 'charlie']).toContain(winnerLogin);
+      const winnerLogin = issue._assignees[0];
+      expect(['alice', 'bob', 'charlie']).toContain(winnerLogin);
 
-    // Exactly ONE marker
-    const autoLabels = issue._label_names.filter(
-      (l: string) => l === 'auto-assigned',
-    );
-    expect(autoLabels).toHaveLength(1);
+      // Exactly ONE marker
+      const autoLabels = issue._label_names.filter(
+        (l: string) => l === 'auto-assigned',
+      );
+      expect(autoLabels).toHaveLength(1);
 
-    // Durable history for winner only (the winner's history label must exist;
-    // losers may or may not have one depending on timing, but winner MUST)
-    expect(finalState.labels[`asnhist--${winnerLogin}`]).toBeDefined();
-    for (const loser of ['alice', 'bob', 'charlie']) {
-      if (loser !== winnerLogin) {
-        expect(finalState.labels[`asnhist--${loser}`]).toBeUndefined();
+      // Durable history for winner only (the winner's history label must exist;
+      // losers may or may not have one depending on timing, but winner MUST)
+      expect(finalState.labels[`asnhist--${winnerLogin}`]).toBeDefined();
+      for (const loser of ['alice', 'bob', 'charlie']) {
+        if (loser !== winnerLogin) {
+          expect(finalState.labels[`asnhist--${loser}`]).toBeUndefined();
+        }
       }
-    }
 
-    // At least one process succeeds
-    const exitCodes = results.map((r) => r.status);
-    expect(exitCodes).toContain(0);
-  }, 60000);
+      // At least one process succeeds
+      const exitCodes = results.map((r) => r.status);
+      expect(exitCodes).toContain(0);
+    }, 60000);
 
-  it('concurrent bot assign with pre-existing human assignment: bot rolls back', async () => {
-    // Issue is ALREADY assigned to a human. Two bot processes attempt to assign.
-    // Both must see the human assignment and rollback. No winner.
-    const { stateFile, pathWithFakeGh } = setupConcurrencyRepo({
-      issues: {
-        42: makeIssue({
-          number: 42,
-          assignees: ['human-user'],
-          labels: ['bug'],
-        }),
-      },
-      prs: {
-        100: makePR({ number: 100, author: 'alice', merged: true }),
-        101: makePR({ number: 101, author: 'bob', merged: true }),
-      },
-      labels: {
-        'auto-assigned': {
-          name: 'auto-assigned',
-          color: '0E8A16',
-          description: 'Assigned via /assign automation',
+    it('concurrent bot assign with pre-existing human assignment: bot rolls back', async () => {
+      // Issue is ALREADY assigned to a human. Two bot processes attempt to assign.
+      // Both must see the human assignment and rollback. No winner.
+      const { stateFile, pathWithFakeGh } = setupConcurrencyRepo({
+        issues: {
+          42: makeIssue({
+            number: 42,
+            assignees: ['human-user'],
+            labels: ['bug'],
+          }),
         },
-      },
+        prs: {
+          100: makePR({ number: 100, author: 'alice', merged: true }),
+          101: makePR({ number: 101, author: 'bob', merged: true }),
+        },
+        labels: {
+          'auto-assigned': {
+            name: 'auto-assigned',
+            color: '0E8A16',
+            description: 'Assigned via /assign automation',
+          },
+        },
+      });
+
+      const { finalState } = await runConcurrentAssign({
+        stateFile,
+        pathWithFakeGh,
+        issueNumber: 42,
+        commenters: ['alice', 'bob'],
+      });
+
+      const issue = finalState.issues['42'];
+
+      // Human assignment preserved; neither bot user assigned
+      expect(issue._assignees).toContain('human-user');
+      expect(issue._assignees).not.toContain('alice');
+      expect(issue._assignees).not.toContain('bob');
+      // No auto-assigned marker
+      expect(issue._label_names).not.toContain('auto-assigned');
+    }, 60000);
+
+    it('single process still succeeds normally (no regression)', () => {
+      const repo = createFakeRepo(
+        defaultStateWith({
+          issues: { 42: makeIssue({ number: 42, assignees: [] }) },
+          prs: { 100: makePR({ number: 100, author: 'alice', merged: true }) },
+        }),
+      );
+
+      const result = repo.runAssign({ issueNumber: 42, commenter: 'alice' });
+
+      expect(result.status).toBe(0);
+      expect(stateIssue(result.state, '42')._assignees).toContain('alice');
+      expect(stateIssue(result.state, '42')._label_names).toContain(
+        'auto-assigned',
+      );
+      expect(stateLabels(result.state)['asnhist--alice']).toBeDefined();
     });
-
-    const { finalState } = await runConcurrentAssign({
-      stateFile,
-      pathWithFakeGh,
-      issueNumber: 42,
-      commenters: ['alice', 'bob'],
-    });
-
-    const issue = finalState.issues['42'];
-
-    // Human assignment preserved; neither bot user assigned
-    expect(issue._assignees).toContain('human-user');
-    expect(issue._assignees).not.toContain('alice');
-    expect(issue._assignees).not.toContain('bob');
-    // No auto-assigned marker
-    expect(issue._label_names).not.toContain('auto-assigned');
-  }, 60000);
-
-  it('single process still succeeds normally (no regression)', () => {
-    const repo = createFakeRepo(
-      defaultStateWith({
-        issues: { 42: makeIssue({ number: 42, assignees: [] }) },
-        prs: { 100: makePR({ number: 100, author: 'alice', merged: true }) },
-      }),
-    );
-
-    const result = repo.runAssign({ issueNumber: 42, commenter: 'alice' });
-
-    expect(result.status).toBe(0);
-    expect(stateIssue(result.state, '42')._assignees).toContain('alice');
-    expect(stateIssue(result.state, '42')._label_names).toContain(
-      'auto-assigned',
-    );
-    expect(stateLabels(result.state)['asnhist--alice']).toBeDefined();
-  });
-});
+  },
+);

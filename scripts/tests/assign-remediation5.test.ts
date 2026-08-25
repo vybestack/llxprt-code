@@ -47,7 +47,14 @@ function defaultStateWith(overrides: Record<string, unknown>) {
 // G1: state=all eligibility query
 // ===========================================================================
 
-describe('G1: state=all eligibility query', () => {
+// These execute the real bash /assign scripts against the fake-gh harness.
+// assign.yml and assign-stale-cleanup.yml run on ubuntu-latest only, and the
+// harness prepends a POSIX-style PATH entry for a shell-script `gh` stub, so on
+// Windows the real gh wins and demands GH_TOKEN. Structural assertions in these
+// files still run everywhere.
+const IS_WINDOWS = process.platform === 'win32';
+
+describe.skipIf(IS_WINDOWS)('G1: state=all eligibility query', () => {
   it('closed issue assignment qualifies (state=all, not default open)', () => {
     // The user's ONLY current non-PR assignment is a CLOSED issue. No static
     // backfill line and no history label exist. The current-assignment
@@ -146,7 +153,7 @@ describe('G1: state=all eligibility query', () => {
 // G1b: fake-gh search query and events fidelity
 // ===========================================================================
 
-describe('G1b: fake-gh search and events fidelity', () => {
+describe.skipIf(IS_WINDOWS)('G1b: fake-gh search and events fidelity', () => {
   it('search query splits on whitespace (not literal +)', () => {
     // The gh CLI query uses '+' as a space separator, which unquote_plus
     // converts to spaces. After that, split must be on whitespace only.
