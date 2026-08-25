@@ -45,6 +45,25 @@ context loss and get checked before the PR goes up.
    physical splice, avoids it. Verify with a timing-independent assertion
    (count operations, not wall clock) rather than assuming.
 
+   **MEASURED, and it is severe.** `tmp/oomproof/proof8.mjs` compares the landed
+   shape against a ring buffer at the cap `turn.ts` actually uses
+   (`MAX_DEBUG_RESPONSE_CHUNKS = 1024`):
+
+   ```
+   CAP=1000  chunks=200,000
+   splice+reindex :   13242 ms   reindexOps=199,000,000   retained=1000
+   ring buffer    :       2 ms   reindexOps=0             retained=1000
+   slowdown       : 5661.4x
+   ```
+
+   200,000 chunks is a modest stream; the incident produced millions. As landed
+   this converts the memory blowup into a 13-second-per-200k-chunk CPU stall,
+   which is arguably a worse failure mode: the runaway hangs the process instead
+   of crashing it, and it does so on the normal path too, not just under attack.
+   MUST FIX before the PR. Replace the physical splice + full reindex with a
+   ring buffer or a logical head offset so the steady-state cost is O(1) per
+   chunk, and assert operation counts rather than wall clock.
+
 6. **Confirm every cap value cannot affect a legitimate response.** Largest
    declared `maxOutputTokens` in the catalog is 128,000
    (`AnthropicModelData.ts:104`). Any cap near that is too tight.
