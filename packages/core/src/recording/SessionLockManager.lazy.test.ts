@@ -159,9 +159,13 @@ describe('SessionLockManager lazy loading @plan:PLAN-20260211-SESSIONRECORDING.P
       `const mod = require(${JSON.stringify(CORE_ROOT_PATH)});` +
         `(async () => {` +
         `const config = mod.resolveRetentionConfig({ enabled: false });` +
-        `const before = Object.keys(require.cache).some((loadedPath) => loadedPath.includes('janitor/sessionJanitor'));` +
-        `await mod.runSessionCleanup({ globalTempDir: '/tmp', config });` +
-        `const after = Object.keys(require.cache).some((loadedPath) => loadedPath.includes('janitor/sessionJanitor'));` +
+        // require.cache keys carry native separators, so the probe folds them
+        // to forward slashes before matching this path fragment. Without that
+        // the check is always false on Windows and `after` reads 0.
+        `const hasJanitor = () => Object.keys(require.cache).some((loadedPath) => loadedPath.replace(/\\\\/g, '/').includes('janitor/sessionJanitor'));` +
+        `const before = hasJanitor();` +
+        `await mod.runSessionCleanup({ globalTempDir: require('node:os').tmpdir(), config });` +
+        `const after = hasJanitor();` +
         `process.stdout.write(before ? '1' : '0');` +
         `process.stdout.write(after ? '1' : '0');` +
         `})();`,
