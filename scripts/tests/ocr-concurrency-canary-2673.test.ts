@@ -94,134 +94,131 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
 
   // These spawn the monitor and command-runner scripts embedded in ocr-review.yml, which runs on ubuntu-latest only and relies on POSIX SIGTERM for graceful shutdown. On Windows kill() terminates abruptly, so the child never flushes telemetry.json (ENOENT). The workflow-structure assertions in this file still run everywhere.
   const IS_WINDOWS = process.platform === 'win32';
+  const itMonitor = it.skipIf(IS_WINDOWS);
 
-  describe.skipIf(IS_WINDOWS)(
-    'dispatch-only loopback transport monitor',
-    () => {
-      it('is trusted inline workflow code around only the real review call', () => {
-        const start = stepNamed(
-          asRecord(codeReviewJob),
-          'Start OCR transport monitor',
-        );
-        const stop = stepNamed(
-          asRecord(codeReviewJob),
-          'Stop OCR transport monitor',
-        );
-        const review = stepNamed(asRecord(codeReviewJob), 'Run OpenCodeReview');
-        const stepsRaw = asRecord(codeReviewJob)['steps'];
-        const steps: WorkflowStep[] = [];
-        if (Array.isArray(stepsRaw)) {
-          for (const s of stepsRaw) {
-            if (s !== null && typeof s === 'object' && !Array.isArray(s)) {
-              steps.push(asRecord(s));
-            }
+  describe('dispatch-only loopback transport monitor', () => {
+    it('is trusted inline workflow code around only the real review call', () => {
+      const start = stepNamed(
+        asRecord(codeReviewJob),
+        'Start OCR transport monitor',
+      );
+      const stop = stepNamed(
+        asRecord(codeReviewJob),
+        'Stop OCR transport monitor',
+      );
+      const review = stepNamed(asRecord(codeReviewJob), 'Run OpenCodeReview');
+      const stepsRaw = asRecord(codeReviewJob)['steps'];
+      const steps: WorkflowStep[] = [];
+      if (Array.isArray(stepsRaw)) {
+        for (const s of stepsRaw) {
+          if (s !== null && typeof s === 'object' && !Array.isArray(s)) {
+            steps.push(asRecord(s));
           }
         }
-        expect(String(start.if)).toContain(
-          "github.event_name == 'workflow_dispatch'",
-        );
-        expect(String(stop.if)).toContain('always()');
-        expect(String(stop.if)).toContain(
-          "github.event_name == 'workflow_dispatch'",
-        );
-        const startIdx = steps.findIndex((s) => s === start);
-        const reviewIdx = steps.findIndex((s) => s === review);
-        const stopIdx = steps.findIndex((s) => s === stop);
-        expect(startIdx).toBeLessThan(reviewIdx);
-        expect(stopIdx).toBe(reviewIdx + 1);
-        expect(commandText(start)).toContain("server.listen(0, '127.0.0.1'");
-        expect(commandText(start)).toContain('for _ in $(seq 1 300); do');
-        expect(commandText(start)).not.toMatch(/checkout|pr-head|HEAD_SHA/);
-      });
+      }
+      expect(String(start.if)).toContain(
+        "github.event_name == 'workflow_dispatch'",
+      );
+      expect(String(stop.if)).toContain('always()');
+      expect(String(stop.if)).toContain(
+        "github.event_name == 'workflow_dispatch'",
+      );
+      const startIdx = steps.findIndex((s) => s === start);
+      const reviewIdx = steps.findIndex((s) => s === review);
+      const stopIdx = steps.findIndex((s) => s === stop);
+      expect(startIdx).toBeLessThan(reviewIdx);
+      expect(stopIdx).toBe(reviewIdx + 1);
+      expect(commandText(start)).toContain("server.listen(0, '127.0.0.1'");
+      expect(commandText(start)).toContain('for _ in $(seq 1 300); do');
+      expect(commandText(start)).not.toMatch(/checkout|pr-head|HEAD_SHA/);
+    });
 
-      it('proves the fresh OCR config cannot override the environment endpoint', () => {
-        const configure = stepNamed(
-          asRecord(codeReviewJob),
-          'Configure OCR LLM settings',
-        );
-        const run = commandText(configure);
-        const source = extractEmbeddedSource(
-          run,
-          'ocr-config-endpoint-preflight.cjs',
-          'PREFLIGHT',
-        );
-        return withTempDirectory(
-          'ocr-config-preflight-2673-',
-          (directory: string) => {
-            const scriptPath = path.join(directory, 'preflight.cjs');
-            const configPath = path.join(directory, 'config.json');
-            fs.writeFileSync(scriptPath, source);
-            fs.writeFileSync(
-              configPath,
-              JSON.stringify({
-                llm: { extra_body: '{}' },
-                language: 'English',
-              }),
-            );
+    it('proves the fresh OCR config cannot override the environment endpoint', () => {
+      const configure = stepNamed(
+        asRecord(codeReviewJob),
+        'Configure OCR LLM settings',
+      );
+      const run = commandText(configure);
+      const source = extractEmbeddedSource(
+        run,
+        'ocr-config-endpoint-preflight.cjs',
+        'PREFLIGHT',
+      );
+      return withTempDirectory(
+        'ocr-config-preflight-2673-',
+        (directory: string) => {
+          const scriptPath = path.join(directory, 'preflight.cjs');
+          const configPath = path.join(directory, 'config.json');
+          fs.writeFileSync(scriptPath, source);
+          fs.writeFileSync(
+            configPath,
+            JSON.stringify({
+              llm: { extra_body: '{}' },
+              language: 'English',
+            }),
+          );
 
-            expect(() =>
-              execFileSync(process.execPath, [scriptPath], {
-                env: {
-                  ...process.env,
-                  OCR_CONFIG_PATH: configPath,
-                  OCR_LLM_URL: 'https://environment-provider.invalid/v1',
-                },
-              }),
-            ).not.toThrow();
-            fs.writeFileSync(
-              configPath,
-              JSON.stringify({
-                llm: {
-                  provider: 'custom',
-                  url: 'https://configuration-provider.invalid/v1',
-                },
-              }),
-            );
-            expect(() =>
-              execFileSync(process.execPath, [scriptPath], {
-                env: {
-                  ...process.env,
-                  OCR_CONFIG_PATH: configPath,
-                  OCR_LLM_URL: 'https://environment-provider.invalid/v1',
-                },
-                stdio: 'pipe',
-              }),
-            ).toThrow();
-            expect(asOptionalRecord(configure.env)?.['OCR_LLM_URL']).toBe(
-              '${{ vars.OCR_LLM_URL }}',
-            );
-            expect(run).toContain('ocr-configured-settings.json');
-            expect(run).not.toContain('ocr-applied-llm-config.json');
-          },
-        );
-      });
+          expect(() =>
+            execFileSync(process.execPath, [scriptPath], {
+              env: {
+                ...process.env,
+                OCR_CONFIG_PATH: configPath,
+                OCR_LLM_URL: 'https://environment-provider.invalid/v1',
+              },
+            }),
+          ).not.toThrow();
+          fs.writeFileSync(
+            configPath,
+            JSON.stringify({
+              llm: {
+                provider: 'custom',
+                url: 'https://configuration-provider.invalid/v1',
+              },
+            }),
+          );
+          expect(() =>
+            execFileSync(process.execPath, [scriptPath], {
+              env: {
+                ...process.env,
+                OCR_CONFIG_PATH: configPath,
+                OCR_LLM_URL: 'https://environment-provider.invalid/v1',
+              },
+              stdio: 'pipe',
+            }),
+          ).toThrow();
+          expect(asOptionalRecord(configure.env)?.['OCR_LLM_URL']).toBe(
+            '${{ vars.OCR_LLM_URL }}',
+          );
+          expect(run).toContain('ocr-configured-settings.json');
+          expect(run).not.toContain('ocr-applied-llm-config.json');
+        },
+      );
+    });
 
-      it('keeps automatic/comment reviews direct and rewrites only dispatch review traffic', () => {
-        const review = stepNamed(asRecord(codeReviewJob), 'Run OpenCodeReview');
-        const expression = String(
-          asOptionalRecord(review.env)?.['OCR_LLM_URL'],
-        );
-        expect(expression).toContain(
-          "github.event_name == 'workflow_dispatch'",
-        );
-        expect(expression).toContain(
-          'steps.ocr-transport-monitor.outputs.proxy_url',
-        );
-        expect(expression).toContain('vars.OCR_LLM_URL');
-        for (const stepName of [
-          'Validate OCR configuration',
-          'Validate OCR LLM connectivity',
-          'Verify review scope includes changed tests',
-        ]) {
-          expect(
-            asOptionalRecord(
-              stepNamed(asRecord(codeReviewJob), stepName).env,
-            )?.['OCR_LLM_URL'],
-          ).toBe('${{ vars.OCR_LLM_URL }}');
-        }
-      });
+    it('keeps automatic/comment reviews direct and rewrites only dispatch review traffic', () => {
+      const review = stepNamed(asRecord(codeReviewJob), 'Run OpenCodeReview');
+      const expression = String(asOptionalRecord(review.env)?.['OCR_LLM_URL']);
+      expect(expression).toContain("github.event_name == 'workflow_dispatch'");
+      expect(expression).toContain(
+        'steps.ocr-transport-monitor.outputs.proxy_url',
+      );
+      expect(expression).toContain('vars.OCR_LLM_URL');
+      for (const stepName of [
+        'Validate OCR configuration',
+        'Validate OCR LLM connectivity',
+        'Verify review scope includes changed tests',
+      ]) {
+        expect(
+          asOptionalRecord(stepNamed(asRecord(codeReviewJob), stepName).env)?.[
+            'OCR_LLM_URL'
+          ],
+        ).toBe('${{ vars.OCR_LLM_URL }}');
+      }
+    });
 
-      it('uses canonical retry headers 0 and 1 while preserving streaming and stripping connection-nominated headers', async () => {
+    itMonitor(
+      'uses canonical retry headers 0 and 1 while preserving streaming and stripping connection-nominated headers',
+      async () => {
         const secret = 'Bearer transport-secret-2673';
         const body = '{"prompt":"sensitive prompt 2673"}';
         const result = await withOcrScenario(async (scope) => {
@@ -319,9 +316,12 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
         expect(persisted).not.toContain(body);
         expect(persisted).not.toContain('x-stainless-retry-count');
         expect(persisted).not.toMatch(/fingerprint|retry_delay/i);
-      });
+      },
+    );
 
-      it('counts every SDK retry request and every actual 429 response', async () => {
+    itMonitor(
+      'counts every SDK retry request and every actual 429 response',
+      async () => {
         const telemetry = await withOcrScenario(async (scope) => {
           let requestCount = 0;
           const upstream = http.createServer((request, response) => {
@@ -350,9 +350,12 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
         expect(telemetry.retry_events).toBe(3);
         expect(telemetry.http_429_responses).toBe(3);
         expect(telemetry.responses_by_status).toEqual({ 200: 1, 429: 3 });
-      });
+      },
+    );
 
-      it('counts a connection-error retry when the next SDK request reports retry count 1', async () => {
+    itMonitor(
+      'counts a connection-error retry when the next SDK request reports retry count 1',
+      async () => {
         const result = await withOcrScenario(async (scope) => {
           let requestCount = 0;
           const upstream = http.createServer((request, response) => {
@@ -400,9 +403,12 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
           retry_events: 1,
           responses_by_status: { 200: 1 },
         });
-      });
+      },
+    );
 
-      it('does not infer retries from concurrent or later identical header-0 requests', async () => {
+    itMonitor(
+      'does not infer retries from concurrent or later identical header-0 requests',
+      async () => {
         const telemetry = await withOcrScenario(async (scope) => {
           const pending: http.ServerResponse[] = [];
           let requestCount = 0;
@@ -443,9 +449,12 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
         expect(telemetry.http_429_responses).toBe(1);
         expect(telemetry.retry_events).toBe(0);
         expect(telemetry.total_requests).toBe(3);
-      });
+      },
+    );
 
-      it('records only aggregate malformed and missing retry-header counts', async () => {
+    itMonitor(
+      'records only aggregate malformed and missing retry-header counts',
+      async () => {
         const telemetry = await withOcrScenario(async (scope) => {
           const upstream = http.createServer((request, response) => {
             request.resume();
@@ -477,9 +486,12 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
           retry_count_header_malformed: 1,
         });
         expect(JSON.stringify(telemetry)).not.toContain('01');
-      });
+      },
+    );
 
-      it('streams delayed SSE responses and forwards chunked request bodies without buffering', async () => {
+    itMonitor(
+      'streams delayed SSE responses and forwards chunked request bodies without buffering',
+      async () => {
         const result = await withOcrScenario(async (scope) => {
           let upstreamCompleted = false;
           let receivedBody = '';
@@ -544,9 +556,12 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
         expect(result.responseBody).toBe('data: first\n\ndata: second\n\n');
         expect(result.firstChunkBeforeCompletion).toBe(true);
         expect(result.telemetry.responses_by_status).toEqual({ 200: 1 });
-      });
+      },
+    );
 
-      it('handles an upstream error after headers and partial body without crashing or double-counting', async () => {
+    itMonitor(
+      'handles an upstream error after headers and partial body without crashing or double-counting',
+      async () => {
         const partialSentinel = '{"partial":';
         const result = await withOcrScenario(async (scope) => {
           let triggerUpstreamReset: (() => void) | null = null;
@@ -655,9 +670,9 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
         expect(result.telemetry.upstream_errors).toBe(0);
         expect(result.telemetry.responses_by_status).toEqual({ 200: 1 });
         expect(result.telemetry.shutdown_complete).toBe(true);
-      });
-    },
-  );
+      },
+    );
+  });
 
   describe.skipIf(IS_WINDOWS)('synchronous OCR command wall timing', () => {
     function readTimingArtifact(timingPath: fs.PathOrFileDescriptor) {

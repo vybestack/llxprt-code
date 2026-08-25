@@ -82,7 +82,11 @@ function findBunExecutableForRuntimeTest(): string {
   if (result.error || result.status !== 0) {
     return '';
   }
-  return 'bun';
+  // Return the executable that was actually probed. Returning the bare string
+  // 'bun' would make the subprocesses below resolve whatever PATH provides,
+  // which is a different binary from the one this probe validated and does not
+  // resolve at all on Windows without shell:true.
+  return process.execPath;
 }
 
 const realBunForRuntimeTest = findBunExecutableForRuntimeTest();

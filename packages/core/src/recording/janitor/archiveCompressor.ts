@@ -292,7 +292,7 @@ async function tryReuseExistingArchive(
   if (verify.ok) {
     // Reused archive: fsync the directory to establish durability and preserve
     // the source recording chronology on the reused archive (finding C).
-    const durable = await fsyncDir(archiveDir);
+    const durable = await commitArchiveDurably(archiveDir, finalArchivePath);
     await applySourceMtime(finalArchivePath, sourceMtime);
     const archiveBytes = await physicalBytes(finalArchivePath);
     return {
@@ -361,7 +361,10 @@ async function finalizeArchive(
         sourceInfo.bytes,
       );
       if (ok.ok) {
-        const durable = await fsyncDir(archiveDir);
+        const durable = await commitArchiveDurably(
+          archiveDir,
+          finalArchivePath,
+        );
         await applySourceMtime(finalArchivePath, sourceMtime);
         const archiveBytes = await physicalBytes(finalArchivePath);
         return {
@@ -379,10 +382,10 @@ async function finalizeArchive(
   // ranking and minRetention apply by original session age.
   await applySourceMtime(finalArchivePath, sourceMtime);
 
-  // Item 6: fsync the archive directory after the rename to ensure the
-  // directory entry is durable.  If fsync fails, report durableCommit=false
-  // so the caller retains the source.
-  const durable = await fsyncDir(archiveDir);
+  // Item 6: flush after the rename so the archive is durable before the caller
+  // may unlink the source.  If the flush fails, report durableCommit=false so
+  // the source is retained.
+  const durable = await commitArchiveDurably(archiveDir, finalArchivePath);
   const archiveBytes = await physicalBytes(finalArchivePath);
   return {
     success: true,
@@ -497,24 +500,28 @@ function supportsDirectoryFsync(): boolean {
 }
 
 /**
- * Attempt to fsync a directory to establish durability (Item 6).
+ * Flush a freshly renamed archive so the reclamation engine may unlink its
+ * source (Item 6).
  *
- * On POSIX systems (Linux, macOS) this opens the directory read-only and calls
- * fsync, returning whether that succeeded.
+ * On POSIX this opens the containing directory read-only and fsyncs it, which
+ * is what makes the new directory entry survive a crash.
  *
- * Where directory fsync does not exist as a concept, the archive is still as
- * durable as the platform allows by this point: {@link streamCompress} fsyncs
- * the temp archive file before {@link finalizeArchive} renames it, so the
- * contents are on disk and the rename is the strongest ordering guarantee
- * available.  Report that as durable rather than blocking reclamation forever.
+ * Windows has no directory fsync, but reporting durability there without
+ * flushing anything would be a claim rather than a guarantee: Node does not
+ * expose `MOVEFILE_WRITE_THROUGH`, so `fsp.rename` is not itself write-through.
+ * Flush the renamed file instead — `FlushFileBuffers` on a file handle commits
+ * that file's data and its metadata, which is the strongest durability the
+ * platform exposes here. Either way the returned value reflects a flush that
+ * actually succeeded, so a failure still holds the source back.
  */
-async function fsyncDir(dirPath: string): Promise<boolean> {
-  if (!supportsDirectoryFsync()) {
-    return true;
-  }
+async function commitArchiveDurably(
+  archiveDir: string,
+  archivePath: string,
+): Promise<boolean> {
+  const target = supportsDirectoryFsync() ? archiveDir : archivePath;
   let fd: fsp.FileHandle | undefined;
   try {
-    fd = await fsp.open(dirPath, 'r');
+    fd = await fsp.open(target, 'r');
     await fd.sync();
     return true;
   } catch {
