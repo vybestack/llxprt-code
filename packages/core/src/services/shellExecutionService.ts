@@ -15,7 +15,10 @@ import type {
   ShellExecutionConfig,
   ShellOutputEvent,
 } from './shellExecutionTypes.js';
-import { ensurePromptvarsDisabled } from './shellOutputUtils.js';
+import {
+  ensurePromptvarsDisabled,
+  ensureNativeExitCodePropagated,
+} from './shellOutputUtils.js';
 import {
   SIGKILL_TIMEOUT_MS,
   isKillablePid,
@@ -93,7 +96,10 @@ export class ShellExecutionService {
     try {
       const isWindows = os.platform() === 'win32';
       const { executable, argsPrefix, shell } = getShellConfiguration();
-      const guardedCommand = ensurePromptvarsDisabled(commandToExecute, shell);
+      const guardedCommand = ensureNativeExitCodePropagated(
+        ensurePromptvarsDisabled(commandToExecute, shell),
+        shell,
+      );
       const spawnArgs = [...argsPrefix, guardedCommand];
 
       const envVars = this.sanitizeEnvironment(
@@ -148,7 +154,10 @@ export class ShellExecutionService {
     const cols = shellExecutionConfig.terminalWidth ?? 80;
     const rows = shellExecutionConfig.terminalHeight ?? 30;
     const { executable, argsPrefix, shell } = getShellConfiguration();
-    const guardedCommand = ensurePromptvarsDisabled(commandToExecute, shell);
+    const guardedCommand = ensureNativeExitCodePropagated(
+      ensurePromptvarsDisabled(commandToExecute, shell),
+      shell,
+    );
     const args = [...argsPrefix, guardedCommand];
 
     const envVars = this.sanitizeEnvironment(

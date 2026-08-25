@@ -622,7 +622,7 @@ describe('ShellExecutionService', () => {
 
       expect(mockPtySpawn).toHaveBeenCalledWith(
         'powershell.exe',
-        ['-NoProfile', '-Command', 'dir "foo bar"'],
+        ['-NoProfile', '-Command', expect.stringContaining('dir "foo bar"')],
         expect.any(Object),
       );
     });

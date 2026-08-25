@@ -474,12 +474,24 @@ describe('ShellExecutionService child_process fallback', () => {
 
       expect(mockCpSpawn).toHaveBeenCalledWith(
         'powershell.exe',
-        ['-NoProfile', '-Command', 'dir "foo bar"'],
+        ['-NoProfile', '-Command', expect.stringContaining('dir "foo bar"')],
         expect.objectContaining({
           shell: false,
           detached: false,
           windowsHide: true,
         }),
+      );
+
+      // Pin the full composed command through the service so the exit-code
+      // wiring is proven on non-Windows dev machines.
+      expect(mockCpSpawn).toHaveBeenCalledWith(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-Command',
+          '$global:LASTEXITCODE = 0;\ndir "foo bar"\nif ($?) { exit 0 }\nif ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\nexit 1',
+        ],
+        expect.anything(),
       );
     });
 
@@ -606,7 +618,7 @@ describe('ShellExecutionService child_process fallback', () => {
 
       expect(mockCpSpawn).toHaveBeenCalledWith(
         'powershell.exe',
-        ['-NoProfile', '-Command', 'echo hello'],
+        ['-NoProfile', '-Command', expect.stringContaining('echo hello')],
         expect.objectContaining({
           windowsHide: true,
         }),
