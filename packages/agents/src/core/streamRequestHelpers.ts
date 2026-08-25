@@ -56,6 +56,7 @@ export interface PreparedRequest {
 export function buildRequestContentsResult(
   userContents: IContent | IContent[],
   historyService: HistoryService,
+  historyOverride?: readonly IContent[],
 ): { contents: IContent[]; pending: IContent[] } {
   const inputArray = Array.isArray(userContents)
     ? userContents
@@ -69,7 +70,10 @@ export function buildRequestContentsResult(
     };
   });
   return {
-    contents: historyService.getCuratedForProvider(userIContents),
+    contents: historyService.getCuratedForProvider(
+      userIContents,
+      historyOverride,
+    ),
     pending: userIContents,
   };
 }
@@ -82,6 +86,16 @@ export function selectRequestTools(
   fallbackTools: unknown,
 ): unknown {
   return params.config?.tools ?? fallbackTools;
+}
+
+export function extractAllowedFunctionNames(
+  toolConfig: unknown,
+): string[] | undefined {
+  if (toolConfig === null || toolConfig === undefined) return undefined;
+  if (typeof toolConfig !== 'object') return undefined;
+  if (!('allowedFunctionNames' in toolConfig)) return undefined;
+  if (!Array.isArray(toolConfig.allowedFunctionNames)) return undefined;
+  return toolConfig.allowedFunctionNames;
 }
 
 /**

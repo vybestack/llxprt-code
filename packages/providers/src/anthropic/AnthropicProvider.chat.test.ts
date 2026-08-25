@@ -22,6 +22,7 @@ import {
   type AnthropicMessage,
   type AnthropicTestSetup,
 } from './test-utils/anthropicProviderTestSetup.js';
+import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
 
 // Shared mock instance for messages.create - using vi.hoisted so it's
 // available when vi.mock factories run.
@@ -87,6 +88,7 @@ void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
 
 void vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation(() => ({
+    ...createAnthropicRawPostTestAdapter(mockMessagesCreate),
     messages: { create: mockMessagesCreate },
     beta: {
       models: {
@@ -264,15 +266,15 @@ describe('AnthropicProvider', () => {
         },
       ]);
 
-      expect(mockAnthropicInstance.messages.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          model: 'claude-opus-5',
-          messages: [{ role: 'user', content: 'Say hello' }],
-          max_tokens: 32000,
-          stream: true,
-          system: expect.any(String),
-        }),
-      );
+      expect(
+        mockAnthropicInstance.messages.create.mock.calls[0][0],
+      ).toMatchObject({
+        model: 'claude-opus-5',
+        messages: [{ role: 'user', content: 'Say hello' }],
+        max_tokens: 32000,
+        stream: true,
+        system: expect.any(String),
+      });
     });
 
     it('should emit tool_result blocks for tool responses with text content', async () => {
@@ -541,22 +543,22 @@ describe('AnthropicProvider', () => {
         },
       ]);
 
-      expect(mockAnthropicInstance.messages.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          model: 'claude-opus-5',
-          messages: [{ role: 'user', content: 'What is the weather?' }],
-          max_tokens: 32000,
-          stream: true,
-          system: expect.any(String),
-          tools: [
-            {
-              name: 'get_weather',
-              description: 'Get the weather',
-              input_schema: { type: 'object', properties: {}, required: [] },
-            },
-          ],
-        }),
-      );
+      expect(
+        mockAnthropicInstance.messages.create.mock.calls[0][0],
+      ).toMatchObject({
+        model: 'claude-opus-5',
+        messages: [{ role: 'user', content: 'What is the weather?' }],
+        max_tokens: 32000,
+        stream: true,
+        system: expect.any(String),
+        tools: [
+          {
+            name: 'get_weather',
+            description: 'Get the weather',
+            input_schema: { type: 'object', properties: {}, required: [] },
+          },
+        ],
+      });
     });
 
     it('should handle API errors', async () => {

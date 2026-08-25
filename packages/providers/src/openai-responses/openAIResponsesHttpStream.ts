@@ -46,6 +46,17 @@ import {
 import { redactSensitiveHeaders, type DumpMode } from '../utils/dumpContext.js';
 import type { ResponsesExecutorDeps } from './openAIResponsesExecutor.js';
 import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';
+import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import {
+  BoundedJsonBody,
+  DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
+  DEFAULT_STREAMING_JSON_CHUNK_BYTES,
+} from '../utils/boundedJsonBody.js';
+
+export {
+  DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
+  DEFAULT_STREAMING_JSON_CHUNK_BYTES,
+} from '../utils/boundedJsonBody.js';
 
 /** Per-request context shared by the executor and the HTTP stream path. */
 export interface StreamResponsesParams {
@@ -66,6 +77,7 @@ export interface StreamResponsesParams {
   request: OpenAIResponsesRequest;
   includeThinkingInResponse: boolean;
   responsesStored: boolean;
+  mediaRequest: ResolvedMediaRequest;
   abortSignal?: AbortSignal;
   maxStreamingAttempts: number;
   streamRetryInitialDelayMs: number;
@@ -77,7 +89,7 @@ export interface StreamResponsesParams {
 interface FetchStreamParams {
   responsesURL: string;
   headers: Record<string, string>;
-  bodyBlob: Blob;
+  body: BoundedJsonBody;
   abortSignal?: AbortSignal;
   includeThinkingInResponse: boolean;
   responsesStored: boolean;
@@ -87,6 +99,28 @@ interface FetchStreamParams {
   onStreamLiveness?: NormalizedGenerateChatOptions['onStreamLiveness'];
 }
 
+function flattenTransportErrors(error: unknown): readonly unknown[] {
+  return error instanceof AggregateError
+    ? error.errors.flatMap((nested) => flattenTransportErrors(nested))
+    : [error];
+}
+
+function transportCleanupError(
+  transportError: unknown,
+  disposalError: unknown,
+  message: string,
+): AggregateError {
+  return new AggregateError(
+    [
+      ...new Set([
+        ...flattenTransportErrors(transportError),
+        ...flattenTransportErrors(disposalError),
+      ]),
+    ],
+    message,
+  );
+}
+
 export async function* streamOverHttp(
   params: StreamResponsesParams,
   deps: ResponsesExecutorDeps,
@@ -94,34 +128,65 @@ export async function* streamOverHttp(
   const contentType = params.isCodex
     ? 'application/json'
     : 'application/json; charset=utf-8';
-  const bodyBlob = new Blob([JSON.stringify(params.request)], {
-    type: contentType,
+  const body = new BoundedJsonBody(params.request, {
+    maxChunkBytes: DEFAULT_STREAMING_JSON_CHUNK_BYTES,
+    maxEnvelopeBytes: DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
   });
-  const headers = await buildResponsesHeaders(
-    params.apiKey,
-    contentType,
-    params.isCodex,
-    params.normalizedOptions,
-    deps,
+  const headers = {
+    ...(await buildResponsesHeaders(
+      params.apiKey,
+      contentType,
+      params.isCodex,
+      params.normalizedOptions,
+      deps,
+    )),
+    'Content-Length': String(body.byteLength),
+  };
+  deps.logger.debug(
+    () =>
+      `Request body transport: streaming-json, envelopeBytes=${body.byteLength}`,
   );
   deps.logger.debug(
     () => `Request body keys: ${JSON.stringify(Object.keys(params.request))}`,
   );
+  let transportError: unknown;
+  let disposalFailed = false;
+  let disposalError: unknown;
   try {
-    yield* fetchStreamWithRetries(
-      {
-        ...params,
-        responsesURL: `${params.baseURL}/responses`,
-        headers,
-        bodyBlob,
-        onStreamLiveness: params.normalizedOptions.onStreamLiveness,
-      },
-      deps,
-    );
+    try {
+      yield* fetchStreamWithRetries(
+        {
+          ...params,
+          responsesURL: `${params.baseURL}/responses`,
+          headers,
+          body,
+          onStreamLiveness: params.normalizedOptions.onStreamLiveness,
+        },
+        deps,
+      );
+    } catch (error) {
+      transportError = error;
+      await dumpErrorOnFailure(error, params, deps);
+      throw error;
+    } finally {
+      try {
+        await body.dispose(transportError);
+      } catch (error) {
+        disposalFailed = true;
+        disposalError = error;
+      }
+    }
   } catch (error) {
-    await dumpErrorOnFailure(error, params, deps);
+    if (disposalFailed) {
+      throw transportCleanupError(
+        error,
+        disposalError,
+        'OpenAI Responses HTTP transport and request cleanup failed',
+      );
+    }
     throw error;
   }
+  if (disposalFailed) throw disposalError;
 }
 
 export async function buildResponsesHeaders(
@@ -219,15 +284,31 @@ async function* fetchStreamWithRetries(
 async function fetchResponse(params: {
   responsesURL: string;
   headers: Record<string, string>;
-  bodyBlob: Blob;
+  body: BoundedJsonBody;
   abortSignal?: AbortSignal;
 }): Promise<Response> {
-  return fetch(params.responsesURL, {
+  const requestBody = params.body.createStreamHandle();
+  const requestInit: RequestInit & { duplex: 'half' } = {
     method: 'POST',
     headers: params.headers,
-    body: params.bodyBlob,
+    body: requestBody.stream,
     signal: params.abortSignal,
-  });
+    duplex: 'half',
+  };
+  try {
+    return await fetch(params.responsesURL, requestInit);
+  } catch (error) {
+    try {
+      await requestBody.dispose(error);
+    } catch (disposalError) {
+      throw transportCleanupError(
+        error,
+        disposalError,
+        'OpenAI Responses fetch and request cleanup failed',
+      );
+    }
+    throw error;
+  }
 }
 
 async function* parseSuccessfulResponse(

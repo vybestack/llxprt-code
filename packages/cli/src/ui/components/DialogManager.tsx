@@ -529,6 +529,7 @@ function renderSessionBrowserDialog(
         activeRecording={
           commandContext.recordingSwapCallbacks?.getCurrentRecording() ?? null
         }
+        mediaStore={config.getLocalMediaStore()}
         onSelect={handleSessionBrowserSelect}
         onClose={uiActions.closeSessionBrowserDialog}
       />

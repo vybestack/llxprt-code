@@ -15,6 +15,7 @@ import type {
   Logger,
   RecordingIntegration,
   SubagentManager,
+  ValidatedSessionMediaPackage,
   Todo, // Import shared command action return types from core
   ToolActionReturn,
   MessageActionReturn,
@@ -275,12 +276,19 @@ export interface ConfirmActionReturn {
  * @plan PLAN-20260214-SESSIONBROWSER.P18
  * @requirement REQ-DI-007
  */
-export interface PerformResumeActionReturn {
-  type: 'perform_resume';
-  sessionRef: string;
-  /** Whether the resume requires user confirmation (e.g., when replacing an active conversation). */
-  requiresConfirmation?: boolean;
-}
+export type PerformResumeActionReturn =
+  | {
+      type: 'perform_resume';
+      sessionRef: string;
+      sessionPackage?: never;
+      requiresConfirmation?: boolean;
+    }
+  | {
+      type: 'perform_resume';
+      sessionRef?: never;
+      sessionPackage: ValidatedSessionMediaPackage;
+      requiresConfirmation?: boolean;
+    };
 
 /**
  * Union of all slash command action return types.

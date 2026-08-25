@@ -34,6 +34,7 @@ export interface PromptEnvelopeProjection {
   readonly transportToken: object;
   readonly finalizedProjection: unknown;
   readonly legacyEstimate: () => Promise<number>;
+  readonly releaseIfUnsent?: () => Promise<void>;
 }
 
 export interface PromptEnvelopeEstimate {

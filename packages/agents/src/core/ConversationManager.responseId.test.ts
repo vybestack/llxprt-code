@@ -115,8 +115,8 @@ describe('ConversationManager records responseId into history @issue:207', () =>
       buildConversationManager(GENERATING_MODEL));
   });
 
-  it('records metadata.id when a responseId is passed', () => {
-    conversationManager.recordHistory(
+  it('records metadata.id when a responseId is passed', async () => {
+    await conversationManager.recordHistory(
       USER_INPUT,
       MODEL_OUTPUT,
       undefined,
@@ -131,8 +131,8 @@ describe('ConversationManager records responseId into history @issue:207', () =>
     expect(ai?.metadata?.responsesStored).toBeUndefined();
   });
 
-  it('does not set metadata.id when responseId is null', () => {
-    conversationManager.recordHistory(
+  it('does not set metadata.id when responseId is null', async () => {
+    await conversationManager.recordHistory(
       USER_INPUT,
       MODEL_OUTPUT,
       undefined,
@@ -146,8 +146,8 @@ describe('ConversationManager records responseId into history @issue:207', () =>
     expect(ai?.metadata?.id).toBeUndefined();
   });
 
-  it('does not set metadata.id when responseId is omitted (undefined)', () => {
-    conversationManager.recordHistory(USER_INPUT, MODEL_OUTPUT);
+  it('does not set metadata.id when responseId is omitted (undefined)', async () => {
+    await conversationManager.recordHistory(USER_INPUT, MODEL_OUTPUT);
 
     const all = historyService.getAll();
     const ai = all.find((c) => c.speaker === 'ai');
@@ -155,8 +155,8 @@ describe('ConversationManager records responseId into history @issue:207', () =>
     expect(ai?.metadata?.id).toBeUndefined();
   });
 
-  it('sets metadata.responsesStored when responsesStored is true', () => {
-    conversationManager.recordHistory(
+  it('sets metadata.responsesStored when responsesStored is true', async () => {
+    await conversationManager.recordHistory(
       USER_INPUT,
       MODEL_OUTPUT,
       undefined,
@@ -171,8 +171,8 @@ describe('ConversationManager records responseId into history @issue:207', () =>
     expect(ai?.metadata?.responsesStored).toBe(true);
   });
 
-  it('does not set metadata.responsesStored when responsesStored is false', () => {
-    conversationManager.recordHistory(
+  it('does not set metadata.responsesStored when responsesStored is false', async () => {
+    await conversationManager.recordHistory(
       USER_INPUT,
       MODEL_OUTPUT,
       undefined,
@@ -187,8 +187,8 @@ describe('ConversationManager records responseId into history @issue:207', () =>
     expect(ai?.metadata?.responsesStored).toBeUndefined();
   });
 
-  it('does not set metadata.id when responseId is an empty string', () => {
-    conversationManager.recordHistory(
+  it('does not set metadata.id when responseId is an empty string', async () => {
+    await conversationManager.recordHistory(
       USER_INPUT,
       MODEL_OUTPUT,
       undefined,

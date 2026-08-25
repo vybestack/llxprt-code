@@ -21,12 +21,14 @@ import type {
   MCPResource,
   MCPServerConfig,
   MessageBus,
+  LocalMediaStore,
   PolicyEngine,
   RedactionConfig,
   RuntimeProviderManager,
   SandboxConfig,
   SchedulerCallbacks,
   SchedulerOptions,
+  SessionRecordingService,
   ShellExecutionConfig,
   ShellReplacementMode,
   SkillManager,
@@ -36,6 +38,7 @@ import type {
   ImageOperationRunner,
   ToolSchedulerContract,
 } from '@vybestack/llxprt-code-core';
+import type { SessionPersistenceService } from '@vybestack/llxprt-code-core/storage/SessionPersistenceService.js';
 import type {
   DiscoveredMCPPrompt,
   MCPDiscoveryState,
@@ -140,7 +143,7 @@ export interface UiContentGeneratorConfig {
 export interface AgentClientSource {
   getAgentClient(): AgentClientContract;
   getAgentClientFactory?(): AgentClientFactory | undefined;
-  createDetachedAgentClient?(runtimeId?: string): AgentClientContract;
+  createDetachedAgentClient?(runtimeId?: string): Promise<AgentClientContract>;
 }
 
 /**
@@ -154,6 +157,10 @@ export interface SessionIdentity {
   getProjectRoot(): string;
   getWorkingDir(): string;
   getProjectTempDir(): string;
+  getLocalMediaStore(): LocalMediaStore;
+  getSessionRecordingService?(): SessionRecordingService | undefined;
+  getSessionRecordingQueueByteLimit(): number;
+  createSessionPersistenceService(sessionId: string): SessionPersistenceService;
   getLlxprtDir(): string;
 }
 
@@ -537,6 +544,12 @@ function buildSessionRuntime(source: StreamRuntimeBareSource): SessionIdentity {
     getProjectRoot: () => source.getProjectRoot(),
     getWorkingDir: () => source.getWorkingDir(),
     getProjectTempDir: () => source.getProjectTempDir(),
+    getLocalMediaStore: () => source.getLocalMediaStore(),
+    getSessionRecordingService: () => source.getSessionRecordingService?.(),
+    getSessionRecordingQueueByteLimit: () =>
+      source.getSessionRecordingQueueByteLimit(),
+    createSessionPersistenceService: (sessionId) =>
+      source.createSessionPersistenceService(sessionId),
     getLlxprtDir: () => source.getLlxprtDir(),
   };
 }

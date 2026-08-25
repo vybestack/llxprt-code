@@ -279,7 +279,7 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       harness.deps.performFallbackCompression.mockImplementation(
         async (_promptId, applyResult) => {
           estimateSpy.mockResolvedValue(50_000); // fits
-          applyResult([makeUserMessage('truncated history')]);
+          await applyResult([makeUserMessage('truncated history')]);
           return true;
         },
       );
@@ -350,7 +350,7 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       expect(harness.deps.performFallbackCompression).toHaveBeenCalled();
 
       expect(thrownError).toBeInstanceOf(Error);
-      expect(thrownError!.message).toContain(
+      expect(thrownError?.message).toContain(
         'Automatic compression failed before fallback',
       );
     });
@@ -394,10 +394,10 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       expect(harness.deps.performFallbackCompression).toHaveBeenCalled();
 
       expect(thrownError).toBeInstanceOf(Error);
-      expect(thrownError!.message).toContain(
+      expect(thrownError?.message).toContain(
         'Automatic compression failed before fallback',
       );
-      expect(thrownError!.message).toContain(
+      expect(thrownError?.message).toContain(
         'network error during compression',
       );
     });
@@ -450,10 +450,10 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
 
       expect(thrownError).toBeInstanceOf(Error);
       // Compression failure diagnostics surfaced
-      expect(thrownError!.message).toContain(
+      expect(thrownError?.message).toContain(
         'Automatic compression failed before fallback',
       );
-      expect(thrownError!.message).toContain(
+      expect(thrownError?.message).toContain(
         'Additional hard-limit compression attempt failed',
       );
     });
@@ -496,10 +496,10 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       }
 
       expect(thrownError).toBeInstanceOf(Error);
-      expect(thrownError!.message).toContain(
+      expect(thrownError?.message).toContain(
         'Truncation fallback failed during hard-limit enforcement',
       );
-      expect(thrownError!.message).toContain('truncation broke');
+      expect(thrownError?.message).toContain('truncation broke');
     });
   });
 
@@ -586,7 +586,7 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       harness.deps.performFallbackCompression.mockImplementation(
         async (_promptId, applyResult) => {
           estimateSpy.mockResolvedValue(50_000);
-          applyResult([makeUserMessage('truncated history')]);
+          await applyResult([makeUserMessage('truncated history')]);
           return true;
         },
       );
@@ -629,7 +629,7 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       harness.deps.performFallbackCompression.mockImplementation(
         async (_promptId, applyResult) => {
           estimateSpy.mockResolvedValue(50_000);
-          applyResult([makeUserMessage('truncated history')]);
+          await applyResult([makeUserMessage('truncated history')]);
           return true;
         },
       );
@@ -682,7 +682,7 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       expect(thrownError).toBeInstanceOf(Error);
       // The diagnostics should identify the skipped compression result so the
       // error is actionable.
-      expect(thrownError!.message).toContain('skipped_empty');
+      expect(thrownError?.message).toContain('skipped_empty');
     });
   });
 
@@ -733,7 +733,7 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       expect(compressionCallCount).toBe(2);
       expect(thrownError).toBeInstanceOf(Error);
       // The underlying cause must be preserved in actionable diagnostics.
-      expect(thrownError!.message).toContain(
+      expect(thrownError?.message).toContain(
         'underlying retry cause: network timeout',
       );
     });
@@ -840,24 +840,18 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       // it did NOT rethrow the raw compression error. The diagnostics surface
       // the compression failure as a structured field, not a raw throw.
       expect(thrownError).toBeInstanceOf(Error);
-      expect(thrownError!.message).toContain(
+      expect(thrownError?.message).toContain(
         'Automatic compression failed before fallback',
       );
-      expect(thrownError!.message).toContain('enforce compression failed');
+      expect(thrownError?.message).toContain('enforce compression failed');
     });
   });
 
   // -----------------------------------------------------------------------
-  // Finding 3 (CodeRabbit PR #2598): Data integrity bug — silent history loss
-  //
-  // If performFallbackCompression rejects AND restoring the original history
-  // fails, forceTruncation can leave historyService empty. A low projection
-  // against that empty history would then fit under the margin-adjusted limit,
-  // and enforce() would return "successfully" despite having lost all
-  // established history. This must be rejected, not silently accepted.
+  // Finding 3 (CodeRabbit PR #2598): Data integrity on publication failure
   // -----------------------------------------------------------------------
-  describe('data integrity: rejects instead of silently accepting lost history (CodeRabbit PR #2598)', () => {
-    it('throws when fallback rejects, history restoration fails, and empty-history projection fits', async () => {
+  describe('data integrity: rejects failed fallback publication (CodeRabbit PR #2598)', () => {
+    it('throws when fallback and original-history replacement both fail', async () => {
       runtimeContext = buildRuntimeContext(historyService, {
         contextLimit: STANDARD_CONTEXT_LIMIT,
         compressionThreshold: COMPRESSION_THRESHOLD,
@@ -869,22 +863,12 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
 
       const harness = buildEnforcerHarness(historyService, runtimeContext);
 
-      // Script the projection sequence so the real fallback stage is
-      // provably reached:
-      // 1. Initial — over-limit
-      // 2. Post-density — over-limit
-      // 3. Post-first-compression — over-limit, effective (>=5%) to avoid retry
-      // 4. Post-truncation — under-limit BUT history was lost
+      // Script the projection sequence so the real fallback stage is reached:
+      // initial, post-density, then an effective but still-over-limit result.
       const estimateSpy = vi.spyOn(historyService, 'estimateTokensForContents');
-      // completionBudget = 65_536, marginAdjustedLimit = 199_995
-      // estimate > 134_459 → over-limit
-      estimateSpy.mockResolvedValueOnce(150_000); // initial
-      estimateSpy.mockResolvedValueOnce(150_000); // post-density
-      // 150_000 + 65_536 = 215_536, need >=5% reduction: <= 139_223
-      // 135_000 + 65_536 = 200_536 > 199_995 (still over)
-      estimateSpy.mockResolvedValueOnce(135_000); // post-compression (effective, still over)
-      // Post-truncation: empty history fits, but history was lost
-      estimateSpy.mockResolvedValueOnce(50_000); // post-truncation
+      estimateSpy.mockResolvedValueOnce(150_000);
+      estimateSpy.mockResolvedValueOnce(150_000);
+      estimateSpy.mockResolvedValueOnce(135_000);
 
       harness.deps.performCompression.mockImplementation(async () => {
         historyService.clear();
@@ -892,19 +876,15 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
         return PerformCompressionResult.COMPRESSED;
       });
 
-      // Make addAll fail during fallback, so restoreHistory cannot apply
-      // either the new or backup history — leaving historyService empty.
-      const addAllSpy = vi
-        .spyOn(historyService, 'addAll')
-        .mockImplementation(() => {
-          throw new Error('history persistence layer down');
-        });
+      const replaceAllSpy = vi
+        .spyOn(historyService, 'replaceAll')
+        .mockRejectedValue(new Error('history persistence layer down'));
 
-      // The fallback rejects because restoreHistory throws when addAll fails
-      // for both new and backup history.
+      // The fallback rejects because the atomic replacement cannot publish
+      // either the truncated result or the requested restoration.
       harness.deps.performFallbackCompression.mockImplementation(
         async (_promptId, applyResult) => {
-          applyResult([makeUserMessage('truncated history')]);
+          await applyResult([makeUserMessage('truncated history')]);
           return true;
         },
       );
@@ -918,15 +898,15 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       } catch (error) {
         thrownError = error as Error;
       } finally {
-        addAllSpy.mockRestore();
+        replaceAllSpy.mockRestore();
       }
 
-      // Enforcement MUST reject rather than silently accept lost history.
+      // Enforcement must reject rather than accept an unpublished fallback.
       expect(thrownError).toBeInstanceOf(Error);
-      expect(thrownError!.message).toContain(
+      expect(thrownError?.message).toContain(
         'Truncation fallback failed during hard-limit enforcement',
       );
-      expect(thrownError!.message).toContain('history persistence layer down');
+      expect(thrownError?.message).toContain('history persistence layer down');
     });
   });
 });

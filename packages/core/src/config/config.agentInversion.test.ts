@@ -77,10 +77,12 @@ function createFakeAgentClient(): AgentClientContract {
     },
     getHistoryService: () => null,
     storeHistoryServiceForReuse: vi.fn(),
-    storeHistoryForLaterUse(storedHistory: ContractContent[]): void {
+    async storeHistoryForLaterUse(
+      storedHistory: ContractContent[],
+    ): Promise<void> {
       history.push(...storedHistory);
     },
-    dispose: vi.fn(),
+    dispose: vi.fn(async () => {}),
     setTools: vi.fn(async () => {}),
     clearTools: vi.fn(),
     updateSystemInstruction: vi.fn(async () => {}),

@@ -245,7 +245,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       let capturedMessages: unknown[] | undefined;
       mockGenerateText.mockImplementation(
         async (config: { messages: unknown[] }) => {
-          capturedMessages = config.messages;
+          capturedMessages = structuredClone(config.messages);
           return {
             text: 'Response',
             usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
@@ -295,7 +295,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       let capturedMessages: unknown[] | undefined;
       mockGenerateText.mockImplementation(
         async (config: { messages: unknown[] }) => {
-          capturedMessages = config.messages;
+          capturedMessages = structuredClone(config.messages);
           return {
             text: 'Response',
             usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
@@ -352,7 +352,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       let capturedMessages: unknown[] | undefined;
       mockGenerateText.mockImplementation(
         async (config: { messages: unknown[] }) => {
-          capturedMessages = config.messages;
+          capturedMessages = structuredClone(config.messages);
           return {
             text: 'Response',
             usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
@@ -582,7 +582,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       let capturedMessages: unknown[] | undefined;
       mockGenerateText.mockImplementation(
         async (config: { messages: unknown[] }) => {
-          capturedMessages = config.messages;
+          capturedMessages = structuredClone(config.messages);
           return {
             text: 'Response',
             usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
@@ -633,7 +633,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       let capturedMessages: unknown[] | undefined;
       mockGenerateText.mockImplementation(
         async (config: { messages: unknown[] }) => {
-          capturedMessages = config.messages;
+          capturedMessages = structuredClone(config.messages);
           return {
             text: 'Response',
             usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
@@ -682,7 +682,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       let capturedMessages: unknown[] | undefined;
       mockGenerateText.mockImplementation(
         async (config: { messages: unknown[] }) => {
-          capturedMessages = config.messages;
+          capturedMessages = structuredClone(config.messages);
           return {
             text: 'Response',
             usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
@@ -794,7 +794,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       let capturedMessages: unknown[] | undefined;
       mockGenerateText.mockImplementation(
         async (config: { messages: unknown[] }) => {
-          capturedMessages = config.messages;
+          capturedMessages = structuredClone(config.messages);
           return {
             text: 'Response',
             usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },

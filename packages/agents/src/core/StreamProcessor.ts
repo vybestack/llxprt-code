@@ -12,6 +12,7 @@ import type {
 import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { StreamOutputAccumulator } from './streamOutputAccumulator.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { MediaAdmissionRelease } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import {
   isRetryableError,
   retryWithBackoff,
@@ -40,12 +41,6 @@ import { logApiError } from './turnLogging.js';
 import { EmptyStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import { isTerminalRetryError } from './turnAbortHelpers.js';
 import {
-  extractResponseTextFromBlocks,
-  analyzeBlocksOutcome,
-  validateStreamCompletion,
-  recordHistoryWithUsage,
-} from './streamValidationHelpers.js';
-import {
   AgentExecutionStoppedError,
   AgentExecutionBlockedError,
 } from './chatSession.js';
@@ -66,17 +61,12 @@ import {
   resolveUserMemory,
   logOutgoingRequest,
   extractSystemInstructionText,
+  extractAllowedFunctionNames,
   type ToolGroupArray,
   type ToolSelectionHookResult,
 } from './streamRequestHelpers.js';
 import { fireBeforeModelHook } from './beforeModelHookFire.js';
-import {
-  trackPromptTokens,
-  isMissingFinishReason,
-  consolidateTextBlocks,
-  prepareHistoryUserInput,
-  clearMatchedEagerToolResponseCallIds,
-} from './streamResponseHelpers.js';
+import { trackPromptTokens } from './streamResponseHelpers.js';
 import {
   afterModelModifiedToChunk,
   afterModelBlockingToModelOutput,
@@ -85,40 +75,26 @@ import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.
 
 import { withCompressionCallbackCleanup } from './streamCleanup.js';
 import { stampTurnIdentityOnInput } from './turnIdentity.js';
+import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
+import {
+  admitStreamChunkForHistory,
+  turnMediaAdmissionContext,
+  type PreparedUserTurn,
+} from './mediaAdmissionSeam.js';
+import { finalizeStreamResponse } from './streamResponseFinalizer.js';
 
-/**
- * Extract the allowedFunctionNames array from a tool-config object.
- *
- * Returns `undefined` when the config is absent or does not carry an
- * `allowedFunctionNames` string array, otherwise returns the typed array.
- */
-function extractAllowedFunctionNames(
-  toolConfig: unknown,
-): string[] | undefined {
-  if (toolConfig === null || toolConfig === undefined) return undefined;
-  if (typeof toolConfig !== 'object') return undefined;
-  if (!('allowedFunctionNames' in toolConfig)) return undefined;
-  if (!Array.isArray(toolConfig.allowedFunctionNames)) return undefined;
-  return toolConfig.allowedFunctionNames;
+function isPreparedUserTurn(
+  value: IContent | IContent[] | PreparedUserTurn,
+): value is PreparedUserTurn {
+  return !Array.isArray(value) && 'userContents' in value;
 }
-
 export class StreamProcessor {
   private logger = new DebugLogger('llxprt:gemini:stream-processor');
   private eagerlyRecordedToolResponseCallIds = new Set<string>();
   private currentPromptEnvelopeEstimate: PromptEnvelopeEstimate | null = null;
 
-  /**
-   * Canonical turn id for the send in flight, minted before the request goes
-   * out so the token-usage record and the persisted turn name the same turn
-   * (#3130). Null before the first send.
-   */
-  private currentTurnId: string | null = null;
-
-  /**
-   * The promptId `currentTurnId` was minted for, so a retry of the same logical
-   * turn reuses that turn's identity instead of minting a second one (#3130).
-   */
-  private currentTurnPromptId: string | null = null;
+  /** Canonical turn identity retained across retries for each logical prompt. */
+  private readonly turnIdByPromptId = new Map<string, string>();
   private currentAttemptIndex = 0;
 
   getPromptEnvelopeEstimate(): PromptEnvelopeEstimate | null {
@@ -148,32 +124,50 @@ export class StreamProcessor {
     }
   }
 
+  releasePromptTurnIdentity(promptId: string): void {
+    this.turnIdByPromptId.delete(promptId);
+  }
+
   /** Resolves the provider, sends the request with retry, and returns a response stream. */
   async makeApiCallAndProcessStream(
     params: SendMessageParams,
     promptId: string,
-    userContent: IContent | IContent[],
+    userInput: IContent | IContent[] | PreparedUserTurn,
     attemptIndex?: number,
+    semanticMediaPurge?: SemanticMediaPurgeAttempt,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     this.currentPromptEnvelopeEstimate = null;
     this.currentAttemptIndex = attemptIndex ?? 0;
     const provider = this.providerResolver('stream');
 
     const providerBaseUrl = this.runtimeContext.state.baseUrl;
-
-    // Mint the canonical turn identity before the send and stamp it on the
-    // user content, so the token-usage record and the persisted turn agree
-    // (AC-1/AC-2, issue #3130). Minted once per logical turn, not per attempt:
-    // a discard-restart re-enters this method with the same promptId, and
-    // re-minting would give the retry a different turn_id from the attempt it
-    // replaced even though both describe the same conversation turn.
-    if (this.currentTurnPromptId !== promptId) {
-      this.currentTurnPromptId = promptId;
-      this.currentTurnId = this.historyService.generateTurnKey();
+    let prepared: PreparedUserTurn | undefined;
+    let providerUserContent: IContent | IContent[];
+    let historyUserContent: IContent | IContent[];
+    if (isPreparedUserTurn(userInput)) {
+      prepared = userInput;
+      providerUserContent = userInput.userIContents;
+      historyUserContent = userInput.userContents;
+    } else {
+      prepared = undefined;
+      providerUserContent = userInput;
+      historyUserContent = userInput;
     }
-    const stampedUserContent = stampTurnIdentityOnInput(userContent, {
+    const existingTurnId = (
+      Array.isArray(providerUserContent)
+        ? providerUserContent
+        : [providerUserContent]
+    ).find((content) => content.metadata?.turnId !== undefined)?.metadata
+      ?.turnId;
+    const turnId =
+      prepared?.turnId ??
+      existingTurnId ??
+      this.turnIdByPromptId.get(promptId) ??
+      this.historyService.generateTurnKey();
+    this.turnIdByPromptId.set(promptId, turnId);
+    const stampedUserContent = stampTurnIdentityOnInput(providerUserContent, {
       promptId,
-      turnId: this.currentTurnId ?? this.historyService.generateTurnKey(),
+      turnId,
     });
 
     this.logger.debug(
@@ -198,20 +192,33 @@ export class StreamProcessor {
       promptId,
       stampedUserContent,
       provider,
+      semanticMediaPurge,
     );
 
-    return this._createCancellableStream(streamResponse, stampedUserContent);
+    return this._createCancellableStream(
+      streamResponse,
+      historyUserContent,
+      prepared,
+      semanticMediaPurge,
+      turnId,
+    );
   }
 
   private _createCancellableStream(
     streamResponse: AsyncGenerator<ModelStreamChunk>,
     userContent: IContent | IContent[],
+    prepared: PreparedUserTurn | undefined,
+    semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
+    turnId: string,
   ): AsyncGenerator<ModelStreamChunk> {
     let processedStream: AsyncGenerator<ModelStreamChunk> | undefined;
     const ensureProcessedStream = (): AsyncGenerator<ModelStreamChunk> => {
       processedStream ??= this.processStreamResponse(
         streamResponse,
         userContent,
+        semanticMediaPurge,
+        turnId,
+        prepared,
       );
       return processedStream;
     };
@@ -268,9 +275,20 @@ export class StreamProcessor {
     promptId: string,
     userContent: IContent | IContent[],
     provider: IProvider,
+    semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
-    const apiCall = () =>
-      this._buildAndSendStreamRequest(params, promptId, userContent, provider);
+    let requestAttempt = 0;
+    const apiCall = () => {
+      if (requestAttempt > 0) semanticMediaPurge?.markRetryHandoff();
+      requestAttempt += 1;
+      return this._buildAndSendStreamRequest(
+        params,
+        promptId,
+        userContent,
+        provider,
+        semanticMediaPurge,
+      );
+    };
 
     return retryWithBackoff(apiCall, {
       onPersistent429: () =>
@@ -287,9 +305,10 @@ export class StreamProcessor {
     promptId: string,
     userContent: IContent | IContent[],
     provider: IProvider,
+    semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     const { contents: requestContents, pending: pendingUserIContents } =
-      this._buildRequestContents(userContent);
+      this._buildRequestContents(userContent, semanticMediaPurge);
 
     const configForHooks = this.runtimeContext.providerRuntime.config;
     const toolSelection = await this._applyToolSelectionHook(
@@ -470,7 +489,7 @@ export class StreamProcessor {
         requestContents: requestPayload.contents,
         tools: requestPayload.tools,
         systemInstruction: this.generationConfig.systemInstruction,
-        turnId: this.currentTurnId,
+        turnId: this.turnIdByPromptId.get(promptId) ?? null,
       });
 
       const streamResponse = provider.generateChatCompletion(prepared.options);
@@ -588,11 +607,18 @@ export class StreamProcessor {
     return { tools: toolsFromConfig, allowedFunctionNames: undefined };
   }
 
-  private _buildRequestContents(userContent: IContent | IContent[]): {
+  private _buildRequestContents(
+    userContent: IContent | IContent[],
+    semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
+  ): {
     contents: IContent[];
     pending: IContent[];
   } {
-    return buildRequestContentsResult(userContent, this.historyService);
+    return buildRequestContentsResult(
+      userContent,
+      this.historyService,
+      semanticMediaPurge?.requestHistory,
+    );
   }
 
   private async _handleBucketFailover(
@@ -798,107 +824,109 @@ export class StreamProcessor {
   async *processStreamResponse(
     streamResponse: AsyncGenerator<ModelStreamChunk>,
     userInput: IContent | IContent[],
+    semanticMediaPurge?: SemanticMediaPurgeAttempt,
+    capturedTurnId?: string,
+    preparedUserTurn?: PreparedUserTurn,
   ): AsyncGenerator<ModelStreamChunk> {
     const includeThoughts =
       this.runtimeContext.ephemerals.reasoning.includeInContext();
+    const turnId = capturedTurnId ?? this.historyService.generateTurnKey();
 
     const accumulator = new StreamOutputAccumulator();
-    for await (const chunk of streamResponse) {
-      const allowedToolNames = chunk.hookRestrictions?.allowedToolNames;
-      const filteredChunk: ModelStreamChunk = {
-        ...chunk,
-        content: {
+    const admissions: MediaAdmissionRelease[] = [];
+    let finalized = false;
+    let failureCleanupStarted = false;
+    try {
+      for await (const chunk of streamResponse) {
+        const allowedToolNames = chunk.hookRestrictions?.allowedToolNames;
+        const filteredContent: IContent = {
           ...chunk.content,
           blocks: filterHookRestrictedBlocks(
             chunk.content.blocks,
             allowedToolNames,
           ),
-        },
-      };
-      accumulator.add(filteredChunk);
-      yield filteredChunk;
+        };
+        const historyChunk = await admitStreamChunkForHistory(
+          this.runtimeContext,
+          chunk,
+          filteredContent,
+          turnId,
+        );
+        admissions.push({
+          contents: [historyChunk.content],
+          context: turnMediaAdmissionContext(turnId, 'provider-stream-output'),
+          mode: 'content',
+        });
+        if (historyChunk.afcHistory !== undefined) {
+          admissions.push({
+            contents: historyChunk.afcHistory,
+            context: turnMediaAdmissionContext(
+              turnId,
+              'provider-stream-afc-history',
+            ),
+            mode: 'contents',
+          });
+        }
+        accumulator.add(historyChunk);
+        yield { ...chunk, content: filteredContent };
+      }
+      await this._finalizeStreamProcessing(
+        accumulator.materialize(),
+        userInput,
+        includeThoughts,
+        semanticMediaPurge,
+        preparedUserTurn,
+        admissions,
+      );
+      finalized = true;
+    } catch (error: unknown) {
+      failureCleanupStarted = true;
+      await this._failStreamProcessing(error, admissions);
+    } finally {
+      if (!finalized && !failureCleanupStarted) {
+        await this.runtimeContext.mediaAdmission?.releaseAdmissions(admissions);
+      }
     }
-
-    await this._finalizeStreamProcessing(
-      accumulator.materialize(),
-      userInput,
-      includeThoughts,
-    );
   }
 
-  private async _finalizeStreamProcessing(
+  private async _failStreamProcessing(
+    error: unknown,
+    admissions: readonly MediaAdmissionRelease[],
+  ): Promise<never> {
+    try {
+      await this.runtimeContext.mediaAdmission?.releaseAdmissions(admissions);
+    } catch (cleanupError: unknown) {
+      throw new AggregateError(
+        [error, cleanupError],
+        'Stream processing failed and media cleanup was incomplete',
+      );
+    }
+    throw error;
+  }
+
+  private _finalizeStreamProcessing(
     acc: ModelOutput,
     userInput: IContent | IContent[],
     includeThoughts: boolean,
+    semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
+    preparedUserTurn: PreparedUserTurn | undefined,
+    mediaAdmissions: readonly MediaAdmissionRelease[],
   ): Promise<void> {
-    acc.content = {
-      ...acc.content,
-      blocks: consolidateTextBlocks(acc.content.blocks),
-    };
-    const finishReason = acc.finishReason;
-    const responseText = extractResponseTextFromBlocks(acc.content.blocks);
-    const outcome = analyzeBlocksOutcome(acc.content.blocks, includeThoughts);
-
-    if (isMissingFinishReason(finishReason)) {
-      this.logger.debug(
-        () =>
-          `[stream:terminal] stream ended without finishReason (hasToolCall=${String(outcome.hasToolCalls)}, hasTextResponse=${String(outcome.hasVisibleText)}, hasThinkingResponse=${String(outcome.hasThinking)}, responseTextLength=${responseText.length})`,
-      );
-    } else {
-      this.logger.debug(
-        () => `[stream:terminal] finalized stream with finishReason`,
-        {
-          finishReason,
-          hasToolCall: outcome.hasToolCalls,
-          hasTextResponse: outcome.hasVisibleText,
-          hasThinkingResponse: outcome.hasThinking,
-          responseTextLength: responseText.length,
-        },
-      );
-    }
-
-    validateStreamCompletion(
-      this.logger,
+    return finalizeStreamResponse({
+      logger: this.logger,
+      conversationManager: this.conversationManager,
+      historyService: this.historyService,
+      compressionHandler: this.compressionHandler,
+      runtimeContext: this.runtimeContext,
+      accumulated: acc,
       userInput,
-      outcome,
-      finishReason,
-      responseText,
-      acc.rawStopReason,
-    );
-
-    const preparedHistoryUserInput = prepareHistoryUserInput(
-      userInput,
-      this.eagerlyRecordedToolResponseCallIds,
-    );
-
-    if (acc.afcHistory !== undefined) {
-      acc.afcHistory = acc.afcHistory.filter(
-        (content: IContent) => content.blocks.length > 0,
-      );
-    }
-
-    const historyOptions = {
-      ...preparedHistoryUserInput.userInputFlags,
-      responseId: acc.responseId ?? acc.content.metadata?.id ?? null,
-      responsesStored: acc.content.metadata?.responsesStored ?? null,
-    };
-
-    try {
-      await recordHistoryWithUsage(
-        this.logger,
-        this.conversationManager,
-        this.historyService,
-        this.compressionHandler,
-        this.runtimeContext,
-        preparedHistoryUserInput.historyUserInput,
-        acc,
-        historyOptions,
-      );
-    } finally {
-      clearMatchedEagerToolResponseCallIds(
-        preparedHistoryUserInput.filteredResults,
+      includeThoughts,
+      semanticMediaPurge,
+      retryHandoff: this.currentAttemptIndex > 0,
+      eagerlyRecordedToolResponseCallIds:
         this.eagerlyRecordedToolResponseCallIds,
-      );
-    }
+      preparedUserTurn,
+      mediaAdmissions,
+    });
   }
 }

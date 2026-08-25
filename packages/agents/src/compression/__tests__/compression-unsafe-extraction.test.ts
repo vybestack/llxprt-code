@@ -155,7 +155,7 @@ describe('ProviderContentEnforcer envelope-based enforcement (issue #2304)', () 
     }
 
     expect(thrownError).toBeInstanceOf(Error);
-    const message = thrownError!.message;
+    const message = thrownError?.message;
     expect(message).toContain('reduced');
     expect(message).not.toContain('reduced 0 tokens');
   });
@@ -181,7 +181,7 @@ describe('ProviderContentEnforcer envelope-based enforcement (issue #2304)', () 
 
     harness.deps.performFallbackCompression.mockImplementation(
       async (_promptId, applyResult) => {
-        applyResult([makeUserMessage('truncated history')]);
+        await applyResult([makeUserMessage('truncated history')]);
         return true;
       },
     );
@@ -323,11 +323,11 @@ describe('ProviderContentEnforcer envelope-based enforcement (issue #2304)', () 
     }
 
     expect(thrownError).toBeInstanceOf(Error);
-    expect(thrownError!.message.toLowerCase()).toContain('unrecoverable');
-    expect(thrownError!.message.toLowerCase()).toContain(
+    expect(thrownError?.message.toLowerCase()).toContain('unrecoverable');
+    expect(thrownError?.message.toLowerCase()).toContain(
       'llm_request_boundary',
     );
-    expect(thrownError!.message.toLowerCase()).toContain('compression');
+    expect(thrownError?.message.toLowerCase()).toContain('compression');
   });
 
   it('returns contents as-is when pendingContents is undefined but under hard limit', async () => {
@@ -397,7 +397,7 @@ describe('ProviderContentEnforcer envelope-based enforcement (issue #2304)', () 
     }
 
     expect(thrownError).toBeInstanceOf(Error);
-    expect(thrownError!.message.toLowerCase()).toContain('unrecoverable');
+    expect(thrownError?.message.toLowerCase()).toContain('unrecoverable');
   });
 
   it('pure-prepend outcome (undefined pending) returns contents as-is INCLUDING preamble when under the limit', async () => {
@@ -460,8 +460,8 @@ describe('ProviderContentEnforcer envelope-based enforcement (issue #2304)', () 
     }
 
     expect(thrownError).toBeInstanceOf(Error);
-    expect(thrownError!.message.toLowerCase()).toContain('unrecoverable');
-    expect(thrownError!.message.toLowerCase()).toContain(
+    expect(thrownError?.message.toLowerCase()).toContain('unrecoverable');
+    expect(thrownError?.message.toLowerCase()).toContain(
       'llm_request_boundary',
     );
   });

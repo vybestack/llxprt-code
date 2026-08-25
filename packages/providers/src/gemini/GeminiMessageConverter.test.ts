@@ -5,7 +5,10 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  IContent,
+  MediaReferenceBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { convertHistoryToGeminiFormat } from './GeminiMessageConverter.js';
 
 describe('GeminiMessageConverter', () => {
@@ -94,5 +97,44 @@ describe('GeminiMessageConverter', () => {
         },
       },
     ]);
+  });
+  it('rejects unresolved media references at the public neutral conversion boundary', () => {
+    const contentId =
+      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const reference: MediaReferenceBlock = {
+      type: 'media',
+      mimeType: 'image/png',
+      encoding: 'reference',
+      contentId,
+      originalContentId: contentId,
+      selectedContentId: contentId,
+      originalObject: {
+        contentId,
+        mimeType: 'image/png',
+        byteLength: 3,
+        normalizedBase64Length: 4,
+      },
+      selectedObject: {
+        contentId,
+        mimeType: 'image/png',
+        byteLength: 3,
+        normalizedBase64Length: 4,
+      },
+      transformation: {
+        policyId: 'identity',
+        policyVersion: 1,
+        parameters: {},
+      },
+      byteLength: 3,
+      normalizedBase64Length: 4,
+      semanticMetadata: {},
+    };
+
+    expect(() =>
+      convertHistoryToGeminiFormat(
+        [{ speaker: 'human', blocks: [reference] }],
+        'gemini-2.5-flash',
+      ),
+    ).toThrow(`Unresolved media reference ${contentId}`);
   });
 });

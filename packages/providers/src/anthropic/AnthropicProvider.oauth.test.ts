@@ -22,6 +22,8 @@ import {
 
 // Shared mock instance for messages.create - using vi.hoisted so it's
 // available when vi.mock factories run.
+import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+
 const mockMessagesCreate = vi.fn();
 
 // Mock the ToolFormatter
@@ -84,6 +86,7 @@ void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
 
 void vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation(() => ({
+    ...createAnthropicRawPostTestAdapter(mockMessagesCreate),
     messages: { create: mockMessagesCreate },
     beta: {
       models: {

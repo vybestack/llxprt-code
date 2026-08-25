@@ -89,12 +89,13 @@ export async function estimateRequestTokens(
 
   if (tokenizer) {
     try {
-      return await estimateWithTokenizer(
+      const result = await estimateWithTokenizer(
         contents,
         modelName,
         tokenizer,
         providerName,
       );
+      return addReferenceMetadataTokens(contents, result);
     } catch (error) {
       if (tokenizer.fallbackPolicy === 'deny') {
         throw error;
@@ -114,9 +115,57 @@ export async function estimateRequestTokens(
   }
 
   const result = await estimateWithGeneric(contents, providerName);
-  return {
+  return addReferenceMetadataTokens(contents, {
     ...result,
     source: `${result.source} (tokenizer unavailable: ${tokenizerFailureModel})`,
+  });
+}
+
+function referenceMetadataCharacterEquivalent(block: unknown): number {
+  if (typeof block !== 'object' || block === null) return 0;
+  if (
+    Reflect.get(block, 'type') !== 'media' ||
+    Reflect.get(block, 'encoding') !== 'reference'
+  ) {
+    return 0;
+  }
+  const normalizedBase64Length = Reflect.get(block, 'normalizedBase64Length');
+  if (typeof normalizedBase64Length !== 'number') {
+    return 0;
+  }
+  const mimeType = Reflect.get(block, 'mimeType');
+  if (
+    typeof mimeType === 'string' &&
+    mimeType.toLowerCase().startsWith('image/') &&
+    Reflect.get(block, 'dimensions') !== undefined
+  ) {
+    return 0;
+  }
+  return Math.min(
+    Math.ceil(normalizedBase64Length / BASE64_MEDIA_CHAR_DIVISOR),
+    MEDIA_DATA_CHAR_CAP,
+  );
+}
+
+function addReferenceMetadataTokens(
+  contents: readonly IContent[],
+  result: EstimationResult,
+): EstimationResult {
+  let encodedCharacterEquivalent = 0;
+  for (const content of contents) {
+    if (!Array.isArray(content.blocks)) continue;
+    for (const block of content.blocks) {
+      encodedCharacterEquivalent += referenceMetadataCharacterEquivalent(block);
+    }
+  }
+  if (encodedCharacterEquivalent === 0) {
+    return result;
+  }
+  return {
+    ...result,
+    tokens:
+      result.tokens +
+      Math.ceil(encodedCharacterEquivalent / CHARS_PER_TOKEN_FALLBACK),
   };
 }
 

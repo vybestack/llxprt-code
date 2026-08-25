@@ -35,10 +35,13 @@ void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   isNetworkTransientError: vi.fn(() => false),
 }));
 
+import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+
 const mockMessagesCreate = vi.fn();
 
 void vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation(() => ({
+    ...createAnthropicRawPostTestAdapter(mockMessagesCreate),
     messages: {
       create: mockMessagesCreate,
     },

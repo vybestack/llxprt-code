@@ -252,8 +252,8 @@ describe('processKimiMedia', () => {
     expect(result.contents).toBe(contents);
   });
 
-  it('falls back to original contents when all uploads fail', async () => {
-    const { client, filesCreate } = createMockClient(async () => {
+  it('rejects instead of returning inline content when an upload fails', async () => {
+    const { client } = createMockClient(async () => {
       throw new Error('upload failed');
     });
     const contents: IContent[] = [
@@ -263,21 +263,14 @@ describe('processKimiMedia', () => {
       },
     ];
 
-    const result = await processKimiMedia(client, contents);
-
-    expect(filesCreate).toHaveBeenCalledTimes(1);
-    expect(result.fileReferenceText).toBe('');
-    expect(result.contents).toBe(contents);
+    await expect(processKimiMedia(client, contents)).rejects.toThrow(
+      'Kimi file upload failed for doc.pdf (application/pdf): upload failed',
+    );
   });
 
-  it('partially succeeds: uploaded blocks replaced, failed blocks preserved', async () => {
-    let callCount = 0;
-    const { client, filesCreate } = createMockClient(async () => {
-      callCount++;
-      if (callCount === 1) {
-        throw new Error('first fails');
-      }
-      return { id: 'file-good', bytes: 10 };
+  it('rejects a mixed upload batch when one selected upload fails', async () => {
+    const { client } = createMockClient(async () => {
+      throw new Error('first fails');
     });
     const contents: IContent[] = [
       {
@@ -286,15 +279,9 @@ describe('processKimiMedia', () => {
       },
     ];
 
-    const result = await processKimiMedia(client, contents);
-
-    expect(filesCreate).toHaveBeenCalledTimes(2);
-    expect(result.fileReferenceText).toContain('file-good');
-
-    // First block (failed) should remain a media block
-    expect(result.contents[0].blocks[0].type).toBe('media');
-    // Second block (succeeded) should be replaced with text
-    expect(result.contents[0].blocks[1].type).toBe('text');
+    await expect(processKimiMedia(client, contents)).rejects.toThrow(
+      'Kimi file upload failed for doc.pdf (application/pdf): first fails',
+    );
   });
 
   it('does not upload image blocks', async () => {

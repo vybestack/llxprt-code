@@ -251,6 +251,10 @@ export {
   getProviderKeyStorage,
   resetProviderKeyStorage,
 } from './storage/provider-key-storage.js';
+export * from './storage/local-media-store.js';
+export * from './storage/media-admission-service.js';
+export * from './storage/request-media-resolver.js';
+export * from './storage/media-lifecycle-metrics.js';
 
 // Export services
 export * from './services/fileDiscoveryService.js';
@@ -528,6 +532,7 @@ export * from './telemetry/uiTelemetry.js';
 export { sessionId } from './utils/session.js';
 // Export content interfaces
 export * from './services/history/IContent.js';
+export * from './services/history/semantic-media-purge.js';
 export { ContentConverters } from './services/history/ContentConverters.js';
 // Chronology trace shape (#1721) is part of the public surface so consumers
 // (e.g. the CLI /dumpcontext command) can type the trace without deep-importing.

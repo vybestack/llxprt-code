@@ -184,6 +184,15 @@ export interface ProfileEphemeralSettings {
   streamFirstResponseTimeoutMs?: number;
   'stream-idle-timeout-ms'?: number;
   streamIdleTimeoutMs?: number;
+  'image-payload-budget-bytes'?: number;
+  'media-store-quota-bytes'?: number;
+  'session-recording-queue-max-bytes'?: number;
+  'session-persistence-queue-max-bytes'?: number;
+  'provider-files'?: 'off' | 'session' | 'workspace';
+  'provider-files-retention-ms'?: number;
+  'provider-files-delete'?: 'delete' | 'retain';
+  'provider-files-zdr'?: 'allow-retention' | 'require';
+  'media.semantic-purge'?: 'off' | 'remove' | 'summary';
 }
 
 export type EphemeralSettings = ProfileEphemeralSettings;

@@ -14,40 +14,12 @@
  * limitations under the License.
  */
 
-import {
-  type IContent,
-  type ToolCallBlock,
-  type ToolResponseBlock,
-} from './IContent.js';
-import { EventEmitter } from 'events';
-// @plan:PLAN-20260603-ISSUE1584.P05 RuntimeTokenizerFactory used for injection path
-import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
-import type { RuntimeTokenizer as ITokenizer } from '../../runtime/contracts/RuntimeTokenizer.js';
-import { DebugLogger } from '../../debug/index.js';
-import { randomUUID } from 'crypto';
-import { canonicalizeToolCallId } from './canonicalToolIds.js';
-import type { DensityResult } from '../../core/compression/types.js';
-import {
-  estimateContentTokens as estimateContentTokensImpl,
-  estimateTokensForContents as estimateTokensForContentsImpl,
-  simpleTokenEstimateForText,
-  type TokenizerProvider,
-} from './historyTokenEstimation.js';
-import {
-  validateDensityResult,
-  applyDensityMutations,
-} from './densityValidation.js';
+import type { IContent, ToolCallBlock, ToolResponseBlock } from './IContent.js';
+import { estimateContentTokens as estimateContentTokensImpl } from './historyTokenEstimation.js';
 import {
   computeStatistics,
   type ConversationStatistics,
-  logContentAdded,
-  logQueuedDuringCompression,
 } from './curationDebugLogger.js';
-import {
-  type HistoryServiceEventEmitter,
-  type CompressionConfig,
-} from './historyEventTypes.js';
-import { getTokenizerForModel } from './historyTokenizerAdapter.js';
 import {
   collectRespondedCallIds,
   getMissingToolCalls,
@@ -62,646 +34,35 @@ import {
   summarizeOldHistory as summarizeOldHistoryHelper,
 } from './historyContextWindow.js';
 import {
-  ChronologyStamper,
   buildChronologyTrace,
   type ChronologyTraceEntry,
 } from './historyChronology.js';
+import { HistoryServiceCore } from './HistoryServiceCore.js';
+import { deepCloneWithoutCircularRefs } from './historyCloneUtils.js';
 
-// Preserve the CompressionConfig export from the same path for consumers.
-export type { CompressionConfig };
+export type {
+  CompressionConfig,
+  HistoryBatchOptions,
+  HistoryBatchParticipant,
+  HistoryBatchPublication,
+  HistoryMediaOwner,
+  HistoryOwnedMediaReservation,
+  PreparedHistoryBatchEffect,
+} from './HistoryServiceCore.js';
 
-import {
-  type MutationFailure,
-  combineMutationFailures,
-} from './historyMutationFailure.js';
-
-type QueuedHistoryMutation =
-  | { kind: 'synchronous'; execute: () => void }
-  | {
-      kind: 'asynchronous';
-      execute: () => Promise<void>;
-      resolve: () => void;
-      reject: (error: unknown) => void;
-    };
+function hasToolResponseType(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  return Reflect.get(value, 'type') === 'tool_response';
+}
 
 /**
- * Service for managing conversation history in a provider-agnostic way.
- * All history is stored as IContent. Providers are responsible for converting
- * to/from their own formats.
+ * Provider-neutral conversation history service.
+ *
+ * Mutation, ownership, chronology, and token-accounting mechanics live in the
+ * cohesive base implementation. This class owns history queries, lifecycle,
+ * compression coordination, and serialization.
  */
-export class HistoryService
-  extends EventEmitter
-  implements HistoryServiceEventEmitter
-{
-  private history: IContent[] = [];
-  private totalTokens: number = 0;
-  private baseTokenOffset: number = 0;
-  private tokenizerCache = new Map<string, ITokenizer>();
-  private tokenizerLock: Promise<void> = Promise.resolve();
-  private pendingTokenizerFailure: { error: unknown } | undefined;
-  private syncGeneration: number = 0;
-  private historyMutationInProgress = false;
-  private historyMutationQueue: QueuedHistoryMutation[] = [];
-  private logger = new DebugLogger('llxprt:history:service');
-
-  private chronology = new ChronologyStamper();
-
-  /**
-   * Monotonic cache anchor: the highest chronology `seq` that must remain in
-   * the preserved head across every subsequent middle-out compression. Once a
-   * head entry is preserved by one compression, no later compression may drop
-   * it, which keeps the provider-visible prefix byte-identical (#3070).
-   *
-   * Survives the compression clear/rebuild; reset explicitly by session-reset
-   * and history-restore paths.
-   */
-  private cacheAnchorSeq: number = 0;
-
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P05
-   * @requirement:REQ-DEP-001
-   * @pseudocode component-boundaries.md C-CB-01, lines 10-15
-   *
-   * Injected tokenizer factory. When provided, HistoryService uses the factory
-   * to obtain tokenizers instead of constructing provider tokenizers directly.
-   * This eliminates the core→providers import dependency on the injection path.
-   */
-  private tokenizerFactory?: RuntimeTokenizerFactory;
-  private activeTokenizationModel = 'gpt-4.1';
-  private activeTokenizationProvider?: string;
-
-  private static readonly COMPRESSION_QUEUE_HIGH_WATER = 4096;
-  private isCompressing: boolean = false;
-  private pendingOperations: Array<() => void> = [];
-  private pendingCompressionHighWaterReported: boolean = false;
-
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P05
-   * @requirement:REQ-DEP-001
-   * @pseudocode component-boundaries.md C-CB-01, lines 10-15
-   *
-   * Set the tokenizer factory for injection-based tokenizer resolution.
-   * When set, getTokenizerForModel will prefer the factory over
-   * constructing provider tokenizers directly.
-   */
-  setTokenizerFactory(factory: RuntimeTokenizerFactory): void {
-    this.tokenizerFactory = factory;
-    this.tokenizerCache.clear();
-  }
-
-  setActiveTokenizationTarget(
-    modelName: string,
-    activeProvider?: string,
-  ): void {
-    this.activeTokenizationModel = modelName;
-    this.activeTokenizationProvider = activeProvider;
-  }
-
-  /**
-   * Get or create tokenizer for a specific model.
-   *
-   * @plan:PLAN-20260603-ISSUE1584.P05
-   * @requirement:REQ-DEP-001
-   * @pseudocode component-boundaries.md C-CB-01, lines 10-15
-   *
-   * When a RuntimeTokenizerFactory is injected, it is preferred over
-   * direct provider tokenizer construction. This removes the core→providers
-   * dependency when using the injection path.
-   */
-  private getTokenizerForModel(
-    modelName: string,
-    activeProvider?: string,
-  ): ITokenizer {
-    return getTokenizerForModel(activeProvider, modelName, {
-      tokenizerCache: this.tokenizerCache,
-      tokenizerFactory: this.tokenizerFactory,
-    });
-  }
-
-  /**
-   * Generate a new canonical history tool ID.
-   * Format: hist_tool_<hash>
-   */
-  generateHistoryId(
-    turnKey: string,
-    callIndex: number,
-    providerName?: string,
-    rawId?: string,
-    toolName?: string,
-  ): string {
-    return canonicalizeToolCallId({
-      providerName,
-      rawId,
-      toolName,
-      turnKey,
-      callIndex,
-    });
-  }
-
-  /**
-   * Get a callback suitable for passing into converters
-   * which will generate normalized history IDs on demand.
-   */
-  getIdGeneratorCallback(turnKey?: string): () => string {
-    let callIndex = 0;
-    const stableTurnKey = turnKey ?? this.generateTurnKey();
-    return () => this.generateHistoryId(stableTurnKey, callIndex++);
-  }
-
-  generateTurnKey(): string {
-    return `turn_${randomUUID()}`;
-  }
-
-  /**
-   * Get the current total token count including base offset (system prompt).
-   *
-   * This value is used for compression threshold calculations and should always
-   * reflect the total context size that will be sent to the API.
-   *
-   * @returns baseTokenOffset + totalTokens (history tokens)
-   */
-  getTotalTokens(): number {
-    return this.baseTokenOffset + this.totalTokens;
-  }
-
-  getBaseTokenOffset(): number {
-    return this.baseTokenOffset;
-  }
-
-  async estimateTokensForText(
-    text: string,
-    modelName = this.activeTokenizationModel,
-  ): Promise<number> {
-    if (!text) {
-      return 0;
-    }
-
-    const tokenizer = this.getTokenizerForModel(
-      modelName,
-      this.activeTokenizationProvider,
-    );
-    try {
-      return await tokenizer.countTokens(text);
-    } catch (error) {
-      if (tokenizer.fallbackPolicy === 'deny') {
-        throw error;
-      }
-      this.logger.debug(
-        'Error counting tokens for raw text, using fallback:',
-        error,
-      );
-      return simpleTokenEstimateForText(text);
-    }
-  }
-
-  /**
-   * Set a base offset that is always included in the total token count.
-   * Useful for accounting for system prompts or other fixed overhead.
-   *
-   * The system prompt token count should be set once at chat start using this method.
-   * This offset is included in getTotalTokens() to ensure compression threshold
-   * calculations account for the full context size (system prompt + history).
-   *
-   * NOTE: The system prompt itself is NEVER compressed - only conversation history
-   * returned by getCurated() is subject to compression.
-   *
-   * @param offset - Number of tokens in the system prompt or fixed overhead
-   */
-  setBaseTokenOffset(offset: number): void {
-    const normalized = Math.max(0, Math.floor(offset));
-    const delta = normalized - this.baseTokenOffset;
-    this.baseTokenOffset = normalized;
-
-    if (delta !== 0) {
-      this.emit('tokensUpdated', {
-        totalTokens: this.getTotalTokens(),
-        addedTokens: delta,
-        contentId: null,
-      });
-    }
-  }
-
-  /**
-   * Sync the total token count to match actual prompt tokens from a provider.
-   * This adjusts the baseTokenOffset so estimates align with the real count.
-   */
-  syncTotalTokens(actualTotal: number): void {
-    if (!Number.isFinite(actualTotal)) {
-      this.logger.debug('Skipping syncTotalTokens for non-finite value', {
-        actualTotal,
-      });
-      return;
-    }
-
-    const normalized = Math.max(0, Math.floor(actualTotal));
-    const generation = this.syncGeneration;
-    this.observeTokenizerOperation(
-      this.runSerializedTokenOperation(() => {
-        if (generation !== this.syncGeneration) return;
-
-        const currentTotal = this.getTotalTokens();
-        const drift = normalized - currentTotal;
-
-        if (drift === 0) {
-          return;
-        }
-
-        this.baseTokenOffset += drift;
-
-        this.emit('tokensUpdated', {
-          totalTokens: this.getTotalTokens(),
-          addedTokens: drift,
-          contentId: null,
-        });
-      }),
-    );
-  }
-
-  private runSerializedTokenOperation<T>(
-    operation: () => T | Promise<T>,
-  ): Promise<T> {
-    const result = this.tokenizerLock.then(operation);
-    this.tokenizerLock = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    return result;
-  }
-
-  private observeTokenizerOperation(operation: Promise<void>): void {
-    void operation.catch((error: unknown) => {
-      this.pendingTokenizerFailure ??= { error };
-      this.logger.error('Asynchronous token accounting failed', error);
-    });
-  }
-
-  private invalidatePendingSyncs(): void {
-    this.syncGeneration++;
-  }
-
-  private runSynchronousHistoryMutation(execute: () => void): void {
-    if (this.historyMutationInProgress) {
-      this.historyMutationQueue.push({ kind: 'synchronous', execute });
-      return;
-    }
-
-    this.historyMutationInProgress = true;
-    let failure: MutationFailure = { failed: false };
-    try {
-      execute();
-    } catch (error: unknown) {
-      failure = { failed: true, error };
-    }
-    const queuedFailure = this.drainSynchronousHistoryMutations();
-    this.historyMutationInProgress = false;
-    this.processHistoryMutationQueue();
-
-    const combinedFailure = combineMutationFailures(failure, queuedFailure);
-    if (combinedFailure.failed) throw combinedFailure.error;
-  }
-
-  private drainSynchronousHistoryMutations(): MutationFailure {
-    let failure: MutationFailure = { failed: false };
-    while (this.historyMutationQueue[0]?.kind === 'synchronous') {
-      const mutation = this.historyMutationQueue.shift();
-      if (mutation?.kind !== 'synchronous') break;
-      try {
-        mutation.execute();
-      } catch (error: unknown) {
-        failure = combineMutationFailures(failure, { failed: true, error });
-      }
-    }
-    return failure;
-  }
-
-  private enqueueAsynchronousHistoryMutation(
-    execute: () => Promise<void>,
-  ): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.historyMutationQueue.push({
-        kind: 'asynchronous',
-        execute,
-        resolve,
-        reject,
-      });
-      this.processHistoryMutationQueue();
-    });
-  }
-
-  private processHistoryMutationQueue(): void {
-    if (this.historyMutationInProgress) return;
-    const mutation = this.historyMutationQueue.shift();
-    if (mutation === undefined) return;
-    if (mutation.kind === 'synchronous') {
-      this.runSynchronousHistoryMutation(mutation.execute);
-      return;
-    }
-
-    this.historyMutationInProgress = true;
-    void mutation.execute().then(
-      () =>
-        this.completeAsynchronousHistoryMutation(mutation, { failed: false }),
-      (error: unknown) =>
-        this.completeAsynchronousHistoryMutation(mutation, {
-          failed: true,
-          error,
-        }),
-    );
-  }
-
-  private completeAsynchronousHistoryMutation(
-    mutation: Extract<QueuedHistoryMutation, { kind: 'asynchronous' }>,
-    failure: MutationFailure,
-  ): void {
-    const queuedFailure = this.drainSynchronousHistoryMutations();
-    this.historyMutationInProgress = false;
-    const result = combineMutationFailures(failure, queuedFailure);
-    if (result.failed) mutation.reject(result.error);
-    else mutation.resolve();
-    this.processHistoryMutationQueue();
-  }
-
-  resetTokenAccounting(): void {
-    this.invalidatePendingSyncs();
-    this.baseTokenOffset = 0;
-    this.emit('tokensUpdated', {
-      totalTokens: this.getTotalTokens(),
-      addedTokens: 0,
-      contentId: null,
-    });
-  }
-
-  /**
-   * Add content to the history.
-   * Zero-block turns are rejected at insertion (issue #2410): they corrupt
-   * provider-facing history (z.ai rejects empty human turns with HTTP 400
-   * error 1213). All other content with a valid speaker is accepted.
-   */
-  add(content: IContent, modelName?: string): void {
-    if (this.isCompressing) {
-      logQueuedDuringCompression(this.logger, content);
-      this.queueCompressionOperation(() => {
-        this.runSynchronousHistoryMutation(() => {
-          this.addInternal(content, modelName);
-        });
-      });
-      return;
-    }
-
-    this.runSynchronousHistoryMutation(() => {
-      this.addInternal(content, modelName);
-    });
-  }
-
-  /**
-   * Queues an operation that arrived while compression held the history lock.
-   *
-   * Operations are never dropped and never rejected: `add()` is on the
-   * streaming path, so failing here would lose conversation content and could
-   * break a turn. `startCompression`/`endCompression` are balanced in a
-   * `finally` by the only caller (`CompressionHandler.performCompression`), so
-   * the lock is always released and the queue is bounded by how long a single
-   * compression takes. Crossing the high-water mark is reported once so an
-   * unbalanced lock would be diagnosable rather than silent (issue #2852).
-   */
-  private queueCompressionOperation(operation: () => void): void {
-    this.pendingOperations.push(operation);
-    if (
-      !this.pendingCompressionHighWaterReported &&
-      this.pendingOperations.length >=
-        HistoryService.COMPRESSION_QUEUE_HIGH_WATER
-    ) {
-      this.pendingCompressionHighWaterReported = true;
-      this.logger.error(
-        'History compression queue exceeded its high-water mark; the compression lock is being held for an unexpectedly long time. No operations are dropped.',
-        { pendingCount: this.pendingOperations.length },
-      );
-    }
-  }
-
-  private addInternal(content: IContent, modelName?: string): void {
-    // Reject zero-block turns: a Content with no blocks corrupts provider-
-    // facing history (notably z.ai rejects empty human turns with HTTP 400
-    // error 1213, issue #2410). This is a systemic safety net — earlier
-    // layers should prevent these from reaching history, but we enforce the
-    // invariant here as the last line of defense.
-    const hasValidSpeaker = ['human', 'ai', 'tool'].includes(content.speaker);
-    const hasBlocks =
-      Array.isArray(content.blocks) && content.blocks.length > 0;
-    const accepted = hasValidSpeaker && hasBlocks;
-
-    if (accepted) {
-      // Stamp chronology only once the content is known to be accepted, so a
-      // rejected turn never consumes a sequence number (#1721).
-      this.chronology.stamp(content);
-    }
-
-    logContentAdded(this.logger, content, modelName);
-
-    if (!accepted) {
-      this.logger.debug(
-        hasValidSpeaker
-          ? 'Content rejected - zero blocks (issue #2410):'
-          : 'Content rejected - invalid speaker:',
-        content.speaker,
-      );
-      return;
-    }
-
-    const generation = this.syncGeneration;
-    this.history.push(content);
-
-    try {
-      this.emit('contentAdded', content);
-    } catch (error: unknown) {
-      // Roll back the insertion. The consumed chronology sequence number is
-      // intentionally NOT reclaimed: sequence numbers are never reused, and
-      // the resulting gap truthfully records that an item was removed.
-      this.history.pop();
-      throw error;
-    }
-
-    // Update token count asynchronously but atomically
-    this.observeTokenizerOperation(
-      this.updateTokenCount(content, modelName, generation),
-    );
-  }
-
-  /**
-   * Atomically update token count for new content
-   */
-  private updateTokenCount(
-    content: IContent,
-    modelName?: string,
-    generation = this.syncGeneration,
-  ): Promise<void> {
-    return this.runSerializedTokenOperation(async () => {
-      // Always derive token counts from the stored content to avoid double counting
-      // when providers attach aggregate usage metadata (which already includes prompt tokens).
-      const defaultModel = modelName ?? this.activeTokenizationModel;
-      const contentTokens = await this.estimateContentTokens(
-        content,
-        defaultModel,
-      );
-      if (generation !== this.syncGeneration) return;
-
-      // Atomically update the total
-      this.totalTokens += contentTokens;
-
-      // Emit event with updated count
-      const eventData = {
-        totalTokens: this.getTotalTokens(),
-        addedTokens: contentTokens,
-        contentId: content.metadata?.id,
-      };
-
-      this.logger.debug('Emitting tokensUpdated:', eventData);
-
-      this.emit('tokensUpdated', eventData);
-    });
-  }
-
-  /**
-   * Estimate token count for content using tokenizer
-   */
-  private async estimateContentTokens(
-    content: IContent,
-    modelName: string,
-  ): Promise<number> {
-    return estimateContentTokensImpl(
-      content,
-      modelName,
-      this.tokenizerProvider(),
-      this.logger,
-    );
-  }
-
-  /** Provide the TokenizerProvider interface for the token estimation helpers. */
-  private tokenizerProvider(
-    activeProvider = this.activeTokenizationProvider,
-  ): TokenizerProvider {
-    return {
-      getTokenizerForModel: (modelName: string) =>
-        this.getTokenizerForModel(modelName, activeProvider),
-      activeProvider,
-    };
-  }
-
-  /**
-   * Add multiple contents to the history.
-   *
-   * Iterates a snapshot because `add` appends to `this.history`: if `contents`
-   * aliases the backing array (`getRawHistory()`), a live iterator would keep
-   * consuming its own appends and never terminate. `replaceAll` is already
-   * immune the same way — its `filter` produces a fresh array before use.
-   */
-  addAll(contents: readonly IContent[], modelName?: string): void {
-    for (const content of [...contents]) {
-      this.add(content, modelName);
-    }
-  }
-
-  async replaceAll(contents: IContent[], modelName?: string): Promise<void> {
-    const accepted = contents.filter(
-      (content) =>
-        ['human', 'ai', 'tool'].includes(content.speaker) &&
-        Array.isArray(content.blocks) &&
-        content.blocks.length > 0,
-    );
-    return this.enqueueAsynchronousHistoryMutation(() =>
-      this.replaceAllInternal(accepted, modelName),
-    );
-  }
-
-  private async replaceAllInternal(
-    accepted: IContent[],
-    modelName?: string,
-  ): Promise<void> {
-    await this.waitForTokenUpdates();
-    const replacementTokens = await this.estimateTokensForContents(
-      accepted,
-      modelName,
-    );
-    const previousHistory = this.history;
-    const previousTokens = this.totalTokens;
-    this.invalidatePendingSyncs();
-    // Uphold the chronology invariant on this insertion path too: items that
-    // already carry a marker keep it, and anything new is stamped (#1721).
-    for (const content of accepted) {
-      this.chronology.stamp(content);
-    }
-    this.history = [...accepted];
-    this.totalTokens = replacementTokens;
-    try {
-      this.emit('tokensUpdated', {
-        totalTokens: this.getTotalTokens(),
-        addedTokens: replacementTokens - previousTokens,
-        contentId: null,
-      });
-    } catch (error: unknown) {
-      this.invalidatePendingSyncs();
-      this.history = previousHistory;
-      this.totalTokens = previousTokens;
-      throw error;
-    }
-  }
-
-  /**
-   * Estimate total tokens for hypothetical contents without mutating history.
-   */
-  async estimateTokensForContents(
-    contents: IContent[],
-    modelName?: string,
-  ): Promise<number> {
-    return estimateTokensForContentsImpl(
-      contents,
-      modelName,
-      this.tokenizerProvider(),
-      this.logger,
-    );
-  }
-
-  /**
-   * Wait for any in-flight token updates to complete.
-   */
-  async waitForTokenUpdates(): Promise<void> {
-    await this.tokenizerLock;
-    const failure = this.pendingTokenizerFailure;
-    this.pendingTokenizerFailure = undefined;
-    if (failure !== undefined) throw failure.error;
-  }
-
-  /**
-   * Apply a density optimization result to the raw history.
-   *
-   * @plan PLAN-20260211-HIGHDENSITY.P08
-   * @requirement REQ-HD-003.1, REQ-HD-003.2, REQ-HD-003.3, REQ-HD-001.6, REQ-HD-001.7
-   * @pseudocode history-service.md lines 20-82
-   */
-  async applyDensityResult(result: DensityResult): Promise<void> {
-    validateDensityResult(result, this.history.length);
-    // Each density replacement takes over the chronology position of the item
-    // it replaces, so the surviving history keeps an unbroken sequence.
-    // densityValidation stays free of chronology knowledge.
-    for (const [index, replacement] of result.replacements) {
-      const replacedMarker = this.history[index].metadata?.chronology;
-      if (replacedMarker !== undefined) {
-        this.chronology.inherit(replacement, replacedMarker);
-      }
-    }
-    applyDensityMutations(this.history, result);
-
-    this.logger.debug('Density: applied result', {
-      replacements: result.replacements.size,
-      removals: result.removals.length,
-      newHistoryLength: this.history.length,
-      metadata: result.metadata,
-    });
-
-    // T1: Full recalculation through tokenizerLock
-    await this.recalculateTotalTokens();
-  }
-
+export class HistoryService extends HistoryServiceCore {
   /**
    * Immutably replace a single tool_response block with a replacement
    * tool_response block, preserving callId/toolName invariants.
@@ -739,12 +100,7 @@ export class HistoryService
     if (target.type !== 'tool_response') {
       return false;
     }
-    // Runtime invariant: the replacement MUST be a tool_response at runtime,
-    // even though the TypeScript type already constrains it. A malformed
-    // object with matching callId/toolName but wrong type (or missing type)
-    // could slip through at runtime and corrupt tool-call/response pairing.
-    const replacementType = (replacement as { type?: unknown }).type;
-    if (replacementType !== 'tool_response') {
+    if (!hasToolResponseType(replacement)) {
       return false;
     }
     if (
@@ -763,15 +119,8 @@ export class HistoryService
     try {
       await this.recalculateTotalTokens(modelName);
     } catch (error) {
-      // Restore BOTH invariants: the history array AND the token accounting.
-      // recalculateTotalTokens may have already mutated this.totalTokens to
-      // reflect the replacement content before a listener/event error aborted
-      // the emit. Leaving totalTokens stale would corrupt the token budget.
       this.history[entryIndex] = previousEntry;
       this.totalTokens = previousTotalTokens;
-      // Best-effort notification so healthy listeners observe the rollback.
-      // A broken listener that originally caused the failure must not mask
-      // the original error.
       try {
         this.emit('tokensUpdated', {
           totalTokens: this.getTotalTokens(),
@@ -867,6 +216,9 @@ export class HistoryService
     this.tokenizerCache.clear();
     this.tokenizerLock = Promise.resolve();
     this.pendingTokenizerFailure = undefined;
+    if (this.mediaOwner !== undefined) {
+      this.enqueueSynchronousOwnershipReleaseAll();
+    }
     // Chronology counters are intentionally NOT reset: seq must never be reused
     // (NG8) so that items added after dispose() never collide with earlier ones.
   }
@@ -875,20 +227,19 @@ export class HistoryService
    * Clear all history
    */
   clear(): void {
-    // If compression is active, queue this operation
+    const clearAndRelease = (): void => {
+      this.runSynchronousHistoryMutation(() => {
+        this.clearInternal();
+      });
+      this.enqueueSynchronousOwnershipReleaseAll();
+    };
     if (this.isCompressing) {
       this.logger.debug('Queueing clear operation during compression');
-      this.queueCompressionOperation(() => {
-        this.runSynchronousHistoryMutation(() => {
-          this.clearInternal();
-        });
-      });
+      this.queueCompressionOperation(clearAndRelease);
       return;
     }
 
-    this.runSynchronousHistoryMutation(() => {
-      this.clearInternal();
-    });
+    clearAndRelease();
   }
 
   private clearInternal(): void {
@@ -937,7 +288,9 @@ export class HistoryService
   removeLastIfMatches(content: IContent): boolean {
     const last = this.history[this.history.length - 1];
     if (last === content) {
+      const previous = [...this.history];
       this.history.pop();
+      this.enqueueSynchronousOwnershipReconcile(previous, () => this.history);
       return true;
     }
     return false;
@@ -945,8 +298,10 @@ export class HistoryService
 
   /** Pop the last content from history. */
   pop(): IContent | undefined {
+    const previous = [...this.history];
     const removed = this.history.pop();
     if (removed) {
+      this.enqueueSynchronousOwnershipReconcile(previous, () => this.history);
       // Recalculate tokens since we removed content
       // This is less efficient but ensures accuracy
       this.observeTokenizerOperation(this.recalculateTokens());
@@ -1019,9 +374,9 @@ export class HistoryService
     return this.history.length === 0;
   }
 
-  /** Clone the history (deep copy). */
+  /** Clone the history without serializing immutable media payloads. */
   clone(): IContent[] {
-    return JSON.parse(JSON.stringify(this.history));
+    return deepCloneWithoutCircularRefs(this.history);
   }
 
   /**
@@ -1067,9 +422,21 @@ export class HistoryService
   /**
    * Get curated history with circular references removed for providers.
    * This ensures the history can be safely serialized and sent to providers.
+   * A request-scoped override lets semantic purge prepare an isolated candidate
+   * without mutating the live conversation before provider success.
    */
-  getCuratedForProvider(tailContents: IContent[] = []): IContent[] {
-    const curated = this.getCurated();
+  getCuratedForProvider(
+    tailContents: IContent[] = [],
+    historyOverride?: readonly IContent[],
+  ): IContent[] {
+    const curated =
+      historyOverride === undefined
+        ? this.getCurated()
+        : buildCuratedHistory(
+            this.logger,
+            [...historyOverride],
+            this.isCompressing,
+          );
     return buildProviderContent(curated, tailContents, this.logger);
   }
 

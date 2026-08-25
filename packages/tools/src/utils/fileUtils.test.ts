@@ -365,8 +365,15 @@ describe('processSingleFileContent image resizing', () => {
     const metadata = await sharp(resized).metadata();
 
     expect(metadata.autoOrient).toEqual({ width: 120, height: 60 });
-    expect(result.llmContent.inlineData?.mimeType).toBe('image/png');
     expect(result.llmContent.inlineData?.displayName).toBe('large.png');
+    expect(
+      Buffer.from(result.llmContent.inlineData?.originalData ?? '', 'base64'),
+    ).toEqual(original);
+    expect(result.llmContent.inlineData?.transformation).toEqual({
+      policyId: 'image-resize',
+      policyVersion: 1,
+      parameters: { maxLongEdge: 120 },
+    });
   });
 
   it('keeps compliant image bytes unchanged through the shared media path', async () => {
@@ -397,6 +404,8 @@ describe('processSingleFileContent image resizing', () => {
     expect(
       Buffer.from(result.llmContent.inlineData?.data ?? '', 'base64'),
     ).toEqual(original);
+    expect(result.llmContent.inlineData?.originalData).toBeUndefined();
+    expect(result.llmContent.inlineData?.transformation).toBeUndefined();
   });
 
   it('does not apply image policy to SVG or other media', async () => {

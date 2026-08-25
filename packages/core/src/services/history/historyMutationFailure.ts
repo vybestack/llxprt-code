@@ -18,6 +18,15 @@ export type MutationFailure =
   | { failed: false }
   | { failed: true; error: unknown };
 
+export type QueuedHistoryMutation =
+  | { kind: 'synchronous'; execute: () => void }
+  | {
+      kind: 'asynchronous';
+      execute: () => Promise<void>;
+      resolve: () => void;
+      reject: (error: unknown) => void;
+    };
+
 export function combineMutationFailures(
   primary: MutationFailure,
   queued: MutationFailure,

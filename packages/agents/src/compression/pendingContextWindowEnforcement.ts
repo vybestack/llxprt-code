@@ -71,8 +71,8 @@ export interface PendingContextWindowEnforcerDeps {
       newHistory: IContent[],
       summary: IContent | undefined,
       topPreserved: number,
-    ) => void,
-  ): void;
+    ) => void | Promise<void>,
+  ): Promise<void>;
   setSuppressDensityDirty(value: boolean): void;
   recordCompressionFailure(): void;
   resetLastPromptTokenCount(): void;
@@ -403,7 +403,7 @@ export class PendingContextWindowEnforcer {
     try {
       const context = await this.deps.buildCompressionContext(input.promptId);
       const result = await this.deps.compressWithFallbackStrategy(context);
-      this.applyFallbackCompressionResult(result);
+      await this.applyFallbackCompressionResult(result);
       this.deps.logger.debug(
         'Compression completed with hard-limit fallback (TopDownTruncation)',
       );
@@ -442,9 +442,9 @@ export class PendingContextWindowEnforcer {
     );
   }
 
-  private applyFallbackCompressionResult(
+  private async applyFallbackCompressionResult(
     result: StrategyCompressionResult,
-  ): void {
+  ): Promise<void> {
     if (result.kind === 'noop') {
       // Truthful no-op: do not mutate history or counters.
       this.deps.logger.debug(
@@ -452,15 +452,15 @@ export class PendingContextWindowEnforcer {
       );
       return;
     }
-    this.deps.applyFallbackCompressionResult(
+    await this.deps.applyFallbackCompressionResult(
       result,
-      (newHistory, _summary, _topPreserved) => {
-        this.deps.historyService.clear();
+      async (newHistory, _summary, _topPreserved) => {
+        await this.deps.historyService.replaceAll(
+          newHistory,
+          this.deps.getRuntimeModel(),
+        );
         // Post-truncation rebuild: the prefix is already destroyed (#3070).
         this.deps.historyService.resetCacheAnchorSeq();
-        for (const content of newHistory) {
-          this.deps.historyService.add(content, this.deps.getRuntimeModel());
-        }
         this.deps.resetLastPromptTokenCount();
       },
     );

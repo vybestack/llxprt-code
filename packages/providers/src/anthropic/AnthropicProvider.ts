@@ -18,6 +18,7 @@ import {
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
 import type { GenerateChatOptions } from '../IProvider.js';
+import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
 import {
   type SystemPromptPlacement,
   requireAssembledSystemInstruction,
@@ -46,6 +47,7 @@ import {
   isAnthropicOAuthBaseURL,
   ANTHROPIC_DEFAULT_BASE_URL,
 } from './AnthropicEndpointUtils.js';
+import { findAnthropicToolSchema } from './AnthropicToolSchema.js';
 import { firstTruthyString } from '../utils/falsyFallback.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { projectAnthropicPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
@@ -65,6 +67,35 @@ import {
   ensureImageRecoveryState,
 } from './AnthropicImageSanitizer.js';
 import { tryConsumeTransportAttempt } from '../transportAttemptBudget.js';
+import {
+  registerAnthropicRequestCleanup,
+  resolveAnthropicRequestBody,
+} from './AnthropicRequestCleanup.js';
+import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import {
+  finishMediaRequest,
+  type MediaRequestOutcome,
+  resolveRequestMedia,
+} from '../utils/request-media-resolution.js';
+
+interface PreparedAnthropicPromptEnvelope {
+  readonly requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>;
+  readonly isOAuth: boolean;
+  readonly authToken: string;
+  readonly mediaRequest: ResolvedMediaRequest;
+}
+
+interface AnthropicTransportPreparation {
+  readonly prepared: PreparedAnthropicPromptEnvelope | undefined;
+  readonly mediaRequest: ResolvedMediaRequest;
+  readonly effectiveOptions: NormalizedGenerateChatOptions;
+}
+
+function isAnthropicMessageStream(
+  response: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>,
+): response is AsyncIterable<Anthropic.MessageStreamEvent> {
+  return Symbol.asyncIterator in response;
+}
 
 export class AnthropicProvider extends BaseProvider {
   // @plan PLAN-20251023-STATELESS-HARDENING.P08
@@ -76,13 +107,7 @@ export class AnthropicProvider extends BaseProvider {
   private lastRateLimitInfo?: AnthropicRateLimitInfo;
   private readonly preparedPromptEnvelopes = new WeakMap<
     object,
-    {
-      readonly requestContext: Awaited<
-        ReturnType<typeof prepareAnthropicRequest>
-      >;
-      readonly isOAuth: boolean;
-      readonly authToken: string;
-    }
+    PreparedAnthropicPromptEnvelope
   >();
 
   constructor(
@@ -103,6 +128,8 @@ export class AnthropicProvider extends BaseProvider {
       // implementation resolves tokens under the `claudecode` identity.
       oauthProvider: oauthManager ? 'claudecode' : undefined,
       oauthManager,
+      mediaTransportCapabilities:
+        declaredMediaTransportCapabilities('anthropic'),
     };
 
     super(baseConfig, config);
@@ -110,6 +137,36 @@ export class AnthropicProvider extends BaseProvider {
     // @plan PLAN-20251023-STATELESS-HARDENING.P08
     // No logger instances stored as instance variables - create on demand
     // @requirement REQ-SP4-002: Eliminate constructor-captured config and user-memory
+  }
+
+  private async resolveTransportPreparation(
+    options: NormalizedGenerateChatOptions,
+  ): Promise<AnthropicTransportPreparation> {
+    const token = options.promptEnvelopeTransportToken;
+    const prepared =
+      token === undefined ? undefined : this.preparedPromptEnvelopes.get(token);
+    if (token !== undefined && prepared === undefined) {
+      throw new Error('Unknown Anthropic prompt-envelope transport token');
+    }
+    const mediaRequest =
+      prepared?.mediaRequest ??
+      (await resolveRequestMedia(
+        options.runtime,
+        options.contents,
+        options.invocation.signal,
+      ));
+    try {
+      return {
+        prepared,
+        mediaRequest,
+        effectiveOptions: {
+          ...options,
+          contents: mediaRequest.withContents((contents) => contents),
+        },
+      };
+    } catch (error) {
+      return finishMediaRequest(mediaRequest, { status: 'failed', error });
+    }
   }
 
   /**
@@ -579,39 +636,14 @@ export class AnthropicProvider extends BaseProvider {
     return name;
   }
 
-  /**
-   * Find the JSON schema for a tool by name from the tools array.
-   * Used for schema-aware parameter coercion (issue #1146).
-   */
   private findToolSchema(
-    tools:
-      | Array<{
-          functionDeclarations: Array<{
-            name: string;
-            parametersJsonSchema?: unknown;
-          }>;
-        }>
-      | undefined,
+    tools: Parameters<typeof findAnthropicToolSchema>[0],
     toolName: string,
     isOAuth: boolean,
   ): unknown {
-    if (!tools) return undefined;
-
-    // For OAuth, tool names in the tools array are prefixed (e.g., llxprt_read_file)
-    // but toolName from the response is unprefixed (e.g., read_file)
-    // So we need to unprefix the stored name before comparing
-    for (const group of tools) {
-      for (const decl of group.functionDeclarations) {
-        const declName = isOAuth
-          ? this.unprefixToolName(decl.name, true)
-          : decl.name;
-        if (declName === toolName) {
-          return decl.parametersJsonSchema;
-        }
-      }
-    }
-
-    return undefined;
+    return findAnthropicToolSchema(tools, toolName, isOAuth, (name, oauth) =>
+      this.unprefixToolName(name, oauth),
+    );
   }
 
   /**
@@ -627,58 +659,61 @@ export class AnthropicProvider extends BaseProvider {
     // silently transported as an empty prompt.
     requireAssembledSystemInstruction(options.systemInstruction);
 
-    const prepared =
-      options.promptEnvelopeTransportToken === undefined
-        ? undefined
-        : this.preparedPromptEnvelopes.get(
-            options.promptEnvelopeTransportToken,
-          );
-    if (
-      options.promptEnvelopeTransportToken !== undefined &&
-      prepared === undefined
-    ) {
-      throw new Error('Unknown Anthropic prompt-envelope transport token');
+    const preparation = await this.resolveTransportPreparation(options);
+    let outcome: MediaRequestOutcome = { status: 'succeeded' };
+    try {
+      yield* this.generatePreparedChat(preparation);
+    } catch (error) {
+      outcome = { status: 'failed', error };
+    } finally {
+      await finishMediaRequest(preparation.mediaRequest, outcome);
     }
+  }
+
+  private async *generatePreparedChat(
+    preparation: AnthropicTransportPreparation,
+  ): AsyncIterableIterator<IContent> {
+    const { prepared, mediaRequest, effectiveOptions } = preparation;
     const { client: initialClient, authToken } = await this.buildProviderClient(
-      options,
-      options.resolved.telemetry,
+      effectiveOptions,
+      effectiveOptions.resolved.telemetry,
       prepared?.authToken,
     );
     const isOAuth = prepared?.isOAuth ?? this.classifyOAuthToken(authToken);
     const requestContext =
       prepared?.requestContext ??
-      (await this.prepareRequestContext(options, isOAuth, authToken));
+      (await this.prepareRequestContext(effectiveOptions, isOAuth, authToken));
+    registerAnthropicRequestCleanup(mediaRequest, requestContext.requestBody);
 
     const customHeaders = this.buildCustomHeaders(requestContext, isOAuth);
-
     const rateLimitLogger = this.getRateLimitLogger();
     await this.applyRateLimitThrottling(
       requestContext,
       rateLimitLogger,
-      options.invocation.signal,
+      effectiveOptions.invocation.signal,
     );
 
     // H2: if a prior outer attempt already sanitized this request's images,
     // reuse the sanitized body instead of resending the poisoned original.
-    const recoveryState = getImageRecoveryState(options);
-    const effectiveRequestBody =
-      recoveryState?.sanitizedBody ?? requestContext.requestBody;
-
+    const effectiveRequestBody = resolveAnthropicRequestBody(
+      mediaRequest,
+      requestContext.requestBody,
+      getImageRecoveryState(effectiveOptions)?.sanitizedBody,
+    );
     const apiCallWithResponse = createAnthropicApiCall(
       initialClient,
       effectiveRequestBody,
       customHeaders,
-      options.invocation.signal,
+      effectiveOptions.invocation.signal,
     );
 
     let response:
       | Anthropic.Message
       | AsyncIterable<Anthropic.MessageStreamEvent>;
     let rateLimitInfo: AnthropicRateLimitInfo | undefined;
-
     try {
       const result = await this.executeApiCall(
-        options,
+        effectiveOptions,
         { ...requestContext, requestBody: effectiveRequestBody },
         apiCallWithResponse,
         rateLimitLogger,
@@ -690,24 +725,22 @@ export class AnthropicProvider extends BaseProvider {
       const recovered = await this.executeImageDimensionRecovery(
         error,
         requestContext,
-        options,
+        effectiveOptions,
         initialClient,
         customHeaders,
         rateLimitLogger,
+        mediaRequest,
       );
       if (recovered === undefined) throw error;
       response = recovered.response;
       rateLimitInfo = recovered.rateLimitInfo;
     }
 
-    if (rateLimitInfo) {
-      this.lastRateLimitInfo = rateLimitInfo;
-    }
-
+    if (rateLimitInfo) this.lastRateLimitInfo = rateLimitInfo;
     yield* this.yieldResponse(
       response,
       requestContext,
-      options,
+      effectiveOptions,
       isOAuth,
       rateLimitLogger,
     );
@@ -736,6 +769,7 @@ export class AnthropicProvider extends BaseProvider {
     initialClient: Parameters<typeof createAnthropicApiCall>[0],
     customHeaders: Parameters<typeof createAnthropicApiCall>[2],
     rateLimitLogger: { debug: (fn: () => string) => void },
+    mediaRequest: ResolvedMediaRequest,
   ): Promise<
     | {
         response:
@@ -770,6 +804,7 @@ export class AnthropicProvider extends BaseProvider {
     if (!tryConsumeTransportAttempt(options)) return undefined;
     state.recoveryUsed = true;
     state.sanitizedBody = sanitized.body;
+    registerAnthropicRequestCleanup(mediaRequest, sanitized.body);
     this.getErrorsLogger().debug(
       () =>
         '[AnthropicProvider] Image dimension 400: sanitized oversized image block(s), retrying once',
@@ -835,26 +870,48 @@ export class AnthropicProvider extends BaseProvider {
     options: GenerateChatOptions,
   ): Promise<PromptEnvelopeProjection> {
     const normalized = await this.normalizeOptionsForProjection(options);
-    const authToken = await this.resolveProjectionAuthToken(normalized);
-    const isOAuth = this.classifyOAuthToken(authToken);
-    const requestContext = await this.prepareRequestContext(
-      normalized,
-      isOAuth,
-      authToken,
+    const mediaRequest = await resolveRequestMedia(
+      normalized.runtime,
+      normalized.contents,
+      normalized.invocation.signal,
     );
-    const transportToken = Object.freeze({});
-    this.preparedPromptEnvelopes.set(transportToken, {
-      requestContext,
-      isOAuth,
-      authToken,
-    });
-    return projectAnthropicPromptEnvelope(requestContext.requestBody, {
-      transportToken,
-      unsupportedMedia: collectUnsupportedMedia(
-        normalized.contents,
-        (category) => category === 'image' || category === 'pdf',
-      ),
-    });
+    const resolvedOptions = {
+      ...normalized,
+      contents: mediaRequest.withContents((contents) => contents),
+    };
+    try {
+      const authToken = await this.resolveProjectionAuthToken(resolvedOptions);
+      const isOAuth = this.classifyOAuthToken(authToken);
+      const requestContext = await this.prepareRequestContext(
+        resolvedOptions,
+        isOAuth,
+        authToken,
+      );
+      registerAnthropicRequestCleanup(mediaRequest, requestContext.requestBody);
+      const transportToken = Object.freeze({});
+      this.preparedPromptEnvelopes.set(transportToken, {
+        requestContext,
+        isOAuth,
+        authToken,
+        mediaRequest,
+      });
+      const projection = projectAnthropicPromptEnvelope(
+        requestContext.requestBody,
+        {
+          transportToken,
+          unsupportedMedia: collectUnsupportedMedia(
+            resolvedOptions.contents,
+            (category) => category === 'image' || category === 'pdf',
+          ),
+        },
+      );
+      return {
+        ...projection,
+        releaseIfUnsent: mediaRequest.release,
+      };
+    } catch (error) {
+      return finishMediaRequest(mediaRequest, { status: 'failed', error });
+    }
   }
 
   private buildCustomHeaders(
@@ -923,6 +980,27 @@ export class AnthropicProvider extends BaseProvider {
     });
   }
 
+  private withSemanticMediaPurgeCacheEvidence(
+    content: IContent,
+    requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
+  ): IContent {
+    const evidence = requestContext.semanticMediaPurgeCacheWriteEvidence;
+    const cacheCreationTokens =
+      content.metadata?.usage?.cache_creation_input_tokens;
+    if (evidence === undefined) return content;
+    if (evidence.preparation !== 'added') return content;
+    if (typeof cacheCreationTokens !== 'number') return content;
+    if (!Number.isFinite(cacheCreationTokens) || cacheCreationTokens <= 0)
+      return content;
+    return {
+      ...content,
+      metadata: {
+        ...content.metadata,
+        semanticMediaPurgeCacheWriteEvidence: evidence,
+      },
+    };
+  }
+
   private async *yieldResponse(
     response: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>,
     requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
@@ -931,22 +1009,27 @@ export class AnthropicProvider extends BaseProvider {
     rateLimitLogger: { debug: (fn: () => string) => void },
   ): AsyncGenerator<IContent> {
     if (requestContext.streamingEnabled) {
-      yield* processAnthropicStream(
-        response as AsyncIterable<Anthropic.MessageStreamEvent>,
-        {
-          isOAuth,
-          tools: options.tools,
-          unprefixToolName: (name, oauth) => this.unprefixToolName(name, oauth),
-          findToolSchema: (t, name, oauth) =>
-            this.findToolSchema(t, name, oauth),
-          logger: this.getStreamingLogger(),
-          cacheLogger: requestContext.cacheLogger,
-          rateLimitLogger,
-          includeThinkingInResponse: requestContext.includeThinkingInResponse,
-        },
-      );
+      if (!isAnthropicMessageStream(response)) {
+        throw new Error('Anthropic streaming response was not an event stream');
+      }
+      const stream = processAnthropicStream(response, {
+        isOAuth,
+        tools: options.tools,
+        unprefixToolName: (name, oauth) => this.unprefixToolName(name, oauth),
+        findToolSchema: (t, name, oauth) => this.findToolSchema(t, name, oauth),
+        logger: this.getStreamingLogger(),
+        cacheLogger: requestContext.cacheLogger,
+        rateLimitLogger,
+        includeThinkingInResponse: requestContext.includeThinkingInResponse,
+      });
+      for await (const content of stream) {
+        yield this.withSemanticMediaPurgeCacheEvidence(content, requestContext);
+      }
     } else {
-      yield parseAnthropicResponse(response as Anthropic.Message, {
+      if (isAnthropicMessageStream(response)) {
+        throw new Error('Anthropic non-streaming response was an event stream');
+      }
+      const content = parseAnthropicResponse(response, {
         isOAuth,
         tools: options.tools,
         unprefixToolName: (name, oauth) => this.unprefixToolName(name, oauth),
@@ -954,6 +1037,7 @@ export class AnthropicProvider extends BaseProvider {
         cacheLogger: requestContext.cacheLogger,
         includeThinkingInResponse: requestContext.includeThinkingInResponse,
       });
+      yield this.withSemanticMediaPurgeCacheEvidence(content, requestContext);
     }
   }
 

@@ -29,13 +29,22 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { mkdtempSync, rmSync, readdirSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  readdirSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
 import {
+  LocalMediaStore,
   replaySession,
   SessionRecordingService,
 } from '@vybestack/llxprt-code-core';
+import { SessionPersistenceService } from '@vybestack/llxprt-code-core/storage/SessionPersistenceService.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
@@ -44,6 +53,16 @@ import type { SessionControlDeps } from '../control/sessionControl.js';
 
 /** Alias for the recording-service type used in the FakeConfig projection. */
 type SessionRecordingServiceType = SessionRecordingService;
+
+class IsolatedTestStorage extends Storage {
+  constructor(private readonly projectTempDir: string) {
+    super(projectTempDir);
+  }
+
+  override getProjectTempDir(): string {
+    return this.projectTempDir;
+  }
+}
 
 /** A single human text IContent turn (the neutral recorded shape). */
 function humanText(text: string): IContent {
@@ -66,14 +85,29 @@ interface FakeConfig {
   readonly getWorkspaceContext: () => {
     readonly getDirectories: () => readonly string[];
   };
+  readonly getLocalMediaStore: () => LocalMediaStore;
+  readonly getSessionRecordingQueueByteLimit: () => number;
+  readonly createSessionPersistenceService: (
+    sessionId: string,
+  ) => SessionPersistenceService;
+  readonly getPersistenceChatsDir: () => string;
   setSessionRecordingService: (
     service: SessionRecordingServiceType | undefined,
   ) => void;
   getSessionRecordingService: () => SessionRecordingServiceType | undefined;
 }
 
-function buildFakeConfig(projectRoot: string): FakeConfig {
+function buildFakeConfig(
+  projectRoot: string,
+  persistenceRoot = projectRoot,
+  persistenceQueueBytes = 1024 * 1024,
+): FakeConfig {
   let installed: SessionRecordingServiceType | undefined;
+  const mediaStore = new LocalMediaStore({
+    rootDirectory: join(projectRoot, 'media'),
+    quotaBytes: 1024 * 1024,
+  });
+  const persistenceStorage = new IsolatedTestStorage(persistenceRoot);
   return {
     getProjectRoot: () => projectRoot,
     storage: {
@@ -81,6 +115,15 @@ function buildFakeConfig(projectRoot: string): FakeConfig {
       getProjectChatsDir: () => join(projectRoot, 'chats'),
     },
     getWorkspaceContext: () => ({ getDirectories: () => [projectRoot] }),
+    getLocalMediaStore: () => mediaStore,
+    getSessionRecordingQueueByteLimit: () => 1024 * 1024,
+    createSessionPersistenceService: (sessionId) =>
+      new SessionPersistenceService(persistenceStorage, sessionId, {
+        mediaStore,
+        maxQueueBytes: persistenceQueueBytes,
+      }),
+    getPersistenceChatsDir: () =>
+      join(persistenceStorage.getProjectTempDir(), 'chats'),
     setSessionRecordingService: (service) => {
       installed = service;
     },
@@ -154,6 +197,7 @@ async function recordResumableSession(
   projectRoot: string,
   sessionId: string,
   seed: IContent,
+  mediaStore?: LocalMediaStore,
 ): Promise<void> {
   const service = new SessionRecordingService({
     sessionId,
@@ -162,6 +206,7 @@ async function recordResumableSession(
     workspaceDirs: [projectRoot],
     provider: 'fake',
     model: 'fake-model',
+    ...(mediaStore === undefined ? {} : { mediaStore }),
   });
   service.recordContent(seed);
   await service.flush();
@@ -313,13 +358,26 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
   it('A2: a post-restore subscribe failure rejects resume, leaves Config NOT pointing at the resumed service, and releases the adopted lock file @requirement:REQ-010', async () => {
     await withProjectRoot(async (projectRoot) => {
       const sessionId = 'atomic-resume-session';
+      const config = buildFakeConfig(projectRoot);
+      const mediaStore = config.getLocalMediaStore();
+      const mediaReference = await mediaStore.admit({
+        bytes: new Uint8Array([4, 8, 15, 16, 23, 42]),
+        mimeType: 'image/png',
+        semanticMetadata: {},
+      });
       await recordResumableSession(
         projectRoot,
         sessionId,
-        humanText('recorded turn beta'),
+        {
+          speaker: 'human',
+          blocks: [
+            { type: 'text', text: 'recorded turn beta' },
+            mediaReference,
+          ],
+        },
+        mediaStore,
       );
 
-      const config = buildFakeConfig(projectRoot);
       const liveHistory = [humanText('live turn')];
       const client = buildFakeClient(liveHistory);
 
@@ -352,12 +410,43 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
       expect(config.getSessionRecordingService()).toBeUndefined();
       expect(control.getRecording().enabled).toBe(false);
       expect(await client.contract.getHistory()).toStrictEqual(liveHistory);
+      expect(await mediaStore.hasReservations(mediaReference.contentId)).toBe(
+        false,
+      );
 
       // The adopted session lock was released: NO lock file remains on disk.
       expect(remainingLockFiles(projectRoot)).toStrictEqual([]);
 
       // Dispose is a clean no-op (nothing to release) — does not throw.
       await expect(control.dispose()).resolves.toBeUndefined();
+    });
+  });
+
+  it('flushes pending recording and persistence before creating a checkpoint', async () => {
+    await withProjectRoot(async (projectRoot) => {
+      const persistenceRoot = join(projectRoot, 'failing-persistence');
+      const config = buildFakeConfig(projectRoot, persistenceRoot);
+      const client = buildFakeClient([humanText('checkpoint seed')]);
+      const control = new SessionControl(
+        buildDeps(config, client.contract, 'checkpoint-persistence'),
+      );
+      await control.setRecording({ enabled: true });
+      const persistenceChats = config.getPersistenceChatsDir();
+      mkdirSync(join(persistenceChats, '..'), { recursive: true });
+      writeFileSync(persistenceChats, 'not a directory');
+      const historyService = client.contract.getHistoryService();
+      if (historyService === null) throw new Error('Expected history service');
+      historyService.add(humanText('pending persistence generation'));
+
+      try {
+        await expect(control.createCheckpoint('must-flush')).rejects.toThrow(
+          /persistence generation 1 failed/i,
+        );
+      } finally {
+        rmSync(persistenceChats, { force: true });
+        mkdirSync(persistenceChats, { recursive: true });
+        await control.dispose();
+      }
     });
   });
 
@@ -443,7 +532,7 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
       expect(restoreAttempt).toBe(1);
       expect(client.replacementCount()).toBe(1);
       const replay = await replaySession(recordingPath!, basename(projectRoot));
-      if (!replay.ok) {
+      if (replay.ok !== true) {
         throw new Error(`Expected replay success: ${replay.error}`);
       }
       expect(replay.history).toStrictEqual(originalHistory);

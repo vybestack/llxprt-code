@@ -131,6 +131,51 @@ export function parsePostGcRecords(
     .filter((record) => record.name?.endsWith('-post-gc') === true);
 }
 
+export interface BoundedPlateauResult {
+  readonly baselineBytes: number;
+  readonly maxBytes: number;
+  readonly withinTolerance: boolean;
+}
+
+/**
+ * Evaluates a caller-selected settled series with both proportional and fixed
+ * runtime-noise allowances. Callers remain responsible for warm-up exclusion.
+ */
+export function evaluateBoundedPlateau(
+  observations: readonly number[],
+  relativeTolerance: number,
+  absoluteAllowanceBytes: number,
+): BoundedPlateauResult {
+  if (observations.length < 3) {
+    throw new Error('Bounded plateau needs at least three settled samples');
+  }
+  if (
+    relativeTolerance < 0 ||
+    !Number.isFinite(relativeTolerance) ||
+    !Number.isSafeInteger(absoluteAllowanceBytes) ||
+    absoluteAllowanceBytes < 0
+  ) {
+    throw new Error('Bounded plateau allowances must be non-negative');
+  }
+  for (const observation of observations) {
+    if (!Number.isSafeInteger(observation) || observation < 0) {
+      throw new Error('Bounded plateau observations must be byte measurements');
+    }
+  }
+  const baselineBytes = observations[0];
+  if (baselineBytes === undefined) {
+    throw new Error('Bounded plateau is missing a baseline');
+  }
+  const maxBytes = Math.max(...observations);
+  return {
+    baselineBytes,
+    maxBytes,
+    withinTolerance:
+      maxBytes <=
+      baselineBytes * (1 + relativeTolerance) + absoluteAllowanceBytes,
+  };
+}
+
 export function evaluatePostGcPlateau(
   postGcHeapBytes: readonly number[],
   tolerance: number,

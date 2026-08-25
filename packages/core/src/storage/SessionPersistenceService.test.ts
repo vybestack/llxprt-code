@@ -288,7 +288,8 @@ describe('SessionPersistenceService', () => {
 
       const result = await service.loadMostRecent();
 
-      expect(result).toStrictEqual(mockSession);
+      expect(result).toMatchObject(mockSession);
+      expect(typeof result?.mediaOwnership.release).toBe('function');
       expect(fs.promises.readFile).toHaveBeenCalledWith(
         expect.stringContaining('2026-01-03'),
         'utf-8',

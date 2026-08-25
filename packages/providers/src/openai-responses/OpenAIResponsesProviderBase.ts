@@ -29,6 +29,7 @@ import { type IProviderConfig } from '../types/IProviderConfig.js';
 import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
 import { OPENAI_TRANSPORT_SELECTOR_KEYS } from '../openai/openaiModelPolicy.js';
 import { BaseProvider, type BaseProviderConfig } from '../BaseProvider.js';
+import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
 import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import { CodexOAuthTokenSchema } from '@vybestack/llxprt-code-auth/types.js';
@@ -66,6 +67,9 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
       // Must set supportsOAuth here because supportsOAuth() is called in super()
       // before _isCodexMode is set
       supportsOAuth: isCodex,
+      mediaTransportCapabilities: declaredMediaTransportCapabilities(
+        isCodex ? 'codex' : 'openai-responses',
+      ),
     };
 
     super(baseConfig, config);

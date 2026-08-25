@@ -701,6 +701,10 @@ export interface AgentSessionControl {
   listSessions(): Promise<readonly SessionInfo[]>;
   /** Deletes a non-active session when no live checkpoint references block it. */
   deleteSession(ref: string): Promise<void>;
+  /** Exports a living session and every reachable media object to a portable package. */
+  exportSession(ref: string, destination: string): Promise<void>;
+  /** Imports a portable session package and activates the imported session. */
+  importSession(packageDirectory: string): Promise<SessionInfo>;
   setRecording(state: SessionRecordingState): Promise<void>;
   getRecording(): SessionRecordingState;
 }

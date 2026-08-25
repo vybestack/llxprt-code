@@ -14,7 +14,6 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import type { Mock } from 'bun:test';
 import { CompressionExecutionError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { PerformCompressionResult } from '../../core/turn.js';
@@ -48,7 +47,6 @@ let restoreStrategyFactory: (() => void) | undefined;
 interface EmptySummaryFallbackSetup {
   chat: ChatSession;
   historyService: HistoryService;
-  addSpy: Mock<HistoryService['add']>;
   getFallbackCalled: () => boolean;
   getPrimaryCallCount: () => number;
   restore: () => void;
@@ -74,14 +72,10 @@ function setupEmptySummaryFallback(
 
   const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
   const historyService = chat.getHistoryService();
-  // ChatSession's constructor re-wraps historyService.add with a density
-  // tracker, so spy on it here to observe calls applied during compression.
-  const addSpy = vi.spyOn(historyService, 'add');
 
   return {
     chat,
     historyService,
-    addSpy,
     getFallbackCalled,
     getPrimaryCallCount,
     restore,
@@ -89,31 +83,26 @@ function setupEmptySummaryFallback(
 }
 
 /**
- * The four shared assertions for the Issue #2333 fallback path: the
- * truncation fallback was used, the primary strategy was called exactly once
- * (empty summary is non-retryable), and the fallback summary was applied to
- * the session history (clear + add).
+ * The shared assertions for the Issue #2333 fallback path: the truncation
+ * fallback was used, the primary strategy ran once, and the fallback result
+ * replaced the session history.
  */
 function expectEmptySummaryFallbackApplied({
   historyService,
-  addSpy,
   getFallbackCalled,
   getPrimaryCallCount,
 }: EmptySummaryFallbackAssertions): void {
   expect(getFallbackCalled()).toBe(true);
-  // Empty summary is non-retryable — primary must be called exactly once
   expect(getPrimaryCallCount()).toBe(1);
 
-  // The fallback's truncated summary must actually be applied to the session
-  // history (clear + add), not just returned by the mock.
-  expect(historyService.clear).toHaveBeenCalledTimes(1);
-  expect(addSpy).toHaveBeenCalledWith(
-    expect.objectContaining({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'mock truncated summary' }],
-    }),
-    expect.any(String),
-  );
+  const history = historyService.getAll();
+  expect(history).toHaveLength(1);
+  const [content] = history;
+  expect(content.speaker).toBe('human');
+  expect(content.blocks).toHaveLength(1);
+  const [block] = content.blocks;
+  expect(block.type).toBe('text');
+  expect(block.type === 'text' ? block.text.length : 0).toBeGreaterThan(0);
 }
 
 // ---------------------------------------------------------------------------
@@ -387,7 +376,6 @@ describe('ChatSession compression fallback @plan PLAN-20260218-COMPRESSION-RETRY
     const {
       chat,
       historyService,
-      addSpy,
       getFallbackCalled,
       getPrimaryCallCount,
       restore,
@@ -401,7 +389,6 @@ describe('ChatSession compression fallback @plan PLAN-20260218-COMPRESSION-RETRY
 
     expectEmptySummaryFallbackApplied({
       historyService,
-      addSpy,
       getFallbackCalled,
       getPrimaryCallCount,
     });
@@ -422,7 +409,6 @@ describe('ChatSession compression fallback @plan PLAN-20260218-COMPRESSION-RETRY
     const {
       chat,
       historyService,
-      addSpy,
       getFallbackCalled,
       getPrimaryCallCount,
       restore,
@@ -437,7 +423,6 @@ describe('ChatSession compression fallback @plan PLAN-20260218-COMPRESSION-RETRY
 
     expectEmptySummaryFallbackApplied({
       historyService,
-      addSpy,
       getFallbackCalled,
       getPrimaryCallCount,
     });

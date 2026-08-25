@@ -10,6 +10,7 @@
  */
 
 import * as path from 'node:path';
+import { ConfigMediaDefaults } from './configMediaDefaults.js';
 import type { EventEmitter } from 'node:events';
 import type { SubagentSchedulerFactory } from '../core/subagentTypes.js';
 import type {
@@ -22,7 +23,7 @@ import type {
 } from '../core/clientContract.js';
 import type { ToolSchedulerFactory } from '../core/toolSchedulerContract.js';
 import type { TaskToolRegistration } from './toolRegistryFactory.js';
-import type { PostSkillDiscoveryToolRegistrar } from './configTypes.js';
+import type { ToolRecord } from './toolRegistryFactory.js';
 import type { PromptRegistry } from '../prompts/prompt-registry.js';
 import type { ResourceRegistry } from '../resources/resource-registry.js';
 import type {
@@ -40,6 +41,7 @@ import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import type { GitService } from '../services/gitService.js';
 import type { ContextManager } from '../services/contextManager.js';
 import type { SessionRecordingService } from '../recording/SessionRecordingService.js';
+import { sessionMediaServices } from '../storage/session-media-service-factories.js';
 import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
 import type { ShellJobManager } from '../services/shellJobManager.js';
 import type { AsyncTaskReminderService } from '../services/asyncTaskReminderService.js';
@@ -63,8 +65,8 @@ import type { SubagentManager } from './subagentManager.js';
 import type { FileExclusions } from '../utils/ignorePatterns.js';
 import type { PolicyEngine } from '../policy/policy-engine.js';
 import type { SkillManager } from '../skills/skillManager.js';
-import type { ToolRecord } from './toolRegistryFactory.js';
 import type { LspState } from './lspIntegration.js';
+import type { PostSkillDiscoveryToolRegistrar } from './configTypes.js';
 import type { ApprovalMode, MCPServerConfig } from './configTypes.js';
 import type { ImageOperationRunner } from '../services/image/imageCapability.js';
 import { resolvePerfSettings } from './configConstructor.js';
@@ -85,7 +87,7 @@ import {
   type FileFilteringOptions,
 } from './configTypes.js';
 
-export abstract class ConfigBaseCore {
+export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   protected toolRegistry!: ToolRegistry;
   protected mcpClientManager?: McpClientManager;
   protected allowedMcpServers!: string[];
@@ -141,6 +143,9 @@ export abstract class ConfigBaseCore {
   protected gitService: GitService | undefined = undefined;
   protected sessionRecordingService: SessionRecordingService | undefined =
     undefined;
+  private readonly sessionMedia = sessionMediaServices(this);
+  readonly getLocalMediaStore = this.sessionMedia.store;
+  readonly createSessionPersistenceService = this.sessionMedia.persistence;
   // @plan PLAN-20260130-ASYNCTASK.P09
   protected asyncTaskManager: AsyncTaskManager | undefined = undefined;
   // #1995 slice 2 — session-owned background shell jobs

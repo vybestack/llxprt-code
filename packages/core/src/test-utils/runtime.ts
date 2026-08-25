@@ -8,6 +8,7 @@ import type { Config } from '../config/config.js';
 import type { RuntimeProvider as IProvider } from '../runtime/contracts/RuntimeProvider.js';
 import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProviderManager.js';
 import type { RuntimeTokenizerFactory } from '../runtime/contracts/RuntimeTokenizerFactory.js';
+import type { SessionRecordingService } from '../recording/SessionRecordingService.js';
 // Type-only import of bun:test: erased at compile time, creates no runtime edge.
 // Required to obtain the precise `vi.fn()` Mock<T> return type.
 import type { vi as ViNamespace } from 'bun:test';
@@ -246,6 +247,7 @@ interface ChatSessionConfigShape {
   getProviderManager: ReturnType<ReturnType<typeof requireVi>['fn']>;
   getSettingsService: ReturnType<ReturnType<typeof requireVi>['fn']>;
   getTokenizerFactory: () => RuntimeTokenizerFactory | undefined;
+  getSessionRecordingService: () => SessionRecordingService | undefined;
 }
 
 interface ChatSessionRuntimeOptions {
@@ -347,6 +349,7 @@ export function createChatSessionRuntime(
     getProviderManager: vi.fn().mockReturnValue(providerManager),
     getSettingsService: vi.fn().mockReturnValue(settingsService),
     getTokenizerFactory: () => tokenizerFactory,
+    getSessionRecordingService: () => undefined,
   };
 
   const config = {

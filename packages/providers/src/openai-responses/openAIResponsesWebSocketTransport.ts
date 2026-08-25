@@ -17,7 +17,9 @@ import {
 import { createStreamInterruptionError } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';
+import { BoundedJsonBody } from '../utils/boundedJsonBody.js';
 
+export const DEFAULT_WEBSOCKET_JSON_ENVELOPE_BYTES = 32 * 1024 * 1024;
 export const CODEX_WEBSOCKET_BETA_HEADER = 'responses_websockets=2026-02-06';
 export interface TransportLogger {
   debug(messageFactory: (() => string) | string): void;
@@ -50,7 +52,7 @@ export interface TransportSocket {
   readonly readyState: number;
   readonly CONNECTING: number;
   readonly OPEN: number;
-  send(data: string): void;
+  send(data: string | Uint8Array): void;
   close(): void;
   onOpen(listener: () => void): () => void;
   onMessage(listener: (data: unknown) => void): () => void;
@@ -160,7 +162,7 @@ class UndiciTransportSocket implements TransportSocket {
     return this.socket.readyState;
   }
 
-  send(data: string): void {
+  send(data: string | Uint8Array): void {
     this.socket.send(data);
   }
 
@@ -408,6 +410,33 @@ function createResponseByteStream(
   });
 }
 
+async function sendBoundedRequestEnvelope(
+  socket: TransportSocket,
+  request: OpenAIResponsesRequest,
+): Promise<void> {
+  const boundedEnvelope = new BoundedJsonBody(
+    { ...request, type: 'response.create' },
+    {
+      maxChunkBytes: DEFAULT_WEBSOCKET_JSON_ENVELOPE_BYTES,
+      maxEnvelopeBytes: DEFAULT_WEBSOCKET_JSON_ENVELOPE_BYTES,
+    },
+  );
+  try {
+    socket.send(boundedEnvelope.toUint8Array());
+  } catch (error) {
+    try {
+      await boundedEnvelope.dispose(error);
+    } catch (disposalError) {
+      throw new AggregateError(
+        [error, disposalError],
+        'Codex Responses WebSocket send and request cleanup failed',
+      );
+    }
+    throw error;
+  }
+  await boundedEnvelope.dispose();
+}
+
 class CodexResponsesWebSocketTransport implements WebSocketTransport {
   private active: LiveConnection | undefined;
   private requestQueue: Promise<void> = Promise.resolve();
@@ -447,7 +476,7 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
             'Codex Responses WebSocket closed before the request was sent',
           );
         }
-        socket.send(JSON.stringify({ ...request, type: 'response.create' }));
+        await sendBoundedRequestEnvelope(socket, request);
         for await (const message of parseResponsesStream(
           createResponseByteStream(source),
           {

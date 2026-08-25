@@ -64,8 +64,8 @@ export function prepareUserTurnContents(
   contents: readonly IContent[],
   history: TurnKeySource,
   promptId: string,
+  turnId: string = history.generateTurnKey(),
 ): { userContents: IContent[]; userIContents: IContent[]; turnId: string } {
-  const turnId = history.generateTurnKey();
   const userContents = stampTurnIdentity(contents, { promptId, turnId });
   // Bind generated history ids to the same turn key that was stamped; calling
   // this without an argument mints a second key, so the ids would belong to a

@@ -14,65 +14,99 @@
  * compressions, spending a third breakpoint at the preserved-head boundary
  * lets the stable head be re-read from cache instead of re-billed at
  * cache-WRITE pricing.
- *
- * `convertToAnthropicMessages` is NOT index-preserving — filtering, merging,
- * thinking-strip, validation, adjacency and empty-block transforms all rebuild
- * message objects — so the anchor breakpoint cannot be located by arithmetic
- * on a content index. Instead the converter tags the message derived from the
- * anchored IContent with the module-private {@link ANCHOR_CACHE_SYMBOL} via
- * {@link tagAnchorMessage}; after the full pipeline {@link attachAnchorCacheControl}
- * locates it by identity and attaches the breakpoint.
- *
- * A Symbol-keyed property is invisible to `JSON.stringify`, so it cannot leak
- * onto the wire; {@link attachAnchorCacheControl} deletes it explicitly
- * regardless.
  */
 
-import type { AnthropicMessage } from './AnthropicMessageNormalizer.js';
+import type {
+  AnthropicMessage,
+  AnthropicMessageBlock,
+} from './AnthropicMessageNormalizer.js';
 import {
   selectLastCacheableBlockIndex,
   sanitizeBlockForCacheControl,
 } from './AnthropicRequestBuilder.js';
 
 type AnchorCacheTtl = '5m' | '1h';
-
 type AnchorCacheLogger = { debug: (fn: () => string) => void };
 
-/**
- * Module-private marker stamped on the AnthropicMessage derived from the
- * IContent carrying `metadata.cacheAnchor`. Never exported, so no consumer
- * outside this module can read or set it.
- */
-const ANCHOR_CACHE_SYMBOL = Symbol('anthropicCacheAnchor');
+const ANCHOR_CACHE_BLOCK = Symbol('anthropicCacheAnchorBlock');
+const ANCHOR_CACHE_STRING = Symbol('anthropicCacheAnchorString');
 
-/**
- * Stamp the anchor marker on `message`. Called by the converter for the
- * message produced from the anchored IContent (human, assistant, or the flush
- * carrying an anchored tool result).
- */
 export function tagAnchorMessage(message: AnthropicMessage): void {
-  Reflect.set(message, ANCHOR_CACHE_SYMBOL, true);
+  if (typeof message.content === 'string') {
+    if (message.content.trim().length > 0) {
+      Reflect.set(message, ANCHOR_CACHE_STRING, true);
+    }
+    return;
+  }
+  const blockIndex = selectLastCacheableBlockIndex(message.content);
+  if (blockIndex < 0) return;
+  Reflect.set(message.content[blockIndex], ANCHOR_CACHE_BLOCK, true);
 }
 
-/**
- * Attach a `cache_control` breakpoint to a single message's last non-thinking,
- * non-empty content block. Reuses the shared {@link selectLastCacheableBlockIndex}
- * block-selection and {@link sanitizeBlockForCacheControl} sanitization so the
- * anchor breakpoint and the rolling-tail breakpoint pick identical block kinds.
- */
-function attachCacheBreakpointToMessage(
+export function materializeAnchorBoundary(
   message: AnthropicMessage,
+  blocks: AnthropicMessageBlock[],
+): void {
+  if (Reflect.get(message, ANCHOR_CACHE_STRING) !== true) return;
+  Reflect.deleteProperty(message, ANCHOR_CACHE_STRING);
+  const blockIndex = selectLastCacheableBlockIndex(blocks);
+  if (blockIndex >= 0) {
+    Reflect.set(blocks[blockIndex], ANCHOR_CACHE_BLOCK, true);
+  }
+}
+
+interface AnchorLocation {
+  readonly message: AnthropicMessage;
+  readonly blockIndex: number;
+}
+
+function takeAnchorLocation(
+  messages: readonly AnthropicMessage[],
+): AnchorLocation | undefined {
+  let found: AnchorLocation | undefined;
+  for (const message of messages) {
+    const stringAnchor = Reflect.get(message, ANCHOR_CACHE_STRING) === true;
+    Reflect.deleteProperty(message, ANCHOR_CACHE_STRING);
+    if (typeof message.content === 'string') {
+      if (
+        found === undefined &&
+        stringAnchor &&
+        message.content.trim() !== ''
+      ) {
+        found = { message, blockIndex: 0 };
+      }
+      continue;
+    }
+    for (
+      let blockIndex = 0;
+      blockIndex < message.content.length;
+      blockIndex += 1
+    ) {
+      const block = message.content[blockIndex];
+      const anchored = Reflect.get(block, ANCHOR_CACHE_BLOCK) === true;
+      Reflect.deleteProperty(block, ANCHOR_CACHE_BLOCK);
+      if (found === undefined && anchored) {
+        found = { message, blockIndex };
+      }
+    }
+  }
+  return found;
+}
+
+function hasCacheControlAtBoundary(location: AnchorLocation): boolean {
+  return (
+    Array.isArray(location.message.content) &&
+    'cache_control' in location.message.content[location.blockIndex]
+  );
+}
+
+function attachCacheBreakpointToMessage(
+  location: AnchorLocation,
   ttl: AnchorCacheTtl,
   logger: AnchorCacheLogger,
 ): void {
+  const { message, blockIndex } = location;
   if (typeof message.content === 'string') {
-    if (message.content.trim() === '') {
-      logger.debug(
-        () =>
-          'Skipped anchor cache_control: anchor message has no cacheable text',
-      );
-      return;
-    }
     message.content = [
       sanitizeBlockForCacheControl(
         { type: 'text', text: message.content },
@@ -84,66 +118,16 @@ function attachCacheBreakpointToMessage(
     );
     return;
   }
-  if (Array.isArray(message.content)) {
-    const content = message.content;
-    const idx = selectLastCacheableBlockIndex(content);
-    if (idx < 0) {
-      logger.debug(
-        () =>
-          'Skipped anchor cache_control: anchor message has no cacheable block',
-      );
-      return;
-    }
-    content[idx] = sanitizeBlockForCacheControl(content[idx], ttl);
-    logger.debug(
-      () => `Added anchor cache_control to ${content[idx].type} block`,
-    );
-  }
+  const block = message.content[blockIndex];
+  message.content[blockIndex] = sanitizeBlockForCacheControl(block, ttl);
 }
 
-/**
- * Attach the preserved-head anchor `cache_control` breakpoint to the message
- * derived from the IContent that carried `metadata.cacheAnchor`, then strip the
- * module-private marker so it can never reach the wire.
- *
- * MUST run AFTER `attachPromptCaching` (the rolling-tail breakpoint): when the
- * anchor coincides with the last message the rolling tail already covers it,
- * so the anchor is skipped to avoid wasting one of the 4 permitted breakpoints.
- *
- * ACCEPTED DEGRADATION: if a transform inside `convertToAnthropicMessages`
- * rebuilt the anchored message object, the symbol is gone and no anchor
- * breakpoint is placed. That is exactly today's behaviour (system + rolling
- * tail only) and is a legitimate optimisation miss — NOT an error to swallow.
- * No retry, fallback, or heuristic re-derivation is performed (#3070).
- */
 export function attachAnchorCacheControl(
   messages: AnthropicMessage[],
   ttl: AnchorCacheTtl,
   logger: AnchorCacheLogger,
 ): void {
-  const anchorIndex = messages.findIndex(
-    (m) => Reflect.get(m, ANCHOR_CACHE_SYMBOL) === true,
-  );
-
-  // Always remove the marker so it can never reach the wire (a Symbol key is
-  // already invisible to JSON.stringify, but delete it explicitly regardless).
-  for (const m of messages) {
-    if (Reflect.get(m, ANCHOR_CACHE_SYMBOL) !== undefined) {
-      Reflect.deleteProperty(m, ANCHOR_CACHE_SYMBOL);
-    }
-  }
-
-  if (anchorIndex === -1) {
-    // Accepted degradation (see docblock): the transform pipeline rebuilt the
-    // anchored message, so no anchor breakpoint is placed.
-    return;
-  }
-
-  // The rolling-tail breakpoint already marks the last message; a second
-  // breakpoint on the same block would waste one of the 4 allowed.
-  if (anchorIndex === messages.length - 1) {
-    return;
-  }
-
-  attachCacheBreakpointToMessage(messages[anchorIndex], ttl, logger);
+  const location = takeAnchorLocation(messages);
+  if (location === undefined || hasCacheControlAtBoundary(location)) return;
+  attachCacheBreakpointToMessage(location, ttl, logger);
 }

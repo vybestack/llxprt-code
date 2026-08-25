@@ -48,6 +48,7 @@ import {
   errorResponse,
   sseResponse,
 } from '../codexStateful.test-helpers.js';
+import { readRawPostTestBody } from '../../test-utils/rawPostTestAdapters.js';
 
 describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery and endpoint scoping @issue:3134', () => {
   beforeEach(() => {
@@ -74,9 +75,7 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
         init?: RequestInit,
       ) => {
         fetchCalls += 1;
-        const blob = init?.body;
-        const bodyText =
-          blob instanceof Blob ? await blob.text() : String(blob ?? '');
+        const bodyText = await readRawPostTestBody(init?.body);
         if (fetchCalls === 1) firstBody = bodyText;
         else secondBody = bodyText;
         if (fetchCalls === 1) {
@@ -197,9 +196,7 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
           _input: unknown,
           init?: RequestInit,
         ) => {
-          const blob = init?.body;
-          turn2Body =
-            blob instanceof Blob ? await blob.text() : String(blob ?? '');
+          turn2Body = await readRawPostTestBody(init?.body);
           return sseResponse('resp_new2', 'ok2');
         };
 
@@ -467,9 +464,7 @@ describe('Codex statefulness is WebSocket-bound @issue:3134', () => {
       _input: unknown,
       init?: RequestInit,
     ) => {
-      if (typeof init?.body === 'string') capturedBody = init.body;
-      else if (init?.body instanceof Blob)
-        capturedBody = await init.body.text();
+      capturedBody = await readRawPostTestBody(init?.body);
       return sseResponse('resp_http', 'ok');
     };
     try {

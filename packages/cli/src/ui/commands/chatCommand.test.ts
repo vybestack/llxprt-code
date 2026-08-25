@@ -9,6 +9,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  LocalMediaStore,
   SessionRecordingService,
   replaySession,
   type IContent,
@@ -30,6 +31,7 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
   let root: string;
   let chatsDir: string;
   let recording: SessionRecordingService;
+  let mediaStore: LocalMediaStore;
   let context: CommandContext;
 
   const command = (name: string): SlashCommand => {
@@ -61,6 +63,10 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'chat-command-'));
     chatsDir = join(root, 'chats');
+    mediaStore = new LocalMediaStore({
+      rootDirectory: join(root, 'media'),
+      quotaBytes: 1024 * 1024,
+    });
     recording = await SessionRecordingService.createLocked({
       sessionId: crypto.randomUUID(),
       projectHash: PROJECT_HASH,
@@ -81,6 +87,7 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
     assertDefined(context.services.config);
     Object.assign(context.services.config, {
       getProjectRoot: () => root,
+      getLocalMediaStore: () => mediaStore,
     });
   });
 

@@ -291,10 +291,8 @@ describe('OpenAIResponsesProvider WebSocket sticky-fallback threshold (issue #30
         _input: unknown,
         init?: RequestInit,
       ) => {
-        if (init?.body instanceof Blob) {
-          capturedBody = await init.body.text();
-        } else if (typeof init?.body === 'string') {
-          capturedBody = init.body;
+        if (init?.body !== undefined && init.body !== null) {
+          capturedBody = await new Response(init.body).text();
         }
         return httpSseResponse();
       };

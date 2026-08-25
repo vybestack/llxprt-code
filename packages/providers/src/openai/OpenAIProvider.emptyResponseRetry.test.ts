@@ -1,18 +1,17 @@
-import { describe, it, expect, beforeEach, vi, type Mock } from 'bun:test';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
-import type { IMessage } from '../IMessage.js';
 import type { ITool } from '../ITool.js';
-import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 import { resetSettingsService } from '@vybestack/llxprt-code-settings';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { IContent } from '../IMessage.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 
 // Mock fetch globally
-global.fetch = vi.fn();
+const fetchMock = vi.fn<typeof fetch>();
+global.fetch = fetchMock;
 
 describe('OpenAIProvider empty response retry (issue #584)', () => {
   let provider: OpenAIProvider;
@@ -65,6 +64,42 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     });
   }
 
+  function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+  }
+
+  async function readRequestBody(
+    init?: RequestInit,
+  ): Promise<Record<string, unknown>> {
+    if (init?.body === undefined || init.body === null) {
+      throw new Error('Expected a physical request body');
+    }
+    const parsed: unknown = JSON.parse(await new Response(init.body).text());
+    if (!isRecord(parsed)) {
+      throw new Error('Expected the physical request body to be an object');
+    }
+    return parsed;
+  }
+
+  function readMessages(
+    body: Record<string, unknown>,
+  ): Array<Record<string, unknown>> {
+    const messages = body['messages'];
+    if (!Array.isArray(messages) || !messages.every(isRecord)) {
+      throw new Error('Expected the physical request body to contain messages');
+    }
+    return messages;
+  }
+
+  function readToolCalls(
+    message: Record<string, unknown>,
+  ): Array<Record<string, unknown>> {
+    const toolCalls = message['tool_calls'];
+    if (!Array.isArray(toolCalls) || !toolCalls.every(isRecord)) {
+      throw new Error('Expected the assistant message to contain tool calls');
+    }
+    return toolCalls;
+  }
   it('should request continuation when tool calls complete but no text returned', async () => {
     // First response: tool call with finish_reason=stop but no text
     const firstResponseChunks = [
@@ -152,35 +187,41 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
 
     // Mock fetch to return first response, then second response
     let callCount = 0;
-    (global.fetch as Mock<typeof global.fetch>).mockImplementation(async () => {
-      callCount++;
-      if (callCount === 1) {
-        return createStreamingResponse(firstResponseChunks);
-      }
-      return createStreamingResponse(secondResponseChunks);
-    });
+    const requestBodies: Array<Record<string, unknown>> = [];
+    fetchMock.mockImplementation(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        requestBodies.push(await readRequestBody(init));
+        callCount++;
+        if (callCount === 1) {
+          return createStreamingResponse(firstResponseChunks);
+        }
+        return createStreamingResponse(secondResponseChunks);
+      },
+    );
 
-    const messages: IMessage[] = [
+    const messages: IContent[] = [
       {
-        role: ContentGeneratorRole.USER,
-        content: 'look through the codebase and tell me what it does',
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'text',
+            text: 'look through the codebase and tell me what it does',
+          },
+        ],
       },
       {
-        role: ContentGeneratorRole.MODEL,
-        content: {
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'thinking',
-              thought: 'pre-tool hidden reasoning that should not be replayed',
-              sourceField: 'reasoning_content',
-            },
-            {
-              type: 'text',
-              text: 'I will inspect the repository now.',
-            },
-          ],
-        },
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'thinking',
+            thought: 'pre-tool hidden reasoning that should not be replayed',
+            sourceField: 'reasoning_content',
+          },
+          {
+            type: 'text',
+            text: 'I will inspect the repository now.',
+          },
+        ],
       },
     ];
 
@@ -245,65 +286,44 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     expect(callCount).toBe(2);
 
     // Verify the continuation request structure (CodeRabbit review #764)
-    const secondFetchCall = (global.fetch as Mock<typeof global.fetch>).mock
-      .calls[1];
-    expect(secondFetchCall).toBeDefined();
-    const secondRequestBody = JSON.parse(
-      secondFetchCall[1]?.body as string,
-    ) as {
-      messages: Array<{
-        role: string;
-        content?: string;
-        tool_calls?: Array<{
-          id?: string;
-          type?: string;
-          function?: {
-            name?: string;
-            arguments?: string;
-          };
-        }>;
-        tool_call_id?: string;
-      }>;
-    };
-
-    // Verify continuation messages structure
-    expect(secondRequestBody.messages).toBeDefined();
-    const continuationMessages = secondRequestBody.messages;
+    const secondRequestBody = requestBodies.at(1);
+    if (secondRequestBody === undefined) {
+      throw new Error('Expected a continuation request');
+    }
+    const continuationMessages = readMessages(secondRequestBody);
 
     // Should have assistant message with tool_calls
     const assistantMsg = continuationMessages.find(
-      (m) => m.role === 'assistant' && m.tool_calls != null,
+      (message) =>
+        message['role'] === 'assistant' && Array.isArray(message['tool_calls']),
     );
-    expect(assistantMsg).toBeDefined();
-    expect(assistantMsg?.tool_calls).toHaveLength(1);
+    if (assistantMsg === undefined) {
+      throw new Error('Expected an assistant continuation message');
+    }
+    const assistantToolCalls = readToolCalls(assistantMsg);
+    expect(assistantToolCalls).toHaveLength(1);
 
     // Should have tool response messages with correct placeholder
     const toolResponseMsgs = continuationMessages.filter(
-      (m) => m.role === 'tool',
+      (message) => message['role'] === 'tool',
     );
     expect(toolResponseMsgs).toHaveLength(1);
 
     // In strict OpenAI-compatible mode we must preserve OpenAI-style IDs in
     // continuation replay (e.g. call_123), not rewritten history IDs.
-    const continuationToolCallId =
-      assistantMsg?.tool_calls?.[0] &&
-      typeof assistantMsg.tool_calls[0].id === 'string'
-        ? assistantMsg.tool_calls[0].id
-        : undefined;
-    expect(continuationToolCallId).toMatch(/^call_/);
+    expect(assistantToolCalls[0]?.['id']).toMatch(/^call_/);
 
-    expect(toolResponseMsgs[0]?.content).toBe(
+    expect(toolResponseMsgs[0]?.['content']).toBe(
       '[Tool call acknowledged - awaiting execution]',
     );
 
     // Assistant tool_call IDs and following tool tool_call_id MUST stay aligned.
     // Strict OpenAI-compatible gateways validate adjacency and exact ID matching.
-    const assistantToolCallIds =
-      assistantMsg?.tool_calls
-        ?.map((tc) => tc.id)
-        .filter((id): id is string => typeof id === 'string') ?? [];
+    const assistantToolCallIds = assistantToolCalls
+      .map((toolCall) => toolCall['id'])
+      .filter((id): id is string => typeof id === 'string');
     const toolResponseIds = toolResponseMsgs
-      .map((m) => m.tool_call_id)
+      .map((message) => message['tool_call_id'])
       .filter((id): id is string => typeof id === 'string');
 
     expect(assistantToolCallIds).toStrictEqual(['call_123']);
@@ -425,18 +445,27 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     ];
 
     let callCount = 0;
-    (global.fetch as Mock<typeof global.fetch>).mockImplementation(async () => {
-      callCount++;
-      if (callCount === 1) {
-        return createStreamingResponse(firstResponseChunks);
-      }
-      return createStreamingResponse(secondResponseChunks);
-    });
+    const requestBodies: Array<Record<string, unknown>> = [];
+    fetchMock.mockImplementation(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        requestBodies.push(await readRequestBody(init));
+        callCount++;
+        if (callCount === 1) {
+          return createStreamingResponse(firstResponseChunks);
+        }
+        return createStreamingResponse(secondResponseChunks);
+      },
+    );
 
-    const messages: IMessage[] = [
+    const messages: IContent[] = [
       {
-        role: ContentGeneratorRole.USER,
-        content: 'scan this repository for TypeScript files',
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'text',
+            text: 'scan this repository for TypeScript files',
+          },
+        ],
       },
     ];
 
@@ -476,44 +505,28 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
 
     expect(callCount).toBe(2);
 
-    const secondFetchCall = (global.fetch as Mock<typeof global.fetch>).mock
-      .calls[1];
-    expect(secondFetchCall).toBeDefined();
-
-    const secondRequestBody = JSON.parse(
-      secondFetchCall[1]?.body as string,
-    ) as {
-      messages: Array<{
-        role: string;
-        content?: string;
-        tool_calls?: Array<{
-          id?: string;
-          type?: string;
-          function?: {
-            name?: string;
-            arguments?: string;
-          };
-        }>;
-        tool_call_id?: string;
-      }>;
-    };
-
-    const continuationAssistant = secondRequestBody.messages.find(
-      (m): boolean =>
-        m.role === 'assistant' &&
-        m.tool_calls != null &&
-        m.tool_calls.length > 0,
+    const secondRequestBody = requestBodies.at(1);
+    if (secondRequestBody === undefined) {
+      throw new Error('Expected a continuation request');
+    }
+    const continuationMessages = readMessages(secondRequestBody);
+    const continuationAssistant = continuationMessages.find(
+      (message) =>
+        message['role'] === 'assistant' && Array.isArray(message['tool_calls']),
     );
-    expect(continuationAssistant).toBeDefined();
-
-    const continuationTool = secondRequestBody.messages.find(
-      (m) => m.role === 'tool',
+    if (continuationAssistant === undefined) {
+      throw new Error('Expected an assistant continuation message');
+    }
+    const continuationTool = continuationMessages.find(
+      (message) => message['role'] === 'tool',
     );
-    expect(continuationTool).toBeDefined();
+    if (continuationTool === undefined) {
+      throw new Error('Expected a tool continuation message');
+    }
 
-    const assistantToolCallId = continuationAssistant?.tool_calls?.[0]?.id;
+    const assistantToolCallId = readToolCalls(continuationAssistant)[0]?.['id'];
     expect(assistantToolCallId).toBe('call_provider_999');
-    expect(continuationTool?.tool_call_id).toBe(assistantToolCallId);
+    expect(continuationTool['tool_call_id']).toBe(assistantToolCallId);
   });
   it('should include tool message name in continuation payload for mistral format', async () => {
     const firstResponseChunks = [
@@ -587,12 +600,16 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     ];
 
     let callCount = 0;
-    (global.fetch as Mock<typeof global.fetch>).mockImplementation(async () => {
-      callCount++;
-      return createStreamingResponse(
-        callCount === 1 ? firstResponseChunks : secondResponseChunks,
-      );
-    });
+    const requestBodies: Array<Record<string, unknown>> = [];
+    fetchMock.mockImplementation(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        requestBodies.push(await readRequestBody(init));
+        callCount++;
+        return createStreamingResponse(
+          callCount === 1 ? firstResponseChunks : secondResponseChunks,
+        );
+      },
+    );
 
     settingsService.set('model', 'mistral-large-latest');
     settingsService.setProviderSetting(
@@ -601,10 +618,10 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
       'mistral-large-latest',
     );
 
-    const messages: IMessage[] = [
+    const messages: IContent[] = [
       {
-        role: ContentGeneratorRole.USER,
-        content: 'find ts files',
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'find ts files' }],
       },
     ];
 
@@ -643,21 +660,12 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
 
     expect(callCount).toBe(2);
 
-    const secondFetchCall = (global.fetch as Mock<typeof global.fetch>).mock
-      .calls[1];
-    const secondRequestBody = JSON.parse(
-      secondFetchCall[1]?.body as string,
-    ) as {
-      messages: Array<{
-        role: string;
-        name?: string;
-        content?: string;
-        tool_call_id?: string;
-      }>;
-    };
-
-    const toolMessage = secondRequestBody.messages.find(
-      (msg) => msg.role === 'tool',
+    const secondRequestBody = requestBodies.at(1);
+    if (secondRequestBody === undefined) {
+      throw new Error('Expected a continuation request');
+    }
+    const toolMessage = readMessages(secondRequestBody).find(
+      (message) => message['role'] === 'tool',
     );
 
     expect(toolMessage).toBeDefined();

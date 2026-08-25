@@ -18,6 +18,7 @@ import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),
@@ -44,6 +45,7 @@ void vi.mock('@anthropic-ai/sdk', () => {
     readonly messages: {
       create: ReturnType<typeof vi.fn>;
     };
+    readonly post: ReturnType<typeof createAnthropicRawPostTestAdapter>['post'];
 
     constructor(opts: Record<string, unknown>) {
       this.instanceId = Symbol('anthropic-client');
@@ -53,11 +55,10 @@ void vi.mock('@anthropic-ai/sdk', () => {
         options: opts,
       });
       this.messages = {
-        create: vi.fn(async (request: unknown) => {
+        create: vi.fn(async (request: Record<string, unknown>) => {
           FakeAnthropic.requests.push({ request });
-          const req = request as { stream?: boolean };
 
-          if (req.stream === true) {
+          if (request['stream'] === true) {
             // Return async iterable for streaming
             return {
               async *[Symbol.asyncIterator]() {
@@ -115,6 +116,7 @@ void vi.mock('@anthropic-ai/sdk', () => {
           };
         }),
       };
+      this.post = createAnthropicRawPostTestAdapter(this.messages.create).post;
     }
   }
 

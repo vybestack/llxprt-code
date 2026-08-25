@@ -229,8 +229,8 @@ describe('AgentClient (client.ts)', () => {
     todoStoreWritePausedMock.mockResolvedValue(undefined);
   });
 
-  afterEach(() => {
-    client.dispose();
+  afterEach(async () => {
+    await client.dispose();
     vi.restoreAllMocks();
   });
 
@@ -372,7 +372,7 @@ describe('AgentClient (client.ts)', () => {
           ],
         },
       ];
-      client.storeHistoryForLaterUse(committedHistory);
+      await client.storeHistoryForLaterUse(committedHistory);
       client['chat'] = undefined;
       const startChatSpy = vi
         .spyOn(client, 'startChat')

@@ -16,8 +16,8 @@ import {
   setupAnthropicProvider,
   type AnthropicMessage,
   type AnthropicTestSetup,
+  createAnthropicRawPostTestAdapter,
 } from './test-utils/anthropicProviderTestSetup.js';
-
 // Shared mock instance for messages.create - using vi.hoisted so it's
 // available when vi.mock factories run.
 const mockMessagesCreate = vi.fn();
@@ -82,6 +82,7 @@ void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
 
 void vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation(() => ({
+    ...createAnthropicRawPostTestAdapter(mockMessagesCreate),
     messages: { create: mockMessagesCreate },
     beta: {
       models: {
@@ -421,8 +422,7 @@ describe('AnthropicProvider', () => {
         );
         await generator.next();
 
-        const call = mockMessagesCreate.mock.calls[0];
-        const options = call[1];
+        const options = mockMessagesCreate.mock.calls[0][1];
 
         // Check beta header - should not contain extended TTL
         const betaHeader = options?.headers?.['anthropic-beta'] as

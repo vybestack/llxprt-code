@@ -18,6 +18,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { GeminiProvider } from './GeminiProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import type {
+  RequestMediaResolutionService,
+  ResolvedMediaRequest,
+} from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 
 const realLlxprtCodeSettingsModule = {
   ...(await import('@vybestack/llxprt-code-settings')),
@@ -476,5 +480,103 @@ describe('GeminiProvider - MediaBlock support', () => {
         data: 'audiodata',
       },
     });
+  });
+
+  it('preserves stream and media-release failures in one aggregate error', async () => {
+    const contentId =
+      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const reference = {
+      type: 'media' as const,
+      mimeType: 'image/png',
+      encoding: 'reference' as const,
+      contentId,
+      originalContentId: contentId,
+      selectedContentId: contentId,
+      originalObject: {
+        contentId,
+        mimeType: 'image/png',
+        byteLength: 3,
+        normalizedBase64Length: 4,
+      },
+      selectedObject: {
+        contentId,
+        mimeType: 'image/png',
+        byteLength: 3,
+        normalizedBase64Length: 4,
+      },
+      transformation: {
+        policyId: 'identity',
+        policyVersion: 1,
+        parameters: {},
+      },
+      byteLength: 3,
+      normalizedBase64Length: 4,
+      semanticMetadata: {},
+    };
+    const materialized: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'media',
+            mimeType: 'image/png',
+            encoding: 'base64',
+            data: 'QUJD',
+          },
+        ],
+      },
+    ];
+    const request: ResolvedMediaRequest = {
+      withContents: (consume) => consume(materialized),
+      registerCleanup: () => {},
+      accounting: () => ({
+        selectedReferenceCount: 1,
+        uniqueContentCount: 1,
+        selectedNormalizedBytes: 4,
+        materializedNormalizedBytes: 4,
+        storeReadCount: 1,
+        reservedContentCount: 1,
+        released: false,
+      }),
+      release: async () => {
+        throw new Error('media release failed');
+      },
+    };
+    const mediaResolver: RequestMediaResolutionService = {
+      resolve: async () => request,
+    };
+    generateContentStreamMock.mockResolvedValueOnce({
+      [Symbol.asyncIterator]: () => ({
+        next: async () => {
+          throw new Error('stream generation failed');
+        },
+      }),
+    });
+    const provider = new GeminiProvider('test-key');
+    const options = createProviderCallOptions({
+      providerName: provider.name,
+      contents: [{ speaker: 'human', blocks: [reference] }],
+    });
+    const iterator = provider.generateChatCompletion({
+      ...options,
+      runtime: { ...options.runtime, mediaResolver },
+    });
+
+    let error: unknown;
+    try {
+      for await (const _content of iterator) {
+        throw new Error('Unexpected Gemini content');
+      }
+    } catch (reason) {
+      error = reason;
+    }
+
+    if (!(error instanceof AggregateError)) {
+      throw new Error('Expected generation and release AggregateError');
+    }
+    expect(error.errors).toEqual([
+      new Error('stream generation failed'),
+      new Error('media release failed'),
+    ]);
   });
 });

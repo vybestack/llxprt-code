@@ -27,9 +27,21 @@ import {
 } from '../utils/dumpSDKContext.js';
 import { type DumpMode } from '../utils/dumpContext.js';
 import { type OpenAITool } from './schemaConverter.js';
+import { withBoundedJsonHttpBody } from '../utils/boundedJsonBody.js';
+
+interface OpenAIRawPostOptions {
+  readonly body: unknown;
+  readonly headers: Record<string, string>;
+  readonly signal?: AbortSignal;
+  readonly stream: boolean;
+}
+
+export interface OpenAIRawPostClient {
+  post(path: string, options: OpenAIRawPostOptions): Promise<unknown>;
+}
 
 export interface ApiExecutionOptions {
-  client: OpenAI;
+  client: OpenAIRawPostClient;
   requestBody: OpenAI.Chat.ChatCompletionCreateParams;
   abortSignal: AbortSignal | undefined;
   mergedHeaders: Record<string, string> | undefined;
@@ -167,6 +179,79 @@ async function handleApiError(
   throw error;
 }
 
+function boundedJsonHeaders(
+  byteLength: number,
+  customHeaders: Record<string, string> | undefined,
+): Record<string, string> {
+  return {
+    ...(customHeaders ?? {}),
+    'content-type': 'application/json',
+    'content-length': String(byteLength),
+  };
+}
+
+function isAsyncChatCompletionStream(
+  value: unknown,
+): value is AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Symbol.asyncIterator in value &&
+    typeof value[Symbol.asyncIterator] === 'function'
+  );
+}
+
+function isChatCompletion(
+  value: unknown,
+): value is OpenAI.Chat.Completions.ChatCompletion {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'choices' in value &&
+    Array.isArray(value.choices)
+  );
+}
+
+export async function executeBoundedStreamingChatRequest(
+  client: OpenAIRawPostClient,
+  requestBody: OpenAI.Chat.ChatCompletionCreateParams,
+  abortSignal: AbortSignal | undefined,
+  mergedHeaders: Record<string, string> | undefined,
+): Promise<AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>> {
+  const response = await withBoundedJsonHttpBody(requestBody, (body) =>
+    client.post('/chat/completions', {
+      body: body.stream,
+      headers: boundedJsonHeaders(body.byteLength, mergedHeaders),
+      stream: true,
+      ...(abortSignal === undefined ? {} : { signal: abortSignal }),
+    }),
+  );
+  if (!isAsyncChatCompletionStream(response)) {
+    throw new TypeError('OpenAI streaming response is not async iterable');
+  }
+  return response;
+}
+
+async function executeBoundedNonStreamingChatRequest(
+  client: OpenAIRawPostClient,
+  requestBody: OpenAI.Chat.ChatCompletionCreateParams,
+  abortSignal: AbortSignal | undefined,
+  mergedHeaders: Record<string, string> | undefined,
+): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+  const response = await withBoundedJsonHttpBody(requestBody, (body) =>
+    client.post('/chat/completions', {
+      body: body.stream,
+      headers: boundedJsonHeaders(body.byteLength, mergedHeaders),
+      stream: false,
+      ...(abortSignal === undefined ? {} : { signal: abortSignal }),
+    }),
+  );
+  if (!isChatCompletion(response)) {
+    throw new TypeError('OpenAI response does not contain a choices array');
+  }
+  return response;
+}
+
 /**
  * Execute streaming API request with dump and error handling.
  */
@@ -196,10 +281,12 @@ async function executeStreamingRequest(
   }
 
   try {
-    const response = (await client.chat.completions.create(requestBody, {
-      ...(abortSignal ? { signal: abortSignal } : {}),
-      ...(mergedHeaders ? { headers: mergedHeaders } : {}),
-    })) as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
+    const response = await executeBoundedStreamingChatRequest(
+      client,
+      requestBody,
+      abortSignal,
+      mergedHeaders,
+    );
 
     if (shouldDumpSuccess && requestBaseId) {
       return wrapStreamWithDump(
@@ -284,10 +371,12 @@ async function executeNonStreamingRequest(
   }
 
   try {
-    const response = (await client.chat.completions.create(requestBody, {
-      ...(abortSignal ? { signal: abortSignal } : {}),
-      ...(mergedHeaders ? { headers: mergedHeaders } : {}),
-    })) as OpenAI.Chat.Completions.ChatCompletion;
+    const response = await executeBoundedNonStreamingChatRequest(
+      client,
+      requestBody,
+      abortSignal,
+      mergedHeaders,
+    );
 
     if (shouldDumpSuccess && requestBaseId) {
       await bestEffortDump(

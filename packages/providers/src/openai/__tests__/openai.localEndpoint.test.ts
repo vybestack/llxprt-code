@@ -22,6 +22,7 @@ import {
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import { isLocalEndpoint } from '../../utils/localEndpoint.js';
+import { createOpenAIRawPostTestAdapter } from '../../test-utils/rawPostTestAdapters.js';
 
 void vi.mock('openai', () => {
   class FakeOpenAI {
@@ -73,6 +74,7 @@ void vi.mock('openai', () => {
         }),
       },
     };
+    post = createOpenAIRawPostTestAdapter(this.chat.completions.create).post;
   }
 
   return { default: FakeOpenAI };

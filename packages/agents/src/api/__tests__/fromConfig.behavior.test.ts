@@ -242,7 +242,7 @@ describe('fromConfig tokenizer readiness @requirement:REQ-3217-001 @requirement:
         ),
       ).toThrow(/runtime registration|runtime.*not/i);
     } finally {
-      disposeCliRuntime(runtimeId);
+      await disposeCliRuntime(runtimeId);
       await built.cleanup();
     }
   });

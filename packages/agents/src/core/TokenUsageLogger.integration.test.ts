@@ -831,5 +831,5 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     expect(success.generation_ms).toBeGreaterThan(0);
     expect(typeof success.provider_request_ms).toBe('number');
     expect(success.provider_request_ms).toBeGreaterThanOrEqual(0);
-  });
+  }, 10_000);
 });

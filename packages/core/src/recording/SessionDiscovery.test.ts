@@ -127,6 +127,28 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
+  it('reports an incompatible recording during continue-target discovery', async () => {
+    const created = await createTestSession(chatsDir, {
+      sessionId: 'incompatible-discovery-session',
+      projectHash: PROJECT_HASH,
+    });
+    const incompatibleLine = {
+      v: 999,
+      seq: 3,
+      ts: new Date().toISOString(),
+      type: 'session_event',
+      payload: { severity: 'info', message: 'future event' },
+    };
+    await fs.appendFile(
+      created.filePath,
+      `${JSON.stringify(incompatibleLine)}\n`,
+    );
+
+    await expect(
+      SessionDiscovery.listContinueTargets(chatsDir, PROJECT_HASH),
+    ).rejects.toThrow(/unsupported recording version/i);
+  });
+
   // -------------------------------------------------------------------------
   // listSessions — Behavioral Tests
   // -------------------------------------------------------------------------

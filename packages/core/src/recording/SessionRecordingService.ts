@@ -45,6 +45,7 @@ import {
 } from './types.js';
 import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
 import { replaySession } from './ReplayEngine.js';
+import type { LocalMediaStore } from '../storage/local-media-store.js';
 
 export const SESSION_FILE_ID_PREFIX_LENGTH = 12;
 
@@ -54,6 +55,18 @@ export const SESSION_FILE_ID_PREFIX_LENGTH = 12;
  * never dropped, because the session file is the durable transcript.
  */
 const QUEUE_HIGH_WATER_RECORDS = 4096;
+const MATERIALIZING_EVENT_TYPES: ReadonlySet<SessionEventType> = new Set([
+  'content',
+  'session_metadata',
+  'session_named',
+  'semantic_media_purge',
+]);
+
+type RecordingLifecycle =
+  | { readonly status: 'active' }
+  | { readonly status: 'failed'; readonly error: unknown }
+  | { readonly status: 'failure-reported' }
+  | { readonly status: 'disposed' };
 
 /**
  * A record that has already been serialised. Serialising at enqueue time keeps
@@ -67,9 +80,44 @@ interface PendingRecord {
   readonly bytes: number;
 }
 
+export interface PreparedContentBatch {
+  publish(): void;
+  rollback(): void;
+  finalize(): void;
+}
+
 function toPendingRecord(line: SessionRecordLine): PendingRecord {
   const json = JSON.stringify(line);
   return { line, json, bytes: Buffer.byteLength(json, 'utf8') + 1 };
+}
+
+function totalRecordBytes(records: readonly PendingRecord[]): number {
+  return records.reduce((total, record) => total + record.bytes, 0);
+}
+
+function containsMediaReference(
+  value: unknown,
+  seen = new WeakSet<object>(),
+): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  if (seen.has(value)) return false;
+  seen.add(value);
+  if (
+    Reflect.get(value, 'type') === 'media' &&
+    Reflect.get(value, 'encoding') === 'reference'
+  ) {
+    return true;
+  }
+  if (Array.isArray(value)) {
+    return value.some((entry) => containsMediaReference(entry, seen));
+  }
+  return Reflect.ownKeys(value).some((key) =>
+    containsMediaReference(Reflect.get(value, key), seen),
+  );
+}
+
+function recordingVersion(payload: unknown): number {
+  return containsMediaReference(payload) ? 2 : 1;
 }
 
 /**
@@ -87,12 +135,14 @@ export class SessionRecordingService {
   private seq: number = 0;
   private filePath: string | null = null;
   private materialized: boolean = false;
-  private active: boolean = true;
+  private lifecycle: RecordingLifecycle = { status: 'active' };
   private draining: boolean = false;
   private drainPromise: Promise<void> | null = null;
   private readonly sessionId: string;
   private readonly projectHash: string;
   private readonly chatsDir: string;
+  private readonly maxQueueBytes: number;
+  private readonly mediaStore: LocalMediaStore | undefined;
   private preContentBuffer: PendingRecord[] = [];
   private preContentBytes: number = 0;
   private chatsDirWatcher: { close(): void } | null = null;
@@ -129,9 +179,17 @@ export class SessionRecordingService {
    * @pseudocode session-recording-service.md lines 53-67
    */
   constructor(config: SessionRecordingServiceConfig) {
+    const maxQueueBytes = config.maxQueueBytes ?? Number.MAX_SAFE_INTEGER;
+    if (!Number.isSafeInteger(maxQueueBytes) || maxQueueBytes < 0) {
+      throw new Error(
+        'Session recording queue byte limit must be a non-negative safe integer',
+      );
+    }
     this.sessionId = config.sessionId;
     this.projectHash = config.projectHash;
     this.chatsDir = config.chatsDir;
+    this.maxQueueBytes = maxQueueBytes;
+    this.mediaStore = config.mediaStore;
 
     const startPayload = {
       sessionId: config.sessionId,
@@ -153,15 +211,16 @@ export class SessionRecordingService {
    * @pseudocode session-recording-service.md lines 69-79
    */
   private bufferPreContent(type: SessionEventType, payload: unknown): void {
-    this.seq++;
     const line: SessionRecordLine = {
-      v: 1,
-      seq: this.seq,
+      v: type === 'semantic_media_purge' ? 2 : recordingVersion(payload),
+      seq: this.seq + 1,
       ts: new Date().toISOString(),
       type,
       payload,
     };
     const record = toPendingRecord(line);
+    this.reserveQueueBytes(record.bytes);
+    this.seq = line.seq;
     this.preContentBuffer.push(record);
     this.preContentBytes += record.bytes;
     this.reportHighWater();
@@ -176,45 +235,77 @@ export class SessionRecordingService {
    * @pseudocode session-recording-service.md lines 81-110
    */
   enqueue(type: SessionEventType, payload: unknown): SessionRecordLine | null {
-    if (!this.active) return null;
-
-    if (
-      (type === 'content' ||
-        type === 'session_metadata' ||
-        type === 'session_named') &&
-      !this.materialized
-    ) {
-      this.materialize();
-      for (const buffered of this.preContentBuffer) {
-        this.queue.push(buffered);
-      }
-      this.queueBytes += this.preContentBytes;
-      this.preContentBuffer = [];
-      this.preContentBytes = 0;
-      this.materialized = true;
-    }
-
-    if (!this.materialized && type !== 'content') {
+    if (this.lifecycle.status !== 'active') return null;
+    if (!this.materialized && !MATERIALIZING_EVENT_TYPES.has(type)) {
       this.bufferPreContent(type, payload);
       return (
         this.preContentBuffer[this.preContentBuffer.length - 1]?.line ?? null
       );
     }
 
-    this.seq++;
     const line: SessionRecordLine = {
-      v: 1,
-      seq: this.seq,
+      v: type === 'semantic_media_purge' ? 2 : recordingVersion(payload),
+      seq: this.seq + 1,
       ts: new Date().toISOString(),
       type,
       payload,
     };
     const record = toPendingRecord(line);
+    this.reserveQueueBytes(record.bytes);
+    if (!this.materialized) {
+      this.materialize();
+      this.queue.push(...this.preContentBuffer);
+      this.queueBytes += this.preContentBytes;
+      this.preContentBuffer = [];
+      this.preContentBytes = 0;
+      this.materialized = true;
+    }
+    this.seq = line.seq;
     this.queue.push(record);
     this.queueBytes += record.bytes;
     this.reportHighWater();
     this.scheduleDrain();
     return line;
+  }
+
+  private reserveQueueBytes(bytes: number): void {
+    const pendingBytes = this.queueBytes + this.preContentBytes;
+    if (bytes > this.maxQueueBytes - pendingBytes) {
+      throw new Error(
+        `Session recording queue byte limit exceeded: ${pendingBytes} + ${bytes} > ${this.maxQueueBytes}`,
+      );
+    }
+  }
+
+  private takeRecordingFailure(): unknown | undefined {
+    if (this.lifecycle.status !== 'failed') return undefined;
+    const error = this.lifecycle.error;
+    this.lifecycle = { status: 'failure-reported' };
+    return error;
+  }
+
+  private transitionToFailure(error: unknown): void {
+    const failures: unknown[] = [error];
+    this.queue = [];
+    this.queueBytes = 0;
+    this.preContentBuffer = [];
+    this.preContentBytes = 0;
+    try {
+      this.chatsDirWatcher?.close();
+    } catch (cleanupError: unknown) {
+      failures.push(cleanupError);
+    }
+    this.chatsDirWatcher = null;
+    this.lifecycle = {
+      status: 'failed',
+      error:
+        failures.length === 1
+          ? error
+          : new AggregateError(
+              failures,
+              'Session recording write and watcher cleanup failed',
+            ),
+    };
   }
 
   /**
@@ -302,11 +393,7 @@ export class SessionRecordingService {
             `  error: ${error}`,
         );
       }
-      this.queue = [];
-      this.queueBytes = 0;
-      this.chatsDirWatcher?.close();
-      this.chatsDirWatcher = null;
-      this.active = false;
+      this.transitionToFailure(error);
     });
   }
 
@@ -321,13 +408,16 @@ export class SessionRecordingService {
     try {
       while (this.queue.length > 0) {
         const batch = [...this.queue];
-        this.queue = [];
-        this.queueBytes = 0;
         const lines = batch.map((record) => record.json).join('\n') + '\n';
         const shouldContinue = await this.writeBatchToFile(lines);
         if (!shouldContinue) {
           return;
         }
+        this.queue = this.queue.slice(batch.length);
+        this.queueBytes -= batch.reduce(
+          (total, record) => total + record.bytes,
+          0,
+        );
       }
     } finally {
       this.draining = false;
@@ -344,11 +434,7 @@ export class SessionRecordingService {
       return true;
     } catch (error: unknown) {
       if (this.isDiskSpaceError(error)) {
-        this.queue = [];
-        this.queueBytes = 0;
-        this.chatsDirWatcher?.close();
-        this.chatsDirWatcher = null;
-        this.active = false;
+        this.transitionToFailure(error);
         return false;
       }
       throw error;
@@ -372,16 +458,25 @@ export class SessionRecordingService {
    * @pseudocode session-recording-service.md lines 148-160
    */
   async flush(): Promise<void> {
-    if (!this.active) return;
+    const existingFailure = this.takeRecordingFailure();
+    if (existingFailure !== undefined) throw existingFailure;
+    if (this.lifecycle.status !== 'active') return;
     if (this.queue.length === 0 && !this.draining) return;
 
     if (this.drainPromise) {
       await this.drainPromise;
+      const drainFailure = this.takeRecordingFailure();
+      if (drainFailure !== undefined) throw drainFailure;
     }
 
     if (this.queue.length > 0) {
-      this.drainPromise = this.drain();
+      this.draining = true;
+      this.drainPromise = this.drain().catch((error: unknown) => {
+        this.transitionToFailure(error);
+      });
       await this.drainPromise;
+      const drainFailure = this.takeRecordingFailure();
+      if (drainFailure !== undefined) throw drainFailure;
     }
   }
 
@@ -393,7 +488,7 @@ export class SessionRecordingService {
    * @pseudocode session-recording-service.md line 162-164
    */
   isActive(): boolean {
-    return this.active;
+    return this.lifecycle.status === 'active';
   }
 
   /**
@@ -420,7 +515,9 @@ export class SessionRecordingService {
 
   ownsLockFor(sessionId: string): boolean {
     return (
-      this.active && this.sessionId === sessionId && this.lockHandle !== null
+      this.lifecycle.status === 'active' &&
+      this.sessionId === sessionId &&
+      this.lockHandle !== null
     );
   }
 
@@ -433,7 +530,7 @@ export class SessionRecordingService {
   }
 
   getOwnedLockHandle(): LockHandle | null {
-    return this.active ? this.lockHandle : null;
+    return this.lifecycle.status === 'active' ? this.lockHandle : null;
   }
 
   /**
@@ -467,14 +564,14 @@ export class SessionRecordingService {
    */
   async dispose(): Promise<void> {
     const failures: unknown[] = [];
-    if (this.active) {
+    if (this.lifecycle.status !== 'disposed') {
       try {
         await this.flush();
       } catch (error: unknown) {
         failures.push(error);
       }
     }
-    this.active = false;
+    this.lifecycle = { status: 'disposed' };
     this.queue = [];
     this.queueBytes = 0;
     this.preContentBuffer = [];
@@ -601,6 +698,97 @@ export class SessionRecordingService {
     this.enqueue('content', { content });
   }
 
+  prepareContentBatch(contents: readonly IContent[]): PreparedContentBatch {
+    if (this.lifecycle.status !== 'active') {
+      throw new Error('Cannot record content batch: recording is not active');
+    }
+    if (this.draining) {
+      throw new Error(
+        'Cannot record content batch while recording is draining',
+      );
+    }
+
+    const expectedSeq = this.seq;
+    const records = contents.map((content, index) =>
+      toPendingRecord({
+        v: recordingVersion({ content }),
+        seq: expectedSeq + index + 1,
+        ts: new Date().toISOString(),
+        type: 'content',
+        payload: { content },
+      }),
+    );
+    const batchBytes = totalRecordBytes(records);
+    const pendingBytes = this.queueBytes + this.preContentBytes;
+    if (batchBytes > this.maxQueueBytes - pendingBytes) {
+      throw new Error(
+        `Session recording queue byte limit exceeded: ${pendingBytes} + ${batchBytes} > ${this.maxQueueBytes}`,
+      );
+    }
+
+    const queueBefore = this.queue;
+    const queueBytesBefore = this.queueBytes;
+    const preContentBefore = this.preContentBuffer;
+    const preContentBytesBefore = this.preContentBytes;
+    const materializedBefore = this.materialized;
+    const filePathBefore = this.filePath;
+    const watcherBefore = this.chatsDirWatcher;
+    let published = false;
+    let finalized = false;
+
+    return {
+      publish: () => {
+        if (published) throw new Error('Content batch was already published');
+        if (this.seq !== expectedSeq) {
+          throw new Error('Recording changed after content batch preflight');
+        }
+        published = true;
+        if (!this.materialized) {
+          this.materialize();
+          this.queue = [...this.preContentBuffer, ...records];
+          this.queueBytes = this.preContentBytes + batchBytes;
+          this.preContentBuffer = [];
+          this.preContentBytes = 0;
+          this.materialized = true;
+        } else {
+          this.queue = [...this.queue, ...records];
+          this.queueBytes += batchBytes;
+        }
+        this.seq = expectedSeq + records.length;
+        this.reportHighWater();
+      },
+      rollback: () => {
+        if (!published || finalized) return;
+        if (this.chatsDirWatcher !== watcherBefore) {
+          this.chatsDirWatcher?.close();
+        }
+        this.queue = queueBefore;
+        this.queueBytes = queueBytesBefore;
+        this.preContentBuffer = preContentBefore;
+        this.preContentBytes = preContentBytesBefore;
+        this.materialized = materializedBefore;
+        this.filePath = filePathBefore;
+        this.chatsDirWatcher = watcherBefore;
+        this.seq = expectedSeq;
+        published = false;
+      },
+      finalize: () => {
+        if (!published) {
+          throw new Error('Cannot finalize an unpublished content batch');
+        }
+        finalized = true;
+        this.scheduleDrain();
+      },
+    };
+  }
+
+  recordSemanticMediaPurge(
+    history: readonly IContent[],
+    frontier: { readonly contentIndex: number; readonly blockIndex: number },
+  ): void {
+    this.enqueue('semantic_media_purge', { history, frontier });
+  }
+
   /**
    * Record a compression event — history was compressed into a summary.
    *
@@ -669,7 +857,7 @@ export class SessionRecordingService {
    * @requirement REQ-REC-002
    */
   recordSessionMetadata(title: string | null): void {
-    if (!this.active) {
+    if (this.lifecycle.status !== 'active') {
       return;
     }
     this.enqueue('session_metadata', { title });
@@ -693,7 +881,7 @@ export class SessionRecordingService {
    * Rejects if the conversation is empty/unmaterialized or the recorder is inactive.
    */
   async createCheckpoint(name: string): Promise<RecordingCheckpointInfo> {
-    if (!this.active) {
+    if (this.lifecycle.status !== 'active') {
       throw new Error('Cannot create checkpoint: recording is not active');
     }
     if (!this.materialized) {
@@ -713,7 +901,9 @@ export class SessionRecordingService {
         'Cannot create checkpoint: conversation has no content yet',
       );
     }
-    const replay = await replaySession(filePath, this.projectHash);
+    const replay = await replaySession(filePath, this.projectHash, {
+      mediaStore: this.mediaStore,
+    });
     if (!replay.ok) {
       throw new Error(`Cannot create checkpoint: ${replay.error}`);
     }
@@ -746,7 +936,7 @@ export class SessionRecordingService {
    * The lifecycle event is flushed before the promise resolves.
    */
   async deleteCheckpoint(checkpointId: string): Promise<void> {
-    if (!this.active) {
+    if (this.lifecycle.status !== 'active') {
       throw new Error('Cannot delete checkpoint: recording is not active');
     }
     if (!this.materialized) {
@@ -763,7 +953,7 @@ export class SessionRecordingService {
    * Only display metadata changes; the watermark and ID are unaffected.
    */
   async renameCheckpoint(checkpointId: string, name: string): Promise<void> {
-    if (!this.active) {
+    if (this.lifecycle.status !== 'active') {
       throw new Error('Cannot rename checkpoint: recording is not active');
     }
     if (!this.materialized) {
@@ -784,7 +974,7 @@ export class SessionRecordingService {
    * Pass `null` to clear the name.
    */
   async setSessionName(name: string | null): Promise<void> {
-    if (!this.active) {
+    if (this.lifecycle.status !== 'active') {
       throw new Error('Cannot set session name: recording is not active');
     }
     const resolved = name === null ? null : name.trim();
@@ -807,7 +997,7 @@ export class SessionRecordingService {
    * The child recording is self-contained after this.
    */
   recordSessionFork(payload: SessionForkedPayload): void {
-    if (!this.active) {
+    if (this.lifecycle.status !== 'active') {
       throw new Error('Cannot record session fork: recording is inactive');
     }
     this.enqueue('session_forked', payload);

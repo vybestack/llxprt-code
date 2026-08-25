@@ -30,6 +30,7 @@ import { SessionLockManager } from './SessionLockManager.js';
 import { replaySession } from './ReplayEngine.js';
 import { type SessionRecordingServiceConfig } from './types.js';
 import { type IContent } from '../services/history/IContent.js';
+import { LocalMediaStore } from '../storage/local-media-store.js';
 
 function requireReplaySuccess(
   result: Awaited<ReturnType<typeof replaySession>>,
@@ -435,6 +436,34 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
       const originalBytes = beforeLines.join('\n');
       expect(priorBytes).toBe(originalBytes);
     });
+  });
+
+  it('reports missing media verification context instead of hiding checkpoints', async () => {
+    const mediaStore = new LocalMediaStore({
+      rootDirectory: path.join(tmp.getDir(), 'media'),
+      quotaBytes: 1024,
+    });
+    const reference = await mediaStore.admit({
+      bytes: new Uint8Array([1, 2, 3, 4]),
+      mimeType: 'image/png',
+      semanticMetadata: {},
+    });
+    const svc = new SessionRecordingService({
+      ...makeConfig(chatsDir()),
+      mediaStore,
+    });
+    svc.recordContent({ speaker: 'human', blocks: [reference] });
+    await svc.createCheckpoint('verified-media');
+    await svc.dispose();
+    const filePath = svc.getFilePath();
+    if (filePath === null) throw new Error('Expected recording path');
+
+    await expect(
+      new CheckpointService().listCheckpoints(filePath, PROJECT_HASH),
+    ).rejects.toThrow(/media reference validation/i);
+    await expect(
+      new CheckpointService(mediaStore).listCheckpoints(filePath, PROJECT_HASH),
+    ).resolves.toHaveLength(1);
   });
 
   it('does not append closed metadata to a sequence-corrupt recording', async () => {

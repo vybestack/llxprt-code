@@ -31,6 +31,7 @@ import {
   createCodexResponsesWebSocketTransport,
   type WebSocketTransport,
 } from './openAIResponsesWebSocketTransport.js';
+import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
 
 export { toOpenAIResponsesWireEffort } from '../openai/openaiModelPolicy.js';
 
@@ -68,6 +69,10 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       resolveAuthTokenForPrompt: () => this.getAuthTokenForPrompt(),
       shouldRetryOnError: (error) => this.shouldRetryOnError(error),
       getDefaultModel: () => this.getDefaultModel(),
+      getMediaTransportCapabilities: (isCodex) =>
+        isCodex
+          ? declaredMediaTransportCapabilities('codex')
+          : this.getMediaTransportCapabilities(),
       getGlobalConfig: () => this.globalConfig,
       getWebSocketTransport: () => this.resolveWebSocketTransport(),
       // Codex statefulness is only valid over the WebSocket transport, so the
@@ -168,13 +173,20 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     const transportToken = Object.freeze({});
     this.preparedPromptEnvelopes.set(transportToken, requestContext);
     const pdfEnabled = isResponsesPdfEnabled(normalized);
-    return projectOpenAIResponsesPromptEnvelope(requestContext.request, {
-      transportToken,
-      unsupportedMedia: collectUnsupportedMedia(
-        normalized.contents,
-        (category) =>
-          category === 'image' || (category === 'pdf' && pdfEnabled),
-      ),
-    });
+    const projection = projectOpenAIResponsesPromptEnvelope(
+      requestContext.request,
+      {
+        transportToken,
+        unsupportedMedia: collectUnsupportedMedia(
+          normalized.contents,
+          (category) =>
+            category === 'image' || (category === 'pdf' && pdfEnabled),
+        ),
+      },
+    );
+    return {
+      ...projection,
+      releaseIfUnsent: requestContext.mediaRequest.release,
+    };
   }
 }

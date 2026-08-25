@@ -108,8 +108,7 @@ async function extractBody(
   const body = init?.body;
   if (body === undefined || body === null) return undefined;
   if (typeof body === 'string') return body;
-  if (body instanceof Blob) return body.text();
-  return undefined;
+  return new Response(body).text();
 }
 
 describe('OpenAIProvider concurrent call-scoped routing isolation @issue:2483', () => {

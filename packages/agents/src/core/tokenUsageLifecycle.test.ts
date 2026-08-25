@@ -124,13 +124,12 @@ function buildCompressionHandler(logFile: string): {
   ];
   vi.spyOn(historyService, 'getCurated').mockReturnValue(curatedHistory);
   vi.spyOn(historyService, 'getRawHistory').mockReturnValue(curatedHistory);
-  vi.spyOn(historyService, 'clear').mockImplementation(() => {
-    compressed = true;
-  });
-  vi.spyOn(historyService, 'add').mockImplementation(() => {
-    compressed = true;
-  });
-  vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(0);
+  vi.spyOn(historyService, 'estimateTokensForContents').mockImplementation(
+    async () => {
+      compressed = true;
+      return TOKENS_AFTER;
+    },
+  );
   vi.spyOn(historyService, 'getCacheAnchorSeq').mockReturnValue(0);
 
   const view = createAgentRuntimeContext({

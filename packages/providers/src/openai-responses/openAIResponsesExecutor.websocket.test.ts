@@ -9,8 +9,10 @@ import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   executeOpenAIResponsesRequest,
+  type PreparedResponsesRequestContext,
   type ResponsesExecutorDeps,
 } from './openAIResponsesExecutor.js';
+import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -18,6 +20,7 @@ import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runt
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import type { WebSocketTransport } from './openAIResponsesWebSocketTransport.js';
 import { createCodexResponsesWebSocketTransport } from './openAIResponsesWebSocketTransport.js';
+import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
 import {
   SocketHarness,
   completingScript,
@@ -89,6 +92,10 @@ function buildDeps(
     shouldRetryOnError: () => false,
     getDefaultModel: () => 'gpt-5.6-sol',
     getGlobalConfig: () => undefined,
+    getMediaTransportCapabilities: (isCodex) =>
+      declaredMediaTransportCapabilities(
+        isCodex ? 'codex' : 'openai-responses',
+      ),
     // Codex statefulness is WS-bound; these harnesses exercise the WS path.
     isWebSocketTransportActive: () => true,
     ...overrides,
@@ -150,6 +157,23 @@ function makeRecordingTransport(behavior: 'success' | 'connect-failure'): {
   };
 }
 
+function requestWithReleaseFailure(error: Error): ResolvedMediaRequest {
+  return {
+    withContents: (consume) => consume([]),
+    registerCleanup: () => undefined,
+    accounting: () => ({
+      selectedReferenceCount: 0,
+      uniqueContentCount: 0,
+      selectedNormalizedBytes: 0,
+      materializedNormalizedBytes: 0,
+      storeReadCount: 0,
+      reservedContentCount: 0,
+      released: false,
+    }),
+    release: () => Promise.reject(error),
+  };
+}
+
 describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:2041', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -159,6 +183,37 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
   afterEach(() => {
     restoreGlobals();
     vi.restoreAllMocks();
+  });
+
+  it('preserves a transport-start failure before a media release failure', async () => {
+    const primary = new Error('responses transport start failed');
+    const cleanup = new Error('responses media release failed');
+    const prepared: PreparedResponsesRequestContext = {
+      rawBaseURL: CODEX_BASE_URL,
+      isCodex: true,
+      includeThinkingInResponse: false,
+      responsesStored: false,
+      request: {
+        model: 'gpt-5.6-sol',
+        input: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+      },
+      mediaRequest: requestWithReleaseFailure(cleanup),
+    };
+    const iterator = executeOpenAIResponsesRequest(
+      buildNormalizedOptions(),
+      buildDeps({
+        resolveAuthTokenForPrompt: () => Promise.reject(primary),
+      }),
+      prepared,
+    );
+
+    const error = await iterator.next().catch((reason: unknown) => reason);
+    if (!(error instanceof AggregateError)) {
+      throw new Error('expected an AggregateError');
+    }
+
+    expect(error.errors).toStrictEqual([primary, cleanup]);
   });
 
   it('A1: uses the WebSocket transport for Codex mode and yields its events', async () => {
@@ -229,6 +284,42 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
     ]);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(transportChecks).toBe(1);
+  });
+
+  it('awaits rejected HTTP request-body disposal and preserves both failures', async () => {
+    const transportError = new Error('responses HTTP transport failed');
+    const disposalError = new Error('responses HTTP body disposal failed');
+    const originalCancel = ReadableStreamDefaultReader.prototype.cancel;
+    ReadableStreamDefaultReader.prototype.cancel = function (): Promise<void> {
+      return Promise.reject(disposalError);
+    };
+    try {
+      setGlobal('fetch', () => Promise.reject(transportError));
+      const options = buildNormalizedOptions({
+        resolved: {
+          model: 'gpt-5',
+          baseURL: 'https://api.openai.com/v1',
+          authToken: 'test-token',
+        },
+      });
+
+      const error = await drain(
+        executeOpenAIResponsesRequest(
+          options,
+          buildDeps({
+            isCodexBaseURL: () => false,
+            getProviderBaseURL: () => 'https://api.openai.com/v1',
+          }),
+        ),
+      ).catch((reason: unknown) => reason);
+
+      if (!(error instanceof AggregateError)) {
+        throw new Error('expected HTTP transport and disposal AggregateError');
+      }
+      expect(error.errors).toStrictEqual([transportError, disposalError]);
+    } finally {
+      ReadableStreamDefaultReader.prototype.cancel = originalCancel;
+    }
   });
 
   it('A5: falls back to HTTP once when WebSocket connect fails before events, then sticks to HTTP', async () => {

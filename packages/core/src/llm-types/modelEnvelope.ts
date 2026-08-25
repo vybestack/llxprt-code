@@ -22,7 +22,11 @@
  * @pseudocode lines 10-52
  */
 
-import type { IContent, UsageStats } from '../services/history/IContent.js';
+import type {
+  IContent,
+  SemanticMediaPurgeCacheWriteEvidence,
+  UsageStats,
+} from '../services/history/IContent.js';
 import type { ToolCallRequest } from './toolCall.js';
 import type { CanonicalFinishReason } from './finishReasons.js';
 import {
@@ -60,6 +64,7 @@ export interface ModelOutput {
   responseId?: string;
   hookRestrictions?: HookRestrictions;
   providerMetadata?: Record<string, unknown>;
+  semanticMediaPurgeCacheWriteEvidence?: SemanticMediaPurgeCacheWriteEvidence;
   /**
    * Neutral automatic-function-calling history — a sequence of IContent
    * turns produced by automatic tool invocation during a single generation.
@@ -160,6 +165,14 @@ export function accumulateModelStreamChunk(
     };
   }
 
+  const semanticMediaPurgeCacheWriteEvidence =
+    chunk.semanticMediaPurgeCacheWriteEvidence ??
+    acc.semanticMediaPurgeCacheWriteEvidence;
+  if (semanticMediaPurgeCacheWriteEvidence !== undefined) {
+    result.semanticMediaPurgeCacheWriteEvidence =
+      semanticMediaPurgeCacheWriteEvidence;
+  }
+
   // afcHistory: last-write-wins (chunk overrides acc when present). Carried
   // as neutral IContent[] (REQ-001.4).
   const afcHistory = chunk.afcHistory ?? acc.afcHistory;
@@ -233,7 +246,7 @@ export function toModelStreamChunk(icontent: IContent): ModelStreamChunk {
   // content.metadata.providerMetadata so it never leaks to agents. This is
   // done immutably — the original icontent is never mutated.
   const providerMeta = meta?.providerMetadata;
-  const content: IContent =
+  let content: IContent =
     providerMeta !== undefined &&
     'automaticFunctionCallingHistory' in providerMeta
       ? {
@@ -246,8 +259,19 @@ export function toModelStreamChunk(icontent: IContent): ModelStreamChunk {
           },
         }
       : icontent;
+  const semanticMediaPurgeCacheWriteEvidence =
+    meta?.semanticMediaPurgeCacheWriteEvidence;
+  if (semanticMediaPurgeCacheWriteEvidence !== undefined) {
+    const metadata = { ...content.metadata };
+    delete metadata.semanticMediaPurgeCacheWriteEvidence;
+    content = { ...content, metadata };
+  }
 
   const result: ModelStreamChunk = { content };
+  if (semanticMediaPurgeCacheWriteEvidence !== undefined) {
+    result.semanticMediaPurgeCacheWriteEvidence =
+      semanticMediaPurgeCacheWriteEvidence;
+  }
 
   const raw = meta?.stopReason ?? meta?.finishReason;
   if (raw !== undefined) {

@@ -275,9 +275,16 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
         sessionId: oldSessionId,
         contents: [makeContent('old content')],
       });
-      const oldLock = await SessionLockManager.acquire(chatsDir, oldSessionId);
-
-      await oldLock.release();
+      const acquiredOldLock = await SessionLockManager.acquire(
+        chatsDir,
+        oldSessionId,
+      );
+      await acquiredOldLock.release();
+      const oldLock: LockHandle = {
+        lockPath: acquiredOldLock.lockPath,
+        ownsLock: () => Promise.resolve(true),
+        release: () => Promise.reject(new Error('old lock cleanup failed')),
+      };
 
       const targetId = 'target-release-fail-test';
       await createTestSession(chatsDir, {
@@ -294,6 +301,9 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
 
       expect(result.ok).toBe(true);
       assertResumeOk(result);
+      expect(result.warnings).toContain(
+        'Session transition committed but prior-session cleanup failed: old lock cleanup failed',
+      );
       const newRecording = context.recordingCallbacks.getCurrentRecording();
       expect(newRecording).not.toBeNull();
       expect(newRecording!.isActive()).toBe(true);
@@ -372,7 +382,8 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
 
         expect(result).toStrictEqual({
           ok: false,
-          error: 'Failed to commit session transition: commit failed',
+          error:
+            'Failed to commit session transition: commit failed; rollback failed: prepared disposal failed; restore session ID failed',
         });
         // Compare the conversation payload only: every history item also
         // carries a client-side chronology marker (#1721) that this rollback
@@ -418,7 +429,7 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
       expect(result).toStrictEqual({
         ok: false,
         error:
-          'Failed to commit session transition: commit failed; failed to restore prior history: rollback restore failed',
+          'Failed to commit session transition: commit failed; rollback failed: rollback restore failed',
       });
       // Compare the conversation payload only: every history item also
       // carries a client-side chronology marker (#1721) that this assertion

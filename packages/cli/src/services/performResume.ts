@@ -29,6 +29,7 @@ import {
   SessionLockManager,
   SessionTransitionService,
   resumeSession,
+  MediaAdmissionService,
   RecordingIntegration,
   type ContinueTarget,
   type IContent,
@@ -37,7 +38,9 @@ import {
   type SessionMetadata,
   type SessionSummary,
   type HistoryService,
+  type LocalMediaStore,
 } from '@vybestack/llxprt-code-core';
+import type { SessionPersistenceService } from '@vybestack/llxprt-code-core/storage/SessionPersistenceService.js';
 import { type DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
 /**
@@ -66,6 +69,9 @@ export interface ResumeContext {
   currentProvider: string;
   currentModel: string;
   workspaceDirs: string[];
+  mediaStore?: LocalMediaStore;
+  maxQueueBytes?: number;
+  persistenceFactory?: (sessionId: string) => SessionPersistenceService;
   recordingCallbacks: RecordingSwapCallbacks;
   historyService?: HistoryService | null;
   adoptSessionId?: (sessionId: string) => void;
@@ -139,7 +145,10 @@ async function resumeCheckpointTarget(
       return { ok: false, error: `Failed to flush source session: ${detail}` };
     }
   }
-  const fork = await new SessionTransitionService().forkFromCheckpoint(
+  const fork = await new SessionTransitionService({
+    mediaStore: context.mediaStore,
+    maxQueueBytes: context.maxQueueBytes,
+  }).forkFromCheckpoint(
     target,
     chatsDir,
     projectHash,
@@ -162,7 +171,7 @@ async function resumeCheckpointTarget(
     ok: true,
     history: fork.history,
     metadata: fork.metadata,
-    warnings: [],
+    warnings: committed.warnings,
   };
 }
 
@@ -187,6 +196,12 @@ async function resumeLivingSession(
     currentProvider: context.currentProvider,
     currentModel: context.currentModel,
     workspaceDirs: context.workspaceDirs,
+    ...(context.mediaStore === undefined
+      ? {}
+      : { mediaStore: context.mediaStore }),
+    ...(context.maxQueueBytes === undefined
+      ? {}
+      : { maxQueueBytes: context.maxQueueBytes }),
   });
   if (!result.ok) return { ok: false, error: result.error };
   const committed = await commitPreparedTransition(
@@ -202,7 +217,7 @@ async function resumeLivingSession(
     ok: true,
     history: result.history,
     metadata: result.metadata,
-    warnings: result.warnings,
+    warnings: [...result.warnings, ...committed.warnings],
   };
 }
 
@@ -226,6 +241,7 @@ export async function performResume(
   const targets = await SessionDiscovery.listContinueTargets(
     chatsDir,
     projectHash,
+    context.mediaStore,
   );
   const target = await resolveTarget(
     sessionRef,
@@ -291,9 +307,30 @@ async function restorePreviousHistory(
   }
 }
 
-function formatHistoryRollbackFailure(error: unknown): string {
-  const detail = error instanceof Error ? error.message : String(error);
-  return `; failed to restore prior history: ${detail}`;
+function errorDetail(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function releasePreparedHistoryMedia(
+  history: readonly IContent[],
+  context: ResumeContext,
+): Promise<void> {
+  if (context.mediaStore === undefined) return;
+  await new MediaAdmissionService(context.mediaStore).releaseContents(history, {
+    turnId: 'session-replay',
+    source: 'session-replay',
+  });
+}
+
+async function runRollbackStep(
+  failures: unknown[],
+  step: () => void | Promise<void>,
+): Promise<void> {
+  try {
+    await step();
+  } catch (error: unknown) {
+    failures.push(error);
+  }
 }
 
 async function commitPreparedTransition(
@@ -303,7 +340,7 @@ async function commitPreparedTransition(
   history: IContent[],
   context: ResumeContext,
   discardOnFailure: boolean,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true; warnings: string[] } | { ok: false; error: string }> {
   const callbacks = context.recordingCallbacks;
   const oldRecording = callbacks.getCurrentRecording();
   const oldIntegration = callbacks.getCurrentIntegration();
@@ -311,7 +348,10 @@ async function commitPreparedTransition(
   const historyService = context.historyService ?? null;
   const previousHistory =
     historyService === null ? null : [...historyService.getAll()];
-  const integration = new RecordingIntegration(recording);
+  const integration = new RecordingIntegration(
+    recording,
+    context.persistenceFactory?.(recording.getSessionId()),
+  );
   try {
     if (historyService !== null) {
       await historyService.replaceAll(history);
@@ -320,89 +360,72 @@ async function commitPreparedTransition(
     context.adoptSessionId?.(metadata.sessionId);
     callbacks.setRecording(recording, integration, lockHandle, metadata);
   } catch (error: unknown) {
-    try {
-      integration.dispose();
-    } catch (disposeError: unknown) {
-      context.logger?.warn(
-        `Failed to dispose prepared recording integration: ${disposeError}`,
+    const rollbackFailures: unknown[] = [];
+    await runRollbackStep(rollbackFailures, () => integration.dispose());
+    if (historyService !== null) {
+      const historyRollbackError = await restorePreviousHistory(
+        historyService,
+        previousHistory,
+        context.logger,
       );
+      if (historyRollbackError !== undefined) {
+        rollbackFailures.push(historyRollbackError);
+      }
     }
-    const historyRollbackError =
-      historyService === null
-        ? undefined
-        : await restorePreviousHistory(
-            historyService,
-            previousHistory,
-            context.logger,
-          );
-    try {
+    await runRollbackStep(rollbackFailures, () => {
       context.adoptSessionId?.(context.currentSessionId);
-    } catch (adoptError: unknown) {
-      context.logger?.warn(
-        `Failed to restore prior session identifier: ${adoptError}`,
+    });
+    await runRollbackStep(rollbackFailures, () =>
+      releasePreparedHistoryMedia(history, context),
+    );
+    const filePath = discardOnFailure ? recording.getFilePath() : null;
+    await runRollbackStep(rollbackFailures, () => recording.dispose());
+    await runRollbackStep(rollbackFailures, () => lockHandle.release());
+    if (filePath !== null) {
+      const { rm } = await import('node:fs/promises');
+      await runRollbackStep(rollbackFailures, () =>
+        rm(filePath, { force: true }),
       );
     }
-    const filePath = discardOnFailure ? recording.getFilePath() : null;
-    await recording.dispose().catch(() => undefined);
-    await lockHandle.release().catch(() => undefined);
-    if (filePath !== null) {
-      const { unlink } = await import('node:fs/promises');
-      await unlink(filePath).catch(() => undefined);
-    }
-    const detail = error instanceof Error ? error.message : String(error);
     const rollbackDetail =
-      historyRollbackError === undefined
+      rollbackFailures.length === 0
         ? ''
-        : formatHistoryRollbackFailure(historyRollbackError);
+        : `; rollback failed: ${rollbackFailures.map(errorDetail).join('; ')}`;
     return {
       ok: false,
-      error: `Failed to commit session transition: ${detail}${rollbackDetail}`,
+      error: `Failed to commit session transition: ${errorDetail(error)}${rollbackDetail}`,
     };
   }
   try {
-    await disposeInfrastructure(
-      oldIntegration,
-      oldRecording,
-      oldLock,
-      context.logger,
-    );
+    await disposeInfrastructure(oldIntegration, oldRecording, oldLock);
   } catch (cleanupError: unknown) {
-    context.logger?.warn(
-      `Failed to dispose prior recording infrastructure: ${cleanupError}`,
-    );
+    return {
+      ok: true,
+      warnings: [
+        `Session transition committed but prior-session cleanup failed: ${errorDetail(cleanupError)}`,
+      ],
+    };
   }
-  return { ok: true };
+  return { ok: true, warnings: [] };
 }
 
 async function disposeInfrastructure(
   oldIntegration: RecordingIntegration | null,
   oldRecording: SessionRecordingService | null,
   oldLock: LockHandle | null,
-  logger?: DebugLogger,
 ): Promise<void> {
-  if (oldIntegration) {
-    try {
-      oldIntegration.dispose();
-    } catch (e) {
-      logger?.warn(
-        `Failed to dispose old recording integration (continuing): ${e}`,
-      );
-    }
+  const failures: unknown[] = [];
+  if (oldIntegration !== null) {
+    await runRollbackStep(failures, () => oldIntegration.dispose());
   }
-  if (oldRecording) {
-    try {
-      await oldRecording.dispose();
-    } catch (e) {
-      logger?.warn(
-        `Failed to dispose old recording service (continuing): ${e}`,
-      );
-    }
+  if (oldRecording !== null) {
+    await runRollbackStep(failures, () => oldRecording.dispose());
   }
-  if (oldLock) {
-    try {
-      await oldLock.release();
-    } catch (e) {
-      logger?.warn(`Failed to release old session lock (continuing): ${e}`);
-    }
+  if (oldLock !== null) {
+    await runRollbackStep(failures, () => oldLock.release());
+  }
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) {
+    throw new AggregateError(failures, 'Prior session cleanup failed');
   }
 }

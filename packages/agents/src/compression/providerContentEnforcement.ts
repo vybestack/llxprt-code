@@ -43,7 +43,7 @@ export interface ProviderContentEnforcementDeps {
   ) => Promise<PerformCompressionResult>;
   performFallbackCompression: (
     promptId: string,
-    applyResult: (newHistory: IContent[]) => void,
+    applyResult: (newHistory: IContent[]) => void | Promise<void>,
   ) => Promise<boolean>;
   estimateFinalizedPromptTokens?: (contents: IContent[]) => Promise<number>;
 }
@@ -541,12 +541,12 @@ export class ProviderContentEnforcer {
     try {
       fallbackSucceeded = await this.deps.performFallbackCompression(
         promptId,
-        (newHistory) => {
+        async (newHistory) => {
           try {
-            this.restoreHistory(newHistory);
+            await this.restoreHistory(newHistory);
             fallbackState.historyRestored = true;
           } catch (restoreError) {
-            fallbackState.historyRestored = this.tryRestoreHistory(
+            fallbackState.historyRestored = await this.tryRestoreHistory(
               originalHistory,
               '[CompressionHandler] Failed to restore history after fallback failure',
             );
@@ -562,7 +562,7 @@ export class ProviderContentEnforcer {
         fallbackError,
       );
       if (!fallbackState.historyRestored) {
-        fallbackState.historyRestored = this.tryRestoreHistory(
+        fallbackState.historyRestored = await this.tryRestoreHistory(
           originalHistory,
           '[CompressionHandler] History restored after fallback rejection',
         );
@@ -573,7 +573,7 @@ export class ProviderContentEnforcer {
         () =>
           '[CompressionHandler] Fallback compression returned false; restoring original history',
       );
-      fallbackState.historyRestored = this.tryRestoreHistory(
+      fallbackState.historyRestored = await this.tryRestoreHistory(
         originalHistory,
         '[CompressionHandler] Failed to restore history after fallback returned false',
       );
@@ -582,7 +582,7 @@ export class ProviderContentEnforcer {
         () =>
           '[CompressionHandler] Fallback compression succeeded without applying history; restoring original history',
       );
-      fallbackState.historyRestored = this.tryRestoreHistory(
+      fallbackState.historyRestored = await this.tryRestoreHistory(
         originalHistory,
         '[CompressionHandler] Failed to restore history after fallback succeeded without applying history',
       );
@@ -642,52 +642,22 @@ export class ProviderContentEnforcer {
       : { contents, projected, compressionFailure };
   }
 
-  private restoreHistory(history: IContent[]): void {
-    const backup = this.deps.historyService.getCurated();
-    this.deps.historyService.clear();
-    // Post-truncation rebuild: the prefix is already destroyed, so reset the
-    // cache anchor (#3070). Subsequent clears in the error-handling flow find
-    // it already at 0.
-    this.deps.historyService.resetCacheAnchorSeq();
-    try {
-      this.addHistoryEntries(history);
-    } catch (restoreError) {
-      this.deps.historyService.clear();
-      try {
-        this.addHistoryEntries(backup);
-      } catch (backupError) {
-        this.deps.logger.error(
-          () =>
-            '[CompressionHandler] Failed to restore both new and backup history; retrying requested history',
-          backupError,
-        );
-        try {
-          this.deps.historyService.clear();
-          this.addHistoryEntries(history);
-          return;
-        } catch (finalError) {
-          this.deps.historyService.clear();
-          this.deps.logger.error(
-            () =>
-              '[CompressionHandler] All history restoration attempts failed; history is empty',
-            finalError,
-          );
-        }
-      }
-      throw restoreError;
-    }
-  }
-
-  private addHistoryEntries(history: IContent[]): void {
-    this.deps.historyService.addAll(
+  private async restoreHistory(history: IContent[]): Promise<void> {
+    await this.deps.historyService.replaceAll(
       history,
       this.deps.runtimeContext.state.model,
     );
+    // Post-truncation replacement destroys the prefix, so its cache anchor no
+    // longer describes a reusable boundary (#3070).
+    this.deps.historyService.resetCacheAnchorSeq();
   }
 
-  private tryRestoreHistory(history: IContent[], message: string): boolean {
+  private async tryRestoreHistory(
+    history: IContent[],
+    message: string,
+  ): Promise<boolean> {
     try {
-      this.restoreHistory(history);
+      await this.restoreHistory(history);
       return true;
     } catch (restoreError) {
       this.deps.logger.error(() => message, restoreError);

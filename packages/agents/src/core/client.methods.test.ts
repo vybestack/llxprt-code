@@ -252,8 +252,8 @@ describe('AgentClient (client.ts)', () => {
       mockContentGenerator;
   });
 
-  afterEach(() => {
-    client.dispose();
+  afterEach(async () => {
+    await client.dispose();
     vi.restoreAllMocks();
   });
 
@@ -788,9 +788,12 @@ sub memory
   // Only /clear command should clear context, not provider switching
 
   describe('addHistory', () => {
-    it('should call chat.addHistory with the provided content', async () => {
+    it('admits the provided content into the active chat', async () => {
+      let admittedHistory: IContent[] = [];
       const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
+        admitAndAddHistory: async (content) => {
+          admittedHistory = [...admittedHistory, content];
+        },
       };
       client['chat'] = mockChat as ChatSession;
 
@@ -800,72 +803,38 @@ sub memory
       };
       await client.addHistory(newContent);
 
-      expect(mockChat.addHistory).toHaveBeenCalledWith(newContent);
+      expect(admittedHistory).toStrictEqual([newContent]);
     });
   });
 
   describe('resetChat', () => {
-    it('should create a new chat session, clearing the old history', async () => {
-      // Setup: Mock getHistory to track history state
+    it('clears history and keeps the active chat instance', async () => {
       let historyState: IContent[] = [];
       (client.getHistory as Mock<typeof client.getHistory>).mockImplementation(
         () => Promise.resolve([...historyState]),
       );
 
-      // Mock addHistory to update the state
-      const mockChat = client['chat'] as ChatSession;
-      mockChat.addHistory.mockImplementation((content: IContent) => {
-        historyState.push(content);
-        return Promise.resolve();
-      });
+      const activeChat = client.getChat();
+      activeChat.admitAndAddHistory = async (content: IContent) => {
+        historyState = [...historyState, content];
+      };
+      const clearHistory = async (): Promise<void> => {
+        historyState = [];
+      };
+      activeChat.clearHistory = clearHistory;
+      activeChat.getLastPromptTokenCount = () => 0;
 
-      // 1. Get the initial chat instance and add some history.
-      const initialChat = client.getChat();
-      const initialHistory = await client.getHistory();
-      await client.addHistory({
+      const oldContent: IContent = {
         speaker: 'human',
         blocks: [{ type: 'text', text: 'some old message' }],
-      });
-      const historyWithOldMessage = await client.getHistory();
-      expect(historyWithOldMessage.length).toBeGreaterThan(
-        initialHistory.length,
-      );
+      };
+      await client.addHistory(oldContent);
+      expect(await client.getHistory()).toStrictEqual([oldContent]);
 
-      // Mock resetChat to clear history and create new chat
-      vi.spyOn(client, 'resetChat').mockImplementation(async () => {
-        historyState = [];
-        // Create a new mock chat instance
-        const newMockChat = {
-          addHistory: vi.fn().mockImplementation((content: IContent) => {
-            historyState.push(content);
-            return Promise.resolve();
-          }),
-          getHistory: vi
-            .fn()
-            .mockImplementation(() => Promise.resolve([...historyState])),
-          getHistoryService: vi.fn().mockReturnValue({
-            clear: vi.fn(),
-            findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
-            getCurated: vi.fn().mockReturnValue([]),
-            getTotalTokens: vi.fn().mockReturnValue(0),
-          }),
-          clearHistory: vi.fn(),
-          sendMessageStream: vi.fn(),
-        };
-        client['chat'] = newMockChat as ChatSession;
-      });
-
-      // 2. Call resetChat.
       await client.resetChat();
 
-      // 3. Get the new chat instance and its history.
-      const newChat = client.getChat();
-      const newHistory = await client.getHistory();
-
-      // 4. Assert that the chat instance is new and the history is reset.
-      expect(newChat).not.toBe(initialChat);
-      expect(newHistory.length).toBe(initialHistory.length);
-      expect(JSON.stringify(newHistory)).not.toContain('some old message');
+      expect(client.getChat().clearHistory).toBe(clearHistory);
+      expect(await client.getHistory()).toStrictEqual([]);
     });
   });
 

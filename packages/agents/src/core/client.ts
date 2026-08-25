@@ -75,6 +75,10 @@ import {
   type EffectiveModelIdentity,
   type RoutedModelProvider,
 } from './modelInfoHelpers.js';
+import {
+  RetainedHistoryAdmissions,
+  type RetainedHistoryAdmission,
+} from './retainedHistoryAdmissions.js';
 
 export class AgentClient implements AgentClientContract {
   private chat?: ChatSession;
@@ -89,6 +93,8 @@ export class AgentClient implements AgentClientContract {
   private readonly MAX_TURNS = 100;
   private _pendingConfig?: ContentGeneratorConfig;
   private _previousHistory?: readonly IContent[];
+  private _deferredHistoryAdmission?: RetainedHistoryAdmission;
+  private readonly historyAdmissions: RetainedHistoryAdmissions;
   private _storedHistoryService?: HistoryService;
   private currentSequenceModel: string | null = null;
   private activeStreamCount = 0;
@@ -144,6 +150,9 @@ export class AgentClient implements AgentClientContract {
     }
 
     this.runtimeState = runtimeState;
+    this.historyAdmissions = new RetainedHistoryAdmissions(() =>
+      this.config.getLocalMediaStore(),
+    );
     this._historyService = historyService;
     this.logger = new DebugLogger('llxprt:core:client');
 
@@ -277,29 +286,67 @@ export class AgentClient implements AgentClientContract {
     this._baseLlmClient = undefined;
   }
 
-  dispose(): void {
-    coreEvents.off(CoreEvent.ModelChanged, this.handleModelChanged);
-    coreEvents.off(
-      CoreEvent.ModelProfileChanged,
-      this.handleModelProfileChanged,
-    );
+  async dispose(): Promise<void> {
+    const failures: unknown[] = [];
+    try {
+      coreEvents.off(CoreEvent.ModelChanged, this.handleModelChanged);
+      coreEvents.off(
+        CoreEvent.ModelProfileChanged,
+        this.handleModelProfileChanged,
+      );
+    } catch (error: unknown) {
+      failures.push(error);
+    }
     if (this._unsubscribe) {
-      this._unsubscribe();
-      this._unsubscribe = undefined;
+      try {
+        this._unsubscribe();
+        this._unsubscribe = undefined;
+      } catch (error: unknown) {
+        failures.push(error);
+      }
+    }
+    const hasChatHistoryMedia = this._previousHistory?.some((content) =>
+      content.blocks.some(
+        (block) => block.type === 'media' && block.encoding === 'reference',
+      ),
+    );
+    if (this.chat !== undefined && hasChatHistoryMedia === true) {
+      try {
+        await this.chat.clearHistory();
+        this.chat = undefined;
+      } catch (error: unknown) {
+        failures.push(error);
+      }
+    }
+    failures.push(
+      ...(await this.historyAdmissions.release(this.historyAdmissions.all)),
+    );
+    if (failures.length === 0 && this.historyAdmissions.all.length === 0) {
+      this._deferredHistoryAdmission = undefined;
+      this._previousHistory = undefined;
+    }
+    if (failures.length > 0) {
+      throw new AggregateError(failures, 'Agent client disposal failed');
     }
   }
 
   async initialize(contentGeneratorConfig: ContentGeneratorConfig) {
-    const previousHistory: readonly IContent[] | undefined =
-      this.chat?.getHistory() ?? this._previousHistory;
+    const activeChat = this.chat;
+    let previousHistory: readonly IContent[] | undefined =
+      activeChat?.getHistory() ?? this._previousHistory;
+    if (activeChat !== undefined && previousHistory !== undefined) {
+      const retained = await this.historyAdmissions.transferActiveHistory(
+        previousHistory,
+        () => activeChat.clearHistory(),
+      );
+      if (retained !== undefined) {
+        previousHistory = retained.history;
+        this._deferredHistoryAdmission = retained;
+      }
+    }
 
-    // Reset the client to force reinitialization with new auth
     this.contentGenerator = undefined;
     this.chat = undefined;
-
-    // Store the new config and previous history for lazy initialization
-    // This ensures the next lazyInitialize() call uses the correct auth config
-    // and preserves conversation history across auth transitions
     this._pendingConfig = contentGeneratorConfig;
     this._previousHistory = previousHistory;
   }
@@ -355,7 +402,7 @@ export class AgentClient implements AgentClientContract {
     if (!this.hasChatInitialized()) {
       await this.resetChat();
     }
-    this.getChat().addHistory(content);
+    await this.getChat().admitAndAddHistory(content);
   }
 
   async updateSystemInstruction(): Promise<void> {
@@ -466,18 +513,38 @@ export class AgentClient implements AgentClientContract {
           return newContent;
         })
       : history;
+    const priorDeferred = this._deferredHistoryAdmission;
 
-    // Store the history for later use
-    this._previousHistory = historyToSet;
-
-    // If chat is already initialized, update it immediately
     if (this.hasChatInitialized()) {
-      this.getChat().setHistory(historyToSet);
+      await this.getChat().setHistory(historyToSet);
+      this._previousHistory = this.getChat().getHistory();
+      const transferFailures = await this.historyAdmissions.release(
+        priorDeferred === undefined ? [] : [priorDeferred],
+      );
+      if (transferFailures.length > 0) {
+        throw new AggregateError(
+          transferFailures,
+          'Deferred history cleanup after initialized update was incomplete',
+        );
+      }
+      this._deferredHistoryAdmission = undefined;
+    } else {
+      await this.replaceDeferredHistory(historyToSet);
     }
-    // Otherwise, the history will be used when the chat is initialized
 
-    // Reset IDE context tracking when history changes
     this.ideContextTracker.resetContext();
+  }
+
+  private async replaceDeferredHistory(
+    history: readonly IContent[],
+  ): Promise<void> {
+    const retained = await this.historyAdmissions.replaceRetainedHistory(
+      history,
+      this._deferredHistoryAdmission,
+      'agent-client-history',
+    );
+    this._previousHistory = retained?.history ?? history;
+    this._deferredHistoryAdmission = retained;
   }
 
   /**
@@ -485,11 +552,11 @@ export class AgentClient implements AgentClientContract {
    * This is used when resuming a chat before authentication.
    * The history will be restored when lazyInitialize() is called.
    */
-  storeHistoryForLaterUse(history: readonly IContent[]): void {
+  async storeHistoryForLaterUse(history: readonly IContent[]): Promise<void> {
     this.logger.debug('Storing history for later use', {
       historyLength: history.length,
     });
-    this._previousHistory = history;
+    await this.replaceDeferredHistory(history);
   }
 
   /**
@@ -576,20 +643,9 @@ export class AgentClient implements AgentClientContract {
   }
 
   async resetChat(): Promise<void> {
-    // If chat exists, clear its history service
+    // If chat exists, clear its history and awaited external media resources.
     if (this.chat) {
-      const historyService = this.chat.getHistoryService() as
-        | HistoryService
-        | null
-        | undefined;
-      if (historyService != null) {
-        // Clear the history service directly
-        historyService.clear();
-        historyService.resetCacheAnchorSeq();
-      } else {
-        // Fallback to chat's clearHistory if no history service
-        this.chat.clearHistory();
-      }
+      await this.chat.clearHistory();
       // Reset the chat's internal state
       this.ideContextTracker.resetContext();
     } else {
@@ -628,60 +684,83 @@ export class AgentClient implements AgentClientContract {
       return;
     }
 
-    // P0 Fix Part 1: Ensure content generator is initialized
-    // This will fail fast if auth/config isn't ready
-    if (!this.contentGenerator) {
-      try {
-        await this.lazyInitialize();
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        throw new Error(
-          `Cannot restore history: Content generator initialization failed. ${message}`,
-        );
-      }
-    }
-
-    // P0 Fix Part 2: Ensure chat is initialized with empty history
-    // We create the chat first, then populate it with restored history
-    if (!this.hasChatInitialized()) {
-      try {
-        this.chat = await this.startChat([]);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        throw new Error(
-          `Cannot restore history: Chat initialization failed. ${message}`,
-        );
-      }
-    }
-
-    // P0 Fix Part 3: Get history service and restore items
-    const historyService = this.getHistoryService();
-    if (!historyService) {
-      throw new Error(
-        'Cannot restore history: History service unavailable after chat initialization',
-      );
-    }
-
-    // Reset the cache anchor: restoreHistory is a wholesale history replacement
-    // reachable from the public Agent.restoreHistory API with no preceding
-    // resetChat, so it was missed when the lifecycle was enumerated by clear()
-    // call sites (#3070 Defect 6).
-    historyService.resetCacheAnchorSeq();
+    const restoreAdmission = await this.historyAdmissions.admitRetainedHistory(
+      historyItems,
+      'restore-history',
+    );
+    const admittedHistory = restoreAdmission?.history ?? historyItems;
 
     try {
-      // Validate and fix any issues in the history service before adding items
-      historyService.validateAndFix();
+      // P0 Fix Part 1: Ensure content generator is initialized
+      // This will fail fast if auth/config isn't ready
+      if (!this.contentGenerator) {
+        try {
+          await this.lazyInitialize();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          throw new Error(
+            `Cannot restore history: Content generator initialization failed. ${message}`,
+          );
+        }
+      }
 
-      // Add all history items
-      historyService.addAll(historyItems);
+      // P0 Fix Part 2: Ensure chat is initialized with empty history
+      // We create the chat first, then populate it with restored history
+      if (!this.hasChatInitialized()) {
+        try {
+          this.chat = await this.startChat([]);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          throw new Error(
+            `Cannot restore history: Chat initialization failed. ${message}`,
+          );
+        }
+      }
 
-      this.logger.debug('History restored successfully', {
-        itemCount: historyItems.length,
-        totalTokens: historyService.getTotalTokens(),
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      throw new Error(`Failed to add history items to service: ${message}`);
+      // P0 Fix Part 3: Get history service and restore items
+      const historyService = this.getHistoryService();
+      if (!historyService) {
+        throw new Error(
+          'Cannot restore history: History service unavailable after chat initialization',
+        );
+      }
+
+      try {
+        // Validate and fix any issues in the history service before adding items
+        historyService.validateAndFix();
+
+        await historyService.replaceBatch(admittedHistory, undefined, {
+          afterPublication: async () => {
+            const releaseFailures = await this.historyAdmissions.release(
+              restoreAdmission === undefined ? [] : [restoreAdmission],
+            );
+            if (releaseFailures.length > 0) {
+              throw new AggregateError(
+                releaseFailures,
+                'Restored history publication cleanup failed',
+              );
+            }
+          },
+        });
+        // Reset the cache anchor only after the complete restored history is
+        // published, so a failed restore leaves the prior cache state intact.
+        historyService.resetCacheAnchorSeq();
+
+        this.logger.debug('History restored successfully', {
+          itemCount: admittedHistory.length,
+          totalTokens: historyService.getTotalTokens(),
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        throw new Error(`Failed to add history items to service: ${message}`);
+      }
+    } catch (error: unknown) {
+      await this.historyAdmissions.releaseAfterFailure(
+        error,
+        restoreAdmission === undefined ? [] : [restoreAdmission],
+        'History restoration failed and admitted media cleanup was incomplete',
+      );
+      return;
     }
   }
 
@@ -714,23 +793,67 @@ export class AgentClient implements AgentClientContract {
   async startChat(extraHistory?: readonly IContent[]): Promise<ChatSession> {
     this.ideContextTracker.resetContext();
     await this.lazyInitialize();
+    const deferredAdmission =
+      extraHistory === this._deferredHistoryAdmission?.history
+        ? this._deferredHistoryAdmission
+        : undefined;
 
-    const chat = await createChatSessionSafe({
-      config: this.config,
-      runtimeState: this.runtimeState,
-      contentGenerator: this.getContentGenerator(),
-      storedHistoryService: this._storedHistoryService,
-      clearStoredHistoryService: () => {
-        this._storedHistoryService = undefined;
-      },
-      extraHistory,
-      generateContentConfig: this.generateContentConfig,
-      todoContinuationService: this.todoContinuationService,
-      toolRegistry: this.config.getToolRegistry(),
-      createHistoryService: () => new HistoryService(),
-      createChatSessionInstance: (...args) => new ChatSession(...args),
-    });
-    this.chat = chat;
+    let chat: ChatSession;
+    try {
+      chat = await createChatSessionSafe({
+        config: this.config,
+        runtimeState: this.runtimeState,
+        contentGenerator: this.getContentGenerator(),
+        storedHistoryService: this._storedHistoryService,
+        clearStoredHistoryService: () => {
+          this._storedHistoryService = undefined;
+        },
+        extraHistory: deferredAdmission === undefined ? extraHistory : [],
+        generateContentConfig: this.generateContentConfig,
+        todoContinuationService: this.todoContinuationService,
+        toolRegistry: this.config.getToolRegistry(),
+        createHistoryService: () => new HistoryService(),
+        createChatSessionInstance: (...args) => new ChatSession(...args),
+      });
+    } catch (error: unknown) {
+      if (deferredAdmission === undefined) throw error;
+      this._deferredHistoryAdmission = undefined;
+      this._previousHistory = undefined;
+      return this.historyAdmissions.releaseAfterFailure(
+        error,
+        [deferredAdmission],
+        'Chat startup failed and deferred history cleanup was incomplete',
+      );
+    }
+
+    if (deferredAdmission !== undefined) {
+      try {
+        await chat.setHistory(deferredAdmission.history);
+      } catch (error: unknown) {
+        this._deferredHistoryAdmission = undefined;
+        this._previousHistory = undefined;
+        return this.historyAdmissions.releaseAfterFailure(
+          error,
+          [deferredAdmission],
+          'Chat startup failed and deferred history cleanup was incomplete',
+          () => chat.clearHistory(),
+        );
+      }
+      this.chat = chat;
+      this._previousHistory = chat.getHistory();
+      const transferFailures = await this.historyAdmissions.release([
+        deferredAdmission,
+      ]);
+      if (transferFailures.length > 0) {
+        throw new AggregateError(
+          transferFailures,
+          'Deferred history ownership transfer to chat was incomplete',
+        );
+      }
+      this._deferredHistoryAdmission = undefined;
+    } else {
+      this.chat = chat;
+    }
     return chat;
   }
 

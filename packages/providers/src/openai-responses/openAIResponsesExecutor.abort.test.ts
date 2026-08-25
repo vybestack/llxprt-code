@@ -274,7 +274,6 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
       ephemerals: { retrywait: 1_000, retries: 5 },
     });
     const iterator = executeOpenAIResponsesRequest(options, buildDeps());
-    controller.abort();
 
     await expect(drain(iterator)).rejects.toBe(abortError);
     // AbortError must NOT trigger a retry — only one fetch call.

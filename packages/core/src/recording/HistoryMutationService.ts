@@ -122,9 +122,12 @@ export class HistoryMutationService {
   async clear(
     history: readonly IContent[],
     recording: SessionRecordingService,
+    beforeCommit?: (remainingHistory: readonly IContent[]) => Promise<void>,
   ): Promise<HistoryMutationResult | HistoryMutationError> {
     const { cutIndex, removed } = computeClearCut(history);
-    return this.applyMutation(history.slice(0, cutIndex), removed, recording);
+    const remaining = history.slice(0, cutIndex);
+    await beforeCommit?.(remaining);
+    return this.applyMutation(remaining, removed, recording);
   }
 
   /**

@@ -7,6 +7,7 @@
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { prepareRequest } from './OpenAIRequestPreparation.js';
 import type { buildResponsesRequestContextForProjection } from '../openai-responses/openAIResponsesExecutor.js';
+import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type {
   PromptEnvelopeProjection,
   UnsupportedMediaEntry,
@@ -20,6 +21,7 @@ export type PreparedOpenAIPromptEnvelope =
   | {
       readonly protocol: 'openai-chat';
       readonly requestContext: Awaited<ReturnType<typeof prepareRequest>>;
+      readonly mediaRequest: ResolvedMediaRequest;
     }
   | {
       readonly protocol: 'openai-responses';
@@ -44,15 +46,25 @@ export class OpenAIPromptEnvelopeStore {
   ): PromptEnvelopeProjection {
     const transportToken = Object.freeze({});
     this.prepared.set(transportToken, prepared);
-    return prepared.protocol === 'openai-responses'
-      ? projectOpenAIResponsesPromptEnvelope(prepared.requestContext.request, {
-          unsupportedMedia,
-          transportToken,
-        })
-      : projectOpenAIChatPromptEnvelope(prepared.requestContext.requestBody, {
-          unsupportedMedia,
-          transportToken,
-        });
+    if (prepared.protocol === 'openai-responses') {
+      return {
+        ...projectOpenAIResponsesPromptEnvelope(
+          prepared.requestContext.request,
+          {
+            unsupportedMedia,
+            transportToken,
+          },
+        ),
+        releaseIfUnsent: prepared.requestContext.mediaRequest.release,
+      };
+    }
+    return {
+      ...projectOpenAIChatPromptEnvelope(prepared.requestContext.requestBody, {
+        unsupportedMedia,
+        transportToken,
+      }),
+      releaseIfUnsent: prepared.mediaRequest.release,
+    };
   }
 }
 
@@ -66,6 +78,7 @@ interface PrepareOpenAIProjectionInput {
   readonly prepareChat: () => Promise<{
     options: NormalizedGenerateChatOptions;
     requestContext: Awaited<ReturnType<typeof prepareRequest>>;
+    mediaRequest: ResolvedMediaRequest;
   }>;
   readonly responsesPdfEnabled: boolean;
   readonly collectUnsupported: (
@@ -92,7 +105,11 @@ export async function prepareOpenAIPromptProjection(
 
   const prepared = await input.prepareChat();
   return input.store.storeProjection(
-    { protocol: 'openai-chat', requestContext: prepared.requestContext },
+    {
+      protocol: 'openai-chat',
+      requestContext: prepared.requestContext,
+      mediaRequest: prepared.mediaRequest,
+    },
     input.collectUnsupported(
       prepared.options,
       (category) => category === 'image',

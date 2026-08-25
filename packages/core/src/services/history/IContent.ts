@@ -88,6 +88,16 @@ export interface ChronologyMarker {
 /**
  * Metadata associated with content
  */
+export interface SemanticMediaPurgeBoundaryTag {
+  readonly blockIndex: number;
+  readonly boundaryId: object;
+}
+
+export interface SemanticMediaPurgeCacheWriteEvidence {
+  readonly boundaryId: object;
+  readonly preparation: 'added' | 'reused';
+}
+
 export interface ContentMetadata {
   /** When this content was created */
   timestamp?: number;
@@ -182,6 +192,20 @@ export interface ContentMetadata {
    * history replacement drops it automatically. NEVER serialized to a provider.
    */
   cacheAnchor?: boolean;
+
+  /** Session-owned durable cursor for explicit semantic media purge. */
+  semanticMediaPurgeFrontier?: {
+    readonly contentIndex: number;
+    readonly blockIndex: number;
+    readonly contentId?: string;
+    readonly mediaId?: string;
+  };
+
+  /** Request-local marker for the exact semantic purge pre-image boundary. */
+  semanticMediaPurgeBoundary?: SemanticMediaPurgeBoundaryTag;
+
+  /** Request-local proof that the provider observed a matching cache write. */
+  semanticMediaPurgeCacheWriteEvidence?: SemanticMediaPurgeCacheWriteEvidence;
 }
 
 export interface UsageStats {
@@ -295,30 +319,436 @@ export interface ToolResponseBlock {
 /**
  * Media content (images, files, etc.)
  */
-export interface MediaBlock {
+interface MediaBlockBase {
   type: 'media';
-
-  /** MIME type of the media */
   mimeType: string;
-
-  /** Either a URL or base64-encoded data */
-  data: string;
-
-  /** Whether data is a URL or base64 */
-  encoding: 'url' | 'base64';
-
-  /** Optional caption or alt text */
   caption?: string;
-
-  /** Original filename if applicable */
   filename?: string;
-
-  /**
-   * @plan PLAN-20260702-LLMTYPES.P03
-   * @requirement REQ-009.1
-   * @pseudocode line 90
-   */
   providerMetadata?: Record<string, unknown>;
+}
+
+/** Intrinsic media dimensions when admission could determine both values. */
+export interface MediaDimensions {
+  readonly width: number;
+  readonly height: number;
+}
+
+/** Deeply immutable, recording-safe semantic metadata values. */
+export type MediaSemanticMetadataValue =
+  | string
+  | number
+  | boolean
+  | null
+  | MediaSemanticMetadata
+  | readonly MediaSemanticMetadataValue[];
+
+/** Provider-neutral semantics that remain stable for the referenced bytes. */
+export interface MediaSemanticMetadata {
+  readonly [key: string]: MediaSemanticMetadataValue;
+}
+
+/** Legacy inline media retained for recording and caller compatibility. */
+export interface ProviderFileReferenceMetadata {
+  readonly cacheKey?: string;
+  readonly provider: string;
+  readonly baseURL: string;
+  readonly credentialHash: string;
+  readonly fileId: string;
+  readonly byteLength: number;
+  readonly scope: 'session' | 'workspace';
+  readonly scopeId: string;
+  readonly createdAt: number;
+  readonly expiresAt: number;
+  readonly deletion: 'retain' | 'delete';
+  readonly zeroDataRetention: 'not-applicable' | 'incompatible-while-retained';
+  readonly deletionState: 'active' | 'pending' | 'failed';
+}
+
+export interface InlineMediaBlock extends MediaBlockBase {
+  encoding: 'url' | 'base64';
+  data: string;
+  readonly dimensions?: MediaDimensions;
+  readonly semanticMetadata?: MediaSemanticMetadata;
+  readonly providerFileIds?: Readonly<Record<string, string>>;
+  readonly providerFiles?: readonly ProviderFileReferenceMetadata[];
+  readonly sourceContentId?: string;
+  readonly originalData?: string;
+  readonly originalMimeType?: string;
+  readonly originalDimensions?: MediaDimensions;
+  readonly transformation?: MediaTransformation;
+}
+
+/** Exact immutable metadata for one content-addressed media object. */
+export interface MediaStoredObject {
+  readonly contentId: string;
+  readonly mimeType: string;
+  readonly byteLength: number;
+  readonly normalizedBase64Length: number;
+  readonly dimensions?: MediaDimensions;
+}
+
+/** Stable identity of the policy that selected or produced a stored variant. */
+export interface MediaTransformation {
+  readonly policyId: string;
+  readonly policyVersion: number;
+  readonly parameters: MediaSemanticMetadata;
+}
+
+/**
+ * Long-lived local media identity. It records replay and accounting metadata
+ * without retaining inline bytes or a machine-specific source path.
+ */
+export interface MediaReferenceBlock extends MediaBlockBase {
+  encoding: 'reference';
+  readonly mimeType: string;
+  readonly contentId: string;
+  readonly originalContentId: string;
+  readonly selectedContentId: string;
+  readonly originalObject: MediaStoredObject;
+  readonly selectedObject: MediaStoredObject;
+  readonly transformation: MediaTransformation;
+  readonly byteLength: number;
+  readonly normalizedBase64Length: number;
+  readonly dimensions?: MediaDimensions;
+  readonly semanticMetadata: MediaSemanticMetadata;
+  readonly providerFileIds?: Readonly<Record<string, string>>;
+  readonly providerFiles?: readonly ProviderFileReferenceMetadata[];
+  readonly data?: never;
+  readonly sourcePath?: never;
+}
+
+/** Provider-neutral inline, URL, or local-reference media. */
+export type MediaBlock = InlineMediaBlock | MediaReferenceBlock;
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isContentId(value: unknown): value is string {
+  return typeof value === 'string' && /^sha256:[0-9a-f]{64}$/.test(value);
+}
+
+function isMimeType(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+\/[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(value)
+  );
+}
+
+function isLegacyInlineMimeType(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  const [essence] = value.split(';', 1);
+  return isMimeType(essence.trim());
+}
+
+function hasValidDimensions(value: unknown): value is MediaDimensions {
+  return (
+    isRecord(value) &&
+    Object.keys(value).length === 2 &&
+    isPositiveInteger(value['width']) &&
+    isPositiveInteger(value['height'])
+  );
+}
+
+function hasValidProviderFileIds(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return Object.entries(value).every(
+    ([provider, fileId]) => provider.length > 0 && isNonEmptyString(fileId),
+  );
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+function hasValidProviderFile(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (value['cacheKey'] !== undefined && !isNonEmptyString(value['cacheKey'])) {
+    return false;
+  }
+  const strings = [
+    value['provider'],
+    value['baseURL'],
+    value['credentialHash'],
+    value['fileId'],
+    value['scopeId'],
+  ];
+  if (!strings.every(isNonEmptyString)) return false;
+  if (!isPositiveInteger(value['byteLength'])) return false;
+  if (value['scope'] !== 'session' && value['scope'] !== 'workspace')
+    return false;
+  const createdAt = value['createdAt'];
+  const expiresAt = value['expiresAt'];
+  if (!isNonNegativeInteger(createdAt)) return false;
+  if (!isNonNegativeInteger(expiresAt)) return false;
+  if (expiresAt <= createdAt) return false;
+  if (value['deletion'] !== 'retain' && value['deletion'] !== 'delete')
+    return false;
+  if (
+    value['zeroDataRetention'] !== 'not-applicable' &&
+    value['zeroDataRetention'] !== 'incompatible-while-retained'
+  ) {
+    return false;
+  }
+  return ['active', 'pending', 'failed'].includes(
+    String(value['deletionState']),
+  );
+}
+
+function hasValidProviderFiles(value: unknown): boolean {
+  return Array.isArray(value) && value.every(hasValidProviderFile);
+}
+
+const MAX_SEMANTIC_METADATA_DEPTH = 64;
+
+function isMediaSemanticMetadataValue(
+  value: unknown,
+  ancestors: Set<object>,
+  depth: number,
+): value is MediaSemanticMetadataValue {
+  if (depth > MAX_SEMANTIC_METADATA_DEPTH) return false;
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'boolean'
+  ) {
+    return true;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value);
+  }
+  if (typeof value !== 'object' || ancestors.has(value)) {
+    return false;
+  }
+  if (!Array.isArray(value)) {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      return false;
+    }
+  }
+  ancestors.add(value);
+  const entries = Array.isArray(value) ? value : Object.values(value);
+  const hasValidKeys =
+    Array.isArray(value) || Object.keys(value).every((key) => key.length > 0);
+  const isValid =
+    hasValidKeys &&
+    entries.every((entry) =>
+      isMediaSemanticMetadataValue(entry, ancestors, depth + 1),
+    );
+  ancestors.delete(value);
+  return isValid;
+}
+
+function isMediaSemanticMetadata(
+  value: unknown,
+): value is MediaSemanticMetadata {
+  return (
+    isRecord(value) && isMediaSemanticMetadataValue(value, new Set<object>(), 0)
+  );
+}
+
+function hasValidStoredObject(value: unknown): value is MediaStoredObject {
+  if (!isRecord(value) || !isContentId(value['contentId'])) return false;
+  if (!isMimeType(value['mimeType'])) return false;
+  const byteLength = value['byteLength'];
+  if (!isPositiveInteger(byteLength)) return false;
+  if (value['normalizedBase64Length'] !== Math.ceil(byteLength / 3) * 4) {
+    return false;
+  }
+  return (
+    value['dimensions'] === undefined || hasValidDimensions(value['dimensions'])
+  );
+}
+
+function hasValidTransformation(value: unknown): value is MediaTransformation {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value['policyId']) &&
+    isPositiveInteger(value['policyVersion']) &&
+    isMediaSemanticMetadata(value['parameters'])
+  );
+}
+
+/** Recognizes valid legacy inline and URL media restored from external data. */
+export function isInlineMediaBlock(value: unknown): value is InlineMediaBlock {
+  if (!isRecord(value) || value['type'] !== 'media') {
+    return false;
+  }
+  if (value['encoding'] !== 'url' && value['encoding'] !== 'base64') {
+    return false;
+  }
+  if (!isLegacyInlineMimeType(value['mimeType'])) return false;
+  const dimensions = value['dimensions'];
+  if (dimensions !== undefined && !hasValidDimensions(dimensions)) return false;
+  const semanticMetadata = value['semanticMetadata'];
+  if (
+    semanticMetadata !== undefined &&
+    !isMediaSemanticMetadata(semanticMetadata)
+  ) {
+    return false;
+  }
+  const providerFileIds = value['providerFileIds'];
+  if (
+    providerFileIds !== undefined &&
+    !hasValidProviderFileIds(providerFileIds)
+  ) {
+    return false;
+  }
+  const providerFiles = value['providerFiles'];
+  if (providerFiles !== undefined && !hasValidProviderFiles(providerFiles)) {
+    return false;
+  }
+  const sourceContentId = value['sourceContentId'];
+  if (sourceContentId !== undefined && !isContentId(sourceContentId))
+    return false;
+  const originalData = value['originalData'];
+  if (originalData !== undefined && !isNonEmptyString(originalData))
+    return false;
+  const originalMimeType = value['originalMimeType'];
+  if (
+    originalMimeType !== undefined &&
+    !isLegacyInlineMimeType(originalMimeType)
+  ) {
+    return false;
+  }
+  const originalDimensions = value['originalDimensions'];
+  if (
+    originalDimensions !== undefined &&
+    !hasValidDimensions(originalDimensions)
+  ) {
+    return false;
+  }
+  const transformation = value['transformation'];
+  if (transformation !== undefined && !hasValidTransformation(transformation)) {
+    return false;
+  }
+  return isNonEmptyString(value['data']);
+}
+
+function dimensionsMatch(
+  left: MediaDimensions | undefined,
+  right: MediaDimensions | undefined,
+): boolean {
+  return left?.width === right?.width && left?.height === right?.height;
+}
+
+function storedObjectMetadataMatches(
+  left: MediaStoredObject,
+  right: MediaStoredObject,
+): boolean {
+  return (
+    left.mimeType === right.mimeType &&
+    left.byteLength === right.byteLength &&
+    left.normalizedBase64Length === right.normalizedBase64Length &&
+    dimensionsMatch(left.dimensions, right.dimensions)
+  );
+}
+
+function referenceObjectsMatch(
+  value: Readonly<Record<string, unknown>>,
+  originalObject: MediaStoredObject,
+  selectedObject: MediaStoredObject,
+): boolean {
+  return [
+    originalObject.contentId === value['originalContentId'],
+    selectedObject.contentId === value['selectedContentId'],
+    selectedObject.contentId === value['contentId'],
+    selectedObject.mimeType === value['mimeType'],
+    selectedObject.byteLength === value['byteLength'],
+    selectedObject.normalizedBase64Length === value['normalizedBase64Length'],
+    dimensionsMatch(
+      selectedObject.dimensions,
+      hasValidDimensions(value['dimensions']) ? value['dimensions'] : undefined,
+    ),
+    originalObject.contentId !== selectedObject.contentId ||
+      storedObjectMetadataMatches(originalObject, selectedObject),
+  ].every(Boolean);
+}
+
+/** Validates the complete persisted local-reference shape and its invariants. */
+export function isMediaReferenceBlock(
+  value: unknown,
+): value is MediaReferenceBlock {
+  if (!isRecord(value) || value['type'] !== 'media') {
+    return false;
+  }
+  if (value['encoding'] !== 'reference') {
+    return false;
+  }
+  if ('data' in value || 'sourcePath' in value) {
+    return false;
+  }
+  if (!isMimeType(value['mimeType'])) {
+    return false;
+  }
+  if (!isContentId(value['contentId'])) {
+    return false;
+  }
+  if (!isContentId(value['originalContentId'])) {
+    return false;
+  }
+  if (!isContentId(value['selectedContentId'])) {
+    return false;
+  }
+  if (value['contentId'] !== value['selectedContentId']) {
+    return false;
+  }
+  const byteLength = value['byteLength'];
+  if (!isPositiveInteger(byteLength)) {
+    return false;
+  }
+  const normalizedBase64Length = value['normalizedBase64Length'];
+  if (!isPositiveInteger(normalizedBase64Length)) {
+    return false;
+  }
+  if (normalizedBase64Length !== Math.ceil(byteLength / 3) * 4) {
+    return false;
+  }
+  const originalObject = value['originalObject'];
+  const selectedObject = value['selectedObject'];
+  if (!hasValidStoredObject(originalObject)) return false;
+  if (!hasValidStoredObject(selectedObject)) return false;
+  if (!hasValidTransformation(value['transformation'])) return false;
+  if (!referenceObjectsMatch(value, originalObject, selectedObject)) {
+    return false;
+  }
+  if (!isMediaSemanticMetadata(value['semanticMetadata'])) {
+    return false;
+  }
+  const dimensions = value['dimensions'];
+  if (dimensions !== undefined && !hasValidDimensions(dimensions)) {
+    return false;
+  }
+  const providerFileIds = value['providerFileIds'];
+  if (
+    providerFileIds !== undefined &&
+    !hasValidProviderFileIds(providerFileIds)
+  ) {
+    return false;
+  }
+  const providerFiles = value['providerFiles'];
+  return providerFiles === undefined || hasValidProviderFiles(providerFiles);
+}
+
+/** Rejects local references before a converter attempts inline transport. */
+export function requireInlineMediaBlock(block: MediaBlock): InlineMediaBlock {
+  if (block.encoding !== 'reference') {
+    return block;
+  }
+  if (!isMediaReferenceBlock(block)) {
+    throw new Error('Malformed media reference');
+  }
+  throw new Error(`Unresolved media reference ${block.contentId}`);
 }
 
 /**
@@ -406,7 +836,7 @@ export const ContentValidation = {
         return Boolean(block.callId) && block.result !== undefined;
       }
       if (block.type === 'media') {
-        return !!block.data && !!block.mimeType;
+        return isInlineMediaBlock(block) || isMediaReferenceBlock(block);
       }
       if (block.type === 'thinking') {
         // A thinking block is valid if it has:

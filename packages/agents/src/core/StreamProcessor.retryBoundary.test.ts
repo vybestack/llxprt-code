@@ -144,6 +144,7 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
       providerResolver: () => mockProvider,
       providerRuntimeBuilder: mockProviderRuntimeBuilder,
       generationConfig: {},
+      turnIdByPromptId: new Map<string, string>(),
       logger: { debug: () => {}, warn: () => {} },
     });
 
@@ -601,6 +602,7 @@ describe('StreamProcessor.makeApiCallAndProcessStream — cancellation before fi
       providerResolver: vi.fn(() => provider),
       _executeStreamApiCall: executeStreamApiCall,
       processStreamResponse,
+      turnIdByPromptId: new Map<string, string>(),
       logger: { debug: () => {}, warn: () => {} },
     });
 

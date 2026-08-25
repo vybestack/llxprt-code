@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import type { IContent } from '../../services/history/IContent.js';
+
 /**
  * Shared types for the session-recording janitor.
  *
@@ -65,6 +67,8 @@ export interface SessionCleanupParams {
   readonly currentSessionId?: string;
   /** Fully resolved retention configuration. */
   readonly config: ResolvedRetentionConfig;
+  /** In-memory history owned by the current process, when available. */
+  readonly activeHistory?: readonly IContent[];
   /** When true, suppress debug logging. */
   readonly quiet?: boolean;
 }

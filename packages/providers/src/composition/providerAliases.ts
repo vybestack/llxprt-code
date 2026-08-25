@@ -10,6 +10,10 @@ import stripJsonComments from 'strip-json-comments';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { debugLogger } from '@vybestack/llxprt-code-core';
 import { fileURLToPath } from 'url';
+import {
+  isProviderMediaTransportCapabilities,
+  type ProviderMediaTransportCapabilities,
+} from '../providerMediaTransportCapabilities.js';
 
 const SUPPORTED_EXTENSIONS = new Set(['.config', '.json']);
 
@@ -119,6 +123,7 @@ export interface ProviderAliasConfig {
    * the existing inline-image-only behavior.
    */
   mediaSupport?: ProviderMediaSupport;
+  mediaTransportCapabilities?: ProviderMediaTransportCapabilities;
 }
 
 export interface ProviderAliasEntry {
@@ -312,6 +317,29 @@ function sanitizeMediaSupport(
     Object.keys(coerced).length > 0 ? coerced : undefined;
 }
 
+function sanitizeMediaTransportCapabilities(
+  aliasConfig: ProviderAliasConfig,
+  filePath: string,
+): void {
+  if (
+    !Object.prototype.hasOwnProperty.call(
+      aliasConfig,
+      'mediaTransportCapabilities',
+    )
+  ) {
+    return;
+  }
+  const value: unknown = aliasConfig.mediaTransportCapabilities;
+  if (!isProviderMediaTransportCapabilities(value)) {
+    debugLogger.warn(
+      `[ProviderAliases] Ignoring malformed mediaTransportCapabilities in ${filePath}`,
+    );
+    aliasConfig.mediaTransportCapabilities = undefined;
+    return;
+  }
+  aliasConfig.mediaTransportCapabilities = { ...value };
+}
+
 function readAliasFile(
   filePath: string,
   source: ProviderAliasSource,
@@ -349,6 +377,7 @@ function readAliasFile(
     sanitizeAliasConfigFields(aliasConfig, filePath);
     sanitizeModelDefaults(aliasConfig, filePath);
     sanitizeMediaSupport(aliasConfig, filePath);
+    sanitizeMediaTransportCapabilities(aliasConfig, filePath);
 
     return {
       alias,

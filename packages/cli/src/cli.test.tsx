@@ -24,14 +24,10 @@ import {
   formatNonInteractiveError,
 } from './cli.js';
 import type { LoadedSettings } from './config/settings.js';
-import {
-  // SettingsFile, // Currently unused
-  loadSettings,
-} from './config/settings.js';
+import { loadSettings } from './config/settings.js';
 import { loadCliConfig } from './config/config.js';
 import { parseArguments } from './config/cliArgParser.js';
-import { appEvents, AppEvent } from './utils/events.js';
-import type { AppEvents } from './utils/events.js';
+import { appEvents, AppEvent, type AppEvents } from './utils/events.js';
 import { EventEmitter } from 'node:events';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { FatalConfigError, OutputFormat } from '@vybestack/llxprt-code-core';
@@ -41,6 +37,7 @@ import { relaunchAppInChildProcess } from './utils/relaunch.js';
 import { getCliVersion } from './utils/version.js';
 import { createForegroundAgent } from './cliAgentBootstrap.js';
 import { __setRenderForTesting } from './session/interactiveUI.js';
+import { createTestSessionMediaConfig } from './test-utils/sessionMediaConfig.js';
 
 // Custom error to identify mock process.exit calls
 class MockProcessExitError extends Error {
@@ -517,6 +514,7 @@ describe('cli.tsx main function', () => {
       getScreenReader: vi.fn(() => false),
       storage: {},
       getProjectTempDir: vi.fn(() => projectTempDir),
+      ...createTestSessionMediaConfig(projectTempDir),
       getContinueSessionRef: vi.fn(() => null),
       getWorkspaceContext: vi.fn(() => ({
         getDirectories: () => ['/tmp/project'],
@@ -681,6 +679,7 @@ describe('cli.tsx main function', () => {
       getScreenReader: vi.fn(() => false),
       storage: {},
       getProjectTempDir: vi.fn(() => projectTempDir),
+      ...createTestSessionMediaConfig(projectTempDir),
       getContinueSessionRef: vi.fn(() => null),
       getWorkspaceContext: vi.fn(() => ({
         getDirectories: () => ['/tmp/project'],

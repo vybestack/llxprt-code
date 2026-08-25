@@ -83,10 +83,13 @@ describe('HistoryService.estimateTokensForContents — image token evidence', ()
 
   it('varies the image token delta by provider', async () => {
     const content = [imageContent()];
-    const b64 = (content[0].blocks[0] as MediaBlock).data;
+    const media = content[0].blocks[0];
+    if (media.type !== 'media' || media.encoding !== 'base64') {
+      throw new Error('Expected inline base64 media fixture');
+    }
     // Guard the fixture: a dimensionless payload would silently collapse both
     // providers onto their unknown-dimension constants.
-    expect(parseImageDimensionsFromBase64(b64)).toEqual({
+    expect(parseImageDimensionsFromBase64(media.data)).toEqual({
       width: 1092,
       height: 1092,
     });

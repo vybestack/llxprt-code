@@ -67,6 +67,7 @@ describe('StreamProcessor.processStreamResponse — stream state release (#2852)
       historyService: {
         add: vi.fn(),
         getAll: () => [],
+        generateTurnKey: () => `turn-${crypto.randomUUID()}`,
         waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
       },
       logger: new DebugLogger('test'),
@@ -187,6 +188,66 @@ describe('StreamProcessor.processStreamResponse — stream state release (#2852)
       sameBlockArray: first.content.blocks === second.content.blocks,
       blockCount: first.content.blocks.length,
     }).toStrictEqual({ sameBlockArray: true, blockCount: 5_000 });
+  });
+
+  it('threads each concurrent stream immutable turn identity through media admission', async () => {
+    const admittedTurnByText = new Map<string, string>();
+    Reflect.set(processor, 'runtimeContext', {
+      ephemerals: { reasoning: { includeInContext: () => false } },
+      mediaAdmission: {
+        admitContent: (
+          content: IContent,
+          context: { readonly turnId: string },
+        ): Promise<IContent> => {
+          const text = content.blocks.find(
+            (block) => block.type === 'text',
+          )?.text;
+          if (text !== undefined) admittedTurnByText.set(text, context.turnId);
+          return Promise.resolve(content);
+        },
+        admitContents: (contents: readonly IContent[]): Promise<IContent[]> =>
+          Promise.resolve([...contents]),
+      },
+    });
+
+    async function* streamOf(prefix: string): AsyncGenerator<ModelStreamChunk> {
+      yield makeChunk(`${prefix}-first`);
+      await Promise.resolve();
+      yield makeFinishChunk(`${prefix}-last`);
+    }
+    const left = processor.processStreamResponse(
+      streamOf('left'),
+      createUserInput(),
+      undefined,
+      'turn-left',
+    );
+    await left.next();
+    const right = processor.processStreamResponse(
+      streamOf('right'),
+      createUserInput(),
+      undefined,
+      'turn-right',
+    );
+
+    await Promise.all([
+      (async () => {
+        for await (const _chunk of left) {
+          // drain
+        }
+      })(),
+      (async () => {
+        for await (const _chunk of right) {
+          // drain
+        }
+      })(),
+    ]);
+
+    expect(Object.fromEntries(admittedTurnByText)).toEqual({
+      'left-first': 'turn-left',
+      'left-last': 'turn-left',
+      'right-first': 'turn-right',
+      'right-last': 'turn-right',
+    });
   });
 
   it('keeps concurrent streams from sharing accumulated blocks', async () => {

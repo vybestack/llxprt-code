@@ -79,7 +79,7 @@ function buildEnforcerDeps(
     performCompression: async () => PerformCompressionResult.FAILED,
     buildCompressionContext: async () => ({}) as never,
     compressWithFallbackStrategy: async () => ({ newHistory: [] }) as never,
-    applyFallbackCompressionResult: () => {},
+    applyFallbackCompressionResult: async () => {},
     setSuppressDensityDirty: () => {},
     recordCompressionFailure: () => {},
     resetLastPromptTokenCount: () => {},

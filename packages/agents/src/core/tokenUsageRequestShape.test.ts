@@ -103,6 +103,75 @@ describe('tokenUsageRequestShape — buckets partition (AC-6)', () => {
     expect(totalContents).toBe(16 + 24 + result.mediaTokens);
   });
 
+  it('counts equivalent inline and referenced media as the same physical request shape', () => {
+    const inlineMedia: IContent = {
+      speaker: 'human',
+      blocks: [
+        {
+          type: 'media',
+          encoding: 'base64',
+          mimeType: 'image/png',
+          data: 'AAEC/f7/',
+        },
+      ],
+    };
+    const referencedMedia: IContent = {
+      speaker: 'human',
+      blocks: [
+        {
+          type: 'media',
+          encoding: 'reference',
+          mimeType: 'image/png',
+          contentId:
+            'sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+          originalContentId:
+            'sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+          selectedContentId:
+            'sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+          originalObject: {
+            contentId:
+              'sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+            mimeType: 'image/png',
+            byteLength: 6,
+            normalizedBase64Length: 8,
+          },
+          selectedObject: {
+            contentId:
+              'sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+            mimeType: 'image/png',
+            byteLength: 6,
+            normalizedBase64Length: 8,
+          },
+          transformation: {
+            policyId: 'image-resize',
+            policyVersion: 1,
+            parameters: {},
+          },
+          byteLength: 6,
+          normalizedBase64Length: 8,
+          semanticMetadata: { purpose: 'screenshot' },
+        },
+      ],
+    };
+    const shape = (requestContents: readonly IContent[]) =>
+      computeRequestShape({
+        requestContents,
+        tools: [],
+        instructionsText: undefined,
+        countTokens: charCounter,
+        previouslySentCallIds: new Set(),
+        previousFingerprint: undefined,
+      });
+
+    const inlineShape = shape([inlineMedia]);
+    const referencedShape = shape([referencedMedia]);
+
+    expect(referencedShape.mediaTokens).toBe(inlineShape.mediaTokens);
+    expect(referencedShape.prefixFingerprint).toBe(
+      inlineShape.prefixFingerprint,
+    );
+  });
+
   it('counts instructions and tool schemas separately from contents', () => {
     const result = computeRequestShape({
       requestContents: [textContent('history text')],

@@ -18,6 +18,7 @@ import type {
   ProviderContext,
   ProviderComparison,
 } from './types.js';
+import { conservativeMediaTransportCapabilities } from './providerMediaTransportCapabilities.js';
 
 const PROVIDER_CAPABILITY_HINTS: Record<
   string,
@@ -83,6 +84,9 @@ export class ProviderCapabilitiesService {
       hasApiKeyConfig: hints.hasApiKeyConfig ?? true,
       hasBaseUrlConfig: hints.hasBaseUrlConfig ?? true,
       supportsPaidMode: typeof provider.isPaidMode === 'function',
+      mediaTransport:
+        provider.getMediaTransportCapabilities?.() ??
+        conservativeMediaTransportCapabilities(),
     };
   }
 

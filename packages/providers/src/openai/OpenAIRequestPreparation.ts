@@ -24,6 +24,11 @@ import { extractModelParamsFromOptions } from './OpenAIClientFactory.js';
 import { sanitizePromptCacheKey } from '../openai-responses/sanitizePromptCacheKey.js';
 import { applyOpenAIChatReasoning } from './openai-chat-reasoning.js';
 import { type Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { applyKimiCacheAffinity } from './kimiCacheAffinity.js';
+import {
+  conservativeMediaTransportCapabilities,
+  type ProviderMediaTransportCapabilities,
+} from '../providerMediaTransportCapabilities.js';
 
 export interface RequestContext {
   model: string;
@@ -212,6 +217,51 @@ function resolveMaxTokens(
   return typeof ephemeralValue === 'number' ? ephemeralValue : undefined;
 }
 
+interface OpenAIMessagePayload {
+  readonly detectedFormat: string;
+  readonly formattedTools: OpenAITool[] | undefined;
+  readonly messagesWithSystem: OpenAI.Chat.ChatCompletionMessageParam[];
+}
+
+function prepareMessagePayload(
+  options: NormalizedGenerateChatOptions,
+  model: string,
+  config: Config | undefined,
+  logger: DebugLogger,
+  providerName: string,
+): OpenAIMessagePayload {
+  const detectedFormat = resolveToolFormat(
+    model,
+    providerName,
+    options.settings,
+    logger,
+  );
+  logger.debug(
+    () =>
+      `[OpenAIProvider] Using tool format '${detectedFormat}' for model '${model}'`,
+    { model, detectedFormat, provider: providerName },
+  );
+  const messages = buildMessagesWithReasoning(
+    options.contents,
+    options,
+    detectedFormat,
+    config,
+  );
+  return {
+    detectedFormat,
+    formattedTools: convertAndGuardTools(
+      options.tools,
+      model,
+      detectedFormat,
+      logger,
+    ),
+    messagesWithSystem: [
+      { role: 'system', content: options.systemInstruction ?? '' },
+      ...messages,
+    ],
+  };
+}
+
 /**
  * Prepare OpenAI API request from normalized options
  * Extracts all the request preparation logic from generateChatCompletionImpl
@@ -222,63 +272,15 @@ export async function prepareRequest(
   config: Config | undefined,
   logger: DebugLogger,
   providerName?: string,
+  mediaTransportCapabilities: ProviderMediaTransportCapabilities = conservativeMediaTransportCapabilities(),
 ): Promise<RequestContext> {
-  const { contents, tools, metadata } = options;
+  const { metadata } = options;
   const model = options.resolved.model || defaultModel;
   const ephemeralSettings = readInvocationRecord(options.invocation.ephemerals);
-
-  // Detect the tool format to use BEFORE building messages
-  // Check for provider toolFormat override before auto-detecting
-  const settings = options.settings;
   const resolvedProviderName = providerName ?? 'openai';
-  const detectedFormat = resolveToolFormat(
-    model,
-    resolvedProviderName,
-    settings,
-    logger,
-  );
-
-  logger.debug(
-    () =>
-      `[OpenAIProvider] Using tool format '${detectedFormat}' for model '${model}'`,
-    {
-      model,
-      detectedFormat,
-      provider: resolvedProviderName,
-    },
-  );
-
-  // Convert IContent to OpenAI messages format
-  const messages = buildMessagesWithReasoning(
-    contents,
-    options,
-    detectedFormat,
-    config,
-  );
-
-  // Convert tools and guard against empty array
-  const formattedTools = convertAndGuardTools(
-    tools,
-    model,
-    detectedFormat,
-    logger,
-  );
-
-  // Get streaming setting
-  const streamingSetting = ephemeralSettings['streaming'];
-  const streamingEnabled = streamingSetting !== 'disabled';
-
-  // Issue #3136: The agent layer owns system-prompt assembly. The provider
-  // transports options.systemInstruction verbatim — it never rebuilds a core
-  // prompt. Projection paths may call this without an instruction; in that
-  // case an empty system message is used so the estimate still resolves.
-  const systemPrompt = options.systemInstruction ?? '';
-
-  // Add system prompt as the first message
-  const messagesWithSystem: OpenAI.Chat.ChatCompletionMessageParam[] = [
-    { role: 'system', content: systemPrompt },
-    ...messages,
-  ];
+  const { detectedFormat, formattedTools, messagesWithSystem } =
+    prepareMessagePayload(options, model, config, logger, resolvedProviderName);
+  const streamingEnabled = ephemeralSettings['streaming'] !== 'disabled';
 
   const maxTokens = resolveMaxTokens(
     metadata.maxTokens,
@@ -308,6 +310,11 @@ export async function prepareRequest(
     resolvedProviderName,
     logger,
   );
+  applyKimiCacheAffinity(requestBody, {
+    providerName: resolvedProviderName,
+    runtimeId: options.invocation.runtimeId,
+    cacheAffinityKey: mediaTransportCapabilities.cacheAffinityKey,
+  });
 
   return {
     model,

@@ -185,6 +185,10 @@
       "bun": "./src/services/history/IContent.ts",
       "import": "./dist/src/services/history/IContent.js"
     },
+    "./services/history/semantic-media-purge.js": {
+      "bun": "./src/services/history/semantic-media-purge.ts",
+      "import": "./dist/src/services/history/semantic-media-purge.js"
+    },
     "./llm-types/index.js": {
       "bun": "./src/llm-types/index.ts",
       "import": "./dist/src/llm-types/index.js"
@@ -215,6 +219,11 @@
       "types": "./dist/src/storage/sessionTypes.d.ts",
       "bun": "./src/storage/sessionTypes.ts",
       "import": "./dist/src/storage/sessionTypes.js"
+    },
+    "./storage/request-media-resolver.js": {
+      "types": "./dist/src/storage/request-media-resolver.d.ts",
+      "bun": "./src/storage/request-media-resolver.ts",
+      "import": "./dist/src/storage/request-media-resolver.js"
     },
     "./storage/secure-store.js": {
       "types": "./dist/src/storage/secure-store.d.ts",

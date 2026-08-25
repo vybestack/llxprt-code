@@ -237,8 +237,8 @@ describe('AgentClient (client.ts)', () => {
     todoStoreWritePausedMock.mockResolvedValue(undefined);
   });
 
-  afterEach(() => {
-    client.dispose();
+  afterEach(async () => {
+    await client.dispose();
     vi.restoreAllMocks();
   });
 

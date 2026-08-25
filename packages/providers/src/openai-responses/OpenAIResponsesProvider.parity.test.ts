@@ -27,6 +27,7 @@ import {
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { readRawPostTestBody } from '../test-utils/rawPostTestAdapters.js';
 
 const originalFetch = global.fetch;
 
@@ -62,10 +63,13 @@ function createFetchCapture(): {
   const captured: CapturedRequest[] = [];
   const mock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     let body: unknown = undefined;
-    if (init?.body instanceof Blob) {
-      body = JSON.parse(await init.body.text());
-    } else if (typeof init?.body === 'string') {
-      body = JSON.parse(init.body);
+    const requestBody: unknown = init?.body;
+    if (requestBody instanceof ReadableStream) {
+      body = JSON.parse(await readRawPostTestBody(requestBody));
+    } else if (requestBody instanceof Blob) {
+      body = JSON.parse(await requestBody.text());
+    } else if (typeof requestBody === 'string') {
+      body = JSON.parse(requestBody);
     }
     captured.push({
       url: String(input),

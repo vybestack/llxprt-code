@@ -24,6 +24,7 @@
  */
 
 import { type IContent } from '../services/history/IContent.js';
+import type { LocalMediaStore } from '../storage/local-media-store.js';
 
 export const SESSION_TITLE_MAX_LENGTH = 120;
 
@@ -52,7 +53,8 @@ export type SessionEventType =
   | 'checkpoint_renamed'
   | 'checkpoint_deleted'
   | 'session_forked'
-  | 'session_named';
+  | 'session_named'
+  | 'semantic_media_purge';
 
 // ---------------------------------------------------------------------------
 // Event envelope
@@ -157,6 +159,14 @@ export interface DirectoriesChangedPayload {
   directories: string[];
 }
 
+export interface SemanticMediaPurgePayload {
+  readonly history: readonly IContent[];
+  readonly frontier: {
+    readonly contentIndex: number;
+    readonly blockIndex: number;
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Checkpoint and session-branching metadata event payloads.
 //
@@ -243,6 +253,10 @@ export interface SessionRecordingServiceConfig {
   cwd?: string;
   provider: string;
   model: string;
+  /** Hard bound for serialized records waiting for durable write. */
+  maxQueueBytes?: number;
+  /** Project-owned store used to verify referenced media during lifecycle replay. */
+  mediaStore?: LocalMediaStore;
 }
 
 // ---------------------------------------------------------------------------
@@ -294,6 +308,10 @@ export type ReplayResult =
       sessionName?: string | null;
       /** Self-contained child ancestry from the `session_forked` event. */
       ancestry?: SessionForkedPayload;
+      readonly semanticMediaPurgeFrontier?: {
+        readonly contentIndex: number;
+        readonly blockIndex: number;
+      };
     }
   | {
       ok: false;

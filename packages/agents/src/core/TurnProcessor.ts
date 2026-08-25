@@ -15,7 +15,6 @@ import type {
   IContent,
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { stampAiTurnModel } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
@@ -47,7 +46,6 @@ import {
   applyRetryTemperature,
   chunkHasVisibleOutput,
 } from './turnAbortHelpers.js';
-import { prepareUserTurnContents } from './turnIdentity.js';
 import { withReportedUsage } from './streamRequestHelpers.js';
 
 import {
@@ -56,7 +54,6 @@ import {
 } from './chatSession.js';
 import {
   createProviderSendTiming,
-  logApiRequest,
   logModelOutputResponse,
   readProviderStreamResponse,
   validateProviderForSend,
@@ -72,13 +69,24 @@ import {
   toModelStreamChunk,
   emptyModelOutput,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import {
-  recordAbandonedStreamAttempt,
-  syncAndRecordTurnUsage,
-} from './tokenUsageActualLogger.js';
+import { recordAbandonedStreamAttempt } from './tokenUsageActualLogger.js';
 import { shouldRetryDirectProviderError } from './turnRetryPolicy.js';
+import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
+
+type SemanticMediaPurgeFactory = () => Promise<
+  SemanticMediaPurgeAttempt | undefined
+>;
+import {
+  prepareAdmittedUserTurn,
+  type PreparedUserTurn,
+} from './mediaAdmissionSeam.js';
+import { enforceTurnMediaRequestContents } from './turnMediaRequest.js';
+import { commitTurnHistory } from './turnHistoryCommit.js';
+import {
+  failedTurnCleanup,
+  throwAfterFailedTurnCleanup,
+  wrapStreamGeneratorLifecycle,
+} from './turnMediaAdmissionLifecycle.js';
 type ToolGroupArray = Array<{
   functionDeclarations: Array<{ name: string }>;
 }>;
@@ -150,41 +158,60 @@ export class TurnProcessor {
   async sendMessage(
     params: SendMessageParams,
     prompt_id: string,
+    semanticMediaPurgeFactory?: SemanticMediaPurgeFactory,
   ): Promise<ModelOutput> {
     await this.sendPromise;
 
     this._resetPerTurnState();
 
-    const prepared = this._prepareSendMessage(params, prompt_id);
+    const prepared = await prepareAdmittedUserTurn(
+      this.runtimeContext,
+      this.historyService,
+      this._normalizeUserContent(params),
+      prompt_id,
+    );
+    this.currentTurnId = prepared.turnId;
 
     // #2410: when the user message converts to zero IContent turns (e.g.
     // empty array after hook-restriction filtering), skip the provider call
     // entirely — never submit a fabricated placeholder to the provider.
     if (prepared.userIContents.length === 0) {
+      await prepared.releaseIfUncommitted();
       return emptyModelOutput();
     }
 
-    const provider = this.providerResolver('sendMessage');
-    const response = await this._executeSendWithRetry(
-      params,
-      prepared.userIContents,
-      provider,
-      prompt_id,
-    );
+    let semanticMediaPurge: SemanticMediaPurgeAttempt | undefined;
+    try {
+      semanticMediaPurge = await semanticMediaPurgeFactory?.();
+      const provider = this.providerResolver('sendMessage');
+      const response = await this._executeSendWithRetry(
+        params,
+        prepared.userIContents,
+        provider,
+        prompt_id,
+        semanticMediaPurge,
+      );
 
-    this.sendPromise = this._commitSendResult(
-      response,
-      prepared.userContents,
-      params,
-      prompt_id,
-      provider,
-    );
+      await semanticMediaPurge?.complete({
+        status: 'success',
+        usage: response.usage,
+        cacheWriteEvidence: response.semanticMediaPurgeCacheWriteEvidence,
+        retryHandoff: this.lastSendAttemptIndex > 0,
+      });
 
-    await this.sendPromise.catch(() => {
+      this.sendPromise = this._commitSendResult(
+        response,
+        prepared,
+        prompt_id,
+        provider,
+      );
+      await this.sendPromise;
+      semanticMediaPurge?.finalize();
+      return response;
+    } catch (error: unknown) {
       this.sendPromise = Promise.resolve();
-    });
-
-    return response;
+      return throwAfterFailedTurnCleanup(error, prepared, semanticMediaPurge);
+    }
   }
 
   /**
@@ -194,11 +221,25 @@ export class TurnProcessor {
   async sendMessageStream(
     params: SendMessageParams,
     prompt_id: string,
+    semanticMediaPurgeFactory?: SemanticMediaPurgeFactory,
   ): Promise<AsyncGenerator<StreamEvent>> {
     await this.sendPromise;
     this._resetPerTurnState();
 
-    const userContents = this._normalizeUserContent(params);
+    const prepared = await prepareAdmittedUserTurn(
+      this.runtimeContext,
+      this.historyService,
+      this._normalizeUserContent(params),
+      prompt_id,
+    );
+    this.currentTurnId = prepared.turnId;
+
+    let semanticMediaPurge: SemanticMediaPurgeAttempt | undefined;
+    try {
+      semanticMediaPurge = await semanticMediaPurgeFactory?.();
+    } catch (error: unknown) {
+      return throwAfterFailedTurnCleanup(error, prepared, undefined);
+    }
 
     let streamDoneResolver: () => void;
     this.sendPromise = new Promise<void>((resolve) => {
@@ -219,19 +260,44 @@ export class TurnProcessor {
       }
     }
 
-    return this._createStreamGenerator(params, prompt_id, userContents, () => {
+    let finished = false;
+    const onDone = (): void => {
+      if (finished) return;
+      finished = true;
+      let releaseFailure: { readonly error: unknown } | undefined;
+      try {
+        this.streamProcessor.releasePromptTurnIdentity(prompt_id);
+      } catch (error: unknown) {
+        releaseFailure = { error };
+      }
       abortSignal?.removeEventListener('abort', onAbort);
       streamDoneResolver!();
-    });
+      if (releaseFailure !== undefined) throw releaseFailure.error;
+    };
+    const stream = this._createStreamGenerator(
+      params,
+      prompt_id,
+      prepared,
+      semanticMediaPurge,
+      onDone,
+    );
+    return wrapStreamGeneratorLifecycle(
+      stream,
+      prepared,
+      semanticMediaPurge,
+      onDone,
+    );
   }
 
   private async *_createStreamGenerator(
     params: SendMessageParams,
     prompt_id: string,
-    userContents: IContent[],
+    prepared: PreparedUserTurn,
+    semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
     onDone: () => void,
   ): AsyncGenerator<StreamEvent> {
     const requestParams = this._withProviderRequestContext(params);
+    let primaryFailure: { readonly error: unknown } | undefined;
     try {
       let lastError: unknown = new Error('Request failed after all retries.');
       let attempt = 0;
@@ -240,8 +306,9 @@ export class TurnProcessor {
         const outcome = yield* this._runStreamAttempt(
           requestParams,
           prompt_id,
-          userContents,
+          prepared,
           attempt,
+          semanticMediaPurge,
         );
         lastError = outcome.error;
         if (outcome.action !== 'retry') {
@@ -255,9 +322,26 @@ export class TurnProcessor {
         }
       }
       if (lastError != null) throw lastError;
-    } finally {
-      onDone();
+    } catch (error: unknown) {
+      primaryFailure = { error };
     }
+    const cleanupFailures: unknown[] = prepared.isTransferredToHistory()
+      ? []
+      : [...(await failedTurnCleanup(prepared, semanticMediaPurge))];
+    try {
+      onDone();
+    } catch (error: unknown) {
+      cleanupFailures.push(error);
+    }
+    if (cleanupFailures.length > 0) {
+      throw new AggregateError(
+        primaryFailure === undefined
+          ? cleanupFailures
+          : [primaryFailure.error, ...cleanupFailures],
+        'Stream turn media cleanup was incomplete',
+      );
+    }
+    if (primaryFailure !== undefined) throw primaryFailure.error;
   }
 
   /**
@@ -268,8 +352,9 @@ export class TurnProcessor {
   private async *_runStreamAttempt(
     params: SendMessageParams,
     prompt_id: string,
-    userContents: IContent[],
+    prepared: PreparedUserTurn,
     attempt: number,
+    semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
   ): AsyncGenerator<StreamEvent, { error: unknown; action: 'retry' | 'stop' }> {
     if (attempt > 0) {
       yield { type: StreamEventType.RETRY };
@@ -282,8 +367,9 @@ export class TurnProcessor {
       const stream = await this.streamProcessor.makeApiCallAndProcessStream(
         currentParams,
         prompt_id,
-        userContents,
+        prepared,
         attempt,
+        semanticMediaPurge,
       );
       for await (const chunk of stream) {
         hasYieldedChunk ||= chunkHasVisibleOutput(chunk);
@@ -397,25 +483,6 @@ export class TurnProcessor {
   }
 
   /**
-   * Prepares user message: validates and converts input before provider enforcement.
-   */
-  private _prepareSendMessage(
-    params: SendMessageParams,
-    promptId: string,
-  ): {
-    userContents: IContent[];
-    userIContents: IContent[];
-  } {
-    const prepared = prepareUserTurnContents(
-      this._normalizeUserContent(params),
-      this.historyService,
-      promptId,
-    );
-    this.currentTurnId = prepared.turnId;
-    return prepared;
-  }
-
-  /**
    * Executes the provider call with retry and bucket failover.
    */
   private async _executeSendWithRetry(
@@ -423,6 +490,7 @@ export class TurnProcessor {
     userIContents: IContent[],
     provider: IProvider,
     prompt_id: string,
+    semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
   ): Promise<ModelOutput> {
     const requestParams = this._withProviderRequestContext(params);
     this._validateProvider(provider);
@@ -437,6 +505,7 @@ export class TurnProcessor {
         prompt_id,
         providerBaseUrl,
         timing,
+        semanticMediaPurge,
       );
       logModelOutputResponse(
         this.runtimeContext,
@@ -458,31 +527,6 @@ export class TurnProcessor {
     } finally {
       this.compressionHandler.clearProviderCompressionCallback(provider);
     }
-  }
-
-  private async _enforceAndLogProviderContents(
-    userIContents: IContent[],
-    provider: IProvider,
-    prompt_id: string,
-    estimateFinalizedPromptTokens?: (contents: IContent[]) => Promise<number>,
-  ): Promise<IContent[]> {
-    const iContents = await this.compressionHandler.enforceProviderContents(
-      {
-        contents: this.historyService.getCuratedForProvider(userIContents),
-        pendingContents: userIContents,
-      },
-      prompt_id,
-      provider,
-      estimateFinalizedPromptTokens,
-    );
-    logApiRequest(
-      this.runtimeContext,
-      this.runtimeContext.state,
-      iContents,
-      this.runtimeContext.state.model,
-      prompt_id,
-    );
-    return iContents;
   }
 
   private _validateProvider(provider: IProvider): void {
@@ -507,6 +551,7 @@ export class TurnProcessor {
     prompt_id: string,
     providerBaseUrl: string | undefined,
     timing: ProviderSendTiming,
+    semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
   ): Promise<ModelOutput> {
     const toolSelection = await this._applyToolSelectionHook(
       this.runtimeContext.providerRuntime.config,
@@ -528,12 +573,16 @@ export class TurnProcessor {
           requestParams.config?.providerRequestContext,
         ),
       enforce: (contents, estimate) =>
-        this._enforceAndLogProviderContents(
-          contents,
+        enforceTurnMediaRequestContents({
+          runtimeContext: this.runtimeContext,
+          historyService: this.historyService,
+          compressionHandler: this.compressionHandler,
+          userContents: contents,
           provider,
-          prompt_id,
-          estimate,
-        ),
+          promptId: prompt_id,
+          semanticMediaPurge,
+          estimateFinalizedPromptTokens: estimate,
+        }),
       fallbackEstimate: (contents) =>
         this.compressionHandler.estimatePendingTokens(contents),
       send: (contents, prepared, attemptIndex) => {
@@ -824,119 +873,27 @@ export class TurnProcessor {
   /**
    * Commits the send result to history: adds user and model content, syncs tokens.
    */
-  private async _commitSendResult(
+  private _commitSendResult(
     response: ModelOutput,
-    userContents: IContent[],
-    _params: SendMessageParams,
-    _prompt_id: string,
+    preparedUserTurn: PreparedUserTurn,
+    promptId: string,
     provider: IProvider,
   ): Promise<void> {
-    try {
-      // Resolve the generating model from the provider that actually served
-      // the request (issue #2511), not from a fresh getActiveProvider() lookup
-      // that can diverge if the active provider changes between generation and
-      // recording, and not from the immutable runtime-state snapshot that goes
-      // stale after a mid-session profile load.
-      const currentModel = resolveGeneratingModel(
-        this.runtimeContext,
-        provider,
-      );
-      // Resolve AFTER the response so LB sub-profile selection is reflected.
-      this.stampingBaseUrl = this.resolveProviderBaseUrl(provider);
-      const afcHistory = response.afcHistory;
-
-      const filteredAfcHistory =
-        afcHistory && afcHistory.length > 0
-          ? afcHistory.filter((content: IContent) => content.blocks.length > 0)
-          : undefined;
-      if (filteredAfcHistory && filteredAfcHistory.length > 0) {
-        this._recordAfcHistory(filteredAfcHistory, currentModel);
-      } else {
-        this._recordUserContents(userContents, currentModel);
-      }
-
-      this._recordOutputContent(response, currentModel, filteredAfcHistory);
-
-      await this._syncTokenCounts(response, _prompt_id);
-    } finally {
-      this.eagerlyRecordedToolResponseCallIds.clear();
-    }
-  }
-
-  private _recordAfcHistory(
-    afcHistory: IContent[],
-    currentModel: string | undefined,
-  ): void {
-    const curatedHistory = this.historyService.getCurated();
-    const index = curatedHistory.length;
-    const newEntries = afcHistory.slice(index);
-    for (const content of newEntries) {
-      // AFC history is mixed user/model; stampAiTurnModel no-ops on non-ai
-      // entries, so only freshly generated model turns get the origin stamp.
-      this.historyService.add(
-        stampAiTurnModel(content, currentModel, this.stampingBaseUrl),
-        currentModel,
-      );
-    }
-  }
-
-  private _recordUserContents(
-    userContents: IContent[],
-    currentModel: string | undefined,
-  ): void {
-    for (const content of userContents) {
-      this.historyService.add(content, currentModel);
-    }
-  }
-
-  private _recordOutputContent(
-    response: ModelOutput,
-    currentModel: string | undefined,
-    afcHistory: IContent[] | undefined,
-  ): void {
-    const outputContent = response.content;
-    const baseURL = this.stampingBaseUrl;
-    if (outputContent.blocks.length > 0) {
-      const includeThoughts =
-        this.runtimeContext.ephemerals.reasoning.includeInContext();
-      const allowedTools = response.hookRestrictions?.allowedToolNames;
-      const blocks = outputContent.blocks;
-      const filteredBlocks = allowedTools
-        ? filterHookRestrictedBlocks(blocks, allowedTools)
-        : blocks;
-      const contentForHistory = includeThoughts
-        ? filteredBlocks
-        : filteredBlocks.filter((b: ContentBlock) => b.type !== 'thinking');
-
-      if (contentForHistory.length > 0) {
-        this.historyService.add(
-          stampAiTurnModel(
-            iContentFromBlocks(contentForHistory, 'ai'),
-            currentModel,
-            baseURL,
-          ),
-          currentModel,
-        );
-      }
-    } else if (!afcHistory || afcHistory.length === 0) {
-      this.historyService.add(
-        stampAiTurnModel(iContentFromBlocks([], 'ai'), currentModel, baseURL),
-        currentModel,
-      );
-    }
-  }
-
-  private async _syncTokenCounts(
-    response: ModelOutput,
-    promptId?: string,
-  ): Promise<void> {
-    await syncAndRecordTurnUsage({
-      history: this.historyService,
-      usageLogger: this.compressionHandler.tokenUsageLogger,
-      usage: response.usage,
+    const currentModel = resolveGeneratingModel(this.runtimeContext, provider);
+    this.stampingBaseUrl = this.resolveProviderBaseUrl(provider);
+    return commitTurnHistory({
+      runtimeContext: this.runtimeContext,
+      historyService: this.historyService,
+      compressionHandler: this.compressionHandler,
+      response,
+      preparedUserTurn,
+      promptId,
+      currentModel,
+      baseUrl: this.stampingBaseUrl,
       lastPromptTokenCount: this.lastPromptTokenCount,
       attemptIndex: this.lastSendAttemptIndex,
-      promptId,
+      eagerlyRecordedToolResponseCallIds:
+        this.eagerlyRecordedToolResponseCallIds,
     });
   }
 }

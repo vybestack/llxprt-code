@@ -20,6 +20,14 @@ describe('extractCacheMetrics', () => {
     });
   });
 
+  describe('Kimi format', () => {
+    it('extracts top-level cached_tokens', () => {
+      const result = extractCacheMetrics({ cached_tokens: 175 });
+
+      expect(result.cachedTokens).toBe(175);
+    });
+  });
+
   describe('Anthropic format', () => {
     it('extracts cache_read_input_tokens and cache_creation_input_tokens', () => {
       const usage = {

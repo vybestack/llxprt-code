@@ -168,6 +168,7 @@ export async function recordHistoryWithUsage(
     userInputWasArray?: boolean;
     userInputWasFunctionResponse?: boolean;
   },
+  afterPublication?: () => void | Promise<void>,
 ): Promise<void> {
   const includeThoughts =
     runtimeContext.ephemerals.reasoning.includeInContext();
@@ -191,41 +192,37 @@ export async function recordHistoryWithUsage(
       }
     : null;
 
-  conversationManager.recordHistory(
+  await conversationManager.recordHistory(
     userInput,
     modelOutput,
     acc.afcHistory,
     streamingUsage,
     userInputFlags,
-  );
-
-  await historyService.waitForTokenUpdates();
-
-  const promptTokens = streamingUsage?.promptTokens ?? null;
-  if (promptTokens !== null && promptTokens > 0) {
-    logger.debug(
-      () =>
-        `[StreamProcessor] Syncing prompt token count to HistoryService: ${promptTokens}`,
-    );
-    historyService.syncTotalTokens(promptTokens);
-    await historyService.waitForTokenUpdates();
-    return;
-  }
-
-  const fallbackTokens = compressionHandler.lastPromptTokenCount;
-  if (fallbackTokens !== null && fallbackTokens > 0) {
-    logger.debug(
-      () =>
-        `[StreamProcessor] Syncing prompt token count to HistoryService: ${fallbackTokens}`,
-    );
-    historyService.syncTotalTokens(fallbackTokens);
-    await historyService.waitForTokenUpdates();
-    return;
-  }
-
-  logger.debug(
-    () =>
-      `[StreamProcessor] No token count to sync (lastPromptTokenCount: ${fallbackTokens})`,
+    async () => {
+      await historyService.waitForTokenUpdates();
+      const promptTokens = streamingUsage?.promptTokens ?? null;
+      const fallbackTokens = compressionHandler.lastPromptTokenCount;
+      let tokensToSync: number | null = null;
+      if (promptTokens !== null && promptTokens > 0) {
+        tokensToSync = promptTokens;
+      } else if (fallbackTokens !== null && fallbackTokens > 0) {
+        tokensToSync = fallbackTokens;
+      }
+      if (tokensToSync !== null) {
+        logger.debug(
+          () =>
+            `[StreamProcessor] Syncing prompt token count to HistoryService: ${tokensToSync}`,
+        );
+        historyService.syncTotalTokens(tokensToSync);
+        await historyService.waitForTokenUpdates();
+      } else {
+        logger.debug(
+          () =>
+            `[StreamProcessor] No token count to sync (lastPromptTokenCount: ${fallbackTokens})`,
+        );
+      }
+      await afterPublication?.();
+    },
   );
 }
 

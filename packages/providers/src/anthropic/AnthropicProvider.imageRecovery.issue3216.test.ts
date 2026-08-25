@@ -33,6 +33,7 @@ import {
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import sharp from 'sharp';
+import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
 
 async function pngBase64(width: number, height: number): Promise<string> {
   const buffer = await sharp({
@@ -52,6 +53,7 @@ const mockMessagesCreate = vi.fn();
 
 void vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation(() => ({
+    ...createAnthropicRawPostTestAdapter(mockMessagesCreate),
     messages: {
       create: mockMessagesCreate,
     },
@@ -438,7 +440,6 @@ describe('AnthropicProvider image recovery (@issue:3216)', () => {
     const { provider, runtimeContext, settingsService } = setupProvider({
       withImageBudget: false,
     });
-    mockMessagesCreate.mockRejectedValueOnce(make400ImageDimensionError());
 
     const messages: IContent[] = [
       {
@@ -465,7 +466,10 @@ describe('AnthropicProvider image recovery (@issue:3216)', () => {
     );
     const attached = attachTransportAttemptBudget(baseOptions, 5);
     const abortController = new AbortController();
-    abortController.abort();
+    mockMessagesCreate.mockImplementationOnce(() => {
+      abortController.abort();
+      return Promise.reject(make400ImageDimensionError());
+    });
     // Preserve the narrowed options type while overriding the signal and
     // carrying the budget-bearing metadata from the attached copy.
     const abortedOptions = {

@@ -74,6 +74,10 @@ function makeRuntimeContext(includeThoughts: boolean): AgentRuntimeContext {
 // Helper: extract observable text from committed history
 // ---------------------------------------------------------------------------
 
+function humanText(text: string): IContent {
+  return { speaker: 'human', blocks: [{ type: 'text', text }] };
+}
+
 function getRecordedHistoryText(history: HistoryService): string {
   const all = history.getAll();
   return all
@@ -116,46 +120,37 @@ describe('REQ-005.1: ConversationManager text consolidation + thought filtering'
     conversationManager = createManager(true);
   });
 
-  it('consolidates adjacent text model outputs into single merged text', () => {
-    const userInput: IContent = {
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'hello' }],
-    };
+  it('consolidates adjacent text model outputs into single merged text', async () => {
+    const userInput = humanText('hello');
     const modelOutput: IContent[] = [
       { speaker: 'ai', blocks: [{ type: 'text', text: 'Hello ' }] },
       { speaker: 'ai', blocks: [{ type: 'text', text: 'World' }] },
     ];
 
-    conversationManager.recordHistory(userInput, modelOutput);
+    await conversationManager.recordHistory(userInput, modelOutput);
 
     const recordedText = getRecordedHistoryText(historyService);
     expect(recordedText).toBe('Hello World');
   });
 
-  it('consolidates three adjacent text chunks into one continuous string', () => {
-    const userInput: IContent = {
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'prompt' }],
-    };
+  it('consolidates three adjacent text chunks into one continuous string', async () => {
+    const userInput = humanText('prompt');
     const modelOutput: IContent[] = [
       { speaker: 'ai', blocks: [{ type: 'text', text: 'A' }] },
       { speaker: 'ai', blocks: [{ type: 'text', text: 'B' }] },
       { speaker: 'ai', blocks: [{ type: 'text', text: 'C' }] },
     ];
 
-    conversationManager.recordHistory(userInput, modelOutput);
+    await conversationManager.recordHistory(userInput, modelOutput);
 
     const recordedText = getRecordedHistoryText(historyService);
     expect(recordedText).toBe('ABC');
   });
 
-  it('filters thoughts from recorded text when includeThoughts=false', () => {
+  it('filters thoughts from recorded text when includeThoughts=false', async () => {
     const ctx = makeRuntimeContext(false);
     const mgr = new ConversationManager(historyService, ctx);
-    const userInput: IContent = {
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'hi' }],
-    };
+    const userInput = humanText('hi');
     const modelOutput: IContent[] = [
       {
         speaker: 'ai',
@@ -171,14 +166,14 @@ describe('REQ-005.1: ConversationManager text consolidation + thought filtering'
       },
     ];
 
-    mgr.recordHistory(userInput, modelOutput);
+    await mgr.recordHistory(userInput, modelOutput);
 
     const recordedText = getRecordedHistoryText(historyService);
     expect(recordedText).toBe('visible answer');
     expect(recordedText).not.toContain('secret thought');
   });
 
-  it('drops thinking blocks and their signatures from history when includeThoughts=false', () => {
+  it('drops thinking blocks and their signatures from history when includeThoughts=false', async () => {
     const ctx = makeRuntimeContext(false);
     const mgr = new ConversationManager(historyService, ctx);
     const userInput: IContent = {
@@ -200,7 +195,7 @@ describe('REQ-005.1: ConversationManager text consolidation + thought filtering'
       },
     ];
 
-    mgr.recordHistory(userInput, modelOutput);
+    await mgr.recordHistory(userInput, modelOutput);
 
     // When includeThoughts=false, the thinking block is NOT recorded as
     // a standalone block in history. The signature is retained on any
@@ -210,7 +205,7 @@ describe('REQ-005.1: ConversationManager text consolidation + thought filtering'
     expect(thinkingBlocks).toHaveLength(0);
   });
 
-  it('includes thinking blocks in history when includeThoughts=true', () => {
+  it('includes thinking blocks in history when includeThoughts=true', async () => {
     const userInput: IContent = {
       speaker: 'human',
       blocks: [{ type: 'text', text: 'hi' }],
@@ -230,7 +225,7 @@ describe('REQ-005.1: ConversationManager text consolidation + thought filtering'
       },
     ];
 
-    conversationManager.recordHistory(userInput, modelOutput);
+    await conversationManager.recordHistory(userInput, modelOutput);
 
     const thinkingBlocks = getRecordedThinkingBlocks(historyService);
     expect(thinkingBlocks.length).toBeGreaterThan(0);
@@ -238,7 +233,7 @@ describe('REQ-005.1: ConversationManager text consolidation + thought filtering'
     expect(thinkingBlocks[0].signature).toBe('sigXYZ');
   });
 
-  it('records usage metadata on the AI entry', () => {
+  it('records usage metadata on the AI entry', async () => {
     const userInput: IContent = {
       speaker: 'human',
       blocks: [{ type: 'text', text: 'hi' }],
@@ -252,7 +247,12 @@ describe('REQ-005.1: ConversationManager text consolidation + thought filtering'
       totalTokens: 15,
     };
 
-    conversationManager.recordHistory(userInput, modelOutput, undefined, usage);
+    await conversationManager.recordHistory(
+      userInput,
+      modelOutput,
+      undefined,
+      usage,
+    );
 
     const aiEntries = historyService.getAll().filter((c) => c.speaker === 'ai');
     expect(aiEntries.length).toBeGreaterThan(0);
@@ -265,12 +265,12 @@ describe('REQ-005.1: ConversationManager text consolidation + thought filtering'
 // ---------------------------------------------------------------------------
 
 describe('REQ-005.1: consolidation + thought filtering (property)', () => {
-  it('consolidating N adjacent text chunks yields their concatenation (property)', () => {
+  it('consolidating N adjacent text chunks yields their concatenation (property)', async () => {
     const textArb = fc.string({ minLength: 1 }).filter((s) => s.length > 0);
     const chunksArb = fc.array(textArb, { minLength: 2, maxLength: 10 });
 
-    fc.assert(
-      fc.property(chunksArb, (texts: string[]) => {
+    await fc.assert(
+      fc.asyncProperty(chunksArb, async (texts: string[]) => {
         const hs = new HistoryService();
         const ctx = makeRuntimeContext(true);
         const mgr = new ConversationManager(hs, ctx);
@@ -284,7 +284,7 @@ describe('REQ-005.1: consolidation + thought filtering (property)', () => {
           blocks: [{ type: 'text' as const, text: t }],
         }));
 
-        mgr.recordHistory(userInput, modelOutput);
+        await mgr.recordHistory(userInput, modelOutput);
 
         const recordedText = getRecordedHistoryText(hs);
         expect(recordedText).toBe(texts.join(''));
@@ -292,7 +292,7 @@ describe('REQ-005.1: consolidation + thought filtering (property)', () => {
     );
   });
 
-  it('thought text never appears in recorded history when includeThoughts=false (property)', () => {
+  it('thought text never appears in recorded history when includeThoughts=false (property)', async () => {
     // Use distinct prefixes so the thought text is never a substring of the
     // answer, making the "not contain" assertion meaningful.
     const thoughtArb = fc
@@ -303,12 +303,12 @@ describe('REQ-005.1: consolidation + thought filtering (property)', () => {
       .map((s) => 'ANSWER_' + s);
     const sigArb = fc.string({ minLength: 1, maxLength: 20 });
 
-    fc.assert(
-      fc.property(
+    await fc.assert(
+      fc.asyncProperty(
         thoughtArb,
         answerArb,
         sigArb,
-        (thought: string, answer: string, sig: string) => {
+        async (thought: string, answer: string, sig: string) => {
           const hs = new HistoryService();
           const ctx = makeRuntimeContext(false);
           const mgr = new ConversationManager(hs, ctx);
@@ -332,7 +332,7 @@ describe('REQ-005.1: consolidation + thought filtering (property)', () => {
             },
           ];
 
-          mgr.recordHistory(userInput, modelOutput);
+          await mgr.recordHistory(userInput, modelOutput);
 
           const recordedText = getRecordedHistoryText(hs);
           expect(recordedText).toBe(answer);
@@ -342,13 +342,13 @@ describe('REQ-005.1: consolidation + thought filtering (property)', () => {
     );
   });
 
-  it('recorded AI text is never empty when model output has visible text (property)', () => {
+  it('recorded AI text is never empty when model output has visible text (property)', async () => {
     const textArb = fc
       .string({ minLength: 1 })
       .filter((s) => s.trim().length > 0);
 
-    fc.assert(
-      fc.property(textArb, (text: string) => {
+    await fc.assert(
+      fc.asyncProperty(textArb, async (text: string) => {
         const hs = new HistoryService();
         const ctx = makeRuntimeContext(true);
         const mgr = new ConversationManager(hs, ctx);
@@ -361,7 +361,7 @@ describe('REQ-005.1: consolidation + thought filtering (property)', () => {
           { speaker: 'ai', blocks: [{ type: 'text', text }] },
         ];
 
-        mgr.recordHistory(userInput, modelOutput);
+        await mgr.recordHistory(userInput, modelOutput);
 
         const recordedText = getRecordedHistoryText(hs);
         expect(recordedText.length).toBeGreaterThan(0);
