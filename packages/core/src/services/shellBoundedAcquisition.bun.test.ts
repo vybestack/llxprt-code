@@ -140,6 +140,22 @@ function chainOnSuccess(first: string, next: string): string {
 }
 
 /**
+ * Re-raise a native program's exit code as the shell's own exit code.
+ *
+ * `powershell -Command` does not adopt the exit status of a native executable
+ * it invoked, so a producer that exits 42 surfaces as 1. bash and cmd.exe
+ * propagate it natively, so this is a no-op there.
+ *
+ * This is applied at the call site rather than inside producerCommand because
+ * `exit` would terminate the shell before any chained command could run.
+ */
+function propagateExit(command: string): string {
+  return getShellConfiguration().shell === 'powershell'
+    ? `${command}; exit $LASTEXITCODE`
+    : command;
+}
+
+/**
  * Execute a shell command via the child_process fallback and collect the
  * final result.
  *
@@ -264,7 +280,7 @@ describe('Shell bounded acquisition - child_process path (cross-platform)', () =
 
   it('preserves exit status of a failing command despite bounded output', async () => {
     const result = await executeAndCollect(
-      producerCommand(524288, 'stdout', 'ascii', 42),
+      propagateExit(producerCommand(524288, 'stdout', 'ascii', 42)),
       { outputRetentionMaxBytes: 4096 },
     );
 
@@ -294,8 +310,15 @@ describe.skipIf(process.platform !== 'win32')(
       // acquisition path must decode these into human-readable text so the
       // model never sees raw <S S="Error"> markup. We force a real error
       // record via Write-Error which reliably produces CLIXML.
+      //
+      // 2000 records, not 50000: each CLIXML error record serialises to
+      // hundreds of bytes, so 2000 already overshoots the 8 KB retention
+      // budget by two orders of magnitude and still proves truncation. Driving
+      // 50000 Write-Error calls through the PowerShell pipeline took longer
+      // than the 180s per-test budget on a loaded CI runner, so the test timed
+      // out before it could assert anything.
       const result = await executeAndCollect(
-        'powershell -NoProfile -Command "Write-Error LLXPRT_CLIXML_BOUND_MARKER; 1..50000 | ForEach-Object { Write-Error $_ }"',
+        'powershell -NoProfile -Command "Write-Error LLXPRT_CLIXML_BOUND_MARKER; 1..2000 | ForEach-Object { Write-Error $_ }"',
         { outputRetentionMaxBytes: 8192 },
       );
 
