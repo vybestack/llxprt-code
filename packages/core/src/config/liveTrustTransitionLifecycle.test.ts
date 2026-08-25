@@ -173,7 +173,7 @@ describe('LiveTrustTransitionLifecycle', () => {
 
     await expect(firstWaiter).resolves.toBe(transitionFailure);
     await expect(secondWaiter).resolves.toBe(transitionFailure);
-    await expect(lifecycle.whenSettled()).resolves.toBeFalsy();
+    await expect(lifecycle.whenSettled()).resolves.toBeUndefined();
   });
 
   it('reports every unconsumed failure in the captured snapshot to concurrent waiters without waiting for later work', async () => {
