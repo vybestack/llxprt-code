@@ -50,7 +50,12 @@ function launcherMagicBlockAfter(marker: string): string {
   return source.slice(magicStart, magicEsac);
 }
 
-describe('POSIX launcher portability', () => {
+// These suites execute the POSIX launcher, which is a `#!/bin/sh` script.
+// Windows has no /bin/sh and ships its own launcher, covered separately by
+// .github/workflows/windows-installed-command.yml, so they cannot run there.
+const IS_WINDOWS = process.platform === 'win32';
+
+describe.skipIf(IS_WINDOWS)('POSIX launcher portability', () => {
   it('passes shellcheck with no warnings', () => {
     // Use POSIX-standard 'command -v' instead of non-standard 'which'.
     const which = spawnSync('sh', ['-c', 'command -v shellcheck'], {
@@ -131,7 +136,7 @@ describe('POSIX launcher portability', () => {
   });
 });
 
-describe('POSIX launcher file', () => {
+describe.skipIf(IS_WINDOWS)('POSIX launcher file', () => {
   it('ships as an executable file with a valid sh shebang', () => {
     expect(existsSync(launcherPath)).toBe(true);
     const stats = statSync(launcherPath);
@@ -146,7 +151,7 @@ describe('POSIX launcher file', () => {
   });
 });
 
-describe('POSIX launcher execution behavior', () => {
+describe.skipIf(IS_WINDOWS)('POSIX launcher execution behavior', () => {
   let tempDir: string;
 
   beforeEach(() => {
@@ -619,222 +624,231 @@ describe('POSIX launcher execution behavior', () => {
   });
 });
 
-describe('POSIX launcher version-pin and platform validation', () => {
-  let tempDir: string;
+describe.skipIf(IS_WINDOWS)(
+  'POSIX launcher version-pin and platform validation',
+  () => {
+    let tempDir: string;
 
-  beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), 'llxprt-pin-'));
-  });
-
-  afterEach(() => {
-    rmSync(tempDir, { recursive: true, force: true });
-  });
-  it('rejects a hoisted Bun whose version does not match the package pin', () => {
-    // The package declares bun pin "9.9.9" but the hoisted Bun has a different
-    // version. The launcher must reject this version mismatch.
-    const consumerDir = join(tempDir, 'consumer-pin-mismatch');
-    const pkgRoot = join(
-      consumerDir,
-      'node_modules',
-      '@vybestack',
-      'llxprt-code',
-    );
-    const binDir = join(pkgRoot, 'bin');
-    mkdirSync(binDir, { recursive: true });
-    const launcherTarget = join(binDir, 'llxprt');
-    copyFileSync(launcherPath, launcherTarget);
-    chmodSync(launcherTarget, 0o755);
-    makeEntry(pkgRoot, 'process.exit(0);');
-
-    // Hoisted Bun with a DIFFERENT version than the pin.
-    const hoistedBunDir = join(consumerDir, 'node_modules', 'bun', 'bin');
-    mkdirSync(hoistedBunDir, { recursive: true });
-    copyFileSync(ensureBun(), join(hoistedBunDir, 'bun.exe'));
-    writeFileSync(
-      join(consumerDir, 'node_modules', 'bun', 'package.json'),
-      JSON.stringify({ name: 'bun', version: '1.0.0' }, null, 2),
-    );
-    writeFileSync(
-      join(pkgRoot, 'package.json'),
-      JSON.stringify(
-        { name: '@vybestack/llxprt-code', dependencies: { bun: '9.9.9' } },
-        null,
-        2,
-      ),
-    );
-
-    const result = spawnSync(launcherTarget, [], {
-      cwd: pkgRoot,
-      encoding: 'utf8',
-      timeout: SHORT_LAUNCH_TIMEOUT_MS,
-      env: { ...process.env, PATH: '/usr/bin:/bin' },
+    beforeEach(() => {
+      tempDir = mkdtempSync(join(tmpdir(), 'llxprt-pin-'));
     });
-    expectNoSpawnError(result);
-    expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
-    expect(result.stderr).toMatch(/bundled Bun runtime was not found/i);
-  });
-  it('accepts a hoisted Bun whose version matches the package pin', () => {
-    const bunVersion = realBunVersion();
-    const consumerDir = join(tempDir, 'consumer-pin-match');
-    const pkgRoot = join(
-      consumerDir,
-      'node_modules',
-      '@vybestack',
-      'llxprt-code',
-    );
-    const binDir = join(pkgRoot, 'bin');
-    mkdirSync(binDir, { recursive: true });
-    const launcherTarget = join(binDir, 'llxprt');
-    copyFileSync(launcherPath, launcherTarget);
-    chmodSync(launcherTarget, 0o755);
-    makeEntry(pkgRoot, 'process.exit(0);');
 
-    // Hoisted Bun with a MATCHING version.
-    const hoistedBunDir = join(consumerDir, 'node_modules', 'bun', 'bin');
-    mkdirSync(hoistedBunDir, { recursive: true });
-    copyFileSync(ensureBun(), join(hoistedBunDir, 'bun.exe'));
-    writeFileSync(
-      join(consumerDir, 'node_modules', 'bun', 'package.json'),
-      JSON.stringify({ name: 'bun', version: bunVersion }, null, 2),
-    );
-    writeFileSync(
-      join(pkgRoot, 'package.json'),
-      JSON.stringify(
-        {
-          name: '@vybestack/llxprt-code',
-          dependencies: { bun: bunVersion },
-        },
-        null,
-        2,
-      ),
-    );
-
-    const result = spawnSync(launcherTarget, [], {
-      cwd: pkgRoot,
-      encoding: 'utf8',
-      timeout: STANDARD_LAUNCH_TIMEOUT_MS,
-      env: { ...process.env, PATH: '/usr/bin:/bin' },
+    afterEach(() => {
+      rmSync(tempDir, { recursive: true, force: true });
     });
-    expectExitOk(result);
-  });
-  it('does not scan beyond the enclosing node_modules for Bun', () => {
-    // The package is nested two levels deep inside node_modules. The enclosing
-    // node_modules has NO bun. An ancestor project dir (OUTSIDE the enclosing
-    // node_modules) has bun — but the launcher must NOT climb past the
-    // enclosing node_modules to find it.
-    const grandparentDir = join(tempDir, 'grandparent');
-    const consumerNm = join(grandparentDir, 'node_modules');
-    const pkgRoot = join(consumerNm, '@vybestack', 'llxprt-code');
-    const binDir = join(pkgRoot, 'bin');
-    mkdirSync(binDir, { recursive: true });
-    const launcherTarget = join(binDir, 'llxprt');
-    copyFileSync(launcherPath, launcherTarget);
-    chmodSync(launcherTarget, 0o755);
-    makeEntry(pkgRoot, 'process.exit(0);');
+    it('rejects a hoisted Bun whose version does not match the package pin', () => {
+      // The package declares bun pin "9.9.9" but the hoisted Bun has a different
+      // version. The launcher must reject this version mismatch.
+      const consumerDir = join(tempDir, 'consumer-pin-mismatch');
+      const pkgRoot = join(
+        consumerDir,
+        'node_modules',
+        '@vybestack',
+        'llxprt-code',
+      );
+      const binDir = join(pkgRoot, 'bin');
+      mkdirSync(binDir, { recursive: true });
+      const launcherTarget = join(binDir, 'llxprt');
+      copyFileSync(launcherPath, launcherTarget);
+      chmodSync(launcherTarget, 0o755);
+      makeEntry(pkgRoot, 'process.exit(0);');
 
-    // Ancestor bun OUTSIDE the enclosing node_modules — must be rejected.
-    const ancestorBunDir = join(tempDir, 'node_modules', 'bun', 'bin');
-    mkdirSync(ancestorBunDir, { recursive: true });
-    copyFileSync(ensureBun(), join(ancestorBunDir, 'bun.exe'));
+      // Hoisted Bun with a DIFFERENT version than the pin.
+      const hoistedBunDir = join(consumerDir, 'node_modules', 'bun', 'bin');
+      mkdirSync(hoistedBunDir, { recursive: true });
+      copyFileSync(ensureBun(), join(hoistedBunDir, 'bun.exe'));
+      writeFileSync(
+        join(consumerDir, 'node_modules', 'bun', 'package.json'),
+        JSON.stringify({ name: 'bun', version: '1.0.0' }, null, 2),
+      );
+      writeFileSync(
+        join(pkgRoot, 'package.json'),
+        JSON.stringify(
+          { name: '@vybestack/llxprt-code', dependencies: { bun: '9.9.9' } },
+          null,
+          2,
+        ),
+      );
 
-    const result = spawnSync(launcherTarget, [], {
-      cwd: pkgRoot,
-      encoding: 'utf8',
-      timeout: SHORT_LAUNCH_TIMEOUT_MS,
-      env: { ...process.env, PATH: '/usr/bin:/bin' },
-    });
-    expectNoSpawnError(result);
-    expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
-    expect(result.stderr).toMatch(/bundled Bun runtime was not found/i);
-  });
-
-  it.skipIf(process.platform !== 'darwin')(
-    'rejects an ELF Bun on Darwin (platform-gated format)',
-    () => {
-      const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
-        withBun: false,
-      });
-      const bunDir = join(pkgRoot, 'node_modules', 'bun', 'bin');
-      mkdirSync(bunDir, { recursive: true });
-      const elfBun = join(bunDir, 'bun.exe');
-      // ELF magic: 7f454c46
-      writeFileSync(elfBun, Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0x00, 0x01]));
-      chmodSync(elfBun, 0o755);
       const result = spawnSync(launcherTarget, [], {
         cwd: pkgRoot,
         encoding: 'utf8',
         timeout: SHORT_LAUNCH_TIMEOUT_MS,
         env: { ...process.env, PATH: '/usr/bin:/bin' },
       });
+      expectNoSpawnError(result);
       expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
-      expect(result.stderr).toMatch(
-        /npm install|bun\.sh|unusable|not a valid|corrupt/i,
+      expect(result.stderr).toMatch(/bundled Bun runtime was not found/i);
+    });
+    it('accepts a hoisted Bun whose version matches the package pin', () => {
+      const bunVersion = realBunVersion();
+      const consumerDir = join(tempDir, 'consumer-pin-match');
+      const pkgRoot = join(
+        consumerDir,
+        'node_modules',
+        '@vybestack',
+        'llxprt-code',
       );
-    },
-    15_000,
-  );
-});
+      const binDir = join(pkgRoot, 'bin');
+      mkdirSync(binDir, { recursive: true });
+      const launcherTarget = join(binDir, 'llxprt');
+      copyFileSync(launcherPath, launcherTarget);
+      chmodSync(launcherTarget, 0o755);
+      makeEntry(pkgRoot, 'process.exit(0);');
 
-describe('POSIX launcher bundle preference (issue #2999)', () => {
-  let tempDir: string;
+      // Hoisted Bun with a MATCHING version.
+      const hoistedBunDir = join(consumerDir, 'node_modules', 'bun', 'bin');
+      mkdirSync(hoistedBunDir, { recursive: true });
+      copyFileSync(ensureBun(), join(hoistedBunDir, 'bun.exe'));
+      writeFileSync(
+        join(consumerDir, 'node_modules', 'bun', 'package.json'),
+        JSON.stringify({ name: 'bun', version: bunVersion }, null, 2),
+      );
+      writeFileSync(
+        join(pkgRoot, 'package.json'),
+        JSON.stringify(
+          {
+            name: '@vybestack/llxprt-code',
+            dependencies: { bun: bunVersion },
+          },
+          null,
+          2,
+        ),
+      );
 
-  beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), 'llxprt-bundle-'));
-  });
-
-  afterEach(() => {
-    rmSync(tempDir, { recursive: true, force: true });
-  });
-
-  it('execs the prebuilt bundle when present (observable via distinct output)', () => {
-    const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
-      entryCode: `console.log('SOURCE');`,
+      const result = spawnSync(launcherTarget, [], {
+        cwd: pkgRoot,
+        encoding: 'utf8',
+        timeout: STANDARD_LAUNCH_TIMEOUT_MS,
+        env: { ...process.env, PATH: '/usr/bin:/bin' },
+      });
+      expectExitOk(result);
     });
-    makeBundle(pkgRoot, `console.log('BUNDLE');`);
+    it('does not scan beyond the enclosing node_modules for Bun', () => {
+      // The package is nested two levels deep inside node_modules. The enclosing
+      // node_modules has NO bun. An ancestor project dir (OUTSIDE the enclosing
+      // node_modules) has bun — but the launcher must NOT climb past the
+      // enclosing node_modules to find it.
+      const grandparentDir = join(tempDir, 'grandparent');
+      const consumerNm = join(grandparentDir, 'node_modules');
+      const pkgRoot = join(consumerNm, '@vybestack', 'llxprt-code');
+      const binDir = join(pkgRoot, 'bin');
+      mkdirSync(binDir, { recursive: true });
+      const launcherTarget = join(binDir, 'llxprt');
+      copyFileSync(launcherPath, launcherTarget);
+      chmodSync(launcherTarget, 0o755);
+      makeEntry(pkgRoot, 'process.exit(0);');
 
-    const result = spawnSync(launcherTarget, [], {
-      cwd: pkgRoot,
-      encoding: 'utf8',
-      timeout: STANDARD_LAUNCH_TIMEOUT_MS,
-      env: { ...process.env, PATH: '/usr/bin:/bin' },
+      // Ancestor bun OUTSIDE the enclosing node_modules — must be rejected.
+      const ancestorBunDir = join(tempDir, 'node_modules', 'bun', 'bin');
+      mkdirSync(ancestorBunDir, { recursive: true });
+      copyFileSync(ensureBun(), join(ancestorBunDir, 'bun.exe'));
+
+      const result = spawnSync(launcherTarget, [], {
+        cwd: pkgRoot,
+        encoding: 'utf8',
+        timeout: SHORT_LAUNCH_TIMEOUT_MS,
+        env: { ...process.env, PATH: '/usr/bin:/bin' },
+      });
+      expectNoSpawnError(result);
+      expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
+      expect(result.stderr).toMatch(/bundled Bun runtime was not found/i);
     });
-    expectExitOk(result);
-    expect(result.stdout.trim()).toBe('BUNDLE');
-  });
 
-  it('falls back to index.ts when the bundle is absent', () => {
-    const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
-      entryCode: `console.log('SOURCE');`,
-    });
-    // No bundle created.
-
-    const result = spawnSync(launcherTarget, [], {
-      cwd: pkgRoot,
-      encoding: 'utf8',
-      timeout: STANDARD_LAUNCH_TIMEOUT_MS,
-      env: { ...process.env, PATH: '/usr/bin:/bin' },
-    });
-    expectExitOk(result);
-    expect(result.stdout.trim()).toBe('SOURCE');
-  });
-
-  it('uses index.ts when LLXPRT_FORCE_SOURCE_ENTRY=1 even if a bundle exists', () => {
-    const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
-      entryCode: `console.log('SOURCE');`,
-    });
-    makeBundle(pkgRoot, `console.log('BUNDLE');`);
-
-    const result = spawnSync(launcherTarget, [], {
-      cwd: pkgRoot,
-      encoding: 'utf8',
-      timeout: STANDARD_LAUNCH_TIMEOUT_MS,
-      env: {
-        ...process.env,
-        PATH: '/usr/bin:/bin',
-        LLXPRT_FORCE_SOURCE_ENTRY: '1',
+    it.skipIf(process.platform !== 'darwin')(
+      'rejects an ELF Bun on Darwin (platform-gated format)',
+      () => {
+        const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
+          withBun: false,
+        });
+        const bunDir = join(pkgRoot, 'node_modules', 'bun', 'bin');
+        mkdirSync(bunDir, { recursive: true });
+        const elfBun = join(bunDir, 'bun.exe');
+        // ELF magic: 7f454c46
+        writeFileSync(
+          elfBun,
+          Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0x00, 0x01]),
+        );
+        chmodSync(elfBun, 0o755);
+        const result = spawnSync(launcherTarget, [], {
+          cwd: pkgRoot,
+          encoding: 'utf8',
+          timeout: SHORT_LAUNCH_TIMEOUT_MS,
+          env: { ...process.env, PATH: '/usr/bin:/bin' },
+        });
+        expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
+        expect(result.stderr).toMatch(
+          /npm install|bun\.sh|unusable|not a valid|corrupt/i,
+        );
       },
+      15_000,
+    );
+  },
+);
+
+describe.skipIf(IS_WINDOWS)(
+  'POSIX launcher bundle preference (issue #2999)',
+  () => {
+    let tempDir: string;
+
+    beforeEach(() => {
+      tempDir = mkdtempSync(join(tmpdir(), 'llxprt-bundle-'));
     });
-    expectExitOk(result);
-    expect(result.stdout.trim()).toBe('SOURCE');
-  });
-});
+
+    afterEach(() => {
+      rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    it('execs the prebuilt bundle when present (observable via distinct output)', () => {
+      const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
+        entryCode: `console.log('SOURCE');`,
+      });
+      makeBundle(pkgRoot, `console.log('BUNDLE');`);
+
+      const result = spawnSync(launcherTarget, [], {
+        cwd: pkgRoot,
+        encoding: 'utf8',
+        timeout: STANDARD_LAUNCH_TIMEOUT_MS,
+        env: { ...process.env, PATH: '/usr/bin:/bin' },
+      });
+      expectExitOk(result);
+      expect(result.stdout.trim()).toBe('BUNDLE');
+    });
+
+    it('falls back to index.ts when the bundle is absent', () => {
+      const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
+        entryCode: `console.log('SOURCE');`,
+      });
+      // No bundle created.
+
+      const result = spawnSync(launcherTarget, [], {
+        cwd: pkgRoot,
+        encoding: 'utf8',
+        timeout: STANDARD_LAUNCH_TIMEOUT_MS,
+        env: { ...process.env, PATH: '/usr/bin:/bin' },
+      });
+      expectExitOk(result);
+      expect(result.stdout.trim()).toBe('SOURCE');
+    });
+
+    it('uses index.ts when LLXPRT_FORCE_SOURCE_ENTRY=1 even if a bundle exists', () => {
+      const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
+        entryCode: `console.log('SOURCE');`,
+      });
+      makeBundle(pkgRoot, `console.log('BUNDLE');`);
+
+      const result = spawnSync(launcherTarget, [], {
+        cwd: pkgRoot,
+        encoding: 'utf8',
+        timeout: STANDARD_LAUNCH_TIMEOUT_MS,
+        env: {
+          ...process.env,
+          PATH: '/usr/bin:/bin',
+          LLXPRT_FORCE_SOURCE_ENTRY: '1',
+        },
+      });
+      expectExitOk(result);
+      expect(result.stdout.trim()).toBe('SOURCE');
+    });
+  },
+);

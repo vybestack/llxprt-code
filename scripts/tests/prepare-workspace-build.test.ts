@@ -187,7 +187,10 @@ describe('prepareWorkspaceBuild', () => {
       workspaces.map(({ path }) => path),
       workspaces,
     );
-    rmSync(join(root, 'node_modules', '@fixture', 'alpha'));
+    rmSync(join(root, 'node_modules', '@fixture', 'alpha'), {
+      recursive: true,
+      force: true,
+    });
 
     expect(() => prepareWorkspaceBuild(root)).toThrow(
       /no node_modules entry.*@fixture\/alpha/s,
@@ -202,7 +205,10 @@ describe('prepareWorkspaceBuild', () => {
       join(root, workspace.path, 'package.json'),
       JSON.stringify({ name: '../packages/alpha' }),
     );
-    rmSync(join(root, 'node_modules', '@fixture', 'alpha'));
+    rmSync(join(root, 'node_modules', '@fixture', 'alpha'), {
+      recursive: true,
+      force: true,
+    });
 
     expect(() => prepareWorkspaceBuild(root)).toThrow(/invalid package name/i);
     expect(existsSync(join(root, workspace.path, 'dist', 'stale.js'))).toBe(
