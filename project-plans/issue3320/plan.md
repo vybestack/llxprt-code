@@ -292,4 +292,25 @@ tmp/verify3320/*2.log.
   (config.scheduler.test.ts, engineTodoContinuation.behavior.test.ts),
   both in unrelated subsystems; both files pass when run individually
   (tmp/verify3320/rerun2.log). Same load-flake pattern as round 1.
-require user approval before inclusion.
+
+## PR outcome (PR #3330, head aba366146)
+
+- All GitHub checks pass on the PR head (ubuntu test shards incl.
+  core/agents/cli, E2E Linux sandbox:none+docker, ACP conformance,
+  SecureStore, CodeQL, lint, smokes, mergeability gate); mergeable
+  state CLEAN, zero actionable review threads.
+- CodeRabbit (CHILL profile): "No actionable comments". Pre-merge
+  checks 4/5 passed; the one failure is the Docstring Coverage warning
+  (20% < 80% threshold, computed over 5 functions touched by the diff).
+  Disposition: Reject — satisfying the threshold would require TSDoc on
+  test functions, which contradicts the repo's test style and the
+  "comments sparingly, why not what" convention; the new exported
+  helper carries a rationale comment instead, mirroring the sibling
+  functions in shellOutputUtils.ts. Warning is non-blocking.
+- PR OpenCodeReview workflow (ocr v1.8.4, full range): exit 0, no
+  findings on all 7 completed eligible files.
+- Windows proof: the acceptance-critical test (native exit 42 → 42)
+  runs on the Windows nightly core shard, which is scheduled, not PR
+  CI; the PR-level proof is the exact composed-command assertion plus
+  the cross-platform behavioral suite. The nightly run will exercise
+  the skipIf(!isWindows) suites (Write-Error → 1, user exit 7 → 7).
