@@ -393,7 +393,7 @@ function runBunScript(
   env?: Record<string, string>,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn('bun', ['-e', code], {
+    const child = spawn(process.execPath, ['-e', code], {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, ...env },
     });

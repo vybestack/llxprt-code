@@ -561,7 +561,7 @@ describe('JanitorLease — transition claim protocol (OCR 18/19)', () => {
         })().catch(e => { process.stderr.write(String(e)); process.stdout.write('ERROR'); });
       `;
 
-    const child = spawn('bun', ['-e', script], {
+    const child = spawn(process.execPath, ['-e', script], {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, TEST_TEMP_DIR: tempDir },
     });

@@ -45,7 +45,7 @@ import { spawn } from 'node:child_process';
  */
 function runBunScript(code: string, timeoutMs = 30000): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn('bun', ['-e', code], {
+    const child = spawn(process.execPath, ['-e', code], {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env },
     });
