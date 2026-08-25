@@ -77,6 +77,20 @@ builder resolves the effective value as `argv.telemetry ?? settings.telemetry.en
 — a CLI flag wins if present, otherwise the persisted setting is used. See
 [Configuration](./cli/configuration.md) for the full settings reference.
 
+### Outfile rotation
+
+When an outfile is configured, the file rotates by size. When the next record
+would push the file past `telemetry.outfileMaxBytes` (default 100 MiB), the
+current file is renamed to `<outfile>.<timestamp>-<suffix>` and a fresh
+outfile is started. At most `telemetry.outfileMaxFiles` (default 10) rotated
+files are retained; the oldest are deleted first. A single record larger than the cap
+is still written whole, because JSONL lines cannot be split.
+
+Metric export uses delta aggregation temporality: each export interval carries only the
+changes since the previous interval rather than re-serializing the full accumulated
+state. Combined with body gating and rotation this keeps the outfile tree bounded
+even for long-running sessions or concurrent sessions sharing a file.
+
 ### Where output goes
 
 | Configuration                       | Output destination                                     |
@@ -125,9 +139,16 @@ set it to `false`).
 - **Prompt logging**: the `telemetry.logPrompts` setting controls whether user
   prompt **text** is included in the `llxprt_code.user_prompt` log event.
   Default is `true`; set it to `false` to redact prompt content from that
-  specific log event. Note: `logPrompts: false` does **not** redact hook
-  input/output data (the `llxprt_code.hook_call` event always includes
-  `hook_input` and `hook_output` fields regardless of this setting).
+  specific log event. Since API bodies flow through the same gate,
+  `logPrompts: false` also keeps conversation content out of
+  `llxprt_code.api_request` and `llxprt_code.api_response` events: those
+  events carry only `request_chars` and `response_chars` sizes (plus token
+  counts) unless `telemetry.logApiBodies` is enabled. Those two events hold
+  no prompt-bearing fields beyond `request_text` and `response_text`, both of
+  which are exported only when `telemetry.logApiBodies` **and**
+  `telemetry.logPrompts` are enabled. Note: `logPrompts: false`
+  does **not** redact hook input/output data (the `llxprt_code.hook_call` event
+  always includes `hook_input` and `hook_output` fields regardless of this setting).
 
 ## Logs and metrics reference
 
@@ -142,9 +163,16 @@ event and metric names use the `llxprt_code.*` prefix (the service name is
   `logPrompts` is enabled)
 - `llxprt_code.tool_call`: each tool call (function, args, duration, success)
 - `llxprt_code.hook_call`: hook execution (event name, input, output, duration)
-- `llxprt_code.api_request`: provider API request
+- `llxprt_code.api_request`: provider API request. Includes `request_chars`
+  (character count of the request body) and token counts. The body itself is
+  omitted by default; it is included only when `telemetry.logApiBodies` is
+  enabled (and `telemetry.logPrompts` is `true`), truncated to
+  `telemetry.logApiBodyMaxChars` (default 4000).
 - `llxprt_code.api_error`: provider API error
-- `llxprt_code.api_response`: provider API response (token counts, latency)
+- `llxprt_code.api_response`: provider API response (token counts, latency,
+  `response_chars`). The response body is included only when
+  `telemetry.logApiBodies` is enabled and `telemetry.logPrompts` is `true`,
+  truncated to `telemetry.logApiBodyMaxChars`.
 - `llxprt_code.slash_command`: slash command execution
 - `llxprt_code.next_speaker_check`: next-speaker determination
 - `llxprt_code.conversation_request`: conversation API request

@@ -208,6 +208,24 @@ Add telemetry configuration to your [user settings.json](./reference/application
 
 Leave `conversationLogPath` empty (or omit it) to use the default `<data>/conversations` location; set it to an absolute path to override.
 
+### Outfile Rotation and API Body Redaction
+
+When telemetry is enabled with an `outfile`, the outfile rotates by size:
+`telemetry.outfileMaxBytes` (default 100 MiB) sets the cap that triggers a
+rename of the active file to `<outfile>.<timestamp>-<suffix>`, and
+`telemetry.outfileMaxFiles` (default 10) is how many rotated files are
+retained. This keeps the on-disk telemetry tree bounded.
+
+The `llxprt_code.api_request` and `llxprt_code.api_response` events export
+sizes and token counts (`request_chars`, `response_chars`), not full bodies.
+Full request and response bodies are exported only when both `telemetry.logApiBodies`
+(an explicit opt-in, default false) and `telemetry.logPrompts` are `true`;
+`logPrompts: false` keeps prompt and conversation content out of these exported
+events even when `logApiBodies` is enabled. When bodies are emitted they are
+truncated to `telemetry.logApiBodyMaxChars` (default 4000). Metric exports use
+delta aggregation temporality, so each export interval carries only changes since the
+previous interval rather than a growing cumulative snapshot.
+
 ### Configuration Options Reference
 
 #### Core Logging Settings

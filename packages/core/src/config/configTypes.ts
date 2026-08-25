@@ -130,6 +130,10 @@ export interface TelemetrySettings {
   enabled?: boolean;
   logPrompts?: boolean;
   outfile?: string;
+  logApiBodies?: boolean;
+  logApiBodyMaxChars?: number;
+  outfileMaxBytes?: number;
+  outfileMaxFiles?: number;
   logConversations?: boolean;
   logResponses?: boolean;
   redactSensitiveData?: boolean;

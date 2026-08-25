@@ -116,6 +116,115 @@ describe('Server Config (config.ts)', () => {
       const config = new Config(paramsWithoutTelemetry);
       expect(config.getTelemetryLogPromptsEnabled()).toBe(true);
     });
+
+    it('should default logApiBodies to false and logApiBodyMaxChars to 4000', () => {
+      const config = new Config({
+        ...baseParams,
+        telemetry: { enabled: true },
+      });
+      expect(config.getTelemetryLogApiBodiesEnabled()).toBe(false);
+      expect(config.getTelemetryLogApiBodyMaxChars()).toBe(4000);
+    });
+
+    it('should honor explicit logApiBodies and logApiBodyMaxChars', () => {
+      const config = new Config({
+        ...baseParams,
+        telemetry: {
+          enabled: true,
+          logApiBodies: true,
+          logApiBodyMaxChars: 1234,
+        },
+      });
+      expect(config.getTelemetryLogApiBodiesEnabled()).toBe(true);
+      expect(config.getTelemetryLogApiBodyMaxChars()).toBe(1234);
+    });
+
+    it('should default outfileMaxBytes to 100 MiB and outfileMaxFiles to 10', () => {
+      const config = new Config({
+        ...baseParams,
+        telemetry: { enabled: true },
+      });
+      expect(config.getTelemetryOutfileMaxBytes()).toBe(104857600);
+      expect(config.getTelemetryOutfileMaxFiles()).toBe(10);
+    });
+
+    it('should honor explicit outfileMaxBytes and outfileMaxFiles', () => {
+      const config = new Config({
+        ...baseParams,
+        telemetry: {
+          enabled: true,
+          outfileMaxBytes: 65536,
+          outfileMaxFiles: 3,
+        },
+      });
+      expect(config.getTelemetryOutfileMaxBytes()).toBe(65536);
+      expect(config.getTelemetryOutfileMaxFiles()).toBe(3);
+    });
+
+    it('resolveTelemetrySettings materializes defaults when callers pass explicit undefined (CLI builder contract)', () => {
+      // The CLI buildTelemetryConfig emits every key, including undefined for
+      // unset ones; the resolver must turn those into defaults, not carry the
+      // undefined through to getTelemetrySettings().
+      const config = new Config({
+        ...baseParams,
+        telemetry: {
+          enabled: true,
+          logApiBodies: undefined,
+          logApiBodyMaxChars: undefined,
+          outfileMaxBytes: undefined,
+          outfileMaxFiles: undefined,
+        },
+      });
+      const resolved = config.getTelemetrySettings();
+      expect(resolved.logApiBodies).toBe(false);
+      expect(resolved.logApiBodyMaxChars).toBe(4000);
+      expect(resolved.outfileMaxBytes).toBe(104857600);
+      expect(resolved.outfileMaxFiles).toBe(10);
+    });
+
+    it('resolveTelemetrySettings preserves explicit false and zero values (?? not ||)', () => {
+      // Body redaction is opt-in: an explicit logApiBodies:false must survive
+      // resolution, and a falsy-but-valid logApiBodyMaxChars:0 must not be
+      // clobbered by the 4000 default. A || regression would flip both.
+      const config = new Config({
+        ...baseParams,
+        telemetry: {
+          enabled: true,
+          logApiBodies: false,
+          logApiBodyMaxChars: 0,
+          outfileMaxBytes: 4096,
+          outfileMaxFiles: 1,
+        },
+      });
+      const resolved = config.getTelemetrySettings();
+      expect(resolved.logApiBodies).toBe(false);
+      expect(resolved.logApiBodyMaxChars).toBe(0);
+      expect(resolved.outfileMaxBytes).toBe(4096);
+      expect(resolved.outfileMaxFiles).toBe(1);
+    });
+
+    it('updateTelemetrySettings merges the new fields', () => {
+      const config = new Config({
+        ...baseParams,
+        telemetry: {
+          enabled: true,
+          logApiBodies: false,
+          outfileMaxBytes: 104857600,
+        },
+      });
+      config.updateTelemetrySettings({
+        logApiBodies: true,
+        logApiBodyMaxChars: 500,
+        outfileMaxBytes: 1000,
+        outfileMaxFiles: 2,
+      });
+      expect(config.getTelemetryLogApiBodiesEnabled()).toBe(true);
+      expect(config.getTelemetryLogApiBodyMaxChars()).toBe(500);
+      expect(config.getTelemetryOutfileMaxBytes()).toBe(1000);
+      expect(config.getTelemetryOutfileMaxFiles()).toBe(2);
+      // Defaults still apply for untouched values.
+      expect(config.getTelemetryLogPromptsEnabled()).toBe(true);
+    });
   });
 
   describe('Ephemeral Settings with SettingsService Integration', () => {

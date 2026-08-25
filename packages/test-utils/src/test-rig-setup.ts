@@ -129,6 +129,11 @@ function buildSettings(
     telemetry: {
       enabled: true,
       outfile: telemetryPath,
+      // The rig's telemetry log is a test artifact in an isolated temp dir;
+      // assertions like readAllApiRequest() depend on full bodies being
+      // recorded there even though export redacts them by default (#3315).
+      logPrompts: true,
+      logApiBodies: true,
     },
     promptService: {
       baseDir: resolvePromptBaseDir(packageDir),

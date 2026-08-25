@@ -42,6 +42,10 @@ export interface ToolLoggingConfig extends SessionConfig {
 export interface TelemetryConfig extends SessionConfig {
   getTelemetryEnabled(): boolean;
   getTelemetryLogPromptsEnabled(): boolean;
+  getTelemetryLogApiBodiesEnabled(): boolean;
+  getTelemetryLogApiBodyMaxChars(): number;
+  getTelemetryOutfileMaxBytes(): number;
+  getTelemetryOutfileMaxFiles(): number;
   getTelemetryOutfile(): string | undefined;
   getDebugMode(): boolean;
   getConversationLoggingEnabled(): boolean;

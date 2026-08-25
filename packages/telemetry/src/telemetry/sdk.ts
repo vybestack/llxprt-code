@@ -73,14 +73,18 @@ function createProviders(config: TelemetryConfig): TelemetryProviders {
     'session.id': config.getSessionId(),
   });
   const telemetryOutfile = config.getTelemetryOutfile() ?? '';
+  const rotation = {
+    maxBytes: config.getTelemetryOutfileMaxBytes(),
+    maxFiles: config.getTelemetryOutfileMaxFiles(),
+  };
   const spanExporter = telemetryOutfile
-    ? new FileSpanExporter(telemetryOutfile)
+    ? new FileSpanExporter(telemetryOutfile, rotation)
     : new ConsoleSpanExporter();
   const logExporter = telemetryOutfile
-    ? new FileLogExporter(telemetryOutfile)
+    ? new FileLogExporter(telemetryOutfile, rotation)
     : new ConsoleLogRecordExporter();
   const metricExporter = telemetryOutfile
-    ? new FileMetricExporter(telemetryOutfile)
+    ? new FileMetricExporter(telemetryOutfile, rotation)
     : new ConsoleMetricExporter();
 
   return {

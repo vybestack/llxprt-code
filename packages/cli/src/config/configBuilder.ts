@@ -89,6 +89,10 @@ function buildTelemetryConfig(argv: CliArgs, settings: Settings) {
     enabled: argv.telemetry ?? telemetrySettings?.enabled,
     logPrompts: argv.telemetryLogPrompts ?? telemetrySettings?.logPrompts,
     outfile: argv.telemetryOutfile ?? telemetrySettings?.outfile,
+    logApiBodies: telemetrySettings?.logApiBodies,
+    logApiBodyMaxChars: telemetrySettings?.logApiBodyMaxChars,
+    outfileMaxBytes: telemetrySettings?.outfileMaxBytes,
+    outfileMaxFiles: telemetrySettings?.outfileMaxFiles,
     perf: telemetrySettings?.perf,
     ...buildTelemetryRedactionConfig(telemetrySettings),
   };

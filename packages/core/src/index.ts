@@ -695,6 +695,7 @@ export type { LlxprtExtension } from './config/configTypes.js';
 
 // Export the perf settings resolver for downstream phases (P06/P10/P12)
 export { resolvePerfSettings } from './config/configConstructor.js';
+export { TELEMETRY_OUTFILE_BOUND_DEFAULTS } from './config/configConstructor.js';
 export type { PerfTelemetrySettings } from './config/configTypes.js';
 
 // Export MCP Client Manager — re-exported from @vybestack/llxprt-code-mcp (also available above)
