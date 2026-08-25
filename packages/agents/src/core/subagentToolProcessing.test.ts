@@ -208,6 +208,21 @@ describe('subagentToolProcessing', () => {
       expect(output.final_message).toContain('max_turns');
     });
 
+    it('should include observed usage and actionable setting guidance for MAX_OUTPUT', () => {
+      const output: OutputObject = {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.MAX_OUTPUT,
+        output_tokens_total: 125,
+        output_tokens_budget: 100,
+      };
+      finalizeOutput(output);
+      expect(output.final_message).toContain('125 output tokens');
+      expect(output.final_message).toContain('100 tokens');
+      expect(output.final_message).toContain(
+        'subagent-max-output-tokens-total',
+      );
+    });
+
     it('should set ERROR message', () => {
       const output: OutputObject = {
         emitted_vars: {},

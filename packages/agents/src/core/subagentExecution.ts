@@ -69,8 +69,28 @@ export interface TerminationCheck {
   reason?: SubagentTerminateMode;
 }
 
+const FALLBACK_CHARACTERS_PER_TOKEN = 4;
+
 /**
- * Check whether the loop should terminate (max_turns or max_time).
+ * Add one completed turn's output usage to the aggregate run total.
+ * Provider-reported completion tokens are authoritative; text size is used
+ * when the provider omits usage metadata.
+ */
+export function recordTurnOutputTokens(
+  ctx: Pick<ExecutionLoopContext, 'output'>,
+  reportedOutputTokens: number | undefined,
+  outputCharacterCount: number,
+): number {
+  const turnOutputTokens =
+    reportedOutputTokens ??
+    Math.ceil(outputCharacterCount / FALLBACK_CHARACTERS_PER_TOKEN);
+  const total = (ctx.output.output_tokens_total ?? 0) + turnOutputTokens;
+  ctx.output.output_tokens_total = total;
+  return total;
+}
+
+/**
+ * Check whether the loop should terminate (max_turns, max_output, or max_time).
  */
 export function checkTerminationConditions(
   turnCounter: number,
@@ -80,6 +100,21 @@ export function checkTerminationConditions(
     'runConfig' | 'subagentId' | 'output' | 'logger'
   >,
 ): TerminationCheck {
+  const outputBudget = ctx.runConfig.max_output_tokens_total;
+  const outputTokensTotal = ctx.output.output_tokens_total ?? 0;
+  if (
+    outputBudget !== undefined &&
+    outputBudget !== -1 &&
+    outputTokensTotal > outputBudget
+  ) {
+    ctx.output.terminate_reason = SubagentTerminateMode.MAX_OUTPUT;
+    ctx.output.output_tokens_budget = outputBudget;
+    ctx.logger.warn(
+      () =>
+        `Subagent ${ctx.subagentId} exceeded aggregate output token budget (${outputTokensTotal}/${outputBudget})`,
+    );
+    return { shouldStop: true, reason: SubagentTerminateMode.MAX_OUTPUT };
+  }
   if (
     ctx.runConfig.max_turns !== undefined &&
     turnCounter >= ctx.runConfig.max_turns

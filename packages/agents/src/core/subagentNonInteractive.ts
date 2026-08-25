@@ -51,6 +51,7 @@ import {
   processNonInteractiveTextResponse,
   handleExecutionError,
   checkGoalCompletion,
+  recordTurnOutputTokens,
 } from './subagentExecution.js';
 import {
   resolveToolName,
@@ -167,6 +168,8 @@ export interface NonInteractiveStreamResult {
   textResponse: string;
   parseableTextResponse: string;
   hookRestrictedAllowedTools: string[] | undefined;
+  reportedOutputTokens: number | undefined;
+  outputCharacterCount: number;
 }
 
 /** Empty stream result returned when the stream is aborted before reading. */
@@ -176,6 +179,8 @@ function emptyStreamResult(): NonInteractiveStreamResult {
     textResponse: '',
     parseableTextResponse: '',
     hookRestrictedAllowedTools: undefined,
+    reportedOutputTokens: undefined,
+    outputCharacterCount: 0,
   };
 }
 
@@ -206,6 +211,8 @@ export async function consumeNonInteractiveStream(
   let textResponse = '';
   let parseableTextResponse = '';
   let hookRestrictedAllowedTools: string[] | undefined;
+  let reportedOutputTokens: number | undefined;
+  let outputCharacterCount = 0;
   const iterator = responseStream[Symbol.asyncIterator]();
   const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(config);
 
@@ -224,12 +231,16 @@ export async function consumeNonInteractiveStream(
     );
     textResponse = readResult.textResponse;
     parseableTextResponse = readResult.parseableTextResponse;
+    reportedOutputTokens = readResult.reportedOutputTokens;
+    outputCharacterCount = readResult.outputCharacterCount;
     if (readResult.aborted) {
       return {
         functionCalls: [],
         textResponse,
         parseableTextResponse,
         hookRestrictedAllowedTools,
+        reportedOutputTokens,
+        outputCharacterCount,
       };
     }
     hookRestrictedAllowedTools = readResult.hookRestrictedAllowedTools;
@@ -244,6 +255,8 @@ export async function consumeNonInteractiveStream(
     textResponse,
     parseableTextResponse,
     hookRestrictedAllowedTools,
+    reportedOutputTokens,
+    outputCharacterCount,
   };
 }
 
@@ -266,11 +279,15 @@ async function readStreamToCompletion(
   textResponse: string;
   parseableTextResponse: string;
   hookRestrictedAllowedTools: string[] | undefined;
+  reportedOutputTokens: number | undefined;
+  outputCharacterCount: number;
   aborted: boolean;
 }> {
   let textResponse = '';
   let parseableTextResponse = '';
   let hookRestrictedAllowedTools: string[] | undefined;
+  let reportedOutputTokens: number | undefined;
+  let outputCharacterCount = 0;
 
   let result = await readNextNonInteractiveEvent(
     iterator,
@@ -288,10 +305,16 @@ async function readStreamToCompletion(
         textResponse,
         parseableTextResponse,
         hookRestrictedAllowedTools,
+        reportedOutputTokens,
+        outputCharacterCount,
         aborted: true,
       };
     }
     if (resp.type === StreamEventType.CHUNK) {
+      outputCharacterCount += JSON.stringify(resp.value.content.blocks).length;
+      if (resp.value.usage !== undefined) {
+        reportedOutputTokens = resp.value.usage.completionTokens;
+      }
       const chunkResult = collectNonInteractiveChunk(
         resp,
         functionCalls,
@@ -318,6 +341,8 @@ async function readStreamToCompletion(
     textResponse,
     parseableTextResponse,
     hookRestrictedAllowedTools,
+    reportedOutputTokens,
+    outputCharacterCount,
     aborted: false,
   };
 }
@@ -362,6 +387,8 @@ export async function runNonInteractiveTurn(
     textResponse,
     parseableTextResponse,
     hookRestrictedAllowedTools,
+    reportedOutputTokens,
+    outputCharacterCount,
   } = await consumeNonInteractiveStream(
     responseStream,
     abortController,
@@ -374,6 +401,7 @@ export async function runNonInteractiveTurn(
   if (abortController.signal.aborted === true) {
     return { functionCalls: [], textResponse: '' };
   }
+  recordTurnOutputTokens(execCtx, reportedOutputTokens, outputCharacterCount);
 
   let functionCalls = rawCalls;
   if (parseableTextResponse) {

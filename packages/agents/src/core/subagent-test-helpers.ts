@@ -185,6 +185,7 @@ export function createStatelessRuntimeBundle(
     telemetryAdapter?: AgentRuntimeTelemetryAdapter;
     contentGenerator?: ContentGenerator;
     toolRegistry?: ToolRegistry;
+    history?: HistoryService;
   } = {},
 ): AgentRuntimeLoaderResult {
   const toolsView = options.toolsView ?? createDefaultToolsView();
@@ -192,7 +193,7 @@ export function createStatelessRuntimeBundle(
     options.providerAdapter ?? createDefaultProviderAdapter();
   const telemetryAdapter =
     options.telemetryAdapter ?? createDefaultTelemetryAdapter();
-  const history = createDefaultHistory();
+  const history = options.history ?? createDefaultHistory();
   const toolRegistry = options.toolRegistry ?? createDefaultToolRegistry();
   const runtimeContext = createRuntimeContext(
     history,
@@ -290,6 +291,16 @@ function createRuntimeContext(
       contextLimit: () => 60_000,
       preserveThreshold: () => 0.2,
       toolFormatOverride: () => undefined,
+      reasoning: {
+        enabled: () => false,
+        includeInContext: () => false,
+        includeInResponse: () => false,
+        format: () => 'native' as const,
+        stripFromContext: () => 'none' as const,
+        effort: () => undefined,
+        maxTokens: () => undefined,
+        adaptiveThinking: () => undefined,
+      },
     },
     telemetry: telemetryAdapter,
     provider: providerAdapter,

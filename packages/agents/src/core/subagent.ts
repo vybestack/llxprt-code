@@ -11,7 +11,12 @@
  */
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { type ToolCallRequestInfo, AgentEventType, Turn } from './turn.js';
+import {
+  type ServerAgentStreamEvent,
+  type ToolCallRequestInfo,
+  AgentEventType,
+  Turn,
+} from './turn.js';
 import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import type {
@@ -56,6 +61,7 @@ import {
   processInteractiveTextResponse,
   handleExecutionError,
   initInteractiveScheduler,
+  recordTurnOutputTokens,
   type ExecutionLoopContext,
 } from './subagentExecution.js';
 import { executeNonInteractiveRun } from './subagentNonInteractive.js';
@@ -127,6 +133,32 @@ function processInteractiveStreamEvent(
     }
   }
   return '';
+}
+
+function countInteractiveOutputCharacters(
+  event: ServerAgentStreamEvent,
+): number {
+  switch (event.type) {
+    case AgentEventType.Content:
+      return event.value.length;
+    case AgentEventType.Thought:
+    case AgentEventType.ToolCallRequest:
+      return JSON.stringify(event.value).length;
+    default:
+      return 0;
+  }
+}
+
+function readInteractiveOutputTokens(
+  event: ServerAgentStreamEvent,
+): number | undefined {
+  if (event.type === AgentEventType.Finished) {
+    return event.value.usageMetadata?.completionTokens;
+  }
+  if (event.type === AgentEventType.UsageMetadata) {
+    return event.value.candidatesTokenCount;
+  }
+  return undefined;
 }
 
 /**
@@ -500,15 +532,28 @@ export class SubAgentScope {
     if (check.shouldStop) return { action: 'stop' };
 
     const nextTurnCounter = turnCounter + 1;
-    const { responseParts, textResponse, currentTurn } =
-      await this.runInteractiveTurn(
-        chat,
-        currentMessages,
-        abortController,
-        turnCounter,
-        execCtx,
-      );
+    const {
+      responseParts,
+      textResponse,
+      currentTurn,
+      reportedOutputTokens,
+      outputCharacterCount,
+    } = await this.runInteractiveTurn(
+      chat,
+      currentMessages,
+      abortController,
+      turnCounter,
+      execCtx,
+    );
     if (abortController.signal.aborted === true) return { action: 'abort' };
+
+    recordTurnOutputTokens(execCtx, reportedOutputTokens, outputCharacterCount);
+    const postTurnCheck = checkTerminationConditions(
+      nextTurnCounter,
+      startTime,
+      execCtx,
+    );
+    if (postTurnCheck.shouldStop) return { action: 'stop' };
 
     processInteractiveTextResponse(textResponse, execCtx);
 
@@ -584,10 +629,15 @@ export class SubAgentScope {
     const blocks = currentMessages[0]?.blocks ?? [];
 
     let textResponse = '';
+    let reportedOutputTokens: number | undefined;
+    let outputCharacterCount = 0;
     try {
       const stream = turn.run(blocks, abortController.signal);
       for await (const event of stream) {
         if (abortController.signal.aborted === true) break;
+        outputCharacterCount += countInteractiveOutputCharacters(event);
+        reportedOutputTokens =
+          readInteractiveOutputTokens(event) ?? reportedOutputTokens;
         const eventText = processInteractiveStreamEvent(event, execCtx);
         textResponse += eventText;
       }
@@ -602,6 +652,8 @@ export class SubAgentScope {
       responseParts: [...turn.pendingToolCalls],
       textResponse,
       currentTurn,
+      reportedOutputTokens,
+      outputCharacterCount,
     };
   }
 

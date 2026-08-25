@@ -88,6 +88,25 @@ export const DEFAULT_DISABLED_TOOLS = [] as const;
 /** Subagent-specific fallback when no valid max-turn setting is materialized. */
 const DEFAULT_UNCONFIGURED_MAX_TURNS = 1000;
 
+/**
+ * Ceiling on the aggregate output tokens one subagent run may generate.
+ *
+ * Deriving this purely from `max_turns * modelMaxOutputTokens` reproduces the
+ * bound that failed in #3335: the 1000-turn fallback times a 16,384-token model
+ * ceiling is 16.4M tokens, and the incident run was still inside that budget at
+ * turn 253. The derived value is therefore clamped to this ceiling.
+ *
+ * 2M output tokens is roughly 4,000 turns of ordinary 500-token responses, or
+ * 122 consecutive maximum-length 16,384-token responses. A subagent still
+ * generating maximum-length responses after 122 turns is looping, not working.
+ * Ordinary runs generate well under 500k, so this leaves at least 4x headroom.
+ */
+const MAX_OUTPUT_TOKENS_TOTAL_CEILING = 2_000_000;
+
+/** Subagent-specific fallback when no model output ceiling is resolvable. */
+const DEFAULT_UNCONFIGURED_MAX_OUTPUT_TOKENS_TOTAL =
+  MAX_OUTPUT_TOKENS_TOTAL_CEILING;
+
 export interface SubagentLaunchRequest {
   name: string;
   runConfig?: RunConfig;
@@ -229,7 +248,6 @@ export class SubagentOrchestrator {
     const modelConfig = this.buildModelConfig(
       SubagentOrchestrator.getRuntimeStateProfile(runtimeProfile),
     );
-    const runConfig = this.buildRunConfig(profile, request.runConfig);
     this.throwIfAborted(
       signal,
       'Subagent launch aborted before runtime assembly.',
@@ -239,6 +257,11 @@ export class SubagentOrchestrator {
     const { runtimeResult, isolatedHandle } = await this.createRuntimeBundle(
       { subagent, runtimeProfile, modelConfig, agentRuntimeId },
       signal,
+    );
+    const runConfig = this.buildResolvedRunConfig(
+      profile,
+      request.runConfig,
+      isolatedHandle.settingsService,
     );
 
     let scope: SubAgentScopeInstance | undefined;
@@ -427,7 +450,23 @@ export class SubagentOrchestrator {
     };
   }
 
-  private buildRunConfig(profile: Profile, custom?: RunConfig): RunConfig {
+  private buildResolvedRunConfig(
+    profile: Profile,
+    custom: RunConfig | undefined,
+    settingsService: SettingsService,
+  ): RunConfig {
+    return this.buildRunConfig(
+      profile,
+      custom,
+      this.resolveModelMaxOutputTokens(profile, settingsService),
+    );
+  }
+
+  private buildRunConfig(
+    profile: Profile,
+    custom: RunConfig | undefined,
+    resolvedModelMaxOutputTokens: number | undefined,
+  ): RunConfig {
     const profileMaxTime = getNumberSetting(profile.ephemeralSettings, [
       'subagent.max_time_minutes',
       'max_time_minutes',
@@ -452,6 +491,35 @@ export class SubagentOrchestrator {
       runConfig.max_turns = Math.floor(maxTurns);
     }
 
+    const profileMaxOutputTokensTotal = getNumberSetting(
+      profile.ephemeralSettings,
+      ['subagent-max-output-tokens-total'],
+    );
+    const parentMaxOutputTokensTotal = this.getParentLimit(
+      'subagent-max-output-tokens-total',
+    );
+    const configuredMaxOutputTokensTotal =
+      custom?.max_output_tokens_total ??
+      profileMaxOutputTokensTotal ??
+      parentMaxOutputTokensTotal;
+    // Proportional to the turn budget where the catalog gives us a model
+    // ceiling, but never above MAX_OUTPUT_TOKENS_TOTAL_CEILING — see the
+    // constant's comment for why the unclamped product is not a real bound.
+    const defaultMaxOutputTokensTotal =
+      runConfig.max_turns !== undefined &&
+      resolvedModelMaxOutputTokens !== undefined
+        ? Math.min(
+            runConfig.max_turns * resolvedModelMaxOutputTokens,
+            MAX_OUTPUT_TOKENS_TOTAL_CEILING,
+          )
+        : DEFAULT_UNCONFIGURED_MAX_OUTPUT_TOKENS_TOTAL;
+    const maxOutputTokensTotal =
+      configuredMaxOutputTokensTotal ?? defaultMaxOutputTokensTotal;
+
+    if (maxOutputTokensTotal > 0) {
+      runConfig.max_output_tokens_total = Math.floor(maxOutputTokensTotal);
+    }
+
     if (custom?.grace_period_seconds !== undefined) {
       runConfig.grace_period_seconds = custom.grace_period_seconds;
     }
@@ -460,13 +528,17 @@ export class SubagentOrchestrator {
   }
 
   private getParentMaxTurns(): number | undefined {
+    return this.getParentLimit('maxTurnsPerPrompt');
+  }
+
+  private getParentLimit(key: string): number | undefined {
     const config = this.options.foregroundConfig as Config & {
-      getEphemeralSetting?: (key: string) => unknown;
+      getEphemeralSetting?: (settingKey: string) => unknown;
     };
     if (typeof config.getEphemeralSetting !== 'function') {
       return undefined;
     }
-    const value = config.getEphemeralSetting('maxTurnsPerPrompt');
+    const value = config.getEphemeralSetting(key);
     if (
       typeof value === 'number' &&
       Number.isFinite(value) &&
@@ -475,6 +547,26 @@ export class SubagentOrchestrator {
       return value;
     }
     return undefined;
+  }
+
+  private resolveModelMaxOutputTokens(
+    profile: Profile,
+    settingsService: SettingsService,
+  ): number | undefined {
+    const catalogValue = settingsService.get('maxOutputTokens');
+    if (
+      typeof catalogValue === 'number' &&
+      Number.isFinite(catalogValue) &&
+      catalogValue > 0
+    ) {
+      return catalogValue;
+    }
+    const profileValue = profile.modelParams.max_tokens;
+    return typeof profileValue === 'number' &&
+      Number.isFinite(profileValue) &&
+      profileValue > 0
+      ? profileValue
+      : undefined;
   }
 
   private baseSessionId(): string {

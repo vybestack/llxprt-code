@@ -101,6 +101,10 @@ export enum SubagentTerminateMode {
    * Indicates that the subagent's execution terminated because it exceeded the maximum number of turns.
    */
   MAX_TURNS = 'MAX_TURNS',
+  /**
+   * Indicates that the subagent's execution terminated because it exceeded the aggregate output token budget.
+   */
+  MAX_OUTPUT = 'MAX_OUTPUT',
 }
 
 /**
@@ -118,6 +122,14 @@ export interface OutputObject {
    * The final natural language response produced by the subagent (if any).
    */
   final_message?: string;
+  /**
+   * The cumulative output tokens reported or estimated across all completed turns.
+   */
+  output_tokens_total?: number;
+  /**
+   * The aggregate output token budget that terminated the run, when applicable.
+   */
+  output_tokens_budget?: number;
   /**
    * The reason for the subagent's termination, indicating whether it completed
    * successfully, timed out, or encountered an error.
@@ -216,6 +228,11 @@ export interface RunConfig {
    * before the execution is terminated. Helps prevent infinite loops.
    */
   max_turns?: number;
+  /**
+   * The aggregate output token budget across all model responses in the run.
+   * A value of -1 disables the budget.
+   */
+  max_output_tokens_total?: number;
   /** Maximum time in seconds allowed for a recovery turn after a termination condition. */
   grace_period_seconds?: number;
 }

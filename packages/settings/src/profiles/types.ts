@@ -144,6 +144,7 @@ export interface ProfileEphemeralSettings {
   'shell-max-timeout-seconds'?: number;
   'shell-inactivity-timeout-seconds'?: number;
   'shell-output-retention-max-bytes'?: number;
+  'subagent-max-output-tokens-total'?: number;
   tpm_threshold?: number;
   timeout_ms?: number;
   circuit_breaker_enabled?: boolean;

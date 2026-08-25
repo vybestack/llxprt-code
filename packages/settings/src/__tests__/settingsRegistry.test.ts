@@ -955,3 +955,20 @@ describe('mcp.lazy and mcp.eagerServers ephemeral settings', () => {
     expect(keys).toContain('mcp.eagerServers');
   });
 });
+
+describe('subagent aggregate output budget setting', () => {
+  it('is profile-persistable and accepts positive integers or -1', () => {
+    const spec = getSettingSpec('subagent-max-output-tokens-total');
+
+    expect(spec?.persistToProfile).toBe(true);
+    expect(
+      validateSetting('subagent-max-output-tokens-total', 10_000).success,
+    ).toBe(true);
+    expect(
+      validateSetting('subagent-max-output-tokens-total', -1).success,
+    ).toBe(true);
+    expect(validateSetting('subagent-max-output-tokens-total', 0).success).toBe(
+      false,
+    );
+  });
+});

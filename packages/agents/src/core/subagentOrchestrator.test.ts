@@ -34,6 +34,7 @@ const baseProfile: Profile = {
 const defaultRunConfig: RunConfig = {
   max_time_minutes: 3,
   max_turns: 5,
+  max_output_tokens_total: 128_000_000,
 };
 
 const foregroundConfig = makeForegroundConfig();
