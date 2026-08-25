@@ -613,8 +613,12 @@ describe('issue-2994 changed-files mode (real hermetic temporary git repos)', ()
     ]);
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('lint-scoped: dry-run — runner argv: [');
-    // The argv must name the real executable, not a hardcoded "bun".
-    expect(result.stdout).toContain(process.execPath);
+    // The argv must name the real executable, not a hardcoded "bun". It is
+    // printed inside a JSON vector, so on Windows the separators arrive
+    // escaped and the raw execPath never matches. Compare against the JSON
+    // encoding of the path (quotes stripped), which is a no-op on POSIX.
+    const encodedExecPath = JSON.stringify(process.execPath).slice(1, -1);
+    expect(result.stdout).toContain(encodedExecPath);
   }, 120_000);
 });
 
