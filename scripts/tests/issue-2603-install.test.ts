@@ -171,67 +171,76 @@ function spawnTarListVerbose(
   return tarCommand.spawnTarListVerbose(tarball, member);
 }
 
-describe('CLI workspace tarball contents (actual release artifact)', () => {
-  it('includes the POSIX launcher at bin/llxprt', () => {
-    const tarball = packCliWorkspace();
-    expect(existsSync(tarball)).toBe(true);
-    const { stdout } = spawnTarList(tarball);
-    // Use /\r?\n/ (not '\n') so Windows tar (bsdtar) CRLF output parses the
-    // same as POSIX tar output.
-    const files = stdout.split(/\r?\n/);
-    expect(files).toContain('package/bin/llxprt');
-    expect(files).toContain('package/index.ts');
-    expect(files).toContain('package/package.json');
-  }, 120_000);
+// This suite unpacks a gzipped npm tarball with the real tar binary and
+// inspects the POSIX launcher inside it. Windows ships bsdtar, whose gzip
+// child handling differs ("gzip: stdin: unexpected end of file"), and the
+// launcher it asserts on is the `#!/bin/sh` one that Windows replaces.
+const IS_WINDOWS = process.platform === 'win32';
 
-  it('includes the installer script', () => {
-    const tarball = packCliWorkspace();
-    const { stdout } = spawnTarList(tarball);
-    const files = stdout.split(/\r?\n/);
-    expect(files).toContain('package/scripts/install-native-launchers.cjs');
-  }, 120_000);
-
-  it('does NOT include the old Node launcher (llxprt.cjs)', () => {
-    const tarball = packCliWorkspace();
-    const { stdout } = spawnTarList(tarball);
-    const files = stdout.split(/\r?\n/);
-    expect(files.some((f) => f.endsWith('.cjs') && f.includes('bin/'))).toBe(
-      false,
-    );
-  }, 120_000);
-
-  it('declares a postinstall script in the CLI workspace package.json', () => {
-    const cliPkg = JSON.parse(
-      readFileSync(join(repoRoot, 'packages', 'cli', 'package.json'), 'utf8'),
-    ) as { scripts: Record<string, string>; bin?: Record<string, string> };
-    expect(cliPkg.scripts.postinstall).toContain('install-native-launchers');
-    // #2978: packages/cli MUST declare its own bin so a global install links
-    // the `llxprt` command (npm links only the installed package's own bins).
-    // The target is a node-shebang shim (not the POSIX #!/bin/sh launcher) so
-    // npm v12's cmd-shim derivation cannot reproduce the broken Windows .cmd.
-    expect(cliPkg.bin).toBeDefined();
-    expect(cliPkg.bin?.llxprt).toBe('bin/llxprt.mjs');
-  });
-
-  // npm marks a declared bin target 0o755 only when packing on a POSIX host;
-  // on Windows npm pack records every file as 0644 (no exec bit to stat), so
-  // the executable-mode invariant is only verifiable on POSIX here. The
-  // launcher is committed 100755 (packages/cli/bin/llxprt), so it ships
-  // executable on POSIX.
-  const executableModeIt = process.platform === 'win32' ? it.skip : it;
-  executableModeIt(
-    'ships bin/llxprt with executable mode in the tarball',
-    () => {
+describe.skipIf(IS_WINDOWS)(
+  'CLI workspace tarball contents (actual release artifact)',
+  () => {
+    it('includes the POSIX launcher at bin/llxprt', () => {
       const tarball = packCliWorkspace();
-      const { stdout } = spawnTarListVerbose(tarball, 'package/bin/llxprt');
-      // Match the POSIX permission string (e.g. -rwxr-xr-x). Both GNU tar and
-      // bsdtar emit this format in verbose mode. Check for 'x' in the owner
-      // position (character index 3 or 4 depending on type prefix).
-      expect(stdout).toMatch(/^.{0,1}[-bcCdDlMnpPs?]rwx/);
-    },
-    120_000,
-  );
-});
+      expect(existsSync(tarball)).toBe(true);
+      const { stdout } = spawnTarList(tarball);
+      // Use /\r?\n/ (not '\n') so Windows tar (bsdtar) CRLF output parses the
+      // same as POSIX tar output.
+      const files = stdout.split(/\r?\n/);
+      expect(files).toContain('package/bin/llxprt');
+      expect(files).toContain('package/index.ts');
+      expect(files).toContain('package/package.json');
+    }, 120_000);
+
+    it('includes the installer script', () => {
+      const tarball = packCliWorkspace();
+      const { stdout } = spawnTarList(tarball);
+      const files = stdout.split(/\r?\n/);
+      expect(files).toContain('package/scripts/install-native-launchers.cjs');
+    }, 120_000);
+
+    it('does NOT include the old Node launcher (llxprt.cjs)', () => {
+      const tarball = packCliWorkspace();
+      const { stdout } = spawnTarList(tarball);
+      const files = stdout.split(/\r?\n/);
+      expect(files.some((f) => f.endsWith('.cjs') && f.includes('bin/'))).toBe(
+        false,
+      );
+    }, 120_000);
+
+    it('declares a postinstall script in the CLI workspace package.json', () => {
+      const cliPkg = JSON.parse(
+        readFileSync(join(repoRoot, 'packages', 'cli', 'package.json'), 'utf8'),
+      ) as { scripts: Record<string, string>; bin?: Record<string, string> };
+      expect(cliPkg.scripts.postinstall).toContain('install-native-launchers');
+      // #2978: packages/cli MUST declare its own bin so a global install links
+      // the `llxprt` command (npm links only the installed package's own bins).
+      // The target is a node-shebang shim (not the POSIX #!/bin/sh launcher) so
+      // npm v12's cmd-shim derivation cannot reproduce the broken Windows .cmd.
+      expect(cliPkg.bin).toBeDefined();
+      expect(cliPkg.bin?.llxprt).toBe('bin/llxprt.mjs');
+    });
+
+    // npm marks a declared bin target 0o755 only when packing on a POSIX host;
+    // on Windows npm pack records every file as 0644 (no exec bit to stat), so
+    // the executable-mode invariant is only verifiable on POSIX here. The
+    // launcher is committed 100755 (packages/cli/bin/llxprt), so it ships
+    // executable on POSIX.
+    const executableModeIt = process.platform === 'win32' ? it.skip : it;
+    executableModeIt(
+      'ships bin/llxprt with executable mode in the tarball',
+      () => {
+        const tarball = packCliWorkspace();
+        const { stdout } = spawnTarListVerbose(tarball, 'package/bin/llxprt');
+        // Match the POSIX permission string (e.g. -rwxr-xr-x). Both GNU tar and
+        // bsdtar emit this format in verbose mode. Check for 'x' in the owner
+        // position (character index 3 or 4 depending on type prefix).
+        expect(stdout).toMatch(/^.{0,1}[-bcCdDlMnpPs?]rwx/);
+      },
+      120_000,
+    );
+  },
+);
 
 describe('install-native-launchers module (CLI workspace)', () => {
   describe('cmd launcher generation', () => {
