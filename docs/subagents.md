@@ -376,6 +376,43 @@ Subagents enforce a turn cap via the `max_turns` parameter on the `task` tool or
 
 A value of `-1` at the task, profile, or foreground layer means **unlimited** (no turn cap). An explicitly stored `-1` foreground value is inherited as unlimited. However, the orchestrator only inherits a **currently materialized valid value** — it does not directly inherit the foreground loop-detection registry's treatment of absent as `-1`. The foreground loop-detection layer independently treats an absent `maxTurnsPerPrompt` as `-1` (unlimited), but the orchestrator does not see that: it reads the foreground config's materialized value and accepts `-1` or a finite positive number. When the foreground value is absent, `NaN`, `Infinity`, a non-number, or zero, the orchestrator rejects it and falls through to the **1000-turn fallback**. The 1000-turn fallback is a fixed constant and does not interpret `-1`.
 
+### Subagent Aggregate Output Budget
+
+A turn cap alone does not bound a looping subagent. A subagent that emits a
+maximum-length response, accomplishes nothing, and repeats stays inside every
+per-response limit while generating an enormous amount of text: 1000 turns
+against a model with a 16,384-token output ceiling is 16.4 million tokens.
+
+Subagents therefore also enforce an aggregate budget on the total output tokens
+generated across the whole run, via `max_output_tokens_total` on the `task`
+tool's run config or the `subagent-max-output-tokens-total` ephemeral.
+Precedence matches the turn cap (highest wins):
+
+1. **Explicit task `max_output_tokens_total`**
+2. **Selected subagent profile `subagent-max-output-tokens-total`**
+3. **Current foreground `subagent-max-output-tokens-total`**
+4. **Derived default** — `max_turns` multiplied by the resolved model output
+   ceiling, clamped to 2,000,000 tokens. When no model ceiling is resolvable the
+   flat 2,000,000 is used.
+
+A value of `-1` at any layer means **unlimited** and omits the budget entirely.
+
+The clamp is the part that matters. Deriving the default purely from
+`max_turns * modelMaxOutputTokens` reproduces the bound that failed in practice,
+because the turn cap is itself generous. 2,000,000 output tokens is roughly
+4,000 turns of ordinary 500-token responses, or 122 consecutive maximum-length
+16,384-token responses; a subagent still emitting maximum-length responses after
+122 turns is looping rather than working. Ordinary runs generate well under
+500,000 tokens.
+
+When the budget is exceeded the run terminates with `MAX_OUTPUT` and the final
+message names the budget and the observed total, so the parent agent can decide
+whether to relaunch with a larger budget or change approach.
+
+Cumulative output is counted from provider-reported usage metadata where
+available. Providers that omit usage fall back to a character-based estimate, so
+a provider that reports nothing cannot make the budget unenforceable.
+
 ## Related commands
 
 ### Session Diagnostics: `/dumpcontext`
