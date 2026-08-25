@@ -106,4 +106,18 @@ No periodic rotation, no general partial-output retry, no
   Round 2 found one low item, fixed — `SocketHarness.appendScript` owns a
   mutable private copy instead of casting a `ReadonlyArray`. Both local rounds
   used; every finding triaged In-scope-Fix, none Reject/Defer.
+- PR inline-OCR round 1 (CI): 1 finding — claimed an AbortError after
+  partial output could be swallowed / thrown as undefined. Classified
+  factual mistake (the abort guard is first and every non-retry branch
+  supplies the error), but the `error?: unknown` optional type invited the
+  misreading, so the non-retry variant now requires the error (commit
+  150206e0c). PR inline-OCR round 2 (CI): 4 findings — B2 now also asserts
+  the `cause` chain survives the terminal wrap (In-scope-Fix) and B5 now
+  asserts the mid-reconnect socket is closed by abort cleanup (In-scope-Fix,
+  passes: no leak). Two rejected with rationale: (a) wrap `invalidate` in
+  try/catch — `closeSocket` already guards readyState and catches close
+  failures, so the proposed wrapper is redundant defensive layering; (b) B5
+  cleanup race — rejection delivery is ordered after the synchronous
+  `finally` (invalidate + turn release), and the new sockets[1] closure
+  assertion proves cleanup precedes reuse. PR review budget (2 rounds) spent.
 - PR, CI watched to green, CodeRabbit triaged. No self-merge.

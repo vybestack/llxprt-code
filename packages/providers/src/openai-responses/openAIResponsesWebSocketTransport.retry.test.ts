@@ -65,6 +65,13 @@ describe('Codex Responses WebSocket connection-lifecycle retry @issue:2771', () 
     expect(String((rejection as Error).message)).toMatch(
       /reached the connection lifecycle limit/,
     );
+    // The wrap must keep the original provider error reachable as cause so
+    // diagnostics survive the terminal failure.
+    expect((rejection as { cause?: unknown }).cause).toMatchObject({
+      details: {
+        providerError: { code: 'websocket_connection_limit_reached' },
+      },
+    });
 
     expect(harness.sockets).toHaveLength(2);
   });
@@ -152,6 +159,9 @@ describe('Codex Responses WebSocket connection-lifecycle retry @issue:2771', () 
     await expect(result).rejects.toMatchObject({ name: 'AbortError' });
     expect(harness.sockets).toHaveLength(2);
     expect(harness.sockets[0].closedByClient).toBe(true);
+    // The mid-reconnect socket must be closed by the abort cleanup too, or
+    // the transport would leak it.
+    expect(harness.sockets[1].closedByClient).toBe(true);
 
     // Reuse the original transport: recovery after a mid-reconnect abort
     // (turn lock released, retired active socket dropped) must work on the
