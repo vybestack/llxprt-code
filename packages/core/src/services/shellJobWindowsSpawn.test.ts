@@ -488,10 +488,29 @@ describe.skipIf(!isWindows || availablePowerShellExes.length === 0)(
         // still be alive: the outer waits for the inner 30s sleep, while the
         // inner owns the redirected logs. This proves unref detached the tree
         // without killing it and gives teardown both PIDs for direct reaping.
-        expect(outerPid).toBeGreaterThan(0);
-        expect(isPidAlive(outerPid)).toBe(true);
-        expect(innerPid).toBeGreaterThan(0);
-        expect(isPidAlive(innerPid)).toBe(true);
+        // The bare booleans below say nothing about WHY a process died, and
+        // this only reproduces on a Windows runner, so carry the evidence into
+        // the assertion message: the outer only exits early if its inner
+        // Start-Process failed, and that failure lands in the redirected logs.
+        const readIfPresent = (label: string, at: string): string => {
+          try {
+            return `${label}: ${JSON.stringify(fs.readFileSync(at, 'utf8').slice(-500))}`;
+          } catch (error: unknown) {
+            return `${label}: <unreadable: ${String(error)}>`;
+          }
+        };
+        const evidence =
+          `outerPid=${outerPid} innerPid=${innerPid} elapsed=${elapsed}ms ` +
+          `status=${result.status}\n` +
+          `${readIfPresent('stdout log', logPath)}\n` +
+          `${readIfPresent('stderr log', errLogPath)}\n` +
+          `spawner stdout: ${JSON.stringify(result.stdout.slice(-500))}\n` +
+          `spawner stderr: ${JSON.stringify(result.stderr.slice(-500))}`;
+
+        expect(outerPid, evidence).toBeGreaterThan(0);
+        expect(isPidAlive(outerPid), evidence).toBe(true);
+        expect(innerPid, evidence).toBeGreaterThan(0);
+        expect(isPidAlive(innerPid), evidence).toBe(true);
 
         debugLogger.debug(
           `[shellJobWindowsSpawn.test] unref subprocess exited in ${elapsed}ms (status ${result.status})`,
