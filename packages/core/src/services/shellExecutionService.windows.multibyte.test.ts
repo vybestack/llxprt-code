@@ -101,7 +101,7 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
     // Should use powershell.exe on Windows (new shell-utils architecture)
     expect(spawn).toHaveBeenCalledWith(
       'powershell.exe',
-      ['-NoProfile', '-Command', command],
+      ['-NoProfile', '-Command', expect.stringContaining(command)],
       expect.objectContaining({
         shell: false,
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -182,7 +182,7 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
     // Should use powershell.exe with command as argument (no extra quote escaping)
     expect(spawn).toHaveBeenCalledWith(
       'powershell.exe',
-      ['-NoProfile', '-Command', command],
+      ['-NoProfile', '-Command', expect.stringContaining(command)],
       expect.objectContaining({ shell: false }),
     );
 

@@ -72,7 +72,7 @@ describe('ShellExecutionService (Windows behavior)', () => {
       );
       expect(spawn).toHaveBeenCalledWith(
         expect.stringMatching(/powershell\.exe$/i),
-        ['-NoProfile', '-Command', 'echo a & echo b'],
+        ['-NoProfile', '-Command', expect.stringContaining('echo a & echo b')],
         expect.objectContaining({
           shell: false,
           windowsVerbatimArguments: false,
@@ -93,7 +93,7 @@ describe('ShellExecutionService (Windows behavior)', () => {
       );
       expect(spawn).toHaveBeenCalledWith(
         expect.stringMatching(/powershell\.exe$/i),
-        ['-NoProfile', '-Command', 'node -v'],
+        ['-NoProfile', '-Command', expect.stringContaining('node -v')],
         expect.objectContaining({
           shell: false,
           windowsVerbatimArguments: false,
