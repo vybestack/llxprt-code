@@ -48,6 +48,13 @@ On Windows, background jobs are launched via PowerShell `Start-Process`:
 - Exit-code propagation relies on caching the process handle before waiting
   (`$null = $p.Handle` → `$p.WaitForExit()` → `$p.ExitCode`).
 
+On an ordinary Windows session, a background job keeps running after the LLxprt
+process that started it exits. That is not guaranteed in every environment: when
+LLxprt runs inside a Windows job object that terminates its processes when the
+job closes, the background job is torn down along with LLxprt. This has been
+observed on GitHub Actions Windows runners. Treat survival past the LLxprt
+process as environment dependent rather than as a guarantee.
+
 To **cancel** a Windows background job, use `check_async_tasks` with
 `action: 'cancel'`, or `taskkill /T /F /PID <pid>` from a shell (the `pid` is
 available from `check_async_tasks` with `action: 'peek'`). The `/T` flag ensures

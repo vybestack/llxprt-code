@@ -215,10 +215,6 @@ function spawnWithNodeChildProcess(
   };
 }
 
-// spawn('powershell.exe', [...], { detached: true }) NEVER executes the
-// command on Windows (exits 0 with empty output). The outer process is
-// therefore spawned WITHOUT detached:true and unref()'d instead.
-
 /**
  * Escape a value for safe interpolation into a PowerShell single-quoted
  * string literal. Every embedded single quote is doubled (`'` → `''`) and the
@@ -282,11 +278,42 @@ export function buildWindowsBackgroundBootstrap(
 /**
  * Spawn a Windows background job using Start-Process semantics.
  *
- * The outer PowerShell process is spawned WITHOUT `detached: true` (which is
- * broken on Windows — see file header) with all stdio ignored, then immediately
- * unreferenced so background work cannot keep the parent event loop alive. Its
- * exit listener continues to observe completion. The inner command runs via
- * Start-Process with -EncodedCommand, writing stdout and stderr to separate logs.
+ * The outer PowerShell process is spawned WITHOUT `detached: true`, with all
+ * stdio ignored, then immediately unreferenced so background work cannot keep
+ * the parent event loop alive. Its exit listener continues to observe
+ * completion. The inner command runs via Start-Process with -EncodedCommand,
+ * writing stdout and stderr to separate logs.
+ *
+ * Why not `detached: true`: spawning `powershell.exe` (or `pwsh`) with
+ * `detached: true` was observed to exit 0 with empty output without ever
+ * running the command, so the flag is unusable here. The outer process is
+ * therefore spawned normally and `unref()`'d instead, which removes it from
+ * the parent's reference count. Note that `detached` is not a job-object
+ * breakaway on Windows: it does not request `CREATE_BREAKAWAY_FROM_JOB`, so it
+ * would not by itself change the lifetime described below.
+ *
+ * Lifetime contract, stated as observed rather than as a guarantee:
+ *
+ * - On an ordinary Windows session the background tree keeps running after the
+ *   process that spawned it exits. Windows does not kill children when a
+ *   parent exits.
+ * - Inside the GitHub Actions Windows runner the tree does NOT survive: the
+ *   outer PowerShell is gone immediately after the spawner exits and the inner
+ *   command never produces output. See the evidence recorded in
+ *   shellJobWindowsSpawn.test.ts.
+ *
+ * The leading explanation for the second case is that the runner contains the
+ * job in a Windows job object that terminates its processes when the job
+ * closes, and this child, not having broken away, is inside it. That has not
+ * been confirmed: identifying the owning job and its limit flags needs
+ * `IsProcessInJob` and `QueryInformationJobObject`, which are native Win32
+ * calls. Callers should treat survival past the spawner as environment
+ * dependent. Issue #3321.
+ *
+ * Breaking out of a containing job was considered and rejected.
+ * `CREATE_BREAKAWAY_FROM_JOB` is not exposed by `node:child_process.spawn` or
+ * `Bun.spawn` options, and it takes effect only when the containing job
+ * permits breakaway. Using it would require native Win32 calls.
  *
  * The returned `pid` is the outer PowerShell PID; `taskkill /T /F /PID <pid>`
  * reliably reaps the entire process tree.
