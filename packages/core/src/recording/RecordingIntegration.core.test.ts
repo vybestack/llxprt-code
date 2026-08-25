@@ -38,6 +38,8 @@ import type { EventEmitter } from 'node:events';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { type IContent } from '../services/history/IContent.js';
 import { RecordingIntegration } from './RecordingIntegration.js';
+import { replaySession } from './ReplayEngine.js';
+import { assertReplayOk } from './replay-test-helpers.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
 import { type SessionRecordingServiceConfig } from './types.js';
 
@@ -389,7 +391,7 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
       ).toHaveLength(0);
     });
 
-    it('records applied compression with an argless-queued add still suppressed', async () => {
+    it('records content queued during a summary-bearing compression window after the compressed record', async () => {
       integration.subscribeToHistory(historyService);
       historyService.add(textContent('before'));
       historyService.startCompression();
@@ -400,6 +402,20 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
       historyService.add(textContent('after'));
 
       const events = await flushAndRead(integration, recordingService);
+      const contentOrCompressed = events
+        .filter(
+          (event) => event.type === 'content' || event.type === 'compressed',
+        )
+        .map((event) => event.type);
+      // 'during' was queued in the window and never recorded before the
+      // flush, so its record must follow the compressed record for replay
+      // to keep it (#3264).
+      expect(contentOrCompressed).toStrictEqual([
+        'content',
+        'compressed',
+        'content',
+        'content',
+      ]);
       const contentTexts = events
         .filter((event) => event.type === 'content')
         .map((event) => {
@@ -407,7 +423,7 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
           return (payload.content.blocks[0] as { type: 'text'; text: string })
             .text;
         });
-      expect(contentTexts).toStrictEqual(['before', 'after']);
+      expect(contentTexts).toStrictEqual(['before', 'during', 'after']);
       expect(
         events.filter((event) => event.type === 'compressed'),
       ).toHaveLength(1);
@@ -425,6 +441,69 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
       expect(
         events.filter((event) => event.type === 'compressed'),
       ).toHaveLength(2);
+    });
+
+    it('records mid-compression streaming content after the compressed event and replays it (#3264)', async () => {
+      integration.subscribeToHistory(historyService);
+      historyService.add(textContent('original question'));
+      const retained = historyService.getCurated();
+
+      historyService.startCompression();
+      historyService.add(toolCallContent('mid'));
+      historyService.clear();
+      for (const content of retained) {
+        // The rebuild re-adds retained entries through the same queue.
+        historyService.add(content);
+      }
+      historyService.endCompression(textContent('summary', 'ai'), 1);
+
+      const events = await flushAndRead(integration, recordingService);
+      const contentOrCompressed = events
+        .filter(
+          (event) => event.type === 'content' || event.type === 'compressed',
+        )
+        .map((event) => event.type);
+      // Exactly one pre-compression content record, one compressed record for
+      // the rebuild (rebuilt entries must not duplicate content records —
+      // #3132), then one record for the mid-compression streaming entry.
+      expect(contentOrCompressed).toStrictEqual([
+        'content',
+        'compressed',
+        'content',
+      ]);
+
+      const recordedContents = events
+        .filter((event) => event.type === 'content')
+        .map((event) => (event.payload as { content: IContent }).content);
+      const originalRecords = recordedContents.filter(
+        (content) =>
+          content.blocks[0].type === 'text' &&
+          content.blocks[0].text === 'original question',
+      );
+      expect(originalRecords).toHaveLength(1);
+      const midRecords = recordedContents.filter((content) =>
+        content.blocks.some(
+          (block) => block.type === 'tool_call' && block.id === 'call_mid',
+        ),
+      );
+      expect(midRecords).toHaveLength(1);
+
+      // Recoverability: replaying the session file keeps the mid entry.
+      const filePath = recordingService.getFilePath();
+      expect(filePath).not.toBeNull();
+      const result = await replaySession(filePath!, PROJECT_HASH);
+      assertReplayOk(result);
+      expect(result.history).toHaveLength(2);
+      expect(result.history[0].blocks[0]).toStrictEqual({
+        type: 'text',
+        text: 'summary',
+      });
+      expect(result.history[1].speaker).toBe('ai');
+      expect(
+        result.history[1].blocks.some(
+          (block) => block.type === 'tool_call' && block.id === 'call_mid',
+        ),
+      ).toBe(true);
     });
   });
 
