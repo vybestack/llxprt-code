@@ -29,6 +29,7 @@ import {
 
 interface ProviderTurn {
   readonly text?: string;
+  readonly thought?: string;
   readonly outputTokens?: number;
   readonly continueWithTool?: boolean;
 }
@@ -84,7 +85,12 @@ class ControlledUsageProvider implements RuntimeProvider {
               },
             },
           ]
-        : [{ type: 'text' as const, text: turn.text ?? 'complete' }];
+        : [
+            ...(turn.thought === undefined
+              ? []
+              : [{ type: 'thinking' as const, thought: turn.thought }]),
+            { type: 'text' as const, text: turn.text ?? 'complete' },
+          ];
     yield {
       speaker: 'ai',
       blocks,
@@ -206,6 +212,43 @@ describe('subagent aggregate output token budget', () => {
       SubagentTerminateMode.MAX_OUTPUT,
     );
     expect(scope.output.output_tokens_total).toBeGreaterThan(0);
+  });
+
+  it('counts reasoning toward the estimate, not just visible text', async () => {
+    // The profile that motivated #3335 ran reasoning at high effort with
+    // includeInContext, so reasoning dwarfed visible text. Counting only the
+    // visible text would leave the budget unenforceable for exactly that shape.
+    const { config } = await createMockConfig();
+    const reasoningHeavy = new ControlledUsageProvider([
+      { thought: 'r'.repeat(4000), text: 'ok' },
+    ]);
+    const scope = await createBudgetScope(config, reasoningHeavy, {
+      max_time_minutes: 5,
+      max_turns: 20,
+      max_output_tokens_total: 100,
+    });
+
+    await scope.runNonInteractive(new ContextState());
+
+    expect(scope.output.terminate_reason).toBe(
+      SubagentTerminateMode.MAX_OUTPUT,
+    );
+
+    // The same visible text with no reasoning stays well under the budget,
+    // which is what proves the reasoning is what tripped it.
+    const { config: textOnlyConfig } = await createMockConfig();
+    const textOnly = new ControlledUsageProvider([{ text: 'ok' }]);
+    const textOnlyScope = await createBudgetScope(textOnlyConfig, textOnly, {
+      max_time_minutes: 5,
+      max_turns: 20,
+      max_output_tokens_total: 100,
+    });
+
+    await textOnlyScope.runNonInteractive(new ContextState());
+
+    expect(textOnlyScope.output.terminate_reason).not.toBe(
+      SubagentTerminateMode.MAX_OUTPUT,
+    );
   });
 
   it('applies the same aggregate budget to the real interactive loop', async () => {
