@@ -198,6 +198,13 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `[]`
   - **Requires restart:** Yes
 
+#### `runtimePlugins`
+
+- **`runtimePlugins`** (array):
+  - **Description:** Bare npm package roots loaded once at startup to contribute provider factories. Runtime plugins are trusted, unsandboxed executable code and may only be configured in user (global) or system settings; a value in project settings is rejected. See docs/runtime-plugins.md.
+  - **Default:** `[]`
+  - **Requires restart:** Yes
+
 #### `coreToolSettings`
 
 - **`coreToolSettings`** (object):

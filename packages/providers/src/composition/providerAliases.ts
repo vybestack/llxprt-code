@@ -27,7 +27,12 @@ const BUILTIN_ALIAS_DIR = fs.existsSync(BUNDLE_ALIAS_DIR)
   ? BUNDLE_ALIAS_DIR
   : DEV_ALIAS_DIR;
 
-export type ProviderAliasSource = 'user' | 'builtin';
+/**
+ * Where an alias entry came from. `user` and `builtin` are alias files on disk;
+ * `plugin` is an alias contributed by a loaded runtime plugin manifest, which
+ * has no on-disk config file.
+ */
+export type ProviderAliasSource = 'user' | 'builtin' | 'plugin';
 
 export interface StaticModelEntry {
   id: string;

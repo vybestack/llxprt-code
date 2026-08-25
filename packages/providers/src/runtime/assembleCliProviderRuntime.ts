@@ -44,6 +44,7 @@ import { createSessionMessageBus } from '@vybestack/llxprt-code-core/confirmatio
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import { createProviderManager } from '../composition/index.js';
+import type { ProviderContributionRegistry } from '../composition/runtimePlugins/types.js';
 import {
   createFileOAuthSettingsProvider,
   type OAuthManager,
@@ -87,6 +88,13 @@ export interface AssembleCliProviderRuntimeInput {
    * `null` to force NO settings provider.
    */
   readonly oauthSettings?: IOAuthSettingsProvider | null;
+  /**
+   * The provider contribution registry produced by loading the configured
+   * runtime plugins once at CLI startup. Forwarded to the composition seam so
+   * alias construction dispatches through it. Omitted by callers that load no
+   * runtime plugins, which then get the built-ins-only registry.
+   */
+  readonly providerContributions?: ProviderContributionRegistry;
 }
 
 /**
@@ -107,7 +115,14 @@ export interface AssembledCliProviderRuntime {
 export function assembleCliProviderRuntime(
   input: AssembleCliProviderRuntimeInput,
 ): AssembledCliProviderRuntime {
-  const { settingsService, config, runtimeId, metadata, oauthSettings } = input;
+  const {
+    settingsService,
+    config,
+    runtimeId,
+    metadata,
+    oauthSettings,
+    providerContributions,
+  } = input;
 
   try {
     // 1. Bind identity BEFORE creating/registering infrastructure (issue #2300).
@@ -148,6 +163,9 @@ export function assembleCliProviderRuntime(
         runtimeMessageBus,
         ...(resolvedOAuthSettings !== undefined
           ? { oauthSettings: resolvedOAuthSettings }
+          : {}),
+        ...(providerContributions !== undefined
+          ? { providerContributions }
           : {}),
       },
     );

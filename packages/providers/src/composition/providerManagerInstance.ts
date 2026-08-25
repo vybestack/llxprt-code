@@ -43,6 +43,7 @@ import {
   sanitizeApiKey,
   registerAliasProviders,
 } from './aliasProviderFactory.js';
+import type { ProviderContributionRegistry } from './runtimePlugins/types.js';
 
 export { bindOpenAIAliasIdentity } from './aliasProviderFactory.js';
 export { createRuntimeTokenizerFactory } from './runtimeTokenizerFactory.js';
@@ -68,6 +69,13 @@ interface ProviderManagerFactoryOptions {
   oauthSettings?: IOAuthSettingsProvider;
   addItem?: OAuthUICallback;
   runtimeMessageBus?: MessageBus;
+  /**
+   * The provider contribution registry alias construction dispatches through.
+   * The composition root (CLI) loads the configured runtime plugins once at
+   * startup and passes the resulting local immutable registry here. When
+   * omitted, alias construction uses the built-ins-only registry.
+   */
+  providerContributions?: ProviderContributionRegistry;
 }
 
 type RuntimeContextShape = ProviderRuntimeContext;
@@ -79,6 +87,12 @@ interface OpenAIRegistrationContext {
   oauthManager: OAuthManager;
   config?: Config;
   authOnlyEnabled?: boolean;
+  /**
+   * The registry alias construction used for this manager. Stored so
+   * {@link refreshAliasProviders} re-registers through the SAME registry
+   * instance rather than re-importing plugins.
+   */
+  providerContributions?: ProviderContributionRegistry;
 }
 
 function createRuntimeContentGeneratorFactory(
@@ -454,6 +468,7 @@ function registerAllProviders(
   config: Config | undefined,
   authOnlyEnabled: boolean,
   addItem: ProviderManagerFactoryOptions['addItem'],
+  providerContributions: ProviderContributionRegistry | undefined,
 ): void {
   registerAliasProviders(
     manager,
@@ -464,6 +479,7 @@ function registerAllProviders(
     oauthManager,
     config,
     authOnlyEnabled,
+    { providerContributions },
   );
 
   registerOAuthProviders(oauthManager, tokenStore, addItem);
@@ -563,6 +579,7 @@ export function createProviderManager(
     allowBrowserEnvironment = false,
     activateConfiguredProvider = true,
     addItem,
+    providerContributions,
   } = options;
 
   const fakeResult = tryActivateFakeProvider(manager, config);
@@ -605,6 +622,7 @@ export function createProviderManager(
     config,
     authOnlyEnabled,
     addItem,
+    providerContributions,
   );
 
   if (activateConfiguredProvider) {
@@ -619,6 +637,7 @@ export function createProviderManager(
     oauthManager,
     config,
     authOnlyEnabled,
+    providerContributions,
   };
   openAIContexts.set(manager, openAIContext);
 
@@ -692,6 +711,7 @@ export function refreshAliasProviders(): void {
     context.oauthManager,
     context.config,
     context.authOnlyEnabled,
+    { providerContributions: context.providerContributions },
   );
 }
 

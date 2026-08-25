@@ -5,6 +5,7 @@
  */
 
 import { loadCliConfig } from './config/config.js';
+import { loadCliRuntimePlugins } from './config/runtimePlugins.js';
 import chalk from 'chalk';
 import type { LoadedSettings } from './config/settings.js';
 import {
@@ -144,6 +145,12 @@ export async function bootstrapRuntimeAndConfig(
   );
   const extensions = loadExtensions(extensionEnablementManager, workspaceRoot);
 
+  // Load the trusted `runtimePlugins` once, before any provider manager is
+  // constructed, so alias construction can dispatch through the resulting
+  // registry (issue #2758). Provenance and specifier violations fail startup
+  // here rather than being merged or skipped.
+  const providerContributions = await loadCliRuntimePlugins(settings);
+
   const config = await loadCliConfig(
     settings.merged,
     extensions,
@@ -151,7 +158,7 @@ export async function bootstrapRuntimeAndConfig(
     sessionId,
     argv,
     workspaceRoot,
-    { settingsService: runtimeSettingsService },
+    { settingsService: runtimeSettingsService, providerContributions },
   );
   const profileManager = new ProfileManager();
   setCliRuntimeContext(runtimeSettingsService, config, {

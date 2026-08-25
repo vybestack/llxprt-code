@@ -624,6 +624,14 @@ describe('SettingsSchema', () => {
       expect(SETTINGS_SCHEMA.folderTrustFeature.showInDialog).toBe(true);
     });
 
+    it('should have runtimePlugins setting in schema as a startup-only array', () => {
+      expect(SETTINGS_SCHEMA.runtimePlugins).toBeDefined();
+      expect(SETTINGS_SCHEMA.runtimePlugins.type).toBe('array');
+      expect(SETTINGS_SCHEMA.runtimePlugins.requiresRestart).toBe(true);
+      expect(SETTINGS_SCHEMA.runtimePlugins.default).toStrictEqual([]);
+      expect(SETTINGS_SCHEMA.runtimePlugins.showInDialog).toBe(false);
+    });
+
     it('should have defaultDisabledTools setting in schema', () => {
       expect(SETTINGS_SCHEMA.defaultDisabledTools).toBeDefined();
       expect(SETTINGS_SCHEMA.defaultDisabledTools.type).toBe('array');
