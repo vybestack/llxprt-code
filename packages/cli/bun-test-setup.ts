@@ -140,8 +140,14 @@ const SUITES_NEEDING_REAL_ALIASES = [
   'test/providers/providerAliases.test.ts',
   'src/ui/commands/providerCommand.test.ts',
 ];
+// argv carries native separators, so on Windows the path arrives as
+// `test\providers\providerAliases.test.ts` and a raw endsWith against the
+// forward-slash entries above never matches. The stub then stays installed for
+// the very suites that opted out, and they assert against mocked aliases
+// instead of the real config files. Compare on normalised separators.
+const toPosixPath = (value: string): string => value.replaceAll('\\', '/');
 const wantsRealProviderAliases = process.argv.some((arg) =>
-  SUITES_NEEDING_REAL_ALIASES.some((suite) => arg.endsWith(suite)),
+  SUITES_NEEDING_REAL_ALIASES.some((suite) => toPosixPath(arg).endsWith(suite)),
 );
 
 if (!wantsRealProviderAliases) {

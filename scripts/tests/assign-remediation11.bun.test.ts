@@ -390,86 +390,96 @@ describe('K2: ordered per-login transition model', () => {
 // K3: Ambiguous marker POST — ownership-aware rollback
 // ===========================================================================
 
-describe('K3: ambiguous marker POST ownership-aware rollback', () => {
-  it('removes label on assignee failure after applied-error label POST', () => {
-    const repo = createFakeRepo(
-      defaultStateWith({
-        issues: { 42: makeIssue({ number: 42, assignees: [] }) },
-        prs: { 100: makePR({ number: 100, author: 'alice', merged: true }) },
-        fail_config: {
-          requests: [
-            {
-              method: 'POST',
-              endpoint: 'repos/test/repo/issues/42/labels',
-              on_nth: 1,
-              type: 'applied_error',
-            },
+// These execute the real bash /assign scripts against the fake-gh harness.
+// assign.yml and assign-stale-cleanup.yml run on ubuntu-latest only, and the
+// harness prepends a POSIX-style PATH entry for a shell-script `gh` stub, so on
+// Windows the real gh wins and demands GH_TOKEN. Structural assertions in these
+// files still run everywhere.
+const IS_WINDOWS = process.platform === 'win32';
+
+describe.skipIf(IS_WINDOWS)(
+  'K3: ambiguous marker POST ownership-aware rollback',
+  () => {
+    it('removes label on assignee failure after applied-error label POST', () => {
+      const repo = createFakeRepo(
+        defaultStateWith({
+          issues: { 42: makeIssue({ number: 42, assignees: [] }) },
+          prs: { 100: makePR({ number: 100, author: 'alice', merged: true }) },
+          fail_config: {
+            requests: [
+              {
+                method: 'POST',
+                endpoint: 'repos/test/repo/issues/42/labels',
+                on_nth: 1,
+                type: 'applied_error',
+              },
+              {
+                method: 'POST',
+                endpoint: 'repos/test/repo/issues/42/assignees',
+                on_nth: 1,
+                type: 'error',
+              },
+            ],
+          },
+        }),
+      );
+
+      const result = repo.runAssign({ issueNumber: 42, commenter: 'alice' });
+
+      expect(result.status).not.toBe(0);
+      expect(stateIssue(result.state, '42')._assignees).not.toContain('alice');
+      expect(stateIssue(result.state, '42')._label_names).not.toContain(
+        'auto-assigned',
+      );
+    });
+
+    it('removes label on TERM signal after applied-error label POST', () => {
+      const repo = createFakeRepo(
+        defaultStateWith({
+          issues: { 42: makeIssue({ number: 42, assignees: [] }) },
+          prs: { 100: makePR({ number: 100, author: 'alice', merged: true }) },
+          fail_config: {
+            requests: [
+              {
+                method: 'POST',
+                endpoint: 'repos/test/repo/issues/42/labels',
+                on_nth: 1,
+                type: 'applied_error',
+              },
+            ],
+          },
+          side_effects: [
             {
               method: 'POST',
               endpoint: 'repos/test/repo/issues/42/assignees',
               on_nth: 1,
-              type: 'error',
+              timing: 'post',
+              action: 'signal_parent',
+              signal: 'SIGTERM',
             },
           ],
-        },
-      }),
-    );
+        }),
+      );
+      const result = repo.runAssign({
+        issueNumber: 42,
+        commenter: 'alice',
+        extraEnv: { ASSIGN_ELECTION_DELAY: '0' },
+      });
 
-    const result = repo.runAssign({ issueNumber: 42, commenter: 'alice' });
-
-    expect(result.status).not.toBe(0);
-    expect(stateIssue(result.state, '42')._assignees).not.toContain('alice');
-    expect(stateIssue(result.state, '42')._label_names).not.toContain(
-      'auto-assigned',
-    );
-  });
-
-  it('removes label on TERM signal after applied-error label POST', () => {
-    const repo = createFakeRepo(
-      defaultStateWith({
-        issues: { 42: makeIssue({ number: 42, assignees: [] }) },
-        prs: { 100: makePR({ number: 100, author: 'alice', merged: true }) },
-        fail_config: {
-          requests: [
-            {
-              method: 'POST',
-              endpoint: 'repos/test/repo/issues/42/labels',
-              on_nth: 1,
-              type: 'applied_error',
-            },
-          ],
-        },
-        side_effects: [
-          {
-            method: 'POST',
-            endpoint: 'repos/test/repo/issues/42/assignees',
-            on_nth: 1,
-            timing: 'post',
-            action: 'signal_parent',
-            signal: 'SIGTERM',
-          },
-        ],
-      }),
-    );
-    const result = repo.runAssign({
-      issueNumber: 42,
-      commenter: 'alice',
-      extraEnv: { ASSIGN_ELECTION_DELAY: '0' },
+      expect(result.status).toBe(143);
+      expect(stateIssue(result.state, '42')._assignees).not.toContain('alice');
+      expect(stateIssue(result.state, '42')._label_names).not.toContain(
+        'auto-assigned',
+      );
     });
-
-    expect(result.status).toBe(143);
-    expect(stateIssue(result.state, '42')._assignees).not.toContain('alice');
-    expect(stateIssue(result.state, '42')._label_names).not.toContain(
-      'auto-assigned',
-    );
-  });
-});
+  },
+);
 
 // ===========================================================================
 // K4: Fake-gh ordinal fidelity — once per request, shared across rules
 // ===========================================================================
 
-describe('K4: fake-gh ordinal fidelity', () => {
+describe.skipIf(IS_WINDOWS)('K4: fake-gh ordinal fidelity', () => {
   it('multiple side-effect rules on one request all see ordinal 1', () => {
     const repo = createFakeRepo(
       defaultStateWith({

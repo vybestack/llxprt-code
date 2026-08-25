@@ -44,7 +44,10 @@ function escapeRegex(s: string): string {
   return s.replace(REGEX_SPECIAL, '\\$&');
 }
 
-describe('codex credential scripts', () => {
+// These scripts are bash; the suite checks bash syntax and executes them. Windows has no bash.
+const IS_WINDOWS = process.platform === 'win32';
+
+describe.skipIf(IS_WINDOWS)('codex credential scripts', () => {
   let tempHome: string;
 
   beforeEach(() => {

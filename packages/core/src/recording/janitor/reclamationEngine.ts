@@ -633,7 +633,16 @@ function compareCandidatesOldestFirst(
 ): number {
   const mtimeDiff = a.mtime.getTime() - b.mtime.getTime();
   if (mtimeDiff !== 0) return mtimeDiff;
-  return path.normalize(a.filePath).localeCompare(path.normalize(b.filePath));
+  // The tie-break must be genuinely deterministic, which localeCompare is not:
+  // it orders by the runtime's locale, and path.normalize emits `\` on Windows
+  // and `/` elsewhere, so the same two archives could sort differently per
+  // platform and locale. Fold to forward slashes and compare by code unit so
+  // "lexicographically oldest" means one fixed thing everywhere.
+  const aPath = path.normalize(a.filePath).replaceAll('\\', '/');
+  const bPath = path.normalize(b.filePath).replaceAll('\\', '/');
+  if (aPath < bPath) return -1;
+  if (aPath > bPath) return 1;
+  return 0;
 }
 
 /**

@@ -468,53 +468,62 @@ describe('terminateWindowsTree - platform-independent outcome tests', () => {
   );
 });
 
-describe('terminateProcessTree - EPERM vs ESRCH signal semantics', () => {
-  const fakeChild = {
-    pid: 99999,
-    exitCode: null,
-    signalCode: null,
-  } as unknown as ChildProcess;
-
-  const epermSignal: SignalFn = () => {
-    throw Object.assign(new Error('Operation not permitted'), {
-      code: 'EPERM',
-    });
-  };
-
-  it('EPERM on liveness probe means group exists; EPERM on SIGTERM is failure', async () => {
-    const result = await terminateProcessTree(fakeChild, {
-      ownsProcessGroup: true,
-      signal: epermSignal,
-      gracePeriodMs: 100,
-    });
-    expect(result.outcome).toBe('failure');
-  });
-
-  it('ESRCH on liveness probe means group is gone — no_target', async () => {
-    const esrchSignal: SignalFn = () => {
-      throw Object.assign(new Error('No such process'), {
-        code: 'ESRCH',
-      });
-    };
-    const result = await terminateProcessTree(fakeChild, {
-      ownsProcessGroup: true,
-      signal: esrchSignal,
-      gracePeriodMs: 100,
-    });
-    expect(result.outcome).toBe('no_target');
-  });
-
-  it('EPERM on direct-child SIGTERM is failure, not no_target', async () => {
-    const runningChild = {
-      pid: 99998,
+// POSIX-only. `doTerminate` short-circuits to `terminateWindowsTree(pid)` on
+// win32 before it ever reads `options.signal`, so the injected EPERM/ESRCH
+// probes below are unreachable there and Windows reports `no_target` from
+// taskkill instead. The rest of this file already guards its POSIX cases the
+// same way; this block was the one that missed it, which is what turned the
+// nightly Windows `rest` shard red.
+describe.skipIf(process.platform === 'win32')(
+  'terminateProcessTree - EPERM vs ESRCH signal semantics',
+  () => {
+    const fakeChild = {
+      pid: 99999,
       exitCode: null,
       signalCode: null,
     } as unknown as ChildProcess;
-    const result = await terminateProcessTree(runningChild, {
-      ownsProcessGroup: false,
-      signal: epermSignal,
-      gracePeriodMs: 100,
+
+    const epermSignal: SignalFn = () => {
+      throw Object.assign(new Error('Operation not permitted'), {
+        code: 'EPERM',
+      });
+    };
+
+    it('EPERM on liveness probe means group exists; EPERM on SIGTERM is failure', async () => {
+      const result = await terminateProcessTree(fakeChild, {
+        ownsProcessGroup: true,
+        signal: epermSignal,
+        gracePeriodMs: 100,
+      });
+      expect(result.outcome).toBe('failure');
     });
-    expect(result.outcome).toBe('failure');
-  });
-});
+
+    it('ESRCH on liveness probe means group is gone — no_target', async () => {
+      const esrchSignal: SignalFn = () => {
+        throw Object.assign(new Error('No such process'), {
+          code: 'ESRCH',
+        });
+      };
+      const result = await terminateProcessTree(fakeChild, {
+        ownsProcessGroup: true,
+        signal: esrchSignal,
+        gracePeriodMs: 100,
+      });
+      expect(result.outcome).toBe('no_target');
+    });
+
+    it('EPERM on direct-child SIGTERM is failure, not no_target', async () => {
+      const runningChild = {
+        pid: 99998,
+        exitCode: null,
+        signalCode: null,
+      } as unknown as ChildProcess;
+      const result = await terminateProcessTree(runningChild, {
+        ownsProcessGroup: false,
+        signal: epermSignal,
+        gracePeriodMs: 100,
+      });
+      expect(result.outcome).toBe('failure');
+    });
+  },
+);

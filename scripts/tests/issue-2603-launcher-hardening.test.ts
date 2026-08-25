@@ -82,32 +82,40 @@ function makeEntry(pkgRoot: string, code: string): void {
   writeFileSync(join(pkgRoot, 'index.ts'), `#!/usr/bin/env -S bun\n${code}\n`);
 }
 
-describe('POSIX launcher readlink-failure and hop-bound hardening', () => {
-  it('exits 43 on readlink failure rather than preserving the same symlink', () => {
-    // On readlink failure (e.g. permission denied, dangling symlink target),
-    // the launcher must immediately emit an actionable symlink-resolution
-    // error and exit 43. It must NOT fall back to preserving the same
-    // $_llxprt_self value (which would cause the while loop to spin
-    // MAX_SYMLINK_HOPS iterations before bailing). We verify at the source
-    // level that a readlink failure is handled by exiting 43 directly, not by
-    // falling through to a self-preservation fallback.
-    const source = readFileSync(launcherPath, 'utf8');
-    expect(source).not.toMatch(
-      /readlink -- "\$_llxprt_self" 2>\/dev\/null \|\| printf '%s\\n' "\$_llxprt_self"/,
-    );
-  });
+// These suites execute the POSIX launcher, which is a `#!/bin/sh` script.
+// Windows has no /bin/sh and ships its own launcher, covered separately by
+// .github/workflows/windows-installed-command.yml, so they cannot run there.
+const IS_WINDOWS = process.platform === 'win32';
 
-  it('terminates a circular symlink chain rather than looping forever', () => {
-    // A bounded loop (MAX_SYMLINK_HOPS) guards against pathological symlink
-    // chains. This is a hop bound, NOT visited-path cycle detection.
-    const source = readFileSync(launcherPath, 'utf8');
-    expect(source).toMatch(/MAX_SYMLINK_HOPS\s*=\s*\d+/);
-    expect(source).toMatch(/symlink resolution exceeded maximum hops/i);
-    expect(source).toMatch(/_llxprt_hops.*gt.*MAX_SYMLINK_HOPS/);
-  });
-});
+describe.skipIf(IS_WINDOWS)(
+  'POSIX launcher readlink-failure and hop-bound hardening',
+  () => {
+    it('exits 43 on readlink failure rather than preserving the same symlink', () => {
+      // On readlink failure (e.g. permission denied, dangling symlink target),
+      // the launcher must immediately emit an actionable symlink-resolution
+      // error and exit 43. It must NOT fall back to preserving the same
+      // $_llxprt_self value (which would cause the while loop to spin
+      // MAX_SYMLINK_HOPS iterations before bailing). We verify at the source
+      // level that a readlink failure is handled by exiting 43 directly, not by
+      // falling through to a self-preservation fallback.
+      const source = readFileSync(launcherPath, 'utf8');
+      expect(source).not.toMatch(
+        /readlink -- "\$_llxprt_self" 2>\/dev\/null \|\| printf '%s\\n' "\$_llxprt_self"/,
+      );
+    });
 
-describe('POSIX launcher sed extraction anchoring', () => {
+    it('terminates a circular symlink chain rather than looping forever', () => {
+      // A bounded loop (MAX_SYMLINK_HOPS) guards against pathological symlink
+      // chains. This is a hop bound, NOT visited-path cycle detection.
+      const source = readFileSync(launcherPath, 'utf8');
+      expect(source).toMatch(/MAX_SYMLINK_HOPS\s*=\s*\d+/);
+      expect(source).toMatch(/symlink resolution exceeded maximum hops/i);
+      expect(source).toMatch(/_llxprt_hops.*gt.*MAX_SYMLINK_HOPS/);
+    });
+  },
+);
+
+describe.skipIf(IS_WINDOWS)('POSIX launcher sed extraction anchoring', () => {
   it('anchors the bun dependency sed extraction at the start of the JSON key line', () => {
     // npm pretty-prints package.json, so each dependency key appears at the
     // start of its own line (with leading whitespace). The sed extraction must
@@ -121,7 +129,7 @@ describe('POSIX launcher sed extraction anchoring', () => {
   });
 });
 
-describe('POSIX launcher exact-pin detection', () => {
+describe.skipIf(IS_WINDOWS)('POSIX launcher exact-pin detection', () => {
   it('treats only an exact X.Y.Z as a pin, not 1.x', () => {
     // The exact-pin detection must recognize ONLY a plain exact semver pin
     // (e.g. "1.3.14"), not any digit-leading string. A range like "1.x" starts
@@ -132,7 +140,7 @@ describe('POSIX launcher exact-pin detection', () => {
   });
 });
 
-describe('POSIX launcher entry-point safety', () => {
+describe.skipIf(IS_WINDOWS)('POSIX launcher entry-point safety', () => {
   let tempDir: string;
 
   beforeEach(() => {
@@ -170,7 +178,7 @@ describe('POSIX launcher entry-point safety', () => {
   }, 15_000);
 });
 
-describe('POSIX launcher range-pin acceptance', () => {
+describe.skipIf(IS_WINDOWS)('POSIX launcher range-pin acceptance', () => {
   let tempDir: string;
 
   beforeEach(() => {
@@ -229,7 +237,7 @@ describe('POSIX launcher range-pin acceptance', () => {
     expect(result.status, result.stderr).toBe(0);
   }, 30_000);
 });
-describe('POSIX launcher prerelease semver pin', () => {
+describe.skipIf(IS_WINDOWS)('POSIX launcher prerelease semver pin', () => {
   let tempDir: string;
 
   beforeEach(() => {

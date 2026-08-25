@@ -214,141 +214,151 @@ describe('G3: Cleanup validates auto-assigned label definition upfront', () => {
 // G4: fake-gh 404 on DELETE of non-attached label; cleanup race resilience
 // ===========================================================================
 
-describe('G4: fake-gh 404 label DELETE + cleanup race resilience', () => {
-  it('fake-gh: DELETE of non-attached issue label returns 404', () => {
-    const repo = createFakeRepo(
-      defaultStateWith({
-        issues: {
-          42: makeIssue({
-            number: 42,
-            assignees: ['u'],
-            labels: ['bug'],
-          }),
-        },
-      }),
-    );
+// These execute the real bash /assign scripts against the fake-gh harness.
+// assign.yml and assign-stale-cleanup.yml run on ubuntu-latest only, and the
+// harness prepends a POSIX-style PATH entry for a shell-script `gh` stub, so on
+// Windows the real gh wins and demands GH_TOKEN. Structural assertions in these
+// files still run everywhere.
+const IS_WINDOWS = process.platform === 'win32';
 
-    let exitCode = 0;
-    let stderr = '';
-    try {
-      execFileSync(
-        'bash',
-        [
-          '-c',
-          `PATH="${repo.binDir}${nodePath.delimiter}$PATH" GH_FAKE_STATE="${repo.stateFile}" ` +
-            `gh api --method DELETE 'repos/test/repo/issues/42/labels/nonexistent' --silent`,
-        ],
-        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
-      );
-    } catch (err: unknown) {
-      const errRecord = asRecord(err);
-      exitCode =
-        typeof errRecord['status'] === 'number' ? errRecord['status'] : 1;
-      stderr =
-        typeof errRecord['stderr'] === 'string'
-          ? errRecord['stderr']
-          : (errRecord['stderr']?.toString() ?? '');
-    }
-
-    expect(exitCode).not.toBe(0);
-    expect(stderr).toMatch(/404/);
-  });
-
-  it('cleanup race: label removed after read but before DELETE succeeds cleanly', () => {
-    const assignedAt = daysAgo(20);
-    const repo = createFakeRepo(
-      defaultStateWith({
-        issues: {
-          42: makeIssue({
-            number: 42,
-            assignees: ['stale-user'],
-            labels: ['auto-assigned'],
-          }),
-        },
-        timeline: {
-          42: [
-            makeLabeledEvent({
+describe.skipIf(IS_WINDOWS)(
+  'G4: fake-gh 404 label DELETE + cleanup race resilience',
+  () => {
+    it('fake-gh: DELETE of non-attached issue label returns 404', () => {
+      const repo = createFakeRepo(
+        defaultStateWith({
+          issues: {
+            42: makeIssue({
               number: 42,
-              label: 'auto-assigned',
-              actor: 'github-actions[bot]',
-              createdAt: assignedAt,
+              assignees: ['u'],
+              labels: ['bug'],
             }),
-            makeAssignedEvent({
-              number: 42,
-              assignee: 'stale-user',
-              actor: 'github-actions[bot]',
-              createdAt: assignedAt,
-            }),
-          ],
-        },
-        side_effects: [
-          {
-            method: 'GET',
-            endpoint: 'repos/test/repo/issues/42',
-            on_nth: 2,
-            action: 'remove_label',
-            issue: 42,
-            label: 'auto-assigned',
           },
-        ],
-      }),
-    );
+        }),
+      );
 
-    const result = repo.runCleanup();
-
-    expect(result.status).toBe(0);
-    expect(stateIssue(result.state, '42')._assignees).not.toContain(
-      'stale-user',
-    );
-    expect(stateIssue(result.state, '42')._label_names).not.toContain(
-      'auto-assigned',
-    );
-  });
-
-  it('cleanup: targeted marker deletion persistent failure hits exact endpoint', () => {
-    const assignedAt = daysAgo(20);
-    const repo = createFakeRepo(
-      defaultStateWith({
-        issues: {
-          42: makeIssue({
-            number: 42,
-            assignees: ['stale-user'],
-            labels: ['auto-assigned'],
-          }),
-        },
-        timeline: {
-          42: [
-            makeLabeledEvent({
-              number: 42,
-              label: 'auto-assigned',
-              actor: 'github-actions[bot]',
-              createdAt: assignedAt,
-            }),
-            makeAssignedEvent({
-              number: 42,
-              assignee: 'stale-user',
-              actor: 'github-actions[bot]',
-              createdAt: assignedAt,
-            }),
+      let exitCode = 0;
+      let stderr = '';
+      try {
+        execFileSync(
+          'bash',
+          [
+            '-c',
+            `PATH="${repo.binDir}${nodePath.delimiter}$PATH" GH_FAKE_STATE="${repo.stateFile}" ` +
+              `gh api --method DELETE 'repos/test/repo/issues/42/labels/nonexistent' --silent`,
           ],
-        },
-        fail_config: {
-          'repos/test/repo/issues/42/labels/auto-assigned': 'error',
-        },
-      }),
-    );
+          { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+        );
+      } catch (err: unknown) {
+        const errRecord = asRecord(err);
+        exitCode =
+          typeof errRecord['status'] === 'number' ? errRecord['status'] : 1;
+        stderr =
+          typeof errRecord['stderr'] === 'string'
+            ? errRecord['stderr']
+            : (errRecord['stderr']?.toString() ?? '');
+      }
 
-    const result = repo.runCleanup();
+      expect(exitCode).not.toBe(0);
+      expect(stderr).toMatch(/404/);
+    });
 
-    expect(stateIssue(result.state, '42')._assignees).not.toContain(
-      'stale-user',
-    );
-    expect(result.status).not.toBe(0);
-    expect(stateIssue(result.state, '42')._label_names).toContain(
-      'auto-assigned',
-    );
-  });
-});
+    it('cleanup race: label removed after read but before DELETE succeeds cleanly', () => {
+      const assignedAt = daysAgo(20);
+      const repo = createFakeRepo(
+        defaultStateWith({
+          issues: {
+            42: makeIssue({
+              number: 42,
+              assignees: ['stale-user'],
+              labels: ['auto-assigned'],
+            }),
+          },
+          timeline: {
+            42: [
+              makeLabeledEvent({
+                number: 42,
+                label: 'auto-assigned',
+                actor: 'github-actions[bot]',
+                createdAt: assignedAt,
+              }),
+              makeAssignedEvent({
+                number: 42,
+                assignee: 'stale-user',
+                actor: 'github-actions[bot]',
+                createdAt: assignedAt,
+              }),
+            ],
+          },
+          side_effects: [
+            {
+              method: 'GET',
+              endpoint: 'repos/test/repo/issues/42',
+              on_nth: 2,
+              action: 'remove_label',
+              issue: 42,
+              label: 'auto-assigned',
+            },
+          ],
+        }),
+      );
+
+      const result = repo.runCleanup();
+
+      expect(result.status).toBe(0);
+      expect(stateIssue(result.state, '42')._assignees).not.toContain(
+        'stale-user',
+      );
+      expect(stateIssue(result.state, '42')._label_names).not.toContain(
+        'auto-assigned',
+      );
+    });
+
+    it('cleanup: targeted marker deletion persistent failure hits exact endpoint', () => {
+      const assignedAt = daysAgo(20);
+      const repo = createFakeRepo(
+        defaultStateWith({
+          issues: {
+            42: makeIssue({
+              number: 42,
+              assignees: ['stale-user'],
+              labels: ['auto-assigned'],
+            }),
+          },
+          timeline: {
+            42: [
+              makeLabeledEvent({
+                number: 42,
+                label: 'auto-assigned',
+                actor: 'github-actions[bot]',
+                createdAt: assignedAt,
+              }),
+              makeAssignedEvent({
+                number: 42,
+                assignee: 'stale-user',
+                actor: 'github-actions[bot]',
+                createdAt: assignedAt,
+              }),
+            ],
+          },
+          fail_config: {
+            'repos/test/repo/issues/42/labels/auto-assigned': 'error',
+          },
+        }),
+      );
+
+      const result = repo.runCleanup();
+
+      expect(stateIssue(result.state, '42')._assignees).not.toContain(
+        'stale-user',
+      );
+      expect(result.status).not.toBe(0);
+      expect(stateIssue(result.state, '42')._label_names).toContain(
+        'auto-assigned',
+      );
+    });
+  },
+);
 
 // ===========================================================================
 // G5: discover_candidates diagnostics

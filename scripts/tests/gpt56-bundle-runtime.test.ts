@@ -25,7 +25,7 @@ const tokenizerWasm = join(
 );
 const tempDirectories: string[] = [];
 const bunAvailable =
-  spawnSync('bun', ['--version'], { encoding: 'utf8' }).status === 0;
+  spawnSync(process.execPath, ['--version'], { encoding: 'utf8' }).status === 0;
 
 afterEach(() => {
   const cleanupErrors: unknown[] = [];
@@ -92,7 +92,7 @@ await Bun.build({
 describe.skipIf(!bunAvailable)('GPT-5.6 bundled runtime', () => {
   it('executes o200k from an isolated bundle and adjacent WASM', () => {
     const buildDirectory = createTemporaryDirectory('llxprt-gpt56-build-');
-    run('bun', [writePortableBuildScript(buildDirectory)], repoRoot);
+    run(process.execPath, [writePortableBuildScript(buildDirectory)], repoRoot);
     copyFileSync(tokenizerWasm, join(buildDirectory, 'tiktoken_bg.wasm'));
 
     const bundle = join(buildDirectory, 'gpt56-bundle-smoke.js');

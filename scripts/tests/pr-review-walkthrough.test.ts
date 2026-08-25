@@ -708,7 +708,7 @@ describe('private optional-stage retry and diagnostics', () => {
       const { workspace, reviewDir, counterDir, pathWithFake } =
         setupReviewWorkspace();
       try {
-        const result = spawnSync('bun', [WALKTHROUGH_SCRIPT], {
+        const result = spawnSync(process.execPath, [WALKTHROUGH_SCRIPT], {
           cwd: workspace,
           encoding: 'utf8',
           timeout: PHASE_TIMEOUT,

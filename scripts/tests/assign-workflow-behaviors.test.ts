@@ -491,7 +491,10 @@ describe('assign-issue.sh behavioral', () => {
 // unassign-stale-issues.sh behavioral tests
 // ---------------------------------------------------------------------------
 
-describe('unassign-stale-issues.sh behavioral', () => {
+// unassign-stale-issues.sh is a bash script executed directly; Windows has no bash. The YAML-structure suites in this file run everywhere.
+const IS_WINDOWS = process.platform === 'win32';
+
+describe.skipIf(IS_WINDOWS)('unassign-stale-issues.sh behavioral', () => {
   it('preserves manual co-assignees when removing stale bot-assignee', () => {
     const assignedAt = daysAgo(20); // 20 days ago, > 14 day threshold
     const repo = createFakeRepo(

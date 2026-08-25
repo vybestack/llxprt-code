@@ -572,8 +572,12 @@ describe('affected-lint-targets selector — type-aware soundness (A5)', () => {
           }>;
         }>;
 
+        // ESLint reports filePath with native separators, so a forward-slash
+        // substring never matches on Windows. Normalise before comparing.
         const betaReport = reports.find((r) =>
-          r.filePath.includes('packages/beta/src/index.ts'),
+          r.filePath
+            .replaceAll('\\', '/')
+            .includes('packages/beta/src/index.ts'),
         );
         expect(
           betaReport,

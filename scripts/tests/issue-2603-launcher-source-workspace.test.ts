@@ -82,218 +82,226 @@ function realBunVersion(): string {
   );
 }
 
-describe('POSIX launcher source-workspace resolution', () => {
-  let tempDir: string;
+// These suites execute the POSIX launcher, which is a `#!/bin/sh` script.
+// Windows has no /bin/sh and ships its own launcher, covered separately by
+// .github/workflows/windows-installed-command.yml, so they cannot run there.
+const IS_WINDOWS = process.platform === 'win32';
 
-  beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), 'llxprt-source-ws-'));
-  });
+describe.skipIf(IS_WINDOWS)(
+  'POSIX launcher source-workspace resolution',
+  () => {
+    let tempDir: string;
 
-  afterEach(() => {
-    rmSync(tempDir, { recursive: true, force: true });
-  });
+    beforeEach(() => {
+      tempDir = mkdtempSync(join(tmpdir(), 'llxprt-source-ws-'));
+    });
 
-  /**
-   * Builds a synthetic source-workspace layout that mirrors the real repo:
-   *   <wsRoot>/packages/cli/bin/llxprt       (launcher copy)
-   *   <wsRoot>/packages/cli/index.ts          (entry)
-   *   <wsRoot>/packages/cli/package.json      (CLI manifest with bun pin)
-   *   <wsRoot>/package.json                   (root manifest with workspaces)
-   *   <wsRoot>/node_modules/bun/bin/bun.exe   (hoisted root Bun)
-   * The launcher sits OUTSIDE any node_modules, so resolution must use the
-   * verified-workspace-root path (option 3).
-   */
-  function makeSourceWorkspace(
-    baseDir: string,
-    opts: {
-      bunVersion?: string;
-      cliPin?: string;
-      rootWorkspaces?: string[];
-      rootPkgName?: string;
-      cliPkgName?: string;
-      withBunPackageJson?: boolean;
-      entryCode?: string;
-    } = {},
-  ): { wsRoot: string; pkgRoot: string; launcherTarget: string } {
-    const wsRoot = join(baseDir, 'repo');
-    const pkgRoot = join(wsRoot, 'packages', 'cli');
-    const binDir = join(pkgRoot, 'bin');
-    mkdirSync(binDir, { recursive: true });
+    afterEach(() => {
+      rmSync(tempDir, { recursive: true, force: true });
+    });
 
-    const launcherTarget = join(binDir, 'llxprt');
-    copyFileSync(launcherPath, launcherTarget);
-    chmodSync(launcherTarget, 0o755);
+    /**
+     * Builds a synthetic source-workspace layout that mirrors the real repo:
+     *   <wsRoot>/packages/cli/bin/llxprt       (launcher copy)
+     *   <wsRoot>/packages/cli/index.ts          (entry)
+     *   <wsRoot>/packages/cli/package.json      (CLI manifest with bun pin)
+     *   <wsRoot>/package.json                   (root manifest with workspaces)
+     *   <wsRoot>/node_modules/bun/bin/bun.exe   (hoisted root Bun)
+     * The launcher sits OUTSIDE any node_modules, so resolution must use the
+     * verified-workspace-root path (option 3).
+     */
+    function makeSourceWorkspace(
+      baseDir: string,
+      opts: {
+        bunVersion?: string;
+        cliPin?: string;
+        rootWorkspaces?: string[];
+        rootPkgName?: string;
+        cliPkgName?: string;
+        withBunPackageJson?: boolean;
+        entryCode?: string;
+      } = {},
+    ): { wsRoot: string; pkgRoot: string; launcherTarget: string } {
+      const wsRoot = join(baseDir, 'repo');
+      const pkgRoot = join(wsRoot, 'packages', 'cli');
+      const binDir = join(pkgRoot, 'bin');
+      mkdirSync(binDir, { recursive: true });
 
-    const bunVersion = opts.bunVersion ?? realBunVersion();
-    const cliPin = opts.cliPin ?? bunVersion;
-    const cliName = opts.cliPkgName ?? '@vybestack/llxprt-code';
-    writeFileSync(
-      join(pkgRoot, 'package.json'),
-      JSON.stringify(
-        { name: cliName, version: '0.10.0', dependencies: { bun: cliPin } },
-        null,
-        2,
-      ),
-    );
+      const launcherTarget = join(binDir, 'llxprt');
+      copyFileSync(launcherPath, launcherTarget);
+      chmodSync(launcherTarget, 0o755);
 
-    makeEntry(pkgRoot, opts.entryCode ?? 'process.exit(0);');
-
-    const rootName = opts.rootPkgName ?? cliName;
-    const workspaces = opts.rootWorkspaces ?? [
-      'packages/tools',
-      'packages/cli',
-      'packages/core',
-    ];
-    writeFileSync(
-      join(wsRoot, 'package.json'),
-      JSON.stringify(
-        {
-          name: rootName,
-          version: '0.10.0',
-          private: true,
-          workspaces,
-        },
-        null,
-        2,
-      ),
-    );
-
-    const rootBunDir = join(wsRoot, 'node_modules', 'bun', 'bin');
-    mkdirSync(rootBunDir, { recursive: true });
-    copyFileSync(ensureBun(), join(rootBunDir, 'bun.exe'));
-    if (opts.withBunPackageJson !== false) {
+      const bunVersion = opts.bunVersion ?? realBunVersion();
+      const cliPin = opts.cliPin ?? bunVersion;
+      const cliName = opts.cliPkgName ?? '@vybestack/llxprt-code';
       writeFileSync(
-        join(wsRoot, 'node_modules', 'bun', 'package.json'),
-        JSON.stringify({ name: 'bun', version: bunVersion }, null, 2),
+        join(pkgRoot, 'package.json'),
+        JSON.stringify(
+          { name: cliName, version: '0.10.0', dependencies: { bun: cliPin } },
+          null,
+          2,
+        ),
       );
+
+      makeEntry(pkgRoot, opts.entryCode ?? 'process.exit(0);');
+
+      const rootName = opts.rootPkgName ?? cliName;
+      const workspaces = opts.rootWorkspaces ?? [
+        'packages/tools',
+        'packages/cli',
+        'packages/core',
+      ];
+      writeFileSync(
+        join(wsRoot, 'package.json'),
+        JSON.stringify(
+          {
+            name: rootName,
+            version: '0.10.0',
+            private: true,
+            workspaces,
+          },
+          null,
+          2,
+        ),
+      );
+
+      const rootBunDir = join(wsRoot, 'node_modules', 'bun', 'bin');
+      mkdirSync(rootBunDir, { recursive: true });
+      copyFileSync(ensureBun(), join(rootBunDir, 'bun.exe'));
+      if (opts.withBunPackageJson !== false) {
+        writeFileSync(
+          join(wsRoot, 'node_modules', 'bun', 'package.json'),
+          JSON.stringify({ name: 'bun', version: bunVersion }, null, 2),
+        );
+      }
+
+      return { wsRoot, pkgRoot, launcherTarget };
     }
 
-    return { wsRoot, pkgRoot, launcherTarget };
-  }
+    it('launches from a source workspace using the verified root Bun', () => {
+      // The launcher is at packages/cli/bin/llxprt with NO enclosing
+      // node_modules around the package. Resolution must verify the workspace
+      // root (two levels up) and accept its node_modules/bun.
+      const { pkgRoot, launcherTarget } = makeSourceWorkspace(tempDir);
+      const result = spawnSync(launcherTarget, ['--version'], {
+        cwd: pkgRoot,
+        encoding: 'utf8',
+        timeout: 30_000,
+        env: { ...process.env, PATH: '/usr/bin:/bin' },
+      });
+      expect(result.status, result.stderr).toBe(0);
+    }, 30_000);
 
-  it('launches from a source workspace using the verified root Bun', () => {
-    // The launcher is at packages/cli/bin/llxprt with NO enclosing
-    // node_modules around the package. Resolution must verify the workspace
-    // root (two levels up) and accept its node_modules/bun.
-    const { pkgRoot, launcherTarget } = makeSourceWorkspace(tempDir);
-    const result = spawnSync(launcherTarget, ['--version'], {
-      cwd: pkgRoot,
-      encoding: 'utf8',
-      timeout: 30_000,
-      env: { ...process.env, PATH: '/usr/bin:/bin' },
-    });
-    expect(result.status, result.stderr).toBe(0);
-  }, 30_000);
+    it('launches the REAL source-workspace launcher (repo root)', () => {
+      // Direct behavioral proof against the actual repo layout: the launcher at
+      // packages/cli/bin/llxprt must resolve the real root node_modules/bun.
+      const result = spawnSync(launcherPath, ['--version'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        timeout: 30_000,
+        env: { ...process.env, PATH: '/usr/bin:/bin' },
+      });
+      expect(result.status, result.stderr).toBe(0);
+    }, 30_000);
 
-  it('launches the REAL source-workspace launcher (repo root)', () => {
-    // Direct behavioral proof against the actual repo layout: the launcher at
-    // packages/cli/bin/llxprt must resolve the real root node_modules/bun.
-    const result = spawnSync(launcherPath, ['--version'], {
-      cwd: repoRoot,
-      encoding: 'utf8',
-      timeout: 30_000,
-      env: { ...process.env, PATH: '/usr/bin:/bin' },
-    });
-    expect(result.status, result.stderr).toBe(0);
-  }, 30_000);
+    it('accepts a source-workspace root via canonical structure regardless of manifest name', () => {
+      // The workspace-root check now uses canonical filesystem structure
+      // (<candidate>/packages/cli === pkg_root), NOT manifest content scanning.
+      // A root whose manifest name differs from the package name is still
+      // accepted because the structural layout is the trust boundary — the
+      // candidate root is deterministically three parents up from the launcher.
+      // This test documents that architectural decision: the structural check
+      // replaces the former grep-based manifest verification.
+      const { pkgRoot, launcherTarget } = makeSourceWorkspace(tempDir, {
+        rootWorkspaces: ['packages/tools', 'packages/core'],
+        rootPkgName: 'some-other-project',
+      });
+      const result = spawnSync(launcherTarget, ['--version'], {
+        cwd: pkgRoot,
+        encoding: 'utf8',
+        timeout: 15_000,
+        env: { ...process.env, PATH: '/usr/bin:/bin' },
+      });
+      // The structural check passes (packages/cli is at the canonical path), so
+      // the launcher finds the hoisted root Bun and exits 0.
+      expect(result.status, result.stderr).toBe(0);
+    }, 15_000);
 
-  it('accepts a source-workspace root via canonical structure regardless of manifest name', () => {
-    // The workspace-root check now uses canonical filesystem structure
-    // (<candidate>/packages/cli === pkg_root), NOT manifest content scanning.
-    // A root whose manifest name differs from the package name is still
-    // accepted because the structural layout is the trust boundary — the
-    // candidate root is deterministically three parents up from the launcher.
-    // This test documents that architectural decision: the structural check
-    // replaces the former grep-based manifest verification.
-    const { pkgRoot, launcherTarget } = makeSourceWorkspace(tempDir, {
-      rootWorkspaces: ['packages/tools', 'packages/core'],
-      rootPkgName: 'some-other-project',
-    });
-    const result = spawnSync(launcherTarget, ['--version'], {
-      cwd: pkgRoot,
-      encoding: 'utf8',
-      timeout: 15_000,
-      env: { ...process.env, PATH: '/usr/bin:/bin' },
-    });
-    // The structural check passes (packages/cli is at the canonical path), so
-    // the launcher finds the hoisted root Bun and exits 0.
-    expect(result.status, result.stderr).toBe(0);
-  }, 15_000);
+    it('rejects a source-workspace root Bun whose package.json is missing (under exact pin)', () => {
+      // The root Bun binary exists but its package.json is absent. Under an
+      // exact pin the launcher must reject (not accept) the unversionable
+      // candidate, so a partial/tampered install cannot bypass the pin.
+      const { pkgRoot, launcherTarget } = makeSourceWorkspace(tempDir, {
+        withBunPackageJson: false,
+      });
+      const result = spawnSync(launcherTarget, [], {
+        cwd: pkgRoot,
+        encoding: 'utf8',
+        timeout: 15_000,
+        env: { ...process.env, PATH: '/usr/bin:/bin' },
+      });
+      expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
+      expect(result.stderr).toMatch(/bundled Bun runtime was not found/i);
+    }, 15_000);
 
-  it('rejects a source-workspace root Bun whose package.json is missing (under exact pin)', () => {
-    // The root Bun binary exists but its package.json is absent. Under an
-    // exact pin the launcher must reject (not accept) the unversionable
-    // candidate, so a partial/tampered install cannot bypass the pin.
-    const { pkgRoot, launcherTarget } = makeSourceWorkspace(tempDir, {
-      withBunPackageJson: false,
-    });
-    const result = spawnSync(launcherTarget, [], {
-      cwd: pkgRoot,
-      encoding: 'utf8',
-      timeout: 15_000,
-      env: { ...process.env, PATH: '/usr/bin:/bin' },
-    });
-    expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
-    expect(result.stderr).toMatch(/bundled Bun runtime was not found/i);
-  }, 15_000);
+    it('rejects a source-workspace root Bun whose version does not match the pin', () => {
+      // The CLI pins bun "9.9.9" but the root Bun package.json reports a
+      // different version. The launcher must reject the mismatch.
+      const { pkgRoot, launcherTarget } = makeSourceWorkspace(tempDir, {
+        bunVersion: '1.0.0',
+        cliPin: '9.9.9',
+      });
+      const result = spawnSync(launcherTarget, [], {
+        cwd: pkgRoot,
+        encoding: 'utf8',
+        timeout: 15_000,
+        env: { ...process.env, PATH: '/usr/bin:/bin' },
+      });
+      expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
+      expect(result.stderr).toMatch(/bundled Bun runtime was not found/i);
+    }, 15_000);
 
-  it('rejects a source-workspace root Bun whose version does not match the pin', () => {
-    // The CLI pins bun "9.9.9" but the root Bun package.json reports a
-    // different version. The launcher must reject the mismatch.
-    const { pkgRoot, launcherTarget } = makeSourceWorkspace(tempDir, {
-      bunVersion: '1.0.0',
-      cliPin: '9.9.9',
-    });
-    const result = spawnSync(launcherTarget, [], {
-      cwd: pkgRoot,
-      encoding: 'utf8',
-      timeout: 15_000,
-      env: { ...process.env, PATH: '/usr/bin:/bin' },
-    });
-    expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
-    expect(result.stderr).toMatch(/bundled Bun runtime was not found/i);
-  }, 15_000);
+    it('does not climb an arbitrary ancestor that is not a verified workspace root', () => {
+      // The package is at <tempDir>/a/b/packages/cli/bin/llxprt (NOT under a
+      // node_modules). Two levels up is <tempDir>/a/b which has no package.json.
+      // A Bun exists much higher at <tempDir>/node_modules/bun — the launcher
+      // must NOT generic-climb to find it.
+      const nested = join(tempDir, 'a', 'b');
+      const { pkgRoot, launcherTarget, wsRoot } = makeSourceWorkspace(nested);
+      // Remove the workspace root's Bun so the only Bun is the arbitrary
+      // ancestor's.
+      rmSync(join(wsRoot, 'node_modules', 'bun'), {
+        recursive: true,
+        force: true,
+      });
 
-  it('does not climb an arbitrary ancestor that is not a verified workspace root', () => {
-    // The package is at <tempDir>/a/b/packages/cli/bin/llxprt (NOT under a
-    // node_modules). Two levels up is <tempDir>/a/b which has no package.json.
-    // A Bun exists much higher at <tempDir>/node_modules/bun — the launcher
-    // must NOT generic-climb to find it.
-    const nested = join(tempDir, 'a', 'b');
-    const { pkgRoot, launcherTarget, wsRoot } = makeSourceWorkspace(nested);
-    // Remove the workspace root's Bun so the only Bun is the arbitrary
-    // ancestor's.
-    rmSync(join(wsRoot, 'node_modules', 'bun'), {
-      recursive: true,
-      force: true,
-    });
+      const ancestorBunDir = join(tempDir, 'node_modules', 'bun', 'bin');
+      mkdirSync(ancestorBunDir, { recursive: true });
+      copyFileSync(ensureBun(), join(ancestorBunDir, 'bun.exe'));
 
-    const ancestorBunDir = join(tempDir, 'node_modules', 'bun', 'bin');
-    mkdirSync(ancestorBunDir, { recursive: true });
-    copyFileSync(ensureBun(), join(ancestorBunDir, 'bun.exe'));
+      const result = spawnSync(launcherTarget, [], {
+        cwd: pkgRoot,
+        encoding: 'utf8',
+        timeout: 15_000,
+        env: { ...process.env, PATH: '/usr/bin:/bin' },
+      });
+      expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
+      expect(result.stderr).toMatch(/bundled Bun runtime was not found/i);
+    }, 15_000);
 
-    const result = spawnSync(launcherTarget, [], {
-      cwd: pkgRoot,
-      encoding: 'utf8',
-      timeout: 15_000,
-      env: { ...process.env, PATH: '/usr/bin:/bin' },
-    });
-    expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
-    expect(result.stderr).toMatch(/bundled Bun runtime was not found/i);
-  }, 15_000);
-
-  it('accepts a source-workspace root Bun whose version matches the pin', () => {
-    const bunVersion = realBunVersion();
-    const { pkgRoot, launcherTarget } = makeSourceWorkspace(tempDir, {
-      bunVersion,
-      cliPin: bunVersion,
-    });
-    const result = spawnSync(launcherTarget, ['--version'], {
-      cwd: pkgRoot,
-      encoding: 'utf8',
-      timeout: 30_000,
-      env: { ...process.env, PATH: '/usr/bin:/bin' },
-    });
-    expect(result.status, result.stderr).toBe(0);
-  }, 30_000);
-});
+    it('accepts a source-workspace root Bun whose version matches the pin', () => {
+      const bunVersion = realBunVersion();
+      const { pkgRoot, launcherTarget } = makeSourceWorkspace(tempDir, {
+        bunVersion,
+        cliPin: bunVersion,
+      });
+      const result = spawnSync(launcherTarget, ['--version'], {
+        cwd: pkgRoot,
+        encoding: 'utf8',
+        timeout: 30_000,
+        env: { ...process.env, PATH: '/usr/bin:/bin' },
+      });
+      expect(result.status, result.stderr).toBe(0);
+    }, 30_000);
+  },
+);

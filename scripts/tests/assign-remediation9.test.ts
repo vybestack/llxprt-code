@@ -25,7 +25,14 @@ function defaultStateWith(overrides: Record<string, unknown>) {
   return { ...defaultState(), ...overrides };
 }
 
-describe('F10: fake-gh fidelity', () => {
+// These execute the real bash /assign scripts against the fake-gh harness.
+// assign.yml and assign-stale-cleanup.yml run on ubuntu-latest only, and the
+// harness prepends a POSIX-style PATH entry for a shell-script `gh` stub, so on
+// Windows the real gh wins and demands GH_TOKEN. Structural assertions in these
+// files still run everywhere.
+const IS_WINDOWS = process.platform === 'win32';
+
+describe.skipIf(IS_WINDOWS)('F10: fake-gh fidelity', () => {
   it('issue PATCH drops configured unassignable assignees consistently with POST', () => {
     const repo = createFakeRepo(
       defaultStateWith({

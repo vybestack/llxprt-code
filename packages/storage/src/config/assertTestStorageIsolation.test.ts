@@ -129,7 +129,14 @@ describe('Storage config root inside an isolated test process', () => {
 
   it('returns an isolated directory unchanged', () => {
     setEnv(ISOLATION_MARKER_ENV, '1');
-    const isolated = path.join(path.sep, 'tmp', 'llxprt-isolated', 'config');
+    // `path.join(path.sep, ...)` yields `\tmp\...` on Windows, which is
+    // drive-relative rather than absolute. Storage resolves what it is given,
+    // so the raw join would be compared against `D:\tmp\...` and never match.
+    // Resolving here makes the fixture absolute on every platform: `/tmp/...`
+    // on POSIX, `<drive>:\tmp\...` on Windows.
+    const isolated = path.resolve(
+      path.join(path.sep, 'tmp', 'llxprt-isolated', 'config'),
+    );
     setEnv('LLXPRT_CONFIG_HOME', isolated);
 
     expect(Storage.getGlobalConfigDir()).toBe(isolated);

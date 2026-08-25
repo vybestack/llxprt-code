@@ -481,7 +481,10 @@ describe('issue #3068: staging fails fast on a missing required asset', () => {
     } finally {
       // Remove the symlink explicitly first so the real node_modules is never
       // touched, then clean the rest of the synthetic root.
-      rmSync(join(root, 'node_modules'), { force: true });
+      // recursive: Windows represents a directory symlink as a junction, and
+      // a non-recursive rmSync on one fails with EPERM/EFAULT. This still
+      // removes the link itself, never its target.
+      rmSync(join(root, 'node_modules'), { recursive: true, force: true });
       rmSync(root, { recursive: true, force: true });
     }
   });

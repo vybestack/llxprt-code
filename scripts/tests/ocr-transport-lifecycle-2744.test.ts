@@ -116,7 +116,10 @@ function responseCallbackFailureProbe(): Record<string, unknown> {
 
 afterEach(cleanEmbeddedMonitors);
 
-describe('OCR transport lifecycle — issue #2744', () => {
+// These spawn the monitor and command-runner scripts embedded in ocr-review.yml, which runs on ubuntu-latest only and relies on POSIX SIGTERM for graceful shutdown. On Windows kill() terminates abruptly, so the child never flushes telemetry.json (ENOENT). The workflow-structure assertions in this file still run everywhere.
+const IS_WINDOWS = process.platform === 'win32';
+
+describe.skipIf(IS_WINDOWS)('OCR transport lifecycle — issue #2744', () => {
   it('aborts only after streamed data and observes request and response closure', async () => {
     const result = await withOcrScenario(async (scope) => {
       let requestBodyCompleted = false;

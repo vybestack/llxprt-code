@@ -71,7 +71,10 @@ function runLauncherVersion(env: NodeJS.ProcessEnv): {
   };
 }
 
-describe('CLI entry smoke guard (issue #2435)', () => {
+// Spawns packages/cli/bin/llxprt, the POSIX '#!/bin/sh' launcher, which Windows cannot execute (it ships a separate launcher).
+const IS_WINDOWS = process.platform === 'win32';
+
+describe.skipIf(IS_WINDOWS)('CLI entry smoke guard (issue #2435)', () => {
   // Regression guard for https://github.com/vybestack/llxprt-code/issues/2435.
   //
   // The smoke-test.yml workflow does a fresh checkout + `npm ci` (no build, no

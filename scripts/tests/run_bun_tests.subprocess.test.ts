@@ -182,7 +182,11 @@ describe('production Bun native test runner', () => {
       expect(child.stdout).toContain(
         `Dry run: ${rootFileCount()} files would be executed:`,
       );
-      expect(child.stdout).toContain('packages/ide-integration/src/');
+      // The runner prints native paths, so fold separators before matching
+      // this canonical forward-slash fragment.
+      expect(child.stdout.replaceAll('\\', '/')).toContain(
+        'packages/ide-integration/src/',
+      );
     },
   );
 

@@ -102,6 +102,30 @@ async function makeArchive(
   return filePath;
 }
 
+/**
+ * Content gzip cannot meaningfully shrink, so the resulting archive's LOGICAL
+ * size tracks the requested size on every platform.
+ *
+ * Budget accounting uses allocated blocks where the OS reports them and falls
+ * back to logical size otherwise (getFileSize in sessionScanner). Node reports
+ * `blocks: 0` on Windows, so a highly compressible fixture that only exceeds
+ * the budget through POSIX 4 KiB block rounding sits *under* budget there and
+ * no eviction runs at all — the sweep returns before it can record the
+ * outcome these tests are about.
+ */
+function incompressible(bytes: number): string {
+  const chunks: string[] = [];
+  let length = 0;
+  let seed = 1;
+  while (length < bytes) {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    const chunk = seed.toString(36);
+    chunks.push(chunk);
+    length += chunk.length;
+  }
+  return chunks.join('').slice(0, bytes);
+}
+
 async function fileExists(filePath: string): Promise<boolean> {
   try {
     await fs.access(filePath);
@@ -595,20 +619,27 @@ describe('Item 3 — archive chronology, minRetention floor, deterministic order
     const alphaPath = await makeArchive(
       archiveDir,
       'session-aaa.jsonl.gz',
-      'x'.repeat(30_000),
+      incompressible(30_000),
     );
     const betaPath = await makeArchive(
       archiveDir,
       'session-zzz.jsonl.gz',
-      'x'.repeat(30_000),
+      incompressible(30_000),
     );
     // Set EXACT same mtime on both.
     const fixedTime = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
     await fs.utimes(alphaPath, fixedTime, fixedTime);
     await fs.utimes(betaPath, fixedTime, fixedTime);
 
-    // Budget allows only one archive (each ~4 KB allocated, budget ~5 KB).
-    const config = resolveRetentionConfig({ maxTotalSizeMB: 0.005 });
+    // Budget that admits exactly one of the two archives, derived from their
+    // real on-disk size rather than hand-calibrated. A fixed literal would
+    // depend on both the gzip ratio and on POSIX block rounding, and the
+    // accounting differs by platform: allocated blocks where the OS reports
+    // them, logical size otherwise.
+    const oneArchiveBytes = (await fs.stat(alphaPath)).size;
+    const config = resolveRetentionConfig({
+      maxTotalSizeMB: (oneArchiveBytes * 1.5) / (1024 * 1024),
+    });
     await runSessionCleanup({ globalTempDir: tempDir, config });
 
     // session-aaa (lexicographically smaller) should be evicted; session-zzz
@@ -773,7 +804,7 @@ describe('Item 4 — failure isolation and diagnostics', () => {
     const archivePath = await makeArchive(
       archiveDir,
       'session-enoent-test.jsonl.gz',
-      'X'.repeat(40_000),
+      incompressible(40_000),
       10 * 24 * 60 * 60 * 1000,
     );
 
@@ -816,7 +847,7 @@ describe('Item 4 — failure isolation and diagnostics', () => {
     const archivePath = await makeArchive(
       archiveDir,
       'session-eperm-test.jsonl.gz',
-      'Y'.repeat(40_000),
+      incompressible(40_000),
       10 * 24 * 60 * 60 * 1000,
     );
 

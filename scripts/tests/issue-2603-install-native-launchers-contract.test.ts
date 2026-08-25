@@ -75,7 +75,14 @@ describe('installNativeLaunchers return shape consistency', () => {
       expect(result.written).toEqual([]);
       expect(result.skipped).toEqual([]);
     } finally {
-      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(tempDir, {
+        recursive: true,
+        force: true,
+        // Windows holds a handle on the temp tree until the launcher
+        // subprocess has fully exited, so an immediate rm hits EBUSY.
+        maxRetries: 10,
+        retryDelay: 100,
+      });
     }
   });
 
@@ -101,7 +108,14 @@ describe('installNativeLaunchers return shape consistency', () => {
       expect(result.written).toEqual([]);
       expect(result.skipped).toEqual([]);
     } finally {
-      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(tempDir, {
+        recursive: true,
+        force: true,
+        // Windows holds a handle on the temp tree until the launcher
+        // subprocess has fully exited, so an immediate rm hits EBUSY.
+        maxRetries: 10,
+        retryDelay: 100,
+      });
     }
   });
 
@@ -133,7 +147,14 @@ describe('installNativeLaunchers return shape consistency', () => {
       expect(result.error).toBeNull();
       expect(result.written.length).toBeGreaterThanOrEqual(2);
     } finally {
-      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(tempDir, {
+        recursive: true,
+        force: true,
+        // Windows holds a handle on the temp tree until the launcher
+        // subprocess has fully exited, so an immediate rm hits EBUSY.
+        maxRetries: 10,
+        retryDelay: 100,
+      });
     }
   });
 });
@@ -172,7 +193,14 @@ describe('installNativeLaunchers logging', () => {
       expect(skipMsg, messages.join('\n')).toBeDefined();
       expect(skipMsg).toMatch(/Skipped foreign/i);
     } finally {
-      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(tempDir, {
+        recursive: true,
+        force: true,
+        // Windows holds a handle on the temp tree until the launcher
+        // subprocess has fully exited, so an immediate rm hits EBUSY.
+        maxRetries: 10,
+        retryDelay: 100,
+      });
     }
   });
 
@@ -211,7 +239,14 @@ describe('installNativeLaunchers logging', () => {
       expect(content).toContain(mod.OWNERSHIP_SENTINEL);
       expect(content.length).toBeGreaterThan(0);
     } finally {
-      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(tempDir, {
+        recursive: true,
+        force: true,
+        // Windows holds a handle on the temp tree until the launcher
+        // subprocess has fully exited, so an immediate rm hits EBUSY.
+        maxRetries: 10,
+        retryDelay: 100,
+      });
     }
   });
 
@@ -251,7 +286,14 @@ describe('installNativeLaunchers logging', () => {
       );
       expect(wroteMsg, messages.join('\n')).toBeDefined();
     } finally {
-      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(tempDir, {
+        recursive: true,
+        force: true,
+        // Windows holds a handle on the temp tree until the launcher
+        // subprocess has fully exited, so an immediate rm hits EBUSY.
+        maxRetries: 10,
+        retryDelay: 100,
+      });
     }
   });
 });
@@ -267,7 +309,14 @@ describe('resolveEntry source guard (issue #2999)', () => {
       const entry = mod.resolveEntry(packageRoot);
       expect(entry).toBe(join(packageRoot, 'index.ts'));
     } finally {
-      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(tempDir, {
+        recursive: true,
+        force: true,
+        // Windows holds a handle on the temp tree until the launcher
+        // subprocess has fully exited, so an immediate rm hits EBUSY.
+        maxRetries: 10,
+        retryDelay: 100,
+      });
     }
   });
 
@@ -282,7 +331,14 @@ describe('resolveEntry source guard (issue #2999)', () => {
       const entry = mod.resolveEntry(packageRoot);
       expect(entry).toBe(join(packageRoot, 'index.ts'));
     } finally {
-      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(tempDir, {
+        recursive: true,
+        force: true,
+        // Windows holds a handle on the temp tree until the launcher
+        // subprocess has fully exited, so an immediate rm hits EBUSY.
+        maxRetries: 10,
+        retryDelay: 100,
+      });
     }
   });
 
@@ -295,7 +351,14 @@ describe('resolveEntry source guard (issue #2999)', () => {
       const entry = mod.resolveEntry(packageRoot);
       expect(entry).toBeNull();
     } finally {
-      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(tempDir, {
+        recursive: true,
+        force: true,
+        // Windows holds a handle on the temp tree until the launcher
+        // subprocess has fully exited, so an immediate rm hits EBUSY.
+        maxRetries: 10,
+        retryDelay: 100,
+      });
     }
   });
 });
@@ -425,7 +488,14 @@ describe('Windows launcher runtime entry precedence (issue #2999)', () => {
   });
 
   afterEach(() => {
-    rmSync(tempDir, { recursive: true, force: true });
+    rmSync(tempDir, {
+      recursive: true,
+      force: true,
+      // Windows holds a handle on the temp tree until the launcher
+      // subprocess has fully exited, so an immediate rm hits EBUSY.
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   });
 
   itWin32(
@@ -582,7 +652,14 @@ describe('Windows launcher cmd-metacharacter paths (issue #2999)', () => {
   });
 
   afterEach(() => {
-    rmSync(tempDir, { recursive: true, force: true });
+    rmSync(tempDir, {
+      recursive: true,
+      force: true,
+      // Windows holds a handle on the temp tree until the launcher
+      // subprocess has fully exited, so an immediate rm hits EBUSY.
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   });
 
   itWin32('cmd: resolves the bundle from a path containing "&"', () => {
@@ -658,7 +735,14 @@ describe('installNativeLaunchers EACCES graceful handling', () => {
       } catch {
         // ignore
       }
-      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(tempDir, {
+        recursive: true,
+        force: true,
+        // Windows holds a handle on the temp tree until the launcher
+        // subprocess has fully exited, so an immediate rm hits EBUSY.
+        maxRetries: 10,
+        retryDelay: 100,
+      });
     }
   });
 });

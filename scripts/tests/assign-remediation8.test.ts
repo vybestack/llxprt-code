@@ -458,73 +458,83 @@ describe('F4: elect_winner malformed-timeline fail-closed', () => {
 // Finding 5: Sticky feedback converges duplicate bot marker comments
 // ===========================================================================
 
-describe('F5: sticky feedback converges duplicate markers', () => {
-  it('multiple bot marker comments converge to exactly one; user marker untouched', () => {
-    const repo = createFakeRepo(
-      defaultStateWith({
-        issues: {
-          42: makeIssue({ number: 42, assignees: ['someone-else'] }),
-        },
-        comments: [
-          {
-            id: 100,
-            issue_number: 42,
-            body: `${MARKER}\nOld bot feedback 1`,
-            user: { login: 'github-actions[bot]', type: 'Bot' },
-            created_at: '2025-07-10T00:00:00Z',
-            updated_at: '2025-07-10T00:00:00Z',
-          },
-          {
-            id: 101,
-            issue_number: 42,
-            body: `${MARKER}\nOld bot feedback 2`,
-            user: { login: 'github-actions[bot]', type: 'Bot' },
-            created_at: '2025-07-11T00:00:00Z',
-            updated_at: '2025-07-11T00:00:00Z',
-          },
-          {
-            id: 102,
-            issue_number: 42,
-            body: 'This is a user comment, not a marker',
-            user: { login: 'human-user', type: 'User' },
-            created_at: '2025-07-12T00:00:00Z',
-            updated_at: '2025-07-12T00:00:00Z',
-          },
-          {
-            id: 103,
-            issue_number: 42,
-            body: `${MARKER}\nOld bot feedback 3`,
-            user: { login: 'github-actions[bot]', type: 'Bot' },
-            created_at: '2025-07-13T00:00:00Z',
-            updated_at: '2025-07-13T00:00:00Z',
-          },
-        ],
-        prs: {
-          100: makePR({ number: 100, author: 'alice', merged: true }),
-        },
-      }),
-    );
+// These execute the real bash /assign scripts against the fake-gh harness.
+// assign.yml and assign-stale-cleanup.yml run on ubuntu-latest only, and the
+// harness prepends a POSIX-style PATH entry for a shell-script `gh` stub, so on
+// Windows the real gh wins and demands GH_TOKEN. Structural assertions in these
+// files still run everywhere.
+const IS_WINDOWS = process.platform === 'win32';
 
-    const result = repo.runAssign({ issueNumber: 42, commenter: 'alice' });
+describe.skipIf(IS_WINDOWS)(
+  'F5: sticky feedback converges duplicate markers',
+  () => {
+    it('multiple bot marker comments converge to exactly one; user marker untouched', () => {
+      const repo = createFakeRepo(
+        defaultStateWith({
+          issues: {
+            42: makeIssue({ number: 42, assignees: ['someone-else'] }),
+          },
+          comments: [
+            {
+              id: 100,
+              issue_number: 42,
+              body: `${MARKER}\nOld bot feedback 1`,
+              user: { login: 'github-actions[bot]', type: 'Bot' },
+              created_at: '2025-07-10T00:00:00Z',
+              updated_at: '2025-07-10T00:00:00Z',
+            },
+            {
+              id: 101,
+              issue_number: 42,
+              body: `${MARKER}\nOld bot feedback 2`,
+              user: { login: 'github-actions[bot]', type: 'Bot' },
+              created_at: '2025-07-11T00:00:00Z',
+              updated_at: '2025-07-11T00:00:00Z',
+            },
+            {
+              id: 102,
+              issue_number: 42,
+              body: 'This is a user comment, not a marker',
+              user: { login: 'human-user', type: 'User' },
+              created_at: '2025-07-12T00:00:00Z',
+              updated_at: '2025-07-12T00:00:00Z',
+            },
+            {
+              id: 103,
+              issue_number: 42,
+              body: `${MARKER}\nOld bot feedback 3`,
+              user: { login: 'github-actions[bot]', type: 'Bot' },
+              created_at: '2025-07-13T00:00:00Z',
+              updated_at: '2025-07-13T00:00:00Z',
+            },
+          ],
+          prs: {
+            100: makePR({ number: 100, author: 'alice', merged: true }),
+          },
+        }),
+      );
 
-    expect(result.status).toBe(0);
+      const result = repo.runAssign({ issueNumber: 42, commenter: 'alice' });
 
-    // Exactly one bot marker comment should remain
-    const botMarkers = stateComments(result.state).filter(
-      (c) =>
-        c.issue_number === 42 &&
-        c.user.login === 'github-actions[bot]' &&
-        String(c.body).startsWith(MARKER),
-    );
-    expect(botMarkers.length).toBe(1);
+      expect(result.status).toBe(0);
 
-    // The user comment must be untouched
-    const userComment = stateComments(result.state).find((c) => c.id === 102);
-    expect(userComment).toBeDefined();
-    expect(userComment?.body).toBe('This is a user comment, not a marker');
-    expect(userComment?.user.login).toBe('human-user');
-  });
-});
+      // Exactly one bot marker comment should remain
+      const botMarkers = stateComments(result.state).filter(
+        (c) =>
+          c.issue_number === 42 &&
+          c.user.login === 'github-actions[bot]' &&
+          String(c.body).startsWith(MARKER),
+      );
+      expect(botMarkers.length).toBe(1);
+
+      // The user comment must be untouched
+      const userComment = stateComments(result.state).find((c) => c.id === 102);
+      expect(userComment).toBeDefined();
+      expect(userComment?.body).toBe('This is a user comment, not a marker');
+      expect(userComment?.user.login).toBe('human-user');
+    });
+  },
+);
 
 // ===========================================================================
 // Finding 6: Bounded retry around cleanup timeline GETs

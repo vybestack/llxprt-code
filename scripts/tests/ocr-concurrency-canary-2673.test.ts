@@ -92,6 +92,10 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
     });
   });
 
+  // These spawn the monitor and command-runner scripts embedded in ocr-review.yml, which runs on ubuntu-latest only and relies on POSIX SIGTERM for graceful shutdown. On Windows kill() terminates abruptly, so the child never flushes telemetry.json (ENOENT). The workflow-structure assertions in this file still run everywhere.
+  const IS_WINDOWS = process.platform === 'win32';
+  const itMonitor = it.skipIf(IS_WINDOWS);
+
   describe('dispatch-only loopback transport monitor', () => {
     it('is trusted inline workflow code around only the real review call', () => {
       const start = stepNamed(
@@ -148,7 +152,10 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
           fs.writeFileSync(scriptPath, source);
           fs.writeFileSync(
             configPath,
-            JSON.stringify({ llm: { extra_body: '{}' }, language: 'English' }),
+            JSON.stringify({
+              llm: { extra_body: '{}' },
+              language: 'English',
+            }),
           );
 
           expect(() =>
@@ -209,444 +216,465 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
       }
     });
 
-    it('uses canonical retry headers 0 and 1 while preserving streaming and stripping connection-nominated headers', async () => {
-      const secret = 'Bearer transport-secret-2673';
-      const body = '{"prompt":"sensitive prompt 2673"}';
-      const result = await withOcrScenario(async (scope) => {
-        const received: Array<Record<string, unknown>> = [];
-        const upstream = http.createServer((request, response) => {
-          const chunks: Buffer[] = [];
-          request.on('data', (chunk) => chunks.push(chunk));
-          request.on('end', () => {
-            received.push({
-              method: request.method,
-              url: request.url,
-              authorization: request.headers.authorization,
-              requestHop: request.headers['x-request-hop'],
-              body: Buffer.concat(chunks).toString('utf8'),
+    itMonitor(
+      'uses canonical retry headers 0 and 1 while preserving streaming and stripping connection-nominated headers',
+      async () => {
+        const secret = 'Bearer transport-secret-2673';
+        const body = '{"prompt":"sensitive prompt 2673"}';
+        const result = await withOcrScenario(async (scope) => {
+          const received: Array<Record<string, unknown>> = [];
+          const upstream = http.createServer((request, response) => {
+            const chunks: Buffer[] = [];
+            request.on('data', (chunk) => chunks.push(chunk));
+            request.on('end', () => {
+              received.push({
+                method: request.method,
+                url: request.url,
+                authorization: request.headers.authorization,
+                requestHop: request.headers['x-request-hop'],
+                body: Buffer.concat(chunks).toString('utf8'),
+              });
+              response.writeHead(received.length === 1 ? 429 : 200, {
+                connection: 'x-response-hop',
+                'content-type': 'application/json',
+                'x-response-hop': 'must-not-forward',
+                'x-upstream-test': 'preserved',
+              });
+              response.write(received.length === 1 ? '{"retry":' : '{"ok":');
+              response.end('true}');
             });
-            response.writeHead(received.length === 1 ? 429 : 200, {
-              connection: 'x-response-hop',
-              'content-type': 'application/json',
-              'x-response-hop': 'must-not-forward',
-              'x-upstream-test': 'preserved',
-            });
-            response.write(received.length === 1 ? '{"retry":' : '{"ok":');
-            response.end('true}');
           });
+          scope.registerUpstream(upstream);
+          const upstreamPort = await listen(upstream);
+          const resource = await startEmbeddedMonitor(
+            `http://127.0.0.1:${upstreamPort}/v1?mode=test`,
+          );
+          scope.registerMonitor(resource);
+          const common = {
+            body,
+            authorization: secret,
+            headers: {
+              connection: 'x-request-hop',
+              'x-request-hop': 'must-not-forward',
+            },
+          };
+          const first = await scope.proxyRequest(
+            asString(resource.ready.proxy_url),
+            {
+              ...common,
+              retryCount: '0',
+            },
+          );
+          const second = await scope.proxyRequest(
+            asString(resource.ready.proxy_url),
+            {
+              ...common,
+              retryCount: '1',
+            },
+          );
+          return {
+            first,
+            second,
+            telemetry: await scope.stopMonitor(),
+            received,
+          };
         });
-        scope.registerUpstream(upstream);
-        const upstreamPort = await listen(upstream);
-        const resource = await startEmbeddedMonitor(
-          `http://127.0.0.1:${upstreamPort}/v1?mode=test`,
-        );
-        scope.registerMonitor(resource);
-        const common = {
-          body,
-          authorization: secret,
-          headers: {
-            connection: 'x-request-hop',
-            'x-request-hop': 'must-not-forward',
-          },
-        };
-        const first = await scope.proxyRequest(
-          asString(resource.ready.proxy_url),
-          {
-            ...common,
-            retryCount: '0',
-          },
-        );
-        const second = await scope.proxyRequest(
-          asString(resource.ready.proxy_url),
-          {
-            ...common,
-            retryCount: '1',
-          },
-        );
-        return {
-          first,
-          second,
-          telemetry: await scope.stopMonitor(),
-          received,
-        };
-      });
 
-      expect([result.first.statusCode, result.second.statusCode]).toEqual([
-        429, 200,
-      ]);
-      expect(result.second.body).toBe('{"ok":true}');
-      expect(result.second.headers['x-upstream-test']).toBe('preserved');
-      expect(result.second.headers['x-response-hop']).toBeUndefined();
-      expect(result.received).toEqual([
-        {
-          method: 'POST',
-          url: '/v1?mode=test',
-          authorization: secret,
-          requestHop: undefined,
-          body,
-        },
-        {
-          method: 'POST',
-          url: '/v1?mode=test',
-          authorization: secret,
-          requestHop: undefined,
-          body,
-        },
-      ]);
-      expect(result.telemetry).toMatchObject({
-        total_requests: 2,
-        http_429_responses: 1,
-        retry_events: 1,
-        retry_count_header_missing: 0,
-        retry_count_header_malformed: 0,
-        responses_by_status: { 200: 1, 429: 1 },
-        shutdown_complete: true,
-      });
-      const persisted = JSON.stringify(result.telemetry);
-      expect(persisted).not.toContain(secret);
-      expect(persisted).not.toContain(body);
-      expect(persisted).not.toContain('x-stainless-retry-count');
-      expect(persisted).not.toMatch(/fingerprint|retry_delay/i);
-    });
+        expect([result.first.statusCode, result.second.statusCode]).toEqual([
+          429, 200,
+        ]);
+        expect(result.second.body).toBe('{"ok":true}');
+        expect(result.second.headers['x-upstream-test']).toBe('preserved');
+        expect(result.second.headers['x-response-hop']).toBeUndefined();
+        expect(result.received).toEqual([
+          {
+            method: 'POST',
+            url: '/v1?mode=test',
+            authorization: secret,
+            requestHop: undefined,
+            body,
+          },
+          {
+            method: 'POST',
+            url: '/v1?mode=test',
+            authorization: secret,
+            requestHop: undefined,
+            body,
+          },
+        ]);
+        expect(result.telemetry).toMatchObject({
+          total_requests: 2,
+          http_429_responses: 1,
+          retry_events: 1,
+          retry_count_header_missing: 0,
+          retry_count_header_malformed: 0,
+          responses_by_status: { 200: 1, 429: 1 },
+          shutdown_complete: true,
+        });
+        const persisted = JSON.stringify(result.telemetry);
+        expect(persisted).not.toContain(secret);
+        expect(persisted).not.toContain(body);
+        expect(persisted).not.toContain('x-stainless-retry-count');
+        expect(persisted).not.toMatch(/fingerprint|retry_delay/i);
+      },
+    );
 
-    it('counts every SDK retry request and every actual 429 response', async () => {
-      const telemetry = await withOcrScenario(async (scope) => {
-        let requestCount = 0;
-        const upstream = http.createServer((request, response) => {
-          request.resume();
-          request.on('end', () => {
+    itMonitor(
+      'counts every SDK retry request and every actual 429 response',
+      async () => {
+        const telemetry = await withOcrScenario(async (scope) => {
+          let requestCount = 0;
+          const upstream = http.createServer((request, response) => {
+            request.resume();
+            request.on('end', () => {
+              requestCount += 1;
+              response.writeHead(requestCount <= 3 ? 429 : 200).end('done');
+            });
+          });
+          scope.registerUpstream(upstream);
+          const upstreamPort = await listen(upstream);
+          const resource = await startEmbeddedMonitor(
+            `http://127.0.0.1:${upstreamPort}/v1`,
+          );
+          scope.registerMonitor(resource);
+          for (const retryCount of ['0', '1', '2', '3']) {
+            await scope.proxyRequest(asString(resource.ready.proxy_url), {
+              body: '{}',
+              authorization: 'Bearer repeated-429-token',
+              retryCount,
+            });
+          }
+          return scope.stopMonitor();
+        });
+
+        expect(telemetry.retry_events).toBe(3);
+        expect(telemetry.http_429_responses).toBe(3);
+        expect(telemetry.responses_by_status).toEqual({ 200: 1, 429: 3 });
+      },
+    );
+
+    itMonitor(
+      'counts a connection-error retry when the next SDK request reports retry count 1',
+      async () => {
+        const result = await withOcrScenario(async (scope) => {
+          let requestCount = 0;
+          const upstream = http.createServer((request, response) => {
             requestCount += 1;
-            response.writeHead(requestCount <= 3 ? 429 : 200).end('done');
+            if (requestCount === 1) {
+              request.socket.destroy();
+              return;
+            }
+            request.resume();
+            request.on('end', () => response.writeHead(200).end('ok'));
           });
+          scope.registerUpstream(upstream);
+          const upstreamPort = await listen(upstream);
+          const resource = await startEmbeddedMonitor(
+            `http://127.0.0.1:${upstreamPort}/v1`,
+          );
+          scope.registerMonitor(resource);
+          const opts = {
+            body: '{}',
+            authorization: 'Bearer network-retry-token',
+          };
+          const first = await scope.proxyRequest(
+            asString(resource.ready.proxy_url),
+            {
+              ...opts,
+              retryCount: '0',
+            },
+          );
+          const second = await scope.proxyRequest(
+            asString(resource.ready.proxy_url),
+            {
+              ...opts,
+              retryCount: '1',
+            },
+          );
+          return { first, second, telemetry: await scope.stopMonitor() };
         });
-        scope.registerUpstream(upstream);
-        const upstreamPort = await listen(upstream);
-        const resource = await startEmbeddedMonitor(
-          `http://127.0.0.1:${upstreamPort}/v1`,
-        );
-        scope.registerMonitor(resource);
-        for (const retryCount of ['0', '1', '2', '3']) {
+
+        expect([result.first.statusCode, result.second.statusCode]).toEqual([
+          502, 200,
+        ]);
+        expect(result.telemetry).toMatchObject({
+          total_requests: 2,
+          upstream_errors: 1,
+          retry_events: 1,
+          responses_by_status: { 200: 1 },
+        });
+      },
+    );
+
+    itMonitor(
+      'does not infer retries from concurrent or later identical header-0 requests',
+      async () => {
+        const telemetry = await withOcrScenario(async (scope) => {
+          const pending: http.ServerResponse[] = [];
+          let requestCount = 0;
+          const upstream = http.createServer((request, response) => {
+            request.resume();
+            request.on('end', () => {
+              requestCount += 1;
+              if (requestCount <= 2) {
+                pending.push(response);
+                if (pending.length === 2) {
+                  pending[0].writeHead(429).end('retry');
+                  pending[1].writeHead(200).end('ok');
+                }
+              } else {
+                response.writeHead(200).end('ok');
+              }
+            });
+          });
+          scope.registerUpstream(upstream);
+          const upstreamPort = await listen(upstream);
+          const resource = await startEmbeddedMonitor(
+            `http://127.0.0.1:${upstreamPort}/v1`,
+          );
+          scope.registerMonitor(resource);
+          const req = {
+            body: '{"same":"body"}',
+            authorization: 'Bearer same-token',
+            retryCount: '0',
+          };
+          await Promise.all([
+            scope.proxyRequest(asString(resource.ready.proxy_url), req),
+            scope.proxyRequest(asString(resource.ready.proxy_url), req),
+          ]);
+          await scope.proxyRequest(asString(resource.ready.proxy_url), req);
+          return scope.stopMonitor();
+        });
+
+        expect(telemetry.http_429_responses).toBe(1);
+        expect(telemetry.retry_events).toBe(0);
+        expect(telemetry.total_requests).toBe(3);
+      },
+    );
+
+    itMonitor(
+      'records only aggregate malformed and missing retry-header counts',
+      async () => {
+        const telemetry = await withOcrScenario(async (scope) => {
+          const upstream = http.createServer((request, response) => {
+            request.resume();
+            request.on('end', () => response.writeHead(200).end('ok'));
+          });
+          scope.registerUpstream(upstream);
+          const upstreamPort = await listen(upstream);
+          const resource = await startEmbeddedMonitor(
+            `http://127.0.0.1:${upstreamPort}/v1`,
+          );
+          scope.registerMonitor(resource);
           await scope.proxyRequest(asString(resource.ready.proxy_url), {
             body: '{}',
-            authorization: 'Bearer repeated-429-token',
-            retryCount,
+            authorization: 'Bearer malformed-token',
+            retryCount: null,
           });
-        }
-        return scope.stopMonitor();
-      });
-
-      expect(telemetry.retry_events).toBe(3);
-      expect(telemetry.http_429_responses).toBe(3);
-      expect(telemetry.responses_by_status).toEqual({ 200: 1, 429: 3 });
-    });
-
-    it('counts a connection-error retry when the next SDK request reports retry count 1', async () => {
-      const result = await withOcrScenario(async (scope) => {
-        let requestCount = 0;
-        const upstream = http.createServer((request, response) => {
-          requestCount += 1;
-          if (requestCount === 1) {
-            request.socket.destroy();
-            return;
-          }
-          request.resume();
-          request.on('end', () => response.writeHead(200).end('ok'));
-        });
-        scope.registerUpstream(upstream);
-        const upstreamPort = await listen(upstream);
-        const resource = await startEmbeddedMonitor(
-          `http://127.0.0.1:${upstreamPort}/v1`,
-        );
-        scope.registerMonitor(resource);
-        const opts = {
-          body: '{}',
-          authorization: 'Bearer network-retry-token',
-        };
-        const first = await scope.proxyRequest(
-          asString(resource.ready.proxy_url),
-          {
-            ...opts,
-            retryCount: '0',
-          },
-        );
-        const second = await scope.proxyRequest(
-          asString(resource.ready.proxy_url),
-          {
-            ...opts,
-            retryCount: '1',
-          },
-        );
-        return { first, second, telemetry: await scope.stopMonitor() };
-      });
-
-      expect([result.first.statusCode, result.second.statusCode]).toEqual([
-        502, 200,
-      ]);
-      expect(result.telemetry).toMatchObject({
-        total_requests: 2,
-        upstream_errors: 1,
-        retry_events: 1,
-        responses_by_status: { 200: 1 },
-      });
-    });
-
-    it('does not infer retries from concurrent or later identical header-0 requests', async () => {
-      const telemetry = await withOcrScenario(async (scope) => {
-        const pending: http.ServerResponse[] = [];
-        let requestCount = 0;
-        const upstream = http.createServer((request, response) => {
-          request.resume();
-          request.on('end', () => {
-            requestCount += 1;
-            if (requestCount <= 2) {
-              pending.push(response);
-              if (pending.length === 2) {
-                pending[0].writeHead(429).end('retry');
-                pending[1].writeHead(200).end('ok');
-              }
-            } else {
-              response.writeHead(200).end('ok');
-            }
+          await scope.proxyRequest(asString(resource.ready.proxy_url), {
+            body: '{}',
+            authorization: 'Bearer malformed-token',
+            retryCount: '01',
           });
+          return scope.stopMonitor();
         });
-        scope.registerUpstream(upstream);
-        const upstreamPort = await listen(upstream);
-        const resource = await startEmbeddedMonitor(
-          `http://127.0.0.1:${upstreamPort}/v1`,
-        );
-        scope.registerMonitor(resource);
-        const req = {
-          body: '{"same":"body"}',
-          authorization: 'Bearer same-token',
-          retryCount: '0',
-        };
-        await Promise.all([
-          scope.proxyRequest(asString(resource.ready.proxy_url), req),
-          scope.proxyRequest(asString(resource.ready.proxy_url), req),
-        ]);
-        await scope.proxyRequest(asString(resource.ready.proxy_url), req);
-        return scope.stopMonitor();
-      });
 
-      expect(telemetry.http_429_responses).toBe(1);
-      expect(telemetry.retry_events).toBe(0);
-      expect(telemetry.total_requests).toBe(3);
-    });
-
-    it('records only aggregate malformed and missing retry-header counts', async () => {
-      const telemetry = await withOcrScenario(async (scope) => {
-        const upstream = http.createServer((request, response) => {
-          request.resume();
-          request.on('end', () => response.writeHead(200).end('ok'));
+        expect(telemetry).toMatchObject({
+          total_requests: 2,
+          retry_events: 0,
+          retry_count_header_missing: 1,
+          retry_count_header_malformed: 1,
         });
-        scope.registerUpstream(upstream);
-        const upstreamPort = await listen(upstream);
-        const resource = await startEmbeddedMonitor(
-          `http://127.0.0.1:${upstreamPort}/v1`,
-        );
-        scope.registerMonitor(resource);
-        await scope.proxyRequest(asString(resource.ready.proxy_url), {
-          body: '{}',
-          authorization: 'Bearer malformed-token',
-          retryCount: null,
-        });
-        await scope.proxyRequest(asString(resource.ready.proxy_url), {
-          body: '{}',
-          authorization: 'Bearer malformed-token',
-          retryCount: '01',
-        });
-        return scope.stopMonitor();
-      });
+        expect(JSON.stringify(telemetry)).not.toContain('01');
+      },
+    );
 
-      expect(telemetry).toMatchObject({
-        total_requests: 2,
-        retry_events: 0,
-        retry_count_header_missing: 1,
-        retry_count_header_malformed: 1,
-      });
-      expect(JSON.stringify(telemetry)).not.toContain('01');
-    });
-
-    it('streams delayed SSE responses and forwards chunked request bodies without buffering', async () => {
-      const result = await withOcrScenario(async (scope) => {
-        let upstreamCompleted = false;
-        let receivedBody = '';
-        const upstream = http.createServer((request, response) => {
-          request.on('data', (chunk) => {
-            receivedBody += chunk;
+    itMonitor(
+      'streams delayed SSE responses and forwards chunked request bodies without buffering',
+      async () => {
+        const result = await withOcrScenario(async (scope) => {
+          let upstreamCompleted = false;
+          let receivedBody = '';
+          const upstream = http.createServer((request, response) => {
+            request.on('data', (chunk) => {
+              receivedBody += chunk;
+            });
+            request.on('end', () => {
+              response.writeHead(200, { 'content-type': 'text/event-stream' });
+              response.write('data: first\n\n');
+              setTimeout(() => {
+                upstreamCompleted = true;
+                response.end('data: second\n\n');
+              }, 150);
+            });
           });
-          request.on('end', () => {
-            response.writeHead(200, { 'content-type': 'text/event-stream' });
-            response.write('data: first\n\n');
-            setTimeout(() => {
-              upstreamCompleted = true;
-              response.end('data: second\n\n');
-            }, 150);
-          });
-        });
-        scope.registerUpstream(upstream);
-        const upstreamPort = await listen(upstream);
-        const resource = await startEmbeddedMonitor(
-          `http://127.0.0.1:${upstreamPort}/v1`,
-        );
-        scope.registerMonitor(resource);
-        const url = new URL(asString(resource.ready.proxy_url));
-        let firstChunkBeforeCompletion = false;
-        const responseBody = await new Promise<string>((resolve, reject) => {
-          const request = http.request(
-            url,
-            {
-              method: 'POST',
-              headers: {
-                'content-type': 'application/json',
-                'x-stainless-retry-count': '0',
-              },
-            },
-            (response) => {
-              const chunks: Buffer[] = [];
-              response.on('data', (chunk) => {
-                if (chunks.length === 0)
-                  firstChunkBeforeCompletion = !upstreamCompleted;
-                chunks.push(chunk);
-              });
-              response.on('end', () =>
-                resolve(Buffer.concat(chunks).toString()),
-              );
-            },
+          scope.registerUpstream(upstream);
+          const upstreamPort = await listen(upstream);
+          const resource = await startEmbeddedMonitor(
+            `http://127.0.0.1:${upstreamPort}/v1`,
           );
-          scope.trackRequest(request);
-          request.once('error', reject);
-          request.write('{"chunk":');
-          setTimeout(() => request.end('true}'), 25);
-        });
-        const telemetry = await scope.stopMonitor();
-        return {
-          receivedBody,
-          responseBody,
-          firstChunkBeforeCompletion,
-          telemetry,
-        };
-      });
-
-      expect(result.receivedBody).toBe('{"chunk":true}');
-      expect(result.responseBody).toBe('data: first\n\ndata: second\n\n');
-      expect(result.firstChunkBeforeCompletion).toBe(true);
-      expect(result.telemetry.responses_by_status).toEqual({ 200: 1 });
-    });
-
-    it('handles an upstream error after headers and partial body without crashing or double-counting', async () => {
-      const partialSentinel = '{"partial":';
-      const result = await withOcrScenario(async (scope) => {
-        let triggerUpstreamReset: (() => void) | null = null;
-        const upstream = http.createServer((request, response) => {
-          request.resume();
-          request.on('end', () => {
-            response.writeHead(200, { 'content-type': 'application/json' });
-            response.write(partialSentinel);
-            triggerUpstreamReset = () => {
-              response.destroy(new Error('upstream mid-stream crash'));
-            };
-          });
-        });
-        scope.registerUpstream(upstream);
-        const upstreamPort = await listen(upstream);
-        const resource = await startEmbeddedMonitor(
-          `http://127.0.0.1:${upstreamPort}/v1`,
-        );
-        scope.registerMonitor(resource);
-
-        const captured = await new Promise<{
-          statusCode: number;
-          body: string;
-        }>((resolve, reject) => {
-          const chunks: Buffer[] = [];
-          let terminatedCleanly = false;
-          let settled = false;
-          const clientRequest = http.request(
-            new URL(asString(resource.ready.proxy_url)),
-            {
-              method: 'POST',
-              headers: {
-                'content-type': 'application/json',
-                'x-stainless-retry-count': '0',
+          scope.registerMonitor(resource);
+          const url = new URL(asString(resource.ready.proxy_url));
+          let firstChunkBeforeCompletion = false;
+          const responseBody = await new Promise<string>((resolve, reject) => {
+            const request = http.request(
+              url,
+              {
+                method: 'POST',
+                headers: {
+                  'content-type': 'application/json',
+                  'x-stainless-retry-count': '0',
+                },
               },
-            },
-            (response) => {
-              const statusCode = response.statusCode;
-              if (statusCode === undefined) {
-                settled = true;
-                reject(new Error('response arrived without an HTTP status'));
-                return;
-              }
-              const resolveAbnormal = () => {
-                if (settled) {
+              (response) => {
+                const chunks: Buffer[] = [];
+                response.on('data', (chunk) => {
+                  if (chunks.length === 0)
+                    firstChunkBeforeCompletion = !upstreamCompleted;
+                  chunks.push(chunk);
+                });
+                response.on('end', () =>
+                  resolve(Buffer.concat(chunks).toString()),
+                );
+              },
+            );
+            scope.trackRequest(request);
+            request.once('error', reject);
+            request.write('{"chunk":');
+            setTimeout(() => request.end('true}'), 25);
+          });
+          const telemetry = await scope.stopMonitor();
+          return {
+            receivedBody,
+            responseBody,
+            firstChunkBeforeCompletion,
+            telemetry,
+          };
+        });
+
+        expect(result.receivedBody).toBe('{"chunk":true}');
+        expect(result.responseBody).toBe('data: first\n\ndata: second\n\n');
+        expect(result.firstChunkBeforeCompletion).toBe(true);
+        expect(result.telemetry.responses_by_status).toEqual({ 200: 1 });
+      },
+    );
+
+    itMonitor(
+      'handles an upstream error after headers and partial body without crashing or double-counting',
+      async () => {
+        const partialSentinel = '{"partial":';
+        const result = await withOcrScenario(async (scope) => {
+          let triggerUpstreamReset: (() => void) | null = null;
+          const upstream = http.createServer((request, response) => {
+            request.resume();
+            request.on('end', () => {
+              response.writeHead(200, { 'content-type': 'application/json' });
+              response.write(partialSentinel);
+              triggerUpstreamReset = () => {
+                response.destroy(new Error('upstream mid-stream crash'));
+              };
+            });
+          });
+          scope.registerUpstream(upstream);
+          const upstreamPort = await listen(upstream);
+          const resource = await startEmbeddedMonitor(
+            `http://127.0.0.1:${upstreamPort}/v1`,
+          );
+          scope.registerMonitor(resource);
+
+          const captured = await new Promise<{
+            statusCode: number;
+            body: string;
+          }>((resolve, reject) => {
+            const chunks: Buffer[] = [];
+            let terminatedCleanly = false;
+            let settled = false;
+            const clientRequest = http.request(
+              new URL(asString(resource.ready.proxy_url)),
+              {
+                method: 'POST',
+                headers: {
+                  'content-type': 'application/json',
+                  'x-stainless-retry-count': '0',
+                },
+              },
+              (response) => {
+                const statusCode = response.statusCode;
+                if (statusCode === undefined) {
+                  settled = true;
+                  reject(new Error('response arrived without an HTTP status'));
                   return;
                 }
-                settled = true;
-                resolve({
-                  statusCode,
-                  body: Buffer.concat(chunks).toString('utf8'),
-                });
-              };
-              response.on('data', (chunk) => {
-                chunks.push(chunk);
-                if (
-                  triggerUpstreamReset !== null &&
-                  Buffer.concat(chunks).toString('utf8') === partialSentinel
-                ) {
-                  const trigger = triggerUpstreamReset;
-                  triggerUpstreamReset = null;
-                  trigger();
-                }
-              });
-              response.on('end', () => {
-                terminatedCleanly = true;
-                if (!settled) {
+                const resolveAbnormal = () => {
+                  if (settled) {
+                    return;
+                  }
                   settled = true;
-                  reject(
-                    new Error(
-                      'response ended cleanly; expected abnormal termination after the partial sentinel',
-                    ),
-                  );
-                }
-              });
-              response.on('error', resolveAbnormal);
-              response.on('close', () => {
-                if (!terminatedCleanly) {
-                  resolveAbnormal();
-                }
-              });
-            },
-          );
-          scope.trackRequest(clientRequest);
-          clientRequest.once('error', (error) => {
-            if (!settled) {
-              settled = true;
-              reject(
-                new Error(
-                  `request-level error reached the client before response headers: ${
-                    error instanceof Error ? error.message : String(error)
-                  }`,
-                ),
-              );
-            }
+                  resolve({
+                    statusCode,
+                    body: Buffer.concat(chunks).toString('utf8'),
+                  });
+                };
+                response.on('data', (chunk) => {
+                  chunks.push(chunk);
+                  if (
+                    triggerUpstreamReset !== null &&
+                    Buffer.concat(chunks).toString('utf8') === partialSentinel
+                  ) {
+                    const trigger = triggerUpstreamReset;
+                    triggerUpstreamReset = null;
+                    trigger();
+                  }
+                });
+                response.on('end', () => {
+                  terminatedCleanly = true;
+                  if (!settled) {
+                    settled = true;
+                    reject(
+                      new Error(
+                        'response ended cleanly; expected abnormal termination after the partial sentinel',
+                      ),
+                    );
+                  }
+                });
+                response.on('error', resolveAbnormal);
+                response.on('close', () => {
+                  if (!terminatedCleanly) {
+                    resolveAbnormal();
+                  }
+                });
+              },
+            );
+            scope.trackRequest(clientRequest);
+            clientRequest.once('error', (error) => {
+              if (!settled) {
+                settled = true;
+                reject(
+                  new Error(
+                    `request-level error reached the client before response headers: ${
+                      error instanceof Error ? error.message : String(error)
+                    }`,
+                  ),
+                );
+              }
+            });
+            clientRequest.end('{"test":true}');
           });
-          clientRequest.end('{"test":true}');
+          const telemetry = await scope.stopMonitor();
+          return { captured, telemetry };
         });
-        const telemetry = await scope.stopMonitor();
-        return { captured, telemetry };
-      });
 
-      expect(result.captured.statusCode).toBe(200);
-      expect(result.captured.body).toBe(partialSentinel);
-      expect(result.telemetry.total_requests).toBe(1);
-      expect(result.telemetry.upstream_errors).toBe(0);
-      expect(result.telemetry.responses_by_status).toEqual({ 200: 1 });
-      expect(result.telemetry.shutdown_complete).toBe(true);
-    });
+        expect(result.captured.statusCode).toBe(200);
+        expect(result.captured.body).toBe(partialSentinel);
+        expect(result.telemetry.total_requests).toBe(1);
+        expect(result.telemetry.upstream_errors).toBe(0);
+        expect(result.telemetry.responses_by_status).toEqual({ 200: 1 });
+        expect(result.telemetry.shutdown_complete).toBe(true);
+      },
+    );
   });
 
-  describe('synchronous OCR command wall timing', () => {
+  describe.skipIf(IS_WINDOWS)('synchronous OCR command wall timing', () => {
     function readTimingArtifact(timingPath: fs.PathOrFileDescriptor) {
       let content;
       try {

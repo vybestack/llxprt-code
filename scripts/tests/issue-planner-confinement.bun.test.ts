@@ -150,34 +150,68 @@ describe('issue-planner confinement script (textual)', () => {
   });
 });
 
-describe('issue-planner confinement script (behavioral)', () => {
-  bashOnly(
-    'passes when node_modules contains a symlink (regression for #2960)',
-    (dir) => {
-      fs.mkdirSync(path.join(dir, '.git'));
-      fs.mkdirSync(path.join(dir, 'planner'));
-      fs.mkdirSync(path.join(dir, 'src', 'nested'), { recursive: true });
-      fs.writeFileSync(path.join(dir, 'src', 'nested', 'code.js'), 'code');
-      fs.mkdirSync(path.join(dir, 'node_modules', '.bin'), { recursive: true });
-      fs.writeFileSync(path.join(dir, 'node_modules', 'real-cli'), 'cli');
-      fs.symlinkSync(
-        path.join(dir, 'node_modules', 'real-cli'),
-        path.join(dir, 'node_modules', '.bin', 'llxprt'),
-      );
+// The confinement script is bash and manipulates POSIX file modes; issue-planner.yml runs on ubuntu-latest only. The textual assertions still run everywhere.
+const IS_WINDOWS = process.platform === 'win32';
 
-      const script = loadConfinementScript();
-      const result = spawnSync('bash', ['-c', script], {
-        cwd: dir,
-        encoding: 'utf8',
-      });
-      expect(result.status, String(result.stderr ?? '')).toBe(0);
-      // The real source file was made read-only.
-      expect(
-        fs.statSync(path.join(dir, 'src', 'nested', 'code.js')).mode & 0o222,
-      ).toBe(0);
-      // planner/ and .git/ remain owner-writable (pruned from the chmod pass).
-      expect(fs.statSync(path.join(dir, 'planner')).mode & 0o200).toBe(0o200);
-      expect(fs.statSync(path.join(dir, '.git')).mode & 0o200).toBe(0o200);
-    },
-  );
-});
+describe.skipIf(IS_WINDOWS)(
+  'issue-planner confinement script (behavioral)',
+  () => {
+    bashOnly(
+      'confines all non-planner/.git paths and restores modes in finally',
+      (dir) => {
+        fs.mkdirSync(path.join(dir, '.git'));
+        fs.mkdirSync(path.join(dir, 'planner'));
+        fs.mkdirSync(path.join(dir, 'src', 'nested'), { recursive: true });
+        fs.writeFileSync(path.join(dir, '.git', 'state'), 'git');
+        fs.writeFileSync(path.join(dir, 'planner', 'plan.md'), 'plan');
+        fs.writeFileSync(path.join(dir, 'src', 'nested', 'code.js'), 'code');
+
+        const result = spawnSync('bash', ['-c', loadConfinementScript()], {
+          cwd: dir,
+          encoding: 'utf8',
+        });
+
+        expect(result.status ?? -1, String(result.stderr ?? '')).toBe(0);
+        for (const target of ['.', 'src', 'src/nested', 'src/nested/code.js']) {
+          expect(fs.statSync(path.join(dir, target)).mode & 0o222, target).toBe(
+            0,
+          );
+        }
+        expect(fs.statSync(path.join(dir, 'planner')).mode & 0o200).toBe(0o200);
+        expect(fs.statSync(path.join(dir, '.git')).mode & 0o200).toBe(0o200);
+      },
+    );
+
+    bashOnly(
+      'passes when node_modules contains a symlink (regression for #2960)',
+      (dir) => {
+        fs.mkdirSync(path.join(dir, '.git'));
+        fs.mkdirSync(path.join(dir, 'planner'));
+        fs.mkdirSync(path.join(dir, 'src', 'nested'), { recursive: true });
+        fs.writeFileSync(path.join(dir, 'src', 'nested', 'code.js'), 'code');
+        fs.mkdirSync(path.join(dir, 'node_modules', '.bin'), {
+          recursive: true,
+        });
+        fs.writeFileSync(path.join(dir, 'node_modules', 'real-cli'), 'cli');
+        fs.symlinkSync(
+          path.join(dir, 'node_modules', 'real-cli'),
+          path.join(dir, 'node_modules', '.bin', 'llxprt'),
+        );
+
+        const script = loadConfinementScript();
+        const result = spawnSync('bash', ['-c', script], {
+          cwd: dir,
+          encoding: 'utf8',
+        });
+        expect(result.status, String(result.stderr ?? '')).toBe(0);
+        // The real source file was made read-only.
+        expect(
+          fs.statSync(path.join(dir, 'src', 'nested', 'code.js')).mode & 0o222,
+        ).toBe(0);
+        // planner/ and .git/ remain owner-writable (pruned from the chmod pass).
+        expect(fs.statSync(path.join(dir, 'planner')).mode & 0o200).toBe(0o200);
+        expect(fs.statSync(path.join(dir, '.git')).mode & 0o200).toBe(0o200);
+      },
+    );
+  },
+);

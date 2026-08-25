@@ -292,7 +292,7 @@ async function tryReuseExistingArchive(
   if (verify.ok) {
     // Reused archive: fsync the directory to establish durability and preserve
     // the source recording chronology on the reused archive (finding C).
-    const durable = await fsyncDir(archiveDir);
+    const durable = await commitArchiveDurably(archiveDir, finalArchivePath);
     await applySourceMtime(finalArchivePath, sourceMtime);
     const archiveBytes = await physicalBytes(finalArchivePath);
     return {
@@ -361,7 +361,10 @@ async function finalizeArchive(
         sourceInfo.bytes,
       );
       if (ok.ok) {
-        const durable = await fsyncDir(archiveDir);
+        const durable = await commitArchiveDurably(
+          archiveDir,
+          finalArchivePath,
+        );
         await applySourceMtime(finalArchivePath, sourceMtime);
         const archiveBytes = await physicalBytes(finalArchivePath);
         return {
@@ -379,10 +382,10 @@ async function finalizeArchive(
   // ranking and minRetention apply by original session age.
   await applySourceMtime(finalArchivePath, sourceMtime);
 
-  // Item 6: fsync the archive directory after the rename to ensure the
-  // directory entry is durable.  If fsync fails, report durableCommit=false
-  // so the caller retains the source.
-  const durable = await fsyncDir(archiveDir);
+  // Item 6: flush after the rename so the archive is durable before the caller
+  // may unlink the source.  If the flush fails, report durableCommit=false so
+  // the source is retained.
+  const durable = await commitArchiveDurably(archiveDir, finalArchivePath);
   const archiveBytes = await physicalBytes(finalArchivePath);
   return {
     success: true,
@@ -477,16 +480,55 @@ async function shouldUnlinkTempFile(
 // ---------------------------------------------------------------------------
 
 /**
- * Attempt to fsync a directory to establish durability (Item 6).
+ * Whether this platform can fsync a directory handle.
  *
- * On POSIX systems (Linux, macOS) this opens the directory read-only and calls
- * fsync.  On Windows or other platforms where directory fsync is not
- * supported, this returns `false` (ambiguous) rather than throwing.
+ * POSIX lets a directory be opened read-only and fsynced, which is what makes
+ * a freshly renamed directory entry durable.  Windows has no equivalent:
+ * `fs.open` on a directory fails outright, and NTFS journals metadata itself
+ * rather than exposing a per-directory flush.
+ *
+ * This is a platform capability, not an error, and the distinction matters.
+ * Reporting the absence as a durability *failure* made
+ * {@link ArchiveResult.durableCommit} permanently false on Windows, and the
+ * reclamation engine refuses to unlink a source whose archive is not durably
+ * committed.  The net effect was that the session janitor archived files but
+ * never reclaimed a single byte on Windows: archives accumulated while every
+ * raw session was retained forever.
  */
-async function fsyncDir(dirPath: string): Promise<boolean> {
+function supportsDirectoryFsync(): boolean {
+  return process.platform !== 'win32';
+}
+
+/**
+ * Flush a freshly renamed archive so the reclamation engine may unlink its
+ * source (Item 6).
+ *
+ * On POSIX this opens the containing directory read-only and fsyncs it, which
+ * is what makes the new directory entry survive a crash.
+ *
+ * Windows has no directory fsync, but reporting durability there without
+ * flushing anything would be a claim rather than a guarantee: Node does not
+ * expose `MOVEFILE_WRITE_THROUGH`, so `fsp.rename` is not itself write-through.
+ * Flush the renamed file instead — `FlushFileBuffers` on a file handle commits
+ * that file's data and its metadata, which is the strongest durability the
+ * platform exposes here. Either way the returned value reflects a flush that
+ * actually succeeded, so a failure still holds the source back.
+ */
+async function commitArchiveDurably(
+  archiveDir: string,
+  archivePath: string,
+): Promise<boolean> {
+  // The open mode differs by target and is not incidental. A directory fsync
+  // needs only read access, but FlushFileBuffers requires a handle with write
+  // access, so opening the archive 'r' fails on Windows and would report the
+  // whole commit as non-durable — reinstating the bug this function exists to
+  // fix.
+  const [target, mode] = supportsDirectoryFsync()
+    ? ([archiveDir, 'r'] as const)
+    : ([archivePath, 'r+'] as const);
   let fd: fsp.FileHandle | undefined;
   try {
-    fd = await fsp.open(dirPath, 'r');
+    fd = await fsp.open(target, mode);
     await fd.sync();
     return true;
   } catch {

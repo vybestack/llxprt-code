@@ -13,6 +13,7 @@ import type {
   ShellExecutionResult,
 } from './shellExecutionService.js';
 import { ShellExecutionService } from './shellExecutionService.js';
+import { getShellConfiguration } from '../utils/shell-utils.js';
 
 /**
  * Behavioral tests for bounded foreground shell output acquisition
@@ -96,8 +97,20 @@ afterAll(() => {
 
 /**
  * Build a cross-platform command that runs the producer script.
- * The execPath and script path are quoted with double quotes which works
- * on bash, zsh, PowerShell, and cmd.exe.
+ *
+ * Quoting the executable and script paths is necessary everywhere, but it is
+ * not sufficient on Windows. ShellExecutionService runs the command through
+ * `getShellConfiguration()`, which selects PowerShell on Windows, and
+ * PowerShell parses a line that BEGINS with a quoted string in expression
+ * mode rather than command mode:
+ *
+ *   "C:\\...\\bun.exe" "C:\\...\\producer.mjs" 1048576 stdout ascii 0
+ *   => Unexpected token '"C:\\...\\producer.mjs"' in expression or statement.
+ *
+ * The call operator `&` forces command mode. bash, zsh, and cmd.exe run the
+ * bare quoted form correctly, so the operator is added only for PowerShell,
+ * and the shell is resolved with the same helper the service uses rather than
+ * by branching on `process.platform` directly.
  */
 function producerCommand(
   size: number,
@@ -105,7 +118,41 @@ function producerCommand(
   mode: 'ascii' | 'multibyte' | 'tiny' = 'ascii',
   exitCode = 0,
 ): string {
-  return `"${process.execPath}" "${producerScript}" ${size} ${stream} ${mode} ${exitCode}`;
+  const invocation = `"${process.execPath}" "${producerScript}" ${size} ${stream} ${mode} ${exitCode}`;
+  return getShellConfiguration().shell === 'powershell'
+    ? `& ${invocation}`
+    : invocation;
+}
+
+/**
+ * Run `next` only if `first` succeeded, in a way every target shell accepts.
+ *
+ * Windows PowerShell 5.1 — which is what `powershell.exe` resolves to on the
+ * CI runners — has no `&&` operator; it arrived in PowerShell 7. Writing
+ * `a && b` there is a parse error, so the whole command fails with exit 1
+ * before the producer ever runs. Use the `$?` success variable instead, which
+ * expresses the same run-on-success semantics.
+ */
+function chainOnSuccess(first: string, next: string): string {
+  return getShellConfiguration().shell === 'powershell'
+    ? `${first}; if ($?) { ${next} }`
+    : `${first} && ${next}`;
+}
+
+/**
+ * Re-raise a native program's exit code as the shell's own exit code.
+ *
+ * `powershell -Command` does not adopt the exit status of a native executable
+ * it invoked, so a producer that exits 42 surfaces as 1. bash and cmd.exe
+ * propagate it natively, so this is a no-op there.
+ *
+ * This is applied at the call site rather than inside producerCommand because
+ * `exit` would terminate the shell before any chained command could run.
+ */
+function propagateExit(command: string): string {
+  return getShellConfiguration().shell === 'powershell'
+    ? `${command}; exit $LASTEXITCODE`
+    : command;
 }
 
 /**
@@ -158,7 +205,10 @@ describe('Shell bounded acquisition - child_process path (cross-platform)', () =
 
   it('preserves exit code and completes despite bounded output', async () => {
     // Produce output beyond the budget, then write a tail marker.
-    const cmd = `${producerCommand(524288, 'stdout', 'ascii')} && echo END_MARKER_42`;
+    const cmd = chainOnSuccess(
+      producerCommand(524288, 'stdout', 'ascii'),
+      'echo END_MARKER_42',
+    );
     const result = await executeAndCollect(cmd, {
       outputRetentionMaxBytes: 4096,
     });
@@ -230,7 +280,7 @@ describe('Shell bounded acquisition - child_process path (cross-platform)', () =
 
   it('preserves exit status of a failing command despite bounded output', async () => {
     const result = await executeAndCollect(
-      producerCommand(524288, 'stdout', 'ascii', 42),
+      propagateExit(producerCommand(524288, 'stdout', 'ascii', 42)),
       { outputRetentionMaxBytes: 4096 },
     );
 
@@ -260,8 +310,15 @@ describe.skipIf(process.platform !== 'win32')(
       // acquisition path must decode these into human-readable text so the
       // model never sees raw <S S="Error"> markup. We force a real error
       // record via Write-Error which reliably produces CLIXML.
+      //
+      // 2000 records, not 50000: each CLIXML error record serialises to
+      // hundreds of bytes, so 2000 already overshoots the 8 KB retention
+      // budget by two orders of magnitude and still proves truncation. Driving
+      // 50000 Write-Error calls through the PowerShell pipeline took longer
+      // than the 180s per-test budget on a loaded CI runner, so the test timed
+      // out before it could assert anything.
       const result = await executeAndCollect(
-        'powershell -NoProfile -Command "Write-Error LLXPRT_CLIXML_BOUND_MARKER; 1..50000 | ForEach-Object { Write-Error $_ }"',
+        'powershell -NoProfile -Command "Write-Error LLXPRT_CLIXML_BOUND_MARKER; 1..2000 | ForEach-Object { Write-Error $_ }"',
         { outputRetentionMaxBytes: 8192 },
       );
 

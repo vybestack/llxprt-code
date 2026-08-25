@@ -353,7 +353,12 @@ function spawnManagedChild(
   code: string,
   env: Record<string, string>,
 ): ManagedChild {
-  const child = spawn('bun', ['-e', code], {
+  // `process.execPath` rather than the bare string 'bun': Node's spawn does
+  // not apply PATHEXT resolution on Windows unless `shell: true`, so a literal
+  // 'bun' never resolves to bun.exe and the child dies before emitting READY.
+  // Under bun:test execPath is the running bun binary, so this is both correct
+  // and portable.
+  const child = spawn(process.execPath, ['-e', code], {
     stdio: ['pipe', 'pipe', 'pipe'],
     env: { ...process.env, ...env },
   });

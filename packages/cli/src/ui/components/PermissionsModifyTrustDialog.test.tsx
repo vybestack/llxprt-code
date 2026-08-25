@@ -5,6 +5,16 @@
  */
 
 import * as path from 'node:path';
+
+/**
+ * The dialog is driven with the POSIX literal `/test/dir` as the working
+ * directory, but the hook keys trust rules by the RESOLVED path. On Windows
+ * that resolves drive-qualified (`D:\test\dir`), so every assertion against a
+ * value the production code produced has to resolve too. A bare POSIX literal
+ * would only ever match on POSIX. This is a no-op on POSIX, where the two are
+ * identical.
+ */
+const RESOLVED_TEST_DIR = path.resolve('/test/dir');
 import { renderWithProviders, waitFor } from '../../test-utils/render.js';
 import { createDeferred } from '../../test-utils/async.js';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
@@ -280,10 +290,10 @@ describe('PermissionsModifyTrustDialog', () => {
     });
 
     expect(mockedSetValue).toHaveBeenCalledWith(
-      '/test/dir',
+      RESOLVED_TEST_DIR,
       TrustLevel.TRUST_FOLDER,
     );
-    expect(mockedTrustedConfig['/test/dir']).toBeUndefined();
+    expect(mockedTrustedConfig[RESOLVED_TEST_DIR]).toBeUndefined();
     expect(lastFrame()).toContain('Modify Trust Settings');
 
     stdin.write('\u001B[B');
@@ -294,7 +304,7 @@ describe('PermissionsModifyTrustDialog', () => {
   });
 
   it('restores the exact saved rule when live application throws', async () => {
-    mockedTrustedConfig['/test/dir'] = TrustLevel.DO_NOT_TRUST;
+    mockedTrustedConfig[RESOLVED_TEST_DIR] = TrustLevel.DO_NOT_TRUST;
     mockConfig.setTrustedFolderLive.mockImplementation(() => {
       throw new Error('live update failed');
     });
@@ -311,12 +321,14 @@ describe('PermissionsModifyTrustDialog', () => {
     stdin.write('\r');
     await waitFor(() => {
       expect(mockedSetValue).toHaveBeenLastCalledWith(
-        '/test/dir',
+        RESOLVED_TEST_DIR,
         TrustLevel.DO_NOT_TRUST,
       );
     });
 
-    expect(mockedTrustedConfig['/test/dir']).toBe(TrustLevel.DO_NOT_TRUST);
+    expect(mockedTrustedConfig[RESOLVED_TEST_DIR]).toBe(
+      TrustLevel.DO_NOT_TRUST,
+    );
     expect(mockedDeleteValue).not.toHaveBeenCalled();
   });
 
@@ -341,7 +353,7 @@ describe('PermissionsModifyTrustDialog', () => {
     stdin.write('\r');
     await waitFor(() => {
       expect(mockedSetValue).toHaveBeenCalledWith(
-        '/test/dir',
+        RESOLVED_TEST_DIR,
         TrustLevel.TRUST_FOLDER,
       );
     });
@@ -379,7 +391,7 @@ describe('PermissionsModifyTrustDialog', () => {
       expect(lastFrame()).toContain('Trust level updated');
     });
     expect(mockedSetValue).toHaveBeenCalledWith(
-      '/test/dir',
+      RESOLVED_TEST_DIR,
       TrustLevel.TRUST_FOLDER,
     );
     expect(mockConfig.setTrustedFolderLive).toHaveBeenCalledWith(false);
@@ -470,7 +482,7 @@ describe('PermissionsModifyTrustDialog', () => {
     stdin.write('\r');
     await waitFor(() => {
       expect(mockedSetValue).toHaveBeenCalledWith(
-        '/test/dir',
+        RESOLVED_TEST_DIR,
         TrustLevel.TRUST_PARENT,
       );
     });
@@ -541,12 +553,8 @@ describe('PermissionsModifyTrustDialog', () => {
     );
     stdin.write('\r');
     await waitFor(() => {
-      // The hook keys trust rules by the RESOLVED working directory, so the
-      // expectation has to resolve too: on Windows path.resolve('/test/dir')
-      // is drive-qualified (D:\test\dir), and a POSIX literal would only ever
-      // match on POSIX. This is a no-op on POSIX, where the two are equal.
       expect(mockedSetValue).toHaveBeenCalledWith(
-        path.resolve('/test/dir'),
+        RESOLVED_TEST_DIR,
         TrustLevel.DO_NOT_TRUST,
       );
     });
