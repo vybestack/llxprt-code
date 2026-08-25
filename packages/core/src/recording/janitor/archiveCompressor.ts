@@ -518,10 +518,17 @@ async function commitArchiveDurably(
   archiveDir: string,
   archivePath: string,
 ): Promise<boolean> {
-  const target = supportsDirectoryFsync() ? archiveDir : archivePath;
+  // The open mode differs by target and is not incidental. A directory fsync
+  // needs only read access, but FlushFileBuffers requires a handle with write
+  // access, so opening the archive 'r' fails on Windows and would report the
+  // whole commit as non-durable — reinstating the bug this function exists to
+  // fix.
+  const [target, mode] = supportsDirectoryFsync()
+    ? ([archiveDir, 'r'] as const)
+    : ([archivePath, 'r+'] as const);
   let fd: fsp.FileHandle | undefined;
   try {
-    fd = await fsp.open(target, 'r');
+    fd = await fsp.open(target, mode);
     await fd.sync();
     return true;
   } catch {
