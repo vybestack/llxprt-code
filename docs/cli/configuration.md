@@ -1393,8 +1393,12 @@ The following settings remain at the top level of the `settings.json` file.
   - **Default:** `{"enabled": false, "logPrompts": true}`
   - **Properties:**
     - **`enabled`** (boolean): Whether or not telemetry is enabled. Defaults to `false`.
-    - **`logPrompts`** (boolean): Controls whether user prompt text is included in the `user_prompt` log event. Does not affect hook I/O logging (hook input/output is always included in `hook_call` events when telemetry is enabled).
+    - **`logPrompts`** (boolean): Controls whether user prompt text is included in the `user_prompt` log event. Also gates API request/response bodies. Does not affect hook I/O logging (hook input/output is always included in `hook_call` events when telemetry is enabled).
+    - **`logApiBodies`** (boolean): Whether full request/response bodies are included in `api_request`/`api_response` events. Defaults to `false`. Bodies are emitted only when `logApiBodies` and `logPrompts` are both `true`, and are truncated to `logApiBodyMaxChars`.
+    - **`logApiBodyMaxChars`** (number): Maximum characters of a request/response body included when `logApiBodies` is enabled. Defaults to `4000`.
     - **`outfile`** (string): Optional local file path for traces, metrics, and logs. Without it, telemetry is written to the console.
+    - **`outfileMaxBytes`** (number): Size cap in bytes that triggers rotation of the outfile. Defaults to `104857600` (100 MiB). The active file is renamed to `<outfile>.<timestamp>-<suffix>` and a fresh file is started; a single record larger than the cap is still written whole.
+    - **`outfileMaxFiles`** (number): Number of rotated outfile files to retain. Defaults to `10`. The oldest rotated files are deleted first.
     - **`perf`** (object): Client-side performance telemetry, written only to local perf files. Independent of `telemetry.enabled` — `perf.enabled` is its own master switch.
       - **`enabled`** (boolean): Master switch for local performance telemetry. Defaults to `false`. When `false`, no perf files are created, no observers are installed, and no memory ring is allocated.
       - **`memory`** (boolean): Records a memory sample (RSS and heap) every 60 seconds into a 120-sample ring, giving roughly two hours of in-session history. Surfaced by the `/perf` command. Defaults to `false`, and is effective **only** when `perf.enabled` is also `true`.

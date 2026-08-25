@@ -18,6 +18,7 @@ export type {
 export { MergeStrategy, TOGGLE_TYPES } from './settings-schema/types.js';
 export { SETTINGS_SCHEMA } from './settings-schema/schema.js';
 import { SETTINGS_SCHEMA } from './settings-schema/schema.js';
+import { TELEMETRY_OUTFILE_BOUND_DEFAULTS } from '@vybestack/llxprt-code-core';
 import type {
   SettingEnumOption,
   SettingsSchema,
@@ -150,9 +151,38 @@ export const SETTINGS_SCHEMA_DEFINITIONS: Record<
         type: 'boolean',
         description: 'Whether prompts are logged in telemetry payloads.',
       },
+      logApiBodies: {
+        type: 'boolean',
+        description:
+          'Whether full request/response bodies are included in api_request and api_response telemetry events. Default false.',
+      },
+      logApiBodyMaxChars: {
+        type: 'number',
+        minimum: 0,
+        multipleOf: 1,
+        description:
+          `Maximum characters of a request/response body included when logApiBodies is true. ` +
+          `Default ${TELEMETRY_OUTFILE_BOUND_DEFAULTS.logApiBodyMaxChars}.`,
+      },
       outfile: {
         type: 'string',
         description: 'File path for writing telemetry output.',
+      },
+      outfileMaxBytes: {
+        type: 'number',
+        minimum: 1,
+        multipleOf: 1,
+        description:
+          `Size cap in bytes that triggers rotation of the telemetry outfile. ` +
+          `Default ${TELEMETRY_OUTFILE_BOUND_DEFAULTS.outfileMaxBytes} (100 MiB).`,
+      },
+      outfileMaxFiles: {
+        type: 'number',
+        minimum: 1,
+        multipleOf: 1,
+        description:
+          `Number of rotated telemetry outfile files to retain. ` +
+          `Default ${TELEMETRY_OUTFILE_BOUND_DEFAULTS.outfileMaxFiles}.`,
       },
       perf: {
         type: 'object',

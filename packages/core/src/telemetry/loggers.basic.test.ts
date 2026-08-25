@@ -174,6 +174,10 @@ describe('loggers', () => {
       getUsageStatisticsEnabled: () => true,
       getTelemetryEnabled: () => true,
       getTelemetryLogPromptsEnabled: () => true,
+      getTelemetryLogApiBodiesEnabled: () => false,
+      getTelemetryLogApiBodyMaxChars: () => 4000,
+      getTelemetryOutfileMaxBytes: () => 104857600,
+      getTelemetryOutfileMaxFiles: () => 10,
     } as Config;
 
     const mockMetrics = {
@@ -217,6 +221,7 @@ describe('loggers', () => {
           [SemanticAttributes.HTTP_STATUS_CODE]: 200,
           model: 'test-model',
           status_code: 200,
+          prompt_id: 'prompt-id-1',
           duration_ms: 100,
           input_token_count: 17,
           output_token_count: 50,
@@ -224,10 +229,9 @@ describe('loggers', () => {
           thoughts_token_count: 5,
           tool_token_count: 2,
           total_token_count: 0,
-          response_text: 'test-response',
-          prompt_id: 'prompt-id-1',
           error: undefined,
           finish_reasons: [],
+          response_chars: 13,
         },
       });
 
@@ -276,9 +280,21 @@ describe('loggers', () => {
         body: 'API response from test-model. Status: 200. Duration: 100ms.',
         attributes: {
           'session.id': 'test-session-id',
-          ...event,
           'event.name': EVENT_API_RESPONSE,
           'event.timestamp': '2025-01-01T00:00:00.000Z',
+          model: 'test-model',
+          status_code: 200,
+          prompt_id: 'prompt-id-1',
+          duration_ms: 100,
+          input_token_count: 17,
+          output_token_count: 50,
+          cached_content_token_count: 10,
+          thoughts_token_count: 5,
+          tool_token_count: 2,
+          total_token_count: 0,
+          error: 'test-error',
+          finish_reasons: [],
+          response_chars: 13,
           'error.message': 'test-error',
         },
       });
@@ -298,6 +314,10 @@ describe('loggers', () => {
       getUsageStatisticsEnabled: () => true,
       getTelemetryEnabled: () => true,
       getTelemetryLogPromptsEnabled: () => true,
+      getTelemetryLogApiBodiesEnabled: () => false,
+      getTelemetryLogApiBodyMaxChars: () => 4000,
+      getTelemetryOutfileMaxBytes: () => 104857600,
+      getTelemetryOutfileMaxFiles: () => 10,
     } as Config;
 
     it('should log an API request with request_text', () => {
@@ -316,7 +336,42 @@ describe('loggers', () => {
           'event.name': EVENT_API_REQUEST,
           'event.timestamp': '2025-01-01T00:00:00.000Z',
           model: 'test-model',
+          request_chars: 22,
+          prompt_id: 'prompt-id-7',
+        },
+      });
+    });
+
+    it('should log an API request with body when logApiBodies is enabled', () => {
+      const mockConfig = {
+        getSessionId: () => 'test-session-id',
+        getTargetDir: () => 'target-dir',
+        getUsageStatisticsEnabled: () => true,
+        getTelemetryEnabled: () => true,
+        getTelemetryLogPromptsEnabled: () => true,
+        getTelemetryLogApiBodiesEnabled: () => true,
+        getTelemetryLogApiBodyMaxChars: () => 4000,
+        getTelemetryOutfileMaxBytes: () => 104857600,
+        getTelemetryOutfileMaxFiles: () => 10,
+      } as Config;
+
+      const event = new ApiRequestEvent(
+        'test-model',
+        'prompt-id-7',
+        'This is a test request',
+      );
+
+      logApiRequest(mockConfig, event);
+
+      expect(mockLogger.emit).toHaveBeenCalledWith({
+        body: 'API request to test-model.',
+        attributes: {
+          'session.id': 'test-session-id',
+          'event.name': EVENT_API_REQUEST,
+          'event.timestamp': '2025-01-01T00:00:00.000Z',
+          model: 'test-model',
           request_text: 'This is a test request',
+          request_chars: 22,
           prompt_id: 'prompt-id-7',
         },
       });
@@ -335,6 +390,7 @@ describe('loggers', () => {
           'event.timestamp': '2025-01-01T00:00:00.000Z',
           model: 'test-model',
           prompt_id: 'prompt-id-6',
+          request_chars: 0,
         },
       });
     });

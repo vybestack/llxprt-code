@@ -335,22 +335,67 @@ export function mergeTelemetrySettings(
   return withClonedPerf({ ...current, ...update });
 }
 
+/**
+ * Defaults for the outfile-bound telemetry controls (#3315). Single source of
+ * truth for resolveTelemetrySettings; applied per-key with ?? so explicit
+ * undefined from callers (e.g. the CLI builder) still materializes the
+ * default.
+ */
+export const TELEMETRY_OUTFILE_BOUND_DEFAULTS: {
+  logApiBodies: boolean;
+  logApiBodyMaxChars: number;
+  outfileMaxBytes: number;
+  outfileMaxFiles: number;
+} = {
+  logApiBodies: false,
+  logApiBodyMaxChars: 4000,
+  outfileMaxBytes: 104857600,
+  outfileMaxFiles: 10,
+};
+
 export function resolveTelemetrySettings(
   telemetry: TelemetrySettings | undefined,
 ): TelemetrySettings {
-  const { perf, ...rest } = telemetry ?? {};
+  const {
+    perf,
+    enabled,
+    logPrompts,
+    logApiBodies,
+    logApiBodyMaxChars,
+    outfileMaxBytes,
+    outfileMaxFiles,
+    outfile,
+    logConversations,
+    logResponses,
+    redactSensitiveData,
+    redactFilePaths,
+    redactUrls,
+    redactEmails,
+    redactPersonalInfo,
+    ...rest
+  } = telemetry ?? {};
+  // Per-key ?? (not a defaults-first spread): callers like the CLI builder
+  // pass explicit undefined for unset keys, and a spread of defaults would be
+  // clobbered by those. undefined must always materialize the default.
   return withClonedPerf({
     ...rest,
-    enabled: telemetry?.enabled ?? false,
-    logPrompts: telemetry?.logPrompts ?? true,
-    outfile: telemetry?.outfile,
-    logConversations: telemetry?.logConversations ?? false,
-    logResponses: telemetry?.logResponses ?? false,
-    redactSensitiveData: telemetry?.redactSensitiveData ?? true,
-    redactFilePaths: telemetry?.redactFilePaths ?? false,
-    redactUrls: telemetry?.redactUrls ?? false,
-    redactEmails: telemetry?.redactEmails ?? false,
-    redactPersonalInfo: telemetry?.redactPersonalInfo ?? false,
+    enabled: enabled ?? false,
+    logPrompts: logPrompts ?? true,
+    logApiBodies: logApiBodies ?? TELEMETRY_OUTFILE_BOUND_DEFAULTS.logApiBodies,
+    logApiBodyMaxChars:
+      logApiBodyMaxChars ?? TELEMETRY_OUTFILE_BOUND_DEFAULTS.logApiBodyMaxChars,
+    outfileMaxBytes:
+      outfileMaxBytes ?? TELEMETRY_OUTFILE_BOUND_DEFAULTS.outfileMaxBytes,
+    outfileMaxFiles:
+      outfileMaxFiles ?? TELEMETRY_OUTFILE_BOUND_DEFAULTS.outfileMaxFiles,
+    outfile,
+    logConversations: logConversations ?? false,
+    logResponses: logResponses ?? false,
+    redactSensitiveData: redactSensitiveData ?? true,
+    redactFilePaths: redactFilePaths ?? false,
+    redactUrls: redactUrls ?? false,
+    redactEmails: redactEmails ?? false,
+    redactPersonalInfo: redactPersonalInfo ?? false,
     ...(perf ? { perf } : {}),
   });
 }

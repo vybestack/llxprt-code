@@ -380,12 +380,23 @@ export function logFileOperation(
 export function logApiRequest(config: Config, event: ApiRequestEvent): void {
   if (!isTelemetrySdkInitialized()) return;
 
+  // Strip the body before spreading: every other field stays exported as
+  // before; only request_text is gated behind the explicit opt-in.
+  const { request_text, ...eventWithoutBody } = event;
   const attributes: LogAttributes = {
     ...getCommonAttributes(config),
-    ...event,
+    ...eventWithoutBody,
     'event.name': EVENT_API_REQUEST,
     'event.timestamp': new Date().toISOString(),
+    request_chars: request_text?.length ?? 0,
   };
+
+  if (isApiBodyExportAllowed(config) && request_text !== undefined) {
+    attributes.request_text = truncateBody(
+      request_text,
+      config.getTelemetryLogApiBodyMaxChars(),
+    );
+  }
 
   const logRecord: LogRecord = {
     body: `API request to ${event.model}.`,
@@ -475,15 +486,16 @@ function buildApiResponseAttributes(
   config: Config,
   event: ApiResponseEvent,
 ): LogAttributes {
+  // Strip the body before spreading: every other field stays exported as
+  // before; only response_text is gated behind the explicit opt-in.
+  const { response_text, ...eventWithoutBody } = event;
   const attributes: LogAttributes = {
     ...getCommonAttributes(config),
-    ...event,
+    ...eventWithoutBody,
     'event.name': EVENT_API_RESPONSE,
     'event.timestamp': new Date().toISOString(),
+    response_chars: response_text?.length ?? 0,
   };
-  if (event.response_text) {
-    attributes.response_text = event.response_text;
-  }
   if (event.error) {
     attributes['error.message'] = event.error;
   } else if (
@@ -492,7 +504,28 @@ function buildApiResponseAttributes(
   ) {
     attributes[SemanticAttributes.HTTP_STATUS_CODE] = event.status_code;
   }
+  if (isApiBodyExportAllowed(config) && response_text !== undefined) {
+    attributes.response_text = truncateBody(
+      response_text,
+      config.getTelemetryLogApiBodyMaxChars(),
+    );
+  }
   return attributes;
+}
+
+/**
+ * Bodies are exported only under an explicit opt-in (`logApiBodies`) AND the
+ * prompt-privacy gate (`logPrompts`): `logPrompts: false` must keep prompt
+ * and conversation content out of every exported event unconditionally.
+ */
+function isApiBodyExportAllowed(config: Config): boolean {
+  return (
+    config.getTelemetryLogApiBodiesEnabled() && shouldLogUserPrompts(config)
+  );
+}
+
+function truncateBody(body: string, maxChars: number): string {
+  return body.length > maxChars ? body.slice(0, maxChars) : body;
 }
 
 function recordTokenUsageMetricsForResponse(
@@ -589,7 +622,7 @@ export function logNextSpeakerCheck(
 }
 
 export function logSlashCommand(
-  config: Config,
+  config: SessionConfig,
   event: SlashCommandEvent,
 ): void {
   if (!isTelemetrySdkInitialized()) return;

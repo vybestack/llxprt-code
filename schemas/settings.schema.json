@@ -1686,9 +1686,31 @@
           "type": "boolean",
           "description": "Whether prompts are logged in telemetry payloads."
         },
+        "logApiBodies": {
+          "type": "boolean",
+          "description": "Whether full request/response bodies are included in api_request and api_response telemetry events. Default false."
+        },
+        "logApiBodyMaxChars": {
+          "type": "number",
+          "minimum": 0,
+          "multipleOf": 1,
+          "description": "Maximum characters of a request/response body included when logApiBodies is true. Default 4000."
+        },
         "outfile": {
           "type": "string",
           "description": "File path for writing telemetry output."
+        },
+        "outfileMaxBytes": {
+          "type": "number",
+          "minimum": 1,
+          "multipleOf": 1,
+          "description": "Size cap in bytes that triggers rotation of the telemetry outfile. Default 104857600 (100 MiB)."
+        },
+        "outfileMaxFiles": {
+          "type": "number",
+          "minimum": 1,
+          "multipleOf": 1,
+          "description": "Number of rotated telemetry outfile files to retain. Default 10."
         },
         "perf": {
           "type": "object",

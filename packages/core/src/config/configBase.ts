@@ -11,6 +11,7 @@ import type { ShellJobManager } from '../services/shellJobManager.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { assertSessionScopedKey } from '@vybestack/llxprt-code-settings';
 import { createToolRegistry as _createToolRegistry } from './toolRegistryFactory.js';
+import { TELEMETRY_OUTFILE_BOUND_DEFAULTS } from './configConstructor.js';
 import { shutdownLsp } from './lspIntegration.js';
 import type { LspServiceClient } from '@vybestack/llxprt-code-ide-integration';
 import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
@@ -67,6 +68,35 @@ export abstract class ConfigBase extends ConfigBaseCore {
     this.contentGeneratorConfig.model = this.originalModel;
     this.inFallbackMode = false;
     this.model = this.originalModel;
+  }
+
+  // #3315 outfile-bound telemetry getters. They read the protected
+  // telemetrySettings field declared by ConfigBaseCore; sibling getters for
+  // the older telemetry flags live there. Fallbacks share the exported
+  // defaults constant with resolveTelemetrySettings so the two cannot drift.
+  getTelemetryLogApiBodiesEnabled(): boolean {
+    return (
+      this.telemetrySettings.logApiBodies ??
+      TELEMETRY_OUTFILE_BOUND_DEFAULTS.logApiBodies
+    );
+  }
+  getTelemetryLogApiBodyMaxChars(): number {
+    return (
+      this.telemetrySettings.logApiBodyMaxChars ??
+      TELEMETRY_OUTFILE_BOUND_DEFAULTS.logApiBodyMaxChars
+    );
+  }
+  getTelemetryOutfileMaxBytes(): number {
+    return (
+      this.telemetrySettings.outfileMaxBytes ??
+      TELEMETRY_OUTFILE_BOUND_DEFAULTS.outfileMaxBytes
+    );
+  }
+  getTelemetryOutfileMaxFiles(): number {
+    return (
+      this.telemetrySettings.outfileMaxFiles ??
+      TELEMETRY_OUTFILE_BOUND_DEFAULTS.outfileMaxFiles
+    );
   }
 
   getGlobalMemory(): string {

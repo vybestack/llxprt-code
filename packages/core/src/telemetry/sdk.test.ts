@@ -22,6 +22,10 @@ function createTelemetryConfig(outfile: string): TelemetryConfig {
   return {
     getTelemetryEnabled: () => true,
     getTelemetryLogPromptsEnabled: () => false,
+    getTelemetryLogApiBodiesEnabled: () => false,
+    getTelemetryLogApiBodyMaxChars: () => 4000,
+    getTelemetryOutfileMaxBytes: () => 104857600,
+    getTelemetryOutfileMaxFiles: () => 10,
     getTelemetryOutfile: () => outfile,
     getDebugMode: () => false,
     getConversationLoggingEnabled: () => false,
