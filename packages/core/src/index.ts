@@ -252,6 +252,7 @@ export {
   resetProviderKeyStorage,
 } from './storage/provider-key-storage.js';
 export * from './storage/local-media-store.js';
+export * from './storage/SessionPersistenceService.js';
 export * from './storage/media-admission-service.js';
 export * from './storage/request-media-resolver.js';
 export * from './storage/media-lifecycle-metrics.js';

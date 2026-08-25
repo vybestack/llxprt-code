@@ -28,6 +28,7 @@ import type {
   SandboxConfig,
   SchedulerCallbacks,
   SchedulerOptions,
+  SessionPersistenceService,
   SessionRecordingService,
   ShellExecutionConfig,
   ShellReplacementMode,
@@ -38,7 +39,6 @@ import type {
   ImageOperationRunner,
   ToolSchedulerContract,
 } from '@vybestack/llxprt-code-core';
-import type { SessionPersistenceService } from '@vybestack/llxprt-code-core/storage/SessionPersistenceService.js';
 import type {
   DiscoveredMCPPrompt,
   MCPDiscoveryState,

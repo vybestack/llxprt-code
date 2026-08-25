@@ -34,13 +34,13 @@ import {
   type ContinueTarget,
   type IContent,
   type SessionRecordingService,
+  type SessionPersistenceService,
   type LockHandle,
   type SessionMetadata,
   type SessionSummary,
   type HistoryService,
   type LocalMediaStore,
 } from '@vybestack/llxprt-code-core';
-import type { SessionPersistenceService } from '@vybestack/llxprt-code-core/storage/SessionPersistenceService.js';
 import { type DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
 /**
