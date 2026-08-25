@@ -76,7 +76,7 @@ interface LifecycleAttemptState {
 
 type LifecycleRetryOutcome =
   | { readonly retry: true }
-  | { readonly retry: false; readonly error?: unknown };
+  | { readonly retry: false; readonly error: unknown };
 
 /**
  * #2771 retry policy: the connection-limit verdict is scoped to the
