@@ -23,6 +23,7 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import { Config } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
+  getCliRuntimeContext,
   getDefaultCliRuntimeId,
   resetDefaultCliRuntimeIdForTesting,
   setDefaultCliRuntimeId,
@@ -52,9 +53,22 @@ function makeConfig(sessionId: string): Config {
 }
 
 describe('cleanupAgents host-injected exit cleanup', () => {
-  it('completes without a callback', async () => {
-    await cleanupAgents([makeAgent(async () => {})], logger);
-    await cleanupAgents([], logger);
+  it('still disposes every agent when no callback is supplied', async () => {
+    const disposed: string[] = [];
+
+    await cleanupAgents(
+      [
+        makeAgent(async () => {
+          disposed.push('first');
+        }),
+        makeAgent(async () => {
+          disposed.push('second');
+        }),
+      ],
+      logger,
+    );
+
+    expect(disposed.sort()).toEqual(['first', 'second']);
   });
 
   it('invokes the callback exactly once, after agent disposal', async () => {
@@ -111,6 +125,25 @@ describe('registerZedAcpRuntime', () => {
     const registered = getDefaultCliRuntimeId();
     expect(registered).toBe(ZED_ACP_RUNTIME_ID);
     expect(registered).not.toContain('cli.runtime');
+  });
+
+  it('registers the caller Config, its settings service, and the bootstrap metadata', () => {
+    const config = makeConfig('zed-acp-runtime-services');
+
+    registerZedAcpRuntime(config);
+
+    // Read the registration back out of the real runtime registry rather than
+    // trusting the call: a regression that registered a different Config, a
+    // detached settings service, or dropped the metadata would still set the
+    // default pointer correctly and go unnoticed.
+    const context = getCliRuntimeContext();
+    expect(context.runtimeId).toBe(ZED_ACP_RUNTIME_ID);
+    expect(context.config).toBe(config);
+    expect(context.settingsService).toBe(config.getSettingsService());
+    expect(context.metadata).toMatchObject({
+      source: 'zed-integration',
+      stage: 'bootstrap',
+    });
   });
 
   it('hands the pointer off from an already-registered CLI runtime', () => {

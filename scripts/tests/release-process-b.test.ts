@@ -86,7 +86,7 @@ function npmReleasePackages() {
 describe('Dockerfile', () => {
   const dockerfile = readRootFile('Dockerfile');
 
-  it('copies tools, storage, auth, settings, telemetry, MCP, core, providers, agents, and CLI tarballs in dependency order', () => {
+  it('copies tools, storage, auth, settings, telemetry, MCP, core, providers, agents, zed-acp, and CLI tarballs in dependency order', () => {
     const storageCopy = dockerfile.indexOf(
       'COPY --chown=node:node packages/storage/dist/vybestack-llxprt-code-storage-*.tgz',
     );
@@ -117,6 +117,9 @@ describe('Dockerfile', () => {
     const agentsCopy = dockerfile.indexOf(
       'COPY --chown=node:node packages/agents/dist/vybestack-llxprt-code-agents-*.tgz',
     );
+    const zedAcpCopy = dockerfile.indexOf(
+      'COPY --chown=node:node packages/zed-acp/dist/vybestack-llxprt-code-zed-acp-*.tgz',
+    );
     const cliCopy = dockerfile.indexOf(
       'COPY --chown=node:node packages/cli/dist/vybestack-llxprt-code-*.tgz',
     );
@@ -137,7 +140,13 @@ describe('Dockerfile', () => {
     ).toBeLessThan(coreCopy);
     expect(providersCopy).toBeGreaterThan(coreCopy);
     expect(agentsCopy).toBeGreaterThan(providersCopy);
-    expect(cliCopy).toBeGreaterThan(agentsCopy);
+    // The CLI depends on the ACP client, so its tarball must be present in the
+    // same local-install transaction and copied before the CLI tarball.
+    expect(
+      zedAcpCopy,
+      'Dockerfile should COPY the zed-acp tarball',
+    ).toBeGreaterThan(agentsCopy);
+    expect(cliCopy).toBeGreaterThan(zedAcpCopy);
   });
 
   it('installs local tarballs in one npm transaction for unpublished versions', () => {
@@ -161,6 +170,7 @@ describe('Dockerfile', () => {
     expect(installCommand).toContain('vybestack-llxprt-code-core-*.tgz');
     expect(installCommand).toContain('vybestack-llxprt-code-providers-*.tgz');
     expect(installCommand).toContain('vybestack-llxprt-code-agents-*.tgz');
+    expect(installCommand).toContain('vybestack-llxprt-code-zed-acp-*.tgz');
     expect(installCommand).toContain('vybestack-llxprt-code-*.tgz');
     // The retry wrapper must not reintroduce a second, split tarball install:
     // the slice between the loop head and the cache clean contains exactly
@@ -233,6 +243,7 @@ describe('scripts/bind-release-deps.ts', () => {
       '@vybestack/llxprt-code-lsp',
       '@vybestack/llxprt-code-providers',
       '@vybestack/llxprt-code-agents',
+      '@vybestack/llxprt-code-zed-acp',
       '@vybestack/llxprt-code',
     ]);
   });

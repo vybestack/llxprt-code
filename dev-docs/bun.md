@@ -8,7 +8,7 @@ workspace manager for this monorepo. It is the companion to
 
 Bun is being adopted incrementally as part of a staged runtime migration. This
 step (S1) introduces Bun **only** as the package/workspace manager: it is used
-to install dependencies, resolve the 16 workspaces, and materialize the
+to install dependencies, resolve the workspaces, and materialize the
 `node_modules` tree. The runtime and build path are intentionally **not**
 changed by S1 — they continue to run on Node and npm until later subissues
 (S3–S7). npm must keep working during the transition so no consumer is broken.
@@ -400,7 +400,7 @@ resolution).
 > by a registry copy rather than the local `packages/cli` link, giving a false
 > pass. The smoke job instead resolves the real path of every workspace entry
 > and requires it to point inside the repository, so it cannot false-pass on a
-> shadowed package. This strict check now applies to **all 16** workspaces,
+> shadowed package. This strict check now applies to **all** workspaces,
 > including `packages/cli`, with no exemptions.
 >
 > This is only sound because S1 also removed a latent trap: the root
@@ -437,7 +437,7 @@ usable, because both assume an incremental install is a fixed point — which it
 is not here. The root cause is structural to this monorepo: the root package and
 `packages/cli` share the name `@vybestack/llxprt-code`, combined with `file:../`
 workspace links and a large `overrides` block. A plain `bun install` against the
-committed lockfile still installs all 16 workspaces correctly; it is only the
+committed lockfile still installs all of the workspaces correctly; it is only the
 re-normalized lockfile _text_ that is unstable, so we regenerate-and-commit
 `bun.lock` deliberately rather than diff-gating it in CI.
 
@@ -475,7 +475,7 @@ npm still works during the transition:
 npm install
 ```
 
-Both commands produce a working, hoisted `node_modules` tree for all 16
+Both commands produce a working, hoisted `node_modules` tree for all
 workspaces.
 
 ## Bun-backed Test Orchestration (issue #2463)
@@ -500,7 +500,7 @@ The root `package.json` defines `test:bun`:
 This script is a Bun-backed orchestrator that mirrors `npm run test
 --workspaces --if-present` (plus `test:scripts`). It:
 
-1. **Discovers all 16 workspaces** from the root `package.json` `workspaces`
+1. **Discovers all workspaces** from the root `package.json` `workspaces`
    array, reading each workspace's `package.json` to determine its `test`
    and `pretest` scripts.
 

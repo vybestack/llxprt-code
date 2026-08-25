@@ -7,7 +7,7 @@
 /**
  * Single source of truth for CI test sharding (issue #2707).
  *
- * The root test command used to run all 16 workspaces sequentially, so CI
+ * The root test command used to run all workspaces sequentially, so CI
  * wall-clock was the *sum* of every package's test time. Sharding splits the
  * suite into parallel CI jobs so the critical path becomes *max(shard)*.
  *
