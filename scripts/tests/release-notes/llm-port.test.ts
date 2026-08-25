@@ -18,7 +18,13 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, isAbsolute, relative } from 'node:path';
+import { join, isAbsolute, relative, resolve } from 'node:path';
+
+/**
+ * NTFS does not implement Unix permission bits, so Node reports a synthesised
+ * mode on Windows and `stat.mode & 0o777` can never equal 0o600 there.
+ */
+const IS_WINDOWS = process.platform === 'win32';
 import { z } from 'zod';
 
 const inlineProfileSchema = z.object({
@@ -212,7 +218,9 @@ describe('createLlmPort', () => {
       },
       successfulRunner((_command, args) => {
         const keyfileIndex = args.indexOf('--keyfile');
-        expect(args[keyfileIndex + 1]).toBe('/configured/keyfile');
+        // The port resolves the configured path, which is drive-qualified on
+        // Windows (D:\configured\keyfile), so the expectation must resolve too.
+        expect(args[keyfileIndex + 1]).toBe(resolve('/configured/keyfile'));
       }),
     );
     await port.generateHighlights('{}');
@@ -253,23 +261,26 @@ describe('createLlmPort', () => {
     }
   });
 
-  it('writes a mode-0600 temp keyfile when no keyfile configured', async () => {
-    let keyfileOk = false;
-    const port = createLlmPort(
-      { provider: 'openai', model: 'model', apiKey: 'temp-key' },
-      successfulRunner((_command, args) => {
-        const keyfileIndex = args.indexOf('--keyfile');
-        const keyfilePath = args[keyfileIndex + 1]!;
-        // Check permissions DURING invocation (temp dir still exists).
-        expect(existsSync(keyfilePath)).toBe(true);
-        const stat = statSync(keyfilePath);
-        expect(stat.mode & 0o777).toBe(0o600);
-        keyfileOk = true;
-      }),
-    );
-    await port.generateHighlights('{}');
-    expect(keyfileOk).toBe(true);
-  });
+  it.skipIf(IS_WINDOWS)(
+    'writes a mode-0600 temp keyfile when no keyfile configured',
+    async () => {
+      let keyfileOk = false;
+      const port = createLlmPort(
+        { provider: 'openai', model: 'model', apiKey: 'temp-key' },
+        successfulRunner((_command, args) => {
+          const keyfileIndex = args.indexOf('--keyfile');
+          const keyfilePath = args[keyfileIndex + 1]!;
+          // Check permissions DURING invocation (temp dir still exists).
+          expect(existsSync(keyfilePath)).toBe(true);
+          const stat = statSync(keyfilePath);
+          expect(stat.mode & 0o777).toBe(0o600);
+          keyfileOk = true;
+        }),
+      );
+      await port.generateHighlights('{}');
+      expect(keyfileOk).toBe(true);
+    },
+  );
 
   it('cleans up the temp directory after successful invocation', async () => {
     let capturedCwd = '';

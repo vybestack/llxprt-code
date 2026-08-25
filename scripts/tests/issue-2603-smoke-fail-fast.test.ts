@@ -701,23 +701,29 @@ describe('benchmark env handoff (root cause E)', () => {
     }
   });
 
-  it('resolveDirectLauncherInvocation on POSIX returns the source launcher', () => {
-    // On POSIX the env handoff does not apply (the launcher is the POSIX
-    // shell script). We assert the POSIX path is returned, proving the
-    // function does not crash when LLXPRT_BENCH_LAUNCHER is unset.
-    const origEnv = process.env.LLXPRT_BENCH_LAUNCHER;
-    delete process.env.LLXPRT_BENCH_LAUNCHER;
-    try {
-      const m = benchmarkModule();
-      const inv = m.resolveDirectLauncherInvocation();
-      expect(inv.command).toMatch(/llxprt$/);
-      expect(inv.baseArgs).toEqual([]);
-    } finally {
-      if (origEnv !== undefined) {
-        process.env.LLXPRT_BENCH_LAUNCHER = origEnv;
+  // Asserts the POSIX branch specifically, and reaches it through a gzipped
+  // tarball. Windows takes the other branch and ships bsdtar, whose gzip child
+  // handling differs. The rest of this suite still runs there.
+  it.skipIf(process.platform === 'win32')(
+    'resolveDirectLauncherInvocation on POSIX returns the source launcher',
+    () => {
+      // On POSIX the env handoff does not apply (the launcher is the POSIX
+      // shell script). We assert the POSIX path is returned, proving the
+      // function does not crash when LLXPRT_BENCH_LAUNCHER is unset.
+      const origEnv = process.env.LLXPRT_BENCH_LAUNCHER;
+      delete process.env.LLXPRT_BENCH_LAUNCHER;
+      try {
+        const m = benchmarkModule();
+        const inv = m.resolveDirectLauncherInvocation();
+        expect(inv.command).toMatch(/llxprt$/);
+        expect(inv.baseArgs).toEqual([]);
+      } finally {
+        if (origEnv !== undefined) {
+          process.env.LLXPRT_BENCH_LAUNCHER = origEnv;
+        }
       }
-    }
-  });
+    },
+  );
 
   it('parseIterations rejects non-numeric / non-positive values', () => {
     const m = benchmarkModule();

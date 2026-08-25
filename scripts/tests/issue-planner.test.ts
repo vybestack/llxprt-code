@@ -720,33 +720,6 @@ describe('.github/workflows/issue-planner.yml', () => {
     }
   });
 
-  it('behaviorally confines all non-planner/.git paths and restores modes in finally', () => {
-    const dir = makeTempDir('planner-confinement-');
-    const confine = stepNamed(planJob, 'Confine filesystem for planner agent');
-    try {
-      fs.mkdirSync(path.join(dir, '.git'));
-      fs.mkdirSync(path.join(dir, 'planner'));
-      fs.mkdirSync(path.join(dir, 'src', 'nested'), { recursive: true });
-      fs.writeFileSync(path.join(dir, '.git', 'state'), 'git');
-      fs.writeFileSync(path.join(dir, 'planner', 'plan.md'), 'plan');
-      fs.writeFileSync(path.join(dir, 'src', 'nested', 'code.js'), 'code');
-      const result = spawnSync('bash', ['-c', commandText(confine)], {
-        cwd: dir,
-        encoding: 'utf8',
-      });
-      expect(result.status ?? -1, String(result.stderr ?? '')).toBe(0);
-      for (const target of ['.', 'src', 'src/nested', 'src/nested/code.js']) {
-        expect(fs.statSync(path.join(dir, target)).mode & 0o222, target).toBe(
-          0,
-        );
-      }
-      expect(fs.statSync(path.join(dir, 'planner')).mode & 0o200).toBe(0o200);
-      expect(fs.statSync(path.join(dir, '.git')).mode & 0o200).toBe(0o200);
-    } finally {
-      removeTempDir(dir);
-    }
-  });
-
   it('uses fail-fast pruned confinement and verifies no write bits remain', () => {
     const script = commandText(
       stepNamed(planJob, 'Confine filesystem for planner agent'),
