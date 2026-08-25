@@ -25,7 +25,7 @@ const tokenizerWasm = join(
 );
 const tempDirectories: string[] = [];
 const bunAvailable =
-  spawnSync('bun', ['--version'], { encoding: 'utf8' }).status === 0;
+  spawnSync(process.execPath, ['--version'], { encoding: 'utf8' }).status === 0;
 
 afterEach(() => {
   const cleanupErrors: unknown[] = [];

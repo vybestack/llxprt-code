@@ -267,7 +267,11 @@ describe('doc-tree invariants (real repo state)', () => {
   describe('keybindings generator single-target', () => {
     it('exactly one file in the entire repo carries KEYBINDINGS-AUTOGEN:START', () => {
       const found = searchRepoForMarker('KEYBINDINGS-AUTOGEN:START');
-      expect(found).toEqual(['docs/keyboard-shortcuts.md']);
+      // relative() returns native separators, so normalise to forward slashes
+      // before comparing against the canonical repo-relative paths.
+      expect(found.map((p) => p.replaceAll('\\', '/'))).toEqual([
+        'docs/keyboard-shortcuts.md',
+      ]);
     });
   });
 
