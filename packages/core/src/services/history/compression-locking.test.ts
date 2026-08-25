@@ -245,4 +245,76 @@ describe('Compression locking', () => {
 
     expect(compressionMessages.length).toBe(3);
   });
+
+  describe('compressionLockReleased event', () => {
+    let observed: string[];
+
+    beforeEach(() => {
+      observed = [];
+      historyService.on('contentAdded', () => {
+        observed.push('contentAdded');
+      });
+      historyService.on('compressionLockReleased', () => {
+        observed.push('compressionLockReleased');
+      });
+      historyService.on('compressionEnded', () => {
+        observed.push('compressionEnded');
+      });
+    });
+
+    it('releases the lock on an argless endCompression without compressionEnded', () => {
+      historyService.startCompression();
+
+      historyService.endCompression();
+
+      expect(observed).toContain('compressionLockReleased');
+      expect(observed).not.toContain('compressionEnded');
+    });
+
+    it('releases the lock on a failed-shaped endCompression without compressionEnded', () => {
+      historyService.startCompression();
+
+      historyService.endCompression(undefined, 3);
+
+      expect(observed).toContain('compressionLockReleased');
+      expect(observed).not.toContain('compressionEnded');
+    });
+
+    it('releases the lock and emits compressionEnded when a summary is provided', () => {
+      historyService.startCompression();
+
+      historyService.endCompression(
+        { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
+        3,
+      );
+
+      expect(observed).toContain('compressionLockReleased');
+      expect(observed).toContain('compressionEnded');
+    });
+
+    it('flushes queued contentAdded before compressionLockReleased then compressionEnded', () => {
+      historyService.startCompression();
+      historyService.add({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'queued during compression' }],
+      });
+
+      historyService.endCompression(
+        { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
+        3,
+      );
+
+      expect(observed).toStrictEqual([
+        'contentAdded',
+        'compressionLockReleased',
+        'compressionEnded',
+      ]);
+    });
+
+    it('emits compressionLockReleased without a preceding startCompression', () => {
+      historyService.endCompression();
+
+      expect(observed).toContain('compressionLockReleased');
+    });
+  });
 });

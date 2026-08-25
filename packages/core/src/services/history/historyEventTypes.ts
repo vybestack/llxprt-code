@@ -27,6 +27,7 @@ export interface HistoryServiceEventEmitter {
   ): this;
   on(event: 'contentAdded', listener: (content: IContent) => void): this;
   on(event: 'compressionStarted', listener: () => void): this;
+  on(event: 'compressionLockReleased', listener: () => void): this;
   on(
     event: 'compressionEnded',
     listener: (summary: IContent, itemsCompressed: number) => void,
@@ -34,6 +35,7 @@ export interface HistoryServiceEventEmitter {
   emit(event: 'tokensUpdated', eventData: TokensUpdatedEvent): boolean;
   emit(event: 'contentAdded', content: IContent): boolean;
   emit(event: 'compressionStarted'): boolean;
+  emit(event: 'compressionLockReleased'): boolean;
   emit(
     event: 'compressionEnded',
     summary: IContent,
@@ -45,6 +47,7 @@ export interface HistoryServiceEventEmitter {
   ): this;
   off(event: 'contentAdded', listener: (content: IContent) => void): this;
   off(event: 'compressionStarted', listener: () => void): this;
+  off(event: 'compressionLockReleased', listener: () => void): this;
   off(
     event: 'compressionEnded',
     listener: (summary: IContent, itemsCompressed: number) => void,
