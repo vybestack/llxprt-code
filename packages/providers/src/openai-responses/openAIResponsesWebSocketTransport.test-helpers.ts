@@ -108,9 +108,16 @@ export class SocketHarness {
   readonly urls: string[] = [];
   readonly headers: Array<Readonly<Record<string, string>>> = [];
 
-  constructor(
-    private readonly scripts: ReadonlyArray<(socket: FakeSocket) => void>,
-  ) {}
+  private readonly scripts: Array<(socket: FakeSocket) => void>;
+
+  constructor(scripts: ReadonlyArray<(socket: FakeSocket) => void>) {
+    this.scripts = [...scripts];
+  }
+
+  /** Adds the script for the next socket beyond the currently scripted set. */
+  appendScript(script: (socket: FakeSocket) => void): void {
+    this.scripts.push(script);
+  }
 
   readonly openSocket: OpenTransportSocket = (url, headers) => {
     if (this.scripts.length === 0) {
@@ -152,6 +159,29 @@ export function options(
 
 export function frame(object: unknown): string {
   return JSON.stringify(object);
+}
+
+/** A top-level WebSocket error frame carrying the connection-limit code. */
+export function connectionLimitErrorFrame(): string {
+  return frame({
+    type: 'error',
+    status: 400,
+    error: {
+      type: 'websocket_error',
+      code: 'websocket_connection_limit_reached',
+      message:
+        'The websocket connection was closed because it has been open for too long',
+    },
+    headers: {},
+  });
+}
+
+/** A script that emits the connection-limit lifecycle error on send. */
+export function connectionLimitScript(): (socket: FakeSocket) => void {
+  return (socket) => {
+    socket.open();
+    socket.onSend = () => socket.message(connectionLimitErrorFrame());
+  };
 }
 
 function deltaFrame(text: string): string {
