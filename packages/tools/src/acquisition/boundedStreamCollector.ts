@@ -23,6 +23,13 @@ export interface BoundedStreamCollectorOptions {
 
 export const DEFAULT_OMISSION_NOTICE = 'LLXPRT output truncated';
 
+interface CollectorStorage {
+  readonly head: Buffer;
+  readonly tail: Buffer;
+}
+
+const EMPTY_BUFFER = Buffer.alloc(0);
+
 function copySlice(source: Buffer, start: number, end: number): Buffer {
   const copy = Buffer.allocUnsafe(end - start);
   source.copy(copy, 0, start, end);
@@ -122,14 +129,17 @@ function encode(text: string, encoding: string): Buffer {
   return Buffer.from(text, nodeBufferEncoding(encoding) ?? 'utf8');
 }
 
-/** Retains a fixed-size byte head and tail without retaining input buffers. */
+/**
+ * Retains a fixed-size byte head and tail without retaining input buffers.
+ * @plan PLAN-20260825-SHELLMEM.P01
+ * @requirement REQ-3329-04
+ */
 export class BoundedStreamCollector {
   private readonly budget: ByteBudget;
   private readonly encoding: string;
   private readonly headCapacity: number;
   private readonly tailCapacity: number;
-  private readonly head: Buffer;
-  private readonly tail: Buffer;
+  private storage: CollectorStorage | null = null;
   private headLength = 0;
   private tailLength = 0;
   private tailStart = 0;
@@ -141,8 +151,6 @@ export class BoundedStreamCollector {
     const fraction = Math.min(Math.max(options.headFraction ?? 0.5, 0), 1);
     this.headCapacity = Math.floor(this.budget.bytes * fraction);
     this.tailCapacity = this.budget.bytes - this.headCapacity;
-    this.head = Buffer.allocUnsafe(this.headCapacity);
-    this.tail = Buffer.allocUnsafe(this.tailCapacity);
   }
 
   get observedByteCount(): number {
@@ -153,12 +161,22 @@ export class BoundedStreamCollector {
     return this.observedBytes > this.budget.bytes;
   }
 
+  /** @plan PLAN-20260825-SHELLMEM.P01 @requirement REQ-3329-04 */
+  private ensureStorage(): CollectorStorage {
+    this.storage ??= {
+      head: Buffer.allocUnsafe(this.headCapacity),
+      tail: Buffer.allocUnsafe(this.tailCapacity),
+    };
+    return this.storage;
+  }
+
   append(chunk: Buffer | string): void {
     const bytes = Buffer.isBuffer(chunk) ? chunk : encode(chunk, this.encoding);
     if (bytes.length === 0) {
       return;
     }
 
+    const storage = this.ensureStorage();
     this.observedBytes += bytes.length;
     let offset = 0;
     if (this.headLength < this.headCapacity) {
@@ -166,11 +184,11 @@ export class BoundedStreamCollector {
         bytes.length,
         this.headCapacity - this.headLength,
       );
-      bytes.copy(this.head, this.headLength, 0, copied);
+      bytes.copy(storage.head, this.headLength, 0, copied);
       this.headLength += copied;
       offset = copied;
     }
-    this.appendTail(bytes, offset);
+    this.appendTail(storage, bytes, offset);
   }
 
   flushDecoder(): void {
@@ -185,22 +203,26 @@ export class BoundedStreamCollector {
     return this.getResult().tailText;
   }
 
-  private appendTail(bytes: Buffer, offset: number): void {
+  private appendTail(
+    storage: CollectorStorage,
+    bytes: Buffer,
+    offset: number,
+  ): void {
     if (this.tailCapacity === 0 || offset >= bytes.length) {
       return;
     }
     const remaining = bytes.length - offset;
     if (remaining >= this.tailCapacity) {
-      bytes.copy(this.tail, 0, bytes.length - this.tailCapacity);
+      bytes.copy(storage.tail, 0, bytes.length - this.tailCapacity);
       this.tailLength = this.tailCapacity;
       this.tailStart = 0;
       return;
     }
     const writeStart = (this.tailStart + this.tailLength) % this.tailCapacity;
     const firstLength = Math.min(remaining, this.tailCapacity - writeStart);
-    bytes.copy(this.tail, writeStart, offset, offset + firstLength);
+    bytes.copy(storage.tail, writeStart, offset, offset + firstLength);
     if (firstLength < remaining) {
-      bytes.copy(this.tail, 0, offset + firstLength, bytes.length);
+      bytes.copy(storage.tail, 0, offset + firstLength, bytes.length);
     }
     const overwritten = Math.max(
       0,
@@ -211,21 +233,33 @@ export class BoundedStreamCollector {
   }
 
   private copiedHead(): Buffer {
-    return copySlice(this.head, 0, this.headLength);
+    return this.storage === null
+      ? EMPTY_BUFFER
+      : copySlice(this.storage.head, 0, this.headLength);
   }
 
   private copiedTail(): Buffer {
-    if (this.tailLength === 0) {
-      return Buffer.alloc(0);
+    if (this.storage === null || this.tailLength === 0) {
+      return EMPTY_BUFFER;
     }
     const result = Buffer.allocUnsafe(this.tailLength);
     const firstLength = Math.min(
       this.tailLength,
       this.tailCapacity - this.tailStart,
     );
-    this.tail.copy(result, 0, this.tailStart, this.tailStart + firstLength);
+    this.storage.tail.copy(
+      result,
+      0,
+      this.tailStart,
+      this.tailStart + firstLength,
+    );
     if (firstLength < this.tailLength) {
-      this.tail.copy(result, firstLength, 0, this.tailLength - firstLength);
+      this.storage.tail.copy(
+        result,
+        firstLength,
+        0,
+        this.tailLength - firstLength,
+      );
     }
     return result;
   }

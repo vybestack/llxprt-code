@@ -127,49 +127,21 @@ export function createPtyResultPromise(
   });
   headlessTerminal.scrollToTop();
 
-  const exitedGuard = createExitGuard();
-  const inactivityTimeoutMs = shellExecutionConfig.inactivityTimeoutMs;
-  const { reset: resetInactivityTimer, controller: inactivityAbortController } =
-    makeInactivityTimer(inactivityTimeoutMs, exitedGuard);
-
-  const activePtyEntry: ActivePty = {
+  const state = initializePtyExecState({
     ptyProcess,
     headlessTerminal,
-    supportsProcessGroupKill: ptyInfo.name !== 'bun-pty',
-  };
-  activePtys.set(ptyProcess.pid, activePtyEntry);
-  lastActivePtyIdRef.value = ptyProcess.pid;
-
-  const state: PtyExecState = {
-    ptyProcess,
-    headlessTerminal,
-    activePtyEntry,
     isWindows,
     abortSignal,
     onOutputEvent,
     shellExecutionConfig,
     ptyInfo,
-    supportsProcessGroupKill: ptyInfo.name !== 'bun-pty',
-    inactivityAbortController,
-    resetInactivityTimer,
-    exitedGuard,
-    output: null,
-    rawCollector: new BoundedCombinedCollector({ budget }),
-    error: null,
-    isStreamingRawContent: true,
-    sniffedBytes: 0,
-    isWriting: false,
-    hasStartedOutput: false,
-    hasResolved: false,
-    abortFinalizeTimeout: null,
-    processingChain: Promise.resolve(),
-    pendingQueueBytes: 0,
-    pendingQueueItems: 0,
-    supportsBackpressure: ptyInfo.supportsBackpressure,
-    backpressurePaused: false,
-    queueOverflowed: false,
-    ...createTerminalTrackingState(effectiveScrollback, rows),
-  };
+    budget,
+    effectiveScrollback,
+    rows,
+  });
+
+  activePtys.set(ptyProcess.pid, state.activePtyEntry);
+  lastActivePtyIdRef.value = ptyProcess.pid;
 
   return new Promise<ShellExecutionResult>((resolve) => {
     setupPtyEventHandlers(
@@ -180,6 +152,77 @@ export function createPtyResultPromise(
       budget,
     );
   });
+}
+
+/**
+ * @plan PLAN-20260825-SHELLMEM.P01
+ * @requirement REQ-3329-02
+ * @requirement REQ-3329-03
+ */
+function initializePtyExecState(execution: {
+  ptyProcess: IPty;
+  headlessTerminal: PtyExecState['headlessTerminal'];
+  isWindows: boolean;
+  abortSignal: AbortSignal;
+  onOutputEvent: (event: ShellOutputEvent) => void;
+  shellExecutionConfig: ShellExecutionConfig;
+  ptyInfo: NonNullable<PtyImplementation>;
+  budget: ByteBudget;
+  effectiveScrollback: number;
+  rows: number;
+}): PtyExecState {
+  const exitedGuard = createExitGuard();
+  const inactivityTimeoutMs =
+    execution.shellExecutionConfig.inactivityTimeoutMs;
+  const {
+    reset: resetInactivityTimer,
+    cancel: cancelInactivityTimer,
+    controller: inactivityAbortController,
+  } = makeInactivityTimer(inactivityTimeoutMs, exitedGuard);
+
+  const activePtyEntry: ActivePty = {
+    ptyProcess: execution.ptyProcess,
+    headlessTerminal: execution.headlessTerminal,
+    supportsProcessGroupKill: execution.ptyInfo.name !== 'bun-pty',
+  };
+
+  return {
+    ptyProcess: execution.ptyProcess,
+    headlessTerminal: execution.headlessTerminal,
+    activePtyEntry,
+    isWindows: execution.isWindows,
+    abortSignal: execution.abortSignal,
+    onOutputEvent: execution.onOutputEvent,
+    shellExecutionConfig: execution.shellExecutionConfig,
+    ptyInfo: execution.ptyInfo,
+    supportsProcessGroupKill: execution.ptyInfo.name !== 'bun-pty',
+    inactivityAbortController,
+    resetInactivityTimer,
+    cancelInactivityTimer,
+    inactivityAbortHandler: null,
+    callerAbortHandler: null,
+    exitRaceCleanup: null,
+    exitedGuard,
+    output: null,
+    rawCollector: new BoundedCombinedCollector({ budget: execution.budget }),
+    error: null,
+    isStreamingRawContent: true,
+    sniffedBytes: 0,
+    isWriting: false,
+    hasStartedOutput: false,
+    hasResolved: false,
+    abortFinalizeTimeout: null,
+    processingChain: Promise.resolve(),
+    pendingQueueBytes: 0,
+    pendingQueueItems: 0,
+    supportsBackpressure: execution.ptyInfo.supportsBackpressure,
+    backpressurePaused: false,
+    queueOverflowed: false,
+    ...createTerminalTrackingState(
+      execution.effectiveScrollback,
+      execution.rows,
+    ),
+  };
 }
 
 function setupPtyEventHandlers(
@@ -233,14 +276,43 @@ function setupPtyEventHandlers(
 
   registerPtyExitHandler(state, resolveResult, abortHandler);
 
+  state.callerAbortHandler = abortHandler;
   state.abortSignal.addEventListener('abort', abortHandler, { once: true });
 }
 
+/**
+ * @plan PLAN-20260825-SHELLMEM.P01
+ * @requirement REQ-3329-01
+ * @requirement REQ-3329-02
+ */
 function teardownPtyState(
   state: PtyExecState,
   activePtys: Map<number, ActivePty>,
   lastActivePtyIdRef: { value: number | null },
 ): void {
+  // Marking the guard here stops every abort/inactivity kill chain that is
+  // still mid-flight (they re-check isExited after each escalation sleep),
+  // so none can schedule a fallback timeout after this execution resolved.
+  state.exitedGuard.markExited();
+  state.cancelInactivityTimer();
+  if (state.callerAbortHandler !== null) {
+    state.abortSignal.removeEventListener('abort', state.callerAbortHandler);
+    state.callerAbortHandler = null;
+  }
+  if (state.exitRaceCleanup !== null) {
+    // ptyExitRace's temporary listener would otherwise stay on the caller
+    // signal until pending output processing settles; a stalled write chain
+    // would retain this execution's closure graph indefinitely.
+    state.exitRaceCleanup();
+    state.exitRaceCleanup = null;
+  }
+  if (state.inactivityAbortHandler !== null) {
+    state.inactivityAbortController.signal.removeEventListener(
+      'abort',
+      state.inactivityAbortHandler,
+    );
+    state.inactivityAbortHandler = null;
+  }
   if (state.abortFinalizeTimeout) {
     clearTimeout(state.abortFinalizeTimeout);
     state.abortFinalizeTimeout = null;
@@ -263,6 +335,7 @@ function teardownPtyState(
   );
 }
 
+/** @plan PLAN-20260825-SHELLMEM.P01 @requirement REQ-3329-03 */
 function makePtyResolveResult(
   state: PtyExecState,
   resolve: (value: ShellExecutionResult) => void,
@@ -275,6 +348,7 @@ function makePtyResolveResult(
     }
     state.hasResolved = true;
     teardownPtyState(state, activePtys, lastActivePtyIdRef);
+    state.rawCollector = null;
     resolve(resultValue);
   };
 }
@@ -304,6 +378,7 @@ function makePtyRender(
   };
 }
 
+/** @plan PLAN-20260825-SHELLMEM.P01 @requirement REQ-3329-02 */
 function setupPtyInactivityHandler(
   state: PtyExecState,
   resolveResult: (resultValue: ShellExecutionResult) => void,
@@ -312,11 +387,13 @@ function setupPtyInactivityHandler(
   if (inactivityTimeoutMs === undefined || inactivityTimeoutMs <= 0) {
     return;
   }
+  const inactivityAbortHandler = () => {
+    void ptyInactivityAbortAction(state, resolveResult);
+  };
+  state.inactivityAbortHandler = inactivityAbortHandler;
   state.inactivityAbortController.signal.addEventListener(
     'abort',
-    () => {
-      void ptyInactivityAbortAction(state, resolveResult);
-    },
+    inactivityAbortHandler,
     { once: true },
   );
   state.resetInactivityTimer();
@@ -359,6 +436,34 @@ export async function ptyInactivityAbortAction(
   finalizeInactivityKill(state, resolveResult);
 }
 
+/**
+ * Schedule the post-escalation fallback resolution. Single-owner: a pending
+ * fallback is cleared first so staggered abort/inactivity chains cannot leak
+ * timers past one another. The callback re-checks hasResolved before
+ * building the result because a timeout that already fired can have its
+ * callback queued behind another resolution path, after the collector was
+ * torn down. The aborted flag is evaluated when the timeout fires so an
+ * overlapping caller abort is still reported.
+ * @plan PLAN-20260825-SHELLMEM.P01
+ * @requirement REQ-3329-03
+ */
+function schedulePtyAbortFallback(
+  state: PtyExecState,
+  resolveResult: (resultValue: ShellExecutionResult) => void,
+  getAborted: () => boolean,
+): void {
+  if (state.abortFinalizeTimeout !== null) {
+    clearTimeout(state.abortFinalizeTimeout);
+  }
+  state.abortFinalizeTimeout = setTimeout(() => {
+    state.abortFinalizeTimeout = null;
+    if (state.hasResolved) {
+      return;
+    }
+    resolveResult(buildPtyResult(state, 1, null, getAborted()));
+  }, SIGKILL_TIMEOUT_MS);
+}
+
 function finalizeInactivityKill(
   state: PtyExecState,
   resolveResult: (resultValue: ShellExecutionResult) => void,
@@ -366,9 +471,11 @@ function finalizeInactivityKill(
   if (state.exitedGuard.isExited()) {
     return;
   }
-  state.abortFinalizeTimeout = setTimeout(() => {
-    resolveResult(buildPtyResult(state, 1, null, state.abortSignal.aborted));
-  }, SIGKILL_TIMEOUT_MS);
+  schedulePtyAbortFallback(
+    state,
+    resolveResult,
+    () => state.abortSignal.aborted,
+  );
 }
 
 function setupPtyAbortHandler(
@@ -428,9 +535,7 @@ export async function ptyAbortAction(
     // PTY may already be terminated.
   }
 
-  state.abortFinalizeTimeout = setTimeout(() => {
-    resolveResult(buildPtyResult(state, 1, null, aborted));
-  }, SIGKILL_TIMEOUT_MS);
+  schedulePtyAbortFallback(state, resolveResult, () => aborted);
 }
 
 function registerPtyExitHandler(
@@ -439,6 +544,9 @@ function registerPtyExitHandler(
   abortHandler: () => void,
 ): void {
   const finalizeResult = (exitCode: number, signal?: number | null) => {
+    if (state.hasResolved) {
+      return;
+    }
     ptyRenderFn(state);
     resolveResult(
       buildPtyResult(
@@ -483,7 +591,11 @@ function ptyExitRace(
       state.abortSignal.removeEventListener('abort', raceAbortListener);
       raceAbortListener = null;
     }
+    state.exitRaceCleanup = null;
   };
+  // Teardown can detach this listener before the race settles (a kill-chain
+  // fallback resolved first); the detacher must stay reachable from state.
+  state.exitRaceCleanup = cleanupRaceListener;
 
   const abortFired = new Promise<'aborted'>((res) => {
     if (state.abortSignal.aborted) {

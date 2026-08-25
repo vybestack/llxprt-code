@@ -16,7 +16,12 @@ import type { ActivePty } from './shellPtyHelpers.js';
 import type { AnsiOutput } from '../utils/terminalSerializer.js';
 import type { BoundedCombinedCollector } from '@vybestack/llxprt-code-tools/acquisition.js';
 
-/** State bag shared across PTY helper closures. */
+/**
+ * State bag shared across PTY helper closures.
+ * @plan PLAN-20260825-SHELLMEM.P01
+ * @requirement REQ-3329-02
+ * @requirement REQ-3329-03
+ */
 export interface PtyExecState {
   ptyProcess: IPty;
   headlessTerminal: Terminal;
@@ -34,6 +39,20 @@ export interface PtyExecState {
   supportsProcessGroupKill: boolean;
   inactivityAbortController: AbortController;
   resetInactivityTimer: () => void;
+  cancelInactivityTimer: () => void;
+  inactivityAbortHandler: (() => void) | null;
+  /**
+   * Listener registered on the caller's AbortSignal. Kept on the state so
+   * every resolution path (including synthetic completion without a real
+   * PTY exit event) can detach it during teardown.
+   */
+  callerAbortHandler: (() => void) | null;
+  /**
+   * Detacher for the temporary abort listener ptyExitRace registers while
+   * waiting for pending output processing. Stored so teardown can detach it
+   * when a kill-chain fallback resolves first and processing never settles.
+   */
+  exitRaceCleanup: (() => void) | null;
   exitedGuard: ExitGuard;
   output: string | AnsiOutput | null;
   /**
@@ -41,7 +60,7 @@ export interface PtyExecState {
    * array (Issue #3200). Retains a bounded head/tail of PTY output for
    * rawOutput compatibility without full-size materialization.
    */
-  rawCollector: BoundedCombinedCollector;
+  rawCollector: BoundedCombinedCollector | null;
   error: Error | null;
   isStreamingRawContent: boolean;
   sniffedBytes: number;

@@ -247,4 +247,18 @@ describe('IntervalUnion', () => {
       expect(u.count()).toBe(1);
     });
   });
+
+  /** @plan PLAN-20260825-SHELLMEM.P02 @requirement REQ-3329-06 */
+  describe('bounded interval retention', () => {
+    /** @plan PLAN-20260825-SHELLMEM.P02 @requirement REQ-3329-06 */
+    it('retains only the newest 8192 disjoint intervals and their duration', () => {
+      for (let index = 0; index < 10_000; index += 1) {
+        u.add(index * 2, index * 2 + 1);
+      }
+
+      expect(u.count()).toBe(8192);
+      expect(u.durationMs()).toBe(8192);
+      expect(u.latestEnd).toBe(19_999);
+    });
+  });
 });

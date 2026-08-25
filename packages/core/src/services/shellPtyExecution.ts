@@ -17,6 +17,7 @@ import {
   maybeEmitRenderedOutput,
 } from './shellPtyHelpers.js';
 import type {
+  BoundedCombinedCollector,
   ByteBudget,
   CombinedAcquisitionResult,
   TruncationMetadata,
@@ -98,18 +99,31 @@ function buildPtyTruncationMetadata(
   return acquisition.metadata.truncated ? acquisition.metadata : undefined;
 }
 
-/** Build a ShellExecutionResult for the PTY path. */
+/** @plan PLAN-20260825-SHELLMEM.P01 @requirement REQ-3329-03 */
+function requireRawCollector(state: PtyExecState): BoundedCombinedCollector {
+  if (state.rawCollector === null) {
+    throw new Error('PTY raw collector accessed after execution teardown');
+  }
+  return state.rawCollector;
+}
+
+/**
+ * Build a ShellExecutionResult for the PTY path.
+ * @plan PLAN-20260825-SHELLMEM.P01
+ * @requirement REQ-3329-03
+ */
 export function buildPtyResult(
   state: PtyExecState,
   exitCode: number,
   signal: number | null,
   aborted: boolean,
 ): ShellExecutionResult {
-  const acquisition = state.rawCollector.getResult();
+  const rawCollector = requireRawCollector(state);
+  const acquisition = rawCollector.getResult();
   const terminalOutput = getFullBufferText(state.headlessTerminal);
 
   return {
-    rawOutput: state.rawCollector.getBoundedRawBuffer(),
+    rawOutput: rawCollector.getBoundedRawBuffer(),
     output: buildPtyTextOutput(state, acquisition, terminalOutput),
     outputTruncation: buildPtyTruncationMetadata(state, acquisition),
     exitCode,
@@ -286,8 +300,9 @@ function appendPtyOutput(
   state: PtyExecState,
   data: string | Buffer,
 ): { text: string; byteLength: number } {
+  const rawCollector = requireRawCollector(state);
   if (Buffer.isBuffer(data)) {
-    state.rawCollector.append(data, 'stdout');
+    rawCollector.append(data, 'stdout');
     return { text: data.toString('utf8'), byteLength: data.length };
   }
 
@@ -307,7 +322,7 @@ function appendPtyOutput(
       end -= 1;
     }
     const encoded = Buffer.from(data.slice(offset, end), 'utf8');
-    state.rawCollector.append(encoded, 'stdout');
+    rawCollector.append(encoded, 'stdout');
     observedBytes += encoded.length;
     offset = end;
   }
@@ -318,11 +333,12 @@ function inspectPtyBinaryPrefix(state: PtyExecState, budget: ByteBudget): void {
   if (!state.isStreamingRawContent || state.sniffedBytes >= MAX_SNIFF_SIZE) {
     return;
   }
-  const sniffBuffer = state.rawCollector.getHeadBytes(
+  const rawCollector = requireRawCollector(state);
+  const sniffBuffer = rawCollector.getHeadBytes(
     Math.min(MAX_SNIFF_SIZE, budget.bytes),
   );
   state.sniffedBytes = Math.min(
-    state.rawCollector.observedByteCount,
+    rawCollector.observedByteCount,
     MAX_SNIFF_SIZE,
     budget.bytes,
   );
@@ -367,7 +383,7 @@ function processPtyChunk(
       if (!state.isStreamingRawContent) {
         state.onOutputEvent({
           type: 'binary_progress',
-          bytesReceived: state.rawCollector.observedByteCount,
+          bytesReceived: requireRawCollector(state).observedByteCount,
         });
         finish();
         return;

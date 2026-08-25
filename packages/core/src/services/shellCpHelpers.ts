@@ -19,14 +19,20 @@ import { stripAnsiIfPresent, MAX_SNIFF_SIZE } from './shellOutputUtils.js';
 import { BoundedCombinedCollector } from '@vybestack/llxprt-code-tools/acquisition.js';
 import type { ByteBudget } from '@vybestack/llxprt-code-tools/acquisition.js';
 
-/** State bag shared across child_process helper closures. */
+/**
+ * State bag shared across child_process helper closures.
+ * @plan PLAN-20260825-SHELLMEM.P01
+ * @requirement REQ-3329-02
+ * @requirement REQ-3329-03
+ */
 export interface CpExecState {
-  child: ChildProcess;
   isWindows: boolean;
   abortSignal: AbortSignal;
   onOutputEvent: (event: ShellOutputEvent) => void;
   inactivityAbortController: AbortController;
   resetInactivityTimer: () => void;
+  cancelInactivityTimer: () => void;
+  inactivityAbortHandler: (() => void) | null;
   exitedGuard: ExitGuard;
   stdoutDecoder: TextDecoder | null;
   stderrDecoder: TextDecoder | null;
@@ -35,9 +41,14 @@ export interface CpExecState {
   error: Error | null;
   isStreamingRawContent: boolean;
   sniffedBytes: number;
-  sniffBuffer: Buffer;
+  sniffBuffer: Buffer | null;
   hasResolved: boolean;
   cleanedUp: boolean;
+  /**
+   * Bounded grace timer armed when the child 'exit' event arrives while
+   * stdio streams are still delivering data (see createCpResultPromise).
+   */
+  drainGraceTimeout: NodeJS.Timeout | null;
 }
 
 /** Create decoders and the bounded collector from the detected encoding. */
@@ -65,6 +76,14 @@ export function ensureDecoders(
   return state.rawCollector;
 }
 
+/** @plan PLAN-20260825-SHELLMEM.P01 @requirement REQ-3329-03 */
+function requireSniffBuffer(state: CpExecState): Buffer {
+  if (state.sniffBuffer === null) {
+    throw new Error('CP sniff buffer accessed after execution teardown');
+  }
+  return state.sniffBuffer;
+}
+
 /**
  * Sniff initial output for binary content detection.
  *
@@ -80,11 +99,12 @@ function checkBinarySniff(state: CpExecState, data: Buffer): void {
   if (remaining <= 0) {
     return;
   }
+  const sniffBuffer = requireSniffBuffer(state);
   const writeLen = Math.min(data.length, remaining);
-  data.copy(state.sniffBuffer, state.sniffedBytes, 0, writeLen);
+  data.copy(sniffBuffer, state.sniffedBytes, 0, writeLen);
   state.sniffedBytes += writeLen;
 
-  if (isBinary(state.sniffBuffer.subarray(0, state.sniffedBytes))) {
+  if (isBinary(sniffBuffer.subarray(0, state.sniffedBytes))) {
     state.isStreamingRawContent = false;
     state.onOutputEvent({ type: 'binary_detected' });
   }
@@ -127,21 +147,39 @@ function emitFinalDecodedChunk(
   }
 }
 
-/** Clean up child_process listeners and materialize bounded raw output. */
+/**
+ * Clean up child_process listeners and materialize bounded raw output.
+ * @plan PLAN-20260825-SHELLMEM.P01
+ * @requirement REQ-3329-01
+ * @requirement REQ-3329-02
+ */
 export function cleanupCpResources(
   state: CpExecState,
+  child: ChildProcess,
   abortHandler: () => void,
 ): { finalBuffer: Buffer } {
   state.exitedGuard.markExited();
+  state.cancelInactivityTimer();
+  if (state.drainGraceTimeout !== null) {
+    clearTimeout(state.drainGraceTimeout);
+    state.drainGraceTimeout = null;
+  }
+  if (state.inactivityAbortHandler !== null) {
+    state.inactivityAbortController.signal.removeEventListener(
+      'abort',
+      state.inactivityAbortHandler,
+    );
+    state.inactivityAbortHandler = null;
+  }
   state.abortSignal.removeEventListener('abort', abortHandler);
 
   if (!state.cleanedUp) {
     state.cleanedUp = true;
-    state.child.stdout?.removeAllListeners('data');
-    state.child.stderr?.removeAllListeners('data');
-    state.child.removeAllListeners('error');
-    state.child.removeAllListeners('exit');
-    state.child.removeAllListeners('close');
+    child.stdout?.removeAllListeners('data');
+    child.stderr?.removeAllListeners('data');
+    child.removeAllListeners('error');
+    child.removeAllListeners('exit');
+    child.removeAllListeners('close');
   }
 
   emitFinalDecodedChunk(state, state.stdoutDecoder);
@@ -162,9 +200,14 @@ function combineOutputSections(first: string, second: string): string {
   return first + (first.endsWith('\n') ? '' : '\n') + second;
 }
 
-/** Build the ShellExecutionResult for a child_process exit. */
+/**
+ * Build the ShellExecutionResult for a child_process exit.
+ * @plan PLAN-20260825-SHELLMEM.P01
+ * @requirement REQ-3329-03
+ */
 export function buildCpExitResult(
   state: CpExecState,
+  child: ChildProcess,
   code: number | null,
   signal: NodeJS.Signals | null,
   finalBuffer: Buffer,
@@ -202,34 +245,38 @@ export function buildCpExitResult(
     error: state.error,
     aborted: state.abortSignal.aborted,
     inactivityTimedOut: state.inactivityAbortController.signal.aborted,
-    pid: state.child.pid,
+    pid: child.pid,
     executionMethod: 'child_process',
   };
 }
 
-/** Register exit/close event handlers on the child process. */
+/**
+ * Register exit/close event handlers on the child process.
+ * @plan PLAN-20260825-SHELLMEM.P01
+ * @requirement REQ-3329-03
+ */
 export function registerCpExitHandlers(
-  state: CpExecState,
+  child: ChildProcess,
   handleExit: (code: number | null, signal: NodeJS.Signals | null) => void,
 ): void {
-  const childOnce = state.child.once as
+  const childOnce = child.once as
     | ((
         event: 'exit' | 'close',
         listener: (code: number | null, signal: NodeJS.Signals | null) => void,
-      ) => typeof state.child)
+      ) => ChildProcess)
     | undefined;
   if (childOnce !== undefined) {
-    childOnce.call(state.child, 'exit', (code, signal) => {
+    childOnce.call(child, 'exit', (code, signal) => {
       handleExit(code, signal);
     });
-    childOnce.call(state.child, 'close', (code, signal) => {
+    childOnce.call(child, 'close', (code, signal) => {
       handleExit(code, signal);
     });
   } else {
-    state.child.on('exit', (code, signal) => {
+    child.on('exit', (code, signal) => {
       handleExit(code, signal);
     });
-    state.child.on('close', (code, signal) => {
+    child.on('close', (code, signal) => {
       handleExit(code, signal);
     });
   }

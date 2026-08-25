@@ -149,6 +149,46 @@ describe('ProviderPerformanceTracker', () => {
     expect(metrics.errorRate).toBeCloseTo(2 / 3, 2);
   });
 
+  /** @plan PLAN-20260825-SHELLMEM.P02 @requirement REQ-3329-07 */
+  it('retains the latest 50 errors while calculating the lifetime error rate', () => {
+    const tracker = new ProviderPerformanceTracker('test-provider');
+
+    for (let index = 1; index <= 100; index += 1) {
+      tracker.recordError(index, `Error ${index}`);
+    }
+    for (let index = 0; index < 10; index += 1) {
+      tracker.recordCompletion(100, null, 1, 1, 1);
+    }
+
+    const metrics = tracker.getLatestMetrics();
+    expect(metrics.errors).toHaveLength(50);
+    expect(metrics.errors[0].error).toBe('Error 51');
+    expect(metrics.errors[49].error).toBe('Error 100');
+    expect(metrics.errorRate).toBe(100 / 110);
+  });
+
+  /** @plan PLAN-20260825-SHELLMEM.P02 @requirement REQ-3329-07 */
+  it('keeps previously returned snapshots intact when the error cap trims', () => {
+    const tracker = new ProviderPerformanceTracker('test-provider');
+
+    for (let index = 1; index <= 50; index += 1) {
+      tracker.recordError(index, `Error ${index}`);
+    }
+    const earlySnapshot = tracker.getLatestMetrics();
+    expect(earlySnapshot.errors).toHaveLength(50);
+    expect(earlySnapshot.errors[0].error).toBe('Error 1');
+
+    // Pushing past the cap trims the tracker's internal buffer; the earlier
+    // snapshot must not lose entries retroactively.
+    for (let index = 51; index <= 60; index += 1) {
+      tracker.recordError(index, `Error ${index}`);
+    }
+
+    expect(earlySnapshot.errors).toHaveLength(50);
+    expect(earlySnapshot.errors[0].error).toBe('Error 1');
+    expect(earlySnapshot.errors[49].error).toBe('Error 50');
+  });
+
   it('should retain partial TTFT and chunk metadata when recording stream errors', () => {
     const tracker = new ProviderPerformanceTracker('test-provider');
 

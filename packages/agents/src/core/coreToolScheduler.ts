@@ -67,6 +67,7 @@ interface QueuedRequest {
 }
 
 const toolSchedulerLogger = new DebugLogger('llxprt:core:tool-scheduler');
+const MAX_SEEN_CALL_IDS = 1024;
 
 export type {
   ValidatingToolCall,
@@ -104,6 +105,7 @@ export interface CoreToolSchedulerOptions {
   toolContextInteractiveMode?: boolean;
 }
 
+/** @plan PLAN-20260825-SHELLMEM.P02 @requirement REQ-3329-05 */
 export class CoreToolScheduler implements ToolSchedulerContract {
   private toolCalls: ToolCall[] = [];
   private outputUpdateHandler?: OutputUpdateHandler;
@@ -370,12 +372,17 @@ export class CoreToolScheduler implements ToolSchedulerContract {
 
     const freshRequests: ToolCallRequestInfo[] = [];
     const duplicates: ToolCallRequestInfo[] = [];
+    // Batch-local view: the session window may evict early IDs mid-batch
+    // (cap 1024), which would otherwise re-admit a duplicate appearing
+    // again later in the same batch. Dedup against both sets.
+    const batchCallIds = new Set<string>();
     for (const r of requestsToProcess) {
-      if (this.seenCallIds.has(r.callId)) {
+      if (batchCallIds.has(r.callId) || this.seenCallIds.has(r.callId)) {
         duplicates.push(r);
       } else {
         freshRequests.push(r);
-        this.seenCallIds.add(r.callId);
+        batchCallIds.add(r.callId);
+        this.rememberCallId(r.callId);
       }
     }
     if (duplicates.length > 0) {
@@ -385,6 +392,21 @@ export class CoreToolScheduler implements ToolSchedulerContract {
     }
     return freshRequests;
   }
+
+  /** @plan PLAN-20260825-SHELLMEM.P02 @requirement REQ-3329-05 */
+  private rememberCallId(callId: string): void {
+    this.seenCallIds.add(callId);
+    if (this.seenCallIds.size <= MAX_SEEN_CALL_IDS) {
+      return;
+    }
+    // The size check above guarantees at least one entry, so this loop
+    // body runs exactly once to evict the oldest-inserted ID.
+    for (const oldest of this.seenCallIds) {
+      this.seenCallIds.delete(oldest);
+      break;
+    }
+  }
+
   private isHookRestrictedRequest(req: ToolCallRequestInfo): boolean {
     const allowedTools = req.hookRestrictedAllowedTools;
     if (allowedTools === undefined) {

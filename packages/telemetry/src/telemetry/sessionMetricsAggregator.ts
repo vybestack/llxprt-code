@@ -164,10 +164,12 @@ function sanitizeFinite(value: number): number {
   return value;
 }
 
+const MAX_DEDUP_ENTRIES = 1024;
+
 /**
- * Unbounded deduplication set for session-lifetime exactly-once tracking.
- * IDs are retained until reset() so replayed older attempts are not
- * double-counted.
+ * Retains an insertion-ordered recent window for duplicate suppression.
+ * @plan PLAN-20260825-SHELLMEM.P02
+ * @requirement REQ-3329-06
  */
 class DedupSet {
   private readonly entries = new Set<string>();
@@ -178,6 +180,14 @@ class DedupSet {
 
   add(value: string): void {
     this.entries.add(value);
+    if (this.entries.size <= MAX_DEDUP_ENTRIES) {
+      return;
+    }
+    const oldest = this.entries.values().next();
+    if (oldest.done === true) {
+      throw new Error('Dedup retention exceeded its cap without an entry');
+    }
+    this.entries.delete(oldest.value);
   }
 
   clear(): void {

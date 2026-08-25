@@ -9,6 +9,8 @@ interface Interval {
   end: number;
 }
 
+const MAX_INTERVALS = 8192;
+
 /**
  * Incrementally maintained, sorted, non-overlapping interval list.
  *
@@ -25,6 +27,10 @@ interface Interval {
  * - an interval fully nested inside another adds no duration
  * - gaps are never bridged
  * - degenerate (end <= start), zero-length and non-finite intervals are ignored
+ * - overflow drops the oldest interval, conservatively undercounting activity
+ *
+ * @plan PLAN-20260825-SHELLMEM.P02
+ * @requirement REQ-3329-06
  */
 class IntervalUnion {
   private readonly intervals: Interval[] = [];
@@ -76,6 +82,7 @@ class IntervalUnion {
       // No overlap: pure insert, the full span is net-new.
       list.splice(lo, 0, { start, end });
       this.cachedDurationMs += end - start;
+      this.trimOldestOverflow();
       return;
     }
 
@@ -87,6 +94,20 @@ class IntervalUnion {
     }
     list.splice(from, to - from, { start: mergedStart, end: mergedEnd });
     this.cachedDurationMs += mergedEnd - mergedStart - removedDuration;
+  }
+
+  /** @plan PLAN-20260825-SHELLMEM.P02 @requirement REQ-3329-06 */
+  private trimOldestOverflow(): void {
+    if (this.intervals.length <= MAX_INTERVALS) {
+      return;
+    }
+    const oldest = this.intervals.shift();
+    if (oldest === undefined) {
+      throw new Error(
+        'Interval retention exceeded its cap without an interval',
+      );
+    }
+    this.cachedDurationMs -= oldest.end - oldest.start;
   }
 
   durationMs(): number {
