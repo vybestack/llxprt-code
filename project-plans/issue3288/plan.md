@@ -126,6 +126,13 @@ zero findings):
   code while the task ran survives the close. Covered by the new test "leaves a
   handler installed while streaming was active in place at close", which fails
   without the identity check.
+- LOW (PR-level OCR round) "if `emitAppend(flushed)` throws, the closing tag is
+  never emitted and the stream is already marked closed": **Reject**. Not a
+  regression: before this change a throwing consumer also prevented the closing
+  tag, and it additionally left `xmlOutputOpen` true and the relay installed.
+  The throw propagates out of the `finally` in `task.ts` either way. Emitting
+  the terminator into a consumer that just threw, via a nested `finally`, is
+  speculative hardening outside this issue's acceptance criteria.
 - LOW "new tests use `as unknown as` assertions": **Reject**. Every neighbouring
   TaskTool suite (`task.test.ts`, `task.heartbeat.test.ts`,
   `taskAsyncStreaming.test.ts`) builds its orchestrator/launch fakes the same
