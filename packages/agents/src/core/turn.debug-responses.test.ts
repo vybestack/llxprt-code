@@ -6,7 +6,12 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { ServerAgentStreamEvent } from './turn.js';
-import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
+import {
+  Turn,
+  AgentEventType,
+  DEFAULT_AGENT_ID,
+  MAX_DEBUG_RESPONSE_CHUNKS,
+} from './turn.js';
 import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -94,6 +99,100 @@ describe('Turn - debug responses and finished event outcome', () => {
           parameters: {},
         },
       ]);
+    });
+
+    it('retains cumulative thinking in linear space by stream identity', async () => {
+      const deltaCount = 128;
+      const mockResponseStream = (async function* () {
+        for (let index = 1; index <= deltaCount; index++) {
+          const chunk = mockChunk({
+            thought: 'x'.repeat(index),
+            isHidden: false,
+          });
+          yield {
+            type: StreamEventType.CHUNK,
+            value: {
+              ...chunk,
+              content: {
+                ...chunk.content,
+                blocks: [
+                  {
+                    type: 'thinking' as const,
+                    thought: 'x'.repeat(index),
+                    sourceField: 'thinking',
+                    streamId: 'reasoning-span-1',
+                    streamStatus: 'delta' as const,
+                  },
+                ],
+              },
+            },
+          };
+        }
+      })();
+      mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+      for await (const _ of turn.run(
+        [{ type: 'text', text: 'Think' }],
+        new AbortController().signal,
+      )) {
+        // consume stream
+      }
+
+      const debugResponses = turn.getDebugResponses();
+      const retainedCharacters = debugResponses.reduce(
+        (total, response) =>
+          total +
+          response.content.blocks.reduce(
+            (chunkTotal, block) =>
+              chunkTotal +
+              (block.type === 'thinking' ? block.thought.length : 0),
+            0,
+          ),
+        0,
+      );
+      expect({
+        retainedChunks: debugResponses.length,
+        retainedCharacters,
+      }).toStrictEqual({
+        retainedChunks: 1,
+        retainedCharacters: deltaCount,
+      });
+    });
+
+    it('retains only the recent diagnostic chunks during a non-thinking runaway', async () => {
+      // Must exceed the trim high-water mark (twice MAX_DEBUG_RESPONSE_CHUNKS),
+      // otherwise the stream ends before any trimming is due and the test
+      // passes without exercising the bound at all.
+      const chunkCount = 3000;
+      const mockResponseStream = (async function* () {
+        for (let index = 0; index < chunkCount; index++) {
+          yield {
+            type: StreamEventType.CHUNK,
+            value: mockChunk({ text: `chunk-${index}` }),
+          };
+        }
+      })();
+      mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+      for await (const _ of turn.run(
+        [{ type: 'text', text: 'Continue' }],
+        new AbortController().signal,
+      )) {
+        // consume stream
+      }
+
+      const debugResponses = turn.getDebugResponses();
+      // Bounded well below the stream length, and bounded in absolute terms so
+      // a larger stream cannot grow retention further.
+      expect(debugResponses.length).toBeLessThan(chunkCount);
+      expect(debugResponses.length).toBeLessThanOrEqual(
+        MAX_DEBUG_RESPONSE_CHUNKS * 2,
+      );
+      // The newest chunk must survive: a diagnostic buffer that drops the most
+      // recent output is useless for diagnosing what just happened.
+      expect(
+        debugResponses[debugResponses.length - 1]?.content.blocks,
+      ).toStrictEqual([{ type: 'text', text: `chunk-${chunkCount - 1}` }]);
     });
 
     describe('Finished event outcome', () => {
