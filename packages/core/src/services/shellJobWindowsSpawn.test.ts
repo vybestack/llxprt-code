@@ -96,6 +96,51 @@ function isPidAlive(pid: number): boolean {
 }
 
 /**
+ * Run `body`, then always reap the PIDs reported by `getPids` and remove `dir`.
+ *
+ * A bare `finally` calling cleanup directly would let a cleanup throw REPLACE
+ * an in-flight assertion failure. These assertions carry an evidence string
+ * that is the only diagnosis available for a Windows-only failure, so losing it
+ * is expensive.
+ *
+ * Cleanup errors are deliberately NOT swallowed: reapAndRemoveWindowsTestDir is
+ * the fail-fast gate that catches leaked PowerShell processes and undeletable
+ * log directories. When the body and cleanup both fail, both are reported via
+ * AggregateError, matching disposeAndCleanupWindowsTest.
+ *
+ * `getPids` is a callback rather than an array because the PIDs are discovered
+ * while the body runs.
+ */
+async function withWindowsProcessCleanup(
+  dir: string,
+  getPids: () => readonly number[],
+  body: () => Promise<void>,
+): Promise<void> {
+  let bodyError: unknown;
+  try {
+    await body();
+  } catch (error) {
+    bodyError = error;
+  }
+
+  try {
+    await reapAndRemoveWindowsTestDir(dir, null, getPids());
+  } catch (cleanupError) {
+    if (bodyError !== undefined) {
+      throw new AggregateError(
+        [bodyError, cleanupError],
+        'Test body and Windows process cleanup both failed',
+      );
+    }
+    throw cleanupError;
+  }
+
+  if (bodyError !== undefined) {
+    throw bodyError;
+  }
+}
+
+/**
  * Read the tail of a redirected log for the evidence string. A missing or
  * unreadable log is rendered as `<unreadable: <error>>` rather than
  * thrown, so the evidence can still accompany whatever assertion failed.
@@ -457,50 +502,52 @@ describe.skipIf(!isWindows || availablePowerShellExes.length === 0)(
       const logPath = path.join(aliveDir, 'out.log');
       const errLogPath = path.join(aliveDir, 'err.log');
       const innerPidFilePath = path.join(aliveDir, 'inner.pid');
-      // Declared before the try so the finally can reap them even if setup throws.
+      // Declared before the body so cleanup can reap them even if setup throws.
       let outerPid = 0;
       let innerPid = 0;
-      try {
-        fs.writeFileSync(logPath, '');
-        fs.writeFileSync(errLogPath, '');
+      await withWindowsProcessCleanup(
+        aliveDir,
+        () => [outerPid, innerPid],
+        async () => {
+          fs.writeFileSync(logPath, '');
+          fs.writeFileSync(errLogPath, '');
 
-        const managedCommand = buildInnerPidMarkerCommand(
-          innerPidFilePath,
-          UNREF_SLEEP_SECONDS,
-        );
-        const spawned = spawnWindowsBackground(
-          getPowerShellExecutable(),
-          managedCommand,
-          aliveDir,
-          { ...process.env },
-          logPath,
-          errLogPath,
-        );
-        outerPid = spawned.pid ?? 0;
-        expect(
-          outerPid,
-          `spawnWindowsBackground returned no outer pid (${String(spawned.pid)})`,
-        ).toBeGreaterThan(0);
-        // Let it throw on timeout (fail fast, no swallow): a missing marker
-        // means the bootstrap never reached Start-Process. Assigned inside the try
-        // so a partial read still reaches the finally.
-        innerPid = await readInnerPidFromMarker(innerPidFilePath, 15000);
+          const managedCommand = buildInnerPidMarkerCommand(
+            innerPidFilePath,
+            UNREF_SLEEP_SECONDS,
+          );
+          const spawned = spawnWindowsBackground(
+            getPowerShellExecutable(),
+            managedCommand,
+            aliveDir,
+            { ...process.env },
+            logPath,
+            errLogPath,
+          );
+          outerPid = spawned.pid ?? 0;
+          expect(
+            outerPid,
+            `spawnWindowsBackground returned no outer pid (${String(spawned.pid)})`,
+          ).toBeGreaterThan(0);
+          // Let it throw on timeout (fail fast, no swallow): a missing marker
+          // means the bootstrap never reached Start-Process. Assigned before the
+          // assertions so a partial read still reaches cleanup.
+          innerPid = await readInnerPidFromMarker(innerPidFilePath, 15000);
 
-        // Both PIDs must be alive at the same moment. The bare booleans below
-        // say nothing about WHY a process died, and this only reproduces on
-        // Windows, so carry the evidence into the assertion message: an early exit
-        // lands in the redirected logs, making a Windows-only failure diagnosable
-        // from the CI log.
-        const evidence =
-          `outerPid=${outerPid} innerPid=${innerPid}\n` +
-          `${readLogTail('stdout log', logPath)}\n` +
-          `${readLogTail('stderr log', errLogPath)}`;
+          // Both PIDs must be alive at the same moment. The bare booleans below
+          // say nothing about WHY a process died, and this only reproduces on
+          // Windows, so carry the evidence into the assertion message: an early
+          // exit lands in the redirected logs, making a Windows-only failure
+          // diagnosable from the CI log.
+          const evidence =
+            `outerPid=${outerPid} innerPid=${innerPid}\n` +
+            `${readLogTail('stdout log', logPath)}\n` +
+            `${readLogTail('stderr log', errLogPath)}`;
 
-        expect(isPidAlive(outerPid), evidence).toBe(true);
-        expect(isPidAlive(innerPid), evidence).toBe(true);
-      } finally {
-        await reapAndRemoveWindowsTestDir(aliveDir, null, [outerPid, innerPid]);
-      }
+          expect(isPidAlive(outerPid), evidence).toBe(true);
+          expect(isPidAlive(innerPid), evidence).toBe(true);
+        },
+      );
     }, 60_000);
 
     interface UnrefFixtureRun {
@@ -515,7 +562,7 @@ describe.skipIf(!isWindows || availablePowerShellExes.length === 0)(
      * Spawn a subprocess that calls spawnWindowsBackground and exits without
      * waiting, then hand the observations to `assertRun`.
      *
-     * Both PID markers are read before `assertRun` runs, so the `finally` reaps
+     * Both PID markers are read before `assertRun` runs, so cleanup reaps
      * whichever PIDs were recovered even when an assertion fails, and removes
      * the fixture directory. Setup that throws before the fixture is spawned
      * has no process to reap, so removing the directory is sufficient there.
@@ -531,89 +578,91 @@ describe.skipIf(!isWindows || availablePowerShellExes.length === 0)(
       const innerPidFilePath = path.join(unrefDir, 'inner.pid');
       let outerPid = 0;
       let innerPid = 0;
-      try {
-        fs.writeFileSync(logPath, '');
-        fs.writeFileSync(errLogPath, '');
+      await withWindowsProcessCleanup(
+        unrefDir,
+        () => [outerPid, innerPid],
+        async () => {
+          fs.writeFileSync(logPath, '');
+          fs.writeFileSync(errLogPath, '');
 
-        const modulePath = path
-          .join(__dirname, 'shellJobSpawn.ts')
-          .replace(/\\/g, '/');
-        const powershellExe = getPowerShellExecutable();
-        const managedCommand = buildInnerPidMarkerCommand(
-          innerPidFilePath,
-          UNREF_SLEEP_SECONDS,
-        );
-        // The script does NOT manually call p.child.unref(): production code
-        // (spawnWindowsBackground) already unrefs immediately at spawn. If that
-        // production contract regresses, the spawner will hang and the
-        // status=0 assertion in the unref test will fail.
-        const script = [
-          `import { spawnWindowsBackground } from '${modulePath}';`,
-          `const p = spawnWindowsBackground(`,
-          `  ${JSON.stringify(powershellExe)},`,
-          `  ${JSON.stringify(managedCommand)},`,
-          `  ${JSON.stringify(os.tmpdir())},`,
-          `  { ...process.env },`,
-          `  ${JSON.stringify(logPath)},`,
-          `  ${JSON.stringify(errLogPath)},`,
-          `);`,
-          `require('fs').writeFileSync(${JSON.stringify(outerPidFilePath)}, String(p.pid));`,
-        ].join('\n');
+          const modulePath = path
+            .join(__dirname, 'shellJobSpawn.ts')
+            .replace(/\\/g, '/');
+          const powershellExe = getPowerShellExecutable();
+          const managedCommand = buildInnerPidMarkerCommand(
+            innerPidFilePath,
+            UNREF_SLEEP_SECONDS,
+          );
+          // The script does NOT manually call p.child.unref(): production code
+          // (spawnWindowsBackground) already unrefs immediately at spawn. If
+          // that production contract regresses, the spawner will hang and the
+          // status=0 assertion in the unref test will fail.
+          const script = [
+            `import { spawnWindowsBackground } from '${modulePath}';`,
+            `const p = spawnWindowsBackground(`,
+            `  ${JSON.stringify(powershellExe)},`,
+            `  ${JSON.stringify(managedCommand)},`,
+            `  ${JSON.stringify(os.tmpdir())},`,
+            `  { ...process.env },`,
+            `  ${JSON.stringify(logPath)},`,
+            `  ${JSON.stringify(errLogPath)},`,
+            `);`,
+            `require('fs').writeFileSync(${JSON.stringify(outerPidFilePath)}, String(p.pid));`,
+          ].join('\n');
 
-        fs.writeFileSync(scriptPath, script);
+          fs.writeFileSync(scriptPath, script);
 
-        const start = Date.now();
-        // Execute the fixture with the current Bun executable
-        // (process.execPath), not npx/tsx/Node: spawnWindowsBackground's
-        // production-unref contract is exercised by the runtime that will
-        // actually run it, which is Bun. Using npx/tsx/Node would prove
-        // nothing about production behavior.
-        const result = spawnSync(process.execPath, [scriptPath], {
-          timeout: UNREF_SPAWN_TIMEOUT_MS,
-          encoding: 'utf8',
-          shell: false,
-        });
-        const elapsed = Date.now() - start;
+          const start = Date.now();
+          // Execute the fixture with the current Bun executable
+          // (process.execPath), not npx/tsx/Node: spawnWindowsBackground's
+          // production-unref contract is exercised by the runtime that will
+          // actually run it, which is Bun. Using npx/tsx/Node would prove
+          // nothing about production behavior.
+          const result = spawnSync(process.execPath, [scriptPath], {
+            timeout: UNREF_SPAWN_TIMEOUT_MS,
+            encoding: 'utf8',
+            shell: false,
+          });
+          const elapsed = Date.now() - start;
 
-        // Capture marker PIDs BEFORE assertions so cleanup in finally always
-        // has the known PIDs even if an assertion throws.
-        try {
-          outerPid = await readInnerPidFromMarker(outerPidFilePath, 10000);
-        } catch {
-          // Marker may not exist if spawn failed before writing it.
-        }
-        try {
-          innerPid = await readInnerPidFromMarker(innerPidFilePath, 10000);
-        } catch {
-          // Inner process may not have started yet.
-        }
+          // Capture marker PIDs BEFORE assertions so cleanup always has the
+          // known PIDs even if an assertion throws.
+          try {
+            outerPid = await readInnerPidFromMarker(outerPidFilePath, 10000);
+          } catch {
+            // Marker may not exist if spawn failed before writing it.
+          }
+          try {
+            innerPid = await readInnerPidFromMarker(innerPidFilePath, 10000);
+          } catch {
+            // Inner process may not have started yet.
+          }
 
-        // The callers' assertions are bare numbers and booleans that say
-        // nothing about WHY a process died, and this only reproduces on a
-        // Windows runner, so every assertion carries this evidence string: the
-        // outer PowerShell only exits early if its inner Start-Process failed,
-        // and that failure lands in the redirected logs.
-        const evidence =
-          `outerPid=${outerPid} innerPid=${innerPid} elapsed=${elapsed}ms ` +
-          `status=${result.status}\n` +
-          `${readLogTail('stdout log', logPath)}\n` +
-          `${readLogTail('stderr log', errLogPath)}\n` +
-          `spawner stdout: ${JSON.stringify(result.stdout.slice(-500))}\n` +
-          `spawner stderr: ${JSON.stringify(result.stderr.slice(-500))}`;
+          // The callers' assertions are bare numbers and booleans that say
+          // nothing about WHY a process died, and this only reproduces on a
+          // Windows runner, so every assertion carries this evidence string:
+          // the outer PowerShell only exits early if its inner Start-Process
+          // failed, and that failure lands in the redirected logs.
+          const evidence =
+            `outerPid=${outerPid} innerPid=${innerPid} elapsed=${elapsed}ms ` +
+            `status=${result.status}\n` +
+            `${readLogTail('stdout log', logPath)}\n` +
+            `${readLogTail('stderr log', errLogPath)}\n` +
+            `spawner stdout: ${JSON.stringify(result.stdout.slice(-500))}\n` +
+            `spawner stderr: ${JSON.stringify(result.stderr.slice(-500))}`;
 
-        debugLogger.debug(
-          `[shellJobWindowsSpawn.test] unref subprocess exited in ${elapsed}ms (status ${result.status})`,
-        );
+          debugLogger.debug(
+            `[shellJobWindowsSpawn.test] unref subprocess exited in ${elapsed}ms (status ${result.status})`,
+          );
 
-        assertRun({
-          status: result.status,
-          outerPid,
-          innerPid,
-          evidence,
-        });
-      } finally {
-        await reapAndRemoveWindowsTestDir(unrefDir, null, [outerPid, innerPid]);
-      }
+          assertRun({
+            status: result.status,
+            outerPid,
+            innerPid,
+            evidence,
+          });
+        },
+      );
     }
 
     // status 0 is the deterministic regression signal: it proves the spawner
