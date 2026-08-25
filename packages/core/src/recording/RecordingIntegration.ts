@@ -60,6 +60,13 @@ export class RecordingIntegration {
       this.compressionInProgress = true;
     };
 
+    const onCompressionLockReleased = () => {
+      if (this.disposed) {
+        return;
+      }
+      this.compressionInProgress = false;
+    };
+
     const onCompressionEnded = (summary: IContent, itemsCompressed: number) => {
       if (this.disposed) {
         return;
@@ -70,11 +77,13 @@ export class RecordingIntegration {
 
     historyService.on('contentAdded', onContentAdded);
     historyService.on('compressionStarted', onCompressionStarted);
+    historyService.on('compressionLockReleased', onCompressionLockReleased);
     historyService.on('compressionEnded', onCompressionEnded);
 
     this.historySubscription = () => {
       historyService.off('contentAdded', onContentAdded);
       historyService.off('compressionStarted', onCompressionStarted);
+      historyService.off('compressionLockReleased', onCompressionLockReleased);
       historyService.off('compressionEnded', onCompressionEnded);
     };
   }

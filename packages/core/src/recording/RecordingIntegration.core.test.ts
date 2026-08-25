@@ -316,6 +316,103 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
       );
     });
 
+    it('records content after an argless endCompression without compressionEnded', async () => {
+      integration.subscribeToHistory(historyService);
+      historyService.add(textContent('before'));
+      historyService.startCompression();
+
+      historyService.endCompression();
+
+      historyService.add(textContent('after'));
+
+      const events = await flushAndRead(integration, recordingService);
+      const contentTexts = events
+        .filter((event) => event.type === 'content')
+        .map((event) => {
+          const payload = event.payload as { content: IContent };
+          return (payload.content.blocks[0] as { type: 'text'; text: string })
+            .text;
+        });
+      expect(contentTexts).toStrictEqual(['before', 'after']);
+      expect(
+        events.filter((event) => event.type === 'compressed'),
+      ).toHaveLength(0);
+    });
+
+    it('records content after a failed-shaped endCompression without compressionEnded', async () => {
+      integration.subscribeToHistory(historyService);
+      historyService.add(textContent('before'));
+      historyService.startCompression();
+
+      historyService.endCompression(undefined, 5);
+
+      historyService.add(textContent('after'));
+
+      const events = await flushAndRead(integration, recordingService);
+      const contentTexts = events
+        .filter((event) => event.type === 'content')
+        .map((event) => {
+          const payload = event.payload as { content: IContent };
+          return (payload.content.blocks[0] as { type: 'text'; text: string })
+            .text;
+        });
+      expect(contentTexts).toStrictEqual(['before', 'after']);
+      expect(
+        events.filter((event) => event.type === 'compressed'),
+      ).toHaveLength(0);
+    });
+
+    it('records content after sequential noop compression cycles', async () => {
+      integration.subscribeToHistory(historyService);
+      historyService.startCompression();
+      historyService.endCompression();
+      historyService.add(textContent('after-first-noop'));
+
+      historyService.startCompression();
+      historyService.endCompression();
+      historyService.add(textContent('after-second-noop'));
+
+      const events = await flushAndRead(integration, recordingService);
+      const contentTexts = events
+        .filter((event) => event.type === 'content')
+        .map((event) => {
+          const payload = event.payload as { content: IContent };
+          return (payload.content.blocks[0] as { type: 'text'; text: string })
+            .text;
+        });
+      expect(contentTexts).toStrictEqual([
+        'after-first-noop',
+        'after-second-noop',
+      ]);
+      expect(
+        events.filter((event) => event.type === 'compressed'),
+      ).toHaveLength(0);
+    });
+
+    it('records applied compression with an argless-queued add still suppressed', async () => {
+      integration.subscribeToHistory(historyService);
+      historyService.add(textContent('before'));
+      historyService.startCompression();
+      historyService.add(textContent('during'));
+
+      historyService.endCompression(textContent('summary', 'ai'), 3);
+
+      historyService.add(textContent('after'));
+
+      const events = await flushAndRead(integration, recordingService);
+      const contentTexts = events
+        .filter((event) => event.type === 'content')
+        .map((event) => {
+          const payload = event.payload as { content: IContent };
+          return (payload.content.blocks[0] as { type: 'text'; text: string })
+            .text;
+        });
+      expect(contentTexts).toStrictEqual(['before', 'after']);
+      expect(
+        events.filter((event) => event.type === 'compressed'),
+      ).toHaveLength(1);
+    });
+
     it('emits one compressed event per compression cycle', async () => {
       integration.subscribeToHistory(historyService);
       emitter.emit('contentAdded', textContent('baseline-materialize'));

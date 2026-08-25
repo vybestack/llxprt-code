@@ -1138,8 +1138,8 @@ export class HistoryService
   /**
    * Mark compression as complete
    * This will flush all queued operations.
-   * When summary and itemsCompressed are provided, emits a compressionEnded
-   * event so the recording service can log the compression.
+   * Always emits a compressionLockReleased event so recording can stop suppressing
+   * content, while compressionEnded stays conditional on summary + itemsCompressed.
    */
   endCompression(summary?: IContent, itemsCompressed?: number): void {
     this.logger.debug('Compression complete - unlocking history', {
@@ -1160,6 +1160,11 @@ export class HistoryService
     this.logger.debug('Flushed pending operations', {
       count: operations.length,
     });
+
+    // Emitted after the queue drain so flushed rebuild content stays inside the
+    // recording suppression window; fires unconditionally so a summary-less
+    // end (no-op/failed compression) cannot wedge recording. (Issue #3263)
+    this.emit('compressionLockReleased');
 
     if (summary && itemsCompressed !== undefined) {
       this.emit('compressionEnded', summary, itemsCompressed);
