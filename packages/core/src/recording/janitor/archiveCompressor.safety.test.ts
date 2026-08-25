@@ -226,7 +226,15 @@ describe('compressToArchive — fsync directory durability (Item 6)', () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
-  it('reports durableCommit=true on supported platforms after successful rename', async () => {
+  // A successful compress-and-rename must report durableCommit on every
+  // platform. This assertion used to read
+  // `process.platform === 'win32' || result.durableCommit`, which tolerated
+  // false on Windows and so encoded the bug that made the janitor archive
+  // files without ever reclaiming them: reclamationEngine refuses to unlink a
+  // source whose archive is not durably committed, so raws accumulated
+  // forever. Windows cannot fsync a directory handle, but the archive file is
+  // fsynced before the rename, which is the durability the platform offers.
+  it('reports durableCommit=true after a successful rename on every platform', async () => {
     const chatsDir = path.join(tempDir, 'chats');
     const archiveDir = path.join(chatsDir, 'archive');
     await fs.mkdir(chatsDir, { recursive: true });
@@ -238,7 +246,6 @@ describe('compressToArchive — fsync directory durability (Item 6)', () => {
     const result = await compressToArchive(sourcePath, archiveDir);
     expect(result.success).toBe(true);
     expect(result.archivePath).not.toBeNull();
-    expect(typeof result.durableCommit).toBe('boolean');
-    expect(process.platform === 'win32' || result.durableCommit).toBe(true);
+    expect(result.durableCommit).toBe(true);
   });
 });

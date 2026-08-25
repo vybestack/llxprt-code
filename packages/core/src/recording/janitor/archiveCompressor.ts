@@ -477,13 +477,41 @@ async function shouldUnlinkTempFile(
 // ---------------------------------------------------------------------------
 
 /**
+ * Whether this platform can fsync a directory handle.
+ *
+ * POSIX lets a directory be opened read-only and fsynced, which is what makes
+ * a freshly renamed directory entry durable.  Windows has no equivalent:
+ * `fs.open` on a directory fails outright, and NTFS journals metadata itself
+ * rather than exposing a per-directory flush.
+ *
+ * This is a platform capability, not an error, and the distinction matters.
+ * Reporting the absence as a durability *failure* made
+ * {@link ArchiveResult.durableCommit} permanently false on Windows, and the
+ * reclamation engine refuses to unlink a source whose archive is not durably
+ * committed.  The net effect was that the session janitor archived files but
+ * never reclaimed a single byte on Windows: archives accumulated while every
+ * raw session was retained forever.
+ */
+function supportsDirectoryFsync(): boolean {
+  return process.platform !== 'win32';
+}
+
+/**
  * Attempt to fsync a directory to establish durability (Item 6).
  *
  * On POSIX systems (Linux, macOS) this opens the directory read-only and calls
- * fsync.  On Windows or other platforms where directory fsync is not
- * supported, this returns `false` (ambiguous) rather than throwing.
+ * fsync, returning whether that succeeded.
+ *
+ * Where directory fsync does not exist as a concept, the archive is still as
+ * durable as the platform allows by this point: {@link streamCompress} fsyncs
+ * the temp archive file before {@link finalizeArchive} renames it, so the
+ * contents are on disk and the rename is the strongest ordering guarantee
+ * available.  Report that as durable rather than blocking reclamation forever.
  */
 async function fsyncDir(dirPath: string): Promise<boolean> {
+  if (!supportsDirectoryFsync()) {
+    return true;
+  }
   let fd: fsp.FileHandle | undefined;
   try {
     fd = await fsp.open(dirPath, 'r');
