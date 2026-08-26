@@ -76,6 +76,51 @@ context loss and get checked before the PR goes up.
 8. **Check for drive-by edits** in both subagents' diffs before committing, the
    way item A needed.
 
+## Findings on the provider work (#3341)
+
+A. **Check 6 passes: cap values are safely generous.** `streamLimits.ts` sets
+   tool-call 16 MiB, SSE line 8 MiB, reasoning capture 8 MiB, buffered text
+   8 MiB. The largest legitimate single response is ~128k tokens, roughly
+   512 KiB, so every cap has at least 16x headroom. `ProviderStreamProtocolError`
+   correctly sets `isRetryable = false` and `shouldFailover = false`: a protocol
+   violation should not cause a failover to another backend, and the message
+   names both the limit and the received size.
+
+B. **Byte accounting is incremental at three of four sites, and quadratic at
+   the fourth.** These measure the delta and accumulate a counter, which is
+   O(1) per chunk and correct:
+   - `vercelReasoningCapture.ts:86` (`reasoningBytes + utf8ByteLength(delta)`)
+   - `AnthropicStreamProcessor.ts:335` (`inputBytes += utf8ByteLength(delta)`)
+   - `OpenAIStreamProcessor.ts:344` (`textBufferBytes += utf8ByteLength(delta)`)
+   - `ToolCallCollector.ts:106-108` (per-fragment)
+
+   But `vercelReasoningCapture.ts:137-141` calls `utf8ByteLength(buffer)` on the
+   **accumulated** incomplete SSE line on every read:
+
+   ```ts
+   buffer += decoder.decode(value, { stream: true });
+   const lines = buffer.split('\n');
+   buffer = lines.pop() ?? '';
+   assertProviderStreamByteLimit('incomplete SSE line', utf8ByteLength(buffer), ...);
+   ```
+
+   In normal operation the trailing line is short, so this is cheap. In the
+   pathological case the cap exists to catch — a peer that never emits `\n` —
+   the buffer grows to megabytes and is fully re-measured on every read, making
+   the guard O(n^2) exactly when it is needed. It still fires at 8 MiB, so this
+   is a should-fix rather than a must-fix, but it is avoidable.
+
+   Remedy: gate the exact measurement behind an O(1) length pre-check. UTF-8
+   byte length is bounded by `3 * str.length`, so `str.length * 3 <= limit`
+   proves the value is under the limit without scanning it:
+
+   ```ts
+   function exceedsUtf8ByteLimit(value: string, limit: number): boolean {
+     if (value.length * 3 <= limit) return false; // cannot exceed; O(1)
+     return utf8ByteLength(value) > limit;
+   }
+   ```
+
 ## Findings on the CLI work (#3340)
 
 9. **Check 7 passes.** `pendingResponseBuffer.test.ts:42-68` uses
