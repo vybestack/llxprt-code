@@ -104,6 +104,9 @@ describe('useCancellation — slash-command cancellation on ESC', () => {
     expect(cancellationNotices(harness.addedItems)).toEqual([
       SLASH_COMMAND_CANCELLED,
     ]);
+    // Cancelling a slash command must not also cancel the (idle) turn.
+    expect(harness.setTurnCancelled).not.toHaveBeenCalled();
+    expect(harness.turnAbortController.signal.aborted).toBe(false);
   });
 
   it('reports the cancellation only once when ESC is pressed repeatedly', () => {

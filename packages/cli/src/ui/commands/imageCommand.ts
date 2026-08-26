@@ -81,6 +81,10 @@ export const imageCommand: SlashCommand = {
         signal: context.signal,
       });
 
+      // The runner can win a race with the abort. Reporting success on top of
+      // the framework's cancellation notice would contradict it.
+      if (context.signal.aborted) return;
+
       context.ui.addItem(
         {
           type: MessageType.INFO,

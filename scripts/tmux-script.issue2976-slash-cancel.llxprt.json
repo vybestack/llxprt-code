@@ -10,7 +10,7 @@
   "startCommand": [
     "bash",
     "-lc",
-    "set -e; repo=$PWD; cmddir=\"$HOME/Library/Preferences/llxprt-code/commands\"; [ -d \"$cmddir\" ] || cmddir=\"$HOME/.llxprt/commands\"; mkdir -p \"$cmddir\"; trap 'rm -f \"$cmddir/issue2976-slowtest.toml\"' EXIT INT TERM; bang=$(printf \"\\047\\041\\047\" | tr -d \"\\047\"); printf 'description = \"issue2976 harness: deliberately long-running slash command\"\\nprompt = \"sleep output: %s{sleep 90}\"\\n' \"$bang\" > \"$cmddir/issue2976-slowtest.toml\"; env LLXPRT_FAKE_RESPONSES=\"$repo/scripts/fixtures/issue2976-slash-cancel.responses.jsonl\" bun scripts/start.ts --provider fake --model fake-model --yolo"
+    "set -e; repo=$PWD; cmddir=$(bun -e 'import {Storage} from \"@vybestack/llxprt-code-settings\"; process.stdout.write(Storage.getUserCommandsDir());'); mkdir -p \"$cmddir\"; trap 'rm -f \"$cmddir/issue2976-slowtest.toml\"' EXIT INT TERM; bang=$(printf \"\\047\\041\\047\" | tr -d \"\\047\"); printf 'description = \"issue2976 harness: deliberately long-running slash command\"\\nprompt = \"sleep output: %s{sleep 90}\"\\n' \"$bang\" > \"$cmddir/issue2976-slowtest.toml\"; env LLXPRT_FAKE_RESPONSES=\"$repo/scripts/fixtures/issue2976-slash-cancel.responses.jsonl\" bun scripts/start.ts --provider fake --model fake-model --yolo"
   ],
   "steps": [
     {

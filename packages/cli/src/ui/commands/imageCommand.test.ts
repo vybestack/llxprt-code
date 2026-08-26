@@ -260,6 +260,32 @@ describe('imageCommand', () => {
     expect((ctx.ui.addItem as ReturnType<typeof vi.fn>).mock.calls).toEqual([]);
   });
 
+  it('reports nothing when the runner wins a race with the cancellation', async () => {
+    // The framework already said the command was cancelled; announcing a saved
+    // path on top of that contradicts it.
+    const invocation = new AbortController();
+    let releaseRunner: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      releaseRunner = resolve;
+    });
+    const runner = vi.fn().mockImplementation(async () => {
+      await gate;
+      return { absoluteOutputPath: '/workspace/out.png' };
+    });
+    const ctx = makeMockContext({
+      runImageOperation: runner,
+      signal: invocation.signal,
+    });
+
+    const pending = imageCommand.action?.(ctx, 'out.png "draw a cat"');
+    await waitFor(() => expect(runner).toHaveBeenCalled());
+    invocation.abort();
+    releaseRunner();
+    await pending;
+
+    expect((ctx.ui.addItem as ReturnType<typeof vi.fn>).mock.calls).toEqual([]);
+  });
+
   it('no longer reacts to a process SIGINT, only to the framework signal', async () => {
     // The command used to abort on its own SIGINT listener, which never fires
     // for Esc in the Ink UI and leaked across invocations. Emitting SIGINT
