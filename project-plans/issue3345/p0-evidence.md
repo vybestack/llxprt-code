@@ -964,6 +964,42 @@ frames across all six turns. Upstream 7.1.1 grows at roughly 21 MB per turn.
 | Physical footprint | 230.3 MB | 562.2 MB | 930.8 MB |
 | IOAccelerator dirty | 19.2 MB | 22.5 MB | 19.3 MB |
 
+### Per-turn native metrics
+
+The table above sampled `vmmap` on a wall-clock timer, uncorrelated with the
+post-GC checkpoints, so only endpoints were usable. That leaves the important
+question open and invites the misreading that the shipped pin is at fault.
+Re-measured with `vmmap` sampled from inside the target at each checkpoint,
+immediately after `Bun.gc(true)`.
+
+Pinned fork 6.4.8, 18 turns of 3,000 frames, 54,000 frames total:
+
+| checkpoint | jsc MB | rss MB | footprint MB | wkDirty MB | wkVirt MB |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| baseline | 41.2 | 116.3 | 81.3 | 50.1 | 4403 |
+| turn-1 | 107.6 | 852.6 | 690.7 | 656.6 | 5120 |
+| turn-7 | 106.3 | 871.4 | 699.3 | 666.2 | 5120 |
+| turn-10 | 106.4 | 876.5 | 682.8 | 649.7 | 5120 |
+| turn-18 | 106.3 | 880.8 | 683.4 | 650.5 | 5120 |
+
+Footprint peaks at 699 MB on turn 7, then settles to about 683 MB and holds for
+eleven turns. Dirty WebKit Malloc follows the same shape and virtual is capped
+at 5120. There is a large one-time high-water on turn 1, 81 MB to 691 MB, and no
+growth after it. **The pinned fork does not leak in the render path**; the
+endpoint figures in the previous table are that one-time high-water, not
+accumulation.
+
+Fork 7.1.0 over the same probe, 10 turns:
+
+| checkpoint | jsc MB | rss MB | footprint MB | wkDirty MB | wkVirt MB |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| turn-1 | 94.8 | 399.7 | 255.0 | 220.2 | 4608 |
+| turn-5 | 444.2 | 1370.3 | 1024.0 | 978.6 | 5837 |
+| turn-10 | 878.2 | 2559.4 | 2150.4 | 2048.0 | 7373 |
+
+Every metric grows linearly, footprint by roughly 210 MB per turn, reaching
+2.15 GB by turn 10 against 683 MB flat on the pin. Virtual is not capped.
+
 ### Findings
 
 1. The pinned fork 6.4.8 is the only one of the three whose post-GC JSC heap

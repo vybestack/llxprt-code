@@ -1099,3 +1099,161 @@ bash run.sh "$REPO/node_modules/ink/build" fork648 6
 bash run.sh "$REPO/tmp/issue3345/fork7/node_modules/@jrichman/ink/build" fork710 6
 bash run.sh "$REPO/tmp/issue3345/spike/node_modules/ink/build" up711 6
 ```
+
+Per-turn native variant, which samples vmmap from inside the target at each
+post-GC checkpoint instead of on a wall-clock timer:
+
+```ts
+/**
+ * Probe: on the CURRENTLY PINNED ink, does native memory plateau across turns
+ * of pure Ink rendering, or grow linearly?
+ *
+ * The earlier probe sampled vmmap on a wall-clock timer, so native numbers were
+ * uncorrelated with the post-GC checkpoints and only endpoints were usable.
+ * This samples vmmap and footprint from inside the target at each checkpoint,
+ * immediately after Bun.gc(true), so every turn has matched JS and native rows.
+ *
+ * Usage: bun native.ts <ink build dir> <turns> [framesPerTurn]
+ */
+import { heapStats } from 'bun:jsc';
+import { EventEmitter } from 'node:events';
+import { execFileSync } from 'node:child_process';
+import React from 'react';
+
+const [, , inkBuild, turnArg = '8', framesArg = '3000'] = process.argv;
+if (!inkBuild) throw new Error('Usage: bun native.ts <ink build dir> [turns]');
+const turns = Number.parseInt(turnArg, 10);
+const framesPerTurn = Number.parseInt(framesArg, 10);
+
+const render = (await import(`${inkBuild}/render.js`)).default;
+const Box = (await import(`${inkBuild}/components/Box.js`)).default;
+const Text = (await import(`${inkBuild}/components/Text.js`)).default;
+
+/** Parses `vmmap -summary` rows the repo's benchmark already relies on. */
+function nativeSample(): {
+  footprintMb: number;
+  webkitDirtyMb: number;
+  webkitVirtualMb: number;
+} {
+  const out = execFileSync('/usr/bin/vmmap', ['-summary', String(process.pid)], {
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  const toMb = (raw: string): number => {
+    const m = /^([\d.]+)([KMG])?/.exec(raw.trim());
+    if (!m) return 0;
+    const n = Number(m[1]);
+    const unit = m[2];
+    if (unit === 'G') return n * 1024;
+    if (unit === 'K') return n / 1024;
+    return n;
+  };
+  const footprint = /Physical footprint:\s+([\d.]+[KMG]?)/.exec(out);
+  let webkitDirty = 0;
+  let webkitVirtual = 0;
+  for (const line of out.split('\n')) {
+    if (line.trim().startsWith('WebKit Malloc')) {
+      const cols = line.trim().split(/\s{2,}/).filter(Boolean);
+      // columns: name, VIRTUAL, RESIDENT, DIRTY, SWAPPED, ...
+      webkitVirtual = toMb(cols[1] ?? '0');
+      webkitDirty = toMb(cols[3] ?? '0');
+      break;
+    }
+  }
+  return {
+    footprintMb: footprint ? toMb(footprint[1]!) : 0,
+    webkitDirtyMb: webkitDirty,
+    webkitVirtualMb: webkitVirtual,
+  };
+}
+
+class Stdout extends EventEmitter {
+  columns = 120;
+  rows = 40;
+  isTTY = true;
+  write = () => {};
+}
+class Stdin extends EventEmitter {
+  isTTY = true;
+  setEncoding() {}
+  setRawMode() {}
+  resume() {}
+  pause() {}
+  ref() {}
+  unref() {}
+  read() {
+    return null;
+  }
+}
+
+const stdout = new Stdout();
+const LINES = 38;
+
+const App = ({ seq }: { seq: number }) =>
+  React.createElement(
+    Box,
+    {
+      flexDirection: 'column',
+      width: stdout.columns,
+      height: stdout.rows,
+      overflow: 'hidden',
+    },
+    Array.from({ length: LINES }, (_u, row) =>
+      React.createElement(
+        Text,
+        { key: row, wrap: 'wrap' },
+        `${seq}:${row} lorem ipsum dolor sit amet consectetur adipiscing elit sed`,
+      ),
+    ),
+  );
+
+const instance = render(React.createElement(App, { seq: 0 }), {
+  stdout,
+  stdin: new Stdin(),
+  stderr: new Stdout(),
+  debug: false,
+  exitOnCtrlC: false,
+  patchConsole: false,
+});
+
+const rows: string[] = [];
+const checkpoint = (label: string) => {
+  Bun.gc(true);
+  Bun.gc(true);
+  const jsc = heapStats();
+  const mem = process.memoryUsage();
+  const nat = nativeSample();
+  rows.push(
+    `${label.padEnd(10)}${(jsc.heapSize / 1e6).toFixed(1).padStart(10)}` +
+      `${(mem.rss / 1e6).toFixed(1).padStart(10)}` +
+      `${nat.footprintMb.toFixed(1).padStart(12)}` +
+      `${nat.webkitDirtyMb.toFixed(1).padStart(12)}` +
+      `${nat.webkitVirtualMb.toFixed(0).padStart(12)}`,
+  );
+};
+
+checkpoint('baseline');
+let seq = 0;
+for (let turn = 1; turn <= turns; turn++) {
+  for (let f = 0; f < framesPerTurn; f++) {
+    seq++;
+    instance.rerender(React.createElement(App, { seq }));
+  }
+  checkpoint(`turn-${turn}`);
+}
+
+console.log(
+  'checkpoint'.padEnd(10) +
+    'jscMB'.padStart(10) +
+    'rssMB'.padStart(10) +
+    'footprintMB'.padStart(12) +
+    'wkDirtyMB'.padStart(12) +
+    'wkVirtMB'.padStart(12),
+);
+for (const r of rows) console.log(r);
+
+instance.unmount();
+process.exit(0);
+```
+
+Run as `bun native.ts <ink build dir> <turns> <framesPerTurn>`.
