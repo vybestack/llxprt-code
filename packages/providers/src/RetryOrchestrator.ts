@@ -38,9 +38,10 @@ import type {
 import { AllBucketsExhaustedError, permitsBucketFailover } from './errors.js';
 import type { StructuredErrorCategory } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
-  delay,
   createAbortError,
+  delay,
 } from '@vybestack/llxprt-code-core/utils/delay.js';
+import { guardStream } from './guardedStream.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import {
   claimProviderErrorObservation,
@@ -68,11 +69,9 @@ import {
   providerOwnsTransportAttempts,
 } from './retryTransportOwnership.js';
 import { safeGetDefaultModel } from './utils/safeDefaultModel.js';
-import { closeIteratorBeforeContinuing } from './utils/streamCleanup.js';
 import {
   classifyRetryError,
   isTerminalRetryError,
-  markErrorAfterStreamOutput,
   resetRetryErrorCounters,
   updateRetryErrorCounters,
 } from './retryErrorClassification.js';
@@ -369,6 +368,7 @@ export class RetryOrchestrator implements IProvider {
       try {
         yield* this.executeRawAttempt(
           ownsAttempts,
+          request,
           attemptOptions,
           linked,
           retryState,
@@ -420,6 +420,7 @@ export class RetryOrchestrator implements IProvider {
 
   private async *executeRawAttempt(
     ownsAttempts: boolean,
+    request: RetryRequestContext,
     attemptOptions: GenerateChatOptions,
     linked: { controller: AbortController },
     retryState: {
@@ -437,12 +438,15 @@ export class RetryOrchestrator implements IProvider {
     const stream = this.wrappedProvider.generateChatCompletion(attemptOptions);
     const producedContent =
       this.config.streamingTimeoutMs > 0
-        ? yield* this.streamWithTimeout(
-            stream,
-            this.config.streamingTimeoutMs,
-            linked.controller,
-          )
-        : yield* this.yieldStreamUnprotected(stream, linked.controller);
+        ? yield* guardStream(stream, {
+            timeoutMs: this.config.streamingTimeoutMs,
+            attemptController: linked.controller,
+            context: request,
+          })
+        : yield* guardStream(stream, {
+            attemptController: linked.controller,
+            context: request,
+          });
     throwIfEmptyStreamExhaustsBudget(
       producedContent,
       budget.used,
@@ -467,44 +471,6 @@ export class RetryOrchestrator implements IProvider {
       this.name,
       this.logger,
     );
-  }
-
-  /**
-   * Yield stream chunks without timeout, marking the error if chunks were
-   * already yielded so the retry loop knows not to retry.
-   */
-  private async *yieldStreamUnprotected(
-    stream: AsyncIterableIterator<IContent>,
-    attemptController: AbortController,
-  ): AsyncGenerator<IContent, boolean> {
-    let chunksYielded = false;
-    let completed = false;
-    let failed = false;
-    let failure: unknown;
-    try {
-      for await (const chunk of stream) {
-        chunksYielded = true;
-        yield chunk;
-      }
-      completed = true;
-      return chunksYielded;
-    } catch (streamError) {
-      failed = true;
-      failure = streamError;
-      if (chunksYielded) {
-        this.logger.debug(
-          () =>
-            `Error after yielding chunks - cannot retry (would produce mixed response)`,
-        );
-        throw markErrorAfterStreamOutput(streamError);
-      }
-      throw streamError;
-    } finally {
-      if (!completed) {
-        attemptController.abort();
-        await closeIteratorBeforeContinuing(stream, failure, failed);
-      }
-    }
   }
 
   /**
@@ -872,53 +838,6 @@ export class RetryOrchestrator implements IProvider {
   }
 
   /**
-   * Wraps an async generator with a timeout for the first chunk
-   */
-  private async *streamWithTimeout(
-    stream: AsyncIterableIterator<IContent>,
-    timeoutMs: number,
-    attemptController: AbortController,
-  ): AsyncGenerator<IContent, boolean> {
-    const iterator = stream[Symbol.asyncIterator]();
-    let firstChunk = true;
-    let chunksYielded = false;
-    let completed = false;
-    let failed = false;
-    let failure: unknown;
-
-    try {
-      for (;;) {
-        if (attemptController.signal.aborted) {
-          throw createAbortError(attemptController.signal.reason);
-        }
-        const nextPromise = iterator.next();
-        const result = firstChunk
-          ? await raceFirstChunkWithTimeout(nextPromise, timeoutMs)
-          : await nextPromise;
-        firstChunk = false;
-        if (result.done === true) {
-          completed = true;
-          return chunksYielded;
-        }
-        chunksYielded = true;
-        yield result.value;
-      }
-    } catch (error) {
-      failed = true;
-      const propagatedFailure = chunksYielded
-        ? markErrorAfterStreamOutput(error)
-        : error;
-      failure = propagatedFailure;
-      throw propagatedFailure;
-    } finally {
-      if (!completed) {
-        attemptController.abort();
-        await closeIteratorBeforeContinuing(iterator, failure, failed);
-      }
-    }
-  }
-
-  /**
    * Creates an AllBucketsExhaustedError with failure reasons
    * @plan PLAN-20260223-ISSUE1598.P16
    * @requirement REQ-1598-IC09
@@ -935,29 +854,6 @@ export class RetryOrchestrator implements IProvider {
     return new AllBucketsExhaustedError(this.name, buckets, lastError, reasons);
   }
 }
-/**
- * Race the first stream chunk against a timeout. Resolves with the iterator
- * result (clearing the timeout), or rejects with a stream-timeout error.
- */
-async function raceFirstChunkWithTimeout<T>(
-  nextPromise: Promise<IteratorResult<T>>,
-  timeoutMs: number,
-): Promise<IteratorResult<T>> {
-  const timeoutController = new AbortController();
-  try {
-    const timeoutPromise = delay(timeoutMs, timeoutController.signal).then(
-      () => {
-        throw new Error(
-          `Stream timeout: first chunk not received after ${timeoutMs}ms`,
-        );
-      },
-    );
-    return await Promise.race([nextPromise, timeoutPromise]);
-  } finally {
-    timeoutController.abort();
-  }
-}
-
 function resolveAttemptErrorMessage(
   status: AttemptStatus,
   error: unknown,
