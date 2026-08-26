@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type {
+  RetryFailureKind,
+  RetryFailurePhase,
+  StreamExposure,
+} from '../retryFailureTaxonomy.js';
+
 /**
  * Explicit terminal status for a single raw provider attempt.
  */
@@ -65,6 +71,24 @@ export interface AttemptEndInfo {
   readonly finishReasons?: string[];
   /** Error message when status is error or aborted */
   readonly errorMessage?: string;
+  /**
+   * Failure taxonomy kind (issue #2532) decoded from the attempt error, or
+   * undefined when the attempt did not fail.
+   */
+  readonly failureKind?: RetryFailureKind;
+  /** Failure taxonomy phase (issue #2532) decoded from the attempt error. */
+  readonly failurePhase?: RetryFailurePhase;
+  /**
+   * Whether the request's irreversible commit flag was set when the attempt
+   * ended (issue #2532): once true, no replay of this request may occur.
+   */
+  readonly committed?: boolean;
+  /** Strongest output exposure that escaped the request (issue #2532). */
+  readonly exposure?: StreamExposure;
+  /** Aggregate transport attempts consumed by the request (issue #2532). */
+  readonly budgetUsed?: number;
+  /** Aggregate transport attempt budget limit for the request (issue #2532). */
+  readonly budgetLimit?: number;
 }
 
 /**

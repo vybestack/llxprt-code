@@ -18,6 +18,7 @@ export interface RetryRequestContext {
   readonly budget: TransportAttemptBudget;
   readonly releaseBudget: () => void;
   readonly markCommitted: (exposure: StreamExposure) => void;
+  readonly markTerminalSeen: () => void;
   readonly committed: boolean;
   readonly exposure: StreamExposure;
   readonly terminalSeen: boolean;
@@ -52,12 +53,14 @@ const EXPOSURE_STRENGTH: Readonly<Record<StreamExposure, number>> = {
 
 /**
  * Structural seam through which any wrapper layer (guarded stream, load
- * balancer backend attempt) marks the request's shared commit state. A
- * RetryRequestContext satisfies this interface; an options-only caller can
- * obtain a handle via findRequestCommitState.
+ * balancer backend attempt, provider stream processor) reads or updates the
+ * request's shared commit state. A RetryRequestContext satisfies this
+ * interface; an options-only caller can obtain a handle via
+ * findRequestCommitState.
  */
 export interface RequestCommitState {
   markCommitted(exposure: StreamExposure): void;
+  markTerminalSeen(): void;
 }
 
 function positiveInteger(value: unknown, fallback: number): number {
@@ -195,6 +198,7 @@ export function resolveRetryRequestContext(
     ),
     markCommitted: (exposure: StreamExposure) =>
       markRequestCommitted(request, exposure),
+    markTerminalSeen: () => markTerminalSeen(request),
   };
   requestCommitStates.set(request, commitState);
   return request;
@@ -233,6 +237,9 @@ export function findRequestCommitState(
   return {
     markCommitted(exposure: StreamExposure): void {
       applyCommit(record, exposure);
+    },
+    markTerminalSeen(): void {
+      record.terminalSeen = true;
     },
   };
 }

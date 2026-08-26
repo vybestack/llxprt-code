@@ -694,6 +694,7 @@ describe('AnthropicProvider', () => {
             type: 'message_delta',
             usage: { input_tokens: 0, output_tokens: 50 },
           };
+          yield { type: 'message_stop' };
         });
 
         settingsService.setProviderSetting('anthropic', 'streaming', 'enabled');

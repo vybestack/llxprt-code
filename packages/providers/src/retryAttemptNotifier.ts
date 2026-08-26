@@ -12,6 +12,7 @@ import type {
 import {
   notifyRetryAttemptStart,
   notifyRetryAttemptEnd,
+  type AttemptFailureReport,
 } from './retryLifecycleNotifier.js';
 
 /**
@@ -43,7 +44,11 @@ export class AttemptNotificationContext {
     );
   }
 
-  notifyEnd(status: AttemptStatus, errorMessage?: string): void {
+  notifyEnd(
+    status: AttemptStatus,
+    errorMessage?: string,
+    failureReport?: AttemptFailureReport,
+  ): void {
     if (!this.shouldNotify || !this.observer) return;
     notifyRetryAttemptEnd(
       this.observer,
@@ -55,6 +60,8 @@ export class AttemptNotificationContext {
       this.providerName,
       this.logger,
       errorMessage,
+      undefined,
+      failureReport,
     );
   }
 }

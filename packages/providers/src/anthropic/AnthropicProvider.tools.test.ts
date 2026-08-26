@@ -168,6 +168,8 @@ describe('AnthropicProvider', () => {
             delta: { stop_reason: 'end_turn' },
           };
           throw new Error('Connection terminated after terminal metadata');
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -210,6 +212,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'Done' },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -268,6 +272,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'Success' },
           };
+
+          yield { type: 'message_stop' };
         },
       });
 
@@ -305,6 +311,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'Success' },
           };
+
+          yield { type: 'message_stop' };
         },
       });
 
@@ -345,6 +353,8 @@ describe('AnthropicProvider', () => {
               type: 'content_block_delta',
               delta: { type: 'text_delta', text: 'Fixed and working' },
             };
+
+            yield { type: 'message_stop' };
           },
         });
 
@@ -406,6 +416,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'ok' },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -463,6 +475,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'ok' },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -508,6 +522,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'ok' },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -558,6 +574,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'ok' },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -610,6 +628,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'ok' },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -667,6 +687,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'ok' },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -720,6 +742,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'ok' },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 

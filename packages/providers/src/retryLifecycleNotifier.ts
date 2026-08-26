@@ -5,7 +5,25 @@
  */
 
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import type { AttemptLifecycleObserver } from './logging/attemptLifecycle.js';
+import type {
+  AttemptLifecycleObserver,
+  AttemptStatus,
+} from './logging/attemptLifecycle.js';
+import type {
+  RetryFailureKind,
+  RetryFailurePhase,
+  StreamExposure,
+} from './retryFailureTaxonomy.js';
+
+/** Failure taxonomy and commitment facts for one attempt (issue #2532). */
+export interface AttemptFailureReport {
+  kind?: RetryFailureKind;
+  phase?: RetryFailurePhase;
+  committed: boolean;
+  exposure: StreamExposure;
+  budgetUsed: number;
+  budgetLimit: number;
+}
 
 /** Notify lifecycle observer of attempt start (fail-open). */
 export function notifyRetryAttemptStart(
@@ -39,7 +57,7 @@ export function notifyRetryAttemptEnd(
   attemptIndex: number,
   attemptId: string,
   modelName: string,
-  status: 'success' | 'error' | 'aborted',
+  status: AttemptStatus,
   requestStartMs: number,
   providerName: string,
   logger: DebugLogger,
@@ -55,6 +73,7 @@ export function notifyRetryAttemptEnd(
     cacheReads?: number;
     cacheWrites?: number | null;
   },
+  failureReport?: AttemptFailureReport,
 ): void {
   const m = metrics ?? {
     firstTokenMs: null,
@@ -84,6 +103,16 @@ export function notifyRetryAttemptEnd(
       cacheReads: m.cacheReads,
       cacheWrites: m.cacheWrites,
       errorMessage,
+      ...(failureReport !== undefined
+        ? {
+            failureKind: failureReport.kind,
+            failurePhase: failureReport.phase,
+            committed: failureReport.committed,
+            exposure: failureReport.exposure,
+            budgetUsed: failureReport.budgetUsed,
+            budgetLimit: failureReport.budgetLimit,
+          }
+        : {}),
     });
   } catch (err) {
     logger.debug(

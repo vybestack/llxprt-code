@@ -76,6 +76,8 @@ void vi.mock('@anthropic-ai/sdk', () => {
                   type: 'content_block_delta',
                   delta: { type: 'text_delta', text: 'ok' },
                 };
+
+                yield { type: 'message_stop' };
               },
             };
           }

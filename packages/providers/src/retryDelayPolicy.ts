@@ -11,6 +11,10 @@ import {
   isRetryableError,
 } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { isStreamTimeoutError } from './providerErrorObservation.js';
+import {
+  isMalformedStreamEventError,
+  isStreamTruncatedError,
+} from './streamProtocolErrors.js';
 import { isQuotaExhaustionError } from './utils/quotaExhaustion.js';
 
 /**
@@ -44,7 +48,13 @@ export function shouldRetryError(error: unknown): boolean {
   if (status === 401) {
     return true;
   }
-  return isStreamTimeoutError(error);
+  if (isStreamTimeoutError(error)) {
+    return true;
+  }
+  // Truncated and malformed streams are transport corruption: the turn is
+  // not usable as-is, so recovery re-issues the request. The commit boundary
+  // in RetryOrchestrator keeps this retryable only before output escapes.
+  return isStreamTruncatedError(error) || isMalformedStreamEventError(error);
 }
 
 /** Maximum allowable Retry-After delay (5 minutes) to prevent stalling. */

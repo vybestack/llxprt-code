@@ -65,6 +65,7 @@ import {
   ensureImageRecoveryState,
 } from './AnthropicImageSanitizer.js';
 import { tryConsumeTransportAttempt } from '../transportAttemptBudget.js';
+import { findRequestCommitState } from '../retryRequestContext.js';
 
 export class AnthropicProvider extends BaseProvider {
   // @plan PLAN-20251023-STATELESS-HARDENING.P08
@@ -943,6 +944,7 @@ export class AnthropicProvider extends BaseProvider {
           cacheLogger: requestContext.cacheLogger,
           rateLimitLogger,
           includeThinkingInResponse: requestContext.includeThinkingInResponse,
+          commitState: findRequestCommitState(options),
         },
       );
     } else {

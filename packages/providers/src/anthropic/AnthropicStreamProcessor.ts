@@ -28,6 +28,11 @@ import {
   MAX_PROVIDER_TOOL_CALL_BYTES,
   utf8ByteLength,
 } from '../streamLimits.js';
+import {
+  MalformedStreamEventError,
+  StreamTruncatedError,
+} from '../streamProtocolErrors.js';
+import type { RequestCommitState } from '../retryRequestContext.js';
 
 export type StreamProcessorOptions = {
   isOAuth: boolean;
@@ -42,6 +47,12 @@ export type StreamProcessorOptions = {
   cacheLogger: { debug: (fn: () => string) => void };
   rateLimitLogger: { debug: (fn: () => string) => void };
   includeThinkingInResponse: boolean;
+  /**
+   * Shared per-request commit state (issue #2532). The processor records the
+   * protocol terminal event on it; it never marks commitment — that belongs
+   * to the guarded stream that yields outward.
+   */
+  commitState?: RequestCommitState;
 };
 
 type CurrentThinkingBlock = {
@@ -141,6 +152,7 @@ async function* processStreamEvents(
   let currentToolCall: CurrentToolCall | undefined;
   let currentThinkingBlock: CurrentThinkingBlock | undefined;
   const thinkingBlockIdentity = createThinkingBlockIdentity();
+  let terminalSeen = false;
 
   for await (const chunk of stream) {
     if (chunk.type === 'message_start') {
@@ -164,6 +176,14 @@ async function* processStreamEvents(
         yield blockResult.content;
       }
     } else if (chunk.type === 'content_block_delta') {
+      if (
+        chunk.delta.type === 'input_json_delta' &&
+        currentToolCall === undefined
+      ) {
+        throw new MalformedStreamEventError(
+          'input_json_delta received with no open tool_use block',
+        );
+      }
       const deltaContent = handleContentBlockDelta(
         chunk,
         currentToolCall,
@@ -192,7 +212,16 @@ async function* processStreamEvents(
       currentThinkingBlock = stopResult.currentThinkingBlock;
     } else if (chunk.type === 'message_delta') {
       yield* handleMessageDelta(chunk, logger);
+    } else if (chunk.type === 'message_stop') {
+      terminalSeen = true;
+      options.commitState?.markTerminalSeen();
     }
+  }
+
+  if (!terminalSeen) {
+    throw new StreamTruncatedError(
+      'Anthropic stream ended without message_stop',
+    );
   }
 }
 

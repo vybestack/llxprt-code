@@ -6,6 +6,10 @@
 
 import { isTimeoutError } from './loadBalancing/streamTimeout.js';
 import { isStreamTimeoutError } from './providerErrorObservation.js';
+import {
+  isMalformedStreamEventError,
+  isStreamTruncatedError,
+} from './streamProtocolErrors.js';
 import { getDelayDuration, getRetryAfterDelayMs } from './retryDelayPolicy.js';
 import {
   classifyRetryError,
@@ -179,6 +183,12 @@ function resolveFailureIdentity(
   }
   if (isTimeoutError(error) || isStreamTimeoutError(error)) {
     return { phase: 'stream', kind: 'timeout' };
+  }
+  if (isStreamTruncatedError(error)) {
+    return { phase: 'stream', kind: 'truncated' };
+  }
+  if (isMalformedStreamEventError(error)) {
+    return { phase: 'protocol', kind: 'malformed' };
   }
   return (
     getStatusIdentity(classification.status) ??

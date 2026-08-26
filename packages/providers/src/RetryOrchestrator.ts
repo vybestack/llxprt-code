@@ -94,6 +94,7 @@ import type {
   AttemptStatus,
 } from './logging/attemptLifecycle.js';
 import { AttemptNotificationContext } from './retryAttemptNotifier.js';
+import type { AttemptFailureReport } from './retryLifecycleNotifier.js';
 import {
   getBucketFailoverHandlerFromOptions,
   getOnAuthErrorHandlerFromOptions,
@@ -400,6 +401,7 @@ export class RetryOrchestrator implements IProvider {
         notification.notifyEnd(
           terminalStatus,
           resolveAttemptErrorMessage(terminalStatus, attemptError),
+          this.buildFailureReport(request, terminalStatus, attemptError),
         );
       }
       if (attemptError === undefined) continue;
@@ -458,6 +460,35 @@ export class RetryOrchestrator implements IProvider {
     );
     resetRetryErrorCounters(retryState);
     bucketFailoverHandler?.resetSession?.();
+  }
+
+  /**
+   * Build the taxonomy/commitment/budget report for attempt telemetry
+   * (issue #2532 AC-07). Failure kind/phase decode only applies to failed
+   * attempts; commitment and budget are reported for every attempt.
+   */
+  private buildFailureReport(
+    request: RetryRequestContext,
+    status: AttemptStatus,
+    error: unknown,
+  ): AttemptFailureReport {
+    if (error === undefined) {
+      return {
+        committed: request.committed,
+        exposure: request.exposure,
+        budgetUsed: request.budget.used,
+        budgetLimit: request.budget.limit,
+      };
+    }
+    const failure = decodeRetryFailure(error);
+    return {
+      kind: failure.kind,
+      phase: failure.phase,
+      committed: request.committed,
+      exposure: request.exposure,
+      budgetUsed: request.budget.used,
+      budgetLimit: request.budget.limit,
+    };
   }
 
   private createAttemptNotification(
