@@ -266,4 +266,22 @@ describe('processSlashCommand cancellation', () => {
 
     expect(cancel()).toBe(false);
   });
+
+  it('deregisters even when the invocation fails before the action runs', async () => {
+    // Otherwise the registry keeps a controller nothing is waiting on, and a
+    // later Esc reports a cancellation that did not happen.
+    const addItem = vi.fn();
+    const { deps, cancel } = createCancellableDeps(addItem);
+    deps.commandContext = new Proxy(deps.commandContext, {
+      get() {
+        throw new Error('context construction exploded');
+      },
+    });
+    deps.commands = createCommands(() => {});
+
+    await processSlashCommand(deps, '/help');
+
+    expect(errorTexts(addItem)).toEqual(['context construction exploded']);
+    expect(cancel()).toBe(false);
+  });
 });

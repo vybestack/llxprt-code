@@ -240,13 +240,15 @@ describe('imageCommand', () => {
     expect(capturedSignal?.aborted).toBe(true);
   });
 
-  it('reports nothing when the runner rejects because the invocation was cancelled', async () => {
-    // The framework already added the cancellation notice; a second error item
-    // would be noise.
+  it('reports nothing for any rejection once the invocation is cancelled', async () => {
+    // Cancellation discards the invocation's outcome uniformly: the framework
+    // already added the cancellation notice, and a failure that merely raced
+    // the Esc describes work the user abandoned. Deliberately a non-abort
+    // error so the rule is not mistaken for abort-error sniffing.
     const invocation = new AbortController();
     const runner = vi.fn().mockImplementation(async () => {
       invocation.abort();
-      throw new Error('The operation was aborted.');
+      throw new Error('provider returned 500');
     });
     const ctx = makeMockContext({
       runImageOperation: runner,

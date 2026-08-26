@@ -173,6 +173,30 @@ describe('ShellProcessor', () => {
     expect(executionSignal).toBe(invocation.signal);
   });
 
+  it('stops spawning later injections once the invocation is cancelled', async () => {
+    // Cancelling must not keep launching processes for the abandoned prompt.
+    const invocation = new AbortController();
+    const cancellableContext = createMockCommandContext({
+      signal: invocation.signal,
+      invocation: { raw: '/cmd', name: 'cmd', args: '' },
+      services: { config: mockConfig as Config },
+      session: { sessionShellAllowlist: new Set() },
+    });
+    const spawned: string[] = [];
+    mockShellExecute.mockImplementation((command: string) => {
+      spawned.push(command);
+      invocation.abort();
+      return { result: Promise.resolve({ ...SUCCESS_RESULT, aborted: true }) };
+    });
+
+    await new ShellProcessor('test-command').process(
+      '!{git status} then !{pwd} then !{whoami}',
+      cancellableContext,
+    );
+
+    expect(spawned).toEqual(['git status']);
+  });
+
   it('should process multiple valid shell injections if all are allowed', async () => {
     const processor = new ShellProcessor('test-command');
     const prompt = '!{git status} in !{pwd}';

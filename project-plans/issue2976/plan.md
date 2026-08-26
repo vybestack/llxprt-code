@@ -368,7 +368,34 @@ Findings from the independent design review, with dispositions.
   resolve-side discard a cancelled command still submitted its prompt to the
   model.
 
+### Fixed after the open-code review
+
+- **The loop guard that stops spawning injections after an abort had no test.**
+  Covered by "stops spawning later injections once the invocation is cancelled".
+- **A controller could stay registered if context construction threw** between
+  `beginSlashCommandAction` and the try block, so a later Esc would report a
+  cancellation that never happened. Registration and context construction now
+  live inside the same try/finally. Covered by "deregisters even when the
+  invocation fails before the action runs".
+- **A discarded result left no trace** while a discarded error did. Both are
+  logged now.
+- **The abort-discard rule read as abort-error sniffing.** The `/image` test now
+  rejects with an unrelated provider error to make the uniform rule explicit:
+  once the invocation is cancelled, its outcome is discarded whatever it was.
+  Narrowing the suppression to `AbortError` was considered and rejected —
+  reporting a provider failure for a request the user just abandoned is noise,
+  and the framework already applies the same rule one level up.
+
 ### Deferred (follow-up, not this issue)
+
+- **Esc does not dismiss a pending shell-expansion confirmation.** By the time
+  the confirmation is on screen the action has settled and its controller is
+  deregistered, so Esc is a no-op there (it neither aborts nor reports, so the
+  single-command case shows no misleading notice). The confirmation carries its
+  own Cancel option, and this is unchanged from before: Esc did nothing during a
+  slash-command confirmation previously either. Closing it means keeping the
+  controller registered across the confirmation and racing the confirmation
+  promise against the signal, which is its own behavioural change.
 
 - **Only `/image`, `/setup-github` and the shell processor honour
   `context.signal`.** Long-running built-ins such as `/compress` and
