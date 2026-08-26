@@ -9,9 +9,9 @@
  *
  * The telemetry package is a leaf workspace package and cannot depend on
  * core's llm-types layer, so the minimal shape needed by telemetry event
- * logging is defined here. Concrete provider SDK usage-metadata objects
- * are structurally assignable to this interface without a runtime
- * dependency on any specific provider SDK.
+ * logging is defined here. Field names are the neutral internal scheme
+ * (input/output/cached/thinking/toolUseInput); provider SDK shapes with
+ * vendor-specific field names must be mapped before constructing events.
  */
 
 /**

@@ -888,7 +888,11 @@ export abstract class ConfigBaseCore {
   getUtilityModel(): string | undefined {
     // Interim utilityModel source; real setting tracked in the companion feature issue (#2614 umbrella)
     const raw = this.settingsService.get('utilityModel');
-    return typeof raw === 'string' ? raw : undefined;
+    if (typeof raw !== 'string') {
+      return undefined;
+    }
+    const trimmed = raw.trim();
+    return trimmed === '' ? undefined : trimmed;
   }
   getSettingsService(): SettingsService {
     return this.settingsService;

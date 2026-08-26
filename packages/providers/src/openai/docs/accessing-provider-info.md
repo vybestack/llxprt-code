@@ -126,8 +126,8 @@ const handleResponsesAPIResponse = (response: any) => {
   if (usage) {
     // Update remote token stats in context
     updateRemoteTokenStats({
-      promptTokenCount: usage.prompt_tokens,
-      candidatesTokenCount: usage.completion_tokens,
+      inputTokenCount: usage.prompt_tokens,
+      outputTokenCount: usage.completion_tokens,
       totalTokenCount: usage.total_tokens,
     });
   }
@@ -145,8 +145,8 @@ interface OpenAIProviderInfo {
   isResponsesAPI: boolean;
   currentModel: string | null;
   remoteTokenInfo: {
-    promptTokenCount?: number;
-    candidatesTokenCount?: number;
+    inputTokenCount?: number;
+    outputTokenCount?: number;
     totalTokenCount?: number;
   };
 }

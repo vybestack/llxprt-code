@@ -17,7 +17,7 @@
  * - config/config.ts (initialize, initializeContentGeneratorConfig)
  * - config/configBaseCore.ts (getAgentClient return type)
  * - utils/summarizer.ts (generateContent)
- * - utils/llm-edit-fixer.ts (generateJson)
+ * - agents/src/api/agentImpl.ts (generateJson)
  * - utils/checkpointUtils.ts (getHistory)
  * - CLI consumers (14+ files: sendMessageStream, setTools, updateSystemInstruction, etc.)
  */

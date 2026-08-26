@@ -58,8 +58,9 @@ provider-specific name (e.g. `useGeminiFoo` in the CLI).
 The allowlist contains pre-existing public API names that cannot be renamed in
 a patch release. Categories:
 
-1. **Model-ID constants** — `DEFAULT_GEMINI_MODEL`, `DEFAULT_GEMINI_FLASH_MODEL`,
-   etc. (genuine env-var / default model IDs).
+1. **Model-ID constants** — provider-owned default model IDs live in their
+   provider implementations; the former `DEFAULT_GEMINI_*` core constants were
+   deleted (issue #2627). No model-ID constants remain allowlisted from core.
 2. **Neutral structural types** — `GeminiContent`, `GeminiContentPart`, etc.
    in `packages/core/src/llm-types/geminiContent.ts`.
 3. **Finish-reason mappers** — `GEMINI_FINISH_MAP`, `mapGeminiFinishReason`.

@@ -65,6 +65,17 @@ interface PromptSuggestionParams {
 
 type AgentClient = ReturnType<PromptCompletionRuntime['getAgentClient']>;
 
+/**
+ * A usable utility model is a non-blank string. Blank values are treated as
+ * unconfigured so the hook stays inert rather than requesting a blank model
+ * id (#2627).
+ */
+function hasUtilityModel(
+  utilityModel: string | undefined,
+): utilityModel is string {
+  return typeof utilityModel === 'string' && utilityModel.trim() !== '';
+}
+
 function shouldSkipPromptCompletion(
   trimmedText: string,
   isPromptCompletionEnabled: boolean,
@@ -77,8 +88,7 @@ function shouldSkipPromptCompletion(
     isSlashCommand(trimmedText) || trimmedText.includes('@');
   // Without a utility model there is no model to route the completion
   // request to; the hook stays inert rather than guessing one (#2627).
-  const noUtilityModel = utilityModel === undefined || utilityModel === '';
-  if (noUtilityModel || !isPromptCompletionEnabled) {
+  if (!hasUtilityModel(utilityModel) || !isPromptCompletionEnabled) {
     return true;
   }
   return tooShort || noClient || isSpecialInput;
@@ -235,7 +245,7 @@ function usePromptSuggestionGenerator({
       return;
     }
 
-    if (!agentClient || utilityModel === undefined) return;
+    if (!agentClient || !hasUtilityModel(utilityModel)) return;
 
     lastRequestedTextRef.current = trimmedText;
     setIsLoadingGhostText(true);
@@ -368,9 +378,7 @@ export function usePromptCompletion({
     isLoading: state.isLoadingGhostText,
     isActive: isCompletionActive(
       buffer,
-      isPromptCompletionEnabled &&
-        utilityModel !== undefined &&
-        utilityModel !== '',
+      isPromptCompletionEnabled && hasUtilityModel(utilityModel),
     ),
     accept: state.acceptGhostText,
     clear: state.clearGhostText,

@@ -4,7 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+// Flag the environment before React loads so act() is warning-free.
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
+
+import { describe, it, expect, vi, afterEach } from 'bun:test';
+import { act } from 'react';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import {
   usePromptCompletion,
@@ -36,27 +43,59 @@ function makeModelOutput(text: string): ModelOutput {
   } as unknown as ModelOutput;
 }
 
+function makeRuntime(utilityModel: string | undefined): {
+  runtime: PromptCompletionRuntime;
+  generateContent: ReturnType<typeof vi.fn>;
+} {
+  const generateContent = vi.fn();
+  const runtime = {
+    getEnablePromptCompletion: () => true,
+    getUtilityModel: () => utilityModel,
+    getAgentClient: () => ({ generateContent }),
+  } as unknown as PromptCompletionRuntime;
+  return { runtime, generateContent };
+}
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe('usePromptCompletion utilityModel gating (issue #2627)', () => {
   it('constructs no request when no utilityModel is configured', async () => {
-    const generateContent = vi.fn();
-    const config = {
-      getEnablePromptCompletion: () => true,
-      getUtilityModel: () => undefined,
-      getAgentClient: () => ({ generateContent }),
-    } as unknown as PromptCompletionRuntime;
+    vi.useFakeTimers();
+    const { runtime, generateContent } = makeRuntime(undefined);
     const buffer = makeBuffer('a sufficiently long prompt');
 
     const { result } = renderHook(() =>
-      usePromptCompletion({ buffer, config, enabled: true }),
+      usePromptCompletion({ buffer, config: runtime, enabled: true }),
     );
 
-    await new Promise((resolve) =>
-      setTimeout(resolve, PROMPT_COMPLETION_DEBOUNCE_MS + 150),
-    );
+    await act(async () => {
+      await advanceTimersByTimeAsync(PROMPT_COMPLETION_DEBOUNCE_MS + 10);
+    });
 
     expect(generateContent).not.toHaveBeenCalled();
     expect(result.current.text).toBe('');
     expect(result.current.isActive).toBe(false);
+  });
+
+  it('constructs no request when utilityModel is an empty or blank string', async () => {
+    vi.useFakeTimers();
+    for (const blank of ['', '   ']) {
+      const { runtime, generateContent } = makeRuntime(blank);
+      const buffer = makeBuffer('a sufficiently long prompt');
+
+      const { result } = renderHook(() =>
+        usePromptCompletion({ buffer, config: runtime, enabled: true }),
+      );
+
+      await act(async () => {
+        await advanceTimersByTimeAsync(PROMPT_COMPLETION_DEBOUNCE_MS + 10);
+      });
+
+      expect(generateContent).not.toHaveBeenCalled();
+      expect(result.current.isActive).toBe(false);
+    }
   });
 
   it('requests completion with the configured utilityModel', async () => {
