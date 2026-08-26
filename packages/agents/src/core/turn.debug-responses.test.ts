@@ -6,6 +6,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { ServerAgentStreamEvent } from './turn.js';
+import { TurnDebugResponses } from './turnDebugResponses.js';
+import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import {
   Turn,
   AgentEventType,
@@ -157,6 +159,49 @@ describe('Turn - debug responses and finished event outcome', () => {
         retainedChunks: 1,
         retainedCharacters: deltaCount,
       });
+    });
+
+    it('keeps the newest thinking state when the appended chunk is what trips the trim', () => {
+      // Exercised directly against TurnDebugResponses so the boundary is exact.
+      // At the high-water mark nothing is doomed yet, but this chunk carries a
+      // continuation AND a sibling, so the sibling is appended and trim runs in
+      // the same push. Judging pending drops from the pre-append length writes
+      // the replacement into the region trim is about to discard. Measured: the
+      // previous arithmetic retains no thought at all here.
+      const think = (thought: string) => ({
+        type: 'thinking' as const,
+        thought,
+        sourceField: 'thinking',
+        streamId: 'boundary-span',
+        streamStatus: 'delta' as const,
+      });
+      const text = (value: string) => ({ type: 'text' as const, text: value });
+      const record = (
+        responses: TurnDebugResponses,
+        blocks: ContentBlock[],
+      ) => {
+        responses.push(
+          { content: { blocks } } as unknown as ModelStreamChunk,
+          blocks,
+        );
+      };
+
+      const responses = new TurnDebugResponses();
+      record(responses, [think('early')]);
+      for (let i = 0; i < MAX_DEBUG_RESPONSE_CHUNKS * 2 - 1; i++) {
+        record(responses, [text(`filler-${i}`)]);
+      }
+      expect(responses.length).toBe(MAX_DEBUG_RESPONSE_CHUNKS * 2);
+
+      record(responses, [think('NEWEST'), text('sibling')]);
+
+      const thoughts = responses.retained.flatMap((chunk) =>
+        chunk.content.blocks
+          .filter((block) => block.type === 'thinking')
+          .map((block) => (block as { thought: string }).thought),
+      );
+      expect(thoughts).toStrictEqual(['NEWEST']);
+      expect(responses.length).toBe(MAX_DEBUG_RESPONSE_CHUNKS);
     });
 
     it('keeps the newest state of a thinking span that trims on the same chunk', async () => {

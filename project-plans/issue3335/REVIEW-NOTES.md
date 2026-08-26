@@ -196,22 +196,6 @@ R5. **Catalog maximum is 131,072, not 128,000.** LOW. Kimi declares 131,072,
     in this branch is therefore slightly overstated (16x becomes 15.26x for the
     aggregate ceiling). No cap changes rank as a result.
 
-## Known coverage gap
-
-G1. **The `pendingDropCount` projected-length fix has no dedicated regression
-    test.** The fix is an arithmetic alignment: the replacement decision runs
-    before `push` appends, so pending drops must be judged from
-    `chunks.length + 1`, which is exactly what `trim` will see afterwards.
-    Reviewed and correct by inspection.
-
-    I attempted a regression test driving `CAP * 2 - 1` fillers with a
-    continuation plus a sibling text block, and it failed against both the old
-    and the new arithmetic, so it demonstrated nothing about the fix. Rather
-    than commit a test that looks like evidence and is not, it was removed and
-    the gap recorded here. The neighbouring case, a span whose recorded position
-    lands in the half about to be dropped, is covered by
-    `keeps the newest state of a thinking span that trims on the same chunk`.
-
 ## Verification notes
 
 V0. **Test-audit gate passes: no new findings on any touched test file.**
