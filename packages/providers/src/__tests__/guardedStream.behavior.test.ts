@@ -220,7 +220,7 @@ describe('guardStream', () => {
 
   it('returns false for an empty stream without aborting or closing it', async () => {
     async function* source(): AsyncGenerator<IContent, void, undefined> {
-      return;
+      yield* [];
     }
     const tracked = trackIterator(source());
     const context = createRequestContext();

@@ -83,7 +83,7 @@ type StreamFactory = (
 ) => AsyncGenerator<IContent>;
 
 interface ScriptedProviderOptions {
-  readonly script: ReadonlyArray<StreamFactory>;
+  readonly script: readonly StreamFactory[];
 }
 
 /**

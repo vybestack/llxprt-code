@@ -136,93 +136,141 @@ function buildThinkingContent(params: {
   };
 }
 
+interface StreamAssemblyState {
+  currentToolCall: CurrentToolCall | undefined;
+  currentThinkingBlock: CurrentThinkingBlock | undefined;
+  terminalSeen: boolean;
+  thinkingBlockIdentity: ThinkingBlockIdentity;
+}
+
 async function* processStreamEvents(
   stream: AsyncIterable<Anthropic.MessageStreamEvent>,
   options: StreamProcessorOptions,
 ): AsyncGenerator<IContent> {
-  const {
-    isOAuth,
-    tools,
-    unprefixToolName,
-    findToolSchema,
-    logger,
-    cacheLogger,
-  } = options;
-
-  let currentToolCall: CurrentToolCall | undefined;
-  let currentThinkingBlock: CurrentThinkingBlock | undefined;
-  const thinkingBlockIdentity = createThinkingBlockIdentity();
-  let terminalSeen = false;
+  const state: StreamAssemblyState = {
+    currentToolCall: undefined,
+    currentThinkingBlock: undefined,
+    terminalSeen: false,
+    thinkingBlockIdentity: createThinkingBlockIdentity(),
+  };
 
   for await (const chunk of stream) {
-    if (chunk.type === 'message_start') {
-      yield* handleMessageStart(chunk, cacheLogger);
-    } else if (chunk.type === 'content_block_start') {
-      const blockResult = handleContentBlockStartStateful(
-        chunk,
-        isOAuth,
-        unprefixToolName,
-        thinkingBlockIdentity,
-        logger,
-        options.includeThinkingInResponse,
-      );
-      if (blockResult.currentToolCall !== undefined) {
-        currentToolCall = blockResult.currentToolCall;
-      }
-      if (blockResult.currentThinkingBlock !== undefined) {
-        currentThinkingBlock = blockResult.currentThinkingBlock;
-      }
-      if (blockResult.content) {
-        yield blockResult.content;
-      }
-    } else if (chunk.type === 'content_block_delta') {
-      if (
-        chunk.delta.type === 'input_json_delta' &&
-        currentToolCall === undefined
-      ) {
-        throw new MalformedStreamEventError(
-          'input_json_delta received with no open tool_use block',
-        );
-      }
-      const deltaContent = handleContentBlockDelta(
-        chunk,
-        currentToolCall,
-        currentThinkingBlock,
-        options.includeThinkingInResponse,
-        logger,
-      );
-      if (deltaContent !== undefined) {
-        yield deltaContent;
-      }
-    } else if (chunk.type === 'content_block_stop') {
-      const stopResult = handleContentBlockStop(
-        chunk,
-        currentToolCall,
-        currentThinkingBlock,
-        tools,
-        isOAuth,
-        findToolSchema,
-        options.includeThinkingInResponse,
-        logger,
-      );
-      if (stopResult.content) {
-        yield stopResult.content;
-      }
-      currentToolCall = stopResult.currentToolCall;
-      currentThinkingBlock = stopResult.currentThinkingBlock;
-    } else if (chunk.type === 'message_delta') {
-      yield* handleMessageDelta(chunk, logger);
-    } else if (chunk.type === 'message_stop') {
-      terminalSeen = true;
-      options.commitState?.markTerminalSeen();
-    }
+    yield* applyStreamEvent(chunk, state, options);
   }
 
-  if (!terminalSeen) {
+  if (!state.terminalSeen) {
     throw new StreamTruncatedError(
       'Anthropic stream ended without message_stop',
     );
   }
+}
+
+function* applyStreamEvent(
+  chunk: Anthropic.MessageStreamEvent,
+  state: StreamAssemblyState,
+  options: StreamProcessorOptions,
+): Generator<IContent> {
+  switch (chunk.type) {
+    case 'message_stop': {
+      state.terminalSeen = true;
+      options.commitState?.markTerminalSeen();
+      return;
+    }
+    case 'message_start': {
+      yield* handleMessageStart(chunk, options.cacheLogger);
+      return;
+    }
+    case 'content_block_start': {
+      yield* applyContentBlockStart(chunk, state, options);
+      return;
+    }
+    case 'content_block_delta': {
+      yield* applyContentBlockDelta(chunk, state, options);
+      return;
+    }
+    case 'content_block_stop': {
+      yield* applyContentBlockStop(chunk, state, options);
+      return;
+    }
+    case 'message_delta': {
+      yield* handleMessageDelta(chunk, options.logger);
+      return;
+    }
+    default:
+      // Unknown event types (e.g. ping) carry no assembly state.
+      return;
+  }
+}
+
+function* applyContentBlockStart(
+  chunk: Extract<Anthropic.MessageStreamEvent, { type: 'content_block_start' }>,
+  state: StreamAssemblyState,
+  options: StreamProcessorOptions,
+): Generator<IContent> {
+  const blockResult = handleContentBlockStartStateful(
+    chunk,
+    options.isOAuth,
+    options.unprefixToolName,
+    state.thinkingBlockIdentity,
+    options.logger,
+    options.includeThinkingInResponse,
+  );
+  if (blockResult.currentToolCall !== undefined) {
+    state.currentToolCall = blockResult.currentToolCall;
+  }
+  if (blockResult.currentThinkingBlock !== undefined) {
+    state.currentThinkingBlock = blockResult.currentThinkingBlock;
+  }
+  if (blockResult.content) {
+    yield blockResult.content;
+  }
+}
+
+function* applyContentBlockDelta(
+  chunk: Extract<Anthropic.MessageStreamEvent, { type: 'content_block_delta' }>,
+  state: StreamAssemblyState,
+  options: StreamProcessorOptions,
+): Generator<IContent> {
+  if (
+    chunk.delta.type === 'input_json_delta' &&
+    state.currentToolCall === undefined
+  ) {
+    throw new MalformedStreamEventError(
+      'input_json_delta received with no open tool_use block',
+    );
+  }
+  const deltaContent = handleContentBlockDelta(
+    chunk,
+    state.currentToolCall,
+    state.currentThinkingBlock,
+    options.includeThinkingInResponse,
+    options.logger,
+  );
+  if (deltaContent !== undefined) {
+    yield deltaContent;
+  }
+}
+
+function* applyContentBlockStop(
+  chunk: Extract<Anthropic.MessageStreamEvent, { type: 'content_block_stop' }>,
+  state: StreamAssemblyState,
+  options: StreamProcessorOptions,
+): Generator<IContent> {
+  const stopResult = handleContentBlockStop(
+    chunk,
+    state.currentToolCall,
+    state.currentThinkingBlock,
+    options.tools,
+    options.isOAuth,
+    options.findToolSchema,
+    options.includeThinkingInResponse,
+    options.logger,
+  );
+  if (stopResult.content) {
+    yield stopResult.content;
+  }
+  state.currentToolCall = stopResult.currentToolCall;
+  state.currentThinkingBlock = stopResult.currentThinkingBlock;
 }
 
 /**

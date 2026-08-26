@@ -11,6 +11,7 @@ import type {
 import { raceWithAbort } from './utils/abortSignal.js';
 import { resetRetryErrorCounters } from './retryErrorClassification.js';
 import { resolveFailoverReason } from './retryDelayPolicy.js';
+import { permitsBucketFailover } from './errors.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 
 export type RetryAction =
@@ -24,6 +25,41 @@ export interface FailoverState {
   consecutiveServerErrors: number;
   attempt: number;
   currentDelay: number;
+}
+
+export interface FailoverFlags {
+  is429: boolean;
+  is402: boolean;
+  isAuthError: boolean;
+  isNetworkError: boolean;
+  is5xxServerError: boolean;
+}
+
+/**
+ * Gate a bucket-failover attempt on the aggregate attempt budget, the
+ * error's eligibility, and the consecutive-failure thresholds. Committed
+ * requests never reach this: post-exposure errors are terminal upstream.
+ */
+export function shouldFailoverNow(
+  state: FailoverState,
+  maxAttempts: number,
+  error: unknown,
+  bucketFailoverHandler: BucketFailoverHandler | undefined,
+  flags: FailoverFlags,
+  failoverThreshold: number,
+): boolean {
+  if (state.attempt >= maxAttempts) return false;
+  if (!permitsBucketFailover(error)) return false;
+  return shouldAttemptFailover(
+    bucketFailoverHandler,
+    flags.is429,
+    flags.is402,
+    flags.isAuthError,
+    flags.isNetworkError,
+    flags.is5xxServerError,
+    state,
+    failoverThreshold,
+  );
 }
 
 /**

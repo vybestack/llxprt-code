@@ -112,21 +112,20 @@ describe('attempt lifecycle taxonomy and commitment telemetry (issue #2532)', ()
     expect(error).toBeUndefined();
     expect(ends.length).toBe(2);
 
-    const failed = ends[0];
-    expect(failed?.status).toBe('error');
-    expect(failed?.failureKind).toBe('server');
-    expect(failed?.failurePhase).toBeDefined();
-    expect(failed?.committed).toBe(false);
-    expect(failed?.exposure).toBe('none');
-    expect(failed?.budgetUsed).toBe(1);
-    expect(failed?.budgetLimit).toBeGreaterThanOrEqual(1);
+    const [failed, success] = ends;
+    expect(failed.status).toBe('error');
+    expect(failed.failureKind).toBe('server');
+    expect(failed.failurePhase).toBeDefined();
+    expect(failed.committed).toBe(false);
+    expect(failed.exposure).toBe('none');
+    expect(failed.budgetUsed).toBe(1);
+    expect(failed.budgetLimit).toBeGreaterThanOrEqual(1);
 
-    const success = ends[1];
-    expect(success?.status).toBe('success');
-    expect(success?.committed).toBe(true);
-    expect(success?.exposure).toBe('content');
-    expect(success?.failureKind).toBeUndefined();
-    expect(success?.budgetUsed).toBe(2);
+    expect(success.status).toBe('success');
+    expect(success.committed).toBe(true);
+    expect(success.exposure).toBe('content');
+    expect(success.failureKind).toBeUndefined();
+    expect(success.budgetUsed).toBe(2);
   });
 
   it('reports commitment with content exposure when an attempt fails after output', async () => {
@@ -153,9 +152,9 @@ describe('attempt lifecycle taxonomy and commitment telemetry (issue #2532)', ()
 
     expect(error).toBeDefined();
     expect(ends.length).toBe(1);
-    expect(ends[0]?.failureKind).toBe('rate_limit');
-    expect(ends[0]?.committed).toBe(true);
-    expect(ends[0]?.exposure).toBe('content');
+    expect(ends[0].failureKind).toBe('rate_limit');
+    expect(ends[0].committed).toBe(true);
+    expect(ends[0].exposure).toBe('content');
   });
 
   it('keeps error messages but never adds token or credential material for auth failures', async () => {
@@ -176,7 +175,7 @@ describe('attempt lifecycle taxonomy and commitment telemetry (issue #2532)', ()
 
     expect(error).toBeDefined();
     expect(ends.length).toBe(1);
-    expect(ends[0]?.failureKind).toBe('auth');
-    expect(ends[0]?.errorMessage).toBe('authentication_error');
+    expect(ends[0].failureKind).toBe('auth');
+    expect(ends[0].errorMessage).toBe('authentication_error');
   });
 });

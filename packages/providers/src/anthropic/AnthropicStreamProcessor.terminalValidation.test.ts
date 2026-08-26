@@ -373,8 +373,8 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
       expect(error).toBeUndefined();
       expect(calls()).toBe(2);
       const text = chunks
-        .map((c) => c.blocks[0])
-        .find((b) => b?.type === 'text');
+        .flatMap((c) => c.blocks)
+        .find((b) => b.type === 'text');
       expect(text).toBeDefined();
     });
 
@@ -424,8 +424,8 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
       expect(error).toBeDefined();
       expect(isTerminalRetryError(error)).toBe(true);
       const text = chunks
-        .map((c) => c.blocks[0])
-        .find((b) => b?.type === 'text');
+        .flatMap((c) => c.blocks)
+        .find((b) => b.type === 'text');
       expect(text).toBeDefined();
     });
 
@@ -445,8 +445,8 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
       expect(error).toBeUndefined();
       expect(calls()).toBe(2);
       const text = chunks
-        .map((c) => c.blocks[0])
-        .find((b) => b?.type === 'text');
+        .flatMap((c) => c.blocks)
+        .find((b) => b.type === 'text');
       expect(text).toBeDefined();
     });
 
@@ -470,8 +470,8 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
       expect(error).toBeInstanceOf(StreamTruncatedError);
       expect(isTerminalRetryError(error)).toBe(true);
       const text = chunks
-        .map((c) => c.blocks[0])
-        .find((b) => b?.type === 'text');
+        .flatMap((c) => c.blocks)
+        .find((b) => b.type === 'text');
       expect(text).toBeDefined();
     });
 
@@ -499,8 +499,8 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
       expect(error).toBeDefined();
       expect(isTerminalRetryError(error)).toBe(true);
       const thinking = chunks
-        .map((c) => c.blocks[0])
-        .find((b) => b?.type === 'thinking');
+        .flatMap((c) => c.blocks)
+        .find((b) => b.type === 'thinking');
       expect(thinking).toBeDefined();
     });
 
@@ -528,8 +528,8 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
       expect(error).toBeDefined();
       expect(isTerminalRetryError(error)).toBe(true);
       const toolCall = chunks
-        .map((c) => c.blocks[0])
-        .find((b) => b?.type === 'tool_call');
+        .flatMap((c) => c.blocks)
+        .find((b) => b.type === 'tool_call');
       expect(toolCall).toBeDefined();
     });
 
@@ -566,8 +566,8 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
       expect(error).toBeUndefined();
       expect(calls()).toBe(2);
       const toolCall = chunks
-        .map((c) => c.blocks[0])
-        .find((b) => b?.type === 'tool_call');
+        .flatMap((c) => c.blocks)
+        .find((b) => b.type === 'tool_call');
       expect(toolCall).toBeDefined();
     });
   });
