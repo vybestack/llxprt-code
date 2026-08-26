@@ -192,7 +192,8 @@ export async function loadCliRuntimePlugins(
   settings: LoadedSettings,
 ): Promise<ProviderContributionRegistry> {
   const specifiers = resolveRuntimePluginSpecifiers(settings);
-  return loadRuntimePlugins(specifiers, {
-    importModule: (specifier: string) => import(specifier),
-  });
+  // Module resolution lives in the providers package, which owns plugin
+  // loading. The CLI owns policy (provenance and specifier shape) and has
+  // already applied it above.
+  return loadRuntimePlugins(specifiers);
 }

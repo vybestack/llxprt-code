@@ -25,8 +25,10 @@ Two consequences follow from that trust model:
 
 ## Configuring plugins
 
-Add `runtimePlugins` to your user settings file (`~/.llxprt/settings.json`) or
-to the system settings file:
+Add `runtimePlugins` to your user (global) settings file or to the system
+settings file. See
+[Application directories](./reference/application-directories.md) for where
+those live on each platform:
 
 ```json
 {

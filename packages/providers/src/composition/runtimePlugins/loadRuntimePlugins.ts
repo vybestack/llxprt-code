@@ -30,7 +30,9 @@ const RUNTIME_PLUGIN_EXPORT_NAME = 'llxprtRuntimePlugin';
  */
 export async function loadRuntimePlugins(
   specifiers: readonly string[],
-  deps: { importModule: (specifier: string) => Promise<unknown> },
+  deps: {
+    importModule: (specifier: string) => Promise<unknown>;
+  } = { importModule: importPluginPackage },
 ): Promise<ProviderContributionRegistry> {
   const loaded: LoadedRuntimePlugin[] = [];
   let registry = buildProviderContributionRegistry(loaded);
@@ -55,6 +57,16 @@ export async function loadRuntimePlugins(
   }
 
   return registry;
+}
+
+/**
+ * Default module resolution: a real dynamic import of the configured package.
+ * The specifier is necessarily computed — resolving a user-configured package
+ * is the entire feature — so this is the one place the loader performs it, and
+ * callers are responsible for having validated the specifier first.
+ */
+async function importPluginPackage(specifier: string): Promise<unknown> {
+  return import(specifier);
 }
 
 async function importPluginModule(
