@@ -107,6 +107,33 @@ function captureReasoningFromJson(
 }
 
 /**
+ * Rejects any SSE line over the byte limit, complete lines included.
+ *
+ * Bounding only the trailing incomplete remainder is trivially bypassed by
+ * appending a newline: the line then arrives complete and would go straight to
+ * JSON.parse unmeasured.
+ *
+ * The cheap length pre-check comes first because the remainder is re-examined
+ * on every read, so measuring it exactly each time would be O(n^2) in the
+ * no-newline case the limit exists to catch.
+ */
+function assertSseLinesWithinLimit(
+  lines: readonly string[],
+  remainder: string,
+): void {
+  for (const candidate of [...lines, remainder]) {
+    if (!exceedsUtf8ByteLimit(candidate, MAX_PROVIDER_SSE_LINE_BYTES)) {
+      continue;
+    }
+    assertProviderStreamByteLimit(
+      'SSE line',
+      utf8ByteLength(candidate),
+      MAX_PROVIDER_SSE_LINE_BYTES,
+    );
+  }
+}
+
+/**
  * Parses an SSE stream reader to extract reasoning from chunks using the
  * configured field name. Runs in the background while the SDK processes
  * the other tee'd stream.
@@ -141,22 +168,7 @@ export async function parseReasoningFromSseStream(
       // Parse SSE chunks (data: {...}\n\n)
       const lines = buffer.split('\n');
       buffer = lines.pop() ?? '';
-      // Every line is checked, not just the incomplete remainder. Bounding only
-      // the remainder is trivially bypassed by appending a newline: the line
-      // then arrives complete and goes straight to JSON.parse unmeasured.
-      //
-      // The cheap length pre-check comes first because this re-examines a
-      // growing accumulator on every read, so measuring exactly each time would
-      // be O(n^2) in the no-newline case the limit exists to catch.
-      for (const candidate of [...lines, buffer]) {
-        if (exceedsUtf8ByteLimit(candidate, MAX_PROVIDER_SSE_LINE_BYTES)) {
-          assertProviderStreamByteLimit(
-            'SSE line',
-            utf8ByteLength(candidate),
-            MAX_PROVIDER_SSE_LINE_BYTES,
-          );
-        }
-      }
+      assertSseLinesWithinLimit(lines, buffer);
 
       const dataLines = lines.filter(
         (line) =>
