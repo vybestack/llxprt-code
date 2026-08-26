@@ -356,6 +356,7 @@ export class RetryOrchestrator implements IProvider {
     const retryState = createInitialRetryState(initialDelayMs);
     while (budget.used < budget.limit) {
       if (isSignalAborted(signal)) throw createAbortError(signal?.reason);
+      request.recordTarget(this.name);
       const usedBefore = budget.used;
       const linked = createLinkedAbortController(signal);
       const attemptOptions = withRequestSignal(
@@ -501,22 +502,24 @@ export class RetryOrchestrator implements IProvider {
     status: AttemptStatus,
     error: unknown,
   ): AttemptFailureReport {
+    const budgetFacts = {
+      committed: request.committed,
+      exposure: request.exposure,
+      budgetUsed: request.budget.used,
+      budgetLimit: request.budget.limit,
+      totalWaitMs: request.totalWaitMs,
+      visitedTargetCount: request.visitedTargets.length,
+      visitedCredentialCount: request.visitedCredentialCount,
+      deadlineRemainingMs: request.deadlineRemainingMs,
+    };
     if (error === undefined) {
-      return {
-        committed: request.committed,
-        exposure: request.exposure,
-        budgetUsed: request.budget.used,
-        budgetLimit: request.budget.limit,
-      };
+      return budgetFacts;
     }
     const failure = decodeRetryFailure(error);
     return {
       kind: failure.kind,
       phase: failure.phase,
-      committed: request.committed,
-      exposure: request.exposure,
-      budgetUsed: request.budget.used,
-      budgetLimit: request.budget.limit,
+      ...budgetFacts,
     };
   }
 
@@ -642,7 +645,6 @@ export class RetryOrchestrator implements IProvider {
       maxAttempts,
       error,
       bucketFailoverHandler,
-      f,
       failoverThreshold,
     );
 
@@ -658,6 +660,7 @@ export class RetryOrchestrator implements IProvider {
         error,
         authRetryTimeoutMs,
         signal,
+        request,
       );
     }
 
@@ -670,6 +673,7 @@ export class RetryOrchestrator implements IProvider {
       signal,
       category,
       errorStatus,
+      request,
     );
   }
 
@@ -691,6 +695,7 @@ export class RetryOrchestrator implements IProvider {
     error: unknown,
     authRetryTimeoutMs: number,
     signal: AbortSignal | undefined,
+    request: RetryRequestContext,
   ): Promise<{ type: 'throw'; error: unknown } | { type: 'continue' }> {
     const failoverResult = await attemptBucketFailover(
       errorStatus,
@@ -706,6 +711,7 @@ export class RetryOrchestrator implements IProvider {
     if (failoverResult === 'continue') {
       const ms = getDelayDuration(error, state.currentDelay);
       await delay(ms, signal);
+      request.recordWait(ms);
       this.config.trackThrottleWaitTime(ms);
       return { type: 'continue' };
     }
@@ -730,6 +736,7 @@ export class RetryOrchestrator implements IProvider {
     signal: AbortSignal | undefined,
     category: StructuredErrorCategory | undefined,
     status: number | undefined,
+    request: RetryRequestContext,
   ): Promise<{ type: 'throw'; error: unknown } | { type: 'continue' }> {
     const shouldRetry = shouldRetryError(error);
     if (!shouldRetry && !shouldAttemptRefreshRetry) {
@@ -754,6 +761,7 @@ export class RetryOrchestrator implements IProvider {
     );
 
     await delay(delayMs, signal);
+    request.recordWait(delayMs);
     this.config.trackThrottleWaitTime(delayMs);
 
     if (hasRetryAfterHeader(error)) {

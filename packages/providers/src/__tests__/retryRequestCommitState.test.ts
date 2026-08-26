@@ -153,4 +153,59 @@ describe('retry request commit state', () => {
     });
     reused.releaseBudget();
   });
+
+  it('tracks cumulative wait, visited targets, and credentials on one request (issue #2532)', () => {
+    const context = createContext();
+
+    context.recordWait(500);
+    context.recordWait(250);
+    context.recordTarget('provider-a');
+    context.recordTarget('provider-a');
+    context.recordTarget('provider-b');
+    context.recordCredentialId('digest-1');
+    context.recordCredentialId('digest-2');
+
+    expect(context.totalWaitMs).toBe(750);
+    expect(context.visitedTargets).toStrictEqual(['provider-a', 'provider-b']);
+    expect(context.visitedCredentialCount).toBe(2);
+    expect(context.deadlineRemainingMs).toBeUndefined();
+  });
+
+  it('tracks an optional request deadline from the retry-deadline-ms ephemeral', () => {
+    const ephemerals: Record<string, unknown> = { 'retry-deadline-ms': 60_000 };
+    const context = createContext({
+      contents: [],
+      invocation: { ephemerals } as GenerateChatOptions['invocation'],
+    });
+
+    const remaining = context.deadlineRemainingMs;
+    expect(remaining).toBeDefined();
+    expect(remaining as number).toBeGreaterThan(59_000);
+    expect(remaining as number).toBeLessThanOrEqual(60_000);
+  });
+
+  it('shares recovery tracking with a nested context while the request budget is live', () => {
+    const first = createContext();
+    first.recordWait(100);
+    first.recordTarget('provider-a');
+
+    // Delegate-layer resolve on the same options (e.g. a load-balancer
+    // backend attempt) reuses the live budget and must observe the same
+    // recovery accounting record.
+    const nested = createContext(first.options);
+    nested.recordWait(50);
+
+    expect(nested.totalWaitMs).toBe(150);
+    expect(first.totalWaitMs).toBe(150);
+    expect(nested.visitedTargets).toStrictEqual(['provider-a']);
+
+    // After the budget is released the record belongs to a fresh logical
+    // request, matching the commit-state reset semantics.
+    nested.releaseBudget();
+    first.releaseBudget();
+    const reused = createContext(first.options);
+    expect(reused.totalWaitMs).toBe(0);
+    expect(reused.visitedTargets).toStrictEqual([]);
+    reused.releaseBudget();
+  });
 });

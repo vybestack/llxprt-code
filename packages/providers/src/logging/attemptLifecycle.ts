@@ -89,6 +89,14 @@ export interface AttemptEndInfo {
   readonly budgetUsed?: number;
   /** Aggregate transport attempt budget limit for the request (issue #2532). */
   readonly budgetLimit?: number;
+  /** Cumulative recovery wait time (ms) consumed by the request (issue #2532) */
+  readonly totalWaitMs?: number;
+  /** Distinct recovery targets visited by the request (issue #2532) */
+  readonly visitedTargetCount?: number;
+  /** Distinct credentials visited by the request (issue #2532) */
+  readonly visitedCredentialCount?: number;
+  /** Remaining ms to the optional request deadline (issue #2532) */
+  readonly deadlineRemainingMs?: number;
 }
 
 /**

@@ -72,13 +72,23 @@ Every logical request gets a `TransportAttemptBudget` created in
 - Anthropic and OpenAI SDK clients are constructed with `maxRetries: 0`, so
   every HTTP attempt is visible to and counted by the orchestrator: one
   budget unit per HTTP attempt.
-- The `openai-vercel` provider forwards the `retries` ephemeral (default 2)
-  into the AI SDK, which retries HTTP requests beneath one orchestrator
-  attempt. Those under-the-wire retries are NOT individually visible to the
-  budget: one budget unit can cover up to `1 + retries` HTTP requests. Set
-  the `retries` ephemeral to `0` for exact budget-to-HTTP-attempt equality.
-  This is documented rather than defaulted to zero to avoid changing
-  existing profile behavior (issue #2532 keeps retry capability intact).
+- The `openai-vercel` provider also constructs its transport with
+  `maxRetries: 0`; every HTTP attempt it makes is an orchestrator-counted
+  attempt. The `retries` ephemeral is still honored where it configures the
+  orchestrator's own budget, but no under-the-wire HTTP retries are hidden
+  from the budget in any bundled adapter.
+
+### Recovery accounting
+
+Beyond the attempt counter, the same request context tracks (issue #2532):
+
+- `totalWaitMs` — cumulative backoff/Retry-After wait consumed by the
+  request across every recovery layer.
+- visited targets (orchestrator attempts and load-balancer backends) and
+  visited credentials (opaque sha256 digests, never raw tokens).
+- an optional wall-clock deadline via the `retry-deadline-ms` ephemeral
+  (absent/0 means no deadline). These facts are reported with attempt
+  telemetry; the attempt budget remains the bounding resource.
 
 ## Commitment
 
@@ -102,6 +112,24 @@ load-balancer failover path:
   invalidation) but never replays this one.
 - The failure surfaces to the caller with the partial output already
   delivered; the agents layer decides whether to restart the turn.
+
+## Recovery eligibility: one taxonomy, two scopes
+
+Both recovery decision points decode the error once into the taxonomy and
+switch on `kind`:
+
+- Central same-target retry (`shouldRetryError` → `isRetryableFailure`):
+  quota-bearing rate limits and invalid requests are terminal; transient
+  network/server/overload/rate-limit failures retry within the budget.
+- Target/credential rotation is deliberately broader
+  (`loadBalancing/failoverSettings.ts` `shouldFailover`,
+  `retryFailoverLogic.ts` `flagsFromFailure`): rotating to a fresh target is
+  the correct recovery even when retrying the same target is futile — e.g. a
+  quota-bearing 429 is terminal for same-target retry but immediately
+  eligible for load-balancer target rotation and credential-bucket rotation
+  (preserving the issue #2849 all-429 rotation behavior). Explicit operator
+  overrides (`failover_status_codes`, `failover_on_network_errors`) always
+  win over the kind defaults.
 
 ## Guarded stream
 

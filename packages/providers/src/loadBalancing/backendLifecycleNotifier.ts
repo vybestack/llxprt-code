@@ -113,6 +113,10 @@ export function notifyBackendEnd(
             exposure: facts.exposure,
             budgetUsed: facts.budgetUsed,
             budgetLimit: facts.budgetLimit,
+            totalWaitMs: facts.totalWaitMs,
+            visitedTargetCount: facts.visitedTargetCount,
+            visitedCredentialCount: facts.visitedCredentialCount,
+            deadlineRemainingMs: facts.deadlineRemainingMs,
           }
         : {}),
     });

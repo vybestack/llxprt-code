@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
+import Anthropic from '@anthropic-ai/sdk';
 import {
   shouldRetryError,
   getDelayDuration,
@@ -93,5 +94,32 @@ describe('getDelayDuration / hasRetryAfterHeader @issue:3140', () => {
     // jitter is ±30%, so the result is within [4000 - 1200, 4000 + 1200]
     expect(delayMs).toBeGreaterThanOrEqual(2800);
     expect(delayMs).toBeLessThanOrEqual(5200);
+  });
+
+  it('reads Retry-After from a real Anthropic SDK APIError', () => {
+    const error = new Anthropic.APIError(
+      429,
+      { message: 'rate limited' },
+      'rate limited',
+      new Headers({ 'retry-after': '2' }),
+    );
+    expect(hasRetryAfterHeader(error)).toBe(true);
+    expect(getDelayDuration(error, 5000)).toBe(2000);
+  });
+
+  it('reads Retry-After from a Fetch Headers object on response', () => {
+    const error = {
+      status: 429,
+      response: { headers: new Headers({ 'Retry-After': '3' }) },
+    };
+    expect(getDelayDuration(error, 5000)).toBe(3000);
+  });
+
+  it('reads Retry-After from mixed-case plain header objects', () => {
+    const error = {
+      status: 429,
+      headers: { 'Retry-After': '4' },
+    };
+    expect(getDelayDuration(error, 5000)).toBe(4000);
   });
 });

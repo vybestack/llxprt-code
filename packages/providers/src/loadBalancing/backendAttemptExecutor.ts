@@ -28,7 +28,11 @@ import {
   requireTransportAttempt,
 } from './delegateAttempt.js';
 import { wrapWithTimeout } from './streamTimeout.js';
-import { findRequestCommitState } from '../retryRequestContext.js';
+import {
+  findRequestCommitState,
+  findRequestRecoveryTracking,
+} from '../retryRequestContext.js';
+import { createHash } from 'node:crypto';
 import type { CircuitBreakerManager } from './circuitBreakerManager.js';
 
 export interface BackendAttemptDeps {
@@ -97,6 +101,18 @@ function startDelegateIterator(
   subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
   deps: BackendAttemptDeps,
 ): { attempt: DelegateAttempt; iterator: AsyncGenerator<IContent> } {
+  const tracking = findRequestRecoveryTracking(resolvedOptions);
+  tracking?.recordTarget(subProfile.name);
+  if (subProfile.authToken !== undefined) {
+    // Only an opaque digest is stored; the token itself never enters the
+    // request budget record (issue #2532 telemetry-no-secrets rule).
+    tracking?.recordCredentialId(
+      createHash('sha256')
+        .update(subProfile.authToken)
+        .digest('hex')
+        .slice(0, 12),
+    );
+  }
   const attempt = createDelegateAttempt(resolvedOptions);
   const rawIterator = delegateProvider.generateChatCompletion(attempt.options);
   const iterator = wrapWithTimeout(

@@ -235,6 +235,29 @@ describe('LoadBalancingProvider commit boundary (issue #2532)', () => {
     expect(backendB.calls.value).toBe(0);
   });
 
+  it('surfaces the terminal error instead of a retryable aggregate after partial text on a failover backend', async () => {
+    const preOutputFailure = networkError();
+    const postOutputFailure = networkError();
+    const backendA = makeScriptedProvider('provider-a', [
+      alwaysThrow(preOutputFailure),
+    ]);
+    const backendB = makeScriptedProvider('provider-b', [
+      yieldThenThrow(textChunk, postOutputFailure),
+    ]);
+    const lb = registerAndCreate(backendA, backendB, makeConfig());
+
+    const result = await pullUntilFailure(lb, makeOptions());
+
+    expect(result.first).toStrictEqual(textChunk);
+    expect(result.failure).toBe(postOutputFailure);
+    expect(result.failure).not.toBeInstanceOf(LoadBalancerFailoverError);
+    expect(isTerminalRetryError(result.failure)).toBe(true);
+    // Backend A may retry pre-output before the rotation reaches B, but B
+    // must never be retried after observable output escapes it.
+    expect(backendA.calls.value).toBeGreaterThanOrEqual(1);
+    expect(backendB.calls.value).toBe(1);
+  });
+
   it('treats a metadata-only chunk as exposure: no retry, no advance', async () => {
     const failure = networkError();
     const backendA = makeScriptedProvider('provider-a', [

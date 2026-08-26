@@ -142,6 +142,18 @@ const mappingCases: FailureCase[] = [
       providerCode: 'api_error',
     },
   },
+  {
+    label: 'Anthropic overloaded_error body with 529 status',
+    error: Object.assign(anthropicError('overloaded_error'), {
+      status: 529,
+    }),
+    expected: {
+      phase: 'stream',
+      kind: 'overload',
+      status: 529,
+      providerCode: 'overloaded_error',
+    },
+  },
 ];
 
 describe('decodeRetryFailure', () => {
@@ -177,14 +189,11 @@ describe('decodeRetryFailure', () => {
 });
 
 describe('isRetryableFailure', () => {
-  it.each(mappingCases)(
-    'matches shouldRetryError for $label',
-    ({ error }) => {
-      const failure = decodeRetryFailure(error);
+  it.each(mappingCases)('matches shouldRetryError for $label', ({ error }) => {
+    const failure = decodeRetryFailure(error);
 
-      expect(isRetryableFailure(failure)).toBe(shouldRetryError(error));
-    },
-  );
+    expect(isRetryableFailure(failure)).toBe(shouldRetryError(error));
+  });
 
   it('publishes the pre-commit retryable kinds', () => {
     expect([...RETRYABLE_FAILURE_KINDS]).toStrictEqual([
@@ -221,6 +230,41 @@ describe('isRetryableFailure', () => {
     expect(isRetryableFailure(decodeRetryFailure(terminalQuota))).toBe(false);
   });
 
+  it('keeps terminal 403 auth status authoritative over provider body codes (issue #2917)', () => {
+    const bodyApiError = Object.assign(errorWithStatus(403), {
+      error: { type: 'api_error', message: 'Forbidden' },
+    });
+
+    const failure = decodeRetryFailure(bodyApiError);
+    expect(failure.kind).toBe('auth');
+    expect(failure.status).toBe(403);
+    expect(failure.providerCode).toBe('api_error');
+    expect(isRetryableFailure(failure)).toBe(false);
+  });
+
+  it('keeps terminal 404 status authoritative over a rate_limit_error body (issue #3140)', () => {
+    const bodyRateLimit = Object.assign(errorWithStatus(404), {
+      error: { type: 'rate_limit_error', message: 'Not found' },
+    });
+
+    const failure = decodeRetryFailure(bodyRateLimit);
+    expect(failure.kind).toBe('invalid_request');
+    expect(failure.status).toBe(404);
+    expect(failure.providerCode).toBe('rate_limit_error');
+    expect(isRetryableFailure(failure)).toBe(false);
+  });
+
+  it('still lets transient statuses defer to the provider body code (529 overload)', () => {
+    const bodyOverload = Object.assign(errorWithStatus(529), {
+      error: { type: 'overloaded_error', message: 'Overloaded' },
+    });
+
+    const failure = decodeRetryFailure(bodyOverload);
+    expect(failure.kind).toBe('overload');
+    expect(failure.status).toBe(529);
+    expect(isRetryableFailure(failure)).toBe(true);
+  });
+
   it('passes through provider codes from every production error position', () => {
     const openAiEnvelope = Object.assign(errorWithStatus(429), {
       error: { code: 'insufficient_quota' },
@@ -238,9 +282,7 @@ describe('isRetryableFailure', () => {
     expect(decodeRetryFailure(liftedProviderType).providerCode).toBe(
       'invalid_request_error',
     );
-    expect(decodeRetryFailure(detailEnvelope).providerCode).toBe(
-      'server_busy',
-    );
+    expect(decodeRetryFailure(detailEnvelope).providerCode).toBe('server_busy');
   });
 
   it('honors aggregate failure retryability markers over kind defaults', () => {

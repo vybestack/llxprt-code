@@ -283,4 +283,102 @@ describe('guardStream', () => {
     expect(tracked.returnCalls()).toBe(1);
     context.releaseBudget();
   });
+
+  it('releases a timeout-disabled first read when the source ignores cancellation', async () => {
+    const tracked = neverSettlingIterator();
+    const context = createRequestContext();
+    const controller = new AbortController();
+    const guarded = guardStream(tracked.iterator, {
+      attemptController: controller,
+      context,
+    });
+    const cancellation = setTimeout(
+      () => controller.abort(new Error('caller cancelled')),
+      0,
+    );
+
+    const thrown = await captureFailure(guarded.next());
+    clearTimeout(cancellation);
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect(thrown instanceof Error ? thrown.name : '').toBe('AbortError');
+    expect(context.committed).toBe(false);
+    expect(controller.signal.aborted).toBe(true);
+    expect(tracked.returnCalls()).toBe(1);
+    context.releaseBudget();
+  });
+
+  it('releases a pending read after the first chunk when the source ignores cancellation', async () => {
+    const tracked = neverSettlingIterator(textChunk);
+    const context = createRequestContext();
+    const controller = new AbortController();
+    const guarded = guardStream(tracked.iterator, {
+      attemptController: controller,
+      context,
+    });
+
+    expect(await nextChunk(guarded)).toBe(textChunk);
+    const cancellation = setTimeout(
+      () => controller.abort(new Error('caller cancelled')),
+      0,
+    );
+    const thrown = await captureFailure(guarded.next());
+    clearTimeout(cancellation);
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect(thrown instanceof Error ? thrown.name : '').toBe('AbortError');
+    expect(isTerminalRetryError(thrown)).toBe(true);
+    expect(context.committed).toBe(true);
+    expect(tracked.returnCalls()).toBe(1);
+    context.releaseBudget();
+  });
+
+  it('closes the underlying iterator when the consumer stops early', async () => {
+    const tracked = neverSettlingIterator(textChunk);
+    const context = createRequestContext();
+    const controller = new AbortController();
+    const guarded = guardStream(tracked.iterator, {
+      attemptController: controller,
+      context,
+    });
+
+    expect(await nextChunk(guarded)).toBe(textChunk);
+    await guarded.return(true);
+
+    expect(context.committed).toBe(true);
+    expect(controller.signal.aborted).toBe(true);
+    expect(tracked.returnCalls()).toBe(1);
+    context.releaseBudget();
+  });
 });
+
+/**
+ * An iterator that never observes abort: the first `firstChunkCount` next()
+ * calls resolve with chunks, every later read stays pending forever. This is
+ * the worst-case source for cancellation: only the guarded stream's abort
+ * race can release the consumer.
+ */
+function neverSettlingIterator(...firstChunks: IContent[]): TrackedStream {
+  let index = 0;
+  let returnCallCount = 0;
+  const iterator: AsyncIterableIterator<IContent> = {
+    next: () =>
+      index < firstChunks.length
+        ? Promise.resolve({
+            done: false as const,
+            value: firstChunks[index++],
+          })
+        : new Promise<IteratorResult<IContent>>(() => {}),
+    return: async () => {
+      returnCallCount += 1;
+      return { done: true as const, value: undefined };
+    },
+    [Symbol.asyncIterator]() {
+      return this;
+    },
+  };
+  return {
+    iterator,
+    returnCalls: () => returnCallCount,
+  };
+}

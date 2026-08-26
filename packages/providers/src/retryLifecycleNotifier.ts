@@ -23,6 +23,10 @@ export interface AttemptFailureReport {
   exposure: StreamExposure;
   budgetUsed: number;
   budgetLimit: number;
+  totalWaitMs?: number;
+  visitedTargetCount?: number;
+  visitedCredentialCount?: number;
+  deadlineRemainingMs?: number;
 }
 
 /** Notify lifecycle observer of attempt start (fail-open). */
@@ -111,6 +115,10 @@ export function notifyRetryAttemptEnd(
             exposure: failureReport.exposure,
             budgetUsed: failureReport.budgetUsed,
             budgetLimit: failureReport.budgetLimit,
+            totalWaitMs: failureReport.totalWaitMs,
+            visitedTargetCount: failureReport.visitedTargetCount,
+            visitedCredentialCount: failureReport.visitedCredentialCount,
+            deadlineRemainingMs: failureReport.deadlineRemainingMs,
           }
         : {}),
     });

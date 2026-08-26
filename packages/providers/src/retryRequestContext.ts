@@ -25,6 +25,17 @@ export interface RetryRequestContext {
   readonly maxAttempts: number;
   readonly initialDelayMs: number;
   readonly authRetryTimeoutMs: number;
+  /** Records recovery wait time (ms) against the request budget. */
+  readonly recordWait: (waitMs: number) => void;
+  /** Records a recovery target (provider or backend) visited by the request. */
+  readonly recordTarget: (target: string) => void;
+  /** Records an opaque credential id used by an attempt (never the secret). */
+  readonly recordCredentialId: (credentialId: string) => void;
+  readonly totalWaitMs: number;
+  readonly visitedTargets: readonly string[];
+  readonly visitedCredentialCount: number;
+  /** Remaining ms before the optional request deadline, or undefined. */
+  readonly deadlineRemainingMs: number | undefined;
 }
 
 interface MutableRequestCommitState {
@@ -33,16 +44,30 @@ interface MutableRequestCommitState {
   terminalSeen: boolean;
 }
 
-const requestCommitStates = new WeakMap<
-  RetryRequestContext,
-  MutableRequestCommitState
->();
+/**
+ * Request-scoped recovery accounting (issue #2532): cumulative backoff wait,
+ * optional wall-clock deadline, and the targets/credentials each request
+ * visited. Stored on the shared metadata record next to the commit state so
+ * every recovery layer observes one budget.
+ */
+interface MutableRecoveryTracking {
+  totalWaitMs: number;
+  startedAtMs: number;
+  deadlineAtMs: number | undefined;
+  visitedTargets: Set<string>;
+  visitedCredentialIds: Set<string>;
+}
+
+const RETRY_REQUEST_CONTEXT_KEYS = {
+  recoveryTracking: 'recoveryTracking',
+} as const;
 
 const RETRY_EPHEMERAL_KEYS = {
   maxAttempts: 'retries',
   initialDelayMs: 'retrywait',
   authRetryTimeoutMs: 'auth-retry-timeout',
-};
+  deadlineMs: 'retry-deadline-ms',
+} as const;
 
 const EXPOSURE_STRENGTH: Readonly<Record<StreamExposure, number>> = {
   none: 0,
@@ -50,6 +75,11 @@ const EXPOSURE_STRENGTH: Readonly<Record<StreamExposure, number>> = {
   content: 2,
   tool_call: 3,
 };
+
+const requestCommitStates = new WeakMap<
+  RetryRequestContext,
+  MutableRequestCommitState
+>();
 
 /**
  * Structural seam through which any wrapper layer (guarded stream, load
@@ -150,6 +180,101 @@ function applyCommit(
   }
 }
 
+function hasRecoveryScalars(value: Record<string, unknown>): boolean {
+  return (
+    typeof value.totalWaitMs === 'number' &&
+    typeof value.startedAtMs === 'number'
+  );
+}
+
+function isRecoveryTracking(value: unknown): value is MutableRecoveryTracking {
+  if (!isRecord(value) || !hasRecoveryScalars(value)) return false;
+  return (
+    value.visitedTargets instanceof Set &&
+    value.visitedCredentialIds instanceof Set
+  );
+}
+
+function deadlineRemainingFrom(
+  tracking: MutableRecoveryTracking,
+): number | undefined {
+  if (tracking.deadlineAtMs === undefined) return undefined;
+  return Math.max(0, tracking.deadlineAtMs - Date.now());
+}
+
+/**
+ * Attach live recovery-accounting accessors (wait/target/credential) to a
+ * request context. Object spread would snapshot the getters once, so the
+ * members must be defined as real accessor properties.
+ */
+function attachRecoveryTrackingMembers(
+  request: RetryRequestContext,
+  tracking: MutableRecoveryTracking,
+): void {
+  Object.defineProperties(request, {
+    totalWaitMs: {
+      get: () => tracking.totalWaitMs,
+      enumerable: true,
+    },
+    visitedTargets: {
+      get: () => [...tracking.visitedTargets],
+      enumerable: true,
+    },
+    visitedCredentialCount: {
+      get: () => tracking.visitedCredentialIds.size,
+      enumerable: true,
+    },
+    deadlineRemainingMs: {
+      get: () => deadlineRemainingFrom(tracking),
+      enumerable: true,
+    },
+    recordWait: {
+      value: (waitMs: number) => {
+        if (Number.isFinite(waitMs) && waitMs > 0) {
+          tracking.totalWaitMs += waitMs;
+        }
+      },
+      enumerable: true,
+    },
+    recordTarget: {
+      value: (target: string) => {
+        if (target.length > 0) tracking.visitedTargets.add(target);
+      },
+      enumerable: true,
+    },
+    recordCredentialId: {
+      value: (credentialId: string) => {
+        if (credentialId.length > 0) {
+          tracking.visitedCredentialIds.add(credentialId);
+        }
+      },
+      enumerable: true,
+    },
+  });
+}
+
+function resolveRecoveryTracking(
+  options: GenerateChatOptions,
+  reusedBudget: boolean,
+  deadlineMs: number | undefined,
+): MutableRecoveryTracking {
+  const context = getRequestMetadataContext(options);
+  const existing = context[RETRY_REQUEST_CONTEXT_KEYS.recoveryTracking];
+  if (reusedBudget && isRecoveryTracking(existing)) return existing;
+  const tracking: MutableRecoveryTracking = {
+    totalWaitMs: 0,
+    startedAtMs: Date.now(),
+    deadlineAtMs:
+      deadlineMs !== undefined && deadlineMs > 0
+        ? Date.now() + deadlineMs
+        : undefined,
+    visitedTargets: new Set<string>(),
+    visitedCredentialIds: new Set<string>(),
+  };
+  context[RETRY_REQUEST_CONTEXT_KEYS.recoveryTracking] = tracking;
+  return tracking;
+}
+
 export function resolveRetryRequestContext(
   options: GenerateChatOptions,
   defaults: {
@@ -167,11 +292,22 @@ export function resolveRetryRequestContext(
   const observationContext = attachProviderErrorObservationContext(
     budgetContext.options,
   );
+  const reusedBudget = budgetContext.options === options;
   const commitState = resolveRequestCommitState(
     observationContext.options,
-    budgetContext.options === options,
+    reusedBudget,
   );
-  const request: RetryRequestContext = {
+  const rawDeadlineMs = ephemerals?.[RETRY_EPHEMERAL_KEYS.deadlineMs];
+  const deadlineMs =
+    typeof rawDeadlineMs === 'number' && Number.isFinite(rawDeadlineMs)
+      ? Math.max(0, rawDeadlineMs)
+      : undefined;
+  const tracking = resolveRecoveryTracking(
+    observationContext.options,
+    reusedBudget,
+    deadlineMs,
+  );
+  const core: RetryRequestContextCore = {
     options: observationContext.options,
     budget: budgetContext.budget,
     releaseBudget: () => {
@@ -200,9 +336,27 @@ export function resolveRetryRequestContext(
       markRequestCommitted(request, exposure),
     markTerminalSeen: () => markTerminalSeen(request),
   };
+  const request = core as RetryRequestContext;
+  attachRecoveryTrackingMembers(request, tracking);
   requestCommitStates.set(request, commitState);
   return request;
 }
+
+/**
+ * RetryRequestContext minus the recovery-accounting members, which are
+ * attached as live accessors by attachRecoveryTrackingMembers immediately
+ * after construction (spread/inline copies would not stay live).
+ */
+type RetryRequestContextCore = Omit<
+  RetryRequestContext,
+  | 'recordWait'
+  | 'recordTarget'
+  | 'recordCredentialId'
+  | 'totalWaitMs'
+  | 'visitedTargets'
+  | 'visitedCredentialCount'
+  | 'deadlineRemainingMs'
+>;
 
 /**
  * Irreversibly marks a request committed and upgrades its exposure.
@@ -275,6 +429,35 @@ export function markTerminalSeen(context: RetryRequestContext): void {
 }
 
 /**
+ * Options-only handle for recording recovery accounting from delegate
+ * layers (e.g. load-balancer backend attempts) that hold request options
+ * rather than the request context object.
+ */
+export interface RequestRecoveryTrackingHandle {
+  recordTarget(target: string): void;
+  recordCredentialId(credentialId: string): void;
+}
+
+export function findRequestRecoveryTracking(
+  options: GenerateChatOptions,
+): RequestRecoveryTrackingHandle | undefined {
+  const record = options.metadata?.[RETRY_REQUEST_CONTEXT_KEY];
+  if (!isRecord(record)) return undefined;
+  const tracking = record[RETRY_REQUEST_CONTEXT_KEYS.recoveryTracking];
+  if (!isRecoveryTracking(tracking)) return undefined;
+  return {
+    recordTarget(target: string): void {
+      if (target.length > 0) tracking.visitedTargets.add(target);
+    },
+    recordCredentialId(credentialId: string): void {
+      if (credentialId.length > 0) {
+        tracking.visitedCredentialIds.add(credentialId);
+      }
+    },
+  };
+}
+
+/**
  * Snapshot of a request's commitment and budget state, located through the
  * request options.
  *
@@ -285,15 +468,19 @@ export function markTerminalSeen(context: RetryRequestContext): void {
  *
  * @returns The current facts, or undefined when no retry context is attached.
  */
-export function findRequestAttemptFacts(
-  options: GenerateChatOptions,
-): {
-  readonly committed: boolean;
-  readonly exposure: StreamExposure;
-  readonly terminalSeen: boolean;
-  readonly budgetUsed: number;
-  readonly budgetLimit: number;
-} | undefined {
+export function findRequestAttemptFacts(options: GenerateChatOptions):
+  | {
+      readonly committed: boolean;
+      readonly exposure: StreamExposure;
+      readonly terminalSeen: boolean;
+      readonly budgetUsed: number;
+      readonly budgetLimit: number;
+      readonly totalWaitMs: number;
+      readonly visitedTargetCount: number;
+      readonly visitedCredentialCount: number;
+      readonly deadlineRemainingMs: number | undefined;
+    }
+  | undefined {
   const record = options.metadata?.[RETRY_REQUEST_CONTEXT_KEY];
   if (!isMutableRequestCommitState(record)) return undefined;
   const budget = (
@@ -304,11 +491,24 @@ export function findRequestAttemptFacts(
   const budgetUsed = typeof budget?.used === 'number' ? budget.used : 0;
   const budgetLimit =
     typeof budget?.limit === 'number' ? budget.limit : budgetUsed;
+  const tracking = record[RETRY_REQUEST_CONTEXT_KEYS.recoveryTracking];
+  const trackingFacts = isRecoveryTracking(tracking) ? tracking : undefined;
+  const totalWaitMs = trackingFacts?.totalWaitMs ?? 0;
+  const visitedTargetCount = trackingFacts?.visitedTargets.size ?? 0;
+  const visitedCredentialCount = trackingFacts?.visitedCredentialIds.size ?? 0;
+  const deadlineRemainingMs =
+    trackingFacts === undefined
+      ? undefined
+      : deadlineRemainingFrom(trackingFacts);
   return {
     committed: record.committed,
     exposure: record.exposure,
     terminalSeen: record.terminalSeen,
     budgetUsed,
     budgetLimit,
+    totalWaitMs,
+    visitedTargetCount,
+    visitedCredentialCount,
+    deadlineRemainingMs,
   };
 }

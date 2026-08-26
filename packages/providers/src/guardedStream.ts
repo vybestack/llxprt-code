@@ -102,7 +102,7 @@ export async function* guardStream(
               attemptController.signal,
               timeoutError,
             )
-          : await nextPromise;
+          : await raceWithAbort(nextPromise, attemptController.signal);
       if (result.done === true) {
         // A stream that completes without content on its FIRST next() is a
         // normal empty stream, not a failure: leave it uncommitted and do not

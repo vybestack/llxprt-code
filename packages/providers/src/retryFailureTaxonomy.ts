@@ -209,9 +209,22 @@ function resolveFailureIdentity(
   if (isMalformedStreamEventError(error)) {
     return { phase: 'protocol', kind: 'malformed' };
   }
+  // Terminal status bands outrank provider body codes: a 403 whose body
+  // says api_error must stay terminal auth (issue #2917 regression guard)
+  // and a 404 carrying rate_limit_error stays terminal invalid_request
+  // (issue #3140). Transient statuses (429, 5xx/529) defer to the more
+  // specific provider code first.
+  const statusIdentity = getStatusIdentity(classification.status);
+  if (
+    statusIdentity !== undefined &&
+    statusIdentity.kind !== 'rate_limit' &&
+    statusIdentity.kind !== 'server'
+  ) {
+    return statusIdentity;
+  }
   return (
-    getStatusIdentity(classification.status) ??
     getProviderIdentity(providerCode) ??
+    statusIdentity ??
     getClassificationIdentity(classification) ?? {
       phase: 'protocol',
       kind: 'unknown',
@@ -272,9 +285,7 @@ interface AggregateRetryability {
   isRetryable?: unknown;
 }
 
-function readAggregateRetryability(
-  failure: RetryFailure,
-): boolean | undefined {
+function readAggregateRetryability(failure: RetryFailure): boolean | undefined {
   const cause = failure.cause;
   if (typeof cause !== 'object' || cause === null) return undefined;
   const aggregate = cause as AggregateRetryability;

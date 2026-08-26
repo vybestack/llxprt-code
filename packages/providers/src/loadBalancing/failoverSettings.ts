@@ -11,10 +11,8 @@
  * backends. Extracted from LoadBalancingProvider.
  */
 
-import {
-  isNetworkTransientError,
-  getErrorStatus,
-} from '@vybestack/llxprt-code-core/utils/retry.js';
+import { getErrorStatus } from '@vybestack/llxprt-code-core/utils/retry.js';
+import { decodeRetryFailure } from '../retryFailureTaxonomy.js';
 import type { FailoverSettings } from '../LoadBalancingProvider.js';
 
 /**
@@ -87,18 +85,31 @@ export function shouldFailover(
     return true;
   }
 
-  if (settings.failoverOnNetworkErrors && isNetworkTransientError(error)) {
+  const failure = decodeRetryFailure(error);
+
+  if (settings.failoverOnNetworkErrors && failure.kind === 'network') {
     return true;
   }
 
-  const status = getErrorStatus(error);
-  if (status !== undefined) {
+  if (failure.status !== undefined) {
     if (settings.failoverStatusCodes) {
-      return settings.failoverStatusCodes.includes(status);
+      return settings.failoverStatusCodes.includes(failure.status);
     }
-    return status === 429 || (status >= 500 && status < 600);
+    // Kind-based defaults. rate_limit deliberately includes quota-bearing
+    // 429s: target rotation is the correct recovery for an exhausted quota
+    // even though central same-target retry treats it as terminal (issue
+    // #2849 keeps all-429 rotations from fatally dropping the request).
+    // overload mirrors the central retry policy for HTTP-200 in-band
+    // Anthropic overload errors.
+    return (
+      failure.kind === 'rate_limit' ||
+      failure.kind === 'overload' ||
+      failure.kind === 'server'
+    );
   }
 
+  // No transport status (in-band protocol errors, unknown failures):
+  // preserve the historical same-backend retry path.
   return true;
 }
 
