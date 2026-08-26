@@ -372,6 +372,24 @@ describe('auto-created failure issues carry label, milestone, and type', () => {
         },
       );
 
+      // A failed lookup is not evidence that no issue exists. Falling through
+      // to create on a lookup error reopens the duplicate window the guard
+      // exists to close, so the notifier must fail closed instead.
+      it.if(site.racesGuarded)(
+        'does not create when the duplicate lookup itself fails',
+        () => {
+          const result = run(
+            site,
+            baseFake({ failOn: [{ method: 'GET', path: 'issue/list' }] }),
+          );
+          expect(createCalls(result)).toHaveLength(0);
+          expect(result.status).not.toBe(0);
+        },
+        // retry_gh burns three 5s sleeps exhausting its attempts against the
+        // failing lookup before the notifier gives up.
+        30_000,
+      );
+
       it('never exits non-zero solely because metadata handling failed', () => {
         const result = run(site, baseFake({ packageJsonFail: true }));
         expect(result.status).toBe(0);

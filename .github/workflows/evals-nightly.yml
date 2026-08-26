@@ -247,7 +247,13 @@ jobs:
             CREATE_ARGS+=(${MILESTONE_ARGS[@]+"${MILESTONE_ARGS[@]}"})
             create_issue_once() {
               local found=""
-              found="$(gh issue list --repo "${GH_REPO}" --search "\"${ISSUE_TITLE}\" in:title is:issue state:open" --limit 30 --json number,title --jq "[.[] | select(.title == \"${ISSUE_TITLE}\") | .number] | .[0] // empty" 2>/dev/null)" || found=""
+              # A failed lookup is not evidence that no issue exists. Treating
+              # it as empty would fall through to create and could open a
+              # duplicate; returning failure makes retry_gh recheck first.
+              if ! found="$(gh issue list --repo "${GH_REPO}" --search "\"${ISSUE_TITLE}\" in:title is:issue state:open" --limit 30 --json number,title --jq "[.[] | select(.title == \"${ISSUE_TITLE}\") | .number] | .[0] // empty" 2>/dev/null)"; then
+                echo "Failed to recheck for an existing issue before creating." >&2
+                return 1
+              fi
               if [[ -n "${found}" ]]; then
                 echo "Issue #${found} already exists; skipping creation." >&2
                 printf '%s\n' "${found}"

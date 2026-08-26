@@ -174,6 +174,9 @@ def handle_issue(argv, state, state_file):
     sub = argv[0] if argv else ""
     if sub == "list":
         opts, pairs, tokens = parse_args(argv[1:])
+        if should_fail(state, "GET", "issue/list"):
+            sys.stderr.write("HTTP 500: issue list failed\n")
+            return 1
         search = next(iter(pairs.get("--search", [])), "")
         jq = next(iter(pairs.get("--jq", []) + pairs.get("-q", [])), None)
         fields = [f for f in next(iter(pairs.get("--json", [])), "number,title").split(",") if f]
@@ -262,6 +265,9 @@ def handle_label(argv, state, state_file):
         return 0
     if sub == "list":
         opts, pairs, tokens = parse_args(argv[1:])
+        if should_fail(state, "GET", "issue/list"):
+            sys.stderr.write("HTTP 500: issue list failed\n")
+            return 1
         search = next(iter(pairs.get("--search", [])), "")
         jq = next(iter(pairs.get("--jq", []) + pairs.get("-q", [])), None)
         names = [name for name in state.get("labels") or {} if not search or name == search]
