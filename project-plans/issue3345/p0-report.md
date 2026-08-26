@@ -7,7 +7,7 @@ an immediate switch to upstream Ink.** The recommendation remains to use the
 issue's "patch now, then evaluate migration" sequence.
 
 The corrected static-remount evidence favors upstream 7.1.1 on one memory axis.
-Its #950 reset runs when this application refreshes `<Static>`, which occurs on
+Its vadimdemedes/ink#950 reset runs when this application refreshes `<Static>`, which occurs on
 terminal resize, history trim or compression, markdown toggle, and clear paths.
 The fork never reset in the remount probe (E10). Within one unchanged `<Static>`
 identity, however, both packages accumulated the same 61,990 characters for the
@@ -284,7 +284,7 @@ the fork. In the 300-item synthetic run, both packages retained a
 packages accumulated the same amount for the same workload, so their rates are
 the same while the `<Static>` identity remains unchanged (E9).
 
-Upstream's #950 reset occurs when the `<Static>` node identity changes. In the
+Upstream's vadimdemedes/ink#950 reset occurs when the `<Static>` node identity changes. In the
 remount probe, both packages retained 20,790 characters after 100 items. Changing
 the key reset upstream to 0 while the fork stayed at 20,790. After 10 more items,
 upstream retained 2,070 and the fork retained 22,860 (E10).
@@ -321,13 +321,13 @@ is not a production heap forecast.
 
 The upstream cache fix, commit `ad9e3ea`, changes both full-string caches to a
 4,096-entry `QuickLRU`. It is on upstream master but in no published release as
-of the P0 capture; PR #987 was closed without merge and the commit landed
+of the P0 capture; PR vadimdemedes/ink#987 was closed without merge and the commit landed
 separately (E1, E12, E13).
 
 ### Effect on the issue rationale
 
 The corrected memory evidence is mixed. Upstream 7.1.1 is better for this
-application's static retention because the #950 reset runs on resize, history
+application's static retention because the vadimdemedes/ink#950 reset runs on resize, history
 trim or compression, markdown toggle, and clear paths, while the fork never
 resets (E10). The improvement is not quantified for a production session, and
 both packages accumulate at the same rate between remounts (E9, E10).
@@ -364,7 +364,7 @@ one alternative dominates another.
 | Patch installed fork 6.4.8 | 4 | 5 | 3 | 1 | 5 | Directly targets the fork's never-reset `fullStaticOutput`; its full-string styled-character cache is bounded and it has no full-string wrap cache, while its character-width map is unbounded. Patch coverage and redraw behavior remain unverified (E9-E11). |
 | Upgrade to fork 7.x and fix retention there | 3 | 4 | 1 | 1 | 3 | It may preserve fork APIs, but P0 did not inspect or run fork 7.x. Its upstream-fix content is unverified. |
 | Switch to upstream now with an interim selection engine | 3 | 1 | 2 | 5 | 1 | 7.1.1 resets static retention on this application's refresh paths, but accumulates identically between resets and has unbounded full-string caches. Selection and fork scrolling APIs are absent (E3, E4, E9-E11). |
-| Defer until #984/#985 are released | 2 | 5 | 3 | 2 | 5 | Preserves current behavior and avoids interim selection work, but leaves the fork's never-reset static accumulator until another action. Both proposals remain open and #985 is draft (E10, E13). |
+| Defer until vadimdemedes/ink#984/#985 are released | 2 | 5 | 3 | 2 | 5 | Preserves current behavior and avoids interim selection work, but leaves the fork's never-reset static accumulator until another action. Both proposals remain open and vadimdemedes/ink#985 is draft (E10, E13). |
 | Patch now, then evaluate after the selection gate | 4 | 5 | 4 | 2 | 4 | Targets the fork's present static retention while retaining behavior, then permits a later upstream release and selection bridge to change the tradeoff (E9-E13). |
 
 The sequence remains the report's recommendation because it addresses the fork's
@@ -394,7 +394,7 @@ that implementation path for 7.1.1 (E9-E13).
 The recommendation would change if one of these conditions is demonstrated:
 
 1. A published upstream release contains bounded full-string text caches and
-   #984/#985, or
+   vadimdemedes/ink#984/#985, or
    equivalent public APIs, with verified hit testing, copy, and highlight
    semantics (E12, E13).
 2. A focused spike proves an app-owned selection implementation across wrapped,

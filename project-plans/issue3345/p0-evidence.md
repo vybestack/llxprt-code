@@ -206,7 +206,7 @@ identical computed workload size of 61,390 characters. Their accumulation rates
 for this workload are the same. The script did not measure renderer static-output
 bytes.
 
-## E10. What upstream #950 actually changes
+## E10. What vadimdemedes/ink#950 actually changes
 
 Upstream 7.1.1 `build/ink.js:324-327` adds `handleStaticChange()` which sets
 `fullStaticOutput = ''`; `build/reconciler.js:98-103` fires it when
@@ -293,7 +293,7 @@ gh api repos/vadimdemedes/ink/compare/ad9e3ea...master
 `src/measure-text.ts` on master: `new QuickLRU<string, Output>({maxSize: 4096})`.
 `src/wrap-text.ts` on master: `new QuickLRU<string, string>({maxSize: 4096})`.
 
-PR #987 itself reports `merged=false, state=closed`. The change landed as
+PR vadimdemedes/ink#987 itself reports `merged=false, state=closed`. The change landed as
 `ad9e3ea` rather than through that PR. Either way it is post-7.1.1 and, per E1,
 unreleased.
 
@@ -301,14 +301,14 @@ unreleased.
 
 | Number | Kind | State | Note |
 | --- | --- | --- | --- |
-| #984 `getFrameController()` for application-owned text selection | PR | open | not draft |
-| #985 selection semantics: flows, boundaries, semantic `Text` props | PR | open | draft |
-| #986 unbounded text caches | issue | closed | |
-| #987 bound caches (LRU) | PR | closed, **not merged** | see E12 |
-| #973 tall `<Static>` overwrites its own last line | issue | **open** | |
-| #968 `measureElement()` returns coordinates | PR | merged 2026-07-16 | in 7.1.1 |
-| #950 drop stale `<Static>` output on identity change | PR | merged 2026-05-13 | in 7.0.3 |
-| #974 preserve last `<Static>` line after full clear | PR | merged 2026-07-16 | in 7.1.1 |
+| vadimdemedes/ink#984 `getFrameController()` for application-owned text selection | PR | open | not draft |
+| vadimdemedes/ink#985 selection semantics: flows, boundaries, semantic `Text` props | PR | open | draft |
+| vadimdemedes/ink#986 unbounded text caches | issue | closed | |
+| vadimdemedes/ink#987 bound caches (LRU) | PR | closed, **not merged** | see E12 |
+| vadimdemedes/ink#973 tall `<Static>` overwrites its own last line | issue | **open** | |
+| vadimdemedes/ink#968 `measureElement()` returns coordinates | PR | merged 2026-07-16 | in 7.1.1 |
+| vadimdemedes/ink#950 drop stale `<Static>` output on identity change | PR | merged 2026-05-13 | in 7.0.3 |
+| vadimdemedes/ink#974 preserve last `<Static>` line after full clear | PR | merged 2026-07-16 | in 7.1.1 |
 
 ## E14. Deep imports and the exports map
 

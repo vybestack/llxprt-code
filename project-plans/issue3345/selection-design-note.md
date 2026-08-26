@@ -14,7 +14,7 @@ session. That mixed memory result does not outweigh the selection scope for 7.1.
 (E9-E12).
 
 The preferred near-term path is to retain and patch the fork while upstream
-#984 and #985 develop. If maintainers later approve a maintained dependency
+vadimdemedes/ink#984 and vadimdemedes/ink#985 develop. If maintainers later approve a maintained dependency
 patch, a renderer-level bridge patterned after those proposals has the smallest
 application blast radius. It should be classified as a package patch with its
 own ownership and attribution obligations.
@@ -111,7 +111,7 @@ There are only three practical hook points:
 1. **Renderer/frame boundary.** Ink produces a cell grid plus a per-cell logical
    text map before ANSI output. Mouse selection consumes the map, and the same
    boundary accepts a selected cell range for painting. This matches the shape
-   recorded for upstream #984 in issue #3345. Upstream 7.1.1 has no released
+   recorded for vadimdemedes/ink#984 in issue #3345. Upstream 7.1.1 has no released
    public boundary of this kind (E13).
 2. **Application text registry.** Every selectable text producer registers its
    source, transform, layout ref, wrapping policy, and logical ordering. A
@@ -219,7 +219,7 @@ no text-producing component changes (`renderer.js:128-172`,
 
 | Option | How it works | Blast radius | Gate assessment |
 | --- | --- | --- | --- |
-| Released upstream frame controller | Use an upstream cell grid, call Ink-side selection painting, and subscribe to frame changes, as issue #3345 records for #984. Add #985's selectable/flow/boundary semantics if released. | Selection hook, geometry adapter, and tests. Text components change only where semantic boundaries are desired. | Preferred future path. It is unavailable in a release; #984 is open and #985 is open draft (E13). |
+| Released upstream frame controller | Use an upstream cell grid, call Ink-side selection painting, and subscribe to frame changes, as issue #3345 records for vadimdemedes/ink#984. Add vadimdemedes/ink#985's selectable/flow/boundary semantics if released. | Selection hook, geometry adapter, and tests. Text components change only where semantic boundaries are desired. | Preferred future path. It is unavailable in a release; vadimdemedes/ink#984 is open and vadimdemedes/ink#985 is open draft (E13). |
 | Maintained Ink patch | Port or adapt the fork renderer's selection map and reverse-video painting into the chosen upstream package. | Dependency patch, renderer tests, package-release maintenance, and license review. Application component changes stay limited. | Technically closest to current behavior. It retains package ownership work and needs explicit maintainer approval. |
 | App-owned selectable text adapter | Replace direct `Text`/`Transform` use with components that register displayed cells and render selected spans. | Broad UI import and component changes. Nested styling and transforms need adapter support everywhere. | Reject under the issue's non-goal of avoiding a UI rewrite. |
 | Root frame postprocessor | Parse rendered output, maintain a terminal cell grid, and inject reverse-video escapes over selected cells. | Custom stdout, incremental rendering, static output, cursor, clear, resize, alternate-screen, and platform acceptance. A separate source map remains necessary for copy. | Reject as an interim selection-only change. |
@@ -230,10 +230,10 @@ A maintained patch avoids rewriting every text-producing component, but it
 changes the migration's ownership result. The package would still carry
 selection code that upstream 7.1.1 lacks (E3, E13).
 
-## Relationship to upstream #984 and #985
+## Relationship to vadimdemedes/ink#984 and vadimdemedes/ink#985
 
-As verified on 2026-08-26, #984 is open and not draft. #985 is open, draft, and
-stacked on #984 (E13). Issue #3345 records their proposed division as a read-only
+As verified on 2026-08-26, vadimdemedes/ink#984 is open and not draft. vadimdemedes/ink#985 is open, draft, and
+stacked on vadimdemedes/ink#984 (E13). Issue #3345 records their proposed division as a read-only
 frame controller with cell-grid access, Ink-side `setSelection()` highlighting
 and `subscribe()`, followed by copy semantics for selectable text, flows, and
 boundaries. These are proposals, not a released dependency contract (E13).
@@ -273,7 +273,7 @@ removed.
 | Terminal anchor drift | High | Both geometry APIs omit static rows. Upstream's captured writes did not home or clear between the tested frames, while terminal cursor placement and final screen state remain unverified (E16, E17). | PTY proof of the forced row-zero invariant across lifecycle cases. |
 | Virtualization invalidates endpoints | High | Off-window items are unmounted and selection stores renderer node identities (`VirtualizedList.hooks.tsx:621-639,802-840`; `useMouseSelection.ts:24-27`). | Tests for scroll during drag, resize during drag, data growth, and item-height correction, with an approved current-coverage policy. |
 | Private API churn | High for a tree port | Upstream omits the fork DOM and hit-test exports (E3). | An explicit maintained patch policy or rejection of private access. |
-| Upstream proposal churn | Medium | #984 is open and #985 is draft (E13). | Adapter boundary and removal plan after a published release. |
+| Upstream proposal churn | Medium | vadimdemedes/ink#984 is open and vadimdemedes/ink#985 is draft (E13). | Adapter boundary and removal plan after a published release. |
 | Performance and retained heap | Medium | A frame map or terminal parser adds per-render data; P0 measured only existing static and text caches (E9-E11). | Render latency and retained-heap regression tests under long output. |
 | License and attribution | Medium | Copying fork selection or viewport implementation brings the source-origin review required by issue #3345. Relevant fork modules include `selection.js`, `scroll.js`, `layout.js`, and `vertical-gap.js`; they carry `Copyright 2025 Google LLC` and `SPDX-License-Identifier: Apache-2.0` headers inside an MIT-declared package, while upstream 7.1.1 ships no equivalent headers (E22). A migration could instead use upstream APIs, community code, or independently designed code. | License review before any copied algorithm enters application or patch source, covering attribution as well as license compatibility. |
 | Platform behavior | High until tested | P0 ran on darwin with stream doubles, not PTYs or Windows/Linux (E0, E17). | PTY and platform acceptance from P3. |
