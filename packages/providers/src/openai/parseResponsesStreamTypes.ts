@@ -61,6 +61,7 @@ export type FunctionCallState = {
   call_id?: string;
   name: string;
   arguments: string;
+  argumentBytes: number;
 };
 
 export type ReasoningDeltaSource =

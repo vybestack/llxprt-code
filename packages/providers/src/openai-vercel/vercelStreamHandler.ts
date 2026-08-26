@@ -152,6 +152,12 @@ async function* processFullStream(
     yield* flushRemainingTextBuffer(state, logger);
     if (captureBuffer.parsePromise !== undefined) {
       await captureBuffer.parsePromise;
+      // The parser captures its own failure rather than rejecting, so an
+      // unobserved rejection cannot crash the process. Rethrow it here, where
+      // there is a caller to handle it.
+      if (captureBuffer.parseError !== undefined) {
+        throw captureBuffer.parseError;
+      }
     }
     yield* emitRemainingStreamThinking(state, rs, captureBuffer, logger);
   } catch (error) {

@@ -45,6 +45,28 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
     },
   },
   {
+    key: 'subagent-max-output-tokens-total',
+    category: 'cli-behavior',
+    description:
+      'Aggregate output token budget for a subagent run (-1 for unlimited)',
+    type: 'number',
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (
+        typeof value === 'number' &&
+        Number.isInteger(value) &&
+        (value === -1 || value > 0)
+      ) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message:
+          'subagent-max-output-tokens-total must be a positive integer or -1 for unlimited',
+      };
+    },
+  },
+  {
     key: 'loopDetectionEnabled',
     category: 'cli-behavior',
     description: 'Enable/disable all loop detection mechanisms (true/false)',

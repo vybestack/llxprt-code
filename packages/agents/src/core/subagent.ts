@@ -11,7 +11,12 @@
  */
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { type ToolCallRequestInfo, AgentEventType, Turn } from './turn.js';
+import {
+  type ServerAgentStreamEvent,
+  type ToolCallRequestInfo,
+  AgentEventType,
+  Turn,
+} from './turn.js';
 import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import type {
@@ -56,6 +61,8 @@ import {
   processInteractiveTextResponse,
   handleExecutionError,
   initInteractiveScheduler,
+  checkOutputBudget,
+  recordTurnOutputTokens,
   type ExecutionLoopContext,
 } from './subagentExecution.js';
 import { executeNonInteractiveRun } from './subagentNonInteractive.js';
@@ -127,6 +134,74 @@ function processInteractiveStreamEvent(
     }
   }
   return '';
+}
+
+/**
+ * Counts characters generated over one interactive turn.
+ *
+ * Stateful for the same reason as `GeneratedOutputCounter` on the
+ * non-interactive path: a provider that re-emits its accumulated reasoning on
+ * every `Thought` event turns an N-character span into roughly N^2/2 counted
+ * characters, which would trip the aggregate budget during legitimate work.
+ * Thoughts carrying a subject are tracked by latest length and contribute once;
+ * thoughts without one are true increments and sum.
+ */
+class InteractiveOutputCounter {
+  private plainCharacters = 0;
+  private readonly latestThoughtLength = new Map<string, number>();
+
+  add(event: ServerAgentStreamEvent): void {
+    switch (event.type) {
+      case AgentEventType.Content:
+        this.plainCharacters += event.value.length;
+        return;
+      case AgentEventType.ToolCallRequest:
+        this.plainCharacters += JSON.stringify(event.value).length;
+        return;
+      case AgentEventType.Thought:
+        this.addThought(event.value);
+        return;
+      default:
+        return;
+    }
+  }
+
+  private addThought(value: unknown): void {
+    const length = JSON.stringify(value).length;
+    const subject = (value as { subject?: unknown } | undefined)?.subject;
+    if (typeof subject !== 'string' || subject === '') {
+      this.plainCharacters += length;
+      return;
+    }
+    this.latestThoughtLength.set(subject, length);
+  }
+
+  get total(): number {
+    let thoughts = 0;
+    for (const length of this.latestThoughtLength.values()) {
+      thoughts += length;
+    }
+    return this.plainCharacters + thoughts;
+  }
+}
+
+/**
+ * Provider-reported completion tokens for a turn, or undefined when the
+ * provider did not report any.
+ *
+ * Only the Finished event is read. The UsageMetadata event carries
+ * Gemini-shaped keys (`candidatesTokenCount`), and this package is required to
+ * stay provider-neutral, which the agents-neutral gate enforces. Finished
+ * carries the same figure in neutral `UsageStats` form. A provider that reports
+ * usage only through the other event falls back to the character estimate,
+ * which is the intended behaviour for an absent report.
+ */
+function readInteractiveOutputTokens(
+  event: ServerAgentStreamEvent,
+): number | undefined {
+  return event.type === AgentEventType.Finished
+    ? event.value.usageMetadata?.completionTokens
+    : undefined;
 }
 
 /**
@@ -500,15 +575,25 @@ export class SubAgentScope {
     if (check.shouldStop) return { action: 'stop' };
 
     const nextTurnCounter = turnCounter + 1;
-    const { responseParts, textResponse, currentTurn } =
-      await this.runInteractiveTurn(
-        chat,
-        currentMessages,
-        abortController,
-        turnCounter,
-        execCtx,
-      );
+    const {
+      responseParts,
+      textResponse,
+      currentTurn,
+      reportedOutputTokens,
+      outputCharacterCount,
+    } = await this.runInteractiveTurn(
+      chat,
+      currentMessages,
+      abortController,
+      turnCounter,
+      execCtx,
+    );
     if (abortController.signal.aborted === true) return { action: 'abort' };
+
+    recordTurnOutputTokens(execCtx, reportedOutputTokens, outputCharacterCount);
+    // Budget only. The turn and time limits are checked at the top of the loop,
+    // so that tool calls the model emitted on its last allowed turn still run.
+    if (checkOutputBudget(execCtx).shouldStop) return { action: 'stop' };
 
     processInteractiveTextResponse(textResponse, execCtx);
 
@@ -584,10 +669,15 @@ export class SubAgentScope {
     const blocks = currentMessages[0]?.blocks ?? [];
 
     let textResponse = '';
+    let reportedOutputTokens: number | undefined;
+    const outputCounter = new InteractiveOutputCounter();
     try {
       const stream = turn.run(blocks, abortController.signal);
       for await (const event of stream) {
         if (abortController.signal.aborted === true) break;
+        outputCounter.add(event);
+        reportedOutputTokens =
+          readInteractiveOutputTokens(event) ?? reportedOutputTokens;
         const eventText = processInteractiveStreamEvent(event, execCtx);
         textResponse += eventText;
       }
@@ -602,6 +692,8 @@ export class SubAgentScope {
       responseParts: [...turn.pendingToolCalls],
       textResponse,
       currentTurn,
+      reportedOutputTokens,
+      outputCharacterCount: outputCounter.total,
     };
   }
 

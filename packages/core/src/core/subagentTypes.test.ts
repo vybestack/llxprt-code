@@ -110,6 +110,7 @@ describe('subagentTypes', () => {
       expect(SubagentTerminateMode.ERROR).toBe('ERROR');
       expect(SubagentTerminateMode.TIMEOUT).toBe('TIMEOUT');
       expect(SubagentTerminateMode.MAX_TURNS).toBe('MAX_TURNS');
+      expect(SubagentTerminateMode.MAX_OUTPUT).toBe('MAX_OUTPUT');
     });
   });
 });

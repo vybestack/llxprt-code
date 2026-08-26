@@ -38,6 +38,10 @@ import {
   type StreamEvent,
 } from './chatSession.js';
 import { closeIteratorBounded } from './iteratorCleanup.js';
+import {
+  TurnDebugResponses,
+  MAX_DEBUG_RESPONSE_CHUNKS,
+} from './turnDebugResponses.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { ContextOverflowError } from '../compression/contextOverflowError.js';
 import {
@@ -75,6 +79,9 @@ import {
   type ServerAgentStreamEvent,
   type StructuredError,
 } from '@vybestack/llxprt-code-core/core/turn.js';
+
+// Re-exported so existing importers of this symbol keep working.
+export { MAX_DEBUG_RESPONSE_CHUNKS };
 
 type TurnRequest = string | object | readonly unknown[];
 /** @deprecated Use DEFAULT_STREAM_IDLE_TIMEOUT_MS from streamIdleTimeout.js instead */
@@ -176,7 +183,7 @@ interface TurnWatchdogBundle {
 // A turn manages the agentic loop turn within the server context.
 export class Turn {
   readonly pendingToolCalls: ToolCallRequestInfo[];
-  private debugResponses: ModelStreamChunk[];
+  private readonly debugResponses = new TurnDebugResponses();
   finishReason: CanonicalFinishReason | undefined;
   private logger: DebugLogger;
 
@@ -187,7 +194,6 @@ export class Turn {
     private readonly providerName: string = 'backend',
   ) {
     this.pendingToolCalls = [];
-    this.debugResponses = [];
     this.finishReason = undefined;
     this.logger = new DebugLogger('llxprt:core:turn');
   }
@@ -252,16 +258,6 @@ export class Turn {
     });
   }
 
-  private pushFilteredDebugChunk(
-    chunk: ModelStreamChunk,
-    allowedBlocks: ContentBlock[],
-  ): void {
-    this.debugResponses.push({
-      ...chunk,
-      content: { ...chunk.content, blocks: allowedBlocks },
-    });
-  }
-
   private *processStreamChunk(
     chunk: ModelStreamChunk,
     traceId: string | undefined,
@@ -271,7 +267,7 @@ export class Turn {
       chunk.content.blocks,
       chunk.hookRestrictions?.allowedToolNames,
     );
-    this.pushFilteredDebugChunk(chunk, allowedBlocks);
+    this.debugResponses.push(chunk, allowedBlocks);
 
     yield* this.emitThoughtContent(allowedBlocks, traceId);
     const text = yield* this.emitTextContent(allowedBlocks, traceId);
@@ -909,7 +905,7 @@ export class Turn {
     return `${name}-${functionCallIndex}-${digest}`;
   }
 
-  getDebugResponses(): ModelStreamChunk[] {
-    return this.debugResponses;
+  getDebugResponses(): readonly ModelStreamChunk[] {
+    return this.debugResponses.retained;
   }
 }

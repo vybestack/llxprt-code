@@ -26,12 +26,65 @@
  *    last (unpaired) fence; when it is even it returns the rightmost `\n\n`
  *    boundary that is not inside a fence, or the text length.
  */
+
+// Normal prose and balanced fences use markdown boundaries before reaching this
+// limit. Forcing requires more than 512 KiB in one unclosed code block, which is
+// above ordinary terminal responses while still bounding per-frame render work.
+/**
+ * Length of unclosed fenced content that forces a split.
+ *
+ * 512 KiB is roughly 128k tokens, which is the largest `maxOutputTokens` any
+ * model in the catalog declares, so only a maximum-length response consisting
+ * entirely of one unbroken code block can reach it. The consequence when that
+ * happens is cosmetic: the block renders as two contiguous, identically styled
+ * code blocks. That is a deliberate trade against retaining the whole response
+ * and re-rendering it on every delta.
+ *
+ * Exported so tests bind to the real values instead of duplicating literals
+ * that could drift away from them.
+ */
+export const MAX_UNCLOSED_FENCE_LENGTH = 512 * 1024;
+
+/** Tail kept after a forced split, so the continuation still has context. */
+export const FORCED_SPLIT_RETAINED_LENGTH = 64 * 1024;
+/**
+ * Info string following an opening fence.
+ *
+ * CommonMark allows any run of non-backtick characters, so the language is
+ * matched as such rather than as `\w`: `c++`, `objective-c` and `c#` are all
+ * legal and all contain punctuation. Getting this wrong is not cosmetic. The
+ * continuation fence would fall back to three backticks with no language, and a
+ * literal ``` inside the retained tail would then close it early, inverting
+ * fence parity for the rest of the stream.
+ */
+const MAX_FENCE_INFO_LENGTH = 100;
+
+/**
+ * The info string for an opening fence, or '' when there is not a usable one.
+ *
+ * Done with trim and a scan rather than a pattern: an anchored pattern with a
+ * lazy body and optional surrounding whitespace backtracks super-linearly, and
+ * this runs on model-controlled text.
+ */
+function readFenceInfo(header: string): string {
+  const info = header.trim();
+  if (info.length > MAX_FENCE_INFO_LENGTH || info.includes('`')) {
+    return '';
+  }
+  return info;
+}
+
 export class IncrementalSplitScanner {
   private text = '';
   private scanPos = 0;
   private fenceParityOdd = false;
   private lastFencePos = -1;
   private lastOutsideParagraphSplit = -1;
+  private openFence = '';
+  private openFenceLanguage = '';
+  private openFenceHeader = '';
+  private openFenceRenderable = false;
+  private capturingFenceHeader = false;
   private visited = 0;
 
   /**
@@ -59,10 +112,13 @@ export class IncrementalSplitScanner {
   }
 
   /**
-   * Index at which the accumulated text may be split without breaking markdown,
-   * identical to `findLastSafeSplitPoint(this.getText())`.
+   * Index at which the accumulated text may be split without breaking markdown.
+   * Oversized unclosed fences are split with a synthetic continuation boundary.
    */
   getSplitPoint(): number {
+    if (this.shouldForceSplit()) {
+      return this.forcedSplitPoint();
+    }
     if (this.fenceParityOdd) {
       return this.lastFencePos;
     }
@@ -79,6 +135,18 @@ export class IncrementalSplitScanner {
     if (splitPoint <= 0) {
       return this.text;
     }
+    if (this.fenceParityOdd && splitPoint > this.lastFencePos) {
+      const continuationOpening = this.openFenceRenderable
+        ? `${this.openFence}${this.openFenceLanguage}\n`
+        : '';
+      const retained = this.text.slice(splitPoint);
+      const visited = this.visited;
+      this.clearMarkdownState();
+      this.visited = visited;
+      this.text = continuationOpening + retained;
+      this.scan();
+      return this.text;
+    }
     this.text = this.text.slice(splitPoint);
     this.scanPos = Math.max(0, this.scanPos - splitPoint);
     this.lastFencePos =
@@ -91,11 +159,7 @@ export class IncrementalSplitScanner {
   }
 
   reset(): void {
-    this.text = '';
-    this.scanPos = 0;
-    this.fenceParityOdd = false;
-    this.lastFencePos = -1;
-    this.lastOutsideParagraphSplit = -1;
+    this.clearMarkdownState();
     this.visited = 0;
   }
 
@@ -119,12 +183,34 @@ export class IncrementalSplitScanner {
   private stepAt(index: number, length: number): number {
     const char = this.text[index];
     if (char === '`') {
+      // Header capture deliberately does not run here. scanFence can defer
+      // (return 0) when the run is still arriving, leaving scanPos unchanged,
+      // and capturing first would then feed the same backtick in again on the
+      // next delta and corrupt the header.
       return this.scanFence(index, length);
     }
+    this.captureFenceHeaderCharacter(char);
     if (char === '\n') {
       return this.scanParagraphBreak(index, length);
     }
     return 1;
+  }
+
+  /**
+   * Whether `index` begins a line, allowing the leading indent the renderer
+   * tolerates before a fence.
+   */
+  private atLineStart(index: number): boolean {
+    for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+      const char = this.text[cursor];
+      if (char === '\n') {
+        return true;
+      }
+      if (char !== ' ' && char !== '\t') {
+        return false;
+      }
+    }
+    return true;
   }
 
   private scanFence(index: number, length: number): number {
@@ -140,9 +226,38 @@ export class IncrementalSplitScanner {
     if (this.text[index + 2] !== '`') {
       return 1;
     }
-    this.fenceParityOdd = !this.fenceParityOdd;
+    // Measure the whole backtick run rather than assuming three. A 4+ backtick
+    // fence reconstructed as three would be closed early by a literal ``` in
+    // the retained tail.
+    let runEnd = index + 3;
+    while (runEnd < length && this.text[runEnd] === '`') {
+      runEnd += 1;
+    }
+
+    // The run may still be growing at the end of the text; wait for more rather
+    // than recording a truncated fence.
+    if (runEnd >= length) {
+      return 0;
+    }
+    if (this.fenceParityOdd) {
+      this.fenceParityOdd = false;
+      this.clearOpenFence();
+    } else {
+      this.fenceParityOdd = true;
+      this.openFence = this.text.slice(index, runEnd);
+      // The renderer only honours a fence that begins a line. The scanner
+      // deliberately toggles on inline runs too, because its split points must
+      // stay identical to the batch helper it mirrors, but synthesizing a
+      // continuation fence for an inline run would wrap ordinary prose in a
+      // code block. Record which kind this is so the forced split can bound the
+      // text without reopening something the renderer never treated as code.
+      this.openFenceRenderable = this.atLineStart(index);
+      this.openFenceLanguage = '';
+      this.openFenceHeader = '';
+      this.capturingFenceHeader = true;
+    }
     this.lastFencePos = index;
-    return 3;
+    return runEnd - index;
   }
 
   private scanParagraphBreak(index: number, length: number): number {
@@ -156,5 +271,72 @@ export class IncrementalSplitScanner {
       this.lastOutsideParagraphSplit = index + 2;
     }
     return 1;
+  }
+
+  private shouldForceSplit(): boolean {
+    return (
+      this.fenceParityOdd &&
+      this.lastFencePos >= 0 &&
+      this.text.length - this.lastFencePos > MAX_UNCLOSED_FENCE_LENGTH
+    );
+  }
+
+  /**
+   * Split offset for a forced split, never landing inside a surrogate pair.
+   *
+   * Both halves matter. Landing on a low surrogate would strip its leading
+   * partner from the retained tail; landing on a high surrogate would leave
+   * that half at the end of the committed text with its partner in the tail.
+   * Either way the pair is torn and both sides render a replacement character.
+   */
+  private forcedSplitPoint(): number {
+    const candidate = this.text.length - FORCED_SPLIT_RETAINED_LENGTH;
+    const code = this.text.charCodeAt(candidate);
+    const isLowSurrogate = code >= 0xdc00 && code <= 0xdfff;
+    if (isLowSurrogate) {
+      return candidate + 1;
+    }
+    // A high surrogate at `candidate` starts the retained tail, so its low
+    // partner at `candidate + 1` is retained with it and the pair survives.
+    // Moving to `candidate - 1` to "keep the pair together" would instead push
+    // the boundary into the *previous* pair whenever `text[candidate - 1]` is a
+    // low surrogate, splitting it and rendering a replacement character on both
+    // sides: the exact damage this guard exists to avoid.
+    return candidate;
+  }
+
+  private captureFenceHeaderCharacter(char: string): void {
+    if (!this.capturingFenceHeader) {
+      return;
+    }
+    if (char === '\n') {
+      // openFence was recorded from the actual backtick run, so only the info
+      // string is derived here.
+      this.openFenceLanguage = readFenceInfo(this.openFenceHeader);
+      this.capturingFenceHeader = false;
+      return;
+    }
+    if (this.openFenceHeader.length < 280) {
+      this.openFenceHeader += char;
+    } else {
+      this.capturingFenceHeader = false;
+    }
+  }
+
+  private clearOpenFence(): void {
+    this.openFence = '';
+    this.openFenceLanguage = '';
+    this.openFenceHeader = '';
+    this.openFenceRenderable = false;
+    this.capturingFenceHeader = false;
+  }
+
+  private clearMarkdownState(): void {
+    this.text = '';
+    this.scanPos = 0;
+    this.fenceParityOdd = false;
+    this.lastFencePos = -1;
+    this.lastOutsideParagraphSplit = -1;
+    this.clearOpenFence();
   }
 }

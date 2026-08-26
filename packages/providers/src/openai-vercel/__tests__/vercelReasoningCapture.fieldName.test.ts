@@ -20,8 +20,14 @@ import { describe, it, expect } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
   createCaptureBuffer,
+  createReasoningCaptureFetch,
   parseReasoningFromSseStream,
 } from '../vercelReasoningCapture.js';
+import {
+  MAX_PROVIDER_REASONING_CAPTURE_BYTES,
+  MAX_PROVIDER_SSE_LINE_BYTES,
+  ProviderStreamProtocolError,
+} from '../../streamLimits.js';
 
 const logger = new DebugLogger('llxprt:test:reasoning-capture');
 
@@ -206,5 +212,143 @@ describe('parseReasoningFromSseStream — configurable field name (#2488)', () =
 
     expect(captureBuffer.reasoningChunks).toStrictEqual([whitespace]);
     expect(captureBuffer.actualFieldName).toBe('reasoning_content');
+  });
+
+  it('rejects an oversized incomplete SSE line with a typed protocol error', async () => {
+    const captureBuffer = createCaptureBuffer();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode('x'.repeat(MAX_PROVIDER_SSE_LINE_BYTES + 1)),
+        );
+        controller.close();
+      },
+    });
+
+    const result = parseReasoningFromSseStream(
+      stream.getReader(),
+      captureBuffer,
+      logger,
+    );
+
+    await expect(result).rejects.toBeInstanceOf(ProviderStreamProtocolError);
+    await expect(result).rejects.toThrow(
+      `SSE line exceeded ${MAX_PROVIDER_SSE_LINE_BYTES}-byte limit`,
+    );
+  });
+
+  it('rejects an oversized COMPLETE SSE line, not just an incomplete one', async () => {
+    // Bounding only the trailing incomplete remainder is bypassed by appending
+    // a newline: the line then arrives complete and would go straight to
+    // JSON.parse unmeasured. The only difference from the test above is the
+    // terminating newline, and it must still be rejected.
+    const captureBuffer = createCaptureBuffer();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(
+            `${'x'.repeat(MAX_PROVIDER_SSE_LINE_BYTES + 1)}\n`,
+          ),
+        );
+        controller.close();
+      },
+    });
+
+    const result = parseReasoningFromSseStream(
+      stream.getReader(),
+      captureBuffer,
+      logger,
+    );
+
+    await expect(result).rejects.toBeInstanceOf(ProviderStreamProtocolError);
+  });
+
+  it('rejects retained reasoning that exceeds its byte limit', async () => {
+    const captureBuffer = createCaptureBuffer();
+    const fragment = 'x'.repeat(1024 * 1024);
+    const chunkCount =
+      Math.floor(MAX_PROVIDER_REASONING_CAPTURE_BYTES / fragment.length) + 1;
+    const stream = createSseStream(
+      Array.from(
+        { length: chunkCount },
+        () =>
+          'data: ' +
+          JSON.stringify({
+            choices: [{ delta: { reasoning_content: fragment } }],
+          }),
+      ),
+    );
+
+    const result = parseReasoningFromSseStream(
+      stream.getReader(),
+      captureBuffer,
+      logger,
+    );
+
+    await expect(result).rejects.toBeInstanceOf(ProviderStreamProtocolError);
+    await expect(result).rejects.toThrow(
+      `captured reasoning exceeded ${MAX_PROVIDER_REASONING_CAPTURE_BYTES}-byte limit`,
+    );
+  });
+
+  it('preserves large legitimate reasoning byte-for-byte', async () => {
+    const captureBuffer = createCaptureBuffer();
+    const reasoning = 'ø'.repeat(512 * 1024);
+    const stream = createSseStream([
+      'data: ' +
+        JSON.stringify({
+          choices: [{ delta: { reasoning_content: reasoning } }],
+        }),
+    ]);
+
+    await parseReasoningFromSseStream(
+      stream.getReader(),
+      captureBuffer,
+      logger,
+    );
+
+    expect(captureBuffer.reasoningChunks.join('')).toBe(reasoning);
+  });
+
+  it('stops the detached parser when the request signal aborts', async () => {
+    const originalFetch = globalThis.fetch;
+    const encoder = new TextEncoder();
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(
+            encoder.encode(
+              'data: {"choices":[{"delta":{"reasoning_content":"started"}}]}\n',
+            ),
+          );
+        },
+      }),
+      { headers: { 'content-type': 'text/event-stream' } },
+    );
+    globalThis.fetch = async (): Promise<Response> => response;
+    const captureBuffer = createCaptureBuffer();
+    const captureFetch = createReasoningCaptureFetch(captureBuffer, logger);
+    const controller = new AbortController();
+
+    let interceptedResponse: Response | undefined;
+    try {
+      interceptedResponse = await captureFetch('https://example.test/stream', {
+        signal: controller.signal,
+      });
+      controller.abort();
+      const parsePromise = captureBuffer.parsePromise;
+      expect(parsePromise).toBeDefined();
+      const outcome = await Promise.race([
+        parsePromise?.then(() => 'stopped' as const),
+        new Promise<'still-reading'>((resolve) => {
+          setTimeout(() => resolve('still-reading'), 50);
+        }),
+      ]);
+
+      expect(outcome).toBe('stopped');
+    } finally {
+      await interceptedResponse?.body?.cancel();
+      globalThis.fetch = originalFetch;
+    }
   });
 });

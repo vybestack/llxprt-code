@@ -32,6 +32,13 @@ import {
   shouldEmitReasoningDelta,
   updateReasoningDeltaState,
 } from './parseResponsesStreamReasoning.js';
+import {
+  assertProviderStreamByteLimit,
+  assertSseLinesWithinLimit,
+  assertToolCallArgumentsWithinLimit,
+  MAX_PROVIDER_TOOL_CALL_BYTES,
+  utf8ByteLength,
+} from '../streamLimits.js';
 
 const logger = new DebugLogger('llxprt:providers:openai-responses:sse');
 
@@ -139,11 +146,19 @@ function handleOutputItemAdded(
   functionCalls: Map<string, FunctionCallState>,
 ): void {
   if (event.item?.type === 'function_call' && event.item.id) {
+    const argumentsValue = event.item.arguments ?? '';
+    const argumentBytes = utf8ByteLength(argumentsValue);
+    assertProviderStreamByteLimit(
+      'tool-call arguments',
+      argumentBytes,
+      MAX_PROVIDER_TOOL_CALL_BYTES,
+    );
     functionCalls.set(event.item.id, {
       id: event.item.id,
       call_id: event.item.call_id,
       name: event.item.name ?? '',
-      arguments: event.item.arguments ?? '',
+      arguments: argumentsValue,
+      argumentBytes,
     });
   }
 }
@@ -158,6 +173,12 @@ function handleArgumentsDelta(
   if (event.item_id && event.delta) {
     const call = functionCalls.get(event.item_id);
     if (call) {
+      call.argumentBytes += utf8ByteLength(event.delta);
+      assertProviderStreamByteLimit(
+        'tool-call arguments',
+        call.argumentBytes,
+        MAX_PROVIDER_TOOL_CALL_BYTES,
+      );
       call.arguments += event.delta;
     }
   }
@@ -282,6 +303,7 @@ function* handleFunctionCallDone(
   const call = functionCalls.get(itemId);
   if (!call) return;
 
+  assertToolCallArgumentsWithinLimit(event.arguments);
   const finalArguments = event.arguments ?? call.arguments;
 
   let parsedArguments: unknown = {};
@@ -895,6 +917,7 @@ export async function* parseResponsesStream(
       // Process complete lines
       const lines = buffer.split('\n');
       buffer = lines.pop() ?? ''; // Keep incomplete line in buffer
+      assertSseLinesWithinLimit(lines, buffer);
 
       const dataLines = lines
         .filter((line) => line.startsWith('data: '))

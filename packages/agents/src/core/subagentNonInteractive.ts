@@ -47,10 +47,13 @@ import {
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { ExecutionLoopContext } from './subagentExecution.js';
 import {
+  checkOutputBudget,
   checkTerminationConditions,
+  GeneratedOutputCounter,
   processNonInteractiveTextResponse,
   handleExecutionError,
   checkGoalCompletion,
+  recordTurnOutputTokens,
 } from './subagentExecution.js';
 import {
   resolveToolName,
@@ -167,6 +170,8 @@ export interface NonInteractiveStreamResult {
   textResponse: string;
   parseableTextResponse: string;
   hookRestrictedAllowedTools: string[] | undefined;
+  reportedOutputTokens: number | undefined;
+  outputCharacterCount: number;
 }
 
 /** Empty stream result returned when the stream is aborted before reading. */
@@ -176,6 +181,8 @@ function emptyStreamResult(): NonInteractiveStreamResult {
     textResponse: '',
     parseableTextResponse: '',
     hookRestrictedAllowedTools: undefined,
+    reportedOutputTokens: undefined,
+    outputCharacterCount: 0,
   };
 }
 
@@ -206,6 +213,8 @@ export async function consumeNonInteractiveStream(
   let textResponse = '';
   let parseableTextResponse = '';
   let hookRestrictedAllowedTools: string[] | undefined;
+  let reportedOutputTokens: number | undefined;
+  let outputCharacterCount = 0;
   const iterator = responseStream[Symbol.asyncIterator]();
   const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(config);
 
@@ -224,12 +233,16 @@ export async function consumeNonInteractiveStream(
     );
     textResponse = readResult.textResponse;
     parseableTextResponse = readResult.parseableTextResponse;
+    reportedOutputTokens = readResult.reportedOutputTokens;
+    outputCharacterCount = readResult.outputCharacterCount;
     if (readResult.aborted) {
       return {
         functionCalls: [],
         textResponse,
         parseableTextResponse,
         hookRestrictedAllowedTools,
+        reportedOutputTokens,
+        outputCharacterCount,
       };
     }
     hookRestrictedAllowedTools = readResult.hookRestrictedAllowedTools;
@@ -244,6 +257,8 @@ export async function consumeNonInteractiveStream(
     textResponse,
     parseableTextResponse,
     hookRestrictedAllowedTools,
+    reportedOutputTokens,
+    outputCharacterCount,
   };
 }
 
@@ -266,11 +281,15 @@ async function readStreamToCompletion(
   textResponse: string;
   parseableTextResponse: string;
   hookRestrictedAllowedTools: string[] | undefined;
+  reportedOutputTokens: number | undefined;
+  outputCharacterCount: number;
   aborted: boolean;
 }> {
   let textResponse = '';
   let parseableTextResponse = '';
   let hookRestrictedAllowedTools: string[] | undefined;
+  let reportedOutputTokens: number | undefined;
+  const outputCounter = new GeneratedOutputCounter();
 
   let result = await readNextNonInteractiveEvent(
     iterator,
@@ -282,16 +301,20 @@ async function readStreamToCompletion(
   );
   while (result.done !== true) {
     const resp = result.value;
-    const isRuntimeAborted = Boolean(abortController.signal.aborted);
-    if (isRuntimeAborted) {
+    if (abortController.signal.aborted) {
       return {
         textResponse,
         parseableTextResponse,
         hookRestrictedAllowedTools,
+        reportedOutputTokens,
+        outputCharacterCount: outputCounter.total,
         aborted: true,
       };
     }
     if (resp.type === StreamEventType.CHUNK) {
+      outputCounter.add(resp.value.content.blocks);
+      reportedOutputTokens =
+        resp.value.usage?.completionTokens ?? reportedOutputTokens;
       const chunkResult = collectNonInteractiveChunk(
         resp,
         functionCalls,
@@ -318,6 +341,8 @@ async function readStreamToCompletion(
     textResponse,
     parseableTextResponse,
     hookRestrictedAllowedTools,
+    reportedOutputTokens,
+    outputCharacterCount: outputCounter.total,
     aborted: false,
   };
 }
@@ -362,6 +387,8 @@ export async function runNonInteractiveTurn(
     textResponse,
     parseableTextResponse,
     hookRestrictedAllowedTools,
+    reportedOutputTokens,
+    outputCharacterCount,
   } = await consumeNonInteractiveStream(
     responseStream,
     abortController,
@@ -374,6 +401,7 @@ export async function runNonInteractiveTurn(
   if (abortController.signal.aborted === true) {
     return { functionCalls: [], textResponse: '' };
   }
+  recordTurnOutputTokens(execCtx, reportedOutputTokens, outputCharacterCount);
 
   let functionCalls = rawCalls;
   if (parseableTextResponse) {
@@ -483,12 +511,14 @@ async function runNonInteractiveLoopIteration(
   );
   if (abortController.signal.aborted === true) return { action: 'abort' };
 
-  const recheck = checkTerminationConditions(
-    turnCounter.value,
-    startTime,
-    execCtx,
-  );
-  if (recheck.shouldStop) return { action: 'stop' };
+  // Only the output budget is re-checked here. Re-checking the turn and time
+  // limits between receiving a response and dispatching its tool calls throws
+  // away work the model just did: a subagent on its last allowed turn would
+  // emit tool calls and have them silently discarded. The loop head already
+  // enforces both limits, so stopping there instead costs one dispatch and
+  // keeps the result. The interactive loop was corrected the same way, and the
+  // two paths must not disagree about when a run ends.
+  if (checkOutputBudget(execCtx).shouldStop) return { action: 'stop' };
 
   const nextMessages = await dispatchNonInteractiveTurnResult(
     functionCalls,

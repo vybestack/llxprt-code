@@ -231,6 +231,7 @@ export function finalizeOutput(output: OutputObject): void {
 
   const existing = output.final_message;
   if (
+    output.terminate_reason !== SubagentTerminateMode.MAX_OUTPUT &&
     typeof existing === 'string' &&
     existing.trim().length > 0 &&
     !isNullishFinalMessageText(
@@ -258,6 +259,15 @@ export function finalizeOutput(output: OutputObject): void {
         'Stopped because the maximum number of turns was reached. ' +
         'Consider passing a higher max_turns value in the task tool invocation to allow more turns.';
       break;
+    case SubagentTerminateMode.MAX_OUTPUT: {
+      const observedTotal = output.output_tokens_total ?? 0;
+      const budget = output.output_tokens_budget;
+      const budgetDetail = budget === undefined ? '' : ` of ${budget} tokens`;
+      baseMessage =
+        `Stopped because the aggregate output token budget${budgetDetail} was exceeded after ${observedTotal} output tokens. ` +
+        'Increase the subagent-max-output-tokens-total setting to allow more output.';
+      break;
+    }
     case SubagentTerminateMode.ERROR:
     default:
       baseMessage = 'Stopped due to an unrecoverable error.';
