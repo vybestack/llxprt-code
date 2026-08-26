@@ -846,3 +846,54 @@ console.log('--- end ---');
 instance.unmount();
 process.exit(0);
 ```
+
+---
+
+## The vadimdemedes/ink#950 backport (E27, E30, E31)
+
+Save as `patches/ink+6.4.8.patch` and apply with `patch-package`, which is
+already a devDependency. The anchors also matched fork 7.1.0 unmodified (E30).
+
+```diff
+--- a/node_modules/ink/build/ink.js
++++ b/node_modules/ink/build/ink.js
+@@ -115,6 +115,7 @@
+         // This variable is used only in debug mode to store full static output
+         // so that it's rerendered every time, not just new static parts, like in non-debug mode
+         this.fullStaticOutput = '';
++        this.rootNode.onStaticChange = this.handleStaticChange;
+         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+         this.container = reconciler.createContainer(this.rootNode, LegacyRoot, null, false, null, 'id', () => { }, () => { }, () => { }, () => { }, null);
+         // Unmount when process exits
+@@ -148,6 +149,11 @@
+     resolveExitPromise = () => { };
+     rejectExitPromise = () => { };
+     unsubscribeExit = () => { };
++    // Backport of upstream ink vadimdemedes/ink#950: drop stale <Static>
++    // output when the <Static> identity changes.
++    handleStaticChange = () => {
++        this.fullStaticOutput = '';
++    };
+     calculateLayout = () => {
+         // The 'columns' property can be undefined or 0 when not using a TTY.
+         // In that case we fall back to 80.
+--- a/node_modules/ink/build/reconciler.js
++++ b/node_modules/ink/build/reconciler.js
+@@ -75,6 +75,12 @@
+         // Since renders are throttled at the instance level and <Static> component children
+         // are rendered only once and then get deleted, we need an escape hatch to
+         // trigger an immediate render to ensure <Static> children are written to output before they get erased
++        if (rootNode.staticNode !== rootNode.previousStaticNode) {
++            rootNode.previousStaticNode = rootNode.staticNode;
++            if (typeof rootNode.onStaticChange === 'function') {
++                rootNode.onStaticChange();
++            }
++        }
+         if (rootNode.isStaticDirty) {
+             rootNode.isStaticDirty = false;
+             if (typeof rootNode.onImmediateRender === 'function') {
+```
+
+Verify with the `static-remount.mjs` probe listed earlier in this file: the
+accumulator should read
+20,790 then **0** then 2,070, matching upstream 7.1.1.

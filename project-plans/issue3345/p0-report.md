@@ -2,30 +2,58 @@
 
 ## Decision summary
 
-**Selection gate recommendation: NO-GO for P1's interim selection port and for
-an immediate switch to upstream Ink.** The recommendation remains to use the
-issue's "patch now, then evaluate migration" sequence.
+**Recommendation: fix the leak now on the pinned fork, and commit to upstream
+Ink as the migration destination. The selection gate is conditional on a bounded
+public-surface prototype.**
 
-The corrected static-remount evidence favors upstream 7.1.1 on one memory axis.
-Its vadimdemedes/ink#950 reset runs when this application refreshes `<Static>`, which occurs on
-terminal resize, history trim or compression, markdown toggle, and clear paths.
-The fork never reset in the remount probe (E10). Within one unchanged `<Static>`
-identity, however, both packages accumulated the same 61,990 characters for the
-same computed 61,390-character workload (E9). The cadence is workload dependent,
-and P0 measured no production session. Upstream 7.1.1 also retains unbounded
-full-string measure and wrap caches. The fork bounds its full-string
-styled-character cache and has no full-string wrap-result cache, although its
-character-width map is unbounded (E11).
+The immediate fix is the ten-line vadimdemedes/ink#950 backport as a dependency
+patch on pinned fork 6.4.8. The measured patch resets `fullStaticOutput` exactly
+as upstream 7.1.1 does, needs no application API adaptation, and carries no
+regression risk to selection, sticky-header, or scroll behavior (E27). Because
+Ink is inlined into
+the published bundle, the patch reaches the normal published-bin path. The
+source-entry fallback and raw-package consumers still resolve the unpatched
+registry package, so those paths remain a stated distribution gap (E28). The
+patch was also shown to survive a real `bundle:cli` build (E31), and its anchors
+applied unchanged to fork 7.1.0, so it survives a fork version bump (E30). What
+it has not been shown to do is preserve terminal behavior: the full-clear replay
+path, standard-buffer resize and clear, and screen-reader mode are all untested
+and are prerequisites before the patch ships (E32).
 
-The static correction improves the case for upstream, but it does not change the
-overall recommendation. Upstream still has no public selection, hit-test, or
-frame-highlight API (E3, E7, E13), and no public API reports the live region's
-terminal-row anchor (E16, E17). The selection design note finds that the
-available interim designs require private renderer data, conversion of text
-producers, or a terminal-frame layer. A later migration remains open after a
-release contains bounded full-string text caches and either the upstream
-selection proposals ship with the needed semantics or a smaller app-owned design
-is demonstrated. P0 does not approve P1 selection implementation now.
+The leak does not affect the default configuration. Schema defaults select
+`AlternateBufferLayout`, which has no `<Static>`. The exposed population is
+interactive users who explicitly opt out of alternate buffer, excluding
+screen-reader and CI sessions (E25). For that population, bounded history is
+re-emitted in full on each `refreshStatic()` remount and appended to an
+unbounded accumulator. Growth is superlinear while history fills, and repeated
+refreshes after the bound add approximately one history's output each time
+(E26).
+
+Do not adopt fork 7.1.0 as the destination. It has had no publication or
+repository push since 2026-06-24, and it did not take vadimdemedes/ink#950 (E23).
+Upgrading to fork 7.1.0 without changing components leaves the static leak.
+Its fork-only `<StaticRender>` avoids `fullStaticOutput`, but the measured
+per-history-item shape writes 6.7 times its workload, 5.6 times the `<Static>`
+shape's amplification. Its own documentation says array input is unsupported
+and incremental invalidation for continuously growing lists remains unsolved
+(E24). Adopting that API would add dependence on an inactive fork.
+
+Sequence the migration **A, C, B, D**. Group A renames and validates alternate
+screen plumbing. Group C replaces fork scroll rendering while retaining the
+application's existing viewport state and input behavior. Group B resolves
+sticky-header parity or an approved behavior reduction. Group D is selection
+and remains the gate. A, C, and B can land while the project still builds on the
+patched fork because none depends on selection.
+
+E29 changes the selection conclusion. Upstream's public `DOMElement`,
+`measureElement`, and `Transform` surfaces are sufficient to walk the mounted
+tree, resolve a simple cell to a UTF-16 endpoint, and paint a simple range. A
+tree port does not inherently require private Ink internals. The unresolved
+work is behavioral parity across text squashing, transforms, ANSI, wrapping,
+clipping, Unicode cell widths, layout gaps, and copy reconstruction, plus
+approximately 137 direct `Text` import sites (E29). A bounded prototype against
+upstream, scoped to the mounted alternate-buffer viewport, decides the
+conditional gate.
 
 ## Spike configuration
 
@@ -78,7 +106,7 @@ check `real-ink.ts`, `ink-stub.ts`, or `ink-testing-library.ts` (E8).
 
 | P1 item | Result | Findings |
 | --- | --- | --- |
-| Selection model and hit testing | **CONFIRMED** | Upstream lacks the public `Selection`, `Range`, `comparePoints`, `hitTest`, and `DOMNode` exports, and `useApp().selection` (E3, E7). The production hook depends on those APIs for point resolution, range ordering, renderer notification, highlight state, and clipboard reconstruction (`packages/cli/src/ui/hooks/useMouseSelection.ts:239-319,380-424`). The spike reports 13 diagnostics in this file (E8). |
+| Selection model and hit testing | **CONFIRMED WITH CORRECTION** | Upstream lacks the fork's `Selection`, `Range`, `comparePoints`, `hitTest`, and `useApp().selection` surfaces (E3, E7). It does publicly export `DOMElement`, `measureElement`, and `Transform`. E29 used only public surfaces to traverse the existing root ref, resolve a simple cell to a UTF-16 offset, and paint a simple selection. The production hook still depends on the removed fork APIs for parity across point resolution, range ordering, renderer notification, highlight state, and clipboard reconstruction (`packages/cli/src/ui/hooks/useMouseSelection.ts:239-319,380-424`). The package-swap spike reports 13 diagnostics in this file (E8). |
 | Sticky headers | **CONFIRMED** | `sticky`, `stickyChildren`, and `opaque` are fork-only Box props (E5). The component passes all three at `packages/cli/src/ui/components/StickyHeader.tsx:29-60`, and tool messages use that component at `packages/cli/src/ui/components/messages/ToolMessage.tsx:229-268`. The compiler reports only `sticky` and `opaque` because of per-element under-reporting (E8). |
 | Scroll plumbing | **CONFIRMED** | Upstream removes `scrollTop`, `scrollLeft`, `scrollbarThumbColor`, and the `scroll` overflow value (E4). `VirtualizedList` passes `overflowY="scroll"`, `scrollTop`, and `scrollbarThumbColor` to the fork at `packages/cli/src/ui/components/shared/VirtualizedList.tsx:93-110`. An app-owned negative-margin viewport works on upstream (E18, E19), but the surrounding behavior remains application code. |
 | Coordinates | **CONFIRMED WITH CORRECTION** | Both geometry APIs are live-region relative and omit preceding `<Static>` lines; the fork's only extra behavior is subtracting fork scroll-box offsets (E16). Under an app-owned negative-margin viewport, upstream `measureElement` already reports scroll-translated child coordinates, so a replacement should not subtract the app scroll offset a second time (E19). The terminal-row anchor remains unavailable from either public geometry API (E16, E17). |
@@ -290,15 +318,33 @@ the key reset upstream to 0 while the fork stayed at 20,790. After 10 more items
 upstream retained 2,070 and the fork retained 22,860 (E10).
 
 This application increments `staticKey` through `refreshStatic()`. Production
-call sites cover every terminal resize, every history trim or compression, every
-markdown toggle, and every clear. Resize refresh is debounced while idle or
-flushed when streaming returns to idle. The standard layout applies that key to
-`<Static>` (`DefaultAppLayout.tsx:323-348`, E10). Upstream 7.1.1 therefore drops
-old static output at each of those remounts, while the fork never resets its
-accumulator. On the static-retention axis, upstream is better for this
-application. It still accumulates without bound within one unchanged identity.
-The reset cadence is workload dependent, and P0 measured no production session
-(E9, E10).
+call sites cover terminal resize, history trim or compression, markdown toggle,
+and clear. Resize refresh is debounced while idle or flushed when streaming
+returns to idle. The standard layout applies that key to `<Static>`
+(`DefaultAppLayout.tsx:323-348`, E10).
+
+The settings trace bounds who encounters this behavior. The schema default is
+`ui.useAlternateBuffer=true`, and merged defaults materialize that value. The
+default interactive layout has no `<Static>`, so the default configuration does
+not leak. Screen-reader and CI renderer branches do not accumulate, and
+non-interactive and ACP paths do not render Ink. The exposed population is
+interactive sessions that explicitly opted out of alternate buffer, excluding
+screen-reader and CI sessions (E25).
+
+History itself is bounded by default to 100 items and 1 MiB. `staticItems` adds
+the header, but each remount re-emits all current items. The unpatched fork
+appends that complete output again without clearing the previous accumulator.
+Repeated refreshes therefore add approximately one history's rendered output per
+remount, despite bounded application history (E26).
+
+The ten-line vadimdemedes/ink#950 backport clears the pinned fork's accumulator
+on the same identity change. In the measured probe, the patched fork and
+upstream 7.1.1 both moved from 20,790 characters to zero on remount and then to
+2,070 after ten new items (E27). This patch changes no application API and no
+selection, sticky-header, or scroll implementation. The normal published path
+uses a bundle with Ink inlined, so a build-time dependency patch reaches that
+path. The source-entry fallback and raw-package consumers still receive the
+unpatched registry copy (E28).
 
 ### Text caches
 
@@ -326,27 +372,32 @@ separately (E1, E12, E13).
 
 ### Effect on the issue rationale
 
-The corrected memory evidence is mixed. Upstream 7.1.1 is better for this
-application's static retention because the vadimdemedes/ink#950 reset runs on resize, history
-trim or compression, markdown toggle, and clear paths, while the fork never
-resets (E10). The improvement is not quantified for a production session, and
-both packages accumulate at the same rate between remounts (E9, E10).
+The static leak has a measured fix independent of migration. Carry the ten-line
+vadimdemedes/ink#950 backport on pinned fork 6.4.8 now, for the
+standard-buffer population identified in E25. It matches upstream's reset in the
+remount probe and preserves the fork APIs used by selection, sticky headers, and
+scrolling (E27). Remove the patch when migration reaches upstream, where the
+same reset already ships.
 
-The published upstream release still has unbounded full-string measure and wrap
-caches. The fork bounds its full-string styled-character cache and has no
-full-string wrap-result cache, although its character-width map remains
-unbounded (E11). Switching to 7.1.1 would therefore improve static disposal while
-regressing full-string cache bounds. The evidence does not support describing
-7.1.1 as a complete bounded-memory fix.
+The build-time patch reaches the normal published bundle path. It does not cover
+the forced source-entry fallback or a consumer that imports the raw package, so
+the fix must not be described as universal across all entry paths (E28).
 
-This correction does not change the overall NO-GO recommendation. The selection,
-hit-test, highlight, and terminal-anchor gaps remain, and the app-owned interim
-design cost is unchanged (E3, E7, E13, E16). Patching the current fork can target
-its static accumulator while retaining those behaviors, after which a published
-upstream release containing `ad9e3ea` and an acceptable selection bridge can be
-evaluated. A later release containing `ad9e3ea` would fix the measured upstream
-full-string caches but would not change E9's accumulation within one unchanged
-`<Static>` identity (E9, E12).
+Fork 7.1.0 does not provide a better destination. It was last published and
+pushed on 2026-06-24, and it omitted vadimdemedes/ink#950 (E23). Without a
+component change, upgrading to it leaves the leak. Its `<StaticRender>` avoids
+the accumulator by using another renderer node type, but the measured per-item
+shape amplified stdout writes 6.7 times over its workload, versus 1.2 times for
+`<Static>`. Its documentation also leaves continuously growing list invalidation
+unsolved (E24). Using that API would tie the application to a fork-only contract
+without resolving the history update model.
+
+Upstream 7.1.1 still has unbounded full-string measure and wrap caches. The
+published release is not a complete bounded-memory fix (E11, E12). That release
+fact affects migration acceptance, but it no longer blocks fixing the static
+accumulator now. Upstream remains the destination because it already contains
+the static reset, its master contains the cache fix, and adopting fork 7.1.0
+would extend dependence on an inactive line (E12, E23).
 
 ## Subjective maintainer tradeoff summary
 
@@ -355,56 +406,92 @@ weighted decision model. A higher score is more favorable. "Memory" combines the
 measured static behavior and known cache bounds. "Feature" rates preservation of
 selection, viewport, sticky, and render-mode contracts. "Evidence" rates how much
 of the path P0 exercised. "Ownership" rates reduction of fork or patch
-maintenance. "Scope" favors a smaller change. Unknown fork 7.x contents are
-scored conservatively and marked unverified. The scores cannot establish that
+maintenance. "Scope" favors a smaller change. The scores cannot establish that
 one alternative dominates another.
 
 | Alternative from issue #3345 | Memory | Feature | Evidence | Ownership | Scope | P0 reading |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| Patch installed fork 6.4.8 | 4 | 5 | 3 | 1 | 5 | Directly targets the fork's never-reset `fullStaticOutput`; its full-string styled-character cache is bounded and it has no full-string wrap cache, while its character-width map is unbounded. Patch coverage and redraw behavior remain unverified (E9-E11). |
-| Upgrade to fork 7.x and fix retention there | 3 | 4 | 1 | 1 | 3 | It may preserve fork APIs, but P0 did not inspect or run fork 7.x. Its upstream-fix content is unverified. |
-| Switch to upstream now with an interim selection engine | 3 | 1 | 2 | 5 | 1 | 7.1.1 resets static retention on this application's refresh paths, but accumulates identically between resets and has unbounded full-string caches. Selection and fork scrolling APIs are absent (E3, E4, E9-E11). |
-| Defer until vadimdemedes/ink#984/#985 are released | 2 | 5 | 3 | 2 | 5 | Preserves current behavior and avoids interim selection work, but leaves the fork's never-reset static accumulator until another action. Both proposals remain open and vadimdemedes/ink#985 is draft (E10, E13). |
-| Patch now, then evaluate after the selection gate | 4 | 5 | 4 | 2 | 4 | Targets the fork's present static retention while retaining behavior, then permits a later upstream release and selection bridge to change the tradeoff (E9-E13). |
+| Backport vadimdemedes/ink#950 to pinned fork 6.4.8 | 4 | 5 | 5 | 2 | 5 | The ten-line patch matched upstream's remount reset and leaves the application-facing fork APIs unchanged. It reaches the normal published bundle but not source-entry or raw-package paths (E27, E28). |
+| Upgrade to fork 7.1.0 without `<StaticRender>` | 3 | 5 | 4 | 1 | 3 | The styled-character cache ceiling is smaller, but the static reset is still absent. The fork has had no publication or push since 2026-06-24 (E23). |
+| Upgrade to fork 7.1.0 and adopt `<StaticRender>` | 3 | 4 | 4 | 1 | 2 | The accumulator stays empty, but the per-item shape amplified writes 5.6 times over `<Static>`, and growing-list invalidation remains unsolved (E24). |
+| Migrate to upstream through groups A, C, B, D | 3 | 4 | 4 | 5 | 1 | Upstream removes fork ownership and contains the static reset. Groups A, C, and B are bounded. Selection parity remains the conditional gate, and released 7.1.1 still has unbounded full-string caches (E11, E12, E29). |
+| Wait for upstream selection proposals before migration work | 2 | 5 | 3 | 3 | 5 | Avoids the selection prototype but delays independent render-mode, scroll, and sticky work. vadimdemedes/ink#984 remains open and vadimdemedes/ink#985 remains draft (E13). |
 
-The sequence remains the report's recommendation because it addresses the fork's
-static accumulator without taking on the current selection port, while retaining
-a later migration path. That is a reasoned preference based on the recorded
-tradeoffs. The scores do not demonstrate it, and the patch has not passed the
-issue's raw-package, bundle, npm, redraw, or clear acceptance checks.
+The recommended two-track sequence uses the backport as a temporary fix and
+upstream as the destination. It avoids making `<StaticRender>` a new fork-only
+application contract and lets migration work proceed independently of the
+static leak.
+
+## Migration sequence and sizing
+
+Use the sequence **A, C, B, D**:
+
+1. **Group A, render-mode plumbing: small, about 8 files.** Replace
+   `alternateBuffer` with upstream's `alternateScreen` contract and retain the
+   existing mode gate. PTY acceptance must prove the terminal-sized live root
+   stays at row zero across entry, redraw, resize, clear, failure rollback,
+   signals, and teardown because stream doubles cannot establish terminal state
+   (E7, E16, E17, E21).
+2. **Group C, scroll plumbing: medium, about 4 to 6 production files.** E18 and
+   E19 prove clipping plus negative-margin translation and show that upstream
+   geometry already reflects translated child coordinates. The application
+   already owns scroll state, thumb geometry, hit testing, wheel routing, and
+   dragging. Only thumb painting is absent after the fork style props are
+   removed. Retain the current variable-height, windowing, anchor, and input
+   contracts rather than adopting one of the evaluated viewport packages.
+3. **Group B, sticky headers: medium-high for parity, or small if maintainers
+   approve dropping the pinned header.** Upstream has no `sticky`,
+   `stickyChildren`, or `opaque` Box props (E5). Preserve current behavior with
+   an app-owned pinned-header design, or record the behavior reduction before
+   removing it.
+4. **Group D, selection: very large and the conditional gate.** E29 proves that
+   a public-surface tree prototype is feasible. It does not prove parity. Scope
+   the prototype to the mounted viewport and decide the gate from behavior and
+   performance evidence.
+
+Groups A, C, and B can each land while the project still builds on the patched
+fork. None depends on the selection implementation. This ordering isolates
+smaller migration contracts before the selection decision and permits the
+backport to be deleted when the final upstream dependency lands.
 
 ## Selection go/no-go recommendation
 
-**NO-GO for the proposed interim selection implementation.** The gate should
-stop P1 selection work and the immediate upstream dependency path. The current
-fork provides renderer-owned cell-to-text mapping, a DOM range model, copy
-reconstruction, and renderer-side highlight painting. Upstream 7.1.1 provides
-none of those public surfaces (E3, E7, E13). App-owned scrolling can solve
-clipping and translation (E18, E19), but it does not solve selection or the
-terminal anchor (E16).
+**CONDITIONAL for an application-owned selection engine against upstream.** E29
+removes private tree access as a blocker. Upstream publicly exports `DOMElement`,
+`measureElement`, and `Transform`; the application already owns the alternate
+layout root ref. A public-only TypeScript spike walked that tree, mapped a cell
+to a UTF-16 endpoint, and painted a simple range (E29).
 
-The companion design note records three available implementation families:
-private Ink tree/renderer access, wrappers or registries across text producers,
-and terminal-frame interception. Each conflicts with the issue's stated exit
-condition of avoiding broad UI rewrites or private Ink internals, or creates a
-renderer-scale subsystem. Upstream's static reset is an improvement, but the
-unbounded full-string caches and unchanged selection cost do not justify taking
-that implementation path for 7.1.1 (E9-E13).
+The remaining gate is parity scope. Upstream does not expose a renderer-final
+fragment or cell map. The application must reproduce nested text squashing,
+transform ordering, ANSI token boundaries, wrapping and truncation, clipping,
+layout gaps, UTF-16 endpoint mapping, cell width, copy separators, and highlight
+interaction with ancestor transforms. Approximately 137 files import `Text`
+directly from Ink, and there is no shared wrapper. `ink-gradient` can strip a
+descendant selection transform's ANSI escapes (E29).
 
-The recommendation would change if one of these conditions is demonstrated:
+Run a bounded public-surface prototype against upstream before approving Group D.
+Limit it to the mounted alternate-buffer viewport, which matches current
+selection coverage because `VirtualizedList` does not mount the full history
+(E21, E29). The prototype should decide the gate by demonstrating:
 
-1. A published upstream release contains bounded full-string text caches and
-   vadimdemedes/ink#984/#985, or
-   equivalent public APIs, with verified hit testing, copy, and highlight
-   semantics (E12, E13).
-2. A focused spike proves an app-owned selection implementation across wrapped,
-   nested, transformed, ANSI-styled, wide, and combining text without private
-   Ink internals or broad text-component rewrites.
-3. PTY tests prove the structurally forced row-zero anchor across entry, redraw,
-   resize, clear, failure rollback, signals, and teardown (E16, E17).
-4. Maintainers explicitly accept a maintained Ink patch as the selection bridge.
-   That changes the ownership goal and should be evaluated as a patch or fork,
-   rather than described as an application-only port.
+1. cell-to-endpoint mapping and range ordering for wrapped, nested,
+   transformed, ANSI-styled, wide, and combining text;
+2. copy reconstruction across layout gaps, clipped boundaries, and mounted item
+   boundaries;
+3. highlight painting that survives ancestor transforms and preserves existing
+   styles;
+4. endpoint behavior during rerender, resize, item-height correction, and scroll
+   during drag;
+5. PTY proof of the row-zero invariant across the lifecycle cases listed under
+   Group A; and
+6. acceptable render latency and retained heap for the mounted viewport.
+
+If the prototype passes, proceed with Group D and the final upstream dependency
+change. If it requires private renderer state, broad conversion of the direct
+`Text` sites, or cannot meet current copy and highlight behavior, stop Group D
+and reassess the bridge. A released upstream frame controller remains an
+alternative if vadimdemedes/ink#984 and vadimdemedes/ink#985 later ship (E13).
 
 ## Test-harness and package observations
 
@@ -444,8 +531,16 @@ package acceptance.
 - `packages/cli/test-utils` was outside the spike typecheck. E14 and E15 probed
   selected harness behavior, but there was no complete test-utils typecheck or
   suite against upstream (E8, E14, E15).
-- P0 did not inspect or run `@jrichman/ink` 7.x. Any claim about its retained fork
-  features or incorporated upstream fixes remains unverified.
-- P0 did not implement or behaviorally test selection, sticky-header, alternate-
-  screen, or app-owned scrollbar replacements. Those remain acceptance work if
-  the gate later changes direction.
+- P0 inspected fork 7.1.0's distributed source and ran the focused
+  `<StaticRender>` probe. It did not run the repository application or full test
+  suite against fork 7.1.0 (E23, E24).
+- P0 ran a simple public-surface selection spike, but did not implement or test
+  selection parity. It also did not implement sticky-header, alternate-screen,
+  or app-owned scrollbar replacements. Those remain migration acceptance work
+  (E29).
+- The vadimdemedes/ink#950 backport was measured only against the renderer
+  accumulator and a bundle build. Terminal behavior after a reset, standard-buffer
+  resize and clear, and screen-reader mode were not tested. The patched fork
+  matches upstream 7.1.1's structure and reset semantics rather than introducing
+  new ones, but that is an argument from equivalence, not a measurement (E27,
+  E31, E32).

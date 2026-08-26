@@ -9,12 +9,17 @@ Collected 2026-08-26 on darwin (arm64), Node v25.2.1, against:
 
 - pinned fork: `node_modules/ink` = `@jrichman/ink@6.4.8` (root `package.json:337`,
   `packages/cli/package.json:89`)
-- spike target: upstream `ink@7.1.1`, installed out-of-tree at
+- spike target: upstream `ink@7.1.1`, installed out of tree at
   `tmp/issue3345/spike/node_modules/ink` (no mainline manifest was modified)
+- fork follow-up: `@jrichman/ink@7.1.0`, installed at
+  `tmp/issue3345/fork7`
+- patched-package follow-up: a copy of pinned fork 6.4.8 at
+  `tmp/issue3345/patch/ink-patched`
 
-The spike scripts referenced below ran in `tmp/issue3345/spike/` (gitignored) and
-are reproduced in `p0-spike-scripts.md` so the runs can be repeated after the
-scratch tree is gone.
+The original spike scripts ran in `tmp/issue3345/spike/` (gitignored) and are
+reproduced in `p0-spike-scripts.md` so those runs can be repeated after the
+scratch tree is gone. E23-E29 record the second-round probes and source traces;
+their scratch paths are named in those evidence items.
 
 ---
 
@@ -566,3 +571,275 @@ into our source"; this records that these source files carry a distinct
 copyright holder and license from the package they ship in.
 
 P0 makes no legal determination. It records the headers as found.
+
+## E23. Fork release activity, static reset, cache bounds, and API surface
+
+Registry metadata captured on 2026-08-26:
+
+```text
+npm view @jrichman/ink dist-tags       -> latest = 7.1.0
+npm view @jrichman/ink versions        -> 51 versions
+npm view @jrichman/ink time.modified   -> 2026-06-24T18:39:13Z
+7.1.0 publication time                 -> 2026-06-24
+```
+
+Nothing was published after 2026-06-24. GitHub metadata for
+`jacob314/ink` reported `pushed_at = 2026-06-24T18:39:53Z`,
+`archived = false`, default branch `master`, and 31 stars. The repository had no
+push in the following two months.
+
+GitHub metadata for `google-gemini/gemini-cli` reported
+`pushed_at = 2026-08-26`. Its manifest pins `ink` to
+`npm:@jrichman/ink@6.6.9`, which differs from this repository's 6.4.8 pin and
+from the fork's 7.1.0 latest release.
+
+Fork 7.1.0 was installed at `tmp/issue3345/fork7` and inspected. Its distributed
+source contains no `handleStaticChange`, `onStaticChange`, or
+`previousStaticNode`. It does not contain the static identity-change reset from
+vadimdemedes/ink#950.
+
+Fork 7.1.0 constructs its styled-character cache as
+`DataLimitedLruMap(2000, 100_000)`, compared with
+`DataLimitedLruMap(10_000, 1_000_000)` in fork 6.4.8. The data-size ceiling is
+one tenth of the 6.4.8 ceiling. Its character `widthCache` remains an unbounded
+`Map`.
+
+Relative to fork 6.4.8, fork 7.1.0 adds these public exports:
+
+`AppContext`, `StaticRender`, `StaticRenderProps`, `renderToRegion`,
+`getAddedScrollHeight`, `getScrollLeft`, `getScrollTop`, `styledCharsWidth`,
+`widestLineFromStyledChars`, `toStyledCharacters`, `styledCharsToString`,
+`wordBreakStyledChars`, `styledLineToString`, `StyledLine`, and
+`wrapStyledChars`.
+
+It removes the `StyledChar` type re-export. A repository import search found no
+import of that type.
+
+## E24. Fork 7.1.0 `<StaticRender>` accumulator and write measurements
+
+`tmp/issue3345/fork7/staticrender-chunked.mjs` rendered 300 items of
+approximately 205 bytes each. The computed workload was 61,390 characters.
+
+| Shape | `fullStaticOutput` | stdout bytes written | Write amplification |
+| --- | ---: | ---: | ---: |
+| `<Static>` | 61,990 | 70,901 | 1.2x |
+| One `<StaticRender>` wrapping all history, `deps=[length]` | 0 | 2,180,449 | 35.5x |
+| One `<StaticRender>` per history item, stable `deps=[id]` | 0 | 409,901 | 6.7x |
+
+The per-item `<StaticRender>` shape wrote 5.6 times as many stdout bytes as the
+`<Static>` shape when comparing the reported amplification ratios.
+
+`<StaticRender>` renders `ink-static-render` rather than setting
+`internal_static`, so its output does not enter `fullStaticOutput`. Its
+distributed doc comment says the API "does not support taking an array of
+items" and says incremental invalidation for "very large, continuously growing
+lists" is unsolved.
+
+## E25. Runtime population exposed to static accumulation
+
+`ui.useAlternateBuffer` has schema default `true` at
+`packages/cli/src/config/settings-schema/schema-ui.ts:157-166`. Schema defaults
+are materialized into `settings.merged` through `computeMergedSettings`
+(`packages/cli/src/config/settings.ts:171-179`), `mergeSettings`
+(`packages/cli/src/config/settingsMerge.ts:452-468`), `getSchemaDefaults`
+(`settingsMerge.ts:84-87`), and `extractDefaults` (`settingsMerge.ts:59-77`).
+`mergeUiSettings` spreads `schemaDefaults.ui` first (`settingsMerge.ts:159`).
+
+Executing the real `mergeSettings({},{},{},{},true)` and
+`mergeSettings({},{},{},{},false)` both yielded
+`merged.ui.useAlternateBuffer === true`. The strict `=== true` layout check
+therefore passes with empty settings layers.
+
+The default interactive session uses `AlternateBufferLayout`. That layout does
+not mount `<Static>`, and `fullStaticOutput` stays empty. The default
+configuration does not exhibit the static accumulator growth.
+
+A repository-wide search of `packages/*/src` found one `<Static>` render and one
+Ink `Static` import, both in
+`packages/cli/src/ui/layouts/DefaultAppLayout.tsx:8,345` within
+`StandardBufferLayout`. No CLI source contains `internal_static`.
+`AlternateBufferLayout` and its transitive render tree contain no `<Static>`,
+including the `quittingMessages` early return.
+
+Two inputs select the standard-buffer layout:
+
+1. `ui.useAlternateBuffer` resolves to a non-`true` value from a winning user,
+   trusted-workspace, or system settings layer, including values written by the
+   Settings dialog.
+2. Screen-reader mode is enabled through `--screen-reader` or
+   `accessibility.screenReader`.
+
+No environment variable, CI check, non-TTY check, terminal-width check, error
+fallback, or profile changes this layout choice. Profiles cannot change it
+because the UI receives the original `LoadedSettings`.
+
+The fork's screen-reader renderer branch writes static output without adding it
+to the accumulator (`node_modules/ink/build/ink.js:233-261`). Its CI branch also
+avoids accumulation (`ink.js:218-225`). Non-interactive prompt and piped modes,
+and Zed/ACP, do not render an Ink tree.
+
+The exposed population is therefore interactive sessions that explicitly opted
+out of alternate buffer, excluding screen-reader and CI sessions.
+
+## E26. Bounded history and superlinear accumulation
+
+`staticItems` consists of `AppHeader` followed by all of `uiState.history`
+(`packages/cli/src/ui/layouts/DefaultAppLayoutHelpers.tsx:201-244`). The
+`historyMaxItems` and `historyMaxBytes` schema defaults are 100 items and 1 MiB
+(`packages/cli/src/config/settings-schema/schema-ui.ts:298-314`).
+`trimHistoryState` enforces both limits
+(`packages/cli/src/ui/hooks/useHistoryManager.ts:221-238`). The default maximum
+`staticItems` set is therefore approximately 101 elements and 1 MiB of history.
+
+Every `refreshStatic()` remount makes the fork re-emit every current item and
+append that output to `fullStaticOutput`. The fork does not reset the accumulator
+on remount (E10). The six remount triggers recorded in E10 include a 300 ms
+debounced terminal-resize refresh. While history fills, repeatedly appending the
+whole current history produces superlinear retained growth relative to unique
+history content. After history reaches its bound, repeated resize refreshes
+continue to append approximately one bounded history's rendered output per
+remount to an unbounded accumulator.
+
+## E27. Static identity-change backport on pinned fork 6.4.8
+
+A copy of pinned fork 6.4.8 at `tmp/issue3345/patch/ink-patched` was patched with
+the change from vadimdemedes/ink#950. Six lines in `build/reconciler.js` call
+`rootNode.onStaticChange()` when
+`rootNode.staticNode !== rootNode.previousStaticNode`, before the existing
+`isStaticDirty` branch. Four lines in `build/ink.js` add
+`handleStaticChange = () => { this.fullStaticOutput = ''; }` and assign it to
+`this.rootNode.onStaticChange`.
+
+The existing `static-remount.mjs` probe produced:
+
+| Package | After 100 items | After remount | After 10 more |
+| --- | ---: | ---: | ---: |
+| Pinned fork 6.4.8, unpatched | 20,790 | 20,790 | 22,860 |
+| Pinned fork 6.4.8 with backport | 20,790 | **0** | 2,070 |
+| Upstream 7.1.1 | 20,790 | 0 | 2,070 |
+
+The patched fork and upstream 7.1.1 produced identical accumulator lengths in
+all three phases.
+
+## E28. Dependency-patch distribution paths
+
+`patch-package` is already a root dev dependency (`package.json:263`). No
+`patches/` directory existed at capture time. `packages/cli` declares `ink` as a
+runtime dependency and publishes a `bundle` directory.
+
+`bundle/llxprt.js` contains `fullStaticOutput`, showing that Ink is inlined into
+the prebuilt bundle. The published bin's `resolveEntry()`
+(`packages/cli/bin/llxprt.mjs:352-361`) prefers `bundle/llxprt.js` when it exists.
+It falls back to `index.ts` when the bundle is missing or
+`LLXPRT_FORCE_SOURCE_ENTRY=1` is set.
+
+A dependency patch applied at build time is therefore included in the bundle
+used by the normal published-bin path. The source-entry fallback and consumers
+that import the raw package still resolve the unpatched registry package.
+
+## E29. Public-surface selection spike against upstream
+
+Upstream exports the `DOMElement` type from its entry point.
+`build/dom.d.ts` publicly declares its `parentNode`, `yogaNode`, `style`,
+`nodeName`, `attributes`, `childNodes`, `internal_transform`, accessibility
+state, static-node references, and render/layout callbacks. The child union
+includes `#text` nodes with `nodeValue`.
+
+`TextNode` and `DOMNode` are not entry-point re-exports. A consumer can express
+the child union as `DOMElement['childNodes'][number]`, narrow it with
+`nodeName === '#text'`, or use a local structural type.
+
+The application already holds a traversal root. `rootUiRef` is attached to the
+alternate layout root at
+`packages/cli/src/ui/layouts/DefaultAppLayout.tsx:292-300` and is passed to
+`useMouseSelection` as `rootRef`.
+
+Upstream also exports `Transform`; its callback is typed as
+`(children: string, index: number) => string`.
+
+The throwaway TypeScript spike at
+`tmp/issue3345/spike/public-selection-spike.ts` imported only public values and
+types from `ink`. It walked the root ref and resolved cell `(5,0)` to UTF-16
+offset 3, character `d`, inside an `ink-text` box measured by public
+`measureElement` as `{x:2,y:0,width:6,height:1}`. A public `Transform` painted
+inverse video over offsets 2 through 4. `tsc --noEmit` exited 0, and the spike
+produced the frame `  ab<INV>cde</INV>f`.
+
+Upstream exposes no renderer-final fragment or cell map. Matching current
+selection behavior still requires application handling for nested text
+squashing, transform ordering, ANSI token boundaries, wrapping, truncation,
+clipping, layout gaps, UTF-16 endpoint mapping, terminal cell width, and copy
+separators.
+
+The repository has no shared `Text` wrapper. Approximately 137 files import
+`Text` directly from `ink`. `ink-gradient` strips ANSI in its own ancestor
+`Transform`, so inverse-video escapes applied by a descendant selection
+transform can be removed.
+
+Selection is enabled only in alternate-buffer mode (E21, E25), where history is
+rendered through the windowed `VirtualizedList`. A selection engine for current
+coverage only needs to map the mounted viewport, not the full history.
+
+## E30. Compiling against fork 7.1.0, and the backport's portability
+
+Method as in E8, with `compilerOptions.paths.ink` pointed at
+`tmp/issue3345/fork7/node_modules/@jrichman/ink@7.1.0`'s `build/index.d.ts`.
+
+| Target | Errors | Files |
+| --- | ---: | ---: |
+| pinned fork 6.4.8 (baseline) | 0 | 0 |
+| fork 7.1.0 | **3** | **1** |
+| upstream 7.1.1 | 26 | 11 |
+
+All three fork 7.1.0 diagnostics are in one test file,
+`src/ui/inkRenderOptions.observer.behavior.test.ts:116,126,145`, and all three
+are the same cause: `RenderMetrics` gained required fields. In 6.4.8 the type is
+`{ renderTime: number }`; in 7.1.0 it also requires `output: string` and
+`staticOutput`, so a fixture constructing `{ renderTime }` no longer satisfies
+it. No production file fails.
+
+The same backport described in E27 was applied unchanged to a copy of fork
+7.1.0 and measured with the same probe:
+
+| | after 100 items | after remount | after 10 more |
+| --- | ---: | ---: | ---: |
+| fork 7.1.0 stock | 20,790 | 20,790 | 22,860 |
+| fork 7.1.0 + backport | 20,790 | **0** | 2,070 |
+
+The patch anchors matched without modification on both 6.4.8 and 7.1.0.
+
+## E31. The backport survives a real bundle build
+
+End-to-end check rather than inference from E28.
+
+1. `node_modules/ink/build/ink.js` and `build/reconciler.js` were backed up, then
+   replaced with the patched copies from E27.
+2. `npm run bundle:cli` was run. It exited 0.
+3. The freshly written `packages/cli/bundle/llxprt.js` was searched: it contains
+   `handleStaticChange` twice and `previousStaticNode` twice.
+4. `node_modules` was restored from the backups. `handleStaticChange` count in
+   `node_modules/ink/build/ink.js` returned to 0, and `git status` was clean.
+
+A build-time patch therefore reaches the published prebuilt bundle. The
+distribution gap recorded in E28 is unchanged: the `LLXPRT_FORCE_SOURCE_ENTRY=1`
+path and any consumer importing the raw package still resolve the unpatched
+registry copy.
+
+The exact patch, in `patch-package` form against `node_modules/ink`, is 11 added
+lines across two files and is reproduced in `p0-spike-scripts.md`.
+
+## E32. What the backport was not shown to do
+
+The measurements above cover the accumulator only. The following were not tested
+and must be covered before the patch ships:
+
+- Terminal behavior in a PTY. The fork replays `fullStaticOutput` after a
+  full-terminal clear (`node_modules/ink/build/ink.js:275`). After a reset, that
+  replay carries only post-remount static output. Upstream 7.1.1 has the same
+  structure and the same reset (`build/ink.js:768`), so the patched fork matches
+  upstream semantics rather than inventing new ones, but neither was verified
+  against a real terminal here.
+- Standard-buffer visual behavior across resize, clear, and history trim, which
+  are the remount triggers from E10.
+- Screen-reader mode, which takes a different renderer branch
+  (`ink.js:233-261`).

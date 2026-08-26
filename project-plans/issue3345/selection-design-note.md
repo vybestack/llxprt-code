@@ -2,22 +2,29 @@
 
 ## Gate decision
 
-**Recommendation: NO-GO for an interim application-owned selection engine on
-upstream Ink 7.1.1.** The public upstream API does not expose cell-to-text hit
-testing, text-node ranges, renderer selection state, or highlight painting (E3,
-E7, E13). Reproducing the current behavior requires one of three boundaries:
-private Ink renderer data, adapters across text-producing components, or a
-terminal-frame processor. Each exceeds the migration's stated acceptance for an
-interim port. Upstream 7.1.1 has better static-reset behavior for this application,
-but it retains unbounded full-string text caches and P0 measured no production
-session. That mixed memory result does not outweigh the selection scope for 7.1.1
-(E9-E12).
+**Recommendation: CONDITIONAL for an application-owned selection engine on
+upstream Ink.** E29 removes private tree access as the blocking objection.
+Upstream publicly exports `DOMElement`, `measureElement`, and `Transform`, and the
+application already holds the alternate layout's root ref. A public-only
+TypeScript spike walked that tree, mapped a terminal cell to a UTF-16 text
+offset, and painted a simple inverse-video range (E29).
 
-The preferred near-term path is to retain and patch the fork while upstream
-vadimdemedes/ink#984 and vadimdemedes/ink#985 develop. If maintainers later approve a maintained dependency
-patch, a renderer-level bridge patterned after those proposals has the smallest
-application blast radius. It should be classified as a package patch with its
-own ownership and attribution obligations.
+The gate remains conditional because the spike does not establish parity.
+Upstream exposes no renderer-final fragment or cell map. An application engine
+must still reproduce nested text squashing, transform ordering, ANSI token
+boundaries, wrapping, truncation, clipping, layout gaps, UTF-16 endpoint mapping,
+cell width, copy separators, and highlight interaction with ancestor transforms.
+The repository has no shared `Text` wrapper, and approximately 137 files import
+`Text` directly from Ink. `ink-gradient` can erase ANSI added by a descendant
+selection transform (E29).
+
+Use a bounded prototype against upstream to decide the gate. Scope it to the
+mounted alternate-buffer viewport, which matches current coverage because mouse
+selection is enabled only in that mode and history is windowed by
+`VirtualizedList` (E21, E25, E29). The static leak is handled independently by
+the ten-line vadimdemedes/ink#950 backport on the pinned fork until migration
+lands (E27, E28). Selection should neither delay that fix nor make fork 7.1.0 the
+destination.
 
 ## Current selection path
 
@@ -100,34 +107,44 @@ The inputs are:
 - clipping and windowing state, including which logical items are mounted; and
 - a stable endpoint identity that survives ordinary rerenders.
 
-Upstream `measureElement` can provide element boxes, but E3 shows no public
-fragment, DOM-node, text-offset, or hit-test export. Element geometry alone
-cannot identify which nested source text owns a cell.
+Upstream `measureElement` provides element boxes, and its public `DOMElement`
+type exposes the child tree, text-node values, parent relationships, Yoga nodes,
+styles, and transforms. `TextNode` and `DOMNode` are not entry-point exports, but
+the public child union can be named as `DOMElement['childNodes'][number]` and
+narrowed on `nodeName === '#text'`. The public-only E29 spike proves that element
+geometry plus tree traversal can identify a simple cell's source text and UTF-16
+offset. Upstream still exposes no renderer-final fragment, text-offset map, or
+hit-test function, so parity requires reconstructing those renderer decisions.
 
 ### Where it must hook in
 
-There are only three practical hook points:
+There are four practical hook points:
 
-1. **Renderer/frame boundary.** Ink produces a cell grid plus a per-cell logical
+1. **Public root-tree traversal.** Walk the application's existing `rootUiRef`,
+   use `measureElement` for boxes, derive displayed fragments from public node
+   fields, and use public `Transform` for painting. This is feasible without
+   private imports (E29). It must reproduce renderer behavior for nested text,
+   transform order, ANSI, wrapping, truncation, clipping, layout gaps, Unicode
+   widths, and copy separators. Approximately 137 direct `Text` import sites and
+   ancestor transforms bound the integration problem.
+2. **Renderer/frame boundary.** Ink produces a cell grid plus a per-cell logical
    text map before ANSI output. Mouse selection consumes the map, and the same
    boundary accepts a selected cell range for painting. This matches the shape
-   recorded for vadimdemedes/ink#984 in issue #3345. Upstream 7.1.1 has no released
-   public boundary of this kind (E13).
-2. **Application text registry.** Every selectable text producer registers its
+   recorded for vadimdemedes/ink#984 in issue #3345. Upstream 7.1.1 has no
+   released public boundary of this kind (E13).
+3. **Application text registry.** Every selectable text producer registers its
    source, transform, layout ref, wrapping policy, and logical ordering. A
    root-level selection provider combines the registrations into a frame map.
    This requires replacing or wrapping direct `Text` and `Transform` use across
    the UI, and it must duplicate Ink's renderer decisions.
-3. **Terminal output boundary.** The custom stdout path parses complete and
+4. **Terminal output boundary.** The custom stdout path parses complete and
    incremental ANSI output into a screen grid and injects highlight escapes.
    Raw terminal cells do not retain source node identity, so copy reconstruction
    still needs a parallel logical-text registry. Static output, cursor movement,
    clears, and terminal scroll also have to be interpreted (E17).
 
-A root `DOMElement` ref does not create a fourth supported option. Traversing its
-`childNodes`, Yoga nodes, internal transforms, or renderer output structures
-would depend on upstream private data because upstream does not export
-`DOMNode` or the fork's fragment helpers (E3).
+The first option is the prototype target because E29 proves access on public
+surfaces. Its unresolved question is parity and integration scope, not access.
 
 ### Proposed port boundary if the gate later changes
 
@@ -151,8 +168,10 @@ service should perform terminal-anchor and viewport conversion before
 and scrollbar-exclusion behavior, while losing all Ink imports except public
 geometry and stdio hooks (`useMouseSelection.ts:322-426`).
 
-The interface only defines the seam. Public upstream 7.1.1 does not supply the
-data needed to implement it (E3, E13).
+The interface only defines the seam. Public upstream tree and geometry data can
+support a prototype, as E29 demonstrates. Upstream does not supply the final
+fragment map or parity semantics, so the prototype must prove that the seam can
+be implemented without broad text-component conversion.
 
 ## Copy reconstruction and current coverage
 
@@ -219,7 +238,8 @@ no text-producing component changes (`renderer.js:128-172`,
 
 | Option | How it works | Blast radius | Gate assessment |
 | --- | --- | --- | --- |
-| Released upstream frame controller | Use an upstream cell grid, call Ink-side selection painting, and subscribe to frame changes, as issue #3345 records for vadimdemedes/ink#984. Add vadimdemedes/ink#985's selectable/flow/boundary semantics if released. | Selection hook, geometry adapter, and tests. Text components change only where semantic boundaries are desired. | Preferred future path. It is unavailable in a release; vadimdemedes/ink#984 is open and vadimdemedes/ink#985 is open draft (E13). |
+| Public root-tree traversal and `Transform` painting | Walk `rootUiRef`, derive visible text fragments from public `DOMElement` fields and `measureElement`, then apply public transforms over selected UTF-16 ranges. | Selection engine, root provider, fragment reconstruction, transform integration, and parity tests. Direct `Text` imports may need adaptation if root-level painting cannot survive component transforms. | Prototype now. E29 proves simple mapping and painting on public surfaces; parity and integration scope decide the gate. |
+| Released upstream frame controller | Use an upstream cell grid, call Ink-side selection painting, and subscribe to frame changes, as issue #3345 records for vadimdemedes/ink#984. Add vadimdemedes/ink#985's selectable/flow/boundary semantics if released. | Selection hook, geometry adapter, and tests. Text components change only where semantic boundaries are desired. | Preferred future path if the public-tree prototype does not meet parity. It is unavailable in a release; vadimdemedes/ink#984 is open and vadimdemedes/ink#985 is open draft (E13). |
 | Maintained Ink patch | Port or adapt the fork renderer's selection map and reverse-video painting into the chosen upstream package. | Dependency patch, renderer tests, package-release maintenance, and license review. Application component changes stay limited. | Technically closest to current behavior. It retains package ownership work and needs explicit maintainer approval. |
 | App-owned selectable text adapter | Replace direct `Text`/`Transform` use with components that register displayed cells and render selected spans. | Broad UI import and component changes. Nested styling and transforms need adapter support everywhere. | Reject under the issue's non-goal of avoiding a UI rewrite. |
 | Root frame postprocessor | Parse rendered output, maintain a terminal cell grid, and inject reverse-video escapes over selected cells. | Custom stdout, incremental rendering, static output, cursor, clear, resize, alternate-screen, and platform acceptance. A separate source map remains necessary for copy. | Reject as an interim selection-only change. |
@@ -268,31 +288,54 @@ removed.
 
 | Risk | Level | Mechanism | Required proof before approval |
 | --- | --- | --- | --- |
-| Cell-to-text mismatch | High | Public upstream geometry has no text-fragment or offset map (E3). Reimplementations can diverge on wrap, transform, gaps, and Unicode. | Behavioral frame tests for every copy feature listed above. |
-| Highlight mismatch | High | App code has no public renderer paint hook in 7.1.1 (E3, E13). | A renderer/frame boundary that preserves existing ANSI styling and incremental output. |
+| Cell-to-text mismatch | High | Public tree traversal is feasible, but upstream supplies no final text-fragment or offset map (E29). Reconstruction can diverge on wrap, transform, gaps, and Unicode. | Behavioral frame tests for every copy feature listed above. |
+| Highlight mismatch | High | Public `Transform` can paint a simple range, but ancestor transforms such as `ink-gradient` can strip its ANSI output (E29). | Prototype proof that selection painting preserves existing styling and survives transform ordering. |
 | Terminal anchor drift | High | Both geometry APIs omit static rows. Upstream's captured writes did not home or clear between the tested frames, while terminal cursor placement and final screen state remain unverified (E16, E17). | PTY proof of the forced row-zero invariant across lifecycle cases. |
 | Virtualization invalidates endpoints | High | Off-window items are unmounted and selection stores renderer node identities (`VirtualizedList.hooks.tsx:621-639,802-840`; `useMouseSelection.ts:24-27`). | Tests for scroll during drag, resize during drag, data growth, and item-height correction, with an approved current-coverage policy. |
-| Private API churn | High for a tree port | Upstream omits the fork DOM and hit-test exports (E3). | An explicit maintained patch policy or rejection of private access. |
+| Public-tree integration scope | High | The public tree is accessible, but the repository has approximately 137 direct `Text` import sites and no shared wrapper. Root-level transforms can interact with component transforms (E29). | A prototype inventory of changed production files and proof that broad text-component conversion is unnecessary or explicitly accepted. |
 | Upstream proposal churn | Medium | vadimdemedes/ink#984 is open and vadimdemedes/ink#985 is draft (E13). | Adapter boundary and removal plan after a published release. |
 | Performance and retained heap | Medium | A frame map or terminal parser adds per-render data; P0 measured only existing static and text caches (E9-E11). | Render latency and retained-heap regression tests under long output. |
 | License and attribution | Medium | Copying fork selection or viewport implementation brings the source-origin review required by issue #3345. Relevant fork modules include `selection.js`, `scroll.js`, `layout.js`, and `vertical-gap.js`; they carry `Copyright 2025 Google LLC` and `SPDX-License-Identifier: Apache-2.0` headers inside an MIT-declared package, while upstream 7.1.1 ships no equivalent headers (E22). A migration could instead use upstream APIs, community code, or independently designed code. | License review before any copied algorithm enters application or patch source, covering attribution as well as license compatibility. |
 | Platform behavior | High until tested | P0 ran on darwin with stream doubles, not PTYs or Windows/Linux (E0, E17). | PTY and platform acceptance from P3. |
 
-## Recommendation and conditions for reconsideration
+## Recommendation and prototype acceptance
 
-Do not begin P1 selection implementation against upstream 7.1.1. Patch the
-current fork's measured retention path, retain the current selection renderer,
-and monitor published upstream releases (E9-E13). Continue P1 work only after
-maintainers approve one of these concrete architectures:
+Proceed with a bounded selection prototype against upstream's public surface.
+Do not make the final dependency switch until that prototype decides the
+conditional gate. Keep the prototype scoped to the mounted alternate-buffer
+viewport, which matches current behavior and excludes unmounted history (E21,
+E29).
 
-- a released upstream frame and selection bridge that passes repository parity;
-- a maintained dependency patch that exposes renderer-level mapping and
-  painting, with ownership and attribution accepted; or
-- an application spike that proves cell mapping and highlight painting without
-  private upstream state or broad text-component conversion.
+The prototype should use the existing `rootUiRef`, public `DOMElement` traversal,
+public `measureElement`, and public `Transform`. It passes the gate only if it
+demonstrates all of the following without private Ink imports:
 
-For any approved path, terminal-anchor proof remains a separate gate. The most
-bounded candidate is to preserve the current terminal-sized, no-`<Static>`
-alternate layout and explicitly force its terminal anchor to row zero
-(`DefaultAppLayout.tsx:274-320`, E16, E17). P0 did not verify that invariant in a
-PTY, so it cannot yet serve as acceptance evidence.
+1. Cell mapping and UTF-16 endpoint behavior for wrapped, nested, transformed,
+   ANSI-styled, wide, and combining text.
+2. Copy reconstruction across layout gaps, clipped boundaries, and mounted item
+   boundaries, with the current soft-wrap behavior.
+3. Highlight painting that preserves styles and survives ancestor transform
+   ordering, including `ink-gradient`.
+4. Stable behavior through rerender, resize, item-height correction, and scroll
+   during drag.
+5. A production-file scope that maintainers accept after accounting for the
+   approximately 137 direct `Text` import sites.
+6. Render latency and retained heap acceptance for the mounted viewport.
+
+Terminal-anchor proof remains a separate acceptance condition. Preserve the
+current terminal-sized, no-`<Static>` alternate layout and explicitly force its
+terminal anchor to row zero (`DefaultAppLayout.tsx:274-320`, E16, E17, E21).
+PTY tests must cover entry, redraw, resize, clear, failure rollback, signals, and
+teardown.
+
+If the prototype passes, continue Group D and the final upstream switch. If it
+requires private renderer state, broad conversion of direct `Text` sites, or
+cannot match current copy and highlight behavior, stop Group D and choose
+between waiting for a released frame bridge or explicitly accepting a maintained
+selection patch (E13). Groups A, C, and B can proceed on the patched fork while
+this gate is evaluated.
+
+Handle the static leak separately now with the ten-line
+vadimdemedes/ink#950 dependency patch on pinned fork 6.4.8. It reaches the normal
+published bundle path but not forced source-entry or raw-package consumers
+(E27, E28). Remove it when the upstream migration lands.
