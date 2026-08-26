@@ -111,7 +111,6 @@ function makeRecordingClient(): AgentClientContract & {
     generateDirectMessage,
     generateJson,
     generateEmbedding,
-    getUserTier: () => undefined,
     getCurrentSequenceModel: () => null,
   } as unknown as AgentClientContract;
 

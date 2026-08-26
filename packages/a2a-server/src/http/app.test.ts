@@ -13,7 +13,6 @@ import {
   AgentEventType,
   ApprovalMode,
   debugLogger,
-  UserTierId,
 } from '@vybestack/llxprt-code-core';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import type {
@@ -82,16 +81,10 @@ const sendMessageStreamSpy = vi.fn();
 const mockAgentClientInstance = {
   sendMessageStream: ((...args) =>
     sendMessageStreamSpy(...args)) as AgentClientContract['sendMessageStream'],
-  getUserTier: vi
-    .fn<AgentClientContract['getUserTier']>()
-    .mockReturnValue(UserTierId.FREE),
   initialize: vi
     .fn<AgentClientContract['initialize']>()
     .mockResolvedValue(undefined),
-} satisfies Pick<
-  AgentClientContract,
-  'sendMessageStream' | 'getUserTier' | 'initialize'
->;
+} satisfies Pick<AgentClientContract, 'sendMessageStream' | 'initialize'>;
 
 describe('E2E Tests', () => {
   let app: express.Express;
@@ -117,9 +110,6 @@ describe('E2E Tests', () => {
         vi.spyOn(task.agentClient, 'sendMessageStream').mockImplementation(
           mockAgentClientInstance.sendMessageStream,
         );
-        vi.spyOn(task.agentClient, 'getUserTier').mockImplementation(
-          mockAgentClientInstance.getUserTier,
-        );
         vi.spyOn(task.agentClient, 'initialize').mockImplementation(
           mockAgentClientInstance.initialize,
         );
@@ -141,8 +131,6 @@ describe('E2E Tests', () => {
 
   beforeEach(() => {
     sendMessageStreamSpy.mockReset();
-    mockAgentClientInstance.getUserTier.mockReset();
-    mockAgentClientInstance.getUserTier.mockReturnValue(UserTierId.FREE);
     mockAgentClientInstance.initialize.mockReset();
     getToolRegistrySpy.mockReset();
     getToolRegistrySpy.mockReturnValue(undefined);

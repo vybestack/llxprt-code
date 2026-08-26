@@ -498,7 +498,6 @@ function createEngineEnv(options: {
     getModelParams: () => ({}),
     setModelParam: () => {},
     clearModelParam: () => {},
-    getUserTier: () => undefined,
     tools: {
       list: () => [],
       get: () => undefined,

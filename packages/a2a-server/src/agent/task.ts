@@ -23,7 +23,6 @@ import type {
   ToolCallConfirmationDetails,
   SerializableConfirmationDetails,
   Config,
-  UserTierId,
   ModelInfo,
   AnsiOutput,
   ToolSchedulerContract,
@@ -270,13 +269,11 @@ export class Task {
     const metadata: {
       coderAgent: CoderAgentMessage;
       model: string;
-      userTier?: UserTierId;
       error?: string;
       traceId?: string;
     } = {
       coderAgent: coderAgentMessage,
       model: this.modelInfo?.model ?? this.config.getModel(),
-      userTier: this.agentClient.getUserTier(),
     };
 
     if (metadataError) {

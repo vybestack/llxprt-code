@@ -96,7 +96,6 @@ function createBaseFakeAgent(gen: () => AsyncIterable<AgentEvent>): Agent {
     getModelParams: () => ({}),
     setModelParam: () => {},
     clearModelParam: () => {},
-    getUserTier: () => undefined,
     profiles: {} as unknown as Agent['profiles'],
     tools: createStubTools(),
     mcp: {} as unknown as Agent['mcp'],

@@ -84,7 +84,6 @@ export const SessionController: React.FC<SessionControllerProps> = ({
     currentModel: resolveModelIdentity(runtime, config.getModel()),
     isPaidMode: statusSnapshot.isPaidMode,
     lastProvider: statusSnapshot.providerName ?? undefined,
-    userTier: undefined,
     transientWarnings: [],
   };
 

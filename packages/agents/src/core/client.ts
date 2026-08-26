@@ -18,7 +18,6 @@ import type { Turn } from './turn.js';
 import { type ServerAgentStreamEvent } from './turn.js';
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { UserTierId } from '@vybestack/llxprt-code-core/code_assist/types.js';
 import {
   buildToolDeclarationsFromView,
   getEnabledToolNamesForPrompt,
@@ -335,10 +334,6 @@ export class AgentClient implements AgentClientContract {
       throw new Error('Content generator not initialized');
     }
     return this.contentGenerator;
-  }
-
-  getUserTier(): UserTierId | undefined {
-    return this.contentGenerator?.userTier;
   }
 
   /**

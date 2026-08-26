@@ -186,7 +186,6 @@ function buildScriptedClient(state: ScriptedClientState): AgentClientContract {
         yield event;
       }
     },
-    getUserTier: () => undefined,
     getCurrentSequenceModel: () => null,
   };
 }

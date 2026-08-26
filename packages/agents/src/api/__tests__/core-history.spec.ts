@@ -383,18 +383,6 @@ describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @req
     }
   });
 
-  it('T-tier getUserTier returns the client tier value (undefined under the fake seam) @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-001', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-    try {
-      // The FakeProvider client reports no paid tier → undefined. Asserting the
-      // exact value pins the delegation (a mutant returning a fabricated tier
-      // would surface a defined value here).
-      expect(agent.getUserTier()).toBeUndefined();
-    } finally {
-      await cleanup();
-    }
-  });
-
   it('T-mp getModelParams returns a frozen, null-prototype snapshot that reflects setModelParam/clearModelParam and is decoupled from the live state @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-004', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {

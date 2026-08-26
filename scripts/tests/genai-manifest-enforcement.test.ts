@@ -14,7 +14,7 @@
  * - F6: reject malformed dependency sections (non-object shapes).
  * - F9: reject duplicate dependency sections (SDK declared in both
  *   dependencies AND devDependencies, etc.).
- * - F10: production guard requires exact configured root/core/providers
+ * - F10: production guard requires exact configured root/providers
  *   dependencies.
  *
  * Per RULES.md: tests assert behavior (does the enforcement report a
@@ -37,7 +37,7 @@ function input(
   return { workspaceDir, manifest };
 }
 
-const SANCTIONED = 'packages/core';
+const SANCTIONED = 'packages/providers';
 
 describe('validateManifestDependencies — F1: reject unauthorized npm aliases targeting GenAI', () => {
   it.each([
@@ -224,7 +224,7 @@ describe('validateManifestDependencies — F9: reject duplicate dependency secti
   });
 });
 
-describe('validateManifestDependencies — F10: exact configured root/core/providers dependencies', () => {
+describe('validateManifestDependencies: F10 exact configured root/providers dependencies', () => {
   it('requires root workspace (.) to declare SDK at exact version', () => {
     const result = validateManifestDependencies(
       input('.', {
@@ -255,13 +255,13 @@ describe('validateManifestDependencies — F10: exact configured root/core/provi
     expect(result.violations.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('requires packages/core to declare SDK at exact version', () => {
+  it('rejects packages/core declaring the SDK', () => {
     const result = validateManifestDependencies(
       input('packages/core', {
         dependencies: { '@google/genai': SANCTIONED_VERSION },
       }),
     );
-    expect(result.violations).toEqual([]);
+    expect(result.violations.length).toBeGreaterThanOrEqual(1);
   });
 
   it('rejects packages/core with wrong version', () => {

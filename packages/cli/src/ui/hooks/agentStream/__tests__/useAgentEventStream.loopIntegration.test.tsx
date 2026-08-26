@@ -319,7 +319,6 @@ function createRealEngineAgent(opts: RealEngineAgentOptions): Agent {
     getModelParams: () => ({}),
     setModelParam: () => {},
     clearModelParam: () => {},
-    getUserTier: () => undefined,
     tools: {
       list: () => [],
       get: () => undefined,
@@ -410,7 +409,6 @@ function createClientBase(): AgentClientContract {
     async *sendMessageStream(): AsyncGenerator<ServerAgentStreamEvent> {
       /* override */
     },
-    getUserTier: () => undefined,
     getCurrentSequenceModel: () => null,
   } as unknown as AgentClientContract;
 }

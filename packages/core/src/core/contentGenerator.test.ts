@@ -8,108 +8,112 @@ import { describe, it, expect, vi, beforeEach, afterAll } from 'bun:test';
 import {
   createContentGenerator,
   createContentGeneratorConfig,
+  type ContentGenerator,
 } from './contentGenerator.js';
 import type { Config } from '../config/config.js';
-
-const mockGoogleGenAIWrapperConstructor = vi.fn();
-const mockGoogleGenAIWrapperInstance = {
-  generateContent: async (): Promise<unknown> => ({}),
-  generateContentStream: async (): Promise<AsyncGenerator<unknown>> => {
-    async function* emptyStream(): AsyncGenerator<unknown> {
-      yield* [];
-    }
-    return emptyStream();
-  },
-  countTokens: async (): Promise<unknown> => ({}),
-  embedContent: async (): Promise<unknown> => ({}),
-};
-
-void vi.mock('../code_assist/googleGenAIWrapper.js', () => ({
-  GoogleGenAIWrapper: vi
-    .fn()
-    .mockImplementation((config: unknown, requestOptions: unknown) => {
-      mockGoogleGenAIWrapperConstructor(config, requestOptions);
-      return mockGoogleGenAIWrapperInstance;
-    }),
-}));
-
-void vi.mock('../utils/installationManager.js', () => ({
-  InstallationManager: vi.fn().mockImplementation(() => ({
-    getInstallationId: () => 'test-installation-id',
-  })),
-}));
+import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProviderManager.js';
+import type { RuntimeContentGeneratorFactory } from '../runtime/contracts/RuntimeContentGeneratorFactory.js';
 
 const mockConfig = {
   getUsageStatisticsEnabled: vi.fn().mockReturnValue(false),
 } as unknown as Config;
 
+function createRuntimeProviderManager(): RuntimeProviderManager {
+  return {
+    getActiveProvider: vi.fn(),
+    getActiveProviderName: vi.fn(),
+    setActiveProvider: vi.fn(),
+    setRuntimeContext: vi.fn(),
+    getAvailableModels: vi.fn(async () => []),
+    getProviderNames: () => [],
+    listProviders: () => [],
+    getProviderByName: vi.fn(),
+    registerProvider: vi.fn(),
+    prepareStatelessProviderInvocation: vi.fn(),
+    getProviderMetrics: () => ({}),
+    getSessionTokenUsage: () => ({
+      input: 0,
+      output: 0,
+      cache: 0,
+      tool: 0,
+      thought: 0,
+      total: 0,
+    }),
+    getServerToolsProvider: () => null,
+    setServerToolsProvider: vi.fn(),
+    setConfig: vi.fn(),
+    hasActiveProvider: () => true,
+    accumulateSessionTokens: vi.fn(),
+  };
+}
+
 describe('createContentGenerator', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('should create a GoogleGenAIWrapper content generator', async () => {
-    const generator = await createContentGenerator(
-      {
-        model: 'test-model',
-        apiKey: 'test-api-key',
-      },
-      mockConfig,
-    );
-    expect(generator).toBe(mockGoogleGenAIWrapperInstance);
-    expect(mockGoogleGenAIWrapperConstructor).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'test-model', apiKey: 'test-api-key' }),
-      expect.objectContaining({ headers: expect.any(Object) }),
-    );
-  });
-
-  it('should add usage-statistics header when enabled', async () => {
-    const statsConfig = {
-      getUsageStatisticsEnabled: vi.fn().mockReturnValue(true),
-    } as unknown as Config;
-
-    await createContentGenerator(
-      {
-        model: 'test-model',
-        apiKey: 'test-api-key',
-      },
-      statsConfig,
-    );
-
-    expect(mockGoogleGenAIWrapperConstructor).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'test-model', apiKey: 'test-api-key' }),
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          'x-gemini-api-privileged-user-id': 'test-installation-id',
-        }),
-      }),
-    );
-  });
-
-  it('should create a GoogleGenAIWrapper content generator with Vertex AI', async () => {
-    const generator = await createContentGenerator(
-      {
-        model: 'test-model',
-        vertexai: true,
-      },
-      mockConfig,
-    );
-    expect(generator).toBe(mockGoogleGenAIWrapperInstance);
-    expect(mockGoogleGenAIWrapperConstructor).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'test-model', vertexai: true }),
-      expect.objectContaining({ headers: expect.any(Object) }),
-    );
-  });
-
-  it('should throw an error when no authentication is provided', async () => {
+  it('rejects when no provider runtime is composed, even with an API key', async () => {
     await expect(
       createContentGenerator(
         {
           model: 'test-model',
+          apiKey: 'test-api-key',
         },
         mockConfig,
       ),
-    ).rejects.toThrow('No Gemini authentication configured');
+    ).rejects.toThrow(
+      'No provider runtime is composed for this Config. Compose the providers package (see packages/providers/src/composition) before creating a content generator.',
+    );
+  });
+
+  it('rejects when no provider runtime is composed even with Vertex settings', async () => {
+    await expect(
+      createContentGenerator(
+        {
+          model: 'test-model',
+          vertexai: true,
+        },
+        mockConfig,
+      ),
+    ).rejects.toThrow(
+      'No provider runtime is composed for this Config. Compose the providers package (see packages/providers/src/composition) before creating a content generator.',
+    );
+  });
+
+  it('rejects a composed provider manager without a content-generator factory', async () => {
+    const providerManager = createRuntimeProviderManager();
+
+    await expect(
+      createContentGenerator(
+        {
+          model: 'test-model',
+          providerManager,
+        },
+        mockConfig,
+      ),
+    ).rejects.toThrow(
+      'Provider content generator factory is required when a provider manager is configured',
+    );
+  });
+
+  it('creates a generator through an injected factory when a provider manager is composed', async () => {
+    const providerManager = createRuntimeProviderManager();
+    const created: ContentGenerator = {
+      generateContent: vi.fn(async () => ({ candidates: [] })),
+      generateContentStream: vi.fn(async function* () {
+        yield { candidates: [] };
+      }),
+      countTokens: vi.fn(async () => ({ totalTokens: 0 })),
+      embedContent: vi.fn(async () => ({ embeddings: [] })),
+    };
+    const factory: RuntimeContentGeneratorFactory<ContentGenerator> = {
+      createContentGenerator: () => created,
+    };
+    const generator = await createContentGenerator(
+      {
+        model: 'test-model',
+        providerManager,
+        contentGeneratorFactory: factory,
+      },
+      mockConfig,
+    );
+    expect(generator).toBe(created);
   });
 });
 

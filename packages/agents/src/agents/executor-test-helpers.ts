@@ -9,6 +9,8 @@ import { AgentTerminateMode, type SubagentActivityEvent } from './types.js';
 import type { AgentDefinition, OutputConfig } from './types.js';
 import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils/config.js';
 import { makeFakeConfig } from '@vybestack/llxprt-code-core/test-utils/config.js';
+import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
+import { buildMockContentGenerator } from '../core/__tests__/chatSession-density-helpers.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { LSTool } from '@vybestack/llxprt-code-tools/tools/ls.js';
 import { ReadFileTool } from '@vybestack/llxprt-code-tools/tools/read-file.js';
@@ -306,11 +308,40 @@ export function setupExecutorFixture(
 
   vi.useFakeTimers();
 
-  const mockConfig = makeFakeConfig();
+  const baseConfig = makeFakeConfig();
+  const providerManager = new TestRuntimeProviderManager();
+  const contentGeneratorFactory = {
+    createContentGenerator: () => buildMockContentGenerator(),
+  };
+  const contentGeneratorConfig = {
+    model: 'test-model',
+    providerManager,
+    contentGeneratorFactory,
+  };
+  const toolRegistryRef: { current?: ToolRegistry } = {};
+  const mockConfig = new Proxy(baseConfig, {
+    get(target, property, receiver) {
+      if (property === 'getProviderManager') {
+        return () => providerManager;
+      }
+      if (property === 'getContentGeneratorFactory') {
+        return () => contentGeneratorFactory;
+      }
+      if (property === 'getContentGeneratorConfig') {
+        return () => contentGeneratorConfig;
+      }
+      if (property === 'getToolRegistry') {
+        return () => toolRegistryRef.current;
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  });
+
   const parentToolRegistry = new ToolRegistry(
     mockConfig,
     getTestRuntimeMessageBus(mockConfig),
   );
+  toolRegistryRef.current = parentToolRegistry;
   parentToolRegistry.registerTool(
     new LSTool(new CoreToolHostAdapter(mockConfig)),
   );
@@ -318,8 +349,6 @@ export function setupExecutorFixture(
     new ReadFileTool(new CoreToolHostAdapter(mockConfig)),
   );
   parentToolRegistry.registerTool(MOCK_TOOL_NOT_ALLOWED);
-
-  vi.spyOn(mockConfig, 'getToolRegistry').mockReturnValue(parentToolRegistry);
 
   mockedGetDirectoryContextString.mockResolvedValue(
     'Mocked Environment Context',

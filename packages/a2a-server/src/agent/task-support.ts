@@ -570,7 +570,6 @@ export function handleStreamIdleTimeout(
     true,
     parseAndFormatApiError(
       event.value.error,
-      undefined,
       getErrorFallbackModel(context),
       context.providerName,
     ),
@@ -636,7 +635,6 @@ export function handleStreamError(
   logger.error('[Task] Received error event from LLM stream:', errorMessage);
   const errMessage = parseAndFormatApiError(
     event.value.error,
-    undefined,
     getErrorFallbackModel(context),
     context.providerName,
   );

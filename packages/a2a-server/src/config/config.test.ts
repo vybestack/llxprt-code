@@ -29,7 +29,6 @@ describe('loadConfig auth fallback', () => {
     vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);
 
     delete process.env.GEMINI_API_KEY;
-    delete process.env.USE_CCPA;
     delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
     delete process.env.GOOGLE_CLOUD_PROJECT;
     delete process.env.GOOGLE_CLOUD_LOCATION;
@@ -42,28 +41,34 @@ describe('loadConfig auth fallback', () => {
     expect(Config.prototype.refreshAuth).not.toHaveBeenCalled();
   });
 
-  it('uses vertex auth when USE_CCPA is set', async () => {
+  it('ignores the retired USE_CCPA authentication selector', async () => {
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
-    vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);
+    vi.spyOn(Config.prototype, 'refreshAuth').mockRejectedValue(
+      new Error('refreshAuth must not be called'),
+    );
 
+    delete process.env.LLXPRT_DEFAULT_PROVIDER;
     process.env.USE_CCPA = 'true';
 
-    await loadConfig({} as never, [], 'test-task-id');
+    const config = await loadConfig({} as never, [], 'test-task-id');
 
-    expect(Config.prototype.refreshAuth).toHaveBeenCalledWith('vertex-ai');
+    expect(config.getProvider()).toBe(UNCONFIGURED_PROVIDER);
   });
 
-  it('uses vertex auth when ADC credentials are present', async () => {
+  it('does not select a provider from Vertex credentials', async () => {
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
-    vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);
+    vi.spyOn(Config.prototype, 'refreshAuth').mockRejectedValue(
+      new Error('refreshAuth must not be called'),
+    );
 
+    delete process.env.LLXPRT_DEFAULT_PROVIDER;
     process.env.GOOGLE_APPLICATION_CREDENTIALS = '/tmp/adc.json';
 
-    await loadConfig({} as never, [], 'test-task-id');
+    const config = await loadConfig({} as never, [], 'test-task-id');
 
-    expect(Config.prototype.refreshAuth).toHaveBeenCalledWith('vertex-ai');
+    expect(config.getProvider()).toBe(UNCONFIGURED_PROVIDER);
   });
 
   it('does not map an OTLP endpoint environment variable into telemetry settings', async () => {
@@ -96,7 +101,6 @@ describe('getApprovalMode LLXPRT_YOLO_MODE', () => {
     vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);
 
     delete process.env.GEMINI_API_KEY;
-    delete process.env.USE_CCPA;
     delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
     delete process.env.GOOGLE_CLOUD_PROJECT;
     delete process.env.GOOGLE_CLOUD_LOCATION;
@@ -114,7 +118,6 @@ describe('getApprovalMode LLXPRT_YOLO_MODE', () => {
     vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);
 
     delete process.env.GEMINI_API_KEY;
-    delete process.env.USE_CCPA;
     delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
     delete process.env.GOOGLE_CLOUD_PROJECT;
     delete process.env.GOOGLE_CLOUD_LOCATION;
@@ -132,7 +135,6 @@ describe('getApprovalMode LLXPRT_YOLO_MODE', () => {
     vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);
 
     delete process.env.GEMINI_API_KEY;
-    delete process.env.USE_CCPA;
     delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
     delete process.env.GOOGLE_CLOUD_PROJECT;
     delete process.env.GOOGLE_CLOUD_LOCATION;
@@ -174,7 +176,6 @@ describe('loadConfig provider-neutral defaults', () => {
     vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);
 
     delete process.env.GEMINI_API_KEY;
-    delete process.env.USE_CCPA;
     delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
     delete process.env.GOOGLE_CLOUD_PROJECT;
     delete process.env.GOOGLE_CLOUD_LOCATION;
@@ -193,7 +194,6 @@ describe('loadConfig provider-neutral defaults', () => {
       .mockResolvedValue(undefined);
 
     delete process.env.GEMINI_API_KEY;
-    delete process.env.USE_CCPA;
     delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
     delete process.env.GOOGLE_CLOUD_PROJECT;
     delete process.env.GOOGLE_CLOUD_LOCATION;
@@ -207,14 +207,13 @@ describe('loadConfig provider-neutral defaults', () => {
     expect(refreshAuthSpy).not.toHaveBeenCalled();
   });
 
-  it('preserves explicit Gemini auth when GEMINI_API_KEY is set', async () => {
+  it('remains unconfigured when GEMINI_API_KEY is set', async () => {
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
-    const refreshAuthSpy = vi
-      .spyOn(Config.prototype, 'refreshAuth')
-      .mockResolvedValue(undefined);
+    vi.spyOn(Config.prototype, 'refreshAuth').mockRejectedValue(
+      new Error('refreshAuth must not be called'),
+    );
 
-    delete process.env.USE_CCPA;
     delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
     delete process.env.GOOGLE_CLOUD_PROJECT;
     delete process.env.GOOGLE_CLOUD_LOCATION;
@@ -222,31 +221,28 @@ describe('loadConfig provider-neutral defaults', () => {
     delete process.env.LLXPRT_DEFAULT_PROVIDER;
     process.env.GEMINI_API_KEY = 'test-key';
 
-    await loadConfig({} as never, [], 'test-task-id');
+    const config = await loadConfig({} as never, [], 'test-task-id');
 
-    // Explicit Gemini API key must trigger gemini-api-key auth.
-    expect(refreshAuthSpy).toHaveBeenCalledWith('gemini-api-key');
+    expect(config.getProvider()).toBe(UNCONFIGURED_PROVIDER);
   });
 
-  it('preserves explicit Gemini auth when LLXPRT_DEFAULT_PROVIDER is gemini', async () => {
+  it('preserves an explicit Gemini provider without refreshing authentication', async () => {
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
-    const refreshAuthSpy = vi
-      .spyOn(Config.prototype, 'refreshAuth')
-      .mockResolvedValue(undefined);
+    vi.spyOn(Config.prototype, 'refreshAuth').mockRejectedValue(
+      new Error('refreshAuth must not be called'),
+    );
 
     delete process.env.GEMINI_API_KEY;
-    delete process.env.USE_CCPA;
     delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
     delete process.env.GOOGLE_CLOUD_PROJECT;
     delete process.env.GOOGLE_CLOUD_LOCATION;
     delete process.env.GOOGLE_API_KEY;
     process.env.LLXPRT_DEFAULT_PROVIDER = 'gemini';
 
-    await loadConfig({} as never, [], 'test-task-id');
+    const config = await loadConfig({} as never, [], 'test-task-id');
 
-    // Explicit Gemini provider via env → OAuth fallback for Gemini.
-    expect(refreshAuthSpy).toHaveBeenCalledWith('oauth-personal');
+    expect(config.getProvider()).toBe('gemini');
   });
 
   it('treats whitespace-only LLXPRT_DEFAULT_PROVIDER as unconfigured', async () => {
@@ -257,7 +253,6 @@ describe('loadConfig provider-neutral defaults', () => {
       .mockResolvedValue(undefined);
 
     delete process.env.GEMINI_API_KEY;
-    delete process.env.USE_CCPA;
     delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
     delete process.env.GOOGLE_CLOUD_PROJECT;
     delete process.env.GOOGLE_CLOUD_LOCATION;
@@ -277,7 +272,6 @@ describe('loadConfig provider-neutral defaults', () => {
     vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);
 
     delete process.env.GEMINI_API_KEY;
-    delete process.env.USE_CCPA;
     delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
     delete process.env.GOOGLE_CLOUD_PROJECT;
     delete process.env.GOOGLE_CLOUD_LOCATION;

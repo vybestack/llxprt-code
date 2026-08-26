@@ -34,30 +34,7 @@ describe('classifyGenaiImporter', () => {
     });
   });
 
-  describe('code_assist enclave (packages/core/src/code_assist)', () => {
-    it('classifies a code_assist source file as enclave', () => {
-      const result = classifyGenaiImporter(
-        'packages/core/src/code_assist/codeAssist.ts',
-      );
-      expect(result).toEqual({ kind: 'enclave' });
-    });
-
-    it('classifies a code_assist test file as enclave', () => {
-      const result = classifyGenaiImporter(
-        'packages/core/src/code_assist/codeAssist.test.ts',
-      );
-      expect(result).toEqual({ kind: 'enclave' });
-    });
-
-    it('classifies a deeply nested code_assist file as enclave', () => {
-      const result = classifyGenaiImporter(
-        'packages/core/src/code_assist/nested/module.ts',
-      );
-      expect(result).toEqual({ kind: 'enclave' });
-    });
-  });
-
-  describe('core (packages/core, non-code_assist)', () => {
+  describe('core (packages/core)', () => {
     it('classifies a core source file as #2348', () => {
       const result = classifyGenaiImporter(
         'packages/core/src/services/history/ContentConverters.ts',
@@ -67,7 +44,7 @@ describe('classifyGenaiImporter', () => {
 
     it('classifies a core runtime file as #2348', () => {
       const result = classifyGenaiImporter(
-        'packages/core/src/core/googleGenAIWrapper.ts',
+        'packages/core/src/runtime/AgentRuntimeLoader.ts',
       );
       expect(result).toEqual({ kind: 'issue', issue: '#2348' });
     });
@@ -188,15 +165,6 @@ describe('classifyGenaiImporter', () => {
       // is matched by its own enclave rule, not falling through.
       const result = classifyGenaiImporter(
         'packages/providers/src/gemini/geminiRequestBuilding.ts',
-      );
-      expect(result).toEqual({ kind: 'enclave' });
-    });
-
-    it('code_assist enclave wins over the broader core rule', () => {
-      // code_assist is under packages/core/src/code_assist, which would
-      // otherwise match the core (#2348) rule. The enclave rule must win.
-      const result = classifyGenaiImporter(
-        'packages/core/src/code_assist/deep/file.ts',
       );
       expect(result).toEqual({ kind: 'enclave' });
     });

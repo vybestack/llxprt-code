@@ -568,7 +568,6 @@ describe('useAgentStream', () => {
       // Verify parseAndFormatApiError was called
       expect(mockParseAndFormatApiError).toHaveBeenCalledWith(
         { message: 'Test error' },
-        undefined,
         'gemini-2.5-pro',
         undefined,
       );

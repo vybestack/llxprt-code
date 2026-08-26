@@ -5,7 +5,6 @@
  */
 
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { UserTierId } from '@vybestack/llxprt-code-core/code_assist/types.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type {
   ApprovalMode,
@@ -994,7 +993,6 @@ export interface Agent {
   getModelParams(): Readonly<Record<string, unknown>>;
   setModelParam(key: string, value: unknown): void;
   clearModelParam(key: string): void;
-  getUserTier(): UserTierId | undefined;
 
   readonly profiles: AgentProfileControl;
   readonly tools: AgentToolControl;

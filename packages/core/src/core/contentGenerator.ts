@@ -32,15 +32,11 @@ import type { Config } from '../config/config.js';
  */
 import type { RuntimeContentGeneratorFactory } from '../runtime/contracts/RuntimeContentGeneratorFactory.js';
 import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProviderManager.js';
-import type { UserTierId } from '../code_assist/types.js';
-import { GoogleGenAIWrapper } from '../code_assist/googleGenAIWrapper.js';
-import { InstallationManager } from '../utils/installationManager.js';
 
 /**
  * Neutral ContentGenerator interface. All request/response types come from the
  * provider-agnostic llm-types layer. Implementations convert to/from their
- * native shapes at the provider boundary (e.g. the code_assist enclave for the
- * Gemini-backed paths).
+ * native shapes at the provider boundary.
  */
 export interface ContentGenerator {
   generateContent(
@@ -56,8 +52,6 @@ export interface ContentGenerator {
   countTokens(request: CountTokensRequest): Promise<CountTokensResult>;
 
   embedContent(request: EmbedContentRequest): Promise<EmbedContentResult>;
-
-  userTier?: UserTierId;
 }
 
 export type ContentGeneratorConfig = {
@@ -129,47 +123,29 @@ export function createContentGeneratorConfig(
 
 export async function createContentGenerator(
   config: ContentGeneratorConfig,
-  gcConfig: Config,
+  _gcConfig: Config,
   _sessionId?: string,
 ): Promise<ContentGenerator> {
   // @plan:PLAN-20260603-ISSUE1584.P05
   // @requirement:REQ-DEP-001
   // Prefer factory injection when available — eliminates core→providers construction
-  if (
-    config.contentGeneratorFactory != null &&
-    config.providerManager != null
-  ) {
-    return config.contentGeneratorFactory.createContentGenerator(
-      config.providerManager,
-    );
-  }
-
-  // @plan:PLAN-20260603-ISSUE1584.P11
-  // @requirement:REQ-DEP-001
-  // Core must not construct provider-owned content generators. CLI/providers wiring injects the factory.
   if (config.providerManager != null) {
+    if (config.contentGeneratorFactory != null) {
+      return config.contentGeneratorFactory.createContentGenerator(
+        config.providerManager,
+      );
+    }
     throw new Error(
       'Provider content generator factory is required when a provider manager is configured',
     );
   }
 
-  const requestOptions = { headers: {} as Record<string, string> };
-  if (gcConfig.getUsageStatisticsEnabled()) {
-    const installationManager = new InstallationManager();
-    const installationId = installationManager.getInstallationId();
-    requestOptions.headers['x-gemini-api-privileged-user-id'] =
-      `${installationId}`;
-  }
-
-  if (config.vertexai === true) {
-    return new GoogleGenAIWrapper(config, requestOptions);
-  }
-
-  if (!config.apiKey) {
-    throw new Error(
-      'No Gemini authentication configured. Set GEMINI_API_KEY environment variable, use --keyfile, or configure Vertex AI credentials.',
-    );
-  }
-
-  return new GoogleGenAIWrapper(config, requestOptions);
+  // @plan:PLAN-20260603-ISSUE1584.P11
+  // @requirement:REQ-DEP-001
+  // Core must not construct provider-owned content generators. The embedding
+  // process must compose the providers package instead of falling back to a
+  // Gemini implementation in core.
+  throw new Error(
+    'No provider runtime is composed for this Config. Compose the providers package (see packages/providers/src/composition) before creating a content generator.',
+  );
 }

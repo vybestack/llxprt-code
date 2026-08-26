@@ -44,13 +44,10 @@ type TestPart = Parameters<typeof splitPartsByRole>[0][number];
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
-const mockGetCodeAssistServer = vi.fn();
-
 void vi.mock('@vybestack/llxprt-code-core', () => {
   const actual = realLlxprtCodeCoreModule;
   return {
     ...actual,
-    getCodeAssistServer: mockGetCodeAssistServer,
     parseAndFormatApiError: vi.fn((msg: string) => msg),
     getErrorMessage: vi.fn((e: unknown) => String(e)),
   };
@@ -564,7 +561,6 @@ describe('handleSubmissionError', () => {
     expect(mockParseAndFormatApiError).toHaveBeenCalledWith(
       'Error: Rate limited',
       undefined,
-      undefined,
       'anthropic',
     );
   });
@@ -579,7 +575,6 @@ describe('handleSubmissionError', () => {
     );
     expect(mockParseAndFormatApiError).toHaveBeenCalledWith(
       'Error: Rate limited',
-      undefined,
       'test-model',
       'Gemini',
     );
@@ -595,7 +590,6 @@ describe('handleSubmissionError', () => {
     );
     expect(mockParseAndFormatApiError).toHaveBeenCalledWith(
       'Error: Rate limited',
-      undefined,
       'test-model',
       undefined,
     );
@@ -657,10 +651,6 @@ describe('showCitations', () => {
       },
     }) as unknown as LoadedSettings;
 
-  beforeEach(() => {
-    mockGetCodeAssistServer.mockReturnValue(null);
-  });
-
   it('returns true when settingsService.get returns true', () => {
     const mockSettingsService = { get: vi.fn(() => true) };
     const config = makeConfig({
@@ -669,12 +659,12 @@ describe('showCitations', () => {
     expect(showCitations(makeSettings(undefined), config)).toBe(true);
   });
 
-  it('returns false when settingsService.get returns false', () => {
+  it('returns false when settingsService overrides merged settings', () => {
     const mockSettingsService = { get: vi.fn(() => false) };
     const config = makeConfig({
       getSettingsService: vi.fn(() => mockSettingsService),
     });
-    expect(showCitations(makeSettings(undefined), config)).toBe(false);
+    expect(showCitations(makeSettings(true), config)).toBe(false);
   });
 
   it('falls through to settings.merged when settingsService.get returns undefined', () => {
@@ -699,22 +689,8 @@ describe('showCitations', () => {
     expect(showCitations(makeSettings(true), config)).toBe(true);
   });
 
-  it('falls through to tier check when settings.merged.ui.showCitations is undefined', () => {
+  it('returns false when both settings sources are absent (no tier fallback)', () => {
     const config = makeConfig({ getSettingsService: vi.fn(() => null) });
-    // Non-FREE tier → true
-    mockGetCodeAssistServer.mockReturnValue({ userTier: 'STANDARD' });
-    expect(showCitations(makeSettings(undefined), config)).toBe(true);
-  });
-
-  it('returns false when userTier is FREE', () => {
-    const config = makeConfig({ getSettingsService: vi.fn(() => null) });
-    mockGetCodeAssistServer.mockReturnValue({ userTier: 'free-tier' });
-    expect(showCitations(makeSettings(undefined), config)).toBe(false);
-  });
-
-  it('returns false when getCodeAssistServer returns undefined', () => {
-    const config = makeConfig({ getSettingsService: vi.fn(() => null) });
-    mockGetCodeAssistServer.mockReturnValue(undefined);
     expect(showCitations(makeSettings(undefined), config)).toBe(false);
   });
 });

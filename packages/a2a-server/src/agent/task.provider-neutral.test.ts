@@ -35,7 +35,6 @@ function captureAgentClientFactory(
     model: runtimeState.model,
   });
   return {
-    getUserTier: () => undefined,
     addHistory: () => Promise.resolve(undefined),
     sendMessageStream: () => (async function* () {})(),
     initialize: () => Promise.resolve(undefined),

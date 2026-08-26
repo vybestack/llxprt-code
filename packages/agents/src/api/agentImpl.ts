@@ -11,7 +11,6 @@
  * @requirement:REQ-017
  */
 
-import type { UserTierId } from '@vybestack/llxprt-code-core/code_assist/types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
@@ -871,10 +870,6 @@ export class AgentImpl implements Agent {
   clearModelParam(key: string): void {
     clearActiveModelParam(key);
     delete this.providerState.modelParams[key];
-  }
-
-  getUserTier(): UserTierId | undefined {
-    return this.deps.resolveClient().getUserTier();
   }
 
   async getHistory(): Promise<readonly AgentMessage[]> {

@@ -110,7 +110,6 @@ function createFakeAgentClient(): AgentClientContract {
     generateContent: vi.fn(async () => ({}) as ContractGenerateContentResponse),
     generateEmbedding: vi.fn(async () => []),
     sendMessageStream: vi.fn(() => emptyServerStream()),
-    getUserTier: vi.fn(() => undefined),
     getCurrentSequenceModel: vi.fn(() => null),
   };
 }

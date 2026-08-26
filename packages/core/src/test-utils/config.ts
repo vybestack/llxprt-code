@@ -85,7 +85,6 @@ function createTestAgentClient(): AgentClientContract {
     generateContent: async () => emptyModelOutput(),
     generateEmbedding: async (texts: string[]) => texts.map(() => []),
     sendMessageStream: () => emptyServerAgentStream(),
-    getUserTier: () => undefined,
     getCurrentSequenceModel: () => null,
   };
 }

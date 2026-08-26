@@ -14,7 +14,7 @@
  *
  * 2. **Dependency-manifest allowlist** — the exact workspace directories and
  *    version specifiers that may declare `@google/genai` as a dependency.
- *    The root packaging bridge and the core/providers enclaves are required;
+ *    The root packaging bridge and the providers enclave are required;
  *    every other workspace is forbidden.
  *
  * 3. **Gemini-name export allowlist** — exported identifiers containing
@@ -47,11 +47,6 @@ export const GENAI_IMPORT_ENCLAVES: readonly ImportEnclave[] = [
     justification:
       'Gemini provider implementation — needs the SDK for API calls.',
   },
-  {
-    prefix: 'packages/core/src/code_assist/',
-    justification:
-      'Code-Assist back-end — needs the SDK for OAuth + API calls.',
-  },
 ];
 
 /**
@@ -73,7 +68,7 @@ const GEMINI_NAME_ENCLAVE_PREFIXES: readonly string[] = IMPORT_ENCLAVE_PREFIXES;
  * `@google/genai` at exactly the specified version.
  */
 export interface DependencyManifestAllowlistEntry {
-  /** Workspace directory relative to repo root (e.g. 'packages/core'). */
+  /** Workspace directory relative to repo root (e.g. 'packages/providers'). */
   readonly workspaceDir: string;
   /** Exact version specifier that must appear in the manifest. */
   readonly version: string;
@@ -96,13 +91,6 @@ export const GENAI_DEPENDENCY_MANIFESTS: readonly DependencyManifestAllowlistEnt
       justification:
         'The published root artifact ships core/provider source, so npm must ' +
         'install the SDK even though root source may not import it.',
-    },
-    {
-      workspaceDir: 'packages/core',
-      version: SANCTIONED_GENAI_VERSION,
-      justification:
-        'Code-Assist back-end (packages/core/src/code_assist/) requires the ' +
-        'SDK at runtime for OAuth and API calls.',
     },
     {
       workspaceDir: 'packages/providers',

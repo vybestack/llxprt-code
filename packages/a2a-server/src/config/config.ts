@@ -48,7 +48,6 @@ export async function loadConfig(
   );
   const config = new Config(configParams);
   await initializeConfig(config);
-  await refreshConfigAuth(config);
   return config;
 }
 
@@ -169,92 +168,6 @@ async function initializeConfig(config: Config): Promise<void> {
       initialize(dependencies?: { messageBus?: MessageBus }): Promise<void>;
     }
   ).initialize({ messageBus: sessionMessageBus });
-}
-
-async function refreshConfigAuth(config: Config): Promise<void> {
-  const authSelection = resolveAuthSelection();
-  if (authSelection === undefined) {
-    // No explicit Gemini credentials or provider selected — stay unconfigured.
-    // The A2A server must not assume Gemini as the default provider.
-    return;
-  }
-  if (authSelection === 'use-ccpa') {
-    await refreshCcpaAuth(config);
-    return;
-  }
-  if (authSelection === 'gemini-api-key') {
-    logger.info('[Config] Using Gemini API Key');
-    await config.refreshAuth('gemini-api-key');
-    return;
-  }
-  if (authSelection === 'vertex-ai') {
-    logger.info('[Config] Using Vertex AI credentials');
-    await config.refreshAuth('vertex-ai');
-    return;
-  }
-  // authSelection === 'gemini-oauth' — explicit Gemini provider via env,
-  // no API key. Fall back to Gemini OAuth.
-  logger.info(
-    '[Config] Explicit Gemini provider selected via LLXPRT_DEFAULT_PROVIDER, falling back to OAuth.',
-  );
-  await config.refreshAuth('oauth-personal');
-}
-
-type AuthSelection =
-  | 'gemini-api-key'
-  | 'use-ccpa'
-  | 'vertex-ai'
-  | 'gemini-oauth'
-  | undefined;
-
-/**
- * Resolve which auth method to use based on explicit Gemini credentials or
- * explicit Gemini provider selection. Returns undefined when no Gemini
- * signals are present (unconfigured / neutral state).
- */
-function resolveAuthSelection(): AuthSelection {
-  if (process.env['USE_CCPA']) {
-    return 'use-ccpa';
-  }
-  if (process.env['GEMINI_API_KEY']) {
-    return 'gemini-api-key';
-  }
-  if (hasVertexCredentials()) {
-    return 'vertex-ai';
-  }
-  // Only fall back to Gemini OAuth when Gemini is explicitly selected.
-  const defaultProvider = process.env['LLXPRT_DEFAULT_PROVIDER']?.trim();
-  if (defaultProvider === 'gemini') {
-    return 'gemini-oauth';
-  }
-  return undefined;
-}
-
-async function refreshCcpaAuth(config: Config): Promise<void> {
-  const adcFilePath = process.env['GOOGLE_APPLICATION_CREDENTIALS'];
-  logger.info('[Config] Using CCPA Auth:');
-  try {
-    if (adcFilePath) {
-      path.resolve(adcFilePath);
-    }
-  } catch (e) {
-    logger.error(
-      `[Config] USE_CCPA env var is true but unable to resolve GOOGLE_APPLICATION_CREDENTIALS file path ${adcFilePath}. Error ${e}`,
-    );
-  }
-  await config.refreshAuth('vertex-ai');
-  logger.info(
-    `[Config] GOOGLE_CLOUD_PROJECT: ${process.env['GOOGLE_CLOUD_PROJECT']}`,
-  );
-}
-
-function hasVertexCredentials(): boolean {
-  return (
-    process.env['GOOGLE_APPLICATION_CREDENTIALS'] !== undefined ||
-    process.env['GOOGLE_CLOUD_PROJECT'] !== undefined ||
-    process.env['GOOGLE_CLOUD_LOCATION'] !== undefined ||
-    process.env['GOOGLE_API_KEY'] !== undefined
-  );
 }
 
 export function mergeMcpServers(

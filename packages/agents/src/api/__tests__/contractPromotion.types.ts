@@ -40,7 +40,6 @@ export type _AssertContractMembers = Expect<
     | 'getChat'
     | 'getHistory'
     | 'getHistoryService'
-    | 'getUserTier'
     | 'dispose'
     | 'startChat'
   >
