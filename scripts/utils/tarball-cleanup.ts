@@ -22,6 +22,19 @@ import { isErrnoException } from './error-guards.ts';
  * `build_sandbox.ts --skip-npm-install-build` can run on a fresh checkout
  * before any build has created `dist/`. Any other error propagates.
  */
+function rmToleratingRace(path: string): void {
+  try {
+    rmSync(path);
+  } catch (error) {
+    // Tolerate only the enumerate/remove race; a stale tarball that
+    // cannot be removed (EPERM/EBUSY/...) must fail the build loudly
+    // rather than silently reach the Dockerfile COPY glob (#3334).
+    if (!isErrnoException(error, 'ENOENT')) {
+      throw error;
+    }
+  }
+}
+
 export function removeTarballs(distDir: string, prefix: string): void {
   let entries: readonly string[];
   try {
@@ -34,7 +47,7 @@ export function removeTarballs(distDir: string, prefix: string): void {
   }
   for (const entry of entries) {
     if (entry.startsWith(`${prefix}-`) && entry.endsWith('.tgz')) {
-      rmSync(join(distDir, entry), { force: true });
+      rmToleratingRace(join(distDir, entry));
     }
   }
 }
