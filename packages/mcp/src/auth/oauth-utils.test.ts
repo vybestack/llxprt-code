@@ -11,9 +11,11 @@ import type {
 } from './oauth-utils.js';
 import { OAuthUtils } from './oauth-utils.js';
 
-// Mock fetch globally
+// Mock fetch globally. The assertion keeps the assignment valid whether the
+// program's global fetch type resolves from Node or Bun types (Bun's fetch
+// requires a preconnect member the untyped mock lacks).
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
+global.fetch = mockFetch as unknown as typeof fetch;
 
 describe('OAuthUtils', () => {
   beforeEach(() => {
