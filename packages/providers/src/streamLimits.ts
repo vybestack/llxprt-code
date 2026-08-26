@@ -74,3 +74,23 @@ export function assertProviderStreamByteLimit(
     );
   }
 }
+
+/**
+ * Bounds a tool-call arguments payload delivered whole rather than in deltas.
+ *
+ * Streamed deltas are capped as they accumulate, but a provider that sends the
+ * entire arguments in a single terminal event never passes through that path,
+ * leaving the per-call limit bounded solely by the far larger SSE line limit.
+ */
+export function assertToolCallArgumentsWithinLimit(
+  args: string | undefined,
+): void {
+  if (args === undefined) {
+    return;
+  }
+  assertProviderStreamByteLimit(
+    'tool-call arguments',
+    utf8ByteLength(args),
+    MAX_PROVIDER_TOOL_CALL_BYTES,
+  );
+}
