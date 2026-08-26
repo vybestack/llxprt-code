@@ -9,9 +9,11 @@ import type Anthropic from '@anthropic-ai/sdk';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { processAnthropicStream } from './anthropic/AnthropicStreamProcessor.js';
 import { parseResponsesStream } from './openai/parseResponsesStream.js';
+import { ToolCallCollector } from './openai/ToolCallCollector.js';
 import {
   MAX_PROVIDER_SSE_LINE_BYTES,
   MAX_PROVIDER_TOOL_CALL_BYTES,
+  assertProviderStreamFragmentLimit,
   ProviderStreamProtocolError,
 } from './streamLimits.js';
 
@@ -110,6 +112,39 @@ function findToolCall(content: readonly IContent[]) {
   }
   return undefined;
 }
+
+describe('retained entry bounds', () => {
+  it('does not retain a fragment that carries no identity and no payload', () => {
+    // Empty deltas cost nothing against the byte budget but still cost an
+    // object each and lengthen the linear duplicate scan, so a peer emitting
+    // them indefinitely grows memory without ever tripping the byte cap.
+    const collector = new ToolCallCollector();
+    collector.addFragment(0, { id: '', name: '', args: '' });
+    collector.addFragment(0, {});
+
+    expect(collector.getCompleteCalls()).toStrictEqual([]);
+  });
+
+  it('still retains a fragment that carries only arguments', () => {
+    const collector = new ToolCallCollector();
+    collector.addFragment(0, { id: 'call-1', name: 'do_thing' });
+    collector.addFragment(0, { args: '{"a":1}' });
+
+    expect(collector.getCompleteCalls()).toHaveLength(1);
+  });
+
+  it('reports a count overrun the same way as a byte overrun', () => {
+    expect(() =>
+      assertProviderStreamFragmentLimit('tool-call fragments', 11, 10),
+    ).toThrow(ProviderStreamProtocolError);
+  });
+
+  it('accepts a count exactly at the limit', () => {
+    expect(() =>
+      assertProviderStreamFragmentLimit('tool-call fragments', 10, 10),
+    ).not.toThrow();
+  });
+});
 
 describe('provider stream byte limits', () => {
   it('rejects an oversized OpenAI Responses incomplete SSE line with a typed protocol error', async () => {

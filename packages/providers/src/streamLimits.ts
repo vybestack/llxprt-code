@@ -12,6 +12,18 @@ export const MAX_PROVIDER_SSE_LINE_BYTES = 8 * 1024 * 1024;
 export const MAX_PROVIDER_REASONING_CAPTURE_BYTES = 8 * 1024 * 1024;
 export const MAX_PROVIDER_BUFFERED_TEXT_BYTES = 8 * 1024 * 1024;
 
+/**
+ * Retained fragments per tool call.
+ *
+ * A byte budget alone does not bound object count: empty or one-byte deltas
+ * cost almost nothing against it while each still costs a retained object, so
+ * a peer emitting them indefinitely grows memory without ever tripping the
+ * byte cap. Streaming a maximum-length tool call one token at a time is on the
+ * order of 128,000 fragments, so this sits far above any legitimate call and
+ * only catches the degenerate case, where the byte cap never would.
+ */
+export const MAX_PROVIDER_TOOL_CALL_FRAGMENTS = 500_000;
+
 export class ProviderStreamProtocolError extends ProviderError {
   readonly category = 'client_error' as const;
   readonly isRetryable = false;
@@ -59,6 +71,24 @@ export function exceedsUtf8ByteLimit(
     return false;
   }
   return utf8ByteLength(value) > limitBytes;
+}
+
+/**
+ * Rejects a retained-entry count above `limit`, reported in the same shape as
+ * the byte limits so a caller cannot tell them apart at the catch site.
+ */
+export function assertProviderStreamFragmentLimit(
+  description: string,
+  retainedCount: number,
+  limitCount: number,
+): void {
+  if (retainedCount > limitCount) {
+    throw new ProviderStreamProtocolError(
+      `${description} count`,
+      limitCount,
+      retainedCount,
+    );
+  }
 }
 
 export function assertProviderStreamByteLimit(

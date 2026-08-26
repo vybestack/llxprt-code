@@ -24,6 +24,8 @@
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
   assertProviderStreamByteLimit,
+  assertProviderStreamFragmentLimit,
+  MAX_PROVIDER_TOOL_CALL_FRAGMENTS,
   MAX_PROVIDER_TOOL_CALL_BYTES,
   utf8ByteLength,
 } from '../streamLimits.js';
@@ -86,7 +88,20 @@ export class ToolCallCollector {
       this.isDuplicateFragment(existing, completeFragment),
     );
 
+    // A fragment carrying no identity and no payload contributes nothing to the
+    // reconstructed call but still costs a retained object and lengthens the
+    // duplicate scan below, which is linear per fragment. Dropping it is not a
+    // limit, just refusing to store noise.
+    if (this.fragmentByteLength(completeFragment) === 0) {
+      return;
+    }
+
     if (!isDuplicate) {
+      assertProviderStreamFragmentLimit(
+        'tool-call fragments',
+        existingFragments.length + 1,
+        MAX_PROVIDER_TOOL_CALL_FRAGMENTS,
+      );
       const nextRetainedBytes =
         (this.retainedBytes.get(index) ?? 0) +
         this.fragmentByteLength(completeFragment);
