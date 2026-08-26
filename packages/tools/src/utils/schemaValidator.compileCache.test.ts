@@ -61,6 +61,24 @@ function collectGarbage(): void {
 }
 
 describe('SchemaValidator compiled-validator retention', () => {
+  it('validates a boolean schema without throwing', () => {
+    // `true` and `false` are valid JSON Schema and reach the derivation path.
+    // A WeakMap key must be an object, so caching them would throw
+    // `Invalid value used as weak map key`; the cache must skip them.
+    //
+    // Both currently return null because the derivation spreads the primitive
+    // into `{}`, an empty schema that accepts anything. That loses `false`'s
+    // reject-everything meaning, but it is the behaviour on `main` and this
+    // change preserves it exactly. Asserted so the no-throw guarantee is
+    // pinned without silently claiming full JSON Schema boolean semantics.
+    expect(() => SchemaValidator.validate(true, { anything: 1 })).not.toThrow();
+    expect(() =>
+      SchemaValidator.validate(false, { anything: 1 }),
+    ).not.toThrow();
+    expect(SchemaValidator.validate(true, { anything: 1 })).toBeNull();
+    expect(SchemaValidator.validate(false, { anything: 1 })).toBeNull();
+  });
+
   /** @plan PLAN-20260826-AJVCACHE.P01 @requirement REQ-3361-01 */
   it('does not retain a compiled validator per validation of a stable schema', () => {
     // A tool declares its schema once; every invocation validates against that
@@ -78,6 +96,11 @@ describe('SchemaValidator compiled-validator retention', () => {
     expect(SchemaValidator.validate(schema, { path: '.' })).toBeNull();
     collectGarbage();
     const before = countHeapClass('SchemaEnv');
+
+    // Without this the assertion is vacuous: if Ajv is upgraded, bundled
+    // differently, or Bun reports a different class name, both samples read 0,
+    // growth computes to 0, and the test passes while validators still leak.
+    expect(before).toBeGreaterThan(0);
 
     for (let index = 0; index < VALIDATION_COUNT; index += 1) {
       expect(SchemaValidator.validate(schema, { path: `dir-${index}` })).toBe(

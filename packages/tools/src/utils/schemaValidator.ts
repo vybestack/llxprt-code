@@ -260,18 +260,39 @@ interface ExtendedSchema {
  */
 const ajvSchemaCache = new WeakMap<ExtendedSchema, ExtendedSchema>();
 
-/** Returns the Ajv-ready schema for a source schema, deriving it once. */
-function toAjvSchema(extSchema: ExtendedSchema): ExtendedSchema {
-  const cached = ajvSchemaCache.get(extSchema);
+/** Strips the internal keywords Ajv must not see. */
+function deriveAjvSchema(schema: unknown): ExtendedSchema {
+  // Spreading a primitive yields `{}`, which is what this code has always
+  // produced for a boolean schema. Preserved deliberately.
+  const ajvSchema = { ...(schema as ExtendedSchema) };
+  delete ajvSchema.requireOne;
+  delete ajvSchema.$schema;
+  return ajvSchema;
+}
+
+/**
+ * Returns the Ajv-ready schema for a source schema, deriving it once.
+ *
+ * Takes `unknown` rather than `ExtendedSchema` because the caller reaches this
+ * through a cast from `unknown`; the declared type cannot be trusted to exclude
+ * primitives at runtime.
+ */
+function toAjvSchema(schema: unknown): ExtendedSchema {
+  // `true` and `false` are valid JSON Schema, and a WeakMap key must be an
+  // object, so primitives cannot be cached. Derive without caching rather than
+  // throwing `Invalid value used as weak map key`.
+  if (typeof schema !== 'object' || schema === null) {
+    return deriveAjvSchema(schema);
+  }
+
+  const source = schema as ExtendedSchema;
+  const cached = ajvSchemaCache.get(source);
   if (cached !== undefined) {
     return cached;
   }
 
-  const ajvSchema = { ...extSchema };
-  delete ajvSchema.requireOne;
-  delete ajvSchema.$schema;
-
-  ajvSchemaCache.set(extSchema, ajvSchema);
+  const ajvSchema = deriveAjvSchema(source);
+  ajvSchemaCache.set(source, ajvSchema);
   return ajvSchema;
 }
 
