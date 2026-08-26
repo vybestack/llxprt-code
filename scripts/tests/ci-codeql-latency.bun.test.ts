@@ -214,11 +214,15 @@ describe('Issue #3187: bound CodeQL latency on the PR feedback path', () => {
       ]);
     });
 
-    it('pull_request retains branches main and release/**', () => {
+    it('pull_request covers main, release/** and dev/**', () => {
+      // dev/** was added deliberately (issue #3358): without it a PR based on
+      // a dev release-line branch ran no CI at all. The list stays pinned so a
+      // latency change still cannot alter event coverage by accident.
       const prConfig = asRecord(on['pull_request']);
       expect(asStringArray(prConfig['branches'])).toEqual([
         'main',
         'release/**',
+        'dev/**',
       ]);
     });
 
