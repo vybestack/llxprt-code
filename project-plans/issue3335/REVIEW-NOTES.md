@@ -113,6 +113,39 @@ Follow-up worth considering separately: a rate-based check (output tokens per
 unit time, or turns without tool calls) would catch the case the budget misses.
 Deliberately not in this change.
 
+## Fence handling across backtick counts (#3340)
+
+Probed the scanner directly with an unclosed fence followed by 800 KiB of body,
+on this branch and on `main`, measuring what the split point retains.
+
+| Opening      | main retains | branch retains | Verdict                    |
+| ------------ | ------------ | -------------- | -------------------------- |
+| 3-backtick   | 819,606      | 65,536         | fixed                      |
+| 4-backtick   | —            | 65,536         | fixed                      |
+| 5-backtick   | —            | 65,536         | fixed                      |
+| 6-backtick   | 0            | 0              | unchanged, see below       |
+| no fence     | 0            | 0              | control, unchanged         |
+
+The 3/4/5 cases are the bug and they are fixed: retention drops from the entire
+response to a bounded 64 KiB tail, and the header capture correctly recovers the
+longer fence and its language so the continuation reopens with the right marker.
+
+**Known limitation, pre-existing and not introduced here.** A 6-or-more-backtick
+opening fence is not seen as opening a block at all. `scanFence`
+(`incrementalSplitScanner.ts:169-194`) matches exactly three backticks and
+returns 3, so the next three of a six-backtick run are read as a *closing*
+fence: parity flips on and straight back off. The measurement above confirms
+`main` behaves identically, so this branch neither causes nor worsens it.
+
+Consequence is rendering, not memory: retention is 0, so there is no leak, but
+the body of a six-backtick block is split at paragraph breaks and rendered as
+prose rather than code. Six-backtick fences are legal CommonMark (used to nest
+blocks containing five backticks) but rare in model output.
+
+Fixing it means tracking fence run-length rather than parity, which is a real
+change to the scanner and unrelated to the memory bound this PR is about.
+Recorded rather than smuggled in.
+
 ## Verification notes
 
 V0. **Test-audit gate passes: no new findings on any touched test file.**
