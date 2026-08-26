@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
+// Deep subpath, not the root barrel. The barrel re-exports every core module,
+// so importing `Config` from it drags the whole public surface into anything
+// that implements this contract, including a third-party plugin. IProvider.ts
+// and BaseProvider.ts already import Config this way.
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { OAuthManager } from '../../auth/index.js';
 import type { IProvider } from '../../IProvider.js';
 import type { IProviderConfig } from '../../types/IProviderConfig.js';
