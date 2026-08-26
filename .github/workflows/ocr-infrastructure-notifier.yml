@@ -242,7 +242,9 @@ jobs:
             annotate_existing_issue() {
               local number="$1"
               if [[ -n "${MILESTONE_TITLE}" ]]; then
-                gh issue edit "${number}" --milestone "${MILESTONE_TITLE}" || \
+                # retry_gh is defined below; bash resolves it at call time.
+                # Setting a milestone is idempotent, so retrying is safe.
+                retry_gh gh issue edit "${number}" --milestone "${MILESTONE_TITLE}" || \
                   echo "::warning::Failed to set milestone '${MILESTONE_TITLE}' on OCR infrastructure issue #${number}."
               fi
               apply_issue_type "${number}"

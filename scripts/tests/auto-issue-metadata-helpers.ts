@@ -156,8 +156,11 @@ def handle_api(argv, state, state_file):
                 applied = field.split("=", 1)[1]
         sys.stdout.write(json.dumps({"number": num, "type": applied}) + "\n")
         return 0
-    sys.stdout.write("{}\n")
-    return 0
+    # Fail loudly rather than returning an empty object. A permissive default
+    # would let a workflow call an endpoint this fake does not model and still
+    # go green, which is precisely the class of bug these tests exist to catch.
+    sys.stderr.write("fake-gh: unmodeled api endpoint: %s %s\n" % (method, path))
+    return 1
 
 def issue_reference(token):
     """gh accepts an issue number or an issue URL wherever it takes an issue."""
@@ -229,10 +232,20 @@ def handle_issue(argv, state, state_file):
         return 0
     if sub == "close":
         return 0
-    return 0
+    sys.stderr.write("fake-gh: unmodeled issue subcommand: %s\n" % sub)
+    return 1
 
 def handle_label(argv, state):
     sub = argv[0] if argv else ""
+    if sub == "create":
+        opts, pairs, tokens = parse_args(argv[1:])
+        name = tokens[0] if tokens else None
+        # gh label create fails when the label already exists; ensure_label
+        # relies on that to fall through to its label list check.
+        if name in (state.get("labels") or {}):
+            sys.stderr.write("HTTP 422: Label already exists\n")
+            return 1
+        return 0
     if sub == "list":
         opts, pairs, tokens = parse_args(argv[1:])
         search = next(iter(pairs.get("--search", [])), "")
@@ -240,7 +253,8 @@ def handle_label(argv, state):
         names = [name for name in state.get("labels") or {} if not search or name == search]
         sys.stdout.write(jq_output(json.dumps([{"name": n} for n in names]), jq))
         return 0
-    return 0
+    sys.stderr.write("fake-gh: unmodeled label subcommand: %s\n" % sub)
+    return 1
 
 def main():
     argv = sys.argv[1:]
@@ -259,7 +273,8 @@ def main():
         elif argv[0] == "label":
             status = handle_label(argv[1:], state)
         else:
-            status = 0
+            sys.stderr.write("fake-gh: unmodeled command: %s\n" % " ".join(argv))
+            status = 1
     finally:
         if call_log:
             with open(call_log, "a") as f:
@@ -341,35 +356,66 @@ export interface RunNotificationResult {
   ghCalls: GhCall[];
 }
 
+/** Context expressions with a fixed value, keyed by the expression text. */
+const CONTEXT_EXPRESSIONS: Record<string, (fake: FakeMetadataState) => string> =
+  {
+    'github.repository': (fake) => fake.repo ?? REPO_DEFAULT,
+    'secrets.GITHUB_TOKEN': () => 'gh-token',
+    'github.token': () => 'gh-token',
+    'github.server_url': () => 'https://github.com',
+    'github.run_id': (fake) => fake.runId ?? '123456',
+    'github.event.inputs.ref': (fake) => fake.ref ?? 'main',
+    'github.event.workflow_run.html_url': (fake) =>
+      `https://github.com/${fake.repo ?? REPO_DEFAULT}/actions/runs/${fake.runId ?? '123456'}`,
+    'needs.classify-ocr-run.result': () => 'success',
+    'needs.classify-ocr-run.outputs.classification': (fake) =>
+      fake.results?.['classification'] ?? 'infrastructure-failure',
+  };
+
+const NEEDS_RESULT = /^needs\.([A-Za-z0-9_-]+)\.result$/;
+const JOB_OR_STEP_OUTPUT =
+  /^(?:needs|steps)\.[A-Za-z0-9_-]+\.outputs\.[A-Za-z0-9_-]+$/;
+const QUOTED_LITERAL = /^'(.*)'$|^"(.*)"$/;
+
+/**
+ * Resolve `a || b || c` by folding over EVERY operand.
+ *
+ * Destructuring just the first two would silently drop the tail and
+ * mis-render the script under test.
+ */
+function resolveFallbackChain(text: string, fake: FakeMetadataState): string {
+  for (const operand of text.split('||')) {
+    const term = operand.trim();
+    const literal = QUOTED_LITERAL.exec(term);
+    const value =
+      literal === null
+        ? resolveExpression(term, fake)
+        : (literal[1] ?? literal[2] ?? '');
+    if (value !== '') {
+      return value;
+    }
+  }
+  return '';
+}
+
 function resolveExpression(expr: string, fake: FakeMetadataState): string {
   const text = expr.trim();
-  if (text === 'github.repository') return fake.repo ?? REPO_DEFAULT;
-  if (text === 'secrets.GITHUB_TOKEN' || text === 'github.token')
-    return 'gh-token';
-  if (text === 'github.server_url') return 'https://github.com';
-  if (text === 'github.run_id') return fake.runId ?? '123456';
-  if (text === 'github.event.inputs.ref') return fake.ref ?? 'main';
-  if (text === 'github.event.workflow_run.html_url') {
-    return `https://github.com/${fake.repo ?? REPO_DEFAULT}/actions/runs/${fake.runId ?? '123456'}`;
-  }
-  if (text === 'needs.classify-ocr-run.result') return 'success';
-  if (text === 'needs.classify-ocr-run.outputs.classification') {
-    return fake.results?.['classification'] ?? 'infrastructure-failure';
+  const context = CONTEXT_EXPRESSIONS[text];
+  if (context) {
+    return context(fake);
   }
   if (text.includes('||')) {
-    const [candidate, fallback] = text.split('||');
-    const base = resolveExpression(candidate, fake);
-    const fallbackValue = fallback.trim().replace(/^['"]|['"]$/g, '');
-    return base !== '' ? base : fallbackValue;
+    return resolveFallbackChain(text, fake);
   }
-  const needsResult = /^needs\.([A-Za-z0-9_-]+)\.result$/.exec(text);
-  if (needsResult)
+  const needsResult = NEEDS_RESULT.exec(text);
+  if (needsResult) {
     return fake.results?.[`${needsResult[1]}.result`] ?? 'failure';
+  }
   // A job or step output that was never set is legitimately empty on the
   // runner, so '' here is faithful rather than a silent hole.
-  const output =
-    /^(?:needs|steps)\.[A-Za-z0-9_-]+\.outputs\.[A-Za-z0-9_-]+$/.exec(text);
-  if (output) return fake.outputs?.[text] ?? '';
+  if (JOB_OR_STEP_OUTPUT.test(text)) {
+    return fake.outputs?.[text] ?? '';
+  }
   // Returning '' for an unknown expression silently changes the script under
   // test -- an unresolved `${{ }}` left in the run body is a bash "bad
   // substitution", which would drop whole arguments while the test still
@@ -448,9 +494,31 @@ function shellArgv(shell: string | undefined, scriptPath: string): string[] {
  * argv to `GH_CALL_LOG`. GitHub `${{ ... }}` expressions in the step env are
  * resolved deterministically.
  */
+/**
+ * Fail with a named binary rather than an opaque assertion.
+ *
+ * The fake `gh` is Python and delegates `--jq` to a real jq, and the notifier
+ * scripts pipe through jq themselves. A missing interpreter makes `gh` exit
+ * non-zero, which those scripts treat as an ordinary API failure and retry
+ * past -- so the suite would fail with a blank, misleading diff instead of
+ * saying the tool is absent.
+ */
+export function assertHarnessPrerequisites(): void {
+  for (const binary of ['python3', 'jq']) {
+    const probe = spawnSync(binary, ['--version'], { stdio: 'ignore' });
+    if (probe.error || probe.status !== 0) {
+      throw new Error(
+        `auto-issue-metadata tests require '${binary}' on PATH (the fake gh is ` +
+          `Python and the notifier scripts pipe through jq)`,
+      );
+    }
+  }
+}
+
 export function runNotification(
   opts: RunNotificationOptions,
 ): RunNotificationResult {
+  assertHarnessPrerequisites();
   const dir = mkdtempSync(path.join(tmpdir(), 'issue3064-metadata-'));
   const stateFile = path.join(dir, 'state.json');
   const callLog = path.join(dir, 'calls.jsonl');
@@ -490,10 +558,17 @@ export function runNotification(
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const ghCalls = readCallLog(callLog);
+    // Fold a spawn failure into stderr. Without it a bash that never started,
+    // or one killed by a signal, reports status 1 with empty output and no
+    // clue why -- painful to diagnose as an intermittent CI failure.
+    const spawnError = result.error
+      ? `
+spawn failed: ${String(result.error)}`
+      : '';
     return {
       status: result.status ?? 1,
       stdout: result.stdout ?? '',
-      stderr: result.stderr ?? '',
+      stderr: `${result.stderr ?? ''}${spawnError}`,
       ghCalls,
     };
   } finally {

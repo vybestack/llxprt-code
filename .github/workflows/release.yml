@@ -615,6 +615,28 @@ jobs:
       - name: Create Issue on Failure
         if: failure()
         run: |
+          ensure_label() {
+            local name="$1"
+            local color="$2"
+            local description="$3"
+            local existing=""
+            local create_err=""
+            # Capture stderr in create_err while discarding stdout; redirect order matters.
+            if create_err="$(gh label create "${name}" --repo "${GH_REPO}" --color "${color}" --description "${description}" 2>&1 >/dev/null)"; then
+              return
+            fi
+            if ! existing="$(gh label list --repo "${GH_REPO}" --search "${name}" --json name --jq ".[] | select(.name == \"${name}\") | .name" 2>&1)"; then
+              echo "Failed to check for label: ${name}" >&2
+              echo "  create error: ${create_err}" >&2
+              echo "  list error: ${existing}" >&2
+              return 1
+            fi
+            if [[ "${existing}" != "${name}" ]]; then
+              echo "Failed to create or find label: ${name}" >&2
+              return 1
+            fi
+          }
+
           # Resolve the milestone for the version currently being worked on in
           # main, so the auto-created failure issue surfaces in the release
           # view (issue #3064). Source of truth is the root package.json
@@ -683,7 +705,14 @@ jobs:
           CREATE_ARGS=(--repo "${GH_REPO}")
           CREATE_ARGS+=(--title "Release Failed for ${{ steps.version.outputs.RELEASE_TAG || 'N/A' }} on $(date +'%Y-%m-%d')")
           CREATE_ARGS+=(--body "The release workflow failed. See the full run for details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}")
-          CREATE_ARGS+=(--label "ci/cd")
+          LABEL_ARGS=()
+          if ensure_label "ci/cd" "e33539" "Issues with github and the workflow scripts and CI CD environment."; then
+            LABEL_ARGS+=(--label "ci/cd")
+          else
+            echo "Warning: continuing without ci/cd label" >&2
+          fi
+
+          CREATE_ARGS+=(${LABEL_ARGS[@]+"${LABEL_ARGS[@]}"})
           # Empty arrays expand to an unbound variable under `set -u` on bash
           # 3.2, so guard every expansion with the `+` alternate form.
           CREATE_ARGS+=(${MILESTONE_ARGS[@]+"${MILESTONE_ARGS[@]}"})

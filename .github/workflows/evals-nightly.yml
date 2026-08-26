@@ -193,7 +193,7 @@ jobs:
             # four attempts and three sleeps editing a reference that can never
             # resolve.
             if [[ ! "${number}" =~ ^[0-9]+$ ]]; then
-              echo "Warning: could not parse issue reference '${reference}'; skipping issue type assignment" >&2
+              echo "Warning: could not parse issue reference '${reference}'; skipping milestone and issue type assignment" >&2
               return 0
             fi
             if [[ -n "${MILESTONE_TITLE}" ]]; then
