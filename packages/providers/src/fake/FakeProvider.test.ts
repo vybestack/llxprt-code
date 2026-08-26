@@ -145,69 +145,31 @@ describe('FakeProvider', () => {
     expect(models[0].id).toBe('fake-model');
   });
 
-  it('supports legacy method/response fixture lines', async () => {
-    const filePath = join(tempDir, 'legacy.responses.jsonl');
+  it('throws when a fixture line has no chunks array', () => {
+    const filePath = join(tempDir, 'missing-chunks.responses.jsonl');
     writeFileSync(
       filePath,
-      JSON.stringify({
-        method: 'generateContentStream',
-        response: [
-          {
-            candidates: [
-              {
-                content: {
-                  role: 'model',
-                  parts: [{ text: 'legacy fixture output' }],
-                },
-                finishReason: 'STOP',
-              },
-            ],
-            usageMetadata: {
-              promptTokenCount: 3,
-              candidatesTokenCount: 5,
-              totalTokenCount: 8,
-            },
-          },
-        ],
-      }),
+      JSON.stringify({ method: 'generateContentStream', response: true }),
       'utf-8',
     );
 
-    const provider = new FakeProvider(filePath);
-
-    const chunks: unknown[] = [];
-    for await (const chunk of provider.generateChatCompletion([])) {
-      chunks.push(chunk);
-    }
-
-    expect(chunks).toHaveLength(1);
-    const first = chunks[0] as {
-      speaker: string;
-      blocks: Array<{ type: string; text?: string }>;
-      metadata?: { stopReason?: string; usage?: { totalTokens?: number } };
-    };
-    expect(first.speaker).toBe('ai');
-    expect(first.blocks[0]).toMatchObject({
-      type: 'text',
-      text: 'legacy fixture output',
-    });
-    expect(first.metadata?.stopReason).toBe('stop');
-    expect(first.metadata?.usage?.totalTokens).toBe(8);
+    expect(() => new FakeProvider(filePath)).toThrow(
+      /Expected JSON object with a chunks array/,
+    );
   });
 
-  it('preserves stopReason for metadata-only legacy candidates', async () => {
-    const filePath = join(tempDir, 'legacy-stop-only.responses.jsonl');
+  it('preserves stopReason for a metadata-only chunk', async () => {
+    const filePath = join(tempDir, 'metadata-only.responses.jsonl');
     writeFileSync(
       filePath,
       JSON.stringify({
-        method: 'generateContentStream',
-        response: {
-          candidates: [
-            {
-              finishReason: 'STOP',
-            },
-          ],
-        },
+        chunks: [
+          {
+            speaker: 'ai',
+            blocks: [],
+            metadata: { stopReason: 'stop' },
+          },
+        ],
       }),
       'utf-8',
     );
@@ -228,19 +190,39 @@ describe('FakeProvider', () => {
     expect(first.metadata?.stopReason).toBe('stop');
   });
 
-  it('throws on invalid legacy response payloads', () => {
-    const filePath = join(tempDir, 'legacy-invalid.responses.jsonl');
+  it('replays usage through to the chunk', async () => {
+    const filePath = join(tempDir, 'usage.responses.jsonl');
     writeFileSync(
       filePath,
       JSON.stringify({
-        method: 'generateContentStream',
-        response: true,
+        chunks: [
+          {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'legacy fixture output' }],
+            metadata: {
+              usage: {
+                promptTokens: 3,
+                completionTokens: 5,
+                totalTokens: 8,
+              },
+            },
+          },
+        ],
       }),
       'utf-8',
     );
 
-    expect(() => new FakeProvider(filePath)).toThrow(
-      /invalid legacy fixture line/i,
-    );
+    const provider = new FakeProvider(filePath);
+
+    const chunks: unknown[] = [];
+    for await (const chunk of provider.generateChatCompletion([])) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks).toHaveLength(1);
+    const first = chunks[0] as {
+      metadata?: { usage?: { totalTokens?: number } };
+    };
+    expect(first.metadata?.usage?.totalTokens).toBe(8);
   });
 });

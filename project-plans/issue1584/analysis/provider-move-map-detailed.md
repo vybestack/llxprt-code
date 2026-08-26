@@ -111,7 +111,7 @@ Each entry includes: source path, destination path, classification rule, and imp
 
 | # | Source Path | Destination Path | Rule | Import Rewrite Category |
 |---|------------|------------------|------|------------------------|
-| 47 | `packages/core/src/providers/logging/ProviderContentExtractor.ts` | `packages/providers/src/logging/ProviderContentExtractor.ts` | Rule 9 | B |
+| 47 | `packages/core/src/providers/logging/ProviderContentExtractor.ts` | `packages/providers/src/logging/streamChunkUtils.ts` | Rule 9 + #2627 deletion override (dead code — zero callers) | B |
 | 48 | `packages/core/src/providers/logging/ProviderPerformanceTracker.ts` | `packages/providers/src/logging/ProviderPerformanceTracker.ts` | Rule 9 | B |
 | 49 | `packages/core/src/providers/logging/ProviderPerformanceTracker.test.ts` | `packages/providers/src/logging/ProviderPerformanceTracker.test.ts` | Rule 9 | B |
 

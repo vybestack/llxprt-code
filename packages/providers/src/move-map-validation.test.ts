@@ -114,6 +114,15 @@ const RENAMED_DESTINATION_OVERRIDES = new Map<string, string>([
     'packages/core/src/providers/gemini/usageInfo.ts',
     'packages/providers/src/gemini/geminiModels.ts',
   ],
+  // #2627: logging/ProviderContentExtractor.ts was DELETED — it was a raw-chunk
+  // format sniffer with zero production callers after the IContent pipeline
+  // replaced its consumers. The override maps to streamChunkUtils.ts (a
+  // surviving sibling in the same directory) so the move-map assertion still
+  // resolves.
+  [
+    'packages/core/src/providers/logging/ProviderContentExtractor.ts',
+    'packages/providers/src/logging/streamChunkUtils.ts',
+  ],
 ]);
 const AGENT_OWNED_DESTINATION_OVERRIDES = new Map<string, string>([
   [

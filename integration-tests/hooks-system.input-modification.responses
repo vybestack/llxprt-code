@@ -1,2 +1,2 @@
-{"method":"generateContentStream","response":[{"candidates":[{"content":{"parts":[{"functionCall":{"name":"write_file","args":{"content":"original content","file_path":"{{CWD}}/original.txt"}}}],"role":"model"},"finishReason":"STOP","index":0}]}]}
-{"method":"generateContentStream","response":[{"candidates":[{"content":{"parts":[{"text":"I have created the file."}],"role":"model"},"finishReason":"STOP","index":0}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"hist_tool_GGH1jXKHfbOFGVgRQWMVoYOI","name":"write_file","parameters":{"content":"original content","file_path":"{{CWD}}/original.txt"}}],"metadata":{"turnId":"turn_8eb8c13c-67bc-40db-8d2c-4675c67982f0","stopReason":"stop"}}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"I have created the file."}],"metadata":{"turnId":"turn_865b06d9-1a44-40ee-b446-4c8df6b21fe1","stopReason":"stop"}}]}
