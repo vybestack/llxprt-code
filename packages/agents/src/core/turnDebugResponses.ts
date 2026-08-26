@@ -141,11 +141,22 @@ export class TurnDebugResponses {
    *
    * Used to avoid writing an update into the region about to be discarded.
    */
+  /**
+   * How many chunks the next {@link trim} will discard.
+   *
+   * The guard and the arithmetic must match `trim` exactly. They did not:
+   * this used `<` where `trim` uses `<=`, so at exactly `CAP * 2` it reported
+   * 1,025 pending drops while `trim` discarded none, and the extra `+ 1`
+   * overcounted by one at every length. Both made `tryReplaceThinkingBlock`
+   * treat live chunks as doomed, dropping valid stream ids from the index and
+   * appending thinking spans instead of replacing them in place, which is the
+   * retention growth this class exists to prevent.
+   */
   private pendingDropCount(): number {
-    if (this.chunks.length < MAX_DEBUG_RESPONSE_CHUNKS * 2) {
+    if (this.chunks.length <= MAX_DEBUG_RESPONSE_CHUNKS * 2) {
       return 0;
     }
-    return this.chunks.length + 1 - MAX_DEBUG_RESPONSE_CHUNKS;
+    return this.chunks.length - MAX_DEBUG_RESPONSE_CHUNKS;
   }
 
   /** Drops the oldest chunks once retention passes the high-water mark. */

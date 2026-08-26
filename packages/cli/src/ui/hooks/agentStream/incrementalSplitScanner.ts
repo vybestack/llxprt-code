@@ -296,9 +296,13 @@ export class IncrementalSplitScanner {
     if (isLowSurrogate) {
       return candidate + 1;
     }
-    const isHighSurrogate = code >= 0xd800 && code <= 0xdbff;
-    // Retain the whole pair rather than committing a lone high surrogate.
-    return isHighSurrogate ? candidate - 1 : candidate;
+    // A high surrogate at `candidate` starts the retained tail, so its low
+    // partner at `candidate + 1` is retained with it and the pair survives.
+    // Moving to `candidate - 1` to "keep the pair together" would instead push
+    // the boundary into the *previous* pair whenever `text[candidate - 1]` is a
+    // low surrogate, splitting it and rendering a replacement character on both
+    // sides: the exact damage this guard exists to avoid.
+    return candidate;
   }
 
   private captureFenceHeaderCharacter(char: string): void {

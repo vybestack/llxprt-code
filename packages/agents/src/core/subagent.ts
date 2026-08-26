@@ -136,17 +136,52 @@ function processInteractiveStreamEvent(
   return '';
 }
 
-function countInteractiveOutputCharacters(
-  event: ServerAgentStreamEvent,
-): number {
-  switch (event.type) {
-    case AgentEventType.Content:
-      return event.value.length;
-    case AgentEventType.Thought:
-    case AgentEventType.ToolCallRequest:
-      return JSON.stringify(event.value).length;
-    default:
-      return 0;
+/**
+ * Counts characters generated over one interactive turn.
+ *
+ * Stateful for the same reason as `GeneratedOutputCounter` on the
+ * non-interactive path: a provider that re-emits its accumulated reasoning on
+ * every `Thought` event turns an N-character span into roughly N^2/2 counted
+ * characters, which would trip the aggregate budget during legitimate work.
+ * Thoughts carrying a subject are tracked by latest length and contribute once;
+ * thoughts without one are true increments and sum.
+ */
+class InteractiveOutputCounter {
+  private plainCharacters = 0;
+  private readonly latestThoughtLength = new Map<string, number>();
+
+  add(event: ServerAgentStreamEvent): void {
+    switch (event.type) {
+      case AgentEventType.Content:
+        this.plainCharacters += event.value.length;
+        return;
+      case AgentEventType.ToolCallRequest:
+        this.plainCharacters += JSON.stringify(event.value).length;
+        return;
+      case AgentEventType.Thought:
+        this.addThought(event.value);
+        return;
+      default:
+        return;
+    }
+  }
+
+  private addThought(value: unknown): void {
+    const length = JSON.stringify(value).length;
+    const subject = (value as { subject?: unknown } | undefined)?.subject;
+    if (typeof subject !== 'string' || subject === '') {
+      this.plainCharacters += length;
+      return;
+    }
+    this.latestThoughtLength.set(subject, length);
+  }
+
+  get total(): number {
+    let thoughts = 0;
+    for (const length of this.latestThoughtLength.values()) {
+      thoughts += length;
+    }
+    return this.plainCharacters + thoughts;
   }
 }
 
@@ -635,12 +670,12 @@ export class SubAgentScope {
 
     let textResponse = '';
     let reportedOutputTokens: number | undefined;
-    let outputCharacterCount = 0;
+    const outputCounter = new InteractiveOutputCounter();
     try {
       const stream = turn.run(blocks, abortController.signal);
       for await (const event of stream) {
         if (abortController.signal.aborted === true) break;
-        outputCharacterCount += countInteractiveOutputCharacters(event);
+        outputCounter.add(event);
         reportedOutputTokens =
           readInteractiveOutputTokens(event) ?? reportedOutputTokens;
         const eventText = processInteractiveStreamEvent(event, execCtx);
@@ -658,7 +693,7 @@ export class SubAgentScope {
       textResponse,
       currentTurn,
       reportedOutputTokens,
-      outputCharacterCount,
+      outputCharacterCount: outputCounter.total,
     };
   }
 
