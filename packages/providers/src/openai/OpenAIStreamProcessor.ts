@@ -67,6 +67,11 @@ import {
   emitFinishOnlyMetadata,
   emitUsageOnlyMetadata,
 } from './OpenAIStreamProcessorState.js';
+import {
+  assertProviderStreamByteLimit,
+  MAX_PROVIDER_BUFFERED_TEXT_BYTES,
+  utf8ByteLength,
+} from '../streamLimits.js';
 
 export interface StreamProcessorDeps {
   toolCallPipeline: ToolCallPipeline;
@@ -268,6 +273,49 @@ function processReasoningDelta(
   }
 }
 
+const KIMI_SECTION_BEGIN = '<|tool_calls_section_begin|>';
+const KIMI_SECTION_END = '<|tool_calls_section_end|>';
+const KIMI_SCAN_TAIL_LENGTH =
+  Math.max(KIMI_SECTION_BEGIN.length, KIMI_SECTION_END.length) - 1;
+
+function countNewTokenOccurrences(
+  text: string,
+  token: string,
+  previousTailLength: number,
+): number {
+  let count = 0;
+  let searchFrom = 0;
+  for (;;) {
+    const index = text.indexOf(token, searchFrom);
+    if (index === -1) {
+      return count;
+    }
+    if (index + token.length > previousTailLength) {
+      count++;
+    }
+    searchFrom = index + token.length;
+  }
+}
+
+function updateKimiSectionCounts(
+  deltaContent: string,
+  state: StreamingState,
+): void {
+  const previousTailLength = state.kimiScanTail.length;
+  const searchableText = state.kimiScanTail + deltaContent;
+  state.kimiBeginCount += countNewTokenOccurrences(
+    searchableText,
+    KIMI_SECTION_BEGIN,
+    previousTailLength,
+  );
+  state.kimiEndCount += countNewTokenOccurrences(
+    searchableText,
+    KIMI_SECTION_END,
+    previousTailLength,
+  );
+  state.kimiScanTail = searchableText.slice(-KIMI_SCAN_TAIL_LENGTH);
+}
+
 /**
  * Handle text delta content: buffer or immediately emit.
  */
@@ -293,14 +341,17 @@ async function* handleTextDelta(
       },
     );
 
+    state.textBufferBytes += utf8ByteLength(deltaContent);
+    assertProviderStreamByteLimit(
+      'buffered text',
+      state.textBufferBytes,
+      MAX_PROVIDER_BUFFERED_TEXT_BYTES,
+    );
     state.textBuffer += deltaContent;
+    updateKimiSectionCounts(deltaContent, state);
 
-    const kimiBeginCount = (
-      state.textBuffer.match(/<\|tool_calls_section_begin\|>/g) ?? []
-    ).length;
-    const kimiEndCount = (
-      state.textBuffer.match(/<\|tool_calls_section_end\|>/g) ?? []
-    ).length;
+    const kimiBeginCount = state.kimiBeginCount;
+    const kimiEndCount = state.kimiEndCount;
     const hasOpenKimiSection = kimiBeginCount > kimiEndCount;
 
     deps.logger.debug(
@@ -328,6 +379,7 @@ async function* handleTextDelta(
       );
       yield* flushTextBuffer(state.textBuffer, state, deps);
       state.textBuffer = '';
+      state.textBufferBytes = 0;
     } else if (hasOpenKimiSection) {
       deps.logger.debug(
         () =>
@@ -418,7 +470,7 @@ async function* processStreamingChunk(
   if (abortSignal?.aborted === true) {
     return;
   }
-  state.allChunks.push(chunk);
+  state.chunkCount++;
 
   const chunkRecord = chunk as unknown as Record<string, unknown>;
   const parsedData = parseChunkData(chunkRecord);
@@ -785,6 +837,7 @@ async function* finalizeStreamingState(
     );
     yield* flushTextBuffer(state.textBuffer, state, deps);
     state.textBuffer = '';
+    state.textBufferBytes = 0;
   }
 
   // Emit any remaining accumulated thinking

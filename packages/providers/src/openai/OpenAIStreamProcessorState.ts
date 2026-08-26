@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import type OpenAI from 'openai';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { type ToolCallPipeline } from './ToolCallPipeline.js';
 import { extractCacheMetrics } from '../utils/cacheMetricsExtractor.js';
@@ -26,6 +25,10 @@ import { mapFinishReasonToStopReason } from './finishReasonMapping.js';
 export interface StreamingState {
   accumulatedText: string;
   textBuffer: string;
+  textBufferBytes: number;
+  kimiBeginCount: number;
+  kimiEndCount: number;
+  kimiScanTail: string;
   accumulatedThinkingContent: string;
   hasEmittedThinking: boolean;
   accumulatedReasoningContent: string;
@@ -40,7 +43,7 @@ export interface StreamingState {
   cachedPipelineResult: Awaited<
     ReturnType<typeof ToolCallPipeline.prototype.process>
   > | null;
-  allChunks: OpenAI.Chat.Completions.ChatCompletionChunk[];
+  chunkCount: number;
 }
 
 /**
@@ -50,6 +53,10 @@ export function createStreamingState(): StreamingState {
   return {
     accumulatedText: '',
     textBuffer: '',
+    textBufferBytes: 0,
+    kimiBeginCount: 0,
+    kimiEndCount: 0,
+    kimiScanTail: '',
     accumulatedThinkingContent: '',
     hasEmittedThinking: false,
     accumulatedReasoningContent: '',
@@ -58,7 +65,7 @@ export function createStreamingState(): StreamingState {
     lastFinishReason: null,
     hasEmittedTerminalMetadata: false,
     cachedPipelineResult: null,
-    allChunks: [],
+    chunkCount: 0,
   };
 }
 
@@ -355,13 +362,13 @@ export function logStreamCompletionSummary(
 
     logger.warn(
       () =>
-        `[OpenAIProvider] Empty streaming response for model '${model}' (received ${state.allChunks.length} chunks with no content).${troubleshooting}`,
+        `[OpenAIProvider] Empty streaming response for model '${model}' (received ${state.chunkCount} chunks with no content).${troubleshooting}`,
       {
         model,
         baseURL: baseURL ?? getBaseURL(),
         isKimiModel: isKimi,
         isSyntheticAPI: isSynthetic,
-        totalChunksReceived: state.allChunks.length,
+        totalChunksReceived: state.chunkCount,
       },
     );
   } else {
@@ -373,7 +380,7 @@ export function logStreamCompletionSummary(
         textBufferLength: state.textBuffer.length,
         reasoningLength: state.accumulatedReasoningContent.length,
         thinkingLength: state.accumulatedThinkingContent.length,
-        totalChunksReceived: state.allChunks.length,
+        totalChunksReceived: state.chunkCount,
       },
     );
   }

@@ -229,8 +229,8 @@ export function processContentEvent(
     return displayText;
   }
 
-  const beforeText = stableText.slice(0, splitPoint);
-  deps.pendingResponse.consume(splitPoint);
+  const { committedText: beforeText } =
+    deps.pendingResponse.consume(splitPoint);
   const afterItem = buildAfterItem(
     deps.pendingResponse.displayText,
     liveProfileIdentity,

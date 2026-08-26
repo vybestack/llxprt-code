@@ -32,6 +32,12 @@ import {
   shouldEmitReasoningDelta,
   updateReasoningDeltaState,
 } from './parseResponsesStreamReasoning.js';
+import {
+  assertProviderStreamByteLimit,
+  MAX_PROVIDER_SSE_LINE_BYTES,
+  MAX_PROVIDER_TOOL_CALL_BYTES,
+  utf8ByteLength,
+} from '../streamLimits.js';
 
 const logger = new DebugLogger('llxprt:providers:openai-responses:sse');
 
@@ -139,11 +145,19 @@ function handleOutputItemAdded(
   functionCalls: Map<string, FunctionCallState>,
 ): void {
   if (event.item?.type === 'function_call' && event.item.id) {
+    const argumentsValue = event.item.arguments ?? '';
+    const argumentBytes = utf8ByteLength(argumentsValue);
+    assertProviderStreamByteLimit(
+      'tool-call arguments',
+      argumentBytes,
+      MAX_PROVIDER_TOOL_CALL_BYTES,
+    );
     functionCalls.set(event.item.id, {
       id: event.item.id,
       call_id: event.item.call_id,
       name: event.item.name ?? '',
-      arguments: event.item.arguments ?? '',
+      arguments: argumentsValue,
+      argumentBytes,
     });
   }
 }
@@ -158,6 +172,12 @@ function handleArgumentsDelta(
   if (event.item_id && event.delta) {
     const call = functionCalls.get(event.item_id);
     if (call) {
+      call.argumentBytes += utf8ByteLength(event.delta);
+      assertProviderStreamByteLimit(
+        'tool-call arguments',
+        call.argumentBytes,
+        MAX_PROVIDER_TOOL_CALL_BYTES,
+      );
       call.arguments += event.delta;
     }
   }
@@ -895,6 +915,11 @@ export async function* parseResponsesStream(
       // Process complete lines
       const lines = buffer.split('\n');
       buffer = lines.pop() ?? ''; // Keep incomplete line in buffer
+      assertProviderStreamByteLimit(
+        'incomplete SSE line',
+        utf8ByteLength(buffer),
+        MAX_PROVIDER_SSE_LINE_BYTES,
+      );
 
       const dataLines = lines
         .filter((line) => line.startsWith('data: '))

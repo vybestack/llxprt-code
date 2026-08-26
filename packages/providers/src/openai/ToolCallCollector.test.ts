@@ -15,6 +15,10 @@
  */
 
 import { describe, it, expect, beforeEach } from 'bun:test';
+import {
+  MAX_PROVIDER_TOOL_CALL_BYTES,
+  ProviderStreamProtocolError,
+} from '../streamLimits.js';
 import { ToolCallCollector } from './ToolCallCollector.js';
 
 describe('ToolCallCollector', () => {
@@ -122,6 +126,36 @@ describe('ToolCallCollector', () => {
       expect(completeCalls).toHaveLength(1);
       expect(completeCalls[0].name).toBe('test_tool'); // Last name wins
       expect(completeCalls[0].args).toBe('{}');
+    });
+
+    it('rejects retained fragments that exceed the per-call byte limit', () => {
+      const fragment = 'x'.repeat(1024 * 1024);
+      collector.addFragment(0, { name: 'store_payload' });
+
+      expect(() => {
+        for (
+          let retainedBytes = 0;
+          retainedBytes <= MAX_PROVIDER_TOOL_CALL_BYTES;
+          retainedBytes += fragment.length
+        ) {
+          collector.addFragment(0, { args: fragment });
+        }
+      }).toThrow(ProviderStreamProtocolError);
+      expect(() => collector.addFragment(0, { args: fragment })).toThrow(
+        `tool-call fragments exceeded ${MAX_PROVIDER_TOOL_CALL_BYTES}-byte limit`,
+      );
+    });
+
+    it('assembles a large legitimate argument byte-for-byte', () => {
+      const first = 'ø'.repeat(256 * 1024);
+      const second = 'ß'.repeat(256 * 1024);
+      collector.addFragment(0, { name: 'store_payload' });
+      collector.addFragment(0, { args: first });
+      collector.addFragment(0, { args: second });
+
+      const completeCalls = collector.getCompleteCalls();
+
+      expect(completeCalls[0]?.args).toBe(first + second);
     });
   });
 });
