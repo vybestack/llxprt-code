@@ -232,6 +232,16 @@ V2. **Full verification result.**
     Re-confirmed after the suite finished and the machine was quiet: the test
     passes in 17.56ms (21/21).
 
+V1c. **The whole `packages/agents/src/api/__tests__` directory is clean on both
+    branches: 903 pass / 0 fail, identical.** The final full-suite run reported
+    four distinct failures, all in that directory, including one named
+    `T1 stream yields ordered thinking then text` that looked like it could be
+    caused by the thinking-accounting changes. Each passes in isolation
+    (`core-conversation.spec.ts` 9/9, `tasksControl.behavior.test.ts` 8/8), and
+    the entire directory passes on this branch and on `main` with the same
+    numbers. The failures do not reproduce at directory scale at all: they are
+    an artifact of running the full suite alongside other heavy jobs.
+
 V1b. **`subagent.runNonInteractive-term.test.ts` and
     `mutationCoverage.behavior.test.ts` are unstable together, on main too.**
     The final full-suite run reported three failures: the mutation post-auth
