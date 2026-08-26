@@ -70,7 +70,11 @@ export {
   createBuiltinProviderContributions,
   createBuiltinProviderContributionRegistry,
   buildProviderContributionRegistry,
+  discoverRuntimePluginPackages,
+  resolvePluginSearchRoot,
+  RUNTIME_PLUGIN_MANIFEST_MARKER,
   loadRuntimePlugins,
+  loadInstalledRuntimePlugins,
   parseRuntimePluginManifest,
   RUNTIME_PLUGIN_SUPPORTED_API_VERSION,
   RuntimePluginIncompatibleError,
@@ -78,6 +82,7 @@ export {
 } from './runtimePlugins/index.js';
 export type {
   ContributedAliasRegistration,
+  RuntimePluginDiscoveryDeps,
   LoadedRuntimePlugin,
   ProviderAliasFactory,
   ProviderContributionOrigin,

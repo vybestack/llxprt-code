@@ -5,59 +5,70 @@
  */
 
 /**
- * Behavioral coverage for issue #2758 AC7: the registry produced by the single
- * startup load actually reaches provider composition, through the same
- * `assembleCliProviderRuntime` seam the CLI uses for both its pre-Config and
- * post-Config assemblies.
+ * Behavioral coverage for issue #2758: an installed plugin package is
+ * discovered, loaded once, and the resulting registry actually reaches
+ * provider composition through the same `assembleCliProviderRuntime` seam the
+ * CLI uses for both its pre-Config and post-Config assemblies.
  *
  * Without this, the `providerContributions` threading through
  * cliSessionBootstrap -> loadCliConfig -> profileBootstrap /
  * postConfigRuntime -> assembleCliProviderRuntime could be deleted and every
  * other runtime-plugin test would still pass.
  *
- * The only stubbed boundary is module resolution (`deps.importModule`); the
- * loader, registry, assembly helper, and ProviderManager are all real.
+ * The only stubbed boundaries are the filesystem (discovery) and module
+ * resolution (loading). The discovery logic, loader, registry, assembly
+ * helper, and ProviderManager are all real.
  */
 
 import { afterEach, describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { loadRuntimePlugins } from '@vybestack/llxprt-code-providers/composition.js';
-import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  discoverRuntimePluginPackages,
+  loadRuntimePlugins,
+} from '@vybestack/llxprt-code-providers/composition.js';
+import type {
+  ProviderContributionRegistry,
+  RuntimePluginDiscoveryDeps,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import {
   assembleCliProviderRuntime,
   disposeCliRuntime,
 } from '@vybestack/llxprt-code-providers/runtime.js';
-import { resolveRuntimePluginSpecifiers } from './runtimePlugins.js';
-import { LoadedSettings, type Settings } from './settings.js';
 
-const PLUGIN_PACKAGE = 'wiring-plugin-pkg';
+const PLUGIN_PACKAGE = 'llxprt-wiring-provider';
 const PLUGIN_PROVIDER_ID = 'wiring-provider';
 const CONTRIBUTED_ALIAS = 'wiring-alias';
 const RUNTIME_ID = 'issue2758-wiring-test';
 
-function layer(
-  path: string,
-  runtimePlugins?: unknown,
-): {
-  path: string;
-  settings: Settings;
-} {
-  return {
-    path,
-    settings: (runtimePlugins === undefined
-      ? {}
-      : { runtimePlugins }) as Settings,
-  };
-}
+const NODE_MODULES = '/g/lib/node_modules';
+const HOST_FILE = `${NODE_MODULES}/@vybestack/llxprt-code-providers/dist/x.js`;
 
-function settingsWithUserPlugins(specifiers: string[]): LoadedSettings {
-  return new LoadedSettings(
-    layer('/system/settings.json'),
-    layer('/system/system-defaults.json'),
-    layer('/user/settings.json', specifiers),
-    layer('/workspace/settings.json'),
-    true,
-  );
+/**
+ * A node_modules layout containing the CLI's own package plus one installed
+ * package that declares the runtime-plugin marker, and one that does not.
+ */
+function discoveryDeps(): RuntimePluginDiscoveryDeps {
+  const dirs: Record<string, string[]> = {
+    [NODE_MODULES]: ['@vybestack', PLUGIN_PACKAGE, 'unrelated-package'],
+    [`${NODE_MODULES}/@vybestack`]: ['llxprt-code-providers'],
+  };
+  const files: Record<string, string> = {
+    [`${NODE_MODULES}/${PLUGIN_PACKAGE}/package.json`]: JSON.stringify({
+      name: PLUGIN_PACKAGE,
+      llxprt: { runtimePlugin: true },
+    }),
+    [`${NODE_MODULES}/unrelated-package/package.json`]: JSON.stringify({
+      name: 'unrelated-package',
+    }),
+    [`${NODE_MODULES}/@vybestack/llxprt-code-providers/package.json`]:
+      JSON.stringify({ name: '@vybestack/llxprt-code-providers' }),
+  };
+  return {
+    fromPath: HOST_FILE,
+    exists: (path) => path in files || path in dirs,
+    listDir: (path) => dirs[path] ?? [],
+    readFile: (path) => files[path] ?? '',
+  };
 }
 
 /** A plugin module whose provider echoes the alias it was built for. */
@@ -144,22 +155,25 @@ describe('runtime plugin startup wiring', () => {
     return assemble(registry, runtimeId);
   }
 
-  it('resolves the configured package and imports it exactly once', async () => {
-    const settings = settingsWithUserPlugins([PLUGIN_PACKAGE]);
+  it('discovers only the installed package that declares the plugin marker', () => {
+    expect(discoverRuntimePluginPackages(discoveryDeps())).toEqual([
+      PLUGIN_PACKAGE,
+    ]);
+  });
+
+  it('imports each discovered package exactly once', async () => {
     const imported: string[] = [];
+    const discovered = discoverRuntimePluginPackages(discoveryDeps());
 
-    const specifiers = resolveRuntimePluginSpecifiers(settings);
-    await loadRegistry(specifiers, (specifier) => imported.push(specifier));
+    await loadRegistry(discovered, (specifier) => imported.push(specifier));
 
-    expect(specifiers).toEqual([PLUGIN_PACKAGE]);
     expect(imported).toEqual([PLUGIN_PACKAGE]);
   });
 
   it('makes a plugin-contributed alias available on the assembled provider manager', async () => {
-    const specifiers = resolveRuntimePluginSpecifiers(
-      settingsWithUserPlugins([PLUGIN_PACKAGE]),
+    const registry = await loadRegistry(
+      discoverRuntimePluginPackages(discoveryDeps()),
     );
-    const registry = await loadRegistry(specifiers);
 
     const { providerManager } = assembleTracked(registry, 'with-plugins');
 
@@ -181,14 +195,12 @@ describe('runtime plugin startup wiring', () => {
   });
 
   it('re-assembling with the same registry keeps the plugin alias, matching the post-Config recomposition', async () => {
-    const specifiers = resolveRuntimePluginSpecifiers(
-      settingsWithUserPlugins([PLUGIN_PACKAGE]),
-    );
-    // One startup load, reused by both assemblies — the plugin package is NOT
+    // One startup load, reused by both assemblies. The plugin package is NOT
     // imported a second time for the post-Config recomposition.
     const imported: string[] = [];
-    const registry = await loadRegistry(specifiers, (specifier) =>
-      imported.push(specifier),
+    const registry = await loadRegistry(
+      discoverRuntimePluginPackages(discoveryDeps()),
+      (specifier) => imported.push(specifier),
     );
 
     // The CLI recomposes under the SAME foreground runtime id (issue #2300),

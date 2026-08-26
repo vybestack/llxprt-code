@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { discoverRuntimePluginPackages } from './discoverRuntimePlugins.js';
 import { parseRuntimePluginManifest } from './manifest.js';
 import { buildProviderContributionRegistry } from './registry.js';
 import type {
@@ -67,6 +68,18 @@ export async function loadRuntimePlugins(
  */
 async function importPluginPackage(specifier: string): Promise<unknown> {
   return import(specifier);
+}
+
+/**
+ * Startup entry point: discover the installed plugin packages and load them.
+ *
+ * Installing a package is the only way to add a provider, so there is nothing
+ * to configure and no list to maintain. Discovery is deterministic
+ * (alphabetical by package name), which fixes plugin order and therefore
+ * contributed-alias order.
+ */
+export async function loadInstalledRuntimePlugins(): Promise<ProviderContributionRegistry> {
+  return loadRuntimePlugins(discoverRuntimePluginPackages());
 }
 
 async function importPluginModule(

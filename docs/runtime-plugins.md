@@ -1,156 +1,105 @@
 # Runtime plugins
 
 A runtime plugin is an npm package that contributes provider factories to
-LLxprt Code at startup. Provider aliases can then name the contributed provider
-as their `baseProvider`, exactly as they name a built-in one.
+LLxprt. Installing the package is what makes the provider available. There is
+no setting to edit and no list of approved packages.
 
-## Runtime plugins are trusted, unsandboxed code
+```bash
+npm i -g llxprt-kookoo-provider     # or: bun add -g llxprt-kookoo-provider
+```
 
-Loading a runtime plugin imports and executes the package in the LLxprt process.
-There is no sandbox, no permission prompt, and no capability restriction. A
-plugin can read your files, read your credentials, and make network requests
-with the same authority as the CLI itself.
+Start LLxprt and the provider is there. Uninstall the package and it is gone,
+along with any aliases it contributed. Nothing else changes.
 
-Treat a runtime plugin the way you would treat a shell profile script: install
-one only if you would run its author's code on your machine without asking.
+## Security
 
-Two consequences follow from that trust model:
+**Runtime plugins are trusted, unsandboxed executable code.** A plugin runs in
+the LLxprt process with the full privileges of the user who started it. It can
+read and write any file that user can, open network connections, and read
+credentials. There is no permission prompt and no isolation boundary.
 
-- `runtimePlugins` may only be set in user (global) or system settings. A value
-  in a project's `.llxprt/settings.json` is rejected and startup fails. Opening
-  a repository must never be enough to make LLxprt execute that repository's
-  code.
-- Only bare package roots are accepted. Paths, URLs, subpaths, and Node built-in
-  module names are rejected, so the value cannot point at an arbitrary file.
+Install a plugin only if you would run its author's code directly, because that
+is what you are doing. Discovery is limited to packages installed alongside
+LLxprt itself, so a project cannot introduce a plugin into your session by
+committing a file.
 
-## Configuring plugins
+## Declaring a plugin
 
-Add `runtimePlugins` to your user (global) settings file or to the system
-settings file. See
-[Application directories](./reference/application-directories.md) for where
-those live on each platform:
+A package opts in by setting a marker in its own `package.json`:
 
 ```json
 {
-  "runtimePlugins": ["my-llxprt-provider", "@acme/llxprt-gateway"]
+  "name": "llxprt-kookoo-provider",
+  "llxprt": { "runtimePlugin": true }
 }
 ```
 
-Plugins load once, at startup, in the order listed. The setting requires a
-restart to take effect; there is no reload.
+The marker is an explicit declaration rather than a naming convention, so a
+package is never picked up by accident and a plugin can be named anything.
+Packages without the marker are ignored.
 
-When several trusted layers set `runtimePlugins`, the entries are concatenated
-in a fixed order: system defaults, then system, then user.
+Discovery reads directory entries and manifests only. No package code runs
+until a declared plugin is loaded.
 
-### Accepted and rejected values
+## The manifest
 
-| Value                   | Result                               |
-| ----------------------- | ------------------------------------ |
-| `my-plugin`             | accepted                             |
-| `@scope/my-plugin`      | accepted                             |
-| `""` or `"   "`         | rejected, empty                      |
-| `fs`, `node:fs`         | rejected, Node built-in module       |
-| `https://example.com/p` | rejected, URL                        |
-| `./p`, `/abs/p`, `~/p`  | rejected, filesystem path            |
-| `pkg/sub`               | rejected, package subpath            |
-| `Upper`, `_leading`     | rejected, malformed npm package name |
-
-## Writing a plugin
-
-A plugin package exports a named binding called `llxprtRuntimePlugin`. There is
-no default export and no alternative export name.
+A plugin exports a named `llxprtRuntimePlugin` binding. There is no default
+export and no alternative name.
 
 ```ts
-import type {
-  ProviderAliasEntry,
-  ProviderFactoryContext,
-  RuntimePluginManifest,
-} from '@vybestack/llxprt-code-providers/composition.js';
-
-export const llxprtRuntimePlugin: RuntimePluginManifest = {
+export const llxprtRuntimePlugin = {
   apiVersion: 1,
-  id: 'acme-gateway',
+  id: 'kookoo',
   providers: [
     {
-      providerId: 'acme',
-      createProvider(
-        entry: ProviderAliasEntry,
-        context: ProviderFactoryContext,
-      ) {
-        return new AcmeProvider(entry.alias, entry.config['base-url']);
-      },
+      providerId: 'kookoo',
+      createProvider: (entry, context) => new KookooProvider(entry, context),
       builtinAliases: [
-        {
-          alias: 'acme-fast',
-          config: {
-            baseProvider: 'acme',
-            'base-url': 'https://api.acme.example/v1',
-          },
-        },
+        { alias: 'kookoo-fast', config: { baseProvider: 'kookoo' } },
       ],
     },
   ],
 };
 ```
 
-### Manifest v1
+| Field | Meaning |
+| --- | --- |
+| `apiVersion` | Must be `1`. Any other value is an incompatible-plugin error. |
+| `id` | Unique plugin id. Two plugins sharing an id is an error. |
+| `providers[].providerId` | The base provider id aliases refer to. Must not collide with a built-in or another plugin. |
+| `providers[].createProvider` | Factory returning an `IProvider`, or `null` when it cannot build one. |
+| `providers[].builtinAliases` | Optional aliases the plugin ships. |
 
-| Field        | Required | Meaning                                                 |
-| ------------ | -------- | ------------------------------------------------------- |
-| `apiVersion` | yes      | Must be `1`. Any other value is an incompatible plugin. |
-| `id`         | yes      | Non-empty, unique across the configured plugins.        |
-| `providers`  | yes      | At least one provider contribution.                     |
+The manifest is validated with Zod and deep-frozen. Unknown keys are rejected.
 
-Each provider contribution:
+`createProvider` receives the resolved alias entry and a context carrying the
+OpenAI-family credentials, the provider config, the OAuth manager, the `Config`,
+and the auth-only flag. It must return an `IProvider`, which is LLxprt's neutral
+provider interface. Plugins do not see provider-specific SDK types and must not
+return them.
 
-| Field            | Required | Meaning                                                |
-| ---------------- | -------- | ------------------------------------------------------ |
-| `providerId`     | yes      | The base provider id an alias names. Case-insensitive. |
-| `createProvider` | yes      | Factory called once per alias entry.                   |
-| `builtinAliases` | no       | Alias configurations the plugin ships with.            |
+## Load order and precedence
 
-The manifest is validated with a strict schema: unknown fields are an error, not
-a warning. The validated manifest is deep-frozen before use.
+Discovered packages load in alphabetical order, so contributed-alias order is
+deterministic across machines.
 
-### The factory contract
+An alias defined in your own alias config file wins over a contributed alias of
+the same name. Your local configuration is the higher-authority layer.
 
-`createProvider(entry, context)` receives the resolved alias entry and a context
-carrying the shared OpenAI credentials and base URL, the OpenAI provider config,
-the OAuth manager, the `Config` when one exists, and the auth-only flag. Return
-the provider instance, or `null` when the entry cannot produce one.
+## Failures
 
-The plugin module itself is imported once per process. A factory runs whenever
-alias providers are constructed, which includes alias refreshes, so it may be
-called more than once for the same alias.
+Loading fails the startup rather than skipping the plugin, so a broken plugin is
+never silently absent:
 
-### Alias precedence
+- the package cannot be imported
+- it does not export `llxprtRuntimePlugin`
+- the manifest is malformed or declares an unsupported `apiVersion`
+- two plugins declare the same plugin id, provider id, or alias name
+- a plugin declares a provider id that shadows a built-in
+- an alias names a base provider that no built-in and no loaded plugin provides
 
-Aliases from your own alias files always win. A `builtinAliases` entry whose
-name matches a user or built-in alias file is not registered; the file's
-definition is used instead. Two plugins contributing the same alias name is an
-error.
+Each error names the package and what to fix.
 
-## Failure modes
-
-Startup fails, with an error naming the offending package, when:
-
-- the package cannot be imported;
-- the package does not export `llxprtRuntimePlugin`;
-- the manifest fails validation;
-- `apiVersion` is not `1`;
-- two configured plugins declare the same `id`;
-- two contributions declare the same `providerId`, or a contribution reuses a
-  built-in provider id;
-- two plugins contribute the same alias name;
-- an alias names a `baseProvider` that no built-in provider and no loaded plugin
-  contributes.
-
-Nothing is skipped with a warning. A misconfigured plugin stops the CLI so the
-problem is visible rather than silently changing which providers exist.
-
-## Non-goals
-
-Runtime plugins contribute providers and nothing else. They do not contribute
-tools, commands, agents, or MCP servers, they are not discovered by scanning,
-and they are not reloaded while the CLI runs. For packaging and distributing
-broader functionality, see [Extensions](./extension.md).
+A neighbouring package with an unreadable `package.json` is ignored rather than
+fatal. It never claimed to be a plugin, and a plugin must declare the marker to
+be one.

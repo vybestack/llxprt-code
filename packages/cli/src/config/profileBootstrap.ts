@@ -65,9 +65,10 @@ export interface RuntimeBootstrapMetadata {
   messageBus?: MessageBus;
   metadata?: Record<string, unknown>;
   /**
-   * The provider contribution registry produced by loading the trusted
-   * `runtimePlugins` once at CLI startup (issue #2758). Forwarded to the
-   * providers assembly so alias construction dispatches through it.
+   * The provider contribution registry produced by discovering and loading
+   * the installed plugin packages once at CLI startup (issue #2758).
+   * Forwarded to the providers assembly so alias construction dispatches
+   * through it.
    */
   providerContributions?: ProviderContributionRegistry;
 }
@@ -85,8 +86,8 @@ export interface ParsedBootstrapArgs {
 export interface CliRuntimeOverrides {
   settingsService?: SettingsService;
   /**
-   * Provider contributions from the trusted `runtimePlugins` setting, loaded
-   * once at startup (issue #2758).
+   * Provider contributions from the installed plugin packages, discovered and
+   * loaded once at startup (issue #2758).
    */
   providerContributions?: ProviderContributionRegistry;
 }

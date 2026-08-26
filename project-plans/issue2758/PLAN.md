@@ -433,3 +433,50 @@ bun scripts/start.ts --profile-load stepfun-37 "write me a haiku and nothing els
 
 Plus `bun scripts/test-audit/scan.ts` on the touched test files — no new
 MOCK_MIRROR / ALWAYS_TRUE / SELF_CONFIRMING / NO_ASSERT findings.
+
+## 7. Design change: install-driven discovery (supersedes AC1-AC3)
+
+The `runtimePlugins` setting is removed. Installing a package is what makes a
+provider available.
+
+Rationale from the issue author: a user should never hand-edit JSON to add a
+provider, and there must be no hard-coded list of known packages, so a
+third-party `llxprt-kookoo-provider` works exactly like a first-party one.
+
+- A package opts in with `"llxprt": { "runtimePlugin": true }` in its own
+  `package.json`. Declaration, not naming convention, so nothing is picked up
+  by accident and a plugin may be named anything.
+- Exactly one directory is searched: the `node_modules` containing this
+  package, which is where `-g` installs put siblings. Bounded startup cost.
+- Discovery reads directory entries and manifests only; no package code runs
+  until a declared plugin is loaded.
+- Load order is alphabetical, so contributed-alias order is deterministic.
+- Verified under BOTH node and bun: sibling resolution by bare name and the
+  package.json marker scan behave identically. Bun's global layout
+  (`~/.bun/install/global/node_modules`) has the same shape as npm's
+  `<prefix>/lib/node_modules`.
+
+Removed: `packages/cli/src/config/runtimePlugins.ts` and its tests, the
+`runtimePlugins` settings schema entry, provenance rules, and specifier
+validation. Kept: manifest v1 + Zod validation, the contribution registry and
+its collision detection, alias dispatch, built-ins on the same factory path,
+and the composition threading.
+
+Scanning was listed as a non-goal in the original issue text; discovery is now
+in scope, for discovery only. Issue #2758's acceptance criteria need updating
+to match.
+
+## 8. Guard change (approved separately)
+
+The genai-enclave guard banned every computed `import()` repo-wide. That is a
+proxy for "no genai outside the enclaves" and it blocked any module loader that
+resolves a package by a runtime-supplied name.
+
+Replaced with an earned exemption: `DYNAMIC_MODULE_LOADERS` lists exact paths
+with justifications, and the guard VERIFIES rather than trusts. A sanctioned
+file keeps every genai import check and must additionally contain no
+`@google/` text at all, which closes the fragment-assembly evasion the old rule
+could not see. `GENAI_IMPORT_ENCLAVES` is untouched.
+
+Mutation-verified both directions. See
+`scripts/tests/genai-enclave-dynamic-loader.test.ts`.

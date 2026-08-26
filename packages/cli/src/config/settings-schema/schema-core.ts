@@ -263,20 +263,6 @@ export const CORE_SETTINGS_SCHEMA = {
       'Tool names disabled by default. Users can re-enable them with /tools enable.',
     showInDialog: false,
   },
-  runtimePlugins: {
-    type: 'array',
-    label: 'Runtime Plugins',
-    category: 'Advanced',
-    requiresRestart: true,
-    default: [] as string[],
-    description:
-      'Bare npm package roots loaded once at startup to contribute provider ' +
-      'factories. Runtime plugins are trusted, unsandboxed executable code and ' +
-      'may only be configured in user (global) or system settings; a value in ' +
-      'project settings is rejected. See docs/runtime-plugins.md.',
-    showInDialog: false,
-    items: { type: 'string' },
-  },
   coreToolSettings: {
     type: 'object',
     label: 'Tool Management',

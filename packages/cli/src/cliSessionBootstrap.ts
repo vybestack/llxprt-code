@@ -5,7 +5,6 @@
  */
 
 import { loadCliConfig } from './config/config.js';
-import { loadCliRuntimePlugins } from './config/runtimePlugins.js';
 import chalk from 'chalk';
 import type { LoadedSettings } from './config/settings.js';
 import {
@@ -145,11 +144,15 @@ export async function bootstrapRuntimeAndConfig(
   );
   const extensions = loadExtensions(extensionEnablementManager, workspaceRoot);
 
-  // Load the trusted `runtimePlugins` once, before any provider manager is
+  // Discover installed provider plugins once, before any provider manager is
   // constructed, so alias construction can dispatch through the resulting
-  // registry (issue #2758). Provenance and specifier violations fail startup
-  // here rather than being merged or skipped.
-  const providerContributions = await loadCliRuntimePlugins(settings);
+  // registry (issue #2758). Installing a package is what makes a provider
+  // available; there is nothing to configure. A broken plugin fails startup
+  // here rather than being skipped.
+  const { loadInstalledRuntimePlugins } = await import(
+    '@vybestack/llxprt-code-providers/composition.js'
+  );
+  const providerContributions = await loadInstalledRuntimePlugins();
 
   const config = await loadCliConfig(
     settings.merged,

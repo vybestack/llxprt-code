@@ -202,16 +202,6 @@
       "type": "array",
       "items": {}
     },
-    "runtimePlugins": {
-      "title": "Runtime Plugins",
-      "description": "Bare npm package roots loaded once at startup to contribute provider factories. Runtime plugins are trusted, unsandboxed executable code and may only be configured in user (global) or system settings; a value in project settings is rejected. See docs/runtime-plugins.md.",
-      "markdownDescription": "Bare npm package roots loaded once at startup to contribute provider factories. Runtime plugins are trusted, unsandboxed executable code and may only be configured in user (global) or system settings; a value in project settings is rejected. See docs/runtime-plugins.md.\n\n- Category: `Advanced`\n- Requires restart: `yes`\n- Default: `[]`",
-      "default": [],
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
     "coreToolSettings": {
       "title": "Tool Management",
       "description": "Manage core tool availability",
