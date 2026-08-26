@@ -12,7 +12,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { cloneFromGit } from '../config/extensions/github.js';
-import extract from 'extract-zip';
+import { extractZipSafe } from './zipExtract.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -100,7 +100,7 @@ async function resolveSkillSource(
   if (isSkillFile) {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'llxprt-skill-'));
     onLog(`Extracting skill from ${source}...`);
-    await extract(path.resolve(source), { dir: tempDir });
+    await extractZipSafe(source, tempDir);
     return { sourcePath: tempDir, tempDirToClean: tempDir };
   }
 
