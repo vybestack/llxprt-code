@@ -84,9 +84,7 @@ function failBeforeOutput(status: number): () => AsyncGenerator<IContent> {
   };
 }
 
-function metadataThenThrow(
-  status: number,
-): () => AsyncGenerator<IContent> {
+function metadataThenThrow(status: number): () => AsyncGenerator<IContent> {
   return async function* partial() {
     yield metadataChunk;
     const error = new Error(`HTTP ${status}`) as Error & { status: number };
@@ -101,9 +99,7 @@ function successText(text: string): () => AsyncGenerator<IContent> {
   };
 }
 
-function makeFailoverConfig(
-  providers: string[],
-): LoadBalancingProviderConfig {
+function makeFailoverConfig(providers: string[]): LoadBalancingProviderConfig {
   return {
     profileName: 'lb-telemetry',
     strategy: 'failover',
@@ -132,7 +128,9 @@ describe('LoadBalancingProvider attempt telemetry (issue #2532)', () => {
 
   it('reports taxonomy, commitment, and shared budget for failed then successful backend attempts', async () => {
     const capture = new LifecycleCapture();
-    const backendA = makeScriptedProvider('provider-a', [failBeforeOutput(500)]);
+    const backendA = makeScriptedProvider('provider-a', [
+      failBeforeOutput(500),
+    ]);
     const backendB = makeScriptedProvider('provider-b', [successText('ok')]);
     providerManager.registerProvider(backendA.provider);
     providerManager.registerProvider(backendB.provider);
@@ -187,7 +185,9 @@ describe('LoadBalancingProvider attempt telemetry (issue #2532)', () => {
 
   it('reports commitment on a metadata-exposed attempt that surfaces terminally', async () => {
     const capture = new LifecycleCapture();
-    const backendA = makeScriptedProvider('provider-a', [metadataThenThrow(429)]);
+    const backendA = makeScriptedProvider('provider-a', [
+      metadataThenThrow(429),
+    ]);
     const backendB = makeScriptedProvider('provider-b', [successText('ok')]);
     providerManager.registerProvider(backendA.provider);
     providerManager.registerProvider(backendB.provider);
