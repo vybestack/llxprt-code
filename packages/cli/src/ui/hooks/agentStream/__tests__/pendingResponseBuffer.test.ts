@@ -104,6 +104,22 @@ describe('PendingResponseBuffer markdown splitting', () => {
     expect(result.retained.startsWith(`${fence}ts\n`)).toBe(true);
   });
 
+  it('does not wrap prose in a code fence when the backticks were inline', () => {
+    // The scanner toggles on inline backtick runs because its split points must
+    // match the batch helper exactly. The renderer only honours a fence that
+    // begins a line, so synthesizing a continuation fence here would turn
+    // ordinary prose into a rendered code block.
+    const result = streamBuffer([
+      'see ``` inline here\n\n',
+      ...Array.from({ length: STREAM_DELTA_COUNT }, () => STREAM_DELTA),
+    ]);
+
+    expect(result.retained.startsWith('```')).toBe(false);
+    expect(result.retained.length).toBeLessThanOrEqual(
+      MAX_UNCLOSED_FENCE_LENGTH,
+    );
+  });
+
   it('preserves a punctuated info string on the continuation fence', () => {
     // CommonMark info strings are any run of non-backticks. Matching \w only
     // dropped the language and fell back to three backticks, which a literal

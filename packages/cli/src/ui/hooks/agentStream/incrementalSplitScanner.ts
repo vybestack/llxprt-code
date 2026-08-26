@@ -83,6 +83,7 @@ export class IncrementalSplitScanner {
   private openFence = '';
   private openFenceLanguage = '';
   private openFenceHeader = '';
+  private openFenceRenderable = false;
   private capturingFenceHeader = false;
   private visited = 0;
 
@@ -135,7 +136,9 @@ export class IncrementalSplitScanner {
       return this.text;
     }
     if (this.fenceParityOdd && splitPoint > this.lastFencePos) {
-      const continuationOpening = `${this.openFence}${this.openFenceLanguage}\n`;
+      const continuationOpening = this.openFenceRenderable
+        ? `${this.openFence}${this.openFenceLanguage}\n`
+        : '';
       const retained = this.text.slice(splitPoint);
       const visited = this.visited;
       this.clearMarkdownState();
@@ -193,6 +196,23 @@ export class IncrementalSplitScanner {
     return 1;
   }
 
+  /**
+   * Whether `index` begins a line, allowing the leading indent the renderer
+   * tolerates before a fence.
+   */
+  private atLineStart(index: number): boolean {
+    for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+      const char = this.text[cursor];
+      if (char === '\n') {
+        return true;
+      }
+      if (char !== ' ' && char !== '\t') {
+        return false;
+      }
+    }
+    return true;
+  }
+
   private scanFence(index: number, length: number): number {
     if (index + 1 >= length) {
       return 0;
@@ -213,6 +233,7 @@ export class IncrementalSplitScanner {
     while (runEnd < length && this.text[runEnd] === '`') {
       runEnd += 1;
     }
+
     // The run may still be growing at the end of the text; wait for more rather
     // than recording a truncated fence.
     if (runEnd >= length) {
@@ -224,6 +245,13 @@ export class IncrementalSplitScanner {
     } else {
       this.fenceParityOdd = true;
       this.openFence = this.text.slice(index, runEnd);
+      // The renderer only honours a fence that begins a line. The scanner
+      // deliberately toggles on inline runs too, because its split points must
+      // stay identical to the batch helper it mirrors, but synthesizing a
+      // continuation fence for an inline run would wrap ordinary prose in a
+      // code block. Record which kind this is so the forced split can bound the
+      // text without reopening something the renderer never treated as code.
+      this.openFenceRenderable = this.atLineStart(index);
       this.openFenceLanguage = '';
       this.openFenceHeader = '';
       this.capturingFenceHeader = true;
@@ -295,6 +323,7 @@ export class IncrementalSplitScanner {
     this.openFence = '';
     this.openFenceLanguage = '';
     this.openFenceHeader = '';
+    this.openFenceRenderable = false;
     this.capturingFenceHeader = false;
   }
 
