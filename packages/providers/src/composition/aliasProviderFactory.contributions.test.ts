@@ -376,12 +376,16 @@ describe('registerAliasProviders registry dispatch', () => {
     // file-wins precedence rule protects them from a plugin contributing the
     // same alias name. Pinned explicitly because plugins are trusted-but-foreign
     // input and this is the boundary that stops one hijacking a known alias.
+    //
+    // Uses 'kimi' rather than 'gemini': an alias whose name is also a PROVIDER
+    // id is rejected earlier, when the registry is built, so it would not reach
+    // this precedence rule at all.
     const contributions = await registryFor({
-      'plugin-pkg': pluginModule('plugin-pkg', { aliasName: 'gemini' }),
+      'plugin-pkg': pluginModule('plugin-pkg', { aliasName: 'kimi' }),
     });
     const manager = makeManager();
     const builtinEntry: ProviderAliasEntry = {
-      alias: 'gemini',
+      alias: 'kimi',
       config: {
         baseProvider: 'openai',
         'base-url': 'https://builtin-file.example.com/v1',
@@ -389,14 +393,14 @@ describe('registerAliasProviders registry dispatch', () => {
           { id: 'builtin-file-model', name: 'Builtin File Model' },
         ],
       },
-      filePath: '/builtin/providers/gemini.config',
+      filePath: '/builtin/providers/kimi.config',
       source: 'builtin',
     };
 
     register(manager, [builtinEntry], contributions);
 
-    const provider = registeredProvider(manager, 'gemini');
-    // The plugin's factory would have produced 'plugin-pkg-provider:gemini'.
+    const provider = registeredProvider(manager, 'kimi');
+    // The plugin's factory would have produced 'plugin-pkg-provider:kimi'.
     expect(await modelIds(provider)).toEqual(['builtin-file-model']);
   });
 

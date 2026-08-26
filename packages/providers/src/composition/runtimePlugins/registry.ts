@@ -71,7 +71,16 @@ export function buildProviderContributionRegistry(
   const orderedProviderIds: string[] = [];
 
   for (const contribution of createBuiltinProviderContributions()) {
-    providers.set(contribution.providerId.toLowerCase(), {
+    const key = contribution.providerId.toLowerCase();
+    if (providers.has(key)) {
+      // The registry's contract is that a collision throws. Silently
+      // overwriting would also desynchronise providers from
+      // orderedProviderIds.
+      throw new Error(
+        `Duplicate built-in provider id '${contribution.providerId}'.`,
+      );
+    }
+    providers.set(key, {
       contribution,
       origin: Object.freeze({ kind: 'builtin' }),
     });
@@ -102,13 +111,14 @@ export function buildProviderContributionRegistry(
     }
   }
 
-  const contributedAliases = collectPluginAliases(plugins);
+  const contributedAliases = collectPluginAliases(plugins, providers);
 
   return freezeRegistry(providers, orderedProviderIds, contributedAliases);
 }
 
 function collectPluginAliases(
   plugins: readonly LoadedRuntimePlugin[],
+  providers: ReadonlyMap<string, RegisteredProvider>,
 ): ContributedAliasRegistration[] {
   const contributedAliases: ContributedAliasRegistration[] = [];
   const aliasOwnerByLower = new Map<string, string>();
@@ -120,6 +130,15 @@ function collectPluginAliases(
         throw new Error(
           `Duplicate contributed alias '${alias.alias}' is contributed by both ` +
             `plugin '${owner}' and plugin '${plugin.manifest.id}'.`,
+        );
+      }
+      if (providers.has(aliasKey)) {
+        // ProviderManager keys providers by name, so an alias that shadows a
+        // provider id would replace that provider outright.
+        throw new Error(
+          `Contributed alias '${alias.alias}' from plugin ` +
+            `'${plugin.manifest.id}' collides with provider id ` +
+            `'${alias.alias}'.`,
         );
       }
       aliasOwnerByLower.set(aliasKey, plugin.manifest.id);

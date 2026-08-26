@@ -102,6 +102,17 @@ async function bootstrapAndLoadProfile(
   };
   const bootstrapArgs = parsedWithOverrides.bootstrapArgs;
   const runtimeState = await prepareRuntimeForProfile(parsedWithOverrides);
+  // The registry may come from either source. Post-config re-assembly must see
+  // the SAME one, or it rebuilds the provider manager without the plugins.
+  const effectiveOverrides: CliRuntimeOverrides = {
+    ...runtimeOverrides,
+    ...(parsedWithOverrides.runtimeMetadata.providerContributions === undefined
+      ? {}
+      : {
+          providerContributions:
+            parsedWithOverrides.runtimeMetadata.providerContributions,
+        }),
+  };
 
   const { profileToLoad, profileExplicitlySpecified } = resolveProfileToLoad({
     bootstrapArgs,
@@ -115,7 +126,7 @@ async function bootstrapAndLoadProfile(
     profileToLoad,
     profileExplicitlySpecified,
   });
-  return { bootstrapArgs, runtimeState, profileResult };
+  return { bootstrapArgs, runtimeState, profileResult, effectiveOverrides };
 }
 
 /** Steps 7-8: Resolve approval mode and provider/model, sync to SettingsService */
@@ -351,7 +362,7 @@ export async function loadCliConfig(
   runtimeOverrides: CliRuntimeOverrides = {},
 ): Promise<Config> {
   loadEnvironment();
-  const { bootstrapArgs, runtimeState, profileResult } =
+  const { bootstrapArgs, runtimeState, profileResult, effectiveOverrides } =
     await bootstrapAndLoadProfile(settings, argv, runtimeOverrides);
   const profileMergedSettings = profileResult.profileMergedSettings;
 
@@ -385,7 +396,7 @@ export async function loadCliConfig(
     profileLoadResult: profileResult,
     providerModelResult: pieces.providerModel,
     defaultDisabledTools: profileMergedSettings.defaultDisabledTools ?? [],
-    runtimeOverrides,
+    runtimeOverrides: effectiveOverrides,
     approvalMode: pieces.approvalMode,
     interactive: pieces.context.interactive,
   });

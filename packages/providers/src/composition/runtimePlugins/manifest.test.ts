@@ -244,6 +244,10 @@ describe('parseRuntimePluginManifest', () => {
 
     expect(error).toBeInstanceOf(RuntimePluginMalformedError);
     expect(error.message).toContain(SPECIFIER);
+    // A plugin author needs to know WHICH field is wrong, not just that
+    // something is. Guards against the message degrading to 'Invalid input'.
+    expect(error.message).toContain('baseProvider');
+    expect(error.message).toContain('builtinAliases');
   });
 
   it('includes the Zod issue path in the malformed error message', () => {

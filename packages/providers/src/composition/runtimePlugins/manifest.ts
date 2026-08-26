@@ -33,6 +33,9 @@ function createAliasConfigSchema(): ReturnType<
       isRecord(value) &&
       typeof value.baseProvider === 'string' &&
       value.baseProvider !== '',
+    // z.custom defaults to 'Invalid input', which tells a plugin author
+    // nothing. Name the field they actually have to fix.
+    { message: 'alias config requires a non-empty baseProvider string' },
   );
 }
 

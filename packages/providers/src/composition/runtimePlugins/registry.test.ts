@@ -197,6 +197,27 @@ describe('buildProviderContributionRegistry', () => {
     expect(error.message).toContain("plugin 'plugin-b'");
   });
 
+  it('rejects a contributed alias that shadows a provider id', () => {
+    // ProviderManager keys providers by name, so registering such an alias
+    // would replace the provider outright rather than sit beside it.
+    expect(() =>
+      buildProviderContributionRegistry([
+        makePlugin('pkg', 'plugin-a', [
+          {
+            providerId: 'plugin-a-provider',
+            createProvider: () => null,
+            builtinAliases: [
+              {
+                alias: 'openai',
+                config: { baseProvider: 'plugin-a-provider' },
+              },
+            ],
+          },
+        ]),
+      ]),
+    ).toThrow(/collides with provider id/);
+  });
+
   it('exposes contributed aliases in plugin-configured order', () => {
     const registry = buildProviderContributionRegistry([
       makePlugin('first-pkg', 'plugin-a', [

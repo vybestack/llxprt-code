@@ -94,6 +94,60 @@ describe('sanctioned dynamic module loaders', () => {
     expect(result.stdout + result.stderr).toContain(SANCTIONED_PATH);
   });
 
+  it('rejects a specifier assembled across the @google/ boundary', async () => {
+    // A contiguous '@google/' check misses this: the text never contains that
+    // substring. Screening the distinctive words is what catches it.
+    const result = await withFixture(async ({ root, write }) => {
+      writeRequiredManifests(write);
+      write(
+        SANCTIONED_PATH,
+        "const sdk = '@' + 'google/genai';\n" +
+          'export async function load(): Promise<unknown> {\n' +
+          '  return import(sdk);\n' +
+          '}\n',
+      );
+      return runScript(root);
+    });
+
+    expect(result.code).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain(SANCTIONED_PATH);
+  });
+
+  it('rejects a computed specifier that is not a parameter of its own function', async () => {
+    // The structural half of the exemption. Even with no genai text anywhere,
+    // a loader may not compute a specifier of its own choosing.
+    const result = await withFixture(async ({ root, write }) => {
+      writeRequiredManifests(write);
+      write(
+        SANCTIONED_PATH,
+        "const chosen = ['a', 'b'].join('-');\n" +
+          'export async function load(): Promise<unknown> {\n' +
+          '  return import(chosen);\n' +
+          '}\n',
+      );
+      return runScript(root);
+    });
+
+    expect(result.code).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain('computed');
+  });
+
+  it('rejects a specifier derived from a parameter rather than being the parameter', async () => {
+    const result = await withFixture(async ({ root, write }) => {
+      writeRequiredManifests(write);
+      write(
+        SANCTIONED_PATH,
+        'export async function load(specifier: string): Promise<unknown> {\n' +
+          "  return import(specifier + '/sub');\n" +
+          '}\n',
+      );
+      return runScript(root);
+    });
+
+    expect(result.code).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain('computed');
+  });
+
   it('rejects a sanctioned loader that assembles the genai name from fragments', async () => {
     // The evasion the plain computed-import ban could not catch on its own:
     // no literal '@google/genai' appears, so a literal-matching scanner sees
