@@ -150,16 +150,23 @@ function countInteractiveOutputCharacters(
   }
 }
 
+/**
+ * Provider-reported completion tokens for a turn, or undefined when the
+ * provider did not report any.
+ *
+ * Only the Finished event is read. The UsageMetadata event carries
+ * Gemini-shaped keys (`candidatesTokenCount`), and this package is required to
+ * stay provider-neutral, which the agents-neutral gate enforces. Finished
+ * carries the same figure in neutral `UsageStats` form. A provider that reports
+ * usage only through the other event falls back to the character estimate,
+ * which is the intended behaviour for an absent report.
+ */
 function readInteractiveOutputTokens(
   event: ServerAgentStreamEvent,
 ): number | undefined {
-  if (event.type === AgentEventType.Finished) {
-    return event.value.usageMetadata?.completionTokens;
-  }
-  if (event.type === AgentEventType.UsageMetadata) {
-    return event.value.candidatesTokenCount;
-  }
-  return undefined;
+  return event.type === AgentEventType.Finished
+    ? event.value.usageMetadata?.completionTokens
+    : undefined;
 }
 
 /**
