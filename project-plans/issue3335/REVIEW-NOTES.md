@@ -76,6 +76,43 @@ context loss and get checked before the PR goes up.
 8. **Check for drive-by edits** in both subagents' diffs before committing, the
    way item A needed.
 
+## Does the budget actually stop the reported incident?
+
+Measured against the incident's own telemetry: 8,138 DeepSeek responses from the
+affected session, output tokens per response.
+
+```
+n=8138  min=2  p50=122  p90=376  mean=339  max=16384
+turns to reach the 2,000,000 budget at mean output:  5,896
+turns to reach it at p50 output:                    16,393
+turns to reach it at the 16,384 ceiling:               122
+```
+
+Two conclusions, one reassuring and one not.
+
+**The budget cannot degrade normal operation.** Typical output is 122 tokens per
+turn. At that rate the budget is ~16,000 turns of work, and `max_turns` (1000 by
+default) binds thousands of turns earlier. For ordinary traffic the budget is
+never the thing that stops a run, which is exactly what was wanted.
+
+**The budget only catches high-output runaways.** The incident reached turn 253.
+Every sampled response for the runaway subagent (`typescriptexpert-wg1coz`) was
+exactly 16,384, the per-response ceiling, so if that held across its turns the
+budget trips at **turn 122** — less than half way to where it actually got, and
+well before the heap died. That is a real fix for the observed failure mode.
+
+But if a future runaway loops with *typical* 122-token responses instead, 253
+turns is 30,866 tokens, about 1.5% of the budget. The budget would never fire
+and `max_turns = 1000` would be the only stop, far too late to matter for
+memory. **This change does not address a many-small-turns runaway.** The
+per-delta retention work (#3339, #3341) is what bounds memory in that case, not
+the budget. Worth stating plainly rather than implying the budget is a general
+runaway guard.
+
+Follow-up worth considering separately: a rate-based check (output tokens per
+unit time, or turns without tool calls) would catch the case the budget misses.
+Deliberately not in this change.
+
 ## Verification notes
 
 V1. **`grep-ripgrep-issue3203-remediation.test.ts` flakes under load, not from
