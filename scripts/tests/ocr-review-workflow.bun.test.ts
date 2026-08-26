@@ -744,9 +744,12 @@ describe('.github/workflows/ocr-review.yml', () => {
       'local create_stderr',
       'issue_body_file="$1"',
       'shift',
-      'gh issue create "$@" --body-file "$issue_body_file" --label "ci/cd" 2>"${create_stderr}"',
+      // Issue #3064 adds the release milestone and captures the created issue
+      // URL so the Bug issue type can be applied over REST afterwards.
+      'gh issue create "$@" --body-file "$issue_body_file" --label "ci/cd" ${MILESTONE_ARGS[@]+"${MILESTONE_ARGS[@]}"} >"${created_issue}" 2>"${create_stderr}"',
       'if grep -Eqi "label|labels|not found|does not exist" "${create_stderr}"; then',
       'gh issue create "$@" --body-file "$issue_body_file"',
+      'apply_issue_type "$(tail -n 1 "${created_issue}")"',
       'Failed to create OCR infrastructure issue.',
       'return 1',
       'create_infrastructure_issue "$body_file"',
