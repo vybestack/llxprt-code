@@ -75,3 +75,31 @@ context loss and get checked before the PR goes up.
 
 8. **Check for drive-by edits** in both subagents' diffs before committing, the
    way item A needed.
+
+## Findings on the CLI work (#3340)
+
+9. **Check 7 passes.** `pendingResponseBuffer.test.ts:42-68` uses
+   `toStrictEqual` on the exact `committed` array and the retained tail for both
+   the no-fence and balanced-fence controls, so commit boundaries are genuinely
+   pinned, not just final text. This is the "do not degrade normal streaming"
+   guard and it is real.
+
+10. **The bound assertion is too weak.** `:70-81` asserts
+    `retained.length < 524_288` against an 820,014-character stream. 524,288 is
+    exactly `MAX_UNCLOSED_FENCE_LENGTH`, so the test only proves retention
+    landed under the trigger for this one fixture size. It would still pass if
+    retention grew with the stream, which is the actual defect. The property
+    that matters is that **retention does not scale with stream length**. Add a
+    second stream at 2x the deltas and assert retention does not materially
+    grow. Also drop `expect(original.length).toBe(820_014)`, which asserts the
+    fixture rather than any behaviour.
+
+11. **Threshold sizing is tight but defensible.**
+    `MAX_UNCLOSED_FENCE_LENGTH = 512 KiB`, retaining `64 KiB` after a forced
+    split. 512 KiB is roughly 128k tokens, which is exactly the largest declared
+    `maxOutputTokens` in the catalog (`AnthropicModelData.ts:104`). So a
+    legitimate maximum-length response consisting *entirely* of one unbroken
+    code block would sit right at the trigger. That combination is vanishingly
+    rare and the consequence is cosmetic (two adjacent, identically styled code
+    blocks), so this is acceptable — but it should be stated in the constant's
+    comment rather than left for a reviewer to work out.
