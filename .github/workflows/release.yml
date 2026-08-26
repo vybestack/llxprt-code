@@ -703,8 +703,8 @@ jobs:
           fi
 
           CREATE_ARGS=(--repo "${GH_REPO}")
-          CREATE_ARGS+=(--title "Release Failed for ${{ steps.version.outputs.RELEASE_TAG || 'N/A' }} on $(date +'%Y-%m-%d')")
-          CREATE_ARGS+=(--body "The release workflow failed. See the full run for details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}")
+          CREATE_ARGS+=(--title "Release Failed for ${RELEASE_TAG} on $(date +'%Y-%m-%d')")
+          CREATE_ARGS+=(--body "The release workflow failed. See the full run for details: ${RUN_URL}")
           LABEL_ARGS=()
           if ensure_label "ci/cd" "e33539" "Issues with github and the workflow scripts and CI CD environment."; then
             LABEL_ARGS+=(--label "ci/cd")
@@ -724,3 +724,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          # Interpolated through env rather than straight into the run body, so
+          # a value carrying shell metacharacters cannot alter the script.
+          RELEASE_TAG: ${{ steps.version.outputs.RELEASE_TAG || 'N/A' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

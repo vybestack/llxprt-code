@@ -179,6 +179,15 @@ def handle_issue(argv, state, state_file):
         fields = [f for f in next(iter(pairs.get("--json", [])), "number,title").split(",") if f]
         m = re.search(r'"([^"]*)"', search)
         title = m.group(1) if m else None
+        # Models an issue opened by a concurrent run: invisible to the first N
+        # searches, visible afterwards. Exercises the create_issue_once guard.
+        hide_until = state.get("issuesVisibleAfterListCalls")
+        seen = state.get("listCalls", 0) + 1
+        state["listCalls"] = seen
+        save(state_file, state)
+        if hide_until is not None and seen <= hide_until:
+            sys.stdout.write(jq_output(json.dumps([]), jq))
+            return 0
         objs = [
             {k: it.get(k) for k in fields}
             for it in state.get("issues", [])
@@ -235,7 +244,7 @@ def handle_issue(argv, state, state_file):
     sys.stderr.write("fake-gh: unmodeled issue subcommand: %s\n" % sub)
     return 1
 
-def handle_label(argv, state):
+def handle_label(argv, state, state_file):
     sub = argv[0] if argv else ""
     if sub == "create":
         opts, pairs, tokens = parse_args(argv[1:])
@@ -245,6 +254,11 @@ def handle_label(argv, state):
         if name in (state.get("labels") or {}):
             sys.stderr.write("HTTP 422: Label already exists\n")
             return 1
+        # Persist it, so a later label list sees it the way real GitHub would.
+        labels = state.get("labels") or {}
+        labels[name] = {"name": name}
+        state["labels"] = labels
+        save(state_file, state)
         return 0
     if sub == "list":
         opts, pairs, tokens = parse_args(argv[1:])
@@ -271,7 +285,7 @@ def main():
         elif argv[0] == "issue":
             status = handle_issue(argv[1:], state, state_file)
         elif argv[0] == "label":
-            status = handle_label(argv[1:], state)
+            status = handle_label(argv[1:], state, state_file)
         else:
             sys.stderr.write("fake-gh: unmodeled command: %s\n" % " ".join(argv))
             status = 1
@@ -327,6 +341,14 @@ export interface FakeMetadataState {
   results?: Record<string, string>;
   /** Values for `needs.*.outputs.*` / `steps.*.outputs.*` expressions. */
   outputs?: Record<string, string>;
+  /**
+   * Hide `issues` from the first N `gh issue list` calls.
+   *
+   * Models an issue opened by a concurrent run between the notifier's initial
+   * search and its create attempt, which is the window the `create_issue_once`
+   * guard exists to close.
+   */
+  issuesVisibleAfterListCalls?: number;
 }
 
 export interface NotificationScript {

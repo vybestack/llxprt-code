@@ -69,7 +69,10 @@ jobs:
           GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
           GH_REPO: '${{ github.repository }}'
           DETAILS_URL: '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'
-          REF: '${{ github.event.inputs.ref }}'
+          # Same fallback the checkout step uses: inputs.ref is empty on push
+          # runs, which would title the issue "Smoke test failed on  @ <date>"
+          # and drop the tested revision.
+          REF: '${{ github.event.inputs.ref || github.sha }}'
         run: |
           ensure_label() {
             local name="$1"

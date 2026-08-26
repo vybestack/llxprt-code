@@ -33,6 +33,8 @@ interface Site {
   jobId: string;
   stepName: string;
   existingIssue: boolean;
+  /** Re-searches for the title inside the create retry loop. */
+  racesGuarded: boolean;
 }
 
 const SITES: Site[] = [
@@ -42,6 +44,7 @@ const SITES: Site[] = [
     jobId: 'notify_failure',
     stepName: 'Create Issue on Failure',
     existingIssue: true,
+    racesGuarded: true,
   },
   {
     name: 'evals-nightly',
@@ -49,6 +52,7 @@ const SITES: Site[] = [
     jobId: 'notify_failure',
     stepName: 'Create Issue on Failure',
     existingIssue: true,
+    racesGuarded: true,
   },
   {
     name: 'release',
@@ -56,6 +60,7 @@ const SITES: Site[] = [
     jobId: 'release',
     stepName: 'Create Issue on Failure',
     existingIssue: false,
+    racesGuarded: false,
   },
   {
     name: 'smoke-test',
@@ -63,6 +68,7 @@ const SITES: Site[] = [
     jobId: 'smoke-test',
     stepName: 'Create Issue on Failure',
     existingIssue: false,
+    racesGuarded: false,
   },
   {
     name: 'ocr-infrastructure-notifier',
@@ -70,6 +76,7 @@ const SITES: Site[] = [
     jobId: 'notify-ocr-infrastructure-failure',
     stepName: 'Notify OCR infrastructure failure issue',
     existingIssue: true,
+    racesGuarded: false,
   },
 ];
 
@@ -329,6 +336,41 @@ describe('auto-created failure issues carry label, milestone, and type', () => {
         }
         expect(result.status).toBe(0);
       });
+
+      // Registered only for the sites that actually re-search inside the
+      // create retry loop; an early-returning test body would be a vacuous
+      // pass everywhere else.
+      it.if(site.racesGuarded)(
+        'does not open a duplicate when an issue appears mid-retry',
+        () => {
+          // Invisible to the initial search, visible by the time the notifier
+          // attempts to create. Without the create_issue_once guard the retry
+          // opens a second issue with the same title.
+          const result = run(
+            site,
+            baseFake({
+              issues: [
+                {
+                  number: 77,
+                  title: TITLES[site.name],
+                  state: 'open',
+                  labels: ['ci/cd'],
+                },
+              ],
+              issuesVisibleAfterListCalls: 1,
+            }),
+          );
+          expect(createCalls(result)).toHaveLength(0);
+          expect(result.status).toBe(0);
+          // The race path never applied CREATE_ARGS, so the metadata has to be
+          // applied to the issue that won the race.
+          expect(milestoneArgv(editCalls(result))).toEqual([
+            '--milestone',
+            '0.11.0',
+          ]);
+          expect(patchCalls(result)).toContain(77);
+        },
+      );
 
       it('never exits non-zero solely because metadata handling failed', () => {
         const result = run(site, baseFake({ packageJsonFail: true }));
