@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { exec } from 'child_process';
+import { exec, execFileSync } from 'child_process';
 import { promisify } from 'util';
 import os from 'os';
 import path from 'path';
@@ -166,8 +166,11 @@ async function getProcessInfo(pid: number): Promise<{
   command: string;
 }> {
   try {
-    const command = `ps -o ppid=,command= -p ${pid}`;
-    const { stdout } = await execAsync(command);
+    const stdout = execFileSync(
+      'ps',
+      ['-o', 'ppid=,command=', '-p', String(pid)],
+      { encoding: 'utf8' },
+    );
     const trimmedStdout = stdout.trim();
     if (!trimmedStdout) {
       return { parentPid: 0, name: '', command: '' };

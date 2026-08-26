@@ -501,22 +501,21 @@ export class CompressionHandler {
       performCompression: (promptId, options) =>
         this.performCompression(promptId, options),
       estimateFinalizedPromptTokens,
+      getPromptTokenBaseline: () => this.lastPromptTokenCount,
+      resetPromptTokenBaseline: () => {
+        this.lastPromptTokenCount = null;
+      },
+      restorePromptTokenBaseline: (baseline) => {
+        this.lastPromptTokenCount = baseline;
+      },
       performFallbackCompression: async (promptId, applyResult) => {
         this.pushSuppressDensityDirty();
         try {
           const context = await this.buildCompressionContext(promptId);
-          const applyAndResetPromptCount = (newHistory: IContent[]) => {
-            this.lastPromptTokenCount = null;
-            applyResult(newHistory);
-          };
           const outcome = await this.performFallbackCompression(
             context,
             new Error('Provider content fallback truncation triggered'),
-            // The enforcer owns its own history restore (restoreHistory) which
-            // already resets the cache anchor; the topPreserved parameter is
-            // not consumed on this path.
-            (newHistory, _summary, _topPreserved) =>
-              applyAndResetPromptCount(newHistory),
+            (newHistory, _summary, _topPreserved) => applyResult(newHistory),
             { swallowErrors: false },
           );
           return outcome === 'applied';
@@ -733,8 +732,8 @@ export class CompressionHandler {
     newHistory: IContent[],
     summary: IContent | undefined,
     topPreserved: number,
-  ) => void {
-    return (newHistory, summary, topPreserved) => {
+  ) => Promise<void> {
+    return async (newHistory, summary, topPreserved) => {
       applyCompressionWithAnchor(
         this.historyService,
         newHistory,
@@ -831,7 +830,7 @@ export class CompressionHandler {
       newHistory: IContent[],
       summary: IContent | undefined,
       topPreserved: number,
-    ) => void,
+    ) => Promise<void>,
   ): Promise<'applied' | 'noop' | 'failed'> {
     const context = await this.buildCompressionContext(promptId);
     const configuredStrategyName = parseCompressionStrategyName(
@@ -864,7 +863,7 @@ export class CompressionHandler {
         );
       }
 
-      this.applyFallbackCompressionResult(result, applyResult);
+      await this.applyFallbackCompressionResult(result, applyResult);
       this.logger.debug('Compression completed with primary strategy');
       return 'applied';
     } catch (err) {
@@ -907,7 +906,7 @@ export class CompressionHandler {
       newHistory: IContent[],
       summary: IContent | undefined,
       topPreserved: number,
-    ) => void,
+    ) => Promise<void>,
   ): Promise<'applied' | 'noop'> {
     if (configuredStrategyName !== 'middle-out') {
       this.logger.debug(
@@ -917,7 +916,7 @@ export class CompressionHandler {
     }
     const routed = await this.runOneShotFallback(context);
     if (routed.kind === 'applied') {
-      this.applyFallbackCompressionResult(routed, applyResult);
+      await this.applyFallbackCompressionResult(routed, applyResult);
       this.logger.debug(
         'Compression completed — middle-out structural no-op routed to one-shot',
       );
@@ -945,14 +944,14 @@ export class CompressionHandler {
    * Apply an 'applied' strategy outcome: commit history, reset failure
    * counters, and surface the marked compression snapshot for recording.
    */
-  private applyFallbackCompressionResult(
+  private async applyFallbackCompressionResult(
     result: StrategyCompressionResult,
     applyResult: (
       newHistory: IContent[],
       summary: IContent | undefined,
       topPreserved: number,
-    ) => void,
-  ): void {
+    ) => Promise<void>,
+  ): Promise<void> {
     if (result.kind === 'noop') {
       this.logger.debug(
         `applyFallbackCompressionResult received structural no-op (${result.reason}); not applying`,
@@ -970,7 +969,11 @@ export class CompressionHandler {
     const summary = CompressionHandler.selectCompressionSummary(
       result.newHistory,
     );
-    applyResult(result.newHistory, summary, result.metadata.topPreserved ?? 0);
+    await applyResult(
+      result.newHistory,
+      summary,
+      result.metadata.topPreserved ?? 0,
+    );
     this.compressionSummary = summary;
     this.compressionFailureCount = 0;
     this.lastCompressionFailureTime = null;
@@ -1006,7 +1009,7 @@ export class CompressionHandler {
       newHistory: IContent[],
       summary: IContent | undefined,
       topPreserved: number,
-    ) => void,
+    ) => Promise<void>,
     options?: { swallowErrors?: boolean },
   ): Promise<'applied' | 'noop' | 'failed'> {
     const swallowErrors = options?.swallowErrors ?? true;
@@ -1020,7 +1023,7 @@ export class CompressionHandler {
         );
         return 'noop';
       }
-      this.applyFallbackCompressionResult(result, applyResult);
+      await this.applyFallbackCompressionResult(result, applyResult);
       this.logger.debug(
         'Compression completed with fallback (TopDownTruncation)',
       );

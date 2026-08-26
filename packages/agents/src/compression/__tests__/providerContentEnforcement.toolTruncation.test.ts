@@ -159,6 +159,9 @@ function buildEnforcerHarness(
     ensureDensityOptimized,
     performCompression,
     performFallbackCompression,
+    getPromptTokenBaseline: () => null,
+    resetPromptTokenBaseline: () => {},
+    restorePromptTokenBaseline: () => {},
   };
   return {
     enforcer: new ProviderContentEnforcer(deps),

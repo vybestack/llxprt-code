@@ -168,13 +168,17 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     const transportToken = Object.freeze({});
     this.preparedPromptEnvelopes.set(transportToken, requestContext);
     const pdfEnabled = isResponsesPdfEnabled(normalized);
-    return projectOpenAIResponsesPromptEnvelope(requestContext.request, {
-      transportToken,
-      unsupportedMedia: collectUnsupportedMedia(
-        normalized.contents,
-        (category) =>
-          category === 'image' || (category === 'pdf' && pdfEnabled),
-      ),
-    });
+    return projectOpenAIResponsesPromptEnvelope(
+      requestContext.request,
+      {
+        transportToken,
+        unsupportedMedia: collectUnsupportedMedia(
+          normalized.contents,
+          (category) =>
+            category === 'image' || (category === 'pdf' && pdfEnabled),
+        ),
+      },
+      requestContext.projectionContext,
+    );
   }
 }

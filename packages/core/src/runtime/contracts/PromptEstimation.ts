@@ -25,6 +25,18 @@ export interface UnsupportedMediaEntry {
   readonly mediaType?: string;
 }
 
+export interface PromptEnvelopeEstimationProjection {
+  readonly finalizedProjection: unknown;
+  readonly legacyEstimate: () => Promise<number>;
+}
+
+export interface PromptEnvelopeAccountingProjection {
+  readonly statefulParentUsed: boolean;
+  readonly retainedBaselineTokens?: number;
+  readonly incremental?: PromptEnvelopeEstimationProjection;
+  readonly fullHistory?: PromptEnvelopeEstimationProjection;
+}
+
 export interface PromptEnvelopeProjection {
   readonly model: string;
   readonly protocol: PromptEnvelopeProtocol;
@@ -34,10 +46,16 @@ export interface PromptEnvelopeProjection {
   readonly transportToken: object;
   readonly finalizedProjection: unknown;
   readonly legacyEstimate: () => Promise<number>;
+  readonly accounting?: PromptEnvelopeAccountingProjection;
 }
 
 export interface PromptEnvelopeEstimate {
   readonly estimatedPromptTokens: number;
+  readonly transmittedTokens?: number;
+  readonly incrementalTokens?: number;
+  readonly retainedBaselineTokens?: number;
+  readonly effectiveTokens?: number;
+  readonly statefulParentUsed?: boolean;
   readonly activeProvider: string;
   readonly model: string;
   readonly protocol: PromptEnvelopeProtocol;
@@ -137,6 +155,70 @@ function isUnsupportedMediaEntry(
   );
 }
 
+function validateEstimationProjection(
+  projection: PromptEnvelopeEstimationProjection,
+  field: string,
+): void {
+  if (typeof projection.legacyEstimate !== 'function') {
+    throw new Error(
+      `PromptEnvelopeEstimate validation failed: ${field}.legacyEstimate must be a function`,
+    );
+  }
+}
+
+function validateProjectionAccounting(
+  projection: PromptEnvelopeProjection,
+): void {
+  const accounting = projection.accounting;
+  if (accounting === undefined) return;
+  if (typeof accounting.statefulParentUsed !== 'boolean') {
+    throw new Error(
+      'PromptEnvelopeEstimate validation failed: statefulParentUsed must be a boolean',
+    );
+  }
+  if (accounting.retainedBaselineTokens !== undefined) {
+    assertFiniteNonNegativeInt(
+      accounting.retainedBaselineTokens,
+      'retainedBaselineTokens',
+    );
+  }
+  if (!accounting.statefulParentUsed) {
+    if (
+      accounting.retainedBaselineTokens !== undefined ||
+      accounting.incremental !== undefined ||
+      accounting.fullHistory !== undefined
+    ) {
+      throw new Error(
+        'PromptEnvelopeEstimate validation failed: stateless accounting cannot carry retained or continuation projections',
+      );
+    }
+    return;
+  }
+  if (accounting.incremental === undefined) {
+    throw new Error(
+      'PromptEnvelopeEstimate validation failed: stateful accounting requires an incremental projection',
+    );
+  }
+  validateEstimationProjection(
+    accounting.incremental,
+    'accounting.incremental',
+  );
+  if (accounting.fullHistory !== undefined) {
+    validateEstimationProjection(
+      accounting.fullHistory,
+      'accounting.fullHistory',
+    );
+  }
+  if (
+    accounting.retainedBaselineTokens === undefined &&
+    accounting.fullHistory === undefined
+  ) {
+    throw new Error(
+      'PromptEnvelopeEstimate validation failed: stateful accounting without observed usage requires a full-history projection',
+    );
+  }
+}
+
 function validateProjection(
   activeProvider: string,
   projection: PromptEnvelopeProjection,
@@ -150,6 +232,7 @@ function validateProjection(
     projection.projectionRevision,
     'projectionRevision',
   );
+  validateProjectionAccounting(projection);
   if (typeof projection.legacyEstimate !== 'function') {
     throw new Error(
       'PromptEnvelopeEstimate validation failed: legacyEstimate must be a function',
@@ -180,32 +263,98 @@ function validateResult(
   }
 }
 
+async function estimateProjection(
+  activeProvider: string,
+  projection: PromptEnvelopeProjection,
+  estimationProjection: PromptEnvelopeEstimationProjection,
+  factory: RuntimeTokenizerFactory,
+): Promise<Awaited<ReturnType<RuntimeTokenizerFactory['estimatePrompt']>>> {
+  const result = await factory.estimatePrompt({
+    activeProvider,
+    canonicalModel: projection.model,
+    protocol: projection.protocol,
+    wireMethod: projection.method,
+    finalizedProjection: estimationProjection.finalizedProjection,
+    projectionRevision: projection.projectionRevision,
+    legacyEstimate: estimationProjection.legacyEstimate,
+  });
+  validateResult(projection, result);
+  return result;
+}
+
 export async function estimatePromptEnvelope(
   activeProvider: string,
   projection: PromptEnvelopeProjection,
   factory: RuntimeTokenizerFactory,
 ): Promise<PromptEnvelopeEstimate> {
   const unsupportedMedia = validateProjection(activeProvider, projection);
-  const result = await factory.estimatePrompt({
+  const wireResult = await estimateProjection(
     activeProvider,
-    canonicalModel: projection.model,
-    protocol: projection.protocol,
-    wireMethod: projection.method,
-    finalizedProjection: projection.finalizedProjection,
-    projectionRevision: projection.projectionRevision,
-    legacyEstimate: projection.legacyEstimate,
-  });
-  validateResult(projection, result);
+    projection,
+    projection,
+    factory,
+  );
+  const accounting = projection.accounting;
+  let incrementalTokens = wireResult.count;
+  let retainedBaselineTokens = 0;
+  let effectiveTokens = wireResult.count;
+  let effectiveResult = wireResult;
+  if (accounting?.statefulParentUsed === true) {
+    const incremental = accounting.incremental;
+    if (incremental === undefined) {
+      throw new Error(
+        'PromptEnvelopeEstimate validation failed: stateful accounting requires an incremental projection',
+      );
+    }
+    const incrementalResult = await estimateProjection(
+      activeProvider,
+      projection,
+      incremental,
+      factory,
+    );
+    incrementalTokens = incrementalResult.count;
+    if (accounting.retainedBaselineTokens !== undefined) {
+      retainedBaselineTokens = accounting.retainedBaselineTokens;
+      effectiveTokens = retainedBaselineTokens + incrementalTokens;
+      effectiveResult = incrementalResult;
+    } else {
+      const fullHistory = accounting.fullHistory;
+      if (fullHistory === undefined) {
+        throw new Error(
+          'PromptEnvelopeEstimate validation failed: stateful accounting without observed usage requires a full-history projection',
+        );
+      }
+      const fullHistoryResult = await estimateProjection(
+        activeProvider,
+        projection,
+        fullHistory,
+        factory,
+      );
+      effectiveTokens = fullHistoryResult.count;
+      if (effectiveTokens < incrementalTokens) {
+        throw new Error(
+          `PromptEnvelopeEstimate validation failed: full-history estimate (${effectiveTokens}) is smaller than the incremental estimate (${incrementalTokens})`,
+        );
+      }
+      retainedBaselineTokens = effectiveTokens - incrementalTokens;
+      effectiveResult = fullHistoryResult;
+    }
+  }
   return Object.freeze({
-    estimatedPromptTokens: result.count,
+    estimatedPromptTokens: effectiveTokens,
+    transmittedTokens: wireResult.count,
+    incrementalTokens,
+    retainedBaselineTokens,
+    effectiveTokens,
+    statefulParentUsed: accounting?.statefulParentUsed ?? false,
     activeProvider,
     model: projection.model,
     protocol: projection.protocol,
     method: projection.method,
-    estimatorMethod: result.method,
-    estimatorFamily: result.family,
-    estimatorVersion: result.estimatorVersion,
-    assetRevision: result.assetRevision,
+    estimatorMethod: effectiveResult.method,
+    estimatorFamily: effectiveResult.family,
+    estimatorVersion: effectiveResult.estimatorVersion,
+    assetRevision: effectiveResult.assetRevision,
     projectionRevision: projection.projectionRevision,
     unsupportedMedia,
   });

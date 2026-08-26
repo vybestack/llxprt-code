@@ -106,11 +106,52 @@ describe('parseTokenUsageLogRecord — legacy normalization', () => {
 });
 
 describe('parseTokenUsageLogRecord — v1 turn records', () => {
-  it('round-trips a minimal v1 turn record', () => {
+  it('round-trips a minimal v1 turn record without requiring new accounting fields', () => {
     const result = parseTokenUsageLogRecord(v1Turn());
-    expect(result).not.toBeNull();
-    expect(result?.record_type).toBe('turn');
-    expect(result?.schema_version).toBe(1);
+    if (result?.record_type !== 'turn') {
+      throw new Error('expected a parseable turn record');
+    }
+
+    expect(result.schema_version).toBe(1);
+    expect(result.transmitted_prompt_tokens).toBeUndefined();
+    expect(result.incremental_prompt_tokens).toBeUndefined();
+    expect(result.retained_context_tokens).toBeUndefined();
+    expect(result.effective_provider_context_tokens).toBeUndefined();
+    expect(result.stateful_parent_used).toBeUndefined();
+  });
+
+  it('round-trips optional finalized provider-context accounting in schema version 1', () => {
+    const result = parseTokenUsageLogRecord(
+      v1Turn({
+        estimated_tokens: 931,
+        transmitted_prompt_tokens: 31,
+        incremental_prompt_tokens: 31,
+        retained_context_tokens: 900,
+        effective_provider_context_tokens: 931,
+        stateful_parent_used: true,
+      }),
+    );
+    if (result?.record_type !== 'turn') {
+      throw new Error('expected a parseable turn record');
+    }
+    const transmitted = result.transmitted_prompt_tokens;
+    const incremental = result.incremental_prompt_tokens;
+    const retained = result.retained_context_tokens;
+    const effective = result.effective_provider_context_tokens;
+    if (
+      transmitted === undefined ||
+      incremental === undefined ||
+      retained === undefined ||
+      effective === undefined
+    ) {
+      throw new Error('expected provider-context accounting fields');
+    }
+
+    expect(result.schema_version).toBe(1);
+    expect(result.stateful_parent_used).toBe(true);
+    expect(transmitted).toBe(incremental);
+    expect(retained + incremental).toBe(effective);
+    expect(result.estimated_tokens).toBe(effective);
   });
 
   it('round-trips optional join-key fields', () => {

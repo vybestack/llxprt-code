@@ -5,6 +5,7 @@
  */
 
 import type {
+  PromptEnvelopeEstimationProjection,
   PromptEnvelopeProjection,
   UnsupportedMediaEntry,
 } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
@@ -34,10 +35,40 @@ export interface ProjectionOptions {
   readonly transportToken?: object;
 }
 
+export interface OpenAIResponsesProjectionContext {
+  readonly statefulParentUsed: boolean;
+  readonly retainedBaselineTokens?: number;
+  readonly incrementalRequest: unknown;
+  readonly fullHistoryRequest?: unknown;
+}
+
 type ProjectionIdentity = Pick<
   PromptEnvelopeProjection,
   'protocol' | 'method' | 'projectionRevision'
 >;
+
+function buildEstimationProjection(
+  requestBody: unknown,
+  promptKeys: readonly string[],
+  protocol: PromptEnvelopeProjection['protocol'],
+): PromptEnvelopeEstimationProjection {
+  const promptText = serializePromptBearingStructure(requestBody, promptKeys);
+  const promptSegments = serializePromptSegments(requestBody, promptKeys);
+  let legacyTokens: number | undefined;
+  const finalizedProjection: ProviderFinalizedPromptProjection = Object.freeze({
+    kind: 'llxprt-provider-prompt-v3',
+    protocol,
+    promptText,
+    promptSegments,
+  });
+  return Object.freeze({
+    finalizedProjection,
+    legacyEstimate: () => {
+      legacyTokens ??= countPromptTokens(promptText);
+      return Promise.resolve(legacyTokens);
+    },
+  });
+}
 
 function buildProjection(
   requestBody: unknown,
@@ -45,16 +76,12 @@ function buildProjection(
   identity: ProjectionIdentity,
   options?: ProjectionOptions,
 ): PromptEnvelopeProjection {
-  const promptText = serializePromptBearingStructure(requestBody, promptKeys);
-  const promptSegments = serializePromptSegments(requestBody, promptKeys);
-  let legacyTokens: number | undefined;
+  const estimationProjection = buildEstimationProjection(
+    requestBody,
+    promptKeys,
+    identity.protocol,
+  );
   const unsupportedMedia = freezeUnsupportedMedia(options?.unsupportedMedia);
-  const finalizedProjection: ProviderFinalizedPromptProjection = Object.freeze({
-    kind: 'llxprt-provider-prompt-v3',
-    protocol: identity.protocol,
-    promptText,
-    promptSegments,
-  });
   // PromptEnvelopeProjection declares every member readonly. Freezing enforces
   // that at runtime too, so a projection cached or replayed across retries
   // cannot be mutated out from under a later estimate (issue #2817).
@@ -65,11 +92,7 @@ function buildProjection(
     projectionRevision: identity.projectionRevision,
     unsupportedMedia,
     transportToken: options?.transportToken ?? EMPTY_TRANSPORT_TOKEN,
-    finalizedProjection,
-    legacyEstimate: () => {
-      legacyTokens ??= countPromptTokens(promptText);
-      return Promise.resolve(legacyTokens);
-    },
+    ...estimationProjection,
   });
 }
 
@@ -234,8 +257,9 @@ export function projectOpenAIChatPromptEnvelope(
 export function projectOpenAIResponsesPromptEnvelope(
   request: unknown,
   options?: ProjectionOptions,
+  context?: OpenAIResponsesProjectionContext,
 ): PromptEnvelopeProjection {
-  return buildProjection(
+  const projection = buildProjection(
     request,
     PROMPT_KEYS['openai-responses'],
     {
@@ -245,4 +269,45 @@ export function projectOpenAIResponsesPromptEnvelope(
     },
     options,
   );
+  if (context === undefined) {
+    return projection;
+  }
+  if (!context.statefulParentUsed) {
+    return Object.freeze({
+      ...projection,
+      accounting: Object.freeze({ statefulParentUsed: false }),
+    });
+  }
+
+  const incremental = buildEstimationProjection(
+    context.incrementalRequest,
+    PROMPT_KEYS['openai-responses'],
+    projection.protocol,
+  );
+  const fullHistoryRequest = context.fullHistoryRequest;
+  if (
+    context.retainedBaselineTokens === undefined &&
+    fullHistoryRequest === undefined
+  ) {
+    throw new Error(
+      'OpenAI Responses projection without observed parent usage requires a full-history request',
+    );
+  }
+  const accounting =
+    context.retainedBaselineTokens === undefined
+      ? Object.freeze({
+          statefulParentUsed: true,
+          incremental,
+          fullHistory: buildEstimationProjection(
+            fullHistoryRequest,
+            PROMPT_KEYS['openai-responses'],
+            projection.protocol,
+          ),
+        })
+      : Object.freeze({
+          statefulParentUsed: true,
+          retainedBaselineTokens: context.retainedBaselineTokens,
+          incremental,
+        });
+  return Object.freeze({ ...projection, accounting });
 }

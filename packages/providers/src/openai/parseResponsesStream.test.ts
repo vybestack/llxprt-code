@@ -21,6 +21,17 @@ function createSSEStream(chunks: string[]): ReadableStream<Uint8Array> {
   });
 }
 
+async function captureStreamError(chunks: string[]): Promise<unknown> {
+  try {
+    for await (const message of parseResponsesStream(createSSEStream(chunks))) {
+      void message;
+    }
+  } catch (error) {
+    return error;
+  }
+  return undefined;
+}
+
 describe('parseResponsesStream', () => {
   it('should parse content chunks correctly', async () => {
     const chunks = [
@@ -445,6 +456,103 @@ describe('parseResponsesStream terminal events (issue #2333)', () => {
         }
       })(),
     ).rejects.toThrow('OpenAI Responses API stream failed');
+  });
+  it('preserves a response.failed context-window error as an actionable client failure', async () => {
+    const providerError = {
+      message:
+        "This model's maximum context length is 4096 tokens, but the input contained 5000 tokens.",
+      type: 'invalid_request_error',
+      code: 'context_length_exceeded',
+      param: 'input',
+    };
+    const error = await captureStreamError([
+      `data: ${JSON.stringify({
+        type: 'response.failed',
+        response: {
+          id: 'resp_context',
+          object: 'response',
+          model: 'gpt-5',
+          status: 'failed',
+          error: providerError,
+        },
+      })}\n\n`,
+    ]);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toMatchObject({
+      message: providerError.message,
+      status: 413,
+      code: providerError.code,
+      providerErrorType: providerError.type,
+      details: {
+        providerError,
+        responseStatus: 'failed',
+      },
+    });
+    expect(error).not.toMatchObject({ code: 'STREAM_INTERRUPTED' });
+  });
+
+  it('classifies a failed terminal response with invalid-request metadata as non-retryable client input', async () => {
+    const providerError = {
+      message: 'The input field must contain at least one item.',
+      type: 'invalid_request_error',
+      code: 'invalid_prompt',
+      param: 'input',
+    };
+    const error = await captureStreamError([
+      `data: ${JSON.stringify({
+        type: 'response.completed',
+        response: {
+          id: 'resp_invalid',
+          object: 'response',
+          model: 'gpt-5',
+          status: 'failed',
+          error: providerError,
+        },
+      })}\n\n`,
+    ]);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toMatchObject({
+      message: providerError.message,
+      status: 400,
+      code: providerError.code,
+      providerErrorType: providerError.type,
+      details: {
+        providerError,
+        responseStatus: 'failed',
+      },
+    });
+    expect(error).not.toMatchObject({ code: 'STREAM_INTERRUPTED' });
+  });
+
+  it('preserves documented top-level input error fields as non-retryable client input', async () => {
+    const error = await captureStreamError([
+      `data: ${JSON.stringify({
+        type: 'error',
+        code: 'invalid_prompt',
+        message: 'The input field is invalid.',
+        param: 'input',
+        sequence_number: 3,
+      })}\n\n`,
+    ]);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toHaveProperty('message', 'The input field is invalid.');
+    expect(error).toHaveProperty('status', 400);
+    expect(error).toHaveProperty('code', 'invalid_prompt');
+    expect(error).toHaveProperty('providerErrorType', 'error');
+    expect(error).toHaveProperty(
+      'details.providerError.message',
+      'The input field is invalid.',
+    );
+    expect(error).toHaveProperty('details.providerError.type', 'error');
+    expect(error).toHaveProperty(
+      'details.providerError.code',
+      'invalid_prompt',
+    );
+    expect(error).toHaveProperty('details.providerError.param', 'input');
+    expect(error).not.toMatchObject({ code: 'STREAM_INTERRUPTED' });
   });
 
   /**
