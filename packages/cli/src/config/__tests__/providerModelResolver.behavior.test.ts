@@ -172,6 +172,22 @@ describe('resolveProviderAndModel: explicit Gemini unchanged (#2481)', () => {
     expect(result.model).toBe('');
   });
 
+  it('treats a whitespace-only provider default as absent (empty model)', () => {
+    const result = resolveProviderAndModel({
+      cliProvider: 'gemini',
+      profileProvider: undefined,
+      envDefaultProvider: undefined,
+      cliModel: undefined,
+      profileModel: undefined,
+      settingsModel: undefined,
+      envDefaultModel: undefined,
+      envGeminiModel: undefined,
+      providerDefaultModel: '   ',
+    });
+    expect(result.provider).toBe('gemini');
+    expect(result.model).toBe('');
+  });
+
   it('does NOT consult the provider default when the provider is openai', () => {
     const result = resolveProviderAndModel({
       cliProvider: 'openai',

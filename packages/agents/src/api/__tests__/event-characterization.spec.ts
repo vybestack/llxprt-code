@@ -575,8 +575,8 @@ describe('Event characterization — invariant/decision-table @plan:PLAN-2026061
         streamThought({ subject: 'planning', description: 'analyzing' }),
       usage: () =>
         streamUsage({
-          promptTokenCount: 1,
-          candidatesTokenCount: 1,
+          inputTokenCount: 1,
+          outputTokenCount: 1,
           totalTokenCount: 2,
         }),
       notice: () => streamNotice('system notice'),

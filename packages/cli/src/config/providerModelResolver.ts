@@ -108,7 +108,7 @@ export function resolveProviderAndModel(
 
   const providerDefault =
     provider === 'gemini'
-      ? (input.providerDefaultModel ?? '')
+      ? (trimIfString(input.providerDefaultModel) ?? '')
       : (aliasDefaultModel ?? '');
   const configuredModel = firstNonEmptyString(
     trimIfString(cliModel),
