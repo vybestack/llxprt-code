@@ -138,6 +138,27 @@ async function createBudgetScope(
 }
 
 describe('subagent aggregate output token budget', () => {
+  it('dispatches tool calls emitted on the last allowed turn', async () => {
+    // The loop head already enforces the turn limit. Re-checking it between
+    // receiving a response and dispatching its tool calls discards work the
+    // model just did. self_emitvalue only reaches emitted_vars if the call was
+    // actually dispatched, so this fails if the run stops one step too early.
+    const { config } = await createMockConfig();
+    const provider = new ControlledUsageProvider([
+      { outputTokens: 1, continueWithTool: true },
+    ]);
+    const scope = await createBudgetScope(config, provider, {
+      max_time_minutes: 5,
+      max_turns: 1,
+      max_output_tokens_total: 1_000_000,
+    });
+
+    await scope.runNonInteractive(new ContextState());
+
+    expect(scope.output.emitted_vars.progress).toBe('1');
+    expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.MAX_TURNS);
+  });
+
   it('terminates the real non-interactive loop after provider usage crosses the budget', async () => {
     const { config } = await createMockConfig();
     const provider = new ControlledUsageProvider([

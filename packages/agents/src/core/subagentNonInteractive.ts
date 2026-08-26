@@ -47,6 +47,7 @@ import {
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { ExecutionLoopContext } from './subagentExecution.js';
 import {
+  checkOutputBudget,
   checkTerminationConditions,
   GeneratedOutputCounter,
   processNonInteractiveTextResponse,
@@ -510,12 +511,14 @@ async function runNonInteractiveLoopIteration(
   );
   if (abortController.signal.aborted === true) return { action: 'abort' };
 
-  const recheck = checkTerminationConditions(
-    turnCounter.value,
-    startTime,
-    execCtx,
-  );
-  if (recheck.shouldStop) return { action: 'stop' };
+  // Only the output budget is re-checked here. Re-checking the turn and time
+  // limits between receiving a response and dispatching its tool calls throws
+  // away work the model just did: a subagent on its last allowed turn would
+  // emit tool calls and have them silently discarded. The loop head already
+  // enforces both limits, so stopping there instead costs one dispatch and
+  // keeps the result. The interactive loop was corrected the same way, and the
+  // two paths must not disagree about when a run ends.
+  if (checkOutputBudget(execCtx).shouldStop) return { action: 'stop' };
 
   const nextMessages = await dispatchNonInteractiveTurnResult(
     functionCalls,
