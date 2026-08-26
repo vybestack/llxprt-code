@@ -160,9 +160,17 @@ export async function parseReasoningFromSseStream(
         `[ReasoningCaptureFetch] Stream parsing error: ${err instanceof Error ? err.message : String(err)}`,
     );
   } finally {
-    signal?.removeEventListener('abort', cancelReader);
-    reader.releaseLock();
+    // Order matters. `finalized` is set first so a consumer waiting on it is
+    // released even if a cleanup step throws.
     captureBuffer.finalized = true;
+    signal?.removeEventListener('abort', cancelReader);
+    // Cancel before releasing the lock. This reader owns one branch of a tee;
+    // merely releasing it leaves the branch live, so as the SDK drains the
+    // other branch the tee keeps queueing every chunk for this abandoned one.
+    // On the byte-limit path that would retain the whole rest of the response,
+    // which is the opposite of what the limit is for.
+    await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
   }
 }
 

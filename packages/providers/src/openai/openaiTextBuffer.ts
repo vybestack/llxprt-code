@@ -65,7 +65,7 @@ export function updateKimiSectionCounts(
 }
 
 /**
- * Handle text delta content: buffer or immediately emit.
+ * Handle text delta content: append to the buffer.
  */
 /**
  * Appends a text delta to the buffer, enforcing the byte cap first.
@@ -73,6 +73,13 @@ export function updateKimiSectionCounts(
  * The running byte count is incremented by the delta rather than recomputed
  * from the buffer, so the check stays O(1) per delta instead of O(n^2) across
  * a stream that never reaches a flush point.
+ */
+/**
+ * Invariant: `state.textBufferBytes` must always equal the UTF-8 byte length of
+ * `state.textBuffer`. Any path that clears, truncates or replaces the buffer
+ * must reset the count with it, or the cap either stops firing or starts
+ * dropping valid content. `flushTextBuffer` in OpenAIStreamProcessor is the
+ * other site that mutates both.
  */
 export function appendBufferedText(
   deltaContent: string,
