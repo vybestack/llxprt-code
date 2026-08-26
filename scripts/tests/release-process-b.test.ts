@@ -568,7 +568,15 @@ describe('.github/workflows/nightly.yml', () => {
     expect(normalizedRun).toContain('--body-file "${BODY_FILE}"');
     expect(normalizedRun).toContain('${FAILED_JOBS_TEXT}');
     expect(normalizedRun).toContain('${RUN_URL}');
-    expect(normalizedRun).toContain('CREATE_ARGS+=("${LABEL_ARGS[@]}")');
+    // Guarded expansion (issue #3064): an empty array expanded as
+    // "${LABEL_ARGS[@]}" is an unbound-variable error under `set -u` on bash
+    // 3.2, so the notifier uses the `+` alternate form.
+    expect(normalizedRun).toContain(
+      'CREATE_ARGS+=(${LABEL_ARGS[@]+"${LABEL_ARGS[@]}"})',
+    );
+    expect(normalizedRun).toContain(
+      'CREATE_ARGS+=(${MILESTONE_ARGS[@]+"${MILESTONE_ARGS[@]}"})',
+    );
   });
 
   it('updates an existing open nightly failure issue instead of duplicating it', () => {

@@ -192,10 +192,30 @@ function consumeGhRepoExpansion(state: ShellState): boolean {
   return true;
 }
 
+/**
+ * Array expansions the scanner resolves back to their source array.
+ *
+ * The guarded form comes first because it is a strict extension of the plain
+ * one. Expanding an EMPTY array as `"${NAME[@]}"` is an "unbound variable"
+ * error under `set -u` on bash 3.2 (still the /bin/bash on macOS), so the
+ * notifier workflows write `${NAME[@]+"${NAME[@]}"}` instead. Both forms must
+ * resolve identically here, otherwise the repository-targeting assertions
+ * below would silently stop covering the guarded call sites.
+ */
+const ARRAY_EXPANSION_PATTERNS: RegExp[] = [
+  /^\$\{([A-Za-z_][A-Za-z0-9_]*)\[@\]\+"\$\{\1\[@\]\}"\}/,
+  /^\$\{([A-Za-z_][A-Za-z0-9_]*)\[@\]\}/,
+];
+
 function consumeArrayExpansion(state: ShellState): boolean {
-  const expansion = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\[@\]\}/.exec(
-    state.line.slice(state.index),
-  );
+  const remainder = state.line.slice(state.index);
+  let expansion: RegExpExecArray | null = null;
+  for (const pattern of ARRAY_EXPANSION_PATTERNS) {
+    expansion = pattern.exec(remainder);
+    if (expansion !== null) {
+      break;
+    }
+  }
   if (expansion === null) {
     return false;
   }

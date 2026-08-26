@@ -127,6 +127,31 @@ jobs:
             printf '%s' "${milestone_title}"
           }
 
+          # Stamp the Bug issue type on the auto-created failure issue (issue
+          # #3064) so it lands in the same triage view as hand-filed bugs.
+          # `gh issue create` has no --type flag, so the type is applied over
+          # REST afterwards. Accepts the issue URL that create prints, or a
+          # bare number. Always returns 0: metadata must never sink the
+          # notification.
+          #
+          # This function is duplicated verbatim across the workflows that
+          # auto-create failure issues rather than sourced from a shared
+          # script, because this job (like the other notifiers) has no checkout
+          # step -- the same reason resolve_milestone reads package.json over
+          # the API instead of from disk.
+          apply_issue_type() {
+            local reference="$1"
+            local number="${reference##*/}"
+            if [[ ! "${number}" =~ ^[0-9]+$ ]]; then
+              echo "Warning: could not parse issue reference '${reference}'; skipping issue type assignment" >&2
+              return 0
+            fi
+            if ! gh api -X PATCH "repos/${GH_REPO}/issues/${number}" -f type=Bug >/dev/null 2>&1; then
+              echo "Warning: failed to set issue type Bug on issue #${number}" >&2
+              return 0
+            fi
+          }
+
           LABEL_ARGS=()
           if ensure_label "ci/cd" "e33539" "Issues with github and the workflow scripts and CI CD environment."; then
             LABEL_ARGS+=(--label "ci/cd")
@@ -192,23 +217,30 @@ jobs:
                 --milestone "${MILESTONE_TITLE}" || \
                 echo "Warning: failed to set milestone '${MILESTONE_TITLE}' on existing issue #${EXISTING_ISSUE}" >&2
             fi
+            apply_issue_type "${EXISTING_ISSUE}"
           else
             INTRODUCTION="The evals nightly workflow failed. Eval job result: ${EVALS_RESULT}."
             build_body_file "${BODY_FILE}" "${INTRODUCTION}"
             CREATE_ARGS=(--repo "${GH_REPO}" --title "${ISSUE_TITLE}" --body-file "${BODY_FILE}")
-            CREATE_ARGS+=("${LABEL_ARGS[@]}")
-            CREATE_ARGS+=("${MILESTONE_ARGS[@]}")
+            # Empty arrays expand to an unbound variable under `set -u` on bash
+            # 3.2, so guard every expansion with the `+` alternate form.
+            CREATE_ARGS+=(${LABEL_ARGS[@]+"${LABEL_ARGS[@]}"})
+            CREATE_ARGS+=(${MILESTONE_ARGS[@]+"${MILESTONE_ARGS[@]}"})
             create_issue_once() {
               local found=""
               found="$(gh issue list --repo "${GH_REPO}" --search "\"${ISSUE_TITLE}\" in:title is:issue state:open" --limit 30 --json number,title --jq "[.[] | select(.title == \"${ISSUE_TITLE}\") | .number] | .[0] // empty" 2>/dev/null)" || found=""
               if [[ -n "${found}" ]]; then
                 echo "Issue #${found} already exists; skipping creation." >&2
+                printf '%s\n' "${found}"
                 return 0
               fi
               gh issue create "${CREATE_ARGS[@]}"
             }
-            retry_gh create_issue_once || {
+            CREATED_ISSUE_FILE=created_issue.txt
+            retry_gh create_issue_once > "${CREATED_ISSUE_FILE}" || {
               echo "ERROR: Failed to create evals nightly failure issue" >&2
               exit 1
             }
+            cat "${CREATED_ISSUE_FILE}"
+            apply_issue_type "$(tail -n 1 "${CREATED_ISSUE_FILE}")"
           fi
