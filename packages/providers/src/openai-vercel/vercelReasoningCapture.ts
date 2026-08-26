@@ -169,7 +169,13 @@ export async function parseReasoningFromSseStream(
     // other branch the tee keeps queueing every chunk for this abandoned one.
     // On the byte-limit path that would retain the whole rest of the response,
     // which is the opposite of what the limit is for.
-    await reader.cancel().catch(() => undefined);
+    // Start the cancellation but do not await it. `cancel()` on a tee branch
+    // can stay pending while the sibling branch is still open, and the SDK may
+    // leave `sdkStream` open after an abort. Awaiting here would keep
+    // `parsePromise` pending and hang `vercelStreamHandler`, which awaits it:
+    // a leak traded for a deadlock. Releasing the lock is what matters
+    // synchronously; the cancellation lands whenever the tee lets it.
+    void reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
 }

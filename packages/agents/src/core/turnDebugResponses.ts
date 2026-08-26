@@ -153,10 +153,17 @@ export class TurnDebugResponses {
    * retention growth this class exists to prevent.
    */
   private pendingDropCount(): number {
-    if (this.chunks.length <= MAX_DEBUG_RESPONSE_CHUNKS * 2) {
+    // Project the length after the chunk this push is about to append. The
+    // replacement decision happens before the append, so comparing against the
+    // current length is one short: at exactly `CAP * 2` this reported nothing
+    // doomed, then the append pushed the total past the threshold and `trim`
+    // discarded the chunk that had just been updated in place, losing the
+    // newest thinking value from the retained response.
+    const projectedLength = this.chunks.length + 1;
+    if (projectedLength <= MAX_DEBUG_RESPONSE_CHUNKS * 2) {
       return 0;
     }
-    return this.chunks.length - MAX_DEBUG_RESPONSE_CHUNKS;
+    return projectedLength - MAX_DEBUG_RESPONSE_CHUNKS;
   }
 
   /** Drops the oldest chunks once retention passes the high-water mark. */
