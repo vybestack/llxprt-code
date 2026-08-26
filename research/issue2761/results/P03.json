@@ -1,0 +1,72 @@
+{
+  "id": "P03",
+  "area": "Streaming + usage",
+  "question": "Where does usage metadata land in a stream, and does text arrive incrementally on both adapters?",
+  "models": [
+    "gemini-3.1-flash-lite"
+  ],
+  "genai": {
+    "adapter": "google-genai@1.30.0",
+    "ok": true,
+    "observation": {
+      "totalChunks": 3,
+      "chunkKinds": [
+        [
+          "text"
+        ],
+        [
+          "text"
+        ],
+        [
+          "text"
+        ]
+      ],
+      "textIncrements": 2,
+      "textArrivedInMultipleIncrements": true,
+      "assembledTextLength": 96,
+      "usageAppears": "per-chunk",
+      "chunkIndicesWithUsage": [
+        0,
+        1,
+        2
+      ],
+      "finalFinishReason": "STOP",
+      "firstUsageKeys": [
+        "candidatesTokenCount",
+        "promptTokenCount",
+        "promptTokensDetails",
+        "serviceTier",
+        "totalTokenCount"
+      ]
+    }
+  },
+  "aisdk": {
+    "adapter": "@ai-sdk/google@2.0.85",
+    "ok": true,
+    "observation": {
+      "totalChunks": 7,
+      "partKindSequence": [
+        "stream-start",
+        "text-start",
+        "text-delta",
+        "text-delta",
+        "text-delta",
+        "text-end",
+        "finish"
+      ],
+      "textDeltaCount": 3,
+      "textArrivedInMultipleIncrements": true,
+      "assembledTextLength": 161,
+      "usageLocation": "finish-part",
+      "finishUsage": {
+        "inputTokens": 12,
+        "outputTokens": 33,
+        "totalTokens": 45
+      },
+      "finishReason": "stop",
+      "requestBodySent": "{\"generationConfig\":{\"maxOutputTokens\":200},\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"Write exactly three sentences about Paris in three short lines.\"}]}]}"
+    }
+  },
+  "verdict": "partial",
+  "finding": "Text arrived in multiple increments: genai=true, ai-sdk=true. Usage placement: genai=per-chunk, ai-sdk=finish-part (present=true). The placements differ: geminiResponseMapper stamps usage onto every chunk it maps, so on the AI SDK path an adapter would have to hold the terminal usage and attach it to the IContent metadata itself."
+}

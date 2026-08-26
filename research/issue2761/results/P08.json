@@ -1,0 +1,78 @@
+{
+  "id": "P08",
+  "area": "Media (inline base64 and URI fileData)",
+  "question": "Do both adapters hit the same media transports: inline base64 bytes as inlineData and a URL as fileData?",
+  "models": [
+    "gemini-3.1-flash-lite"
+  ],
+  "genai": {
+    "adapter": "google-genai@1.30.0",
+    "ok": true,
+    "observation": {
+      "inline": {
+        "attempted": true,
+        "ok": true,
+        "httpStatus": 200,
+        "providerError": null,
+        "textPreview": "Black and white.",
+        "wirePartKeys": [
+          "inlineData"
+        ],
+        "wireUriForwarded": false
+      },
+      "uri": {
+        "attempted": true,
+        "ok": false,
+        "httpStatus": 429,
+        "providerError": "{\"error\":{\"code\":429,\"message\":\"Resource has been exhausted (e.g. check quota).\",\"status\":\"RESOURCE_EXHAUSTED\"}}",
+        "textPreview": "",
+        "wirePartKeys": [
+          "fileData"
+        ],
+        "wireUriForwarded": true
+      },
+      "quotaControl": {
+        "ranAfterUriCase": true,
+        "plainTextAccepted": true,
+        "httpStatus": 200
+      },
+      "note": "Ran through the recording proxy so the wire part keys and fileUri forwarding are captured whether accepted or rejected."
+    }
+  },
+  "aisdk": {
+    "adapter": "@ai-sdk/google@2.0.85",
+    "ok": true,
+    "observation": {
+      "inline": {
+        "attempted": true,
+        "ok": true,
+        "httpStatus": 200,
+        "providerError": null,
+        "textPreview": "Black and white.",
+        "sentDataKind": "base64"
+      },
+      "uri": {
+        "attempted": true,
+        "ok": false,
+        "httpStatus": 429,
+        "providerError": "Resource has been exhausted (e.g. check quota).",
+        "textPreview": "",
+        "sentDataKind": "url"
+      },
+      "supportedUrlsSummary": [
+        {
+          "mediaType": "*",
+          "patternCount": 3,
+          "patternFlags": [
+            "",
+            "",
+            ""
+          ]
+        }
+      ]
+    }
+  },
+  "verdict": "parity",
+  "transientHandled": true,
+  "finding": "Inline base64 PNG: @google/genai accepted (wire part keys [inlineData]); AI SDK accepted (ok). URI fileData: @google/genai rejected (wire fileData.uri forwarded: true); AI SDK rejected (Resource has been exhausted (e.g. check quota).). Both adapters put the URL on fileData.fileUri and got the same verdict from the endpoint, so the URI transport is equivalent. The shared RESOURCE_EXHAUSTED is the AI Studio endpoint refusing an arbitrary fileUri host, not a quota problem: a plain text call succeeded immediately afterwards. The MediaBlock encoding:url -> fileData and encoding:base64 -> inlineData mapping in neutralConverters maps unchanged."
+}

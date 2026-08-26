@@ -1,0 +1,97 @@
+{
+  "id": "P10",
+  "area": "Errors, safety and finish reasons",
+  "question": "Do both adapters throw an identifyable unfurlable error, surface a raw finish reason after truncation, and expose the safety surface, so geminiApiErrorToProviderApiError and the rawStopReason passthrough still work?",
+  "models": [
+    "gemini-3.1-flash-lite"
+  ],
+  "genai": {
+    "adapter": "google-genai@1.30.0",
+    "ok": true,
+    "observation": {
+      "missingModel": {
+        "threw": true,
+        "errorName": "ApiError",
+        "message": "{\"error\":{\"code\":404,\"message\":\"models/gemini-does-not-exist-2761 is not found for API version v1beta, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their s",
+        "statusCode": 404,
+        "isApiErrorClass": true,
+        "neutralFields": {
+          "hasMessage": true,
+          "hasStatus": true,
+          "hasRetryabilitySignal": false,
+          "hasRawBody": false,
+          "bodyKeys": []
+        }
+      },
+      "truncation": {
+        "textLength": 0,
+        "finishReasonRaw": "MAX_TOKENS",
+        "httpStatus": null
+      },
+      "safety": {
+        "candidateSafetyRatingsCount": 4,
+        "firstSafetyRatingKeys": [
+          "category",
+          "probability"
+        ],
+        "promptFeedback": null,
+        "finishReason": "MAX_TOKENS"
+      }
+    }
+  },
+  "aisdk": {
+    "adapter": "@ai-sdk/google@2.0.85",
+    "ok": true,
+    "observation": {
+      "missingModel": {
+        "threw": true,
+        "errorName": "AI_APICallError",
+        "message": "models/gemini-does-not-exist-2761 is not found for API version v1beta, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported methods.",
+        "statusCode": 404,
+        "neutralFields": {
+          "hasMessage": true,
+          "hasStatus": true,
+          "hasRetryabilitySignal": false,
+          "hasRawBody": true,
+          "bodyKeys": [
+            "error"
+          ]
+        }
+      },
+      "truncation": {
+        "finishReasonNormalized": "length",
+        "rawInResponseBody": "MAX_TOKENS",
+        "content": [],
+        "responseBodyOpaque": true
+      },
+      "safety": {
+        "safetyRatingsPresent": true,
+        "safetyRatingsCount": 4,
+        "promptFeedbackPresent": false,
+        "googleMetadataKeys": [
+          "groundingMetadata",
+          "promptFeedback",
+          "safetyRatings",
+          "serviceTier",
+          "urlContextMetadata",
+          "usageMetadata"
+        ],
+        "rawBodySafetyRatingsPresent": true,
+        "content": [
+          {
+            "type": "text",
+            "length": 14,
+            "preview": "Hello! How can",
+            "providerMetadata": {
+              "google": {
+                "thoughtSignature": "EnEKbwERTTIPl+mOpLUwccpF+y7yNoF8/ANkRZryKCTKUKsCtGHz0yLBdIwVcxFpzWwABhvvzp50yP30D6uHZ+03JOx4+DTs3GsDUzN7gqRqGpZ35D1aYELTSZI4VfhJmDARBRztSPnDh93u5++D0q3DfA=="
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "verdict": "partial",
+  "finding": "Nonexistent model: @google/genai threw ApiError (HTTP 404), neutral fields reachable: message=true status=true retryable=false rawBody=false. The AI SDK threw AI_APICallError (HTTP 404), neutral-relevant fields: message=true status=true retryable=false rawBody=true (error-body keys [error]), so geminiApiErrorToProviderApiError is buildable from it (status via statusCode, flags from statusCode/isRetryable, raw via responseBody). Truncation: genai finishReason=MAX_TOKENS at 0 chars; AI SDK normalized length and the RAW provider value is reachable in response.body (providerMetadata.google has no per-candidate finishReason field, so rawStopReason needs response.body). Safety: genai candidate safetyRatings=4; AI SDK safetyRatingsPresent=true, promptFeedbackPresent=false."
+}

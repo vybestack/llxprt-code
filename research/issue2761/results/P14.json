@@ -1,0 +1,63 @@
+{
+  "id": "P14",
+  "area": "Model listing",
+  "question": "Do both adapters offer a listing path, and is the AI SDK missing one a real gap given llxprt lists models with a bare fetch?",
+  "models": [],
+  "genai": {
+    "adapter": "google-genai@1.30.0",
+    "ok": true,
+    "observation": {
+      "sdkOffersListing": true,
+      "keyMethod": "models.list",
+      "modelCount": 10,
+      "firstIds": [
+        "models/gemini-2.5-flash",
+        "models/gemini-2.5-pro",
+        "models/gemini-2.5-flash-preview-tts",
+        "models/gemini-2.5-pro-preview-tts",
+        "models/gemma-4-26b-a4b-it"
+      ]
+    }
+  },
+  "aisdk": {
+    "adapter": "@ai-sdk/google@2.0.85",
+    "ok": true,
+    "observation": {
+      "sdkOffersListing": false,
+      "methodNames": [
+        "chat",
+        "embedding",
+        "generativeAI",
+        "image",
+        "imageModel",
+        "languageModel",
+        "textEmbedding",
+        "textEmbeddingModel",
+        "tools"
+      ],
+      "languageModelFactory": true,
+      "providerTools": [
+        "codeExecution",
+        "enterpriseWebSearch",
+        "fileSearch",
+        "googleMaps",
+        "googleSearch",
+        "urlContext",
+        "vertexRagStore"
+      ],
+      "llxprtBareFetchListing": {
+        "status": 200,
+        "modelCount": 50,
+        "firstIds": [
+          "models/gemini-2.5-flash",
+          "models/gemini-2.5-pro",
+          "models/gemini-2.5-flash-preview-tts",
+          "models/gemini-2.5-pro-preview-tts",
+          "models/gemma-4-26b-a4b-it"
+        ]
+      }
+    }
+  },
+  "verdict": "parity",
+  "finding": "@google/genai exposes models.list (listed=true); @ai-sdk/google exposes no listing method (sdkOffersListing=false). That costs llxprt nothing here: geminiModels.fetchModelsFromApi already lists with a bare fetch against /v1beta/models, which returned 50 models at status 200 in this run, and the provider never calls the SDK for listing."
+}

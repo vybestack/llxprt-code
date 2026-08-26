@@ -1,0 +1,88 @@
+{
+  "id": "P02",
+  "area": "Non-streaming generation",
+  "question": "Does a single-shot generate return equivalent text, finish reason, usage, response id and system-instruction transport through both adapters?",
+  "models": [
+    "gemini-3.1-flash-lite"
+  ],
+  "genai": {
+    "adapter": "google-genai@1.30.0",
+    "ok": true,
+    "observation": {
+      "text": "Paris",
+      "partKinds": [
+        [
+          "text",
+          "thoughtSignature"
+        ]
+      ],
+      "finishReason": "STOP",
+      "usageMetadata": {
+        "promptTokenCount": 25,
+        "candidatesTokenCount": 1,
+        "totalTokenCount": 26,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 25
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "responseId": "KmCParS4FMiLqtsPoqCk0Qc",
+      "modelVersion": "gemini-3.1-flash-lite",
+      "promptFeedback": null
+    }
+  },
+  "aisdk": {
+    "adapter": "@ai-sdk/google@2.0.85",
+    "ok": true,
+    "observation": {
+      "content": [
+        {
+          "type": "text",
+          "length": 5,
+          "preview": "Paris",
+          "providerMetadata": {
+            "google": {
+              "thoughtSignature": "EnEKbwERTTIP9AolCZnMuWR7rB7/tDuxOD3yYhSy2Y94JIHXcMw0x3bW9pFvI5RyhQJm33kDdxRwLoFsC9iBr7dHf4X+SRzOGO0hiYqr3up9JHTDf1Nx5KzgI1Z6UjaAGmSIgTjNFvIUgov+3+0o10B1cQ=="
+            }
+          }
+        }
+      ],
+      "finishReason": "stop",
+      "usage": {
+        "inputTokens": 24,
+        "outputTokens": 1,
+        "totalTokens": 25
+      },
+      "providerMetadata": {
+        "google": {
+          "promptFeedback": null,
+          "groundingMetadata": null,
+          "urlContextMetadata": null,
+          "safetyRatings": null,
+          "serviceTier": null,
+          "usageMetadata": {
+            "promptTokenCount": 24,
+            "candidatesTokenCount": 1,
+            "totalTokenCount": 25,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 24
+              }
+            ]
+          }
+        }
+      },
+      "warnings": [],
+      "responseId": null,
+      "modelId": null,
+      "requestBodySent": "{\"generationConfig\":{\"maxOutputTokens\":32},\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"What is the capital of France? One word.\"}]}],\"systemInstruction\":{\"parts\":[{\"text\":\"You are a terse assistant. Always answer with exactly one word.\"}]}}",
+      "hasRawResponseBody": true
+    }
+  },
+  "verdict": "partial",
+  "finding": "Text, finish reason and usage match, but response-id availability differs (genai=true, ai-sdk=false). llxprt treats responseId as a first-class ModelOutput field, so an adapter would have to recover it from the raw response body."
+}

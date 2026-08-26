@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "lib": ["ES2023", "DOM"],
+    "module": "Preserve",
+    "moduleResolution": "bundler",
+    "target": "es2022",
+    "types": ["node", "bun"]
+  },
+  "include": ["src/**/*.ts"]
+}

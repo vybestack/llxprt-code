@@ -1,0 +1,101 @@
+{
+  "id": "P12",
+  "area": "BaseURL override, custom fetch, proxy and dumps",
+  "question": "Can both adapters be redirected to a custom baseURL, can wire bodies be captured for dumps, does the AI SDK accept a custom fetch while @google/genai offers none, and can raw bodies be reached without a proxy?",
+  "models": [
+    "gemini-3.1-flash-lite"
+  ],
+  "genai": {
+    "adapter": "google-genai@1.30.0",
+    "ok": true,
+    "observation": {
+      "baseUrlRedirected": true,
+      "wireDump": {
+        "method": "POST",
+        "url": "/v1beta/models/gemini-3.1-flash-lite:generateContent",
+        "status": 200,
+        "requestBody": {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Reply with the single word ok."
+                }
+              ],
+              "role": "user"
+            }
+          ],
+          "generationConfig": {
+            "maxOutputTokens": 8
+          }
+        },
+        "responseBodyPreview": "{\n  \"candidates\": [\n    {\n      \"content\": {\n        \"parts\": [\n          {\n            \"text\": \"ok\",\n            \"thoughtSignature\": \"EnEKbwERTTIPcO2SYAOKrN4C4",
+        "contentType": "application/json; charset=UTF-8"
+      },
+      "customFetchHook": {
+        "googleGenAIOptionsMembers": [
+          "vertexai",
+          "project",
+          "location",
+          "apiKey",
+          "apiVersion",
+          "googleAuthOptions",
+          "httpOptions"
+        ],
+        "httpOptionsMembers": [
+          "baseUrl",
+          "apiVersion",
+          "headers",
+          "timeout",
+          "extraBody"
+        ],
+        "hasFetchMember": false,
+        "note": "GoogleGenAIOptions has no fetch member; HttpOptions has no fetch member either, so the only interception surface is the baseUrl / headers / timeout trio."
+      },
+      "rawBodyAvailability": {
+        "responseObjectWireBodyMember": "none (only sdkHttpResponse.responseInternal)"
+      }
+    }
+  },
+  "aisdk": {
+    "adapter": "@ai-sdk/google@2.0.85",
+    "ok": true,
+    "observation": {
+      "baseUrlRedirected": true,
+      "wireDump": {
+        "method": "POST",
+        "url": "/v1beta/models/gemini-3.1-flash-lite:generateContent",
+        "status": 200,
+        "requestBody": {
+          "generationConfig": {
+            "maxOutputTokens": 8
+          },
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Reply with the single word ok."
+                }
+              ]
+            }
+          ]
+        },
+        "responseBodyPreview": "{\n  \"candidates\": [\n    {\n      \"content\": {\n        \"parts\": [\n          {\n            \"text\": \"ok\",\n            \"thoughtSignature\": \"EnEKbwERTTIPwRZkelqL5dhRa",
+        "contentType": "application/json; charset=UTF-8"
+      },
+      "customFetch": {
+        "sawRequestAndResponse": true,
+        "fetchRequestUrl": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
+        "fetchRequestBodyKind": "json"
+      },
+      "rawBodyAvailability": {
+        "requestBodyReturned": true,
+        "responseBodyReturned": true,
+        "note": "doGenerate returns request.body and response.body, so an AI SDK adapter can dump the actual wire body without a proxy."
+      }
+    }
+  },
+  "verdict": "parity",
+  "finding": "Base-URL override: @google/genai was redirected (proxy path /v1beta/models/gemini-3.1-flash-lite:generateContent, status 200); the AI SDK was redirected too (proxy path /v1beta/models/gemini-3.1-flash-lite:generateContent, status 200), so both accept a custom baseURL. Custom fetch: only the AI SDK exposes one (makeRecordingFetch saw both directions: true); @google/genai has no fetch member in GoogleGenAIOptions (members [vertexai,project,location,apiKey,apiVersion,googleAuthOptions,httpOptions]) nor in HttpOptions (members [baseUrl,apiVersion,headers,timeout,extraBody]), so baseURL is its only interception surface. Raw bodies for dumps: the AI SDK returns request.body AND response.body directly (true), while @google/genai exposes only none (only sdkHttpResponse.responseInternal) on the response object. dumpSDKContext today writes the SDK parameter object; an AI SDK adapter would make dumps BETTER (real wire body with status/headers), not worse or equivalent."
+}

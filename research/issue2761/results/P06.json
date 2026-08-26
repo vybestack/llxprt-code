@@ -1,0 +1,101 @@
+{
+  "id": "P06",
+  "area": "Thought signatures (request and response)",
+  "question": "On Gemini 3, does each adapter surface the response thought signature, send it back on replay, and cover the missing-signature case that thoughtSignatures.ts handles by hand today?",
+  "models": [
+    "gemini-3.5-flash"
+  ],
+  "genai": {
+    "adapter": "google-genai@1.30.0",
+    "ok": true,
+    "observation": {
+      "step1_capture": {
+        "toolCallId": "call_195766",
+        "toolName": "get_temp",
+        "responseSignature": {
+          "present": true,
+          "length": 380,
+          "prefix": "EpoCCpcCARFNMg9j",
+          "isSentinel": false
+        }
+      },
+      "step2_replayWithSignature": {
+        "accepted": true,
+        "httpStatus": 200,
+        "providerError": null,
+        "signaturesOnWire": [
+          {
+            "present": true,
+            "length": 380,
+            "prefix": "EpoCCpcCARFNMg9j",
+            "isSentinel": false
+          }
+        ]
+      },
+      "step3_replayWithoutSignature": {
+        "accepted": false,
+        "httpStatus": 400,
+        "providerError": "{\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Function call is missing a thought_signature in functionCall parts. This is required for tools to work correctly, and missing thought_signature may lead to degraded model performance. Additional data, function call `default_api:get_temp` , position 2. Please refer to https://ai.google.dev/gemini-api/docs/thought-signatures for more details.\",\n    \"st",
+        "signaturesOnWire": [
+          {
+            "present": false,
+            "length": 0,
+            "prefix": null,
+            "isSentinel": false
+          }
+        ],
+        "thrown": {
+          "name": "ApiError",
+          "message": "{\"error\":{\"code\":400,\"message\":\"Function call is missing a thought_signature in functionCall parts. This is required for tools to work correctly, and missing thought_signature may lead to degraded model performance. Additional data, function call `default_api:get_temp` , position 2. Please refer to https://ai.google.dev/gemini-api/docs/thought-signatures for more details.\",\"status\":\"INVALID_ARGUMENT\"}}",
+          "statusCode": 400
+        }
+      },
+      "note": "Sent raw, with no llxprt-side signature injection, so step 3 shows what happens when thoughtSignatures.ts is absent."
+    }
+  },
+  "aisdk": {
+    "adapter": "@ai-sdk/google@2.0.85",
+    "ok": true,
+    "observation": {
+      "step1_capture": {
+        "toolCallId": "call_1845697",
+        "toolName": "get_temp",
+        "responseSignature": {
+          "present": true,
+          "length": 544,
+          "prefix": "EpUDCpIDARFNMg9D",
+          "isSentinel": false
+        },
+        "replayRequiresInputParse": true
+      },
+      "step2_replayWithSignature": {
+        "accepted": true,
+        "httpStatus": 200,
+        "providerError": null,
+        "signaturesOnWire": [
+          {
+            "present": true,
+            "length": 544,
+            "prefix": "EpUDCpIDARFNMg9D",
+            "isSentinel": false
+          }
+        ]
+      },
+      "step3_replayWithoutSignature": {
+        "accepted": true,
+        "httpStatus": 200,
+        "providerError": null,
+        "signaturesOnWire": [
+          {
+            "present": true,
+            "length": 32,
+            "prefix": "skip_thought_sig",
+            "isSentinel": true
+          }
+        ]
+      }
+    }
+  },
+  "verdict": "parity",
+  "finding": "@ai-sdk/google surfaced the response signature (length 544) and the signed replay was accepted. On the unsigned replay it injected the same skip_thought_signature_validator sentinel llxprt injects, result accepted. Raw @google/genai with no injection: signed replay accepted, unsigned replay rejected (HTTP 400). The AI SDK ships the same workaround thoughtSignatures.ts implements, so that module would become redundant."
+}

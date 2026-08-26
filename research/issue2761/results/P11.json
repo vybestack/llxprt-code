@@ -1,0 +1,56 @@
+{
+  "id": "P11",
+  "area": "Abort",
+  "question": "When the AbortSignal is already aborted, does each adapter fail before any request leaves the process with an identifiable abort error, and when a stream is aborted mid-flight does iteration terminate promptly with a clear error?",
+  "models": [
+    "gemini-3.1-flash-lite"
+  ],
+  "genai": {
+    "adapter": "google-genai@1.30.0",
+    "ok": true,
+    "observation": {
+      "preDispatch": {
+        "threw": false,
+        "name": "",
+        "message": "",
+        "looksAbort": false,
+        "statusCode": null,
+        "requestsLeftProcess": true
+      },
+      "midStream": {
+        "chunksSeen": 1,
+        "endedCleanly": false,
+        "threw": true,
+        "name": "AbortError",
+        "message": "The operation was aborted.",
+        "msAbortToEnd": 0
+      },
+      "totalProxyRecords": 1
+    }
+  },
+  "aisdk": {
+    "adapter": "@ai-sdk/google@2.0.85",
+    "ok": true,
+    "observation": {
+      "preDispatch": {
+        "threw": true,
+        "name": "AbortError",
+        "message": "The operation was aborted.",
+        "looksAbort": true,
+        "statusCode": null,
+        "requestsLeftProcess": false
+      },
+      "midStream": {
+        "chunksSeen": 3,
+        "endedCleanly": false,
+        "threw": true,
+        "name": "AbortError",
+        "message": "The operation was aborted.",
+        "msAbortToEnd": 0
+      },
+      "totalProxyRecords": 0
+    }
+  },
+  "verdict": "partial",
+  "finding": "Pre-dispatch (signal already aborted): @google/genai threw nothing (returned) (abort-distinguishable=false, HTTP none, requests that left the process: yes); the AI SDK threw AbortError (abort-distinguishable=true, HTTP none, requests that left the process: no). Mid-stream: genai saw 1 chunk(s) and threw AbortError in 0ms; the AI SDK saw 3 chunk(s) and threw AbortError in 0ms. The AI SDK short-circuits an already-aborted signal on its own (fetch level), so llxprt's throwIfAborted guard would be redundant on that path; @google/genai only registers an abort listener and lets the call through, which is exactly why that guard exists today."
+}

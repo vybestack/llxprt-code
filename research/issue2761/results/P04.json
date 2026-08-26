@@ -1,0 +1,73 @@
+{
+  "id": "P04",
+  "area": "Parallel tool calls and tool-call IDs",
+  "question": "Does each adapter surface multiple tool calls from one model turn, give each an id, and accept those ids replayed on the tool-response turn?",
+  "models": [
+    "gemini-3.1-flash-lite"
+  ],
+  "genai": {
+    "adapter": "google-genai@1.30.0",
+    "ok": true,
+    "observation": {
+      "parallelCallCount": 2,
+      "calls": [
+        {
+          "name": "get_weather",
+          "id": "call_720025",
+          "idLooksSynthetic": false,
+          "args": {
+            "city": "Paris"
+          }
+        },
+        {
+          "name": "get_time",
+          "id": "call_720026",
+          "idLooksSynthetic": false,
+          "args": {
+            "city": "Paris"
+          }
+        }
+      ],
+      "idsPresent": true,
+      "finishReason": "STOP",
+      "roundTrip": {
+        "attempted": true,
+        "accepted": true,
+        "idsEchoed": 2,
+        "error": null
+      }
+    }
+  },
+  "aisdk": {
+    "adapter": "@ai-sdk/google@2.0.85",
+    "ok": true,
+    "observation": {
+      "parallelCallCount": 2,
+      "calls": [
+        {
+          "name": "get_weather",
+          "id": "call_2172031",
+          "idLooksSynthetic": false,
+          "args": "{\"city\":\"Paris\"}"
+        },
+        {
+          "name": "get_time",
+          "id": "call_2172032",
+          "idLooksSynthetic": false,
+          "args": "{\"city\":\"Paris\"}"
+        }
+      ],
+      "idsPresent": true,
+      "finishReason": "tool-calls",
+      "warnings": [],
+      "roundTrip": {
+        "attempted": true,
+        "accepted": true,
+        "idsEchoed": 2,
+        "error": null
+      }
+    }
+  },
+  "verdict": "parity",
+  "finding": "@google/genai surfaced 2 call(s) in one turn (ids present: true); @ai-sdk/google surfaced 2 (ids present: true). Replaying the ids on the tool-response turn was accepted for genai and accepted for the AI SDK. Both give every call a stable id, so geminiResponseMapper would no longer need its synthetic `call_<ts>_<rand>` fallback on the AI SDK path."
+}

@@ -1,0 +1,83 @@
+{
+  "id": "P01",
+  "area": "API-key auth",
+  "question": "Does each adapter carry the API key, the llxprt User-Agent and user custom headers onto the wire the same way, and reject a bad key comparably?",
+  "models": [
+    "gemini-3.1-flash-lite"
+  ],
+  "genai": {
+    "adapter": "google-genai@1.30.0",
+    "ok": true,
+    "observation": {
+      "method": "POST",
+      "url": "/v1beta/models/gemini-3.1-flash-lite:generateContent",
+      "status": 200,
+      "authCarrier": "x-goog-api-key-header",
+      "requestHeaderNames": [
+        "accept",
+        "accept-encoding",
+        "connection",
+        "content-length",
+        "content-type",
+        "host",
+        "user-agent",
+        "x-goog-api-client",
+        "x-goog-api-key",
+        "x-llxprt-probe"
+      ],
+      "customHeaderOnWire": true,
+      "userAgentOnWire": true,
+      "responseText": "ok",
+      "badKey": {
+        "errorName": "ApiError",
+        "message": "{\"error\":{\"code\":400,\"message\":\"API key not valid. Please pass a valid API key.\",\"status\":\"INVALID_ARGUMENT\",\"details\":[{\"@type\":\"type.googleapis.com/google.rpc.ErrorInfo\",\"reason\":\"API_KEY_INVALID\",\"domain\":\"googleapis.com\",\"metadata\":{\"service\":\"generativelanguage.googleapis.com\"}},{\"@type\":\"type.googleapis.com/google.rpc.LocalizedMessage\",\"locale\":\"en-US\",\"message\":\"API key not valid. Please pass a valid API key.\"}]}}",
+        "status": 400
+      }
+    }
+  },
+  "aisdk": {
+    "adapter": "@ai-sdk/google@2.0.85",
+    "ok": true,
+    "observation": {
+      "method": "POST",
+      "url": "/v1beta/models/gemini-3.1-flash-lite:generateContent",
+      "status": 200,
+      "authCarrier": "x-goog-api-key-header",
+      "requestHeaderNames": [
+        "accept",
+        "accept-encoding",
+        "connection",
+        "content-length",
+        "content-type",
+        "host",
+        "user-agent",
+        "x-goog-api-key",
+        "x-llxprt-probe"
+      ],
+      "customHeaderOnWire": true,
+      "userAgentOnWire": true,
+      "content": [
+        {
+          "type": "text",
+          "length": 2,
+          "preview": "ok",
+          "providerMetadata": {
+            "google": {
+              "thoughtSignature": "EnEKbwERTTIP8VJTia76eRe4ZWbVswrdIY9z9r2mV7FO2oEB11pu45zny27z1q5Fi3yoAVzFIo1oXjVmKl30O9GrKytub8Il3rC0WdxodZxjE+PUI7HBNUCP39sdVZsh1BxMo75Ugcs5jxtmCACwvAIOGA=="
+            }
+          }
+        }
+      ],
+      "requestBodySent": "{\"generationConfig\":{\"maxOutputTokens\":8},\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"Reply with the single word ok.\"}]}]}",
+      "badKey": {
+        "errorName": "AI_APICallError",
+        "message": "API key not valid. Please pass a valid API key.",
+        "statusCode": 400,
+        "hasData": true,
+        "hasResponseBody": true
+      }
+    }
+  },
+  "verdict": "parity",
+  "finding": "Auth carrier on the wire: genai used x-goog-api-key-header, the AI SDK used x-goog-api-key-header (same form). Custom header reached the wire: genai=true, ai-sdk=true; llxprt User-Agent survived: genai=true, ai-sdk=true. A deliberately invalid key was rejected by genai=true and ai-sdk=true. The header stamping and custom-header merge in GeminiProvider.createHttpOptions carries over unchanged."
+}

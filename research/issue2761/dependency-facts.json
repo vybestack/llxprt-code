@@ -1,0 +1,205 @@
+{
+  "generatedAt": "2026-08-26T22:48:19.242Z",
+  "probeContext": {
+    "aiSdkGoogle": {
+      "name": "@ai-sdk/google",
+      "resolvedVersion": "2.0.85",
+      "dependencies": {
+        "@ai-sdk/provider": "2.0.3",
+        "@ai-sdk/provider-utils": "3.0.30"
+      },
+      "peerDependencies": {
+        "zod": "^3.25.76 || ^4.1.8"
+      },
+      "engines": {
+        "node": ">=18"
+      }
+    },
+    "aiSdkProvider": {
+      "name": "@ai-sdk/provider",
+      "resolvedVersion": "2.0.3",
+      "dependencies": {
+        "json-schema": "^0.4.0"
+      },
+      "peerDependencies": null,
+      "engines": {
+        "node": ">=18"
+      }
+    },
+    "aiSdkProviderUtils": {
+      "name": "@ai-sdk/provider-utils",
+      "resolvedVersion": "3.0.30",
+      "dependencies": {
+        "@standard-schema/spec": "^1.0.0",
+        "eventsource-parser": "^3.0.6",
+        "@ai-sdk/provider": "2.0.3"
+      },
+      "peerDependencies": {
+        "zod": "^3.25.76 || ^4.1.8"
+      },
+      "engines": {
+        "node": ">=18"
+      }
+    },
+    "googleGenai": {
+      "name": "@google/genai",
+      "resolvedVersion": "1.30.0",
+      "dependencies": {
+        "google-auth-library": "^10.3.0",
+        "ws": "^8.18.0"
+      },
+      "peerDependencies": {
+        "@modelcontextprotocol/sdk": "^1.20.1"
+      },
+      "engines": {
+        "node": ">=20.0.0"
+      }
+    },
+    "zod": {
+      "name": "zod",
+      "resolvedVersion": "3.25.76",
+      "dependencies": null,
+      "peerDependencies": null,
+      "engines": null
+    }
+  },
+  "llxprtRootTree": {
+    "ai": {
+      "name": "ai",
+      "resolvedVersion": "5.0.206",
+      "dependencies": {
+        "@opentelemetry/api": "1.9.0",
+        "@ai-sdk/gateway": "2.0.105",
+        "@ai-sdk/provider": "2.0.3",
+        "@ai-sdk/provider-utils": "3.0.27"
+      },
+      "peerDependencies": {
+        "zod": "^3.25.76 || ^4.1.8"
+      },
+      "engines": {
+        "node": ">=18"
+      }
+    },
+    "aiSdkOpenai": {
+      "name": "@ai-sdk/openai",
+      "resolvedVersion": "2.0.109",
+      "dependencies": {
+        "@ai-sdk/provider-utils": "3.0.27",
+        "@ai-sdk/provider": "2.0.3"
+      },
+      "peerDependencies": {
+        "zod": "^3.25.76 || ^4.1.8"
+      },
+      "engines": {
+        "node": ">=18"
+      }
+    },
+    "aiSdkProvider": {
+      "name": "@ai-sdk/provider",
+      "resolvedVersion": "2.0.3",
+      "dependencies": {
+        "json-schema": "^0.4.0"
+      },
+      "peerDependencies": null,
+      "engines": {
+        "node": ">=18"
+      }
+    },
+    "aiSdkProviderUtils": {
+      "name": "@ai-sdk/provider-utils",
+      "resolvedVersion": "2.2.8",
+      "dependencies": {
+        "@ai-sdk/provider": "1.1.3",
+        "nanoid": "^3.3.8",
+        "secure-json-parse": "^2.7.0"
+      },
+      "peerDependencies": {
+        "zod": "^3.23.8"
+      },
+      "engines": {
+        "node": ">=18"
+      }
+    },
+    "googleGenai": {
+      "name": "@google/genai",
+      "resolvedVersion": "1.30.0",
+      "dependencies": {
+        "google-auth-library": "^10.3.0",
+        "ws": "^8.18.0"
+      },
+      "peerDependencies": {
+        "@modelcontextprotocol/sdk": "^1.20.1"
+      },
+      "engines": {
+        "node": ">=20.0.0"
+      }
+    },
+    "zod": {
+      "name": "zod",
+      "resolvedVersion": "3.25.76",
+      "dependencies": null,
+      "peerDependencies": null,
+      "engines": null
+    },
+    "aiSdkProviderUtilsNestedUnderAi": {
+      "name": "@ai-sdk/provider-utils",
+      "resolvedVersion": "3.0.27",
+      "dependencies": {
+        "@standard-schema/spec": "^1.0.0",
+        "eventsource-parser": "^3.0.6",
+        "@ai-sdk/provider": "2.0.3"
+      },
+      "peerDependencies": {
+        "zod": "^3.25.76 || ^4.1.8"
+      },
+      "engines": {
+        "node": ">=18"
+      }
+    },
+    "aiSdkProviderNestedUnderAi": {
+      "name": "@ai-sdk/provider",
+      "resolvedVersion": null,
+      "dependencies": null,
+      "peerDependencies": null,
+      "engines": null
+    }
+  },
+  "protocol": {
+    "probeProviderProtocolMajor": 2,
+    "rootProviderProtocolMajor": 2,
+    "matches": true,
+    "registryLatest": "4.0.53",
+    "registryLatestProviderDependency": "4.0.8",
+    "registryLatestProviderProtocolMajor": 4,
+    "v4MixingRejected": true,
+    "v4MixingRationale": "llxprt ships the AI SDK v5 generation (ai + @ai-sdk/openai on @ai-sdk/provider v2). Adopting the current @ai-sdk/google latest would put a provider-protocol v4 model object into the same tree as v2-protocol providers, so it is rejected for this decision."
+  },
+  "vertex": {
+    "aiSdkGoogleDependencyClosure": [
+      "@ai-sdk/provider",
+      "@ai-sdk/provider-utils"
+    ],
+    "aiSdkGoogleDeclaresGoogleAuthLibrary": false,
+    "googleGenaiDeclaresGoogleAuthLibrary": true,
+    "aiSdkGoogleVertex": {
+      "latest": "5.0.65",
+      "latestDependencies": {
+        "@ai-sdk/google": "4.0.53",
+        "@ai-sdk/provider": "4.0.8",
+        "@ai-sdk/anthropic": "4.0.44",
+        "google-auth-library": "^10.6.2",
+        "@ai-sdk/provider-utils": "5.0.32",
+        "@ai-sdk/openai-compatible": "3.0.39"
+      },
+      "newestProtocolV2Line": "3.0.165",
+      "newestProtocolV2Dependencies": {
+        "@ai-sdk/google": "2.0.90",
+        "@ai-sdk/provider": "2.0.3",
+        "@ai-sdk/anthropic": "2.0.96",
+        "google-auth-library": "^10.5.0",
+        "@ai-sdk/provider-utils": "3.0.33",
+        "@ai-sdk/openai-compatible": "1.0.49"
+      }
+    }
+  }
+}

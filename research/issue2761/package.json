@@ -1,0 +1,21 @@
+{
+  "name": "llxprt-probe-google-ai-sdk-parity",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Issue #2761 spike probes: @ai-sdk/google@2.0.85 vs @google/genai@1.30.0 parity for the Gemini adapter. Deliberately NOT a root workspace member.",
+  "type": "module",
+  "scripts": {
+    "facts": "bun src/dependency-facts.ts",
+    "all": "bun src/run-all.ts",
+    "probe": "bun src/run-all.ts --only"
+  },
+  "dependencies": {
+    "@ai-sdk/google": "2.0.85",
+    "@ai-sdk/provider": "2.0.3",
+    "@google/genai": "1.30.0",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5"
+  }
+}

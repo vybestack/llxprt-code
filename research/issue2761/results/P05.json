@@ -1,0 +1,214 @@
+{
+  "id": "P05",
+  "area": "Schemas",
+  "question": "For a tool schema full of Gemini-conflicting JSON-Schema keywords, and for an object sub-schema missing `type`, what does each adapter actually put on the wire and does the API accept it?",
+  "models": [
+    "gemini-3.1-flash-lite"
+  ],
+  "genai": {
+    "adapter": "google-genai@1.30.0",
+    "ok": true,
+    "observation": {
+      "dialectKeywordCase": {
+        "accepted": true,
+        "wireTools": [
+          {
+            "functionDeclarations": [
+              {
+                "name": "place_order",
+                "description": "Place a test order.",
+                "parametersJsonSchema": {
+                  "type": "object",
+                  "title": "PlaceOrder",
+                  "description": "A test order.",
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "additionalProperties": false,
+                  "properties": {
+                    "nested": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "count": {
+                          "type": "number",
+                          "minimum": 1,
+                          "maximum": 10,
+                          "exclusiveMinimum": 0
+                        },
+                        "label": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "tags": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "count"
+                      ]
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "a",
+                        "b"
+                      ],
+                      "default": "a"
+                    },
+                    "either": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "nested"
+                  ]
+                }
+              }
+            ]
+          }
+        ],
+        "httpStatus": 200,
+        "providerError": null,
+        "keywordsOnWire": [
+          "$schema",
+          "title",
+          "additionalProperties",
+          "format",
+          "exclusiveMinimum",
+          "anyOf",
+          "default"
+        ]
+      },
+      "untypedObjectCase": {
+        "accepted": false,
+        "wireTools": [
+          {
+            "functionDeclarations": [
+              {
+                "name": "place_order",
+                "description": "Place a test order.",
+                "parameters": {
+                  "properties": {
+                    "who": {
+                      "type": "STRING"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "httpStatus": 400,
+        "providerError": "{\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"* GenerateContentRequest.tools[0].function_declarations[0].parameters.properties: only allowed for OBJECT type\\n\",\n    \"status\": \"INVALID_ARGUMENT\"\n  }\n}\n",
+        "keywordsOnWire": []
+      },
+      "note": "Schemas are sent UNCLEANED. llxprt normally runs cleanGeminiSchema and patches a missing top-level type before this point."
+    }
+  },
+  "aisdk": {
+    "adapter": "@ai-sdk/google@2.0.85",
+    "ok": true,
+    "observation": {
+      "dialectKeywordCase": {
+        "accepted": true,
+        "wireTools": [
+          {
+            "functionDeclarations": [
+              {
+                "name": "place_order",
+                "description": "Place a test order.",
+                "parameters": {
+                  "description": "A test order.",
+                  "required": [
+                    "nested"
+                  ],
+                  "type": "object",
+                  "properties": {
+                    "nested": {
+                      "required": [
+                        "count"
+                      ],
+                      "type": "object",
+                      "properties": {
+                        "count": {
+                          "type": "number"
+                        },
+                        "label": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "tags": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "a",
+                        "b"
+                      ]
+                    },
+                    "either": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "httpStatus": 200,
+        "providerError": null,
+        "keywordsOnWire": [
+          "format",
+          "anyOf"
+        ]
+      },
+      "untypedObjectCase": {
+        "accepted": false,
+        "wireTools": [
+          {
+            "functionDeclarations": [
+              {
+                "name": "place_order",
+                "description": "Place a test order.",
+                "parameters": {
+                  "properties": {
+                    "who": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "httpStatus": 400,
+        "providerError": "{\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"* GenerateContentRequest.tools[0].function_declarations[0].parameters.properties: only allowed for OBJECT type\\n\",\n    \"status\": \"INVALID_ARGUMENT\"\n  }\n}\n",
+        "keywordsOnWire": []
+      }
+    }
+  },
+  "verdict": "partial",
+  "finding": "Uncleaned dialect schema: @google/genai forwarded it verbatim (keywords still on the wire: $schema, title, additionalProperties, format, exclusiveMinimum, anyOf, default), API accepted; @ai-sdk/google put format, anyOf on the wire, API accepted. Untyped-object sub-schema: genai rejected (HTTP 400), ai-sdk rejected (HTTP 400). llxprt would still own dialect cleaning: the AI SDK left Gemini-incompatible keywords on the wire."
+}

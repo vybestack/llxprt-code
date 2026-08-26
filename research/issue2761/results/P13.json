@@ -1,0 +1,76 @@
+{
+  "id": "P13",
+  "area": "Grounding and URL-context metadata",
+  "question": "Do both adapters surface groundingMetadata / urlContextMetadata from a server-tool call in a shape llxprt web_search / web_fetch callers can use?",
+  "models": [
+    "gemini-3.1-flash-lite"
+  ],
+  "genai": {
+    "adapter": "google-genai@1.30.0",
+    "ok": true,
+    "observation": {
+      "search": {
+        "ok": false,
+        "value": null,
+        "error": {
+          "name": "ApiError",
+          "message": "{\"error\":{\"code\":429,\"message\":\"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \",\"status\":\"RESOURCE_EXHAUSTED\",\"details\":[{\"@type\":\"type.googleapis.com/google.rpc.Help\",\"links\":[{\"description\":\"Learn more about Gemini API quotas\",\"url\":\"https://ai.google.dev/gemini-api/docs/rate-limits\"}]}]}}",
+          "statusCode": 429
+        },
+        "transient": true
+      },
+      "urlContext": {
+        "ok": true,
+        "value": {
+          "reachedCaller": true,
+          "location": "candidate.urlContextMetadata",
+          "webSearchQueries": [],
+          "groundingChunksCount": 0,
+          "groundingSupportsCount": 0,
+          "urlMetadataCount": 1,
+          "urlRetrievalStatuses": [
+            "URL_RETRIEVAL_STATUS_SUCCESS"
+          ],
+          "sourceParts": 0,
+          "finishReason": "STOP"
+        },
+        "error": null,
+        "transient": false
+      }
+    }
+  },
+  "aisdk": {
+    "adapter": "@ai-sdk/google@2.0.85",
+    "ok": true,
+    "observation": {
+      "search": {
+        "ok": false,
+        "value": null,
+        "error": {
+          "name": "AI_APICallError",
+          "message": "You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. ",
+          "statusCode": 429,
+          "responseBody": "{\n  \"error\": {\n    \"code\": 429,\n    \"message\": \"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \",\n    \"status\": \"RESOURCE_EXHAUSTED\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.Help\",\n        \"links\": [\n          {\n            \"description\": \"Learn more about Gemini API quotas\",\n            \"url\": \"https://ai.google.dev/gemini-api/docs/rate-limits\"\n          }\n        ]\n      }\n    ]\n  }\n}\n"
+        },
+        "transient": true
+      },
+      "urlContext": {
+        "ok": true,
+        "value": {
+          "reachedCaller": true,
+          "location": "providerMetadata.google.urlContextMetadata",
+          "urlMetadataCount": 1,
+          "urlRetrievalStatuses": [
+            "URL_RETRIEVAL_STATUS_SUCCESS"
+          ],
+          "finishReason": "stop"
+        },
+        "error": null,
+        "transient": false
+      }
+    }
+  },
+  "verdict": "partial",
+  "transientHandled": true,
+  "finding": "Google Search grounding was NOT exercised: the key has no Search-grounding quota (genai transient=true, ai-sdk transient=true), so this dimension is unproven. URL context: @google/genai surfaced candidate.urlContextMetadata (true) with 1 entries (statuses: URL_RETRIEVAL_STATUS_SUCCESS); the AI SDK surfaced providerMetadata.google.urlContextMetadata (true) with 1 entries (statuses: URL_RETRIEVAL_STATUS_SUCCESS). geminiServerTools returns the RAW GenerateContentResponse to web_search and web_fetch callers today. On the AI SDK path that raw response is not what the caller gets: grounding data is repackaged under providerMetadata.google and web chunks also become source content parts, so an adapter would have to rebuild the response shape those callers consume."
+}
