@@ -163,7 +163,9 @@ function buildEnforcerHarness(
     ensureDensityOptimized,
     performCompression,
     performFallbackCompression,
+    getPromptTokenBaseline: () => null,
     resetPromptTokenBaseline: () => {},
+    restorePromptTokenBaseline: () => {},
   };
   return {
     enforcer: new ProviderContentEnforcer(deps),
@@ -377,21 +379,27 @@ describe('P26: providerContentEnforcement characterization', () => {
       const initialStateful = effectiveEstimates.find(
         (estimate) => estimate.statefulParentUsed === true,
       );
-      if (initialStateful?.incrementalTokens === undefined) {
+      if (
+        initialStateful?.incrementalTokens === undefined ||
+        initialStateful.transmittedTokens === undefined
+      ) {
         throw new Error('Expected a stateful Responses estimate');
+      }
+      if (initialStateful.retainedBaselineTokens === undefined) {
+        throw new Error('Expected retained stateful context');
       }
       const finalEstimate = effectiveEstimates[effectiveEstimates.length - 1];
 
       expect(initialStateful.transmittedTokens).toBeLessThan(10_000);
       expect(initialStateful).toMatchObject({
-        retainedBaselineTokens: 12_000,
+        retainedBaselineTokens: 12_050,
         effectiveTokens: initialStateful.estimatedPromptTokens,
         statefulParentUsed: true,
       });
-      expect(initialStateful.transmittedTokens).toBeGreaterThan(
-        initialStateful.incrementalTokens,
+      expect(initialStateful.incrementalTokens).toBe(
+        initialStateful.transmittedTokens,
       );
-      expect(12_000 + initialStateful.incrementalTokens).toBe(
+      expect(12_050 + initialStateful.incrementalTokens).toBe(
         initialStateful.estimatedPromptTokens,
       );
       expect(finalEstimate).toMatchObject({

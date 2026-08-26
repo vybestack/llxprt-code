@@ -547,7 +547,9 @@ describe('Finding 2: stage-aware projection errors in ProviderContentEnforcer (I
       ensureDensityOptimized: vi.fn().mockResolvedValue(undefined),
       performCompression: vi.fn(),
       performFallbackCompression: vi.fn().mockResolvedValue(false),
+      getPromptTokenBaseline: () => null,
       resetPromptTokenBaseline: () => {},
+      restorePromptTokenBaseline: () => {},
       ...overrides,
     };
     return { enforcer: new ProviderContentEnforcer(deps), deps };
@@ -567,8 +569,12 @@ describe('Finding 2: stage-aware projection errors in ProviderContentEnforcer (I
 
     const harness = buildEnforcerHarness({
       estimateFinalizedPromptTokens: async () => 150_000,
+      getPromptTokenBaseline: () => promptTokenBaseline,
       resetPromptTokenBaseline: () => {
         promptTokenBaseline = 0;
+      },
+      restorePromptTokenBaseline: (baseline) => {
+        promptTokenBaseline = baseline ?? 0;
       },
     });
     harness.deps.performCompression.mockResolvedValue(
@@ -605,6 +611,107 @@ describe('Finding 2: stage-aware projection errors in ProviderContentEnforcer (I
       responsesStored: true,
       providerMetadata: { custom: 'metadata resp-original-parent' },
     });
+  });
+
+  it('restores history state when fallback rejects after committing its candidate', async () => {
+    historyService.add(makeStoredAi('resp-original-parent'));
+    historyService.add(makeUserMessage('original follow-up'));
+    await historyService.waitForTokenUpdates();
+    historyService.setBaseTokenOffset(37);
+    const [anchorEntry] = historyService.getChronologyTrace();
+    historyService.setCacheAnchorSeq(anchorEntry.seq);
+    const originalHistory = [...historyService.getRawHistory()];
+    const originalTokens =
+      (await historyService.estimateTokensForContents(originalHistory)) + 37;
+    let promptTokenBaseline = 123;
+
+    const harness = buildEnforcerHarness({
+      estimateFinalizedPromptTokens: async () => 150_000,
+      getPromptTokenBaseline: () => promptTokenBaseline,
+      resetPromptTokenBaseline: () => {
+        promptTokenBaseline = 0;
+      },
+      restorePromptTokenBaseline: (baseline) => {
+        promptTokenBaseline = baseline ?? 0;
+      },
+    });
+    harness.deps.performCompression.mockResolvedValue(
+      PerformCompressionResult.COMPRESSED,
+    );
+    harness.deps.performFallbackCompression.mockImplementation(
+      async (_promptId, applyResult) => {
+        await applyResult([makeStoredAi('resp-candidate')]);
+        throw new Error('fallback bookkeeping failed');
+      },
+    );
+    const pending = makeUserMessage('pending request');
+
+    await expect(
+      harness.enforcer.enforce(
+        {
+          contents: historyService.getCuratedForProvider([pending]),
+          pendingContents: [pending],
+        },
+        'rejected-after-commit',
+      ),
+    ).rejects.toThrow('fallback bookkeeping failed');
+
+    expect(historyService.getRawHistory()).toStrictEqual(originalHistory);
+    expect(historyService.getTotalTokens()).toBe(originalTokens);
+    expect(historyService.getBaseTokenOffset()).toBe(37);
+    expect(historyService.getCacheAnchorSeq()).toBe(anchorEntry.seq);
+    expect(promptTokenBaseline).toBe(123);
+  });
+
+  it('restores history state when prompt-baseline reset fails after replacement', async () => {
+    historyService.add(makeStoredAi('resp-original-parent'));
+    historyService.add(makeUserMessage('original follow-up'));
+    await historyService.waitForTokenUpdates();
+    historyService.setBaseTokenOffset(37);
+    const [anchorEntry] = historyService.getChronologyTrace();
+    historyService.setCacheAnchorSeq(anchorEntry.seq);
+    const originalHistory = [...historyService.getRawHistory()];
+    const originalTokens =
+      (await historyService.estimateTokensForContents(originalHistory)) + 37;
+    let promptTokenBaseline = 123;
+
+    const harness = buildEnforcerHarness({
+      estimateFinalizedPromptTokens: async () => 150_000,
+      getPromptTokenBaseline: () => promptTokenBaseline,
+      resetPromptTokenBaseline: () => {
+        promptTokenBaseline = 0;
+        throw new Error('prompt baseline reset failed');
+      },
+      restorePromptTokenBaseline: (baseline) => {
+        promptTokenBaseline = baseline ?? 0;
+      },
+    });
+    harness.deps.performCompression.mockResolvedValue(
+      PerformCompressionResult.COMPRESSED,
+    );
+    harness.deps.performFallbackCompression.mockImplementation(
+      async (_promptId, applyResult) => {
+        await applyResult([makeStoredAi('resp-candidate')]);
+        return true;
+      },
+    );
+    const pending = makeUserMessage('pending request');
+
+    await expect(
+      harness.enforcer.enforce(
+        {
+          contents: historyService.getCuratedForProvider([pending]),
+          pendingContents: [pending],
+        },
+        'failed-baseline-reset',
+      ),
+    ).rejects.toThrow('prompt baseline reset failed');
+
+    expect(historyService.getRawHistory()).toStrictEqual(originalHistory);
+    expect(historyService.getTotalTokens()).toBe(originalTokens);
+    expect(historyService.getBaseTokenOffset()).toBe(37);
+    expect(historyService.getCacheAnchorSeq()).toBe(anchorEntry.seq);
+    expect(promptTokenBaseline).toBe(123);
   });
 
   /**

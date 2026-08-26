@@ -24,7 +24,7 @@ export interface StatefulConversation {
   enabled: boolean;
   parentId: string | undefined;
   content: IContent[];
-  parentPromptTokens?: number;
+  parentRetainedTokens?: number;
 }
 
 const RESPONSES_STATEFUL_KEY = 'responses-stateful';
@@ -78,19 +78,31 @@ function isEligibleParent(entry: IContent, rawBaseURL: string): boolean {
   return isSameEndpoint(entry.metadata?.providerBaseURL, rawBaseURL);
 }
 
-function readObservedPromptTokens(
+function isValidatedTokenCount(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    Number.isSafeInteger(value) &&
+    value >= 0
+  );
+}
+
+function readObservedRetainedTokens(
   entry: IContent | undefined,
 ): number | undefined {
-  if (entry === undefined) return undefined;
-  if (entry.metadata === undefined) return undefined;
-  if (entry.metadata.usage === undefined) return undefined;
+  const usage = entry?.metadata?.usage;
+  if (usage === undefined) return undefined;
 
-  const promptTokens: unknown = entry.metadata.usage.promptTokens;
-  if (typeof promptTokens !== 'number') return undefined;
-  if (!Number.isFinite(promptTokens)) return undefined;
-  if (!Number.isInteger(promptTokens)) return undefined;
-  if (promptTokens < 0) return undefined;
-  return promptTokens;
+  const promptTokens: unknown = usage.promptTokens;
+  const completionTokens: unknown = usage.completionTokens;
+  if (
+    !isValidatedTokenCount(promptTokens) ||
+    !isValidatedTokenCount(completionTokens)
+  ) {
+    return undefined;
+  }
+  const retainedTokens = promptTokens + completionTokens;
+  return Number.isSafeInteger(retainedTokens) ? retainedTokens : undefined;
 }
 
 /**
@@ -200,12 +212,12 @@ export function computeStatefulConversation(
     return { enabled: true, parentId: undefined, content };
   }
 
-  const parentPromptTokens = readObservedPromptTokens(content[parentIndex]);
+  const parentRetainedTokens = readObservedRetainedTokens(content[parentIndex]);
   return {
     enabled: true,
     parentId,
     content: trimmedContent,
-    ...(parentPromptTokens === undefined ? {} : { parentPromptTokens }),
+    ...(parentRetainedTokens === undefined ? {} : { parentRetainedTokens }),
   };
 }
 

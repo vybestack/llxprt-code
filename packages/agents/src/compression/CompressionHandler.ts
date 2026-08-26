@@ -501,8 +501,12 @@ export class CompressionHandler {
       performCompression: (promptId, options) =>
         this.performCompression(promptId, options),
       estimateFinalizedPromptTokens,
+      getPromptTokenBaseline: () => this.lastPromptTokenCount,
       resetPromptTokenBaseline: () => {
         this.lastPromptTokenCount = null;
+      },
+      restorePromptTokenBaseline: (baseline) => {
+        this.lastPromptTokenCount = baseline;
       },
       performFallbackCompression: async (promptId, applyResult) => {
         this.pushSuppressDensityDirty();

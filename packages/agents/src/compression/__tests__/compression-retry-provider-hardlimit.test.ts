@@ -73,7 +73,9 @@ function buildEnforcerHarness(
     ensureDensityOptimized,
     performCompression,
     performFallbackCompression,
+    getPromptTokenBaseline: () => null,
     resetPromptTokenBaseline: () => {},
+    restorePromptTokenBaseline: () => {},
     ...overrides,
   };
   return {

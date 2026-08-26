@@ -368,7 +368,7 @@ describe('stateful Responses finalized-estimate telemetry (issue #3219 AC-6)', (
     expect(serialized).toStrictEqual(accounting);
     expect(serialized.retained).toBeGreaterThan(0);
     expect(serialized.effective).toBeGreaterThan(serialized.transmitted);
-    expect(serialized.transmitted).toBeGreaterThan(serialized.incremental);
+    expect(serialized.transmitted).toBe(serialized.incremental);
     expect(serialized.retained + serialized.incremental).toBe(
       serialized.effective,
     );

@@ -423,21 +423,16 @@ function buildResponsesProjectionContext(
       incrementalRequest: request,
     };
   }
-  const incrementalRequest: OpenAIResponsesRequest = {
-    model: request.model,
-    input: request.input,
-    stream: request.stream,
-  };
-  if (stateful.parentPromptTokens !== undefined) {
+  if (stateful.parentRetainedTokens !== undefined) {
     return {
       statefulParentUsed,
-      incrementalRequest,
-      retainedBaselineTokens: stateful.parentPromptTokens,
+      incrementalRequest: request,
+      retainedBaselineTokens: stateful.parentRetainedTokens,
     };
   }
   return {
     statefulParentUsed,
-    incrementalRequest,
+    incrementalRequest: request,
     fullHistoryRequest: {
       ...request,
       input: buildInput(

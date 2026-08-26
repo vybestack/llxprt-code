@@ -62,7 +62,9 @@ function buildEnforcerHarness(
     ensureDensityOptimized,
     performCompression,
     performFallbackCompression,
+    getPromptTokenBaseline: () => null,
     resetPromptTokenBaseline: () => {},
+    restorePromptTokenBaseline: () => {},
     ...overrides,
   };
   return { enforcer: new ProviderContentEnforcer(deps), deps, historyService };

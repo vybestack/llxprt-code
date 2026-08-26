@@ -48,7 +48,9 @@ export interface ProviderContentEnforcementDeps {
     promptId: string,
     applyResult: (newHistory: IContent[]) => Promise<void>,
   ) => Promise<boolean>;
+  getPromptTokenBaseline: () => number | null;
   resetPromptTokenBaseline: () => void;
+  restorePromptTokenBaseline: (baseline: number | null) => void;
   estimateFinalizedPromptTokens?: (contents: IContent[]) => Promise<number>;
 }
 
@@ -71,6 +73,12 @@ interface OverflowReductionResult {
   compressionFailure?: Error;
   truncationFailure?: Error;
   truncationApplied: boolean;
+}
+
+interface FallbackStateSnapshot {
+  readonly history: IContent[];
+  readonly cacheAnchorSeq: number;
+  readonly promptTokenBaseline: number | null;
 }
 
 export class ProviderContentEnforcer {
@@ -529,6 +537,45 @@ export class ProviderContentEnforcer {
     return result;
   }
 
+  private captureFallbackState(): FallbackStateSnapshot {
+    return {
+      history: [...this.deps.historyService.getRawHistory()],
+      cacheAnchorSeq: this.deps.historyService.getCacheAnchorSeq(),
+      promptTokenBaseline: this.deps.getPromptTokenBaseline(),
+    };
+  }
+
+  private async restoreFallbackState(
+    snapshot: FallbackStateSnapshot,
+  ): Promise<void> {
+    await this.deps.historyService.replaceAll(
+      [...snapshot.history],
+      this.deps.runtimeContext.state.model,
+    );
+    if (snapshot.cacheAnchorSeq === 0) {
+      this.deps.historyService.resetCacheAnchorSeq();
+    } else {
+      this.deps.historyService.setCacheAnchorSeq(snapshot.cacheAnchorSeq);
+    }
+    this.deps.restorePromptTokenBaseline(snapshot.promptTokenBaseline);
+  }
+
+  private async restoreRejectedFallback(
+    snapshot: FallbackStateSnapshot,
+    fallbackError: unknown,
+  ): Promise<Error> {
+    const failure = this.normalizeError(fallbackError);
+    try {
+      await this.restoreFallbackState(snapshot);
+      return failure;
+    } catch (rollbackError) {
+      return new AggregateError(
+        [failure, this.normalizeError(rollbackError)],
+        'Provider truncation fallback failed and its state rollback also failed',
+      );
+    }
+  }
+
   /**
    * Executes fallback truncation and commits its candidate history atomically.
    * The existing history remains untouched unless the complete candidate is
@@ -538,9 +585,10 @@ export class ProviderContentEnforcer {
     truncationApplied: boolean;
     truncationFailure?: Error;
   }> {
+    const snapshot = this.captureFallbackState();
     let truncationFailure: Error | undefined;
     let fallbackSucceeded = false;
-    const candidate = { committed: false };
+    const candidate = { installed: false, committed: false };
     try {
       fallbackSucceeded = await this.deps.performFallbackCompression(
         promptId,
@@ -549,17 +597,26 @@ export class ProviderContentEnforcer {
             [...invalidateResponsesStatefulChain(newHistory)],
             this.deps.runtimeContext.state.model,
           );
+          candidate.installed = true;
           this.deps.historyService.resetCacheAnchorSeq();
           this.deps.resetPromptTokenBaseline();
           candidate.committed = true;
         },
       );
+      if (!fallbackSucceeded && candidate.installed) {
+        throw new Error(
+          'Fallback compression rejected after installing candidate history',
+        );
+      }
     } catch (fallbackError) {
-      truncationFailure = this.normalizeError(fallbackError);
+      truncationFailure = candidate.installed
+        ? await this.restoreRejectedFallback(snapshot, fallbackError)
+        : this.normalizeError(fallbackError);
+      candidate.committed = false;
       this.deps.logger.warn(
         () =>
           '[CompressionHandler] Provider truncation fallback rejected during hard-limit enforcement',
-        fallbackError,
+        truncationFailure,
       );
     }
     if (fallbackSucceeded && !candidate.committed) {

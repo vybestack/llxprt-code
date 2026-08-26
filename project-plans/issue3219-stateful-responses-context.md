@@ -8,7 +8,7 @@ Issue: https://github.com/vybestack/llxprt-code/issues/3219
 
 ### AC-1: Effective provider context is distinct from transport size
 
-**Given** an OpenAI Responses request with an eligible `previous_response_id`, a provider-observed prompt-token count on the selected parent, and a small post-parent delta,
+**Given** an OpenAI Responses request with an eligible `previous_response_id`, provider-observed prompt and completion usage on the selected parent, and a small post-parent delta,
 **when** the provider projects the finalized request,
 **then** the projection and estimate distinguish:
 
@@ -17,15 +17,15 @@ Issue: https://github.com/vybestack/llxprt-code/issues/3219
 - the retained provider-context baseline;
 - the estimated effective provider context used for context-window decisions.
 
-The effective count includes retained context plus the new model-visible prompt contribution. Cached tokens remain part of context occupancy. They are not subtracted.
+The retained baseline conservatively includes the selected parent's observed prompt and completion usage. The new model-visible contribution includes the current instructions, tools, and post-parent input. Cached tokens remain part of context occupancy. They are not subtracted. Prior noncarried request configuration may therefore be conservatively overcounted, but selected-parent output and current configuration are not omitted.
 
 **Boundaries:**
 
 - Stateless and full-history requests have no retained baseline and use the full serialized projection as their effective context. History must not be counted twice.
 - Statefulness configured without an eligible parent remains a full-history request.
 - `store: false`, cross-endpoint parents, rejected parents, unsupported stateful transports, and a parent with no post-parent content retain their current full-history behavior.
-- If a provider parent lacks usable observed prompt usage, estimation must still use the complete locally model-visible history rather than the transport delta alone.
-- Instructions, tools, and completion budget are counted once in the applicable context calculation.
+- If a provider parent lacks usable observed prompt or completion usage, estimation must still use the complete locally model-visible history rather than the transport delta alone.
+- The selected parent's completion contributes to retained input. The new request's completion budget remains separate and is counted once by enforcement.
 
 ### AC-2: Stateful transport remains a delta optimization
 
@@ -122,7 +122,7 @@ Tests must use Bun and real production components at the behavior seam. Network 
 
 - Confirm the prepared transport-token cache can retain the delta request while estimation uses effective-context data.
 - Confirm the prompt projection and estimate contracts can carry the four accounting facts without changing unrelated providers' behavior.
-- Confirm parent `metadata.usage.promptTokens` is populated from Responses usage and identify the selected parent at request construction.
+- Confirm parent `metadata.usage.promptTokens` and `metadata.usage.completionTokens` are populated from Responses usage and identify the selected parent at request construction.
 - Confirm token telemetry schema compatibility for optional additive fields.
 - Confirm existing lineage invalidation utility and the exact rewrite gaps.
 - Confirm existing HTTP structured error shape and retry classification to reuse for SSE parity.
@@ -203,6 +203,28 @@ The second and final local OCR produced eleven hypotheses. Each was checked agai
 11. Top-level SSE event type `error`: `Not-applicable`. OpenAI documents `ResponseErrorEvent.type` as always `error`, and AC-5 requires preserving provider fields.
 
 No third local OCR will be run. The two accepted findings were remediated test-first, and the remaining items do not authorize issue-scope expansion.
+
+## PR review triage
+
+The first PR review run and CodeRabbit produced fourteen positioned threads plus summary-only hypotheses. Each was checked against current source and focused behavior:
+
+1. `PRRT_kwDOPB5qbc6cXV8i`: `Reject`. The provider test passes strict typechecking. Its call-options helper contextually types the content fixture, and finalized estimation always returns validated transmitted tokens.
+2. `PRRT_kwDOPB5qbc6cXV8m`: `Blocker-Fix`. Parent prompt usage alone omitted the selected parent's output and current noncarried request configuration. The retained estimate now uses validated parent prompt plus completion usage, does not subtract cached tokens, and adds the current model-visible wire prompt. Missing or invalid usage still uses full local-history accounting. Transport remains parent ID plus delta.
+3. `PRRT_kwDOPB5qbc6cX8lh` and `PRRT_kwDOPB5qbc6cX8n_`: `Blocker-Fix`, one root cause. A fallback could install candidate history and then reject during post-installation bookkeeping. The fallback now snapshots history, cache anchor, and prompt baseline, restores them on post-installation failure, and reports rollback failure rather than hiding it.
+4. `PRRT_kwDOPB5qbc6cX8pv`, `PRRT_kwDOPB5qbc6cX8rV`, and `PRRT_kwDOPB5qbc6cX8s5`: `Reject`, one root cause. The findings conflated finalized wire, incremental, retained, and effective estimates. Focused contract tests confirm the configured estimators and current values.
+5. `PRRT_kwDOPB5qbc6cX8uz`: `Reject`. Send-time enforcement intentionally uses effective provider context. Using transmitted tokens would recreate the small-delta overflow defect.
+6. `PRRT_kwDOPB5qbc6cX8w2`: `Reject`. The compatibility estimate remains the authoritative effective count; transmitted, retained, and effective values are also recorded separately.
+7. `PRRT_kwDOPB5qbc6cX8ym`: `Reject`. A marker before the rewrite boundary identifies a valid parent that predates a post-parent-only edit. A marker at or after the rewrite causes full-chain invalidation, including earlier markers.
+8. `PRRT_kwDOPB5qbc6cX81O`: `Reject`. The throwing listener belongs to a fresh per-test `HistoryService` instance that is not shared or retained.
+9. `PRRT_kwDOPB5qbc6cX83Q`: `Reject`. `replaceAllInternal` does not change `baseTokenOffset`; rollback restores history and total tokens while the unchanged offset remains included.
+10. `PRRT_kwDOPB5qbc6cX849`: `Reject`. Runtime-context creation registers no listener on the per-test `SettingsService`, and cleanup removes the active reference.
+11. `PRRT_kwDOPB5qbc6cX86u`: `Reject`. `node:util.isDeepStrictEqual` is cycle-aware; a Bun runtime probe with self-referential values completed without throwing.
+12. Summary-only zero-baseline, duplicate validation-guard, and private terminal-error status findings: `Reject`. Zero is accepted through explicit undefined checks, local guards provide strict narrowing after a void validator, and the terminal-error helper type is module-private.
+13. Changed-file coverage metadata: `Defer`. This was review-run metadata rather than a source finding. Changing broad coverage or quality tooling is outside this issue.
+
+Accepted PR findings were reproduced with failing behavioral tests before remediation. No additional local OCR round was started.
+
+The final remediation cycle passed the exact full repository suite, lint, typecheck, format, and build. The required Stepfun smoke reached the provider and returned HTTP 400, `you have no active step plan subscription`, from the external account. Test-audit scanned 2,707 files on current main and the candidate with no scanner errors; normalized findings were identical after excluding shifted line numbers.
 
 ## Completion gate
 

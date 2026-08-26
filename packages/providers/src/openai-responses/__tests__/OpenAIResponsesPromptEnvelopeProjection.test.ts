@@ -153,97 +153,83 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
     expect(estimate.estimatedPromptTokens).toBe(estimate.effectiveTokens);
   });
 
-  it('AC-1: adds only the incremental input to provider-observed occupancy without subtracting cached tokens', async () => {
+  it('AC-1: prefers a large provider-observed retained baseline to a deliberately smaller local replay without subtracting cached tokens', async () => {
+    const provider = new TestResponsesProvider();
+    const contents = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'small question' }] },
+      {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'small answer' }],
+        metadata: {
+          id: 'resp_1',
+          responsesStored: true,
+          usage: {
+            promptTokens: 50_000,
+            completionTokens: 0,
+            totalTokens: 50_000,
+            cachedTokens: 45_000,
+          },
+        },
+      },
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'small follow up' }],
+      },
+    ];
+    const projection = await provider.projectPromptEnvelope(
+      buildCallOptions(provider, {
+        contents,
+        ephemerals: { 'responses-stateful': true },
+      }),
+    );
+    const fullHistory = await provider.projectPromptEnvelope(
+      buildCallOptions(provider, { contents }),
+    );
+    const factory = createLengthTokenizerFactory();
+
+    const estimate = await estimatePromptEnvelope(
+      provider.name,
+      projection,
+      factory,
+    );
+    const fullHistoryEstimate = await estimatePromptEnvelope(
+      provider.name,
+      fullHistory,
+      factory,
+    );
+    if (estimate.incrementalTokens === undefined) {
+      throw new Error('Expected a stateful incremental estimate');
+    }
+
+    expect(estimate.retainedBaselineTokens).toBe(50_000);
+    expect(estimate.effectiveTokens).toBe(50_000 + estimate.incrementalTokens);
+    expect(estimate.effectiveTokens).toBeGreaterThan(
+      fullHistoryEstimate.effectiveTokens,
+    );
+  });
+
+  it('includes nonzero parent completion usage without serializing complete local history', async () => {
     const provider = new TestResponsesProvider();
     const projection = await provider.projectPromptEnvelope(
       buildCallOptions(provider, {
         contents: [
-          { speaker: 'human', blocks: [{ type: 'text', text: 'previous q' }] },
+          { speaker: 'human', blocks: [{ type: 'text', text: 'question' }] },
           {
             speaker: 'ai',
-            blocks: [{ type: 'text', text: 'previous a' }],
+            blocks: [{ type: 'text', text: 'answer' }],
             metadata: {
-              id: 'resp_1',
+              id: 'resp_with_completion',
               responsesStored: true,
               usage: {
-                promptTokens: 50_000,
-                completionTokens: 200,
-                totalTokens: 50_200,
-                cachedTokens: 45_000,
+                promptTokens: 700,
+                completionTokens: 300,
+                totalTokens: 1_000,
               },
             },
           },
           {
             speaker: 'human',
             blocks: [{ type: 'text', text: 'follow up' }],
-          },
-        ],
-        ephemerals: { 'responses-stateful': true },
-      }),
-    );
-
-    const estimate = await estimatePromptEnvelope(
-      provider.name,
-      projection,
-      createLengthTokenizerFactory(),
-    );
-    if (estimate.incrementalTokens === undefined) {
-      throw new Error('Expected a stateful incremental estimate');
-    }
-
-    expect(estimate.statefulParentUsed).toBe(true);
-    expect(estimate.retainedBaselineTokens).toBe(50_000);
-    expect(estimate.effectiveTokens).toBe(50_000 + estimate.incrementalTokens);
-    expect(estimate.effectiveTokens).toBeGreaterThan(50_000);
-  });
-
-  it('does not serialize complete local history when observed parent usage supplies the baseline', async () => {
-    const provider = new TestResponsesProvider();
-    const projection = await provider.projectPromptEnvelope(
-      buildCallOptions(provider, {
-        contents: [
-          {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'read the retained record' }],
-          },
-          {
-            speaker: 'ai',
-            blocks: [
-              {
-                type: 'tool_call',
-                id: 'retained-call',
-                name: 'lookup_record',
-                parameters: { id: 'record-1' },
-              },
-            ],
-          },
-          {
-            speaker: 'tool',
-            blocks: [
-              {
-                type: 'tool_response',
-                callId: 'retained-call',
-                toolName: 'lookup_record',
-                result: 'retained tool output',
-              },
-            ],
-          },
-          {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'observed parent response' }],
-            metadata: {
-              id: 'resp_observed_parent',
-              responsesStored: true,
-              usage: {
-                promptTokens: 40_000,
-                completionTokens: 100,
-                totalTokens: 40_100,
-              },
-            },
-          },
-          {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'post-parent delta' }],
           },
         ],
         configOverrides: {
@@ -255,96 +241,105 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
       }),
     );
 
-    expect(projection.accounting?.statefulParentUsed).toBe(true);
-    expect(projection.accounting?.retainedBaselineTokens).toBe(40_000);
+    const estimate = await estimatePromptEnvelope(
+      provider.name,
+      projection,
+      createLengthTokenizerFactory(),
+    );
+
+    expect(estimate.retainedBaselineTokens).toBe(1_000);
   });
 
-  it('counts repeated stateful instructions and tools in transport but not in the incremental contribution', async () => {
+  it('counts current changed instructions and tools even though prior noncarried configuration may be conservatively overcounted', async () => {
     const provider = new TestResponsesProvider();
-    const projection = await provider.projectPromptEnvelope(
+    const contents = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'first question' }] },
+      {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'first answer' }],
+        metadata: {
+          id: 'resp_before_configuration_change',
+          responsesStored: true,
+          usage: {
+            promptTokens: 700,
+            completionTokens: 300,
+            totalTokens: 1_000,
+          },
+        },
+      },
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'use the changed configuration' }],
+      },
+    ];
+    const configuredProjection = await provider.projectPromptEnvelope(
       buildCallOptions(provider, {
+        contents,
         systemInstruction:
-          'Use the declared lookup tool and explain each returned field in concise prose.',
+          'These current instructions must remain visible to the model.',
         tools: [
           {
             functionDeclarations: [
               {
-                name: 'lookup_record',
-                description: 'Look up a record by its stable identifier.',
+                name: 'lookup_current_record',
+                description:
+                  'Look up a record under the current tool contract.',
                 parametersJsonSchema: {
                   type: 'object',
-                  properties: {
-                    id: { type: 'string', description: 'Stable record ID' },
-                  },
+                  properties: { id: { type: 'string' } },
                   required: ['id'],
                 },
               },
             ],
           },
         ],
-        contents: [
-          {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'Look up the first record.' }],
-          },
-          {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'The first record is complete.' }],
-            metadata: {
-              id: 'resp_with_instructions_and_tools',
-              responsesStored: true,
-              usage: {
-                promptTokens: 50_000,
-                completionTokens: 100,
-                totalTokens: 50_100,
-              },
-            },
-          },
-          {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'Now look up the second record.' }],
-          },
-        ],
         ephemerals: { 'responses-stateful': true },
       }),
     );
+    const plainProjection = await provider.projectPromptEnvelope(
+      buildCallOptions(provider, {
+        contents,
+        ephemerals: { 'responses-stateful': true },
+      }),
+    );
+    const factory = createLengthTokenizerFactory();
 
-    const estimate = await estimatePromptEnvelope(
+    const configuredEstimate = await estimatePromptEnvelope(
       provider.name,
-      projection,
-      createLengthTokenizerFactory(),
+      configuredProjection,
+      factory,
+    );
+    const plainEstimate = await estimatePromptEnvelope(
+      provider.name,
+      plainProjection,
+      factory,
     );
     if (
-      typeof estimate.incrementalTokens !== 'number' ||
-      estimate.transmittedTokens === undefined ||
-      estimate.retainedBaselineTokens === undefined
+      configuredEstimate.incrementalTokens === undefined ||
+      plainEstimate.incrementalTokens === undefined
     ) {
-      throw new Error('Expected stateful incremental accounting');
-    }
-    if (estimate.effectiveTokens === undefined) {
-      throw new Error('Expected stateful incremental accounting');
+      throw new Error('Expected stateful incremental estimates');
     }
 
-    expect(estimate.transmittedTokens).toBeGreaterThan(
-      estimate.incrementalTokens,
+    expect(configuredEstimate.incrementalTokens).toBe(
+      configuredEstimate.transmittedTokens,
     );
-    expect(estimate.effectiveTokens).toBe(
-      estimate.retainedBaselineTokens + estimate.incrementalTokens,
+    expect(configuredEstimate.incrementalTokens).toBeGreaterThan(
+      plainEstimate.incrementalTokens,
     );
-    expect(estimate.effectiveTokens).toBeLessThan(
-      estimate.retainedBaselineTokens + estimate.transmittedTokens,
-    );
-    expect(estimate.estimatedPromptTokens).toBe(estimate.effectiveTokens);
   });
 
   it.each([
-    ['missing', undefined],
-    ['negative', -1],
-    ['fractional', 1.5],
-    ['not finite', Number.POSITIVE_INFINITY],
+    ['missing usage', undefined, undefined],
+    ['negative prompt usage', -1, 20],
+    ['fractional prompt usage', 1.5, 20],
+    ['nonfinite prompt usage', Number.POSITIVE_INFINITY, 20],
+    ['negative completion usage', 20, -1],
+    ['fractional completion usage', 20, 1.5],
+    ['nonfinite completion usage', 20, Number.POSITIVE_INFINITY],
   ])(
-    'AC-1: uses complete local history when parent usage is %s',
-    async (_case, promptTokens) => {
+    'AC-1: falls back to complete model-visible local history for %s',
+    async (_case, promptTokens, completionTokens) => {
       const provider = new TestResponsesProvider();
       const contents = [
         { speaker: 'human', blocks: [{ type: 'text', text: 'previous q' }] },
@@ -354,13 +349,13 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
           metadata: {
             id: 'resp_1',
             responsesStored: true,
-            ...(promptTokens === undefined
+            ...(promptTokens === undefined || completionTokens === undefined
               ? {}
               : {
                   usage: {
                     promptTokens,
-                    completionTokens: 20,
-                    totalTokens: 20,
+                    completionTokens,
+                    totalTokens: promptTokens + completionTokens,
                   },
                 }),
           },
@@ -392,7 +387,6 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
       );
 
       expect(statefulEstimate.statefulParentUsed).toBe(true);
-      expect(statefulEstimate.retainedBaselineTokens).toBeGreaterThan(0);
       expect(statefulEstimate.effectiveTokens).toBe(
         fullHistoryEstimate.effectiveTokens,
       );
