@@ -897,3 +897,205 @@ already a devDependency. The anchors also matched fork 7.1.0 unmodified (E30).
 Verify with the `static-remount.mjs` probe listed earlier in this file: the
 accumulator should read
 20,790 then **0** then 2,070, matching upstream 7.1.1.
+
+---
+
+## Ink render-churn probe (E35)
+
+The issue-2852 harness has no Ink dimension, so this probe adds one. Run under
+Bun on macOS. It renders the alternate-buffer shape (terminal-sized,
+`overflow: hidden`, no `<Static>`) and samples the same metrics.
+
+```ts
+/**
+ * Throwaway probe (issue #3345 follow-up): does the Ink RENDER path, as used in
+ * alternate-buffer mode, produce the dirty-WebKit-Malloc signature reported in
+ * #2905? The repository's issue-2852 harness has text/media/reasoning modes,
+ * none of which render through Ink, so the existing plateau guards cannot see
+ * a render-path leak.
+ *
+ * Mirrors the issue-2852 target's checkpoint shape: Bun.gc(true) then sample
+ * bun:jsc heapStats and process.memoryUsage(), writing NDJSON the runner reads
+ * while vmmap/footprint are captured externally against this pid.
+ *
+ * Usage: bun target.ts <ndjson out> <ink build dir> <turns>
+ */
+import { heapStats } from 'bun:jsc';
+import { appendFileSync, writeFileSync } from 'node:fs';
+import { EventEmitter } from 'node:events';
+import React from 'react';
+
+const [, , outputPath, inkBuild, turnArg = '4'] = process.argv;
+if (!outputPath || !inkBuild) {
+  throw new Error('Usage: bun target.ts <ndjson out> <ink build dir> [turns]');
+}
+const turns = Number.parseInt(turnArg, 10);
+if (!Number.isInteger(turns) || turns < 3) {
+  throw new Error('Turns must be an integer of at least 3 to judge a plateau');
+}
+
+const render = (await import(`${inkBuild}/render.js`)).default;
+const Box = (await import(`${inkBuild}/components/Box.js`)).default;
+const Text = (await import(`${inkBuild}/components/Text.js`)).default;
+
+writeFileSync(outputPath, '');
+const checkpoint = (label: string) => {
+  Bun.gc(true);
+  const mem = process.memoryUsage();
+  appendFileSync(
+    outputPath,
+    `${JSON.stringify({
+      label,
+      pid: process.pid,
+      postGc: true,
+      jsc: heapStats(),
+      rss: mem.rss,
+      heapUsed: mem.heapUsed,
+      external: mem.external,
+      arrayBuffers: mem.arrayBuffers,
+    })}\n`,
+  );
+};
+
+/** Terminal-sized, overflow-hidden root with no <Static>: the alternate-buffer shape. */
+class Stdout extends EventEmitter {
+  columns = 120;
+  rows = 40;
+  isTTY = true;
+  bytes = 0;
+  write = (chunk: string) => {
+    this.bytes += chunk.length;
+  };
+}
+class Stdin extends EventEmitter {
+  isTTY = true;
+  setEncoding() {}
+  setRawMode() {}
+  resume() {}
+  pause() {}
+  ref() {}
+  unref() {}
+  read() {
+    return null;
+  }
+}
+
+const stdout = new Stdout();
+const LINES_PER_FRAME = 38;
+
+/** Distinct text every frame, as streaming output produces. */
+const App = ({ seq }: { seq: number }) =>
+  React.createElement(
+    Box,
+    {
+      flexDirection: 'column',
+      width: stdout.columns,
+      height: stdout.rows,
+      overflow: 'hidden',
+    },
+    Array.from({ length: LINES_PER_FRAME }, (_unused, row) =>
+      React.createElement(
+        Text,
+        { key: row, wrap: 'wrap' },
+        `${seq}:${row} lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod`,
+      ),
+    ),
+  );
+
+const instance = render(React.createElement(App, { seq: 0 }), {
+  stdout,
+  stdin: new Stdin(),
+  stderr: new Stdout(),
+  debug: false,
+  exitOnCtrlC: false,
+  patchConsole: false,
+});
+
+checkpoint('baseline');
+
+const FRAMES_PER_TURN = 3000;
+let seq = 0;
+for (let turn = 1; turn <= turns; turn++) {
+  for (let frame = 0; frame < FRAMES_PER_TURN; frame++) {
+    seq++;
+    instance.rerender(React.createElement(App, { seq }));
+  }
+  checkpoint(`turn-${turn}-post-gc`);
+}
+
+instance.unmount();
+appendFileSync(
+  outputPath,
+  `${JSON.stringify({ label: 'summary', framesRendered: seq, stdoutBytes: stdout.bytes })}\n`,
+);
+process.exit(0);
+```
+
+Runner, which samples `vmmap -summary` against the target pid:
+
+```bash
+#!/bin/bash
+# Throwaway runner (issue #3345 follow-up). Launches the Ink churn target under
+# Bun and samples vmmap/footprint against its pid at each post-GC checkpoint,
+# the same native metrics scripts/issue-2852-memory-benchmark.ts parses.
+set -u
+REPO=/Users/acoliver/projects/llxprt/branch-7/llxprt-code
+BUILD="$1"
+NAME="$2"
+TURNS="${3:-4}"
+OUT="$REPO/tmp/issue3345/inkchurn/$NAME"
+mkdir -p "$OUT"
+
+bun "$REPO/tmp/issue3345/inkchurn/target.ts" "$OUT/checkpoints.ndjson" "$BUILD" "$TURNS" &
+PID=$!
+
+# Sample native regions while the target runs.
+for i in $(seq 1 200); do
+  if ! kill -0 "$PID" 2>/dev/null; then break; fi
+  /usr/bin/vmmap -summary "$PID" > "$OUT/vmmap.$i.txt" 2>/dev/null
+  sleep 1
+done
+wait "$PID"
+EXIT=$?
+
+echo "target exit=$EXIT"
+echo "--- post-GC checkpoints (JSC heap / rss / external) ---"
+python3 - "$OUT/checkpoints.ndjson" <<'PY'
+import json,sys
+for line in open(sys.argv[1]):
+    d=json.loads(line)
+    if d.get('label')=='summary':
+        print(f"summary framesRendered={d['framesRendered']} stdoutBytes={d['stdoutBytes']}")
+        continue
+    j=d.get('jsc',{})
+    print(f"{d['label']:<20} jscHeap={j.get('heapSize',0)/1e6:8.2f}MB "
+          f"rss={d['rss']/1e6:8.2f}MB external={d['external']/1e6:7.2f}MB")
+PY
+echo "--- dirty WebKit Malloc / IOAccelerator / footprint over samples ---"
+python3 - "$OUT" <<'PY'
+import re,sys,glob,os
+def dirty(text, region):
+    for line in text.splitlines():
+        if line.strip().startswith(region):
+            nums = re.findall(r'(\d+(?:\.\d+)?)([KMG]?)', line)
+            # vmmap -summary columns: VIRTUAL RESIDENT DIRTY SWAPPED
+            return line.strip()
+    return None
+files = sorted(glob.glob(os.path.join(sys.argv[1],'vmmap.*.txt')),
+               key=lambda p:int(p.rsplit('.',2)[1]))
+for p in (files[:1] + files[-1:]) if files else []:
+    t=open(p, errors='ignore').read()
+    print(os.path.basename(p))
+    for r in ('Physical footprint','WebKit Malloc','IOAccelerator'):
+        m=[l.strip() for l in t.splitlines() if l.strip().startswith(r)]
+        print('   ', m[0] if m else f'{r}: (absent)')
+PY
+```
+
+Invoke once per build, for example:
+
+```bash
+bash run.sh "$REPO/node_modules/ink/build" fork648 6
+bash run.sh "$REPO/tmp/issue3345/fork7/node_modules/@jrichman/ink/build" fork710 6
+bash run.sh "$REPO/tmp/issue3345/spike/node_modules/ink/build" up711 6
+```

@@ -846,6 +846,12 @@ and must be covered before the patch ships:
 
 ## E33. Render-path text-cache growth, which applies in every render mode
 
+> **Superseded by E35.** The measurement below is accurate for the styled-
+> character cache in isolation, but the conclusion drawn from it, that fork
+> 7.1.0 is a default-mode memory improvement, is wrong. Measuring the whole
+> render path shows fork 7.1.0 leaking without bound where the current pin
+> plateaus. Read E35 before using anything here.
+
 E9 through E12 concern `fullStaticOutput`, which only accumulates when a
 `<Static>` node emits. Per E21 and E25 that never happens in alternate-buffer
 mode, which is the default. The styled-character cache is different: it is
@@ -905,3 +911,79 @@ refuted as the cause.
 
 Existing tooling: `npm run mem:profile` (documented in `docs/memory-profiling.md`)
 and `scripts/issue-2852-memory-{target,runner,benchmark}.ts`.
+
+## E35. Ink render-path memory under Bun, and the retraction of E33's conclusion
+
+E33 measured only the styled-character cache and concluded fork 7.1.0 was
+roughly 69 times better. Measuring the whole render path reverses that result.
+**E33's recommendation is retracted. The conclusion drawn from it was wrong.**
+
+### Why this probe exists
+
+`scripts/issue-2852-memory-target.ts` has three modes, `text`, `media`, and
+`reasoning`. All three drive `PendingResponseBuffer` and the streaming pipeline.
+None of them render through Ink. The post-GC plateau verdicts added by #3114
+therefore cannot observe an Ink render-path leak.
+
+### Method
+
+Throwaway probe at `tmp/issue3345/inkchurn/` run under Bun. It renders a
+terminal-sized `overflow: hidden` root with no `<Static>`, matching the
+alternate-buffer layout shape (E21), with 38 `<Text>` lines of distinct content
+per frame. Checkpoints call `Bun.gc(true)` then sample `bun:jsc` `heapStats()`
+and `process.memoryUsage()`, mirroring the issue-2852 target. `vmmap -summary`
+is sampled against the pid for the native regions that
+`scripts/issue-2852-memory-benchmark.ts` parses.
+
+All three builds ran the identical workload: 6 turns of 3,000 frames, 18,000
+frames total.
+
+### Post-GC JSC heap, in MB
+
+| Turn | fork 6.4.8 (pin) | fork 7.1.0 | upstream 7.1.1 |
+| --- | ---: | ---: | ---: |
+| baseline | 41.18 | 41.14 | 40.45 |
+| 1 | 116.36 | 84.36 | 67.31 |
+| 2 | 114.70 | 159.75 | 92.15 |
+| 3 | 114.64 | 236.84 | 108.55 |
+| 4 | 115.56 | 312.10 | 141.26 |
+| 5 | 115.46 | 387.42 | 156.68 |
+| 6 | **115.19** | **464.47** | **173.18** |
+
+The pinned fork plateaus. Turns 2 through 6 stay within 115.19 and 115.56, a
+spread under 1%. Fork 7.1.0 grows near-linearly at roughly 76 MB per 3,000
+frames across all six turns. Upstream 7.1.1 grows at roughly 21 MB per turn.
+
+### Other metrics at the end of the same runs
+
+| Metric | fork 6.4.8 | fork 7.1.0 | upstream 7.1.1 |
+| --- | ---: | ---: | ---: |
+| `external` trend | flat, 36.75 to 37.53 | flat, 36.98 to 37.69 | **linear, 36.75 to 90.57** |
+| WebKit Malloc virtual | 5.0 G | 5.0 G | 5.4 G |
+| WebKit Malloc dirty | 198.0 MB | 527.9 MB | 897.8 MB |
+| Physical footprint | 230.3 MB | 562.2 MB | 930.8 MB |
+| IOAccelerator dirty | 19.2 MB | 22.5 MB | 19.3 MB |
+
+### Findings
+
+1. The pinned fork 6.4.8 is the only one of the three whose post-GC JSC heap
+   plateaus under sustained Ink rendering. Both candidate upgrade targets leak.
+2. A 6.4.8 to 7.1.0 bump would introduce an unbounded render-path leak. E33's
+   suggestion that it is a default-mode improvement is withdrawn.
+3. Upstream 7.1.1 leaks on two axes here, JSC heap and `external`. The `external`
+   growth is consistent with its unbounded measure and wrap caches (E11).
+4. All three drive WebKit Malloc to roughly 5 GB virtual against a far smaller
+   dirty figure. That is the allocator high-water and churn signature #2852
+   attributed for the streaming pipeline (E34), reproduced here from Ink
+   rendering alone with no streaming, no media, and no shell activity.
+5. IOAccelerator stays flat in all three, so this probe does not reproduce the
+   IOAccelerator component of #2905 (E34).
+
+### Limits
+
+Synthetic and adversarial: every line of every frame is distinct, which is the
+worst case for any text cache. Real sessions repeat content. The comparison
+between builds is valid because the workload is identical, but the absolute
+figures are not a production forecast. One machine, one platform, one Bun
+version. No claim is made here about which allocation site is responsible; that
+requires the native attribution #2905 specifies.

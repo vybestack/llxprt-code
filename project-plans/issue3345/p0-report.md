@@ -66,11 +66,18 @@ pipeline), #3114 (closed, plateau verdicts for JSC heap, Bun external memory, an
 dirty WebKit Malloc), and #2905, which is **open** and holds the unattributed
 native signature (E34). This report should not be read as addressing those.
 
-The one finding here that does apply in the default mode is the render-path text
-cache: the current pin grows the heap by about 131.9 MB over 20,000 distinct
-rendered strings, fork 7.1.0 by about 1.9 MB, and upstream 7.1.1 by about
-120.1 MB (E33). That makes a 6.4.8 to 7.1.0 bump a candidate improvement on its
-own terms, separate from both the static accumulator and the migration.
+On the Ink render path, which does run in the default mode, the current pin is
+the best of the three builds. Over an identical 18,000-frame workload its post-GC
+JSC heap plateaus at about 115 MB, while fork 7.1.0 grows without bound to
+464 MB and upstream 7.1.1 grows to 173 MB with `external` also growing linearly
+(E35). An earlier isolated cache measurement suggested the opposite and led to a
+recommendation to bump to fork 7.1.0; that recommendation is withdrawn (E33,
+E35).
+
+All three builds drive WebKit Malloc to roughly 5 GB virtual from Ink rendering
+alone, with no streaming, media, or shell activity. That is the allocator
+high-water signature #2852 attributed elsewhere, and the existing harness cannot
+see it because none of its three modes render through Ink (E34, E35).
 
 ## Spike configuration
 
@@ -413,6 +420,12 @@ separately (E1, E12, E13).
 
 ### Render-path text cache
 
+> **Superseded by the render-path measurement in E35.** The table below is a
+> valid isolated-cache measurement, but the two consequences drawn from it
+> are withdrawn: measuring the whole render path shows fork 7.1.0 leaking
+> without bound where the current pin plateaus, so the suggested bump would
+> be a regression. See "Render-path memory under Bun" below.
+
 This is the one memory behavior in this report that applies in every render mode,
 including the default alternate buffer. Rendering 20,000 distinct strings through
 Ink and sampling `heapUsed` after forced GC, reproducible across two runs (E33):
@@ -440,6 +453,45 @@ Two consequences that cut against conclusions elsewhere in this report:
 
 Limits: JS heap only, synthetic, one string shape. It measures nothing native and
 says nothing about IOAccelerator or IOSurface (E33).
+
+### Render-path memory under Bun
+
+The existing issue-2852 harness cannot observe this. Its `text`, `media`, and
+`reasoning` modes all drive the streaming buffer; none renders through Ink, so
+the post-GC plateau verdicts added by #3114 are blind to a render-path leak
+(E34, E35).
+
+Rendering a terminal-sized `overflow: hidden` root with no `<Static>`, the
+alternate-buffer shape, for an identical 18,000 frames on each build, post-GC
+JSC heap in MB (E35):
+
+| Turn | fork 6.4.8 (pin) | fork 7.1.0 | upstream 7.1.1 |
+| --- | ---: | ---: | ---: |
+| 1 | 116.36 | 84.36 | 67.31 |
+| 3 | 114.64 | 236.84 | 108.55 |
+| 6 | **115.19** | **464.47** | **173.18** |
+
+The pin plateaus within 1% across turns 2 through 6. Fork 7.1.0 grows by roughly
+76 MB per 3,000 frames and upstream 7.1.1 by roughly 21 MB, neither settling.
+Upstream also grows `external` linearly from 36.75 MB to 90.57 MB, consistent
+with its unbounded measure and wrap caches (E11).
+
+Three consequences:
+
+1. **The pinned fork is the best of the three on this axis.** Both candidate
+   upgrade targets introduce a render-path leak that the pin does not have. This
+   is a constraint on the migration, not an argument against it, but any upstream
+   swap has to answer it.
+2. The earlier recommendation to bump 6.4.8 to 7.1.0 as a memory improvement is
+   withdrawn. It would make default-mode memory worse.
+3. All three drive WebKit Malloc to roughly 5 GB virtual with dirty figures of
+   198.0, 527.9, and 897.8 MB respectively, and physical footprints of 230.3,
+   562.2, and 930.8 MB, from Ink rendering alone. IOAccelerator stays flat, so
+   this does not reproduce that component of #2905 (E34, E35).
+
+The workload is adversarial, with every line of every frame distinct. The
+build-to-build comparison is sound because the workload is identical, but the
+absolute numbers are not a production forecast (E35).
 
 ### Effect on the issue rationale
 
