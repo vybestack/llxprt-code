@@ -96,9 +96,22 @@ Added at each site, in the style already used by `nightly.yml`:
 - `resolve_milestone` — prints the milestone title on stdout, or nothing. Reads
   `repos/${GH_REPO}/contents/package.json?ref=main`, extracts `.version`, then
   exact-matches across all pages of open milestones. Every failure path warns to
-  stderr and returns empty (AC5). This is the function already present in
-  `nightly.yml` and `evals-nightly.yml`, unchanged; it is added verbatim to the
-  other three.
+  stderr and returns empty (AC5).
+
+  The version of this function shipped in #3149 ran
+  `gh api --paginate --slurp ... --jq ...`, which gh rejects outright:
+  `the --slurp option is not supported with --jq or --template`. Because the
+  resolver fails soft, nightly and evals-nightly carried on and created their
+  issues with **no milestone at all** — the milestone feature has never worked.
+  Resolution now pipes the slurped pages to a real `jq` and passes the version
+  with `--arg`, which also removes the `"${current_version}"` quoting that had
+  to survive a round of shell escaping:
+
+  ```bash
+  gh api --paginate --slurp "repos/${GH_REPO}/milestones?state=open&per_page=100" \
+    | jq -r --arg version "${current_version}" \
+        '[.[][] | select(.title == $version)] | .[0].title // empty'
+  ```
 - `apply_issue_type <issue-number-or-url>` — new. Accepts either a bare number
   or the URL that `gh issue create` prints, extracts the trailing number, and
   runs `gh api -X PATCH "repos/${GH_REPO}/issues/N" -f type=Bug`. Warns and
@@ -121,9 +134,13 @@ Added at each site, in the style already used by `nightly.yml`:
    `create_infrastructure_issue`, apply type after create, and apply milestone
    plus type on the two existing-issue comment paths.
 
-`smoke-test.yml` and `release.yml` pass `--label ci/cd` directly with no
-`ensure_label` fallback: the label already exists and a missing label should
-fail loudly rather than be papered over.
+`smoke-test.yml` and `release.yml` use the same `ensure_label` create-or-verify
+helper as `nightly.yml` and `evals-nightly.yml`. Passing `--label ci/cd`
+directly was tried first and rejected in review: `gh` hard-fails an unknown
+label, and both steps run under the runner's default `bash -e`, so a missing
+label would lose the whole failure notification rather than merely losing the
+label. `ocr-infrastructure-notifier.yml` keeps its existing
+create-then-retry-without-labels fallback, which gives the same guarantee.
 
 ## Test plan
 
@@ -149,7 +166,9 @@ fake-API state, so they describe observable behavior rather than source text.
 ### `scripts/tests/auto-issue-metadata.test.ts` (new)
 
 Run once per site via a table over the five workflows, so every case below is
-asserted five times against real execution.
+asserted five times against real execution. One further case compiles the
+embedded Python so an escaping slip in the fake surfaces directly rather than as
+a retried `gh` error (61 tests total).
 
 Happy path:
 
@@ -212,6 +231,52 @@ Cross-cutting:
   `scripts/tests/ocr-review-workflow.bun.test.ts`, and
   `scripts/tests/release-process-b.test.ts` assert on exact shell strings at the
   touched sites and will need their expectations updated to the new argv.
+
+## Review outcomes
+
+Two review rounds ran: a correctness/intent review and an open code review.
+
+Accepted and fixed:
+
+- **The milestone never resolved.** `gh api --paginate --slurp --jq` is rejected
+  by gh. Fixed at all five sites by piping to external jq (see Design). This
+  defect shipped in #3149 and this branch had copied it to three more files.
+- **The evals reuse path skipped the milestone.** `create_issue_once` returns
+  the number of an issue that appeared after the outer search, in which case
+  `CREATE_ARGS` never applied. Both reuse paths now go through one
+  `annotate_issue` helper, which validates the reference before calling the API
+  so an unparseable one cannot burn four retries and three sleeps.
+- **A missing `ci/cd` label would have lost the notification** in smoke-test and
+  release. Both now use `ensure_label`.
+- **The tests passed against all of the above**, so the harness was hardened:
+  the fake gh models gh's option validation, emits the real `--slurp`
+  page-of-pages shape, requires a title and body on create, records PATCH
+  fields, accepts issue URLs, and fails loudly on anything it does not model.
+  The harness substitutes `${{ }}` in the run body (not just `env`), throws on
+  unmodelled expressions instead of yielding `''`, and invokes bash with the
+  runner's real flags per the step's `shell`.
+- Assorted diagnostics: prerequisite checks naming a missing `python3`/`jq`,
+  spawn errors folded into stderr, a `||` fold that does not drop operands, and
+  corrected warning wording.
+
+Rejected:
+
+- **Share the helpers via a runtime-fetched script for release.yml and
+  smoke-test.yml.** Those two jobs do have checkouts, but the other three
+  notifier jobs do not, so this would leave two divergent mechanisms for the
+  same logic instead of one duplicated one.
+
+## Evidence that the tests are not vacuous
+
+Mutation checks, each re-run after the final refactor:
+
+| Mutation | Result |
+| --- | --- |
+| Reintroduce `--slurp` with `--jq` | 5 tests fail |
+| Change `type=Bug` to `type=Task` | 2 tests fail |
+
+Both mutations passed silently against the harness as first written, which is
+why the harness changes above were necessary.
 
 ## Out of scope
 
