@@ -123,8 +123,9 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
           return runScript(root, 1);
         });
         expect(code).toBe(1);
-        expect(stdout).toContain('not in the sanctioned workspace allowlist');
+        expect(stdout).toContain('allowlist');
         expect(stdout).toContain('packages/core');
+        expect(stdout).toContain('@google/genai');
       });
 
       it('FAILS when packages/cli declares @google/genai in optionalDependencies', async () => {
