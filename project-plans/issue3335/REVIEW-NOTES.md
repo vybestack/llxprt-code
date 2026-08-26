@@ -232,6 +232,23 @@ V2. **Full verification result.**
     Re-confirmed after the suite finished and the machine was quiet: the test
     passes in 17.56ms (21/21).
 
+V1b. **`subagent.runNonInteractive-term.test.ts` and
+    `mutationCoverage.behavior.test.ts` are unstable together, on main too.**
+    The final full-suite run reported three failures: the mutation post-auth
+    guard test twice at exactly 30000.00ms (its timeout), and
+    `should time out while waiting for interactive tool completion`.
+
+    The second sits in a file this branch modifies, so it needed checking rather
+    than assuming. In isolation it passes 12/12 on this branch. Run as a pair,
+    both files give **23 pass / 11 fail on this branch and 23 pass / 11 fail on
+    `main`** — identical. The term file drives `vi.useFakeTimers()` and
+    `advanceTimersByTime`, which is exactly the shape that breaks when another
+    file in the same process installs its own timer mocks.
+
+    Pre-existing cross-file interference, not a regression here. As with V1, the
+    project runner executes files individually, which is why the full suite is
+    otherwise clean.
+
 V1. **`grep-ripgrep-issue3203-remediation.test.ts` flakes under load, not from
     this branch.** The full-suite run reported
     `grep with exactly max_results matches is NOT marked incomplete` failing at
