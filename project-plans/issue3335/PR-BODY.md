@@ -44,6 +44,16 @@ visible text. There is a paired assertion proving reasoning is what trips the
 budget: a reasoning-heavy turn terminates, the same visible text without
 reasoning does not.
 
+Only the budget is evaluated mid-turn. The turn and time limits stay at the top
+of the loop where they already were. Checking everything mid-turn looks tidier
+and is wrong: a subagent on its last allowed turn would stop before handling the
+tool calls it had just emitted, silently dropping their results. The budget is
+the one condition that has to be checked as soon as output is counted, because
+its whole purpose is stopping a runaway before another request goes out.
+`checkOutputBudget` is split out for that, and there are tests pinning that the
+mid-turn check ignores an exhausted turn budget while the top-of-loop check
+still enforces it.
+
 ### 2. Ungated per-chunk diagnostic state (#3339, #3335)
 
 `Turn.debugResponses` retained one object per streamed chunk, forever, on a
@@ -56,6 +66,18 @@ read; `parseThought` is the read that forces the flatten.
 
 `OpenAIStreamProcessor.allChunks` retained every raw SDK chunk so that three log
 lines could read `.length`. Now a counter.
+
+The cap itself needed care. Trimming on every chunk past the limit costs an
+O(cap) front-splice plus an O(cap) index rebuild per chunk, which is O(n*cap)
+over a stream: measured **12.2s and 407M operations for 200k chunks**, trading
+the memory blowup for a CPU stall. Letting retention reach twice the cap and
+then dropping a full cap's worth in one batch amortises to O(1) per chunk, at
+**23ms and 397k operations** for the same input. That is a 544x speedup for
+1026x fewer operations, still bounded and still retaining the newest chunks.
+
+The retention bound, the thinking-block collapse, and the index that makes the
+collapse cheap now live in `TurnDebugResponses` rather than as three more
+methods on `Turn`, which keeps the behaviour testable on its own.
 
 Provider emission semantics are deliberately unchanged. Making Anthropic and
 OpenAI Responses emit true deltas is defence in depth against a bug that dies
@@ -97,6 +119,35 @@ gains the `AbortSignal` it never had, so a cancelled request stops the detached
 background parser), and the qwen `textBuffer`, whose growth was previously
 suppressed only by an unterminated Kimi tool section while two full-buffer regex
 scans ran per delta.
+
+### Sizing the caps
+
+Every cap here is set against the largest response the model catalog can
+legitimately produce: 128,000 output tokens (`AnthropicModelData.ts:104`),
+roughly 512 KiB of text.
+
+| Cap                                | Value     | Headroom vs a legitimate max response |
+| ---------------------------------- | --------- | ------------------------------------- |
+| `MAX_OUTPUT_TOKENS_TOTAL_CEILING`  | 2,000,000 | ~16x (122 consecutive max responses)  |
+| `MAX_PROVIDER_TOOL_CALL_BYTES`     | 16 MiB    | ~32x                                  |
+| `MAX_PROVIDER_SSE_LINE_BYTES`      | 8 MiB     | ~16x                                  |
+| `MAX_PROVIDER_REASONING_CAPTURE`   | 8 MiB     | ~16x                                  |
+| `MAX_PROVIDER_BUFFERED_TEXT_BYTES` | 8 MiB     | ~16x                                  |
+| `MAX_UNCLOSED_FENCE_LENGTH`        | 512 KiB   | ~1x, see below                        |
+
+`MAX_UNCLOSED_FENCE_LENGTH` is the one tight number and it is deliberate. Only a
+maximum-length response consisting *entirely* of one unbroken code block can
+reach it, and the consequence when that happens is cosmetic: the block renders
+as two contiguous, identically styled code blocks. The alternative is retaining
+the whole response and re-rendering it on every delta. The reasoning is recorded
+on the constant so it does not have to be re-derived.
+
+The byte guards count the delta and accumulate, rather than re-measuring the
+buffer each time, so they stay O(1) per chunk. Where a guard has to inspect an
+accumulated buffer, an O(1) length pre-check settles the common case:
+UTF-8 length is bounded by three times `String.length`, so a cheap comparison
+proves the value is under the limit without scanning it. Otherwise the guard
+would be quadratic in exactly the pathological case it exists to catch.
 
 ## Reviewer Test Plan
 
