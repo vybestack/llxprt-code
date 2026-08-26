@@ -160,9 +160,9 @@ Pull request review produced two additional hypotheses. CodeRabbit identified a 
 - Five full repository test attempts did not produce a green local result. Different runs timed out in different agents files; a reduced-agents-concurrency run instead timed out in one provider tokenizer file and later in agents. The post-review attempt passed providers 579/579 and every package after agents, but four agents files hit their existing per-file timeout. Every previously implicated agents file passed separately, the full agents package passed 376/376 plus 6/6 isolated files, and the provider tokenizer rerun passed 33/33. The failures vary with loaded workspace execution, but their cause is not established. No security-remediation test failed, and this plan does not claim a green local full-suite run.
 - The required `stepfun-37` smoke command reached the configured provider but exited with HTTP 400 because the account has no active Step plan subscription. The local environment could not complete the external inference step.
 
-Evidence still required after this update:
+### Pull request status
 
-- pull request CI and review-thread status.
+Pull request 3337 passed its post-remediation CI cycle with 39 checks passing, no failures, and three intentional skips. The valid streamed-size review finding was fixed in `b91ed44d6`; the invalid yauzl auto-close finding was answered with source evidence. Both inline threads are resolved, and no actionable review thread remains.
 
 ## Acceptance criteria
 
