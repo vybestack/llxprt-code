@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import type { IProvider } from '../../IProvider.js';
 import {
   loadRuntimePlugins,
   RuntimePluginIncompatibleError,
@@ -22,7 +23,7 @@ const BUILTIN_PROVIDER_IDS = [
 ];
 
 function noopFactory(): ProviderAliasFactory {
-  return () => null;
+  return () => ({}) as unknown as IProvider;
 }
 
 function makeExport(
@@ -183,7 +184,7 @@ describe('loadRuntimePlugins', () => {
               providers: [
                 {
                   providerId: 'future-provider',
-                  createProvider: () => null,
+                  createProvider: () => ({}) as unknown as IProvider,
                 },
               ],
             },

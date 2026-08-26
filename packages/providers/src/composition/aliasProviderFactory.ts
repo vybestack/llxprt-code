@@ -24,7 +24,6 @@ import { AnthropicProvider } from '../anthropic/AnthropicProvider.js';
 import { GeminiProvider } from '../gemini/GeminiProvider.js';
 import type { ProviderManager } from '../ProviderManager.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
-import type { IProvider } from '../IProvider.js';
 import type { OAuthManager } from '../auth/index.js';
 import type { IModel } from '../IModel.js';
 import { type ProviderAliasEntry } from './providerAliases.js';
@@ -214,13 +213,14 @@ export function createOpenAIAliasProvider(
   openaiApiKey: string | undefined,
   openaiBaseUrl: string | undefined,
   openaiProviderConfig: IProviderConfig,
-): OpenAIProvider | null {
+): OpenAIProvider {
   const resolvedBaseUrl = entry.config['base-url'] ?? openaiBaseUrl;
   if (!resolvedBaseUrl) {
-    debugLogger.warn(
-      `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
+    throw new Error(
+      `Alias '${entry.alias}' (${entry.filePath}) has no base-url and no ` +
+        `default base URL is configured. Set 'base-url' on the alias or ` +
+        `configure a default for the openai provider.`,
     );
-    return null;
   }
 
   const aliasProviderConfig: IProviderConfig = {
@@ -267,13 +267,14 @@ export function createOpenAIResponsesAliasProvider(
   openaiBaseUrl: string | undefined,
   openaiProviderConfig: IProviderConfig,
   oauthManager: OAuthManager,
-): OpenAIResponsesProvider | null {
+): OpenAIResponsesProvider {
   const resolvedBaseUrl = entry.config['base-url'] ?? openaiBaseUrl;
   if (!resolvedBaseUrl) {
-    debugLogger.warn(
-      `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
+    throw new Error(
+      `Alias '${entry.alias}' (${entry.filePath}) has no base-url and no ` +
+        `default base URL is configured. Set 'base-url' on the alias or ` +
+        `configure a default for the openai provider.`,
     );
-    return null;
   }
 
   const aliasProviderConfig: IProviderConfig = {
@@ -326,13 +327,14 @@ export function createOpenAIVercelAliasProvider(
   openaiApiKey: string | undefined,
   openaiBaseUrl: string | undefined,
   openaiProviderConfig: IProviderConfig,
-): OpenAIVercelProvider | null {
+): OpenAIVercelProvider {
   const resolvedBaseUrl = entry.config['base-url'] ?? openaiBaseUrl;
   if (!resolvedBaseUrl) {
-    debugLogger.warn(
-      `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
+    throw new Error(
+      `Alias '${entry.alias}' (${entry.filePath}) has no base-url and no ` +
+        `default base URL is configured. Set 'base-url' on the alias or ` +
+        `configure a default for the openai provider.`,
     );
-    return null;
   }
 
   const aliasProviderConfig: IProviderConfig = {
@@ -376,7 +378,7 @@ export function createOpenAIVercelAliasProvider(
 export function createGeminiAliasProvider(
   entry: ProviderAliasEntry,
   config?: Config,
-): GeminiProvider | null {
+): GeminiProvider {
   let aliasApiKey: string | undefined;
   if (entry.config.apiKeyEnv) {
     const envValue = process.env[entry.config.apiKeyEnv];
@@ -408,7 +410,7 @@ export function createAnthropicAliasProvider(
   entry: ProviderAliasEntry,
   oauthManager: OAuthManager | undefined,
   authOnlyEnabled = false,
-): AnthropicProvider | null {
+): AnthropicProvider {
   let aliasApiKey: string | undefined;
   // Only use environment variable API key if authOnly is not enabled
   if (!authOnlyEnabled && entry.config.apiKeyEnv) {
@@ -529,11 +531,9 @@ export function registerAliasProviders(
   // Resolve every factory and construct every provider BEFORE touching the
   // manager. `refreshAliasProviders` re-runs this against a live manager, so a
   // single unresolvable alias must not leave half the aliases swapped out.
-  const providers = entries
-    .map((entry) =>
-      resolveAliasFactory(contributions, entry)(entry, factoryContext),
-    )
-    .filter((provider): provider is IProvider => provider !== null);
+  const providers = entries.map((entry) =>
+    resolveAliasFactory(contributions, entry)(entry, factoryContext),
+  );
 
   for (const provider of providers) {
     providerManagerInstance.registerProvider(provider as never);

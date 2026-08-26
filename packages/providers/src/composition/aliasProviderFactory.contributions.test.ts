@@ -255,22 +255,6 @@ describe('registerAliasProviders registry dispatch', () => {
     expect(manager.listProviders()).not.toContain('ghost-alias');
   });
 
-  it('registers nothing and does not throw when a factory returns null', async () => {
-    const contributions = await registryFor({
-      'plugin-pkg': pluginModule('plugin-pkg', { factory: () => null }),
-    });
-    const manager = makeManager();
-
-    register(
-      manager,
-      [makeAliasEntry('null-alias', { baseProvider: 'plugin-pkg-provider' })],
-      contributions,
-    );
-
-    expect(manager.getProviderByName('null-alias')).toBeUndefined();
-    expect(manager.listProviders()).not.toContain('null-alias');
-  });
-
   it('registers aliases contributed by a plugin manifest', async () => {
     const contributions = await registryFor({
       'plugin-pkg': pluginModule('plugin-pkg', {
@@ -295,7 +279,7 @@ describe('registerAliasProviders registry dispatch', () => {
         aliasName: 'origin-alias',
         factory: (entry) => {
           seen.push(entry);
-          return null;
+          return aliasEchoProvider(entry);
         },
       }),
     });
@@ -359,9 +343,6 @@ describe('registerAliasProviders registry dispatch', () => {
       context,
     );
 
-    if (!claudecode || !anthropic) {
-      throw new Error('expected both anthropic-family providers');
-    }
     expect(claudecode.name).toBe('claudecode');
     expect(anthropic.name).toBe('anthropic');
     // Only the subscription identity is bound to the OAuth manager, so with no
@@ -522,18 +503,31 @@ describe('built-in alias factory parity', () => {
       EMPTY_PROVIDER_CONFIG,
     );
 
-    expect(provider?.name).toBe('direct-alias');
+    expect(provider.name).toBe('direct-alias');
   });
 
-  it('still returns null when no base URL is available', () => {
-    const provider = createOpenAIAliasProvider(
-      makeAliasEntry('no-base-url', { baseProvider: 'openai' }),
-      undefined,
-      undefined,
-      EMPTY_PROVIDER_CONFIG,
-    );
+  it('throws instead of skipping when no base URL is available', () => {
+    // Silently dropping a provider the user configured leaves them with a
+    // missing provider and no explanation. The error names the alias and the
+    // file it came from.
+    let thrown: unknown;
+    try {
+      createOpenAIAliasProvider(
+        makeAliasEntry('no-base-url', { baseProvider: 'openai' }),
+        undefined,
+        undefined,
+        EMPTY_PROVIDER_CONFIG,
+      );
+    } catch (error) {
+      thrown = error;
+    }
 
-    expect(provider).toBeNull();
+    if (!(thrown instanceof Error)) {
+      throw new Error('expected createOpenAIAliasProvider to throw');
+    }
+    expect(thrown.message).toContain('no-base-url');
+    expect(thrown.message).toContain('base-url');
+    expect(thrown.message).toContain('/config/providers/no-base-url.config');
   });
 
   it('exposes exactly the built-in provider ids', () => {

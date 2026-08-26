@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import type { IProvider } from '../../IProvider.js';
 import {
   parseRuntimePluginManifest,
   RUNTIME_PLUGIN_SUPPORTED_API_VERSION,
@@ -37,7 +38,7 @@ function validManifest(overrides?: {
     providers: [
       {
         providerId: 'theme',
-        createProvider: () => null,
+        createProvider: () => ({}) as unknown as IProvider,
       },
     ],
     ...overrides,
@@ -45,7 +46,7 @@ function validManifest(overrides?: {
 }
 
 function validFactory(): ProviderAliasFactory {
-  return () => null;
+  return () => ({}) as unknown as IProvider;
 }
 
 describe('parseRuntimePluginManifest', () => {
@@ -89,7 +90,7 @@ describe('parseRuntimePluginManifest', () => {
     expect(() => {
       (manifest.providers as unknown[]).push({
         providerId: 'other',
-        createProvider: () => null,
+        createProvider: () => ({}) as unknown as IProvider,
       });
     }).toThrow(TypeError);
 
@@ -104,7 +105,7 @@ describe('parseRuntimePluginManifest', () => {
       providers: [
         {
           providerId: 'nested',
-          createProvider: () => null,
+          createProvider: () => ({}) as unknown as IProvider,
           builtinAliases: [
             {
               alias: 'nested-alias',
@@ -230,7 +231,7 @@ describe('parseRuntimePluginManifest', () => {
         providers: [
           {
             providerId: 'theme',
-            createProvider: () => null,
+            createProvider: () => ({}) as unknown as IProvider,
             builtinAliases: [
               {
                 alias: 'theme-alias',
@@ -280,7 +281,7 @@ describe('parseRuntimePluginManifest', () => {
         providers: [
           {
             providerId: 'theme',
-            createProvider: () => null,
+            createProvider: () => ({}) as unknown as IProvider,
             unexpectedField: 42,
           },
         ],

@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import type { IProvider } from '../../IProvider.js';
 import {
   buildProviderContributionRegistry,
   createBuiltinProviderContributionRegistry,
@@ -25,7 +26,7 @@ const BUILTIN_PROVIDER_IDS = [
 ];
 
 function noopFactory(): ProviderAliasFactory {
-  return () => null;
+  return () => ({}) as unknown as IProvider;
 }
 
 function makePlugin(
@@ -205,7 +206,7 @@ describe('buildProviderContributionRegistry', () => {
         makePlugin('pkg', 'plugin-a', [
           {
             providerId: 'plugin-a-provider',
-            createProvider: () => null,
+            createProvider: () => ({}) as unknown as IProvider,
             builtinAliases: [
               {
                 alias: 'openai',

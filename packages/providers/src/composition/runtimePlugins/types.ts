@@ -28,15 +28,17 @@ export interface ProviderFactoryContext {
 }
 
 /**
- * A factory that constructs a provider for an alias whose base provider is either a
- * built-in id or a provider id contributed by a runtime plugin. It may return null
- * when no provider can be built (the single documented exception is the built-in
- * OpenAI-family factories returning null when no base URL is available).
+ * A factory that constructs a provider for an alias whose base provider is
+ * either a built-in id or a provider id contributed by a runtime plugin.
+ *
+ * A factory that cannot build a provider MUST throw with an actionable message.
+ * Returning nothing is not an option: silently dropping a provider the user
+ * configured leaves them with a missing provider and no explanation.
  */
 export type ProviderAliasFactory = (
   entry: ProviderAliasEntry,
   context: ProviderFactoryContext,
-) => IProvider | null;
+) => IProvider;
 
 /**
  * An alias entry a plugin contributes for one of its own provider ids. The config is
