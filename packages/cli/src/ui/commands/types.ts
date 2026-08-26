@@ -39,6 +39,15 @@ import type { SubagentView } from '../components/SubagentManagement/types.js';
 
 // Grouped dependencies for clarity and easier mocking
 export interface CommandContext {
+  /**
+   * Aborted when the user cancels this slash-command invocation with Esc in
+   * the interactive UI. In non-interactive mode this is the run-level abort
+   * controller's signal, which that path aborts on its own terms.
+   *
+   * Long-running actions must forward this to whatever they await so the work
+   * actually stops instead of being abandoned in the background.
+   */
+  signal: AbortSignal;
   // Invocation properties for when commands are called.
   invocation?: {
     /** The raw, untrimmed input string from the user. */

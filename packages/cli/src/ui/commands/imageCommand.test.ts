@@ -7,6 +7,7 @@
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi } from 'bun:test';
 import { imageCommand } from './imageCommand.js';
+import { assertTruthy } from '../../test-utils/assertions.js';
 import { MessageType } from '../types.js';
 import type { CommandContext } from './types.js';
 
@@ -48,12 +49,14 @@ function makeMockContext(overrides?: {
     outputPath: string;
     inputPaths: readonly string[];
   }) => Promise<{ absoluteOutputPath: string }>;
+  signal?: AbortSignal;
 }): CommandContext {
   const capability =
     overrides?.runImageOperation !== undefined
       ? new ImageCapabilityHolder(overrides.runImageOperation)
       : new ImageCapabilityHolder();
   return {
+    signal: overrides?.signal ?? new AbortController().signal,
     services: {
       // The holder INSTANCE is the config, so `getRunImageOperation` is reached
       // through the prototype with the instance as receiver. It is deliberately
@@ -154,7 +157,8 @@ describe('imageCommand', () => {
       prompt: 'draw a cat',
       outputPath: 'out.png',
       inputPaths: [],
-      signal: expect.any(AbortSignal),
+      // The framework's invocation signal, not one the command minted itself.
+      signal: ctx.signal,
     });
     const calls = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock.calls;
     const infoCall = calls.find(
@@ -176,7 +180,7 @@ describe('imageCommand', () => {
       prompt: 'fix the text',
       outputPath: 'fixed.png',
       inputPaths: ['original.png'],
-      signal: expect.any(AbortSignal),
+      signal: ctx.signal,
     });
   });
 
@@ -192,7 +196,7 @@ describe('imageCommand', () => {
     expect((errorCall![0] as { text: string }).text).toContain('provider down');
   });
 
-  it('aborts the runner signal when SIGINT is emitted during the operation', async () => {
+  it('aborts the runner mid-operation when the invocation is cancelled', async () => {
     let capturedSignal: AbortSignal | undefined;
     let releaseRunner: () => void = () => {};
     const gate = new Promise<void>((resolve) => {
@@ -208,7 +212,7 @@ describe('imageCommand', () => {
           signal: AbortSignal;
         }) => {
           capturedSignal = req.signal;
-          // Hold until SIGINT is emitted so the abort happens mid-operation.
+          // Hold until the invocation is cancelled so the abort lands mid-run.
           await gate;
           if (req.signal.aborted) {
             throw new Error('The operation was aborted.');
@@ -216,7 +220,11 @@ describe('imageCommand', () => {
           return { absoluteOutputPath: '/workspace/out.png' };
         },
       );
-    const ctx = makeMockContext({ runImageOperation: runner });
+    const invocation = new AbortController();
+    const ctx = makeMockContext({
+      runImageOperation: runner,
+      signal: invocation.signal,
+    });
     const actionPromise = imageCommand.action?.(
       ctx,
       'out.png "draw a cat"',
@@ -225,31 +233,68 @@ describe('imageCommand', () => {
     // Wait for the runner to capture the signal.
     await waitFor(() => expect(capturedSignal).toBeDefined());
     expect(capturedSignal?.aborted).toBe(false);
-    process.emit('SIGINT');
+    invocation.abort();
     releaseRunner();
     await actionPromise;
 
     expect(capturedSignal?.aborted).toBe(true);
   });
 
-  it('removes the SIGINT listener after a successful operation (no leak)', async () => {
-    const runner = vi.fn().mockResolvedValue({
-      absoluteOutputPath: '/workspace/out.png',
+  it('reports nothing when the runner rejects because the invocation was cancelled', async () => {
+    // The framework already added the cancellation notice; a second error item
+    // would be noise.
+    const invocation = new AbortController();
+    const runner = vi.fn().mockImplementation(async () => {
+      invocation.abort();
+      throw new Error('The operation was aborted.');
     });
-    const ctx = makeMockContext({ runImageOperation: runner });
-    const before = process.listenerCount('SIGINT');
+    const ctx = makeMockContext({
+      runImageOperation: runner,
+      signal: invocation.signal,
+    });
+
     await imageCommand.action?.(ctx, 'out.png "draw a cat"');
-    const after = process.listenerCount('SIGINT');
-    expect(after).toBe(before);
+
+    expect((ctx.ui.addItem as ReturnType<typeof vi.fn>).mock.calls).toEqual([]);
   });
 
-  it('removes the SIGINT listener after a failed operation (no leak)', async () => {
-    const runner = vi.fn().mockRejectedValue(new Error('fail'));
+  it('no longer reacts to a process SIGINT, only to the framework signal', async () => {
+    // The command used to abort on its own SIGINT listener, which never fires
+    // for Esc in the Ink UI and leaked across invocations. Emitting SIGINT
+    // mid-operation must now leave the operation untouched.
+    let capturedSignal: AbortSignal | undefined;
+    let releaseRunner: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      releaseRunner = resolve;
+    });
+    const runner = vi
+      .fn()
+      .mockImplementation(async (req: { signal: AbortSignal }) => {
+        capturedSignal = req.signal;
+        await gate;
+        return { absoluteOutputPath: '/workspace/out.png' };
+      });
     const ctx = makeMockContext({ runImageOperation: runner });
-    const before = process.listenerCount('SIGINT');
-    await imageCommand.action?.(ctx, 'out.png "draw a cat"');
-    const after = process.listenerCount('SIGINT');
-    expect(after).toBe(before);
+    // Keep node from applying its default SIGINT behaviour to the emit below.
+    const keepAlive = () => {};
+    process.on('SIGINT', keepAlive);
+    try {
+      const pending = imageCommand.action?.(ctx, 'out.png "draw a cat"');
+      await waitFor(() => expect(capturedSignal).toBeDefined());
+      process.emit('SIGINT');
+      releaseRunner();
+      await pending;
+    } finally {
+      process.removeListener('SIGINT', keepAlive);
+    }
+
+    assertTruthy(capturedSignal);
+    expect(capturedSignal.aborted).toBe(false);
+    const calls = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock.calls;
+    const infoCall = calls.find(
+      (c) => (c[0] as { type: string }).type === MessageType.INFO,
+    );
+    expect(infoCall).toBeDefined();
   });
 
   it('exercises receiver binding: a prototype-method capability works via the runtime wrapper', async () => {

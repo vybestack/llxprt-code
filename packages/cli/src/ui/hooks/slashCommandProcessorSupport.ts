@@ -177,11 +177,21 @@ export function usePendingHistory(
   return { pendingItem, setPendingItem, pendingHistoryItems, addMessage };
 }
 
+/**
+ * The base context is used for completions and as the template for
+ * invocations; it is never the context an action runs under, because
+ * `processSlashCommand` always overrides `signal` with the controller it
+ * registered for that invocation. Completions are not cancellable, so a signal
+ * that never aborts is the correct value here.
+ */
+const NEVER_ABORTED_SIGNAL = new AbortController().signal;
+
 export function useCommandContext(
   inputs: CommandContextInputs,
 ): CommandContext {
   return useMemo(
     (): CommandContext => ({
+      signal: NEVER_ABORTED_SIGNAL,
       services: {
         config: inputs.config,
         agent: inputs.agent,

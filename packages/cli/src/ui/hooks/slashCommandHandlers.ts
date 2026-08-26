@@ -67,6 +67,10 @@ export interface SlashCommandHandlerDeps {
   recordingSwapCallbacks?: RecordingSwapCallbacks;
   confirmationLogger: DebugLogger;
   slashCommandLogger: DebugLogger;
+  /** Registers the action about to be awaited and returns its controller. */
+  beginSlashCommandAction: () => AbortController;
+  /** Deregisters an action once it has settled. */
+  endSlashCommandAction: (controller: AbortController) => void;
 }
 
 interface ParsedCommandState {
@@ -150,15 +154,24 @@ async function executeParsedCommand(
 ): Promise<SlashCommandProcessorResult | false> {
   const { commandToExecute } = parsed;
   if (commandToExecute?.action) {
+    const controller = deps.beginSlashCommandAction();
     const context = buildInvocationContext(
       deps.commandContext,
       parsed,
       oneTimeShellAllowlist,
       overwriteConfirmed,
+      controller.signal,
     );
-    const result = await commandToExecute.action(context, parsed.args);
-    return result
-      ? handleActionResult(deps, context, result)
+    const outcome = await runCommandAction(
+      deps,
+      commandToExecute.action,
+      context,
+      parsed.args,
+      controller,
+    );
+    if (outcome.cancelled) return { type: 'handled' };
+    return outcome.result
+      ? handleActionResult(deps, context, outcome.result)
       : { type: 'handled' };
   }
   if (commandToExecute?.subCommands) {
@@ -169,14 +182,59 @@ async function executeParsedCommand(
   return { type: 'handled' };
 }
 
+type CommandAction = NonNullable<SlashCommand['action']>;
+
+type CommandActionOutcome =
+  | { cancelled: true; result?: undefined }
+  | { cancelled: false; result: Awaited<ReturnType<CommandAction>> };
+
+/**
+ * Awaits the action while it is registered as cancellable.
+ *
+ * Once the invocation is aborted its outcome is discarded either way. A
+ * rejection is the expected shape of "the user pressed Esc" and must not also
+ * surface as a command error; a resolution is a command that noticed the abort
+ * and unwound cleanly, and acting on its result would carry out work the user
+ * just cancelled (for example submitting a prompt built from a shell injection
+ * that was killed mid-flight).
+ */
+async function runCommandAction(
+  deps: SlashCommandHandlerDeps,
+  action: CommandAction,
+  context: CommandContext,
+  args: string,
+  controller: AbortController,
+): Promise<CommandActionOutcome> {
+  try {
+    const result = await action(context, args);
+    if (controller.signal.aborted) return { cancelled: true };
+    return { cancelled: false, result };
+  } catch (error) {
+    if (!controller.signal.aborted) throw error;
+    // The discard is intentional, but an unrelated bug can land in the same
+    // window, so leave a trace rather than losing it entirely.
+    deps.slashCommandLogger.debug(
+      () =>
+        `discarded error from cancelled ${context.invocation?.raw ?? 'command'}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+    );
+    return { cancelled: true };
+  } finally {
+    deps.endSlashCommandAction(controller);
+  }
+}
+
 function buildInvocationContext(
   baseContext: CommandContext,
   parsed: ParsedCommandState,
   oneTimeShellAllowlist: Set<string> | undefined,
   overwriteConfirmed: boolean | undefined,
+  signal: AbortSignal,
 ): CommandContext {
   const fullCommandContext: CommandContext = {
     ...baseContext,
+    signal,
     invocation: {
       raw: parsed.trimmed,
       name: parsed.commandToExecute?.name ?? '',

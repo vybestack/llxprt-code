@@ -171,6 +171,7 @@ const createTestContext = ({
   };
 
   return {
+    signal: new AbortController().signal,
     invocation: {
       raw: '',
       name: '',

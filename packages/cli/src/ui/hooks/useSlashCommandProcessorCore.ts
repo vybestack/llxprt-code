@@ -22,7 +22,10 @@ import type {
 import type { LoadedSettings } from '../../config/settings.js';
 import type { SlashCommand } from '../commands/types.js';
 import type { ExtensionUpdateState } from '../state/extensions.js';
-import { processSlashCommand } from './slashCommandHandlers.js';
+import {
+  processSlashCommand,
+  type SlashCommandHandlerDeps,
+} from './slashCommandHandlers.js';
 import {
   confirmationLogger,
   slashCommandLogger,
@@ -35,6 +38,10 @@ import {
   useManagers,
   usePendingHistory,
 } from './slashCommandProcessorSupport.js';
+import {
+  useSlashCommandCancellation,
+  type SlashCommandCancellation,
+} from './useSlashCommandCancellation.js';
 
 interface TodoContextValue {
   todos: Todo[];
@@ -56,6 +63,8 @@ export type SlashCommandProcessorCoreResult = {
     prompt: React.ReactNode;
     onConfirm: (confirmed: boolean) => void;
   } | null;
+  /** Aborts every in-flight slash command. Returns true iff any was aborted. */
+  cancelActiveSlashCommand: () => boolean;
 };
 
 export interface UseSlashCommandProcessorCoreArgs {
@@ -133,11 +142,40 @@ function useSlashCommandProcessorState(
   };
 }
 
+function buildHandlerDeps(
+  args: UseSlashCommandProcessorCoreArgs,
+  state: SlashCommandProcessorState,
+  pending: ReturnType<typeof usePendingHistory>,
+  commandContext: ReturnType<typeof useCommandContext>,
+  cancellation: SlashCommandCancellation,
+): SlashCommandHandlerDeps {
+  return {
+    commands: state.commands,
+    config: args.config,
+    commandContext,
+    actions: args.actions,
+    addItem: args.addItem,
+    addMessage: pending.addMessage,
+    setIsProcessing: args.setIsProcessing,
+    setLocalIsProcessing: state.setLocalIsProcessing,
+    setPendingItem: pending.setPendingItem,
+    setSessionShellAllowlist: state.setSessionShellAllowlist,
+    setConfirmationRequest: state.setConfirmationRequest,
+    recordingIntegration: args.recordingIntegration,
+    recordingSwapCallbacks: args.recordingSwapCallbacks,
+    confirmationLogger,
+    slashCommandLogger,
+    beginSlashCommandAction: cancellation.beginSlashCommandAction,
+    endSlashCommandAction: cancellation.endSlashCommandAction,
+  };
+}
+
 export function useSlashCommandProcessorCore(
   args: UseSlashCommandProcessorCoreArgs,
 ): SlashCommandProcessorCoreResult {
   const session = useSessionStats();
   const state = useSlashCommandProcessorState(args.config);
+  const cancellation = useSlashCommandCancellation();
   const managers = useManagers(args.config);
   const pending = usePendingHistory(args.addItem);
   const commandContext = useCommandContext({
@@ -180,29 +218,13 @@ export function useSlashCommandProcessorCore(
       addToHistory: boolean = true,
     ): Promise<SlashCommandProcessorResult | false> =>
       processSlashCommand(
-        {
-          commands: state.commands,
-          config: args.config,
-          commandContext,
-          actions: args.actions,
-          addItem: args.addItem,
-          addMessage: pending.addMessage,
-          setIsProcessing: args.setIsProcessing,
-          setLocalIsProcessing: state.setLocalIsProcessing,
-          setPendingItem: pending.setPendingItem,
-          setSessionShellAllowlist: state.setSessionShellAllowlist,
-          setConfirmationRequest: state.setConfirmationRequest,
-          recordingIntegration: args.recordingIntegration,
-          recordingSwapCallbacks: args.recordingSwapCallbacks,
-          confirmationLogger,
-          slashCommandLogger,
-        },
+        buildHandlerDeps(args, state, pending, commandContext, cancellation),
         rawQuery,
         oneTimeShellAllowlist,
         overwriteConfirmed,
         addToHistory,
       ),
-    [args, commandContext, pending, state],
+    [args, commandContext, pending, state, cancellation],
   );
   return {
     handleSlashCommand,
@@ -210,5 +232,6 @@ export function useSlashCommandProcessorCore(
     pendingHistoryItems: pending.pendingHistoryItems,
     commandContext,
     confirmationRequest: state.confirmationRequest,
+    cancelActiveSlashCommand: cancellation.cancelActiveSlashCommand,
   };
 }

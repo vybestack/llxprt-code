@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { automock } from '@vybestack/llxprt-code-test-utils';
+import { automock, waitFor } from '@vybestack/llxprt-code-test-utils';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
@@ -58,6 +58,16 @@ void vi.mock('../../utils/gitUtils.js', () => ({
 void vi.mock('../utils/commandUtils.js', () => ({
   getUrlOpenCommand: vi.fn(),
 }));
+
+/**
+ * The command only reads `signal` off the context, so a minimal context with a
+ * real signal is enough and keeps the fixture honest about what is required.
+ */
+function makeContext(signal?: AbortSignal): CommandContext {
+  return {
+    signal: signal ?? new AbortController().signal,
+  } as CommandContext;
+}
 
 describe('setupGithubCommand', () => {
   let scratchDir = '';
@@ -118,7 +128,7 @@ describe('setupGithubCommand', () => {
     ).mockReturnValueOnce('fakeOpenCommand');
 
     const result = (await setupGithubCommand.action?.(
-      {} as CommandContext,
+      makeContext(),
       '',
     )) as ToolActionReturn;
 
@@ -199,7 +209,7 @@ describe('setupGithubCommand', () => {
     ).mockReturnValueOnce('fakeOpenCommand');
 
     const result = (await setupGithubCommand.action?.(
-      {} as CommandContext,
+      makeContext(),
       '',
     )) as ToolActionReturn;
 
@@ -267,8 +277,55 @@ describe('setupGithubCommand', () => {
     });
 
     await expect(
-      setupGithubCommand.action?.({} as CommandContext, ''),
+      setupGithubCommand.action?.(makeContext(), ''),
     ).rejects.toThrow(/Invalid response code downloading.*404 - Not Found/);
+  });
+
+  it('aborts the in-flight downloads when the invocation is cancelled', async () => {
+    const fakeRepoRoot = scratchDir;
+    const invocation = new AbortController();
+    let downloadSignal: AbortSignal | undefined;
+
+    // Behave like a real fetch: stay pending until the caller's signal aborts.
+    (global.fetch as Mock<typeof global.fetch>).mockImplementation(
+      (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          const signal = init?.signal;
+          if (!signal) throw new Error('fetch was called without a signal');
+          downloadSignal = signal;
+          signal.addEventListener('abort', () => {
+            reject(new Error('This operation was aborted'));
+          });
+        }),
+    );
+
+    (
+      gitUtils.isGitHubRepository as Mock<typeof gitUtils.isGitHubRepository>
+    ).mockReturnValueOnce(true);
+    (
+      gitUtils.getGitRepoRoot as Mock<typeof gitUtils.getGitRepoRoot>
+    ).mockReturnValueOnce(fakeRepoRoot);
+    (
+      gitUtils.getLatestGitHubRelease as Mock<
+        typeof gitUtils.getLatestGitHubRelease
+      >
+    ).mockResolvedValueOnce('v1.2.3');
+    (
+      gitUtils.getGitHubRepoInfo as Mock<typeof gitUtils.getGitHubRepoInfo>
+    ).mockReturnValue({ owner: 'fake', repo: 'repo' });
+
+    const pending = setupGithubCommand.action?.(
+      makeContext(invocation.signal),
+      '',
+    );
+    // The download is genuinely in flight; nothing has settled it yet.
+    await waitFor(() => expect(downloadSignal).toBeDefined());
+
+    invocation.abort();
+
+    // The download can only unwind here because the invocation signal is part
+    // of the composed signal handed to fetch.
+    await expect(pending).rejects.toThrow(/aborted/i);
   });
 });
 

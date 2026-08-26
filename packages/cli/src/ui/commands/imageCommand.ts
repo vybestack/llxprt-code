@@ -69,21 +69,16 @@ export const imageCommand: SlashCommand = {
     }
 
     const verb = parsed.operation === 'generate' ? 'Generated' : 'Edited';
-    // The slash-command action API has no cancellation signal. Follow the
-    // established process SIGINT pattern (cf. imageModeDispatch): register a
-    // one-shot SIGINT listener that aborts a controller scoped to this
-    // operation's lifetime. The signal is forwarded to the common runner so
-    // the backend/write honor it. The listener is ALWAYS removed (finally) so
-    // no listener leaks across success/failure/cancellation.
-    const controller = new AbortController();
-    const onSigInt = () => controller.abort();
-    process.once('SIGINT', onSigInt);
+    // context.signal is the framework's per-invocation cancellation signal: it
+    // aborts on Esc in the interactive UI and on the process abort controller
+    // in non-interactive mode. Forwarding it to the common runner is what makes
+    // the backend request and the output write stop.
     try {
       const result = await runner({
         prompt: parsed.prompt,
         outputPath: parsed.outputPath,
         inputPaths: parsed.inputPaths,
-        signal: controller.signal,
+        signal: context.signal,
       });
 
       context.ui.addItem(
@@ -94,6 +89,9 @@ export const imageCommand: SlashCommand = {
         Date.now(),
       );
     } catch (error) {
+      // A rejection after cancellation is the expected shape of "the user
+      // pressed Esc"; the framework already reported it in history.
+      if (context.signal.aborted) return;
       const message = error instanceof Error ? error.message : String(error);
       context.ui.addItem(
         {
@@ -102,8 +100,6 @@ export const imageCommand: SlashCommand = {
         },
         Date.now(),
       );
-    } finally {
-      process.removeListener('SIGINT', onSigInt);
     }
   },
 
