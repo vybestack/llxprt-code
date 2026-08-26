@@ -62,13 +62,13 @@ export const llxprtRuntimePlugin = {
 };
 ```
 
-| Field | Meaning |
-| --- | --- |
-| `apiVersion` | Must be `1`. Any other value is an incompatible-plugin error. |
-| `id` | Unique plugin id. Two plugins sharing an id is an error. |
-| `providers[].providerId` | The base provider id aliases refer to. Must not collide with a built-in or another plugin. |
-| `providers[].createProvider` | Factory returning an `IProvider`, or `null` when it cannot build one. |
-| `providers[].builtinAliases` | Optional aliases the plugin ships. |
+| Field                        | Meaning                                                                                    |
+| ---------------------------- | ------------------------------------------------------------------------------------------ |
+| `apiVersion`                 | Must be `1`. Any other value is an incompatible-plugin error.                              |
+| `id`                         | Unique plugin id. Two plugins sharing an id is an error.                                   |
+| `providers[].providerId`     | The base provider id aliases refer to. Must not collide with a built-in or another plugin. |
+| `providers[].createProvider` | Factory returning an `IProvider`, or `null` when it cannot build one.                      |
+| `providers[].builtinAliases` | Optional aliases the plugin ships.                                                         |
 
 The manifest is validated with Zod and deep-frozen. Unknown keys are rejected.
 
