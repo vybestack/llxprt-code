@@ -10,7 +10,8 @@ import {
   isMalformedStreamEventError,
   isStreamTruncatedError,
 } from './streamProtocolErrors.js';
-import { getDelayDuration, getRetryAfterDelayMs } from './retryDelayPolicy.js';
+import { getDelayDuration, getRetryAfterDelayMs } from './retryAfterHeader.js';
+import { isQuotaExhaustionError } from './utils/quotaExhaustion.js';
 import {
   classifyRetryError,
   type RetryErrorClassification,
@@ -88,14 +89,32 @@ function readStringProperty(
   return typeof propertyValue === 'string' ? propertyValue : undefined;
 }
 
+/**
+ * Reads the provider's own error code from every position production errors
+ * use: the Anthropic nested envelope (`error.error.type`), the OpenAI
+ * envelope (`error.code`), the Codex/ChatGPT `detail` envelope, and the
+ * `providerErrorType` field that parseErrorResponse lifts onto thrown
+ * errors. Mirrors the positions recognized by quota classification.
+ */
 function getProviderCode(error: unknown): string | undefined {
   const envelope = readRecordProperty(error, 'error');
   const detail = readRecordProperty(envelope, 'error');
-  const code =
-    readStringProperty(detail, 'type') ??
-    readStringProperty(envelope, 'type') ??
-    readStringProperty(error, 'type');
-  return code === 'error' ? undefined : code;
+  const openAiDetail = readRecordProperty(error, 'detail');
+  const positions: Array<[unknown, string]> = [
+    [detail, 'type'],
+    [envelope, 'type'],
+    [error, 'type'],
+    [error, 'code'],
+    [error, 'providerErrorType'],
+    [envelope, 'code'],
+    [openAiDetail, 'code'],
+    [openAiDetail, 'type'],
+  ];
+  for (const [holder, property] of positions) {
+    const code = readStringProperty(holder, property);
+    if (code !== undefined && code !== 'error') return code;
+  }
+  return undefined;
 }
 
 function hasErrorName(error: unknown, expected: string): boolean {
@@ -237,11 +256,67 @@ export function decodeRetryFailure(error: unknown): RetryFailure {
 /**
  * Reports whether a failure kind is eligible for pre-commit recovery.
  *
+ * Kind-level eligibility ignores status and provider codes; recovery
+ * decisions must use {@link isRetryableFailure}, which consumes the full
+ * failure. Retained for callers that only need the coarse kind gate.
+ *
  * @param kind Normalized failure kind.
  * @returns True when the kind can be retried before output is exposed.
  */
 export function isRetryableFailureKind(kind: RetryFailureKind): boolean {
   return RETRYABLE_FAILURE_KINDS.has(kind);
+}
+
+interface AggregateRetryability {
+  failures?: unknown;
+  isRetryable?: unknown;
+}
+
+function readAggregateRetryability(
+  failure: RetryFailure,
+): boolean | undefined {
+  const cause = failure.cause;
+  if (typeof cause !== 'object' || cause === null) return undefined;
+  const aggregate = cause as AggregateRetryability;
+  if (!Array.isArray(aggregate.failures)) return undefined;
+  if (typeof aggregate.isRetryable !== 'boolean') return undefined;
+  return aggregate.isRetryable;
+}
+
+/**
+ * The single recovery-eligibility decision for a normalized failure.
+ *
+ * Consumes the full failure — kind, status, and cause shape — so status
+ * and provider-code exceptions (403 auth, terminal-quota 429,
+ * load-balancer-owned request timeouts) resolve here instead of in every
+ * caller. This is what `shouldRetryError` delegates to; recovery layers
+ * must call it rather than re-deriving eligibility from the kind alone.
+ *
+ * @param failure Normalized provider failure.
+ * @returns True when the failure may be retried before output is exposed.
+ */
+export function isRetryableFailure(failure: RetryFailure): boolean {
+  const aggregate = readAggregateRetryability(failure);
+  if (aggregate !== undefined) return aggregate;
+  switch (failure.kind) {
+    case 'network':
+    case 'overload':
+    case 'server':
+    case 'malformed':
+    case 'truncated':
+      return true;
+    case 'rate_limit':
+      return !isQuotaExhaustionError(failure.cause);
+    case 'auth':
+      return failure.status === 401;
+    case 'timeout':
+      // Load-balancer request timeouts are governed by the load balancer's
+      // own failover settings; only orchestrator first-chunk stream
+      // timeouts are retried by the central policy.
+      return isStreamTimeoutError(failure.cause);
+    default:
+      return false;
+  }
 }
 
 /**

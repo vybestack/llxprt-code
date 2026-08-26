@@ -273,3 +273,42 @@ export function getRequestCommitState(context: RetryRequestContext): {
 export function markTerminalSeen(context: RetryRequestContext): void {
   requireRequestCommitState(context).terminalSeen = true;
 }
+
+/**
+ * Snapshot of a request's commitment and budget state, located through the
+ * request options.
+ *
+ * Used by attempt telemetry (e.g. load-balancer backend attempts) that holds
+ * options rather than the request context object. Reading through the shared
+ * metadata record means the snapshot reflects marks made by any layer, taken
+ * at the moment of the attempt's terminal event.
+ *
+ * @returns The current facts, or undefined when no retry context is attached.
+ */
+export function findRequestAttemptFacts(
+  options: GenerateChatOptions,
+): {
+  readonly committed: boolean;
+  readonly exposure: StreamExposure;
+  readonly terminalSeen: boolean;
+  readonly budgetUsed: number;
+  readonly budgetLimit: number;
+} | undefined {
+  const record = options.metadata?.[RETRY_REQUEST_CONTEXT_KEY];
+  if (!isMutableRequestCommitState(record)) return undefined;
+  const budget = (
+    record as {
+      transportAttemptBudget?: { used?: unknown; limit?: unknown };
+    }
+  ).transportAttemptBudget;
+  const budgetUsed = typeof budget?.used === 'number' ? budget.used : 0;
+  const budgetLimit =
+    typeof budget?.limit === 'number' ? budget.limit : budgetUsed;
+  return {
+    committed: record.committed,
+    exposure: record.exposure,
+    terminalSeen: record.terminalSeen,
+    budgetUsed,
+    budgetLimit,
+  };
+}

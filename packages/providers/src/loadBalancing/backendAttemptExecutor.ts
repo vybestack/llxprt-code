@@ -56,7 +56,9 @@ export interface BackendAttemptParams {
    * generateChatCompletion invocation — so exhausted transport budgets do
    * NOT emit phantom lifecycle start events. Returns the context needed for
    * the terminal record. */
-  readonly startBackendAttempt: () => BackendAttemptContext | null;
+  readonly startBackendAttempt: (
+    resolvedOptions: GenerateChatOptions,
+  ) => BackendAttemptContext | null;
   readonly deps: BackendAttemptDeps;
 }
 
@@ -159,7 +161,9 @@ export async function* executeBackendAttempt(
     delegateProvider,
     deps,
   );
-  attemptCtx = startBackendAttempt();
+  // Facts snapshot must read the resolved options: the retry context
+  // record is attached (and shared) through the delegate metadata chain.
+  attemptCtx = startBackendAttempt(prepared.resolvedOptions);
 
   try {
     const delegate = startDelegateIterator(
@@ -202,6 +206,7 @@ export async function* executeBackendAttempt(
       subProfile,
       isAbort ? 'aborted' : 'error',
       error instanceof Error ? error.message : String(error),
+      error,
     );
     terminalEmitted = true;
     throw error;

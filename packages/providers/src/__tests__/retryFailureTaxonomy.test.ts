@@ -6,9 +6,14 @@
 
 import { describe, expect, it } from 'bun:test';
 import { shouldRetryError } from '../retryDelayPolicy.js';
+import { RequestTimeoutError } from '../loadBalancing/streamTimeout.js';
+import {
+  MalformedStreamEventError,
+  StreamTruncatedError,
+} from '../streamProtocolErrors.js';
 import {
   decodeRetryFailure,
-  isRetryableFailureKind,
+  isRetryableFailure,
   isTimeoutFailure,
   RETRYABLE_FAILURE_KINDS,
 } from '../retryFailureTaxonomy.js';
@@ -171,19 +176,13 @@ describe('decodeRetryFailure', () => {
   });
 });
 
-describe('isRetryableFailureKind', () => {
-  const equivalenceCases = mappingCases.filter(
-    ({ expected }) => expected.status !== 403,
-  );
-
-  it.each(equivalenceCases)(
+describe('isRetryableFailure', () => {
+  it.each(mappingCases)(
     'matches shouldRetryError for $label',
     ({ error }) => {
       const failure = decodeRetryFailure(error);
 
-      expect(isRetryableFailureKind(failure.kind)).toBe(
-        shouldRetryError(error),
-      );
+      expect(isRetryableFailure(failure)).toBe(shouldRetryError(error));
     },
   );
 
@@ -200,24 +199,99 @@ describe('isRetryableFailureKind', () => {
     ]);
   });
 
-  it('documents the existing status-sensitive auth retry discrepancy', () => {
+  it('decides eligibility from the full failure: 401 retries, 403 does not', () => {
     const unauthorized = errorWithStatus(401);
     const forbidden = errorWithStatus(403);
 
     expect(decodeRetryFailure(unauthorized).kind).toBe('auth');
     expect(decodeRetryFailure(forbidden).kind).toBe('auth');
-    expect(shouldRetryError(unauthorized)).toBe(true);
-    expect(shouldRetryError(forbidden)).toBe(false);
-    expect(isRetryableFailureKind('auth')).toBe(true);
+    expect(isRetryableFailure(decodeRetryFailure(unauthorized))).toBe(true);
+    expect(isRetryableFailure(decodeRetryFailure(forbidden))).toBe(false);
   });
 
-  it('documents the existing terminal-quota subtype discrepancy', () => {
+  it('decides eligibility from the full failure: terminal-quota 429 does not retry', () => {
     const terminalQuota = Object.assign(errorWithStatus(429), {
       code: 'insufficient_quota',
     });
 
     expect(decodeRetryFailure(terminalQuota).kind).toBe('rate_limit');
-    expect(shouldRetryError(terminalQuota)).toBe(false);
-    expect(isRetryableFailureKind('rate_limit')).toBe(true);
+    expect(decodeRetryFailure(terminalQuota).providerCode).toBe(
+      'insufficient_quota',
+    );
+    expect(isRetryableFailure(decodeRetryFailure(terminalQuota))).toBe(false);
+  });
+
+  it('passes through provider codes from every production error position', () => {
+    const openAiEnvelope = Object.assign(errorWithStatus(429), {
+      error: { code: 'insufficient_quota' },
+    });
+    const liftedProviderType = Object.assign(errorWithStatus(400), {
+      providerErrorType: 'invalid_request_error',
+    });
+    const detailEnvelope = Object.assign(errorWithStatus(500), {
+      detail: { code: 'server_busy' },
+    });
+
+    expect(decodeRetryFailure(openAiEnvelope).providerCode).toBe(
+      'insufficient_quota',
+    );
+    expect(decodeRetryFailure(liftedProviderType).providerCode).toBe(
+      'invalid_request_error',
+    );
+    expect(decodeRetryFailure(detailEnvelope).providerCode).toBe(
+      'server_busy',
+    );
+  });
+
+  it('honors aggregate failure retryability markers over kind defaults', () => {
+    const retryableAggregate = Object.assign(new Error('aggregate'), {
+      failures: [errorWithStatus(503)],
+      isRetryable: true,
+    });
+    const exhaustedAggregate = Object.assign(new Error('aggregate'), {
+      failures: [errorWithStatus(503)],
+      isRetryable: false,
+    });
+
+    expect(isRetryableFailure(decodeRetryFailure(retryableAggregate))).toBe(
+      true,
+    );
+    expect(isRetryableFailure(decodeRetryFailure(exhaustedAggregate))).toBe(
+      false,
+    );
+  });
+
+  it('keeps load-balancer request timeouts outside orchestrator retry', () => {
+    const lbTimeout = new RequestTimeoutError(500);
+
+    const failure = decodeRetryFailure(lbTimeout);
+    expect(failure.kind).toBe('timeout');
+    expect(isRetryableFailure(failure)).toBe(false);
+  });
+
+  it('agrees with shouldRetryError across representative error shapes', () => {
+    const representative: unknown[] = [
+      errorWithStatus(400),
+      errorWithStatus(404),
+      errorWithStatus(422),
+      errorWithStatus(429),
+      errorWithStatus(500),
+      errorWithStatus(503),
+      errorWithStatus(401),
+      errorWithStatus(403),
+      errorWithStatus(402),
+      Object.assign(errorWithStatus(429), { code: 'insufficient_quota' }),
+      { name: 'AbortError', message: 'aborted' },
+      new Error('ECONNRESET style transient'),
+      new RequestTimeoutError(250),
+      new StreamTruncatedError(),
+      new MalformedStreamEventError('input_json_delta without tool block'),
+    ];
+
+    for (const error of representative) {
+      expect(isRetryableFailure(decodeRetryFailure(error))).toBe(
+        shouldRetryError(error),
+      );
+    }
   });
 });

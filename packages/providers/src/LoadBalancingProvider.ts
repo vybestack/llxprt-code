@@ -406,7 +406,7 @@ export class LoadBalancingProvider implements IProvider {
     requireTransportAttempt(resolvedOptions);
 
     const { lifecycleObserver, attemptCtx } = this.startBackendAttempt(
-      options,
+      resolvedOptions,
       subProfile,
       0,
     );
@@ -886,6 +886,7 @@ export class LoadBalancingProvider implements IProvider {
       requestLocalAttemptIndex,
       idSequence,
       this.logger,
+      options,
     );
     return { lifecycleObserver, attemptCtx };
   }
@@ -914,7 +915,7 @@ export class LoadBalancingProvider implements IProvider {
       startTime,
       chunksYielded,
       lifecycleObserver,
-      startBackendAttempt: () =>
+      startBackendAttempt: (resolvedOptions?: GenerateChatOptions) =>
         notifyBackendStart(
           lifecycleObserver,
           this.config.profileName,
@@ -922,6 +923,7 @@ export class LoadBalancingProvider implements IProvider {
           requestLocalAttemptIndex,
           idSequence,
           this.logger,
+          resolvedOptions ?? options,
         ),
       deps: {
         logger: this.logger,

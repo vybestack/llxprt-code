@@ -14,11 +14,19 @@ import type {
 import { resolveSubProfileModel } from './subProfileHelpers.js';
 import { BackendMetricsCollector } from './backendMetrics.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
+import { findRequestAttemptFacts } from '../retryRequestContext.js';
+import { decodeRetryFailure } from '../retryFailureTaxonomy.js';
 
 export interface BackendAttemptContext {
   attemptId: string;
   attemptIndex: number;
   startMs: number;
+  /**
+   * Resolved options for the attempt. Carried so the terminal record can
+   * snapshot commitment and budget state from the shared request context
+   * at the moment the attempt ends.
+   */
+  options: GenerateChatOptions;
 }
 
 export type BackendAttemptStatus = 'success' | 'error' | 'aborted';
@@ -44,6 +52,7 @@ export function notifyBackendStart(
   attemptIndex: number,
   idSequence: number,
   logger: DebugLogger,
+  options: GenerateChatOptions,
 ): BackendAttemptContext | null {
   if (!observer) return null;
   // Global idSequence provides uniqueness; attemptIndex is request-local
@@ -64,7 +73,7 @@ export function notifyBackendStart(
         `LB lifecycle onAttemptStart failed: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
-  return { attemptId, attemptIndex, startMs };
+  return { attemptId, attemptIndex, startMs, options };
 }
 
 export function notifyBackendEnd(
@@ -73,8 +82,11 @@ export function notifyBackendEnd(
   subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
   status: BackendAttemptStatus,
   errorMessage: string | undefined,
+  error?: unknown,
 ): void {
   if (!observer) return;
+  const failure = error !== undefined ? decodeRetryFailure(error) : undefined;
+  const facts = findRequestAttemptFacts(ctx.options);
   try {
     observer.onAttemptEnd({
       attemptId: ctx.attemptId,
@@ -92,6 +104,17 @@ export function notifyBackendEnd(
       thoughtsTokens: 0,
       toolTokens: 0,
       errorMessage,
+      ...(failure !== undefined
+        ? { failureKind: failure.kind, failurePhase: failure.phase }
+        : {}),
+      ...(facts !== undefined
+        ? {
+            committed: facts.committed,
+            exposure: facts.exposure,
+            budgetUsed: facts.budgetUsed,
+            budgetLimit: facts.budgetLimit,
+          }
+        : {}),
     });
   } catch (err) {
     // Swallow lifecycle observer errors — they must not break the stream
@@ -105,9 +128,10 @@ export function notifyBackendResult(
   subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
   status: BackendAttemptStatus,
   errorMessage?: string,
+  error?: unknown,
 ): void {
   if (!observer || !ctx) return;
-  notifyBackendEnd(observer, ctx, subProfile, status, errorMessage);
+  notifyBackendEnd(observer, ctx, subProfile, status, errorMessage, error);
 }
 
 function invokeHookSafely(hook: () => void): void {
@@ -124,11 +148,19 @@ function notifyTerminalSafely(
   subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
   status: BackendAttemptStatus,
   errorMessage?: string,
+  error?: unknown,
 ): void {
   if (!lifecycleObserver || !attemptCtx) return;
   const ctx = attemptCtx;
   invokeHookSafely(() =>
-    notifyBackendEnd(lifecycleObserver, ctx, subProfile, status, errorMessage),
+    notifyBackendEnd(
+      lifecycleObserver,
+      ctx,
+      subProfile,
+      status,
+      errorMessage,
+      error,
+    ),
   );
 }
 
@@ -172,6 +204,7 @@ function recordFailureMetrics(
     subProfile,
     status,
     error instanceof Error ? error.message : String(error),
+    error,
   );
 }
 
