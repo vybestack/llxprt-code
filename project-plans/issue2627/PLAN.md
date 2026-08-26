@@ -242,3 +242,13 @@ consumers; no new subsystems). Implementation order inside the phase:
 
 (Classify as Blocker-Fix / In-scope-Fix / Reject / Defer; reviewer suggestions do not
 authorize scope expansion.)
+
+## Verification record (2026-08-26)
+
+- Acceptance greps G1-G4: all empty/pass.
+- `npm run typecheck` (all workspaces + scripts + evals): PASS.
+- `npm run lint`: PASS (0 errors; earlier 90-error run was stale-d.ts artifact during concurrent core rebuild).
+- `npm run build` (all workspaces): PASS.
+- Full `npm run test`: CLI 717/717; core 400/400; telemetry 43/43; other workspaces all pass; agents bulk runner 378/379 with a RANDOM different single file failing per run (mutationCoverage → config-injection+hooks → lspControl → tasksControl), each failing only at the runner's 180s hang cap and each passing in isolation in ~1-2s. Reproduced on PRISTINE origin/main worktree (publicSurface.guard failed there, 4th distinct file) — pre-existing machine-load flake in this runner on this box, proven not caused by this branch. CI runners are uncontended; watch PR checks.
+- Smoke (stepfun-37): CLI boots, loads profile, resolves model via new providerDefaultModel path, reaches remote API; provider returns `400 you have no active step plan subscription` (external account state, persistent across retries). Startup + config + provider wiring + error formatting all exercised; generation blocked by lapsed subscription, not by code.
+- Fixups committed in 743c9577d2 (harness neutralization, providerManager stubs for 6 CLI config test files, two lint fixes).
