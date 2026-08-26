@@ -19,6 +19,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
+import { AgentEventType } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
   runAdapterStatic,
   loopToolsComplete,
@@ -398,6 +399,36 @@ describe('Event adapter projection @plan:PLAN-20260617-COREAPI.P14 @requirement:
   it('an entirely empty loop stream emits NO events at all @issue:3087', async () => {
     const events = await runAdapterStatic([]);
     expect(events).toStrictEqual([]);
+  });
+
+  it('usage_metadata maps internal neutral counts onto the Gemini-named public usage wire #2627', async () => {
+    // Guards the internal telemetry rename (#2627): the internal
+    // ServerUsageMetadataEvent value is neutral (inputTokenCount etc.) while
+    // the public {type:'usage'} wire stays Gemini-named. The explicit mapping
+    // must carry every nonzero count across — a missing mapping would
+    // silently emit zeroed counts (all fields are optional).
+    const events = await runAdapterStatic([
+      wrapStream({
+        type: AgentEventType.UsageMetadata,
+        value: {
+          inputTokenCount: 120,
+          outputTokenCount: 30,
+          totalTokenCount: 150,
+          cachedTokenCount: 12,
+        },
+      }),
+    ]);
+    const usageEvents = events.filter((e) => e.type === 'usage');
+    expect(usageEvents).toHaveLength(1);
+    expect(usageEvents[0]).toStrictEqual({
+      type: 'usage',
+      usage: {
+        promptTokenCount: 120,
+        candidatesTokenCount: 30,
+        totalTokenCount: 150,
+        cachedContentTokenCount: 12,
+      },
+    });
   });
 
   it('the terminal done keeps the last REPORTED usage when the final iteration reports none @issue:3087', async () => {

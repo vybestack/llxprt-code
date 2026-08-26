@@ -35,7 +35,7 @@ describe('ContextUsageDisplay Semantic Colors', () => {
     // 95% used, 5% remaining - should be error color
     const { lastFrame } = render(
       <ContextUsageDisplay
-        promptTokenCount={95000}
+        inputTokenCount={95000}
         model="test-model"
         contextLimit={100000}
       />,
@@ -49,7 +49,7 @@ describe('ContextUsageDisplay Semantic Colors', () => {
     // 80% used, 20% remaining - should be warning color
     const { lastFrame } = render(
       <ContextUsageDisplay
-        promptTokenCount={80000}
+        inputTokenCount={80000}
         model="test-model"
         contextLimit={100000}
       />,
@@ -63,7 +63,7 @@ describe('ContextUsageDisplay Semantic Colors', () => {
     // 50% used, 50% remaining - should be secondary color
     const { lastFrame } = render(
       <ContextUsageDisplay
-        promptTokenCount={50000}
+        inputTokenCount={50000}
         model="test-model"
         contextLimit={100000}
       />,
@@ -77,7 +77,7 @@ describe('ContextUsageDisplay Semantic Colors', () => {
     // 90% used, 10% remaining - should be warning color (boundary)
     const { lastFrame } = render(
       <ContextUsageDisplay
-        promptTokenCount={90000}
+        inputTokenCount={90000}
         model="test-model"
         contextLimit={100000}
       />,
@@ -91,7 +91,7 @@ describe('ContextUsageDisplay Semantic Colors', () => {
     // 75% used, 25% remaining - should be warning color (boundary)
     const { lastFrame } = render(
       <ContextUsageDisplay
-        promptTokenCount={75000}
+        inputTokenCount={75000}
         model="test-model"
         contextLimit={100000}
       />,
@@ -105,7 +105,7 @@ describe('ContextUsageDisplay Semantic Colors', () => {
     // Test with custom limit: 50% used, 50% remaining
     const { lastFrame } = render(
       <ContextUsageDisplay
-        promptTokenCount={25000}
+        inputTokenCount={25000}
         model="test-model"
         contextLimit={50000}
       />,
@@ -117,7 +117,7 @@ describe('ContextUsageDisplay Semantic Colors', () => {
 
   it('should render properly across different themes', () => {
     const props = {
-      promptTokenCount: 5000, // 95% used, 5% remaining
+      inputTokenCount: 5000, // 95% used, 5% remaining
       model: 'test-model',
       contextLimit: 100000,
     };

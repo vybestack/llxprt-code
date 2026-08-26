@@ -27,8 +27,8 @@ import type {
 import { useOpenAIProviderInfo } from '../hooks/useOpenAIProviderInfo.js';
 
 interface RemoteTokenStats {
-  promptTokenCount: number;
-  candidatesTokenCount: number;
+  inputTokenCount: number;
+  outputTokenCount: number;
   totalTokenCount: number;
   lastUpdated: Date | null;
 }
@@ -56,8 +56,8 @@ export const OpenAIProviderContextProvider: React.FC<{
   const providerInfo = useOpenAIProviderInfo();
 
   const [remoteTokenStats, setRemoteTokenStats] = useState<RemoteTokenStats>({
-    promptTokenCount: 0,
-    candidatesTokenCount: 0,
+    inputTokenCount: 0,
+    outputTokenCount: 0,
     totalTokenCount: 0,
     lastUpdated: null,
   });
@@ -65,9 +65,8 @@ export const OpenAIProviderContextProvider: React.FC<{
   const updateRemoteTokenStats = useCallback(
     (stats: Partial<RemoteTokenStats>) => {
       setRemoteTokenStats((prev) => ({
-        promptTokenCount: stats.promptTokenCount ?? prev.promptTokenCount,
-        candidatesTokenCount:
-          stats.candidatesTokenCount ?? prev.candidatesTokenCount,
+        inputTokenCount: stats.inputTokenCount ?? prev.inputTokenCount,
+        outputTokenCount: stats.outputTokenCount ?? prev.outputTokenCount,
         totalTokenCount: stats.totalTokenCount ?? prev.totalTokenCount,
         lastUpdated: new Date(),
       }));
@@ -83,8 +82,8 @@ export const OpenAIProviderContextProvider: React.FC<{
     if (previousProviderRef.current !== providerInfo.provider) {
       previousProviderRef.current = providerInfo.provider;
       setRemoteTokenStats({
-        promptTokenCount: 0,
-        candidatesTokenCount: 0,
+        inputTokenCount: 0,
+        outputTokenCount: 0,
         totalTokenCount: 0,
         lastUpdated: null,
       });

@@ -83,7 +83,6 @@ export const ALLOWED_GEMINI_PAIRS: readonly string[] = [
   'auth/src/__tests__/token-store.spec.ts::_validGeminiToken',
   'auth/src/__tests__/token-store.spec.ts::geminiToken',
   'auth/src/__tests__/token-store.spec.ts::geminiBuckets',
-  'telemetry/src/telemetry/events/session-events.ts::useGemini',
   'settings/src/profiles/__tests__/canonicalProfileRepair.testHelpers.ts::corruptCanonicalProfileNonGeminiModel',
   'settings/src/profiles/__tests__/canonicalProfileRepair.test.ts::corruptCanonicalProfileNonGeminiModel',
   'providers/src/composition/aliasProviderFactory.ts::createGeminiAliasProvider',

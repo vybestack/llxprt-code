@@ -21,15 +21,15 @@
  * Only the fields consumed by telemetry event logging are modeled.
  */
 export interface UsageMetadata {
-  promptTokenCount?: number;
-  candidatesTokenCount?: number;
+  inputTokenCount?: number;
+  outputTokenCount?: number;
   totalTokenCount?: number;
-  cachedContentTokenCount?: number;
-  thoughtsTokenCount?: number;
-  toolUsePromptTokenCount?: number;
-  cacheTokensDetails?: Array<Record<string, unknown>>;
-  candidatesTokensDetails?: Array<Record<string, unknown>>;
-  promptTokensDetails?: Array<Record<string, unknown>>;
-  toolUsePromptTokensDetails?: Array<Record<string, unknown>>;
+  cachedTokenCount?: number;
+  thinkingTokenCount?: number;
+  toolUseInputTokenCount?: number;
+  cachedTokensDetails?: Array<Record<string, unknown>>;
+  outputTokensDetails?: Array<Record<string, unknown>>;
+  inputTokensDetails?: Array<Record<string, unknown>>;
+  toolUseInputTokensDetails?: Array<Record<string, unknown>>;
   trafficType?: string;
 }

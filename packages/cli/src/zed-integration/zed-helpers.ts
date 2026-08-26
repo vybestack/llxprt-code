@@ -312,11 +312,11 @@ export function describeSessionUpdateForLog(update: acp.SessionUpdate): string {
 export function buildUsageUpdate(
   usage: {
     readonly totalTokenCount?: number;
-    readonly candidatesTokenCount?: number;
+    readonly outputTokenCount?: number;
   },
   contextWindowSize: number,
 ): acp.SessionUpdate | null {
-  const used = usage.totalTokenCount ?? usage.candidatesTokenCount ?? 0;
+  const used = usage.totalTokenCount ?? usage.outputTokenCount ?? 0;
   if (used === 0) {
     return null;
   }

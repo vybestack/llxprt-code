@@ -11,6 +11,7 @@
 import {
   AgentEventType,
   type ServerAgentStreamEvent,
+  type ServerUsageMetadataEvent,
   type ToolCallRequestInfo,
   type ToolCallResponseInfo,
   type ServerToolCallConfirmationDetails,
@@ -228,7 +229,7 @@ function toStopInfo(e: StopEvent): AgentStopInfo {
  * (UsageMetadataValue) stays Gemini-named (promptTokenCount, etc.) for
  * backward compatibility. This mapper is the sole bridge.
  *
- * Per OQ-14 PUBLIC-out-of-scope: reasoningTokens / thoughtsTokenCount are
+ * Per OQ-14 PUBLIC-out-of-scope: reasoning / thinking token counts are
  * NOT emitted to the public wire.
  *
  * @plan:PLAN-20260707-AGENTNEUTRAL.P19
@@ -246,6 +247,37 @@ function usageStatsToPublicUsageMetadata(
     totalTokenCount: usage.totalTokens,
     ...(usage.cachedTokens !== undefined
       ? { cachedContentTokenCount: usage.cachedTokens }
+      : {}),
+  };
+}
+
+/**
+ * Maps the internal ServerUsageMetadataEvent value (neutral
+ * inputTokenCount/outputTokenCount vocabulary, #2627) to the Gemini-named
+ * public UsageMetadataValue wire type.
+ *
+ * The public wire type stays Gemini-named (promptTokenCount, etc.) for
+ * backward compatibility; this explicit mapping — not a cast — is the
+ * bridge, so the renamed internal fields can never silently leak onto the
+ * wire as zeroed Gemini-named counts.
+ *
+ * @plan:PLAN-20260707-AGENTNEUTRAL.P19
+ * @requirement:REQ-007.2
+ */
+function internalUsageToPublic(value: unknown): UsageMetadataValue {
+  const usage = value as ServerUsageMetadataEvent['value'];
+  return {
+    ...(usage.inputTokenCount !== undefined
+      ? { promptTokenCount: usage.inputTokenCount }
+      : {}),
+    ...(usage.outputTokenCount !== undefined
+      ? { candidatesTokenCount: usage.outputTokenCount }
+      : {}),
+    ...(usage.totalTokenCount !== undefined
+      ? { totalTokenCount: usage.totalTokenCount }
+      : {}),
+    ...(usage.cachedTokenCount !== undefined
+      ? { cachedContentTokenCount: usage.cachedTokenCount }
       : {}),
   };
 }
@@ -321,7 +353,7 @@ function* mapValueEventInner(
       };
       return;
     case AgentEventType.UsageMetadata:
-      yield { type: 'usage', usage: value as UsageMetadataValue };
+      yield { type: 'usage', usage: internalUsageToPublic(value) };
       return;
     case AgentEventType.ModelInfo:
       yield { type: 'model-info', info: value as ModelInfo };

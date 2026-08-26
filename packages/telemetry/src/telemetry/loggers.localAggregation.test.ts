@@ -41,8 +41,8 @@ describe('Provider-owned local aggregation (SDK disabled)', () => {
   it('aggregates provider-owned API responses locally even when SDK is NOT initialized', () => {
     expect(sdk.isTelemetrySdkInitialized()).toBe(false);
     const event = new ApiResponseEvent('test-model-owned', 1000, 'prompt-1', {
-      promptTokenCount: 100,
-      candidatesTokenCount: 50,
+      inputTokenCount: 100,
+      outputTokenCount: 50,
       totalTokenCount: 150,
     });
     event.provider_owned = true;
@@ -75,7 +75,7 @@ describe('Provider-owned local aggregation (SDK disabled)', () => {
       'agent-only-model',
       1000,
       'prompt-agent',
-      { promptTokenCount: 100, candidatesTokenCount: 50, totalTokenCount: 150 },
+      { inputTokenCount: 100, outputTokenCount: 50, totalTokenCount: 150 },
     );
     // provider_owned is NOT set — this is the agent adapter path
     logApiResponse(mockConfig, event);
@@ -132,7 +132,7 @@ describe('Exactly-once producer path (provider_owned dedup)', () => {
       'dedup-model',
       1000,
       'prompt-dedup',
-      { promptTokenCount: 100, candidatesTokenCount: 50, totalTokenCount: 150 },
+      { inputTokenCount: 100, outputTokenCount: 50, totalTokenCount: 150 },
       undefined,
       undefined,
       undefined,
@@ -154,7 +154,7 @@ describe('Exactly-once producer path (provider_owned dedup)', () => {
       'dedup-model-2',
       1000,
       'prompt-retry',
-      { promptTokenCount: 100, candidatesTokenCount: 50, totalTokenCount: 150 },
+      { inputTokenCount: 100, outputTokenCount: 50, totalTokenCount: 150 },
       undefined,
       undefined,
       undefined,
@@ -167,8 +167,8 @@ describe('Exactly-once producer path (provider_owned dedup)', () => {
       1000,
       'prompt-retry',
       {
-        promptTokenCount: 200,
-        candidatesTokenCount: 100,
+        inputTokenCount: 200,
+        outputTokenCount: 100,
         totalTokenCount: 300,
       },
       undefined,
@@ -190,7 +190,7 @@ describe('Exactly-once producer path (provider_owned dedup)', () => {
       'dual-model',
       1000,
       'prompt-dual',
-      { promptTokenCount: 100, candidatesTokenCount: 50, totalTokenCount: 150 },
+      { inputTokenCount: 100, outputTokenCount: 50, totalTokenCount: 150 },
       undefined,
       undefined,
       undefined,
@@ -202,7 +202,7 @@ describe('Exactly-once producer path (provider_owned dedup)', () => {
       'dual-model',
       1000,
       'prompt-dual',
-      { promptTokenCount: 100, candidatesTokenCount: 50, totalTokenCount: 150 },
+      { inputTokenCount: 100, outputTokenCount: 50, totalTokenCount: 150 },
       undefined,
       undefined,
       undefined,
@@ -227,8 +227,8 @@ describe('Reset clears canonical state', () => {
 
   it('reset clears all model/tool/timing metrics', () => {
     const event = new ApiResponseEvent('reset-model', 1000, 'prompt-reset', {
-      promptTokenCount: 100,
-      candidatesTokenCount: 50,
+      inputTokenCount: 100,
+      outputTokenCount: 50,
       totalTokenCount: 150,
     });
     event.provider_owned = true;
@@ -249,7 +249,7 @@ describe('Reset clears canonical state', () => {
       'reset-dedup-model',
       1000,
       'prompt-reset-dedup',
-      { promptTokenCount: 100, candidatesTokenCount: 50, totalTokenCount: 150 },
+      { inputTokenCount: 100, outputTokenCount: 50, totalTokenCount: 150 },
       undefined,
       undefined,
       undefined,

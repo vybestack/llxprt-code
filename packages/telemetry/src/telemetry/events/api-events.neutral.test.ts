@@ -11,34 +11,34 @@ import { ApiResponseEvent } from './api-events.js';
 describe('neutral UsageMetadata structural assignability', () => {
   it('accepts a minimal usage object', () => {
     const usage: UsageMetadata = {
-      promptTokenCount: 10,
-      candidatesTokenCount: 5,
+      inputTokenCount: 10,
+      outputTokenCount: 5,
       totalTokenCount: 15,
     };
-    expect(usage.promptTokenCount).toBe(10);
+    expect(usage.inputTokenCount).toBe(10);
   });
 
   it('accepts all fields used by ApiResponseEvent', () => {
     const usage: UsageMetadata = {
-      promptTokenCount: 100,
-      candidatesTokenCount: 50,
-      cachedContentTokenCount: 20,
-      thoughtsTokenCount: 5,
-      toolUsePromptTokenCount: 10,
+      inputTokenCount: 100,
+      outputTokenCount: 50,
+      cachedTokenCount: 20,
+      thinkingTokenCount: 5,
+      toolUseInputTokenCount: 10,
       totalTokenCount: 185,
     };
-    expect(usage.toolUsePromptTokenCount).toBe(10);
+    expect(usage.toolUseInputTokenCount).toBe(10);
   });
 });
 
 describe('ApiResponseEvent with neutral UsageMetadata', () => {
   it('extracts token counts from neutral usage data', () => {
     const usage: UsageMetadata = {
-      promptTokenCount: 100,
-      candidatesTokenCount: 50,
-      cachedContentTokenCount: 20,
-      thoughtsTokenCount: 5,
-      toolUsePromptTokenCount: 10,
+      inputTokenCount: 100,
+      outputTokenCount: 50,
+      cachedTokenCount: 20,
+      thinkingTokenCount: 5,
+      toolUseInputTokenCount: 10,
       totalTokenCount: 185,
     };
     const event = new ApiResponseEvent('gemini-pro', 500, 'prompt-1', usage);
@@ -52,7 +52,7 @@ describe('ApiResponseEvent with neutral UsageMetadata', () => {
 
   it('defaults missing counts to 0 for partial usage data', () => {
     const event = new ApiResponseEvent('gemini-pro', 500, 'prompt-1', {
-      promptTokenCount: 7,
+      inputTokenCount: 7,
     });
     expect(event.input_token_count).toBe(7);
     expect(event.output_token_count).toBe(0);
