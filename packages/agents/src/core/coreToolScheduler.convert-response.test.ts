@@ -7,7 +7,6 @@
 import { describe, it, expect } from 'bun:test';
 import { convertToFunctionResponse } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core/config/models.js';
 import type {
   ContentBlock,
   MediaBlock,
@@ -243,7 +242,7 @@ describe('convertToFunctionResponse', () => {
         'tool-output-max-tokens': 50,
         'tool-output-truncate-mode': 'truncate',
       }),
-      getModel: () => DEFAULT_GEMINI_MODEL,
+      getModel: () => 'gemini-2.5-pro',
     } as unknown as Config;
 
     const result = convertToFunctionResponse(

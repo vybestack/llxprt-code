@@ -216,11 +216,19 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
       return content;
     }
 
+    const rawUtilityModel = this.config
+      .getSettingsService()
+      .get('utilityModel');
+    // Interim utilityModel source; real setting tracked in the companion feature issue (#2614 umbrella)
+    const utilityModel =
+      typeof rawUtilityModel === 'string' ? rawUtilityModel : undefined;
+
     return summarizeToolOutput(
       content,
       this.config.getAgentClient(),
       signal,
       tokenBudget,
+      utilityModel,
     );
   }
 

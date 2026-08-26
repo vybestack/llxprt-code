@@ -27,12 +27,9 @@ export {
   DEFAULT_AUTOCOMPLETE_IGNORE_PATTERNS,
   DEFAULT_AUTOCOMPLETE_MAX_DEPTH,
   type MCPOAuthConfig,
-  DEFAULT_GEMINI_FLASH_MODEL,
 } from './config.js';
 
 export type { Config as ConfigInstance } from './config.js';
-
-export { DEFAULT_GEMINI_FLASH_MODEL as DEFAULT_FLASH_MODEL } from './models.js';
 
 /**
  * @plan:PLAN-20250117-SUBAGENTCONFIG.P15

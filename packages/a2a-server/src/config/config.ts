@@ -18,7 +18,6 @@ import {
   MessageBus,
   loadServerHierarchicalMemory,
   LLXPRT_CONFIG_DIR,
-  DEFAULT_GEMINI_EMBEDDING_MODEL,
   PLACEHOLDER_MODEL,
   UNCONFIGURED_PROVIDER,
   type LlxprtExtension,
@@ -80,7 +79,7 @@ function createBaseConfigParameters(
     sessionId: taskId,
     model: PLACEHOLDER_MODEL,
     provider: resolveProviderFromEnv(),
-    embeddingModel: DEFAULT_GEMINI_EMBEDDING_MODEL,
+    embeddingModel: undefined,
     sandbox: undefined, // Sandbox might not be relevant for a server-side agent
     targetDir: workspaceDir, // Or a specific directory the agent operates on
     debugMode: process.env['DEBUG'] === 'true' || false,

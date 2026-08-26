@@ -38,7 +38,6 @@ import type { AgentRuntimeLoaderResult } from '@vybestack/llxprt-code-core/runti
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { initializeTestConfig } from '@vybestack/llxprt-code-core/test-utils/config.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core/config/models.js';
 import type { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import type {
   ModelConfig,
@@ -102,7 +101,7 @@ export async function createMockConfig(
   );
   const configParams: ConfigParameters = {
     sessionId: 'test-session',
-    model: DEFAULT_GEMINI_MODEL,
+    model: 'gemini-2.5-pro',
     targetDir: '.',
     debugMode: false,
     cwd: process.cwd(),
@@ -115,7 +114,7 @@ export async function createMockConfig(
   await config.refreshAuth();
 
   vi.spyOn(config, 'getContentGeneratorConfig').mockReturnValue({
-    model: DEFAULT_GEMINI_MODEL,
+    model: 'gemini-2.5-pro',
   });
 
   const toolRegistry = config.getToolRegistry();

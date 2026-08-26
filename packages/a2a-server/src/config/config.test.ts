@@ -168,7 +168,7 @@ describe('loadConfig provider-neutral defaults', () => {
     vi.restoreAllMocks();
   });
 
-  it('uses PLACEHOLDER_MODEL (not DEFAULT_GEMINI_MODEL) when no model configured', async () => {
+  it('uses PLACEHOLDER_MODEL (never a hard-coded Gemini default) when no model configured', async () => {
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
     vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);

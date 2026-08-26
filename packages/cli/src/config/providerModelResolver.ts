@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { loadProviderAliasEntries } from '@vybestack/llxprt-code-providers/composition.js';
 import { firstNonEmptyString } from '../utils/coalesce.js';
@@ -32,6 +31,7 @@ export interface ProviderModelInput {
   settingsModel: string | undefined;
   envDefaultModel: string | undefined;
   envGeminiModel: string | undefined;
+  providerDefaultModel?: string;
 }
 
 export interface ProviderModelResult {
@@ -100,7 +100,9 @@ export function resolveProviderAndModel(
     provider !== undefined ? getAliasDefaultModel(provider) : undefined;
 
   const providerDefault =
-    provider === 'gemini' ? DEFAULT_GEMINI_MODEL : (aliasDefaultModel ?? '');
+    provider === 'gemini'
+      ? (input.providerDefaultModel ?? '')
+      : (aliasDefaultModel ?? '');
   const configuredModel = firstNonEmptyString(
     trimIfString(cliModel),
     trimIfString(profileModel),

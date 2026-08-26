@@ -12,7 +12,6 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
-import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core/config/models.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import {
@@ -65,7 +64,7 @@ describe('CoreToolScheduler policy decisions', () => {
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: () => mockMessageBus,
       getPolicyEngine: () => mockPolicyEngine,
-      getModel: () => DEFAULT_GEMINI_MODEL,
+      getModel: () => 'gemini-2.5-pro',
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({
@@ -154,7 +153,7 @@ describe('CoreToolScheduler policy decisions', () => {
       getToolRegistry: () => mockToolRegistry,
       getMessageBus: () => mockMessageBus,
       getPolicyEngine: () => mockPolicyEngine,
-      getModel: () => DEFAULT_GEMINI_MODEL,
+      getModel: () => 'gemini-2.5-pro',
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({

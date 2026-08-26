@@ -124,6 +124,7 @@ const mockConfig = {
     getDirectories: () => ['/tmp/test'],
   }),
   getEnablePromptCompletion: () => false,
+  getUtilityModel: () => undefined,
 } as unknown as Config;
 
 describe('InputPrompt paste functionality', () => {

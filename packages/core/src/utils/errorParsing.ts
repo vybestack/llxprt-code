@@ -12,7 +12,6 @@ import {
   type ApiError,
 } from './quotaErrorDetection.js';
 import type { StructuredError } from '../core/turn.js';
-import { DEFAULT_GEMINI_MODEL } from '../config/models.js';
 import { UserTierId } from '../code_assist/types.js';
 import { getErrorStatus, STREAM_INTERRUPTED_ERROR_CODE } from './retry.js';
 
@@ -39,23 +38,17 @@ const getRateLimitErrorMessageGeneric = () =>
   '\nRate limit exceeded. LLxprt Code retries rate-limited requests with backoff when possible. Please wait before retrying manually.';
 
 // Google Free Tier message functions
-const getRateLimitErrorMessageGoogleProQuotaFree = (
-  currentModel: string = DEFAULT_GEMINI_MODEL,
-) =>
+const getRateLimitErrorMessageGoogleProQuotaFree = (currentModel: string) =>
   `\nYou have reached your daily ${currentModel} quota limit. ${FREE_TIER_GUIDANCE}`;
 
 const getRateLimitErrorMessageGoogleGenericQuotaFree = () =>
   `\nYou have reached your daily quota limit. ${FREE_TIER_GUIDANCE}`;
 
 // Google Legacy/Standard Tier message functions
-const getRateLimitErrorMessageGoogleProQuotaPaid = (
-  currentModel: string = DEFAULT_GEMINI_MODEL,
-) =>
+const getRateLimitErrorMessageGoogleProQuotaPaid = (currentModel: string) =>
   `\nYou have reached your daily ${currentModel} quota limit. ${PAID_TIER_THANKS} To continue accessing the ${currentModel} model today, ${PAID_TIER_AUTH_HINT}`;
 
-const getRateLimitErrorMessageGoogleGenericQuotaPaid = (
-  currentModel: string = DEFAULT_GEMINI_MODEL,
-) =>
+const getRateLimitErrorMessageGoogleGenericQuotaPaid = (currentModel: string) =>
   `\nYou have reached your daily quota limit. ${PAID_TIER_THANKS} To continue accessing the ${currentModel} model today, ${PAID_TIER_AUTH_HINT}`;
 
 function buildStatusSuffix(status?: number, statusLabel?: string): string {
@@ -192,10 +185,7 @@ function getRateLimitMessage(
     return getRateLimitErrorMessageGeneric();
   }
 
-  const effectiveModel =
-    currentModel === undefined || currentModel === ''
-      ? DEFAULT_GEMINI_MODEL
-      : currentModel;
+  const effectiveModel = currentModel ?? '';
 
   if (isProQuotaExceededError(error)) {
     return isPaidTier

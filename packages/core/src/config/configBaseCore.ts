@@ -885,6 +885,11 @@ export abstract class ConfigBaseCore {
   getEnablePromptCompletion(): boolean {
     return this.enablePromptCompletion;
   }
+  getUtilityModel(): string | undefined {
+    // Interim utilityModel source; real setting tracked in the companion feature issue (#2614 umbrella)
+    const raw = this.settingsService.get('utilityModel');
+    return typeof raw === 'string' ? raw : undefined;
+  }
   getSettingsService(): SettingsService {
     return this.settingsService;
   }

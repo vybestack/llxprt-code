@@ -9,11 +9,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { AgentClientContract } from '../core/clientContract.js';
 import type { ModelOutput } from '../llm-types/modelEnvelope.js';
 import { debugLogger } from './debugLogger.js';
-import {
-  summarizeToolOutput,
-  llmSummarizer,
-  defaultSummarizer,
-} from './summarizer.js';
+import { summarizeToolOutput, defaultSummarizer } from './summarizer.js';
 import type { ToolResult } from '@vybestack/llxprt-code-tools';
 
 describe('summarizers', () => {
@@ -58,7 +54,27 @@ describe('summarizers', () => {
       expect(mockAgentClient.generateContent).not.toHaveBeenCalled();
     });
 
-    it('should call generateContent if text is longer than maxLength', async () => {
+    it('should return original text and skip generateContent when no utilityModel is configured', async () => {
+      const longText = 'This is a very long text.'.repeat(200);
+      const logSpy = vi.spyOn(debugLogger, 'log').mockImplementation(() => {});
+
+      const result = await summarizeToolOutput(
+        longText,
+        mockAgentClient,
+        abortSignal,
+        2000,
+        undefined,
+      );
+
+      expect(mockAgentClient.generateContent).not.toHaveBeenCalled();
+      expect(result).toBe(longText);
+      expect(logSpy).toHaveBeenCalledWith(
+        'summarizeToolOutput enabled but no utilityModel configured — skipping',
+      );
+      logSpy.mockRestore();
+    });
+
+    it('should call generateContent with the utilityModel when configured', async () => {
       const longText = 'This is a very long text.'.repeat(200);
       const summary = 'This is a summary.';
       const mockOutput: ModelOutput = {
@@ -76,9 +92,14 @@ describe('summarizers', () => {
         mockAgentClient,
         abortSignal,
         2000,
+        'gemini-2.5-flash-lite',
       );
 
       expect(mockAgentClient.generateContent).toHaveBeenCalledTimes(1);
+      const calledWith = (
+        mockAgentClient.generateContent as Mock<(...args: never[]) => unknown>
+      ).mock.calls[0];
+      expect(calledWith[3]).toBe('gemini-2.5-flash-lite');
       expect(result).toBe(summary);
     });
 
@@ -94,6 +115,7 @@ describe('summarizers', () => {
         mockAgentClient,
         abortSignal,
         2000,
+        'gemini-2.5-flash-lite',
       );
 
       expect(mockAgentClient.generateContent).toHaveBeenCalledTimes(1);
@@ -117,7 +139,13 @@ describe('summarizers', () => {
         mockAgentClient.generateContent as Mock<(...args: never[]) => unknown>
       ).mockResolvedValue(mockOutput);
 
-      await summarizeToolOutput(longText, mockAgentClient, abortSignal, 1000);
+      await summarizeToolOutput(
+        longText,
+        mockAgentClient,
+        abortSignal,
+        1000,
+        'gemini-2.5-flash-lite',
+      );
 
       const expectedPrompt = `Summarize the following tool output to be a maximum of 1000 tokens. The summary should be concise and capture the main points of the tool output.
 
@@ -137,66 +165,6 @@ Return the summary string which should first contain an overall summarization of
       ).mock.calls[0];
       const contents = calledWith[0];
       expect(contents[0].blocks[0].text).toBe(expectedPrompt);
-    });
-  });
-
-  describe('llmSummarizer', () => {
-    it('should summarize tool output using summarizeToolOutput', async () => {
-      const toolResult: ToolResult = {
-        llmContent: 'This is a very long text.'.repeat(200),
-        returnDisplay: '',
-      };
-      const summary = 'This is a summary.';
-      const mockOutput: ModelOutput = {
-        content: {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: summary }],
-        },
-      };
-      (
-        mockAgentClient.generateContent as Mock<(...args: never[]) => unknown>
-      ).mockResolvedValue(mockOutput);
-
-      const result = await llmSummarizer(
-        toolResult,
-        mockAgentClient,
-        abortSignal,
-      );
-
-      expect(mockAgentClient.generateContent).toHaveBeenCalledTimes(1);
-      expect(result).toBe(summary);
-    });
-
-    it('should handle different llmContent types', async () => {
-      const longText = 'This is a very long text.'.repeat(200);
-      const toolResult: ToolResult = {
-        llmContent: [{ text: longText }],
-        returnDisplay: '',
-      };
-      const summary = 'This is a summary.';
-      const mockOutput: ModelOutput = {
-        content: {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: summary }],
-        },
-      };
-      (
-        mockAgentClient.generateContent as Mock<(...args: never[]) => unknown>
-      ).mockResolvedValue(mockOutput);
-
-      const result = await llmSummarizer(
-        toolResult,
-        mockAgentClient,
-        abortSignal,
-      );
-
-      expect(mockAgentClient.generateContent).toHaveBeenCalledTimes(1);
-      const calledWith = (
-        mockAgentClient.generateContent as Mock<(...args: never[]) => unknown>
-      ).mock.calls[0];
-      const contents = calledWith[0];
-      expect(contents[0].blocks[0].text).toContain(`"${longText}"`);
-      expect(result).toBe(summary);
     });
   });
 

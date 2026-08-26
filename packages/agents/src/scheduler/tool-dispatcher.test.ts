@@ -32,7 +32,6 @@ import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js'
 import type { ContextAwareTool } from '@vybestack/llxprt-code-tools';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
-import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core/config/models.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -71,7 +70,7 @@ function createMockConfig(overrides: Partial<Config> = {}): Config {
     }),
     getEnableHooks: () => false,
     getHookSystem: () => null,
-    getModel: () => DEFAULT_GEMINI_MODEL,
+    getModel: () => 'gemini-2.5-pro',
     isInteractive: () => false,
   };
   return { ...defaults, ...overrides } as unknown as Config;

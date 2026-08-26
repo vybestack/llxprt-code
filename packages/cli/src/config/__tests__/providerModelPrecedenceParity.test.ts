@@ -33,7 +33,6 @@ import {
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
-  DEFAULT_GEMINI_MODEL,
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
   clearActiveProviderRuntimeContext,
@@ -124,6 +123,9 @@ void vi.mock('../profileBootstrap.js', () => {
         setActiveProvider: vi.fn(),
         getActiveProvider: vi.fn(() => undefined),
         getAvailableModels: vi.fn(async () => []),
+        getProviderByName: vi.fn(() => ({
+          getDefaultModel: () => 'gemini-2.5-pro',
+        })),
       },
       oauthManager: undefined,
     })),
@@ -150,6 +152,9 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
       setActiveProvider: vi.fn(),
       getActiveProvider: vi.fn(() => undefined),
       getAvailableModels: vi.fn(async () => []),
+      getProviderByName: vi.fn(() => ({
+        getDefaultModel: () => 'gemini-2.5-pro',
+      })),
     } as unknown as ProviderManager);
 
   return {
@@ -415,10 +420,10 @@ describe('providerModelPrecedenceParity: 6-level model chain', () => {
     expect(config.getModel()).toBe('');
   });
 
-  it('level 6 fallback: explicit gemini provider → DEFAULT_GEMINI_MODEL', async () => {
+  it('level 6 fallback: explicit gemini provider → provider default model', async () => {
     const config = await runConfig({}, ['--provider', 'gemini']);
     expect(config.getProvider()).toBe('gemini');
-    expect(config.getModel()).toBe(DEFAULT_GEMINI_MODEL);
+    expect(config.getModel()).toBe('gemini-2.5-pro');
   });
 
   it('level 5: GEMINI_MODEL env provides model when resolved provider is explicit gemini', async () => {

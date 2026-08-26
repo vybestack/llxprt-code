@@ -7,10 +7,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { MutableRefObject, Dispatch, SetStateAction } from 'react';
 
-import {
-  DEFAULT_GEMINI_FLASH_LITE_MODEL,
-  getResponseTextFromBlocks,
-} from '@vybestack/llxprt-code-core';
+import { getResponseTextFromBlocks } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type {
   IContent,
@@ -35,6 +32,7 @@ export interface PromptCompletion {
 
 export interface PromptCompletionRuntime extends AgentClientSource {
   getEnablePromptCompletion(): boolean;
+  getUtilityModel(): string | undefined;
 }
 
 export interface UsePromptCompletionOptions {
@@ -71,12 +69,20 @@ function shouldSkipPromptCompletion(
   trimmedText: string,
   isPromptCompletionEnabled: boolean,
   agentClient: AgentClient | undefined,
+  utilityModel: string | undefined,
 ): boolean {
   const tooShort = trimmedText.length < PROMPT_COMPLETION_MIN_LENGTH;
   const noClient = !agentClient;
   const isSpecialInput =
     isSlashCommand(trimmedText) || trimmedText.includes('@');
-  return tooShort || noClient || isSpecialInput || !isPromptCompletionEnabled;
+  const noUtilityModel = utilityModel === undefined || utilityModel === '';
+  return (
+    tooShort ||
+    noClient ||
+    isSpecialInput ||
+    !isPromptCompletionEnabled ||
+    noUtilityModel
+  );
 }
 
 function buildPromptCompletionRequest(trimmedText: string): {
@@ -125,6 +131,7 @@ async function requestPromptSuggestion(
   agentClient: NonNullable<AgentClient>,
   trimmedText: string,
   signal: AbortSignal,
+  utilityModel: string,
 ): Promise<string> {
   const { contents, generationConfig } =
     buildPromptCompletionRequest(trimmedText);
@@ -132,7 +139,7 @@ async function requestPromptSuggestion(
     contents,
     generationConfig,
     signal,
-    DEFAULT_GEMINI_FLASH_LITE_MODEL,
+    utilityModel,
   );
   if (signal.aborted) return '';
 
@@ -211,6 +218,7 @@ function usePromptSuggestionGenerator({
   return useCallback(async () => {
     const trimmedText = buffer.text.trim();
     const agentClient = config?.getAgentClient();
+    const utilityModel = config?.getUtilityModel();
 
     if (trimmedText === lastRequestedTextRef.current) return;
     abortControllerRef.current?.abort();
@@ -220,6 +228,7 @@ function usePromptSuggestionGenerator({
         trimmedText,
         isPromptCompletionEnabled,
         agentClient,
+        utilityModel,
       )
     ) {
       clearGhostText();
@@ -227,7 +236,7 @@ function usePromptSuggestionGenerator({
       return;
     }
 
-    if (!agentClient) return;
+    if (!agentClient || utilityModel === undefined) return;
 
     lastRequestedTextRef.current = trimmedText;
     setIsLoadingGhostText(true);
@@ -239,6 +248,7 @@ function usePromptSuggestionGenerator({
         agentClient,
         trimmedText,
         signal,
+        utilityModel,
       );
       if (suggestionText.length > 0) setGhostText(suggestionText);
       else clearGhostText();
@@ -320,6 +330,7 @@ export function usePromptCompletion({
   const lastRequestedTextRef = useRef<string>('');
   const isPromptCompletionEnabled =
     enabled && (config?.getEnablePromptCompletion() ?? false);
+  const utilityModel = config?.getUtilityModel();
   const state = usePromptCompletionState(buffer);
   const generatePromptSuggestions = usePromptSuggestionGenerator({
     buffer,
@@ -356,7 +367,12 @@ export function usePromptCompletion({
   return {
     text: state.ghostText,
     isLoading: state.isLoadingGhostText,
-    isActive: isCompletionActive(buffer, isPromptCompletionEnabled),
+    isActive: isCompletionActive(
+      buffer,
+      isPromptCompletionEnabled &&
+        utilityModel !== undefined &&
+        utilityModel !== '',
+    ),
     accept: state.acceptGhostText,
     clear: state.clearGhostText,
     markSelected: state.markSuggestionSelected,

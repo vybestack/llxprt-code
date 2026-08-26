@@ -8,7 +8,6 @@ import { describe, it, expect, vi } from 'bun:test';
 import { CoreToolScheduler } from './coreToolScheduler.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core/config/models.js';
 import {
   createMockMessageBus,
   createMockPolicyEngine,
@@ -25,7 +24,7 @@ describe('CoreToolScheduler getToolSuggestion', () => {
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
       getEnableHooks: () => false,
       getPolicyEngine: vi.fn().mockReturnValue(createMockPolicyEngine()),
-      getModel: () => DEFAULT_GEMINI_MODEL,
+      getModel: () => 'gemini-2.5-pro',
     } as unknown as Config;
 
     // Create scheduler
