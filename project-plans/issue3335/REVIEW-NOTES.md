@@ -115,6 +115,21 @@ Deliberately not in this change.
 
 ## Verification notes
 
+V0. **Test-audit gate passes: no new findings on any touched test file.**
+    `bun scripts/test-audit/scan.ts` over 2,699 files. Of the 13 test files this
+    branch touches, 11 have zero findings, including all seven new ones
+    (`subagent.aggregate-output-budget`, `subagentOrchestrator.output-budget`,
+    `turn.debug-responses`, `providerStreamLimits`, `pendingResponseBuffer`,
+    `contentEventProcessor.streaming`, `OpenAIStreamProcessor.retention`).
+
+    Two touched files carry findings, all pre-existing:
+    `settingsRegistry.test.ts` (4: WEAK_ONLY at 687/706/851, STRUCTURE_ONLY at
+    882) and `subagentToolProcessing.test.ts` (2: MOCK_ONLY_ORACLE at 449/477).
+    Both are outside this branch's hunks: the only edit to `settingsRegistry` is
+    at line 955+, after every finding; the only edit to `subagentToolProcessing`
+    is at 208-223, and the findings sit 200+ lines later. Confirmed directly by
+    grepping `main` for the flagged test names, which are present there.
+
 V1. **`grep-ripgrep-issue3203-remediation.test.ts` flakes under load, not from
     this branch.** The full-suite run reported
     `grep with exactly max_results matches is NOT marked incomplete` failing at
