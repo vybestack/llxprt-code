@@ -22,7 +22,7 @@
     "format": "prettier --write .",
     "test": "bun run-bun-tests.ts",
     "test:ci": "bun run-bun-tests.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test-bun.json",
     "prepack": "bun ../../scripts/bun-build.config.ts --cli-only"
   },
   "files": [

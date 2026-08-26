@@ -68,7 +68,10 @@ describe('issue #2951 non-regression — macOS/Linux Ctrl+J (darwin module graph
 
     handleInputKey(plainEnterKey, deps);
 
-    expect(submitted).toBe('submit me');
+    // The `as` widens the closure-captured variable back to its declared
+    // type: control-flow analysis cannot see the handleSubmit callback run,
+    // so it would otherwise narrow `submitted` to its initial `null`.
+    expect(submitted as string | null).toBe('submit me');
     expect(buffer.lines).toEqual(['submit me']);
   });
 });

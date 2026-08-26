@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false,
+    "types": ["node", "bun-types/test", "bun-types/test-globals"]
+  },
+  "include": ["../../bun-test-corrections.d.ts", "test-bun/**/*.ts"]
+}

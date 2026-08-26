@@ -9,6 +9,7 @@ import { createRuntimeSettingsService } from '@vybestack/llxprt-code-core/runtim
 import {
   separateSettings,
   type Profile,
+  type ProfileEphemeralSettings,
 } from '@vybestack/llxprt-code-settings';
 import { DEFAULT_DISABLED_TOOLS } from '../src/core/subagentOrchestrator.js';
 import {
@@ -36,11 +37,20 @@ describe('Anthropic subagent text settings (Issue #1738)', () => {
   it.each([
     {
       name: 'nested',
-      ephemeralSettings: { text: { verbosity: 'medium' } },
+      // Deliberately out-of-type input: `text.verbosity` is not a declared
+      // ProfileEphemeralSettings key and the nested object form is not the
+      // declared flat-dotted shape. This test pins that the runtime
+      // classifier tolerates BOTH spellings, so the fixtures must bypass the
+      // static type here.
+      ephemeralSettings: {
+        text: { verbosity: 'medium' },
+      } as unknown as ProfileEphemeralSettings,
     },
     {
       name: 'flat',
-      ephemeralSettings: { 'text.verbosity': 'medium' },
+      ephemeralSettings: {
+        'text.verbosity': 'medium',
+      } as unknown as ProfileEphemeralSettings,
     },
   ])(
     'classifies $name text verbosity as behavior rather than a request parameter',

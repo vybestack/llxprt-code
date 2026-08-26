@@ -21,6 +21,10 @@
  *
  * This adds no runtime behaviour and re-exports nothing; it only describes what
  * Bun already does.
+ *
+ * `bun-types@1.3.14` also predates `expect.fail()`, which the Bun runtime has
+ * provided since 1.1.x. The callable `Expect` interface is declared in
+ * `bun:test`, so it can be merged here the same way.
  */
 
 declare module 'bun:test' {
@@ -34,5 +38,10 @@ declare module 'bun:test' {
   interface Matchers<T = unknown> {
     rejects: AwaitedMatchers<MatchersBuiltin<unknown>>;
     resolves: AwaitedMatchers<MatchersBuiltin<Awaited<T>>>;
+  }
+
+  interface Expect {
+    /** Fails the test with the given message (always throws). */
+    fail(message?: string | Error): never;
   }
 }

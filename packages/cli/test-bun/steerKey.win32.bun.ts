@@ -42,7 +42,10 @@ describe('issue #2951 — Windows Ctrl+Enter steering (win32 module graph)', () 
 
     handleInputKey(windowsCtrlEnterKey, deps);
 
-    expect(steeredText).toBe('steer me');
+    // The `as` widens the closure-captured variable back to its declared
+    // type: control-flow analysis cannot see the handleSteer callback run,
+    // so it would otherwise narrow `steeredText` to its initial `null`.
+    expect(steeredText as string | null).toBe('steer me');
     // Buffer is cleared, and no newline was appended.
     expect(buffer.lines).toEqual(['']);
   });
@@ -106,7 +109,10 @@ describe('issue #2951 — Windows Ctrl+Enter steering (win32 module graph)', () 
 
     handleInputKey(plainEnterKey, deps);
 
-    expect(submitted).toBe('submit me');
+    // The `as` widens the closure-captured variable back to its declared
+    // type: control-flow analysis cannot see the handleSubmit callback run,
+    // so it would otherwise narrow `submitted` to its initial `null`.
+    expect(submitted as string | null).toBe('submit me');
     expect(buffer.lines).toEqual(['submit me']);
   });
 });

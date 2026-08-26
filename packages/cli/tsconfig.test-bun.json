@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false,
+    "lib": ["DOM", "DOM.Iterable", "ES2022", "ESNext.Disposable"]
+  },
+  "include": ["../../bun-test-corrections.d.ts", "test-bun/**/*.ts"]
+}
