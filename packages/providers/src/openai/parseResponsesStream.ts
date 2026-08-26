@@ -34,7 +34,7 @@ import {
 } from './parseResponsesStreamReasoning.js';
 import {
   assertProviderStreamByteLimit,
-  MAX_PROVIDER_SSE_LINE_BYTES,
+  assertSseLinesWithinLimit,
   assertToolCallArgumentsWithinLimit,
   MAX_PROVIDER_TOOL_CALL_BYTES,
   utf8ByteLength,
@@ -917,11 +917,7 @@ export async function* parseResponsesStream(
       // Process complete lines
       const lines = buffer.split('\n');
       buffer = lines.pop() ?? ''; // Keep incomplete line in buffer
-      assertProviderStreamByteLimit(
-        'incomplete SSE line',
-        utf8ByteLength(buffer),
-        MAX_PROVIDER_SSE_LINE_BYTES,
-      );
+      assertSseLinesWithinLimit(lines, buffer);
 
       const dataLines = lines
         .filter((line) => line.startsWith('data: '))

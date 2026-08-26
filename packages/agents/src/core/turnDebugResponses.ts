@@ -105,6 +105,14 @@ export class TurnDebugResponses {
     if (location === undefined) {
       return false;
     }
+    // A span whose recorded home is about to be trimmed must not be replaced
+    // in place: the update would land in the half that is dropped moments
+    // later, losing the newest state of that span entirely. Re-appending
+    // instead keeps it in the retained window.
+    if (location.chunkIndex < this.pendingDropCount()) {
+      this.thinkingByStreamId.delete(streamId);
+      return false;
+    }
     // The index is rebuilt whenever chunks are dropped, so a recorded location
     // always addresses a live chunk.
     const existing = this.chunks[location.chunkIndex];
@@ -126,6 +134,18 @@ export class TurnDebugResponses {
     return block.type === 'thinking' && typeof block.streamId === 'string'
       ? block.streamId
       : undefined;
+  }
+
+  /**
+   * Chunks the next trim would drop, or 0 when no trim is due.
+   *
+   * Used to avoid writing an update into the region about to be discarded.
+   */
+  private pendingDropCount(): number {
+    if (this.chunks.length < MAX_DEBUG_RESPONSE_CHUNKS * 2) {
+      return 0;
+    }
+    return this.chunks.length + 1 - MAX_DEBUG_RESPONSE_CHUNKS;
   }
 
   /** Drops the oldest chunks once retention passes the high-water mark. */

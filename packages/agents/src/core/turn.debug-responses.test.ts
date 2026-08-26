@@ -159,6 +159,59 @@ describe('Turn - debug responses and finished event outcome', () => {
       });
     });
 
+    it('keeps the newest state of a thinking span that trims on the same chunk', async () => {
+      // A continued span is replaced at its recorded position, then trimming
+      // runs. If the recorded position sits in the half about to be dropped,
+      // the newest state of that span is written straight into the discarded
+      // region and lost, while its sibling text survives. Collapse and trim are
+      // otherwise only tested apart, so this interaction slips through.
+      const chunkCount = MAX_DEBUG_RESPONSE_CHUNKS * 2;
+      const thinkingChunk = (thought: string) => {
+        const chunk = mockChunk({ thought, isHidden: false });
+        return {
+          ...chunk,
+          content: {
+            ...chunk.content,
+            blocks: [
+              {
+                type: 'thinking' as const,
+                thought,
+                sourceField: 'thinking',
+                streamId: 'reasoning-span-1',
+                streamStatus: 'delta' as const,
+              },
+            ],
+          },
+        };
+      };
+      const mockResponseStream = (async function* () {
+        yield { type: StreamEventType.CHUNK, value: thinkingChunk('early') };
+        for (let index = 0; index < chunkCount; index++) {
+          yield {
+            type: StreamEventType.CHUNK,
+            value: mockChunk({ text: `filler-${index}` }),
+          };
+        }
+        yield { type: StreamEventType.CHUNK, value: thinkingChunk('FINAL') };
+      })();
+      mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+      for await (const _ of turn.run(
+        [{ type: 'text', text: 'Continue' }],
+        new AbortController().signal,
+      )) {
+        // consume stream
+      }
+
+      const blocks = turn
+        .getDebugResponses()
+        .flatMap((chunk) => chunk.content.blocks);
+      const thoughts = blocks.filter((block) => block.type === 'thinking');
+
+      expect(thoughts).toHaveLength(1);
+      expect(thoughts[0]).toMatchObject({ thought: 'FINAL' });
+    });
+
     it('retains only the recent diagnostic chunks during a non-thinking runaway', async () => {
       // Must exceed the trim high-water mark (twice MAX_DEBUG_RESPONSE_CHUNKS),
       // otherwise the stream ends before any trimming is due and the test

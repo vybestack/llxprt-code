@@ -114,7 +114,10 @@ export function checkOutputBudget(
   if (
     outputBudget !== undefined &&
     outputBudget !== UNLIMITED_OUTPUT_TOKENS_TOTAL &&
-    outputTokensTotal > outputBudget
+    // >= not >. Stopping only once the total exceeds the budget lets a run that
+    // lands exactly on it issue one more request, so the overshoot is a whole
+    // extra response rather than nothing.
+    outputTokensTotal >= outputBudget
   ) {
     ctx.output.terminate_reason = SubagentTerminateMode.MAX_OUTPUT;
     ctx.output.output_tokens_budget = outputBudget;

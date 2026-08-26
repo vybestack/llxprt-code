@@ -94,3 +94,30 @@ export function assertToolCallArgumentsWithinLimit(
     MAX_PROVIDER_TOOL_CALL_BYTES,
   );
 }
+
+/**
+ * Rejects any SSE line over the byte limit, complete lines included.
+ *
+ * Bounding only the trailing incomplete remainder is trivially bypassed by
+ * appending a newline: the line then arrives complete and would go straight to
+ * JSON.parse unmeasured.
+ *
+ * The cheap length pre-check comes first because the remainder is re-examined
+ * on every read, so measuring it exactly each time would be O(n^2) in the
+ * no-newline case the limit exists to catch.
+ */
+export function assertSseLinesWithinLimit(
+  lines: readonly string[],
+  remainder: string,
+): void {
+  for (const candidate of [...lines, remainder]) {
+    if (!exceedsUtf8ByteLimit(candidate, MAX_PROVIDER_SSE_LINE_BYTES)) {
+      continue;
+    }
+    assertProviderStreamByteLimit(
+      'SSE line',
+      utf8ByteLength(candidate),
+      MAX_PROVIDER_SSE_LINE_BYTES,
+    );
+  }
+}
