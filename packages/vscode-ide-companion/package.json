@@ -156,12 +156,12 @@
     "zod": "^3.25.76"
   },
   "overrides": {
-    "js-yaml": "^4.2.0",
+    "js-yaml": "^4.3.1",
     "@textlint/linter-formatter": {
-      "js-yaml": "npm:js-yaml@4.2.0"
+      "js-yaml": "npm:js-yaml@4.3.1"
     },
     "rc-config-loader": {
-      "js-yaml": "npm:js-yaml@4.2.0"
+      "js-yaml": "npm:js-yaml@4.3.1"
     }
   }
 }

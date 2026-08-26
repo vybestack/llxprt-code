@@ -44,7 +44,7 @@
     "@vybestack/llxprt-code-settings": "file:../settings",
     "@vybestack/llxprt-code-tools": "file:../tools",
     "google-auth-library": "^9.11.0",
-    "shell-quote": "^1.8.4",
+    "shell-quote": "^1.10.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
