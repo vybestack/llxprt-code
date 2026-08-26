@@ -145,12 +145,11 @@ export function recordTurnOutputTokens(
   const estimated = Math.ceil(
     outputCharacterCount / FALLBACK_CHARACTERS_PER_TOKEN,
   );
-  const reportIsUsable =
+  const turnOutputTokens =
     reportedOutputTokens !== undefined &&
-    (reportedOutputTokens > 0 || outputCharacterCount === 0);
-  const turnOutputTokens = reportIsUsable
-    ? (reportedOutputTokens ?? 0)
-    : estimated;
+    (reportedOutputTokens > 0 || outputCharacterCount === 0)
+      ? reportedOutputTokens
+      : estimated;
   const total = (ctx.output.output_tokens_total ?? 0) + turnOutputTokens;
   ctx.output.output_tokens_total = total;
   return total;
