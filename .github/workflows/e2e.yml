@@ -9,6 +9,7 @@ on:
     branches:
       - 'main'
       - 'release/**'
+      - 'dev/**'
   # This supports explicit labeled reruns for internal PRs. Fork target events
   # never reach the secret-bearing E2E jobs.
   pull_request_target:
