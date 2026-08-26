@@ -172,6 +172,84 @@ jobs:
                 ;;
             esac
             ISSUE_TITLE="OCR review infrastructure failure"
+            # Resolve the milestone for the version currently being worked on
+            # in main, so the auto-created failure issue surfaces in the
+            # release view (issue #3064). Source of truth is the root
+            # package.json `version` on main. Resolved by exact title match
+            # against open milestones (not nearest due date). Fails soft: an
+            # unresolvable milestone logs a warning and returns empty, so the
+            # notification still goes out.
+            resolve_milestone() {
+              local package_json
+              if ! package_json="$(gh api "repos/${GH_REPO}/contents/package.json?ref=main" -H 'Accept: application/vnd.github.raw' 2>/dev/null)"; then
+                echo "Warning: could not read package.json from main; skipping milestone resolution" >&2
+                return
+              fi
+              local current_version
+              current_version="$(printf '%s' "${package_json}" | jq -r '.version // empty' 2>/dev/null)"
+              if [[ -z "${current_version}" ]]; then
+                echo "Warning: package.json on main has no version field; skipping milestone resolution" >&2
+                return
+              fi
+              # gh issue --milestone accepts a milestone TITLE, not a number.
+              # Resolve the title by exact match across ALL open milestone
+              # pages, then return it for assignment.
+              local milestone_title=""
+              if ! milestone_title="$(gh api --paginate --slurp "repos/${GH_REPO}/milestones?state=open&per_page=100" 2>/dev/null | jq -r --arg version "${current_version}" '[.[][] | select(.title == $version)] | .[0].title // empty' 2>/dev/null)"; then
+                echo "Warning: could not list open milestones; skipping milestone assignment" >&2
+                return
+              fi
+              if [[ -z "${milestone_title}" ]]; then
+                echo "Warning: no open milestone titled '${current_version}'; skipping milestone assignment" >&2
+                return
+              fi
+              printf '%s' "${milestone_title}"
+            }
+
+            # Stamp the Bug issue type on the auto-created failure issue (issue
+            # #3064) so it lands in the same triage view as hand-filed bugs.
+            # `gh issue create` has no --type flag, so the type is applied over
+            # REST afterwards. Accepts the issue URL that create prints, or a
+            # bare number. Always returns 0: metadata must never sink the
+            # notification.
+            #
+            # This function is duplicated verbatim across the workflows that
+            # auto-create failure issues rather than sourced from a shared
+            # script, because this job (like the other notifiers) has no
+            # checkout step -- the same reason resolve_milestone reads
+            # package.json over the API instead of from disk.
+            apply_issue_type() {
+              local reference="$1"
+              local number="${reference##*/}"
+              if [[ ! "${number}" =~ ^[0-9]+$ ]]; then
+                echo "Warning: could not parse issue reference '${reference}'; skipping issue type assignment" >&2
+                return 0
+              fi
+              if ! gh api -X PATCH "repos/${GH_REPO}/issues/${number}" -f type=Bug >/dev/null 2>&1; then
+                echo "Warning: failed to set issue type Bug on issue #${number}" >&2
+                return 0
+              fi
+            }
+
+            MILESTONE_TITLE="$(resolve_milestone)"
+            MILESTONE_ARGS=()
+            if [[ -n "${MILESTONE_TITLE}" ]]; then
+              MILESTONE_ARGS+=(--milestone "${MILESTONE_TITLE}")
+            fi
+
+            # Keep the long-lived tracking issue on the current release
+            # milestone and issue type, not just on first creation.
+            annotate_existing_issue() {
+              local number="$1"
+              if [[ -n "${MILESTONE_TITLE}" ]]; then
+                # retry_gh is defined below; bash resolves it at call time.
+                # Setting a milestone is idempotent, so retrying is safe.
+                retry_gh gh issue edit "${number}" --milestone "${MILESTONE_TITLE}" || \
+                  echo "::warning::Failed to set milestone '${MILESTONE_TITLE}' on OCR infrastructure issue #${number}."
+              fi
+              apply_issue_type "${number}"
+            }
+
             retry_gh() {
               local attempt
               for attempt in 1 2 3 4; do
@@ -188,21 +266,29 @@ jobs:
             create_infrastructure_issue() {
               local issue_body_file
               local create_stderr
+              local created_issue
               issue_body_file="$1"
               shift
               create_stderr="$(mktemp)"
-              if gh issue create "$@" --body-file "$issue_body_file" --label "ci/cd" 2>"${create_stderr}"; then
-                rm -f "${create_stderr}"
+              created_issue="$(mktemp)"
+              # Empty arrays expand to an unbound variable under `set -u` on
+              # bash 3.2, so guard every expansion with the `+` alternate form.
+              if gh issue create "$@" --body-file "$issue_body_file" --label "ci/cd" ${MILESTONE_ARGS[@]+"${MILESTONE_ARGS[@]}"} >"${created_issue}" 2>"${create_stderr}"; then
+                cat "${created_issue}"
+                apply_issue_type "$(tail -n 1 "${created_issue}")"
+                rm -f "${create_stderr}" "${created_issue}"
                 return 0
               fi
               if grep -Eqi "label|labels|not found|does not exist" "${create_stderr}"; then
                 echo "::warning::OCR infrastructure issue label was unavailable; retrying without labels."
-                if gh issue create "$@" --body-file "$issue_body_file"; then
-                  rm -f "${create_stderr}"
+                if gh issue create "$@" --body-file "$issue_body_file" ${MILESTONE_ARGS[@]+"${MILESTONE_ARGS[@]}"} >"${created_issue}"; then
+                  cat "${created_issue}"
+                  apply_issue_type "$(tail -n 1 "${created_issue}")"
+                  rm -f "${create_stderr}" "${created_issue}"
                   return 0
                 fi
               fi
-              rm -f "${create_stderr}"
+              rm -f "${create_stderr}" "${created_issue}"
               echo "::warning::Failed to create OCR infrastructure issue."
               return 1
             }
@@ -253,6 +339,7 @@ jobs:
             fi
             if [ -n "$EXISTING_ISSUE" ]; then
               gh issue comment "${EXISTING_ISSUE}" --body-file "$body_file" || echo "::warning::Failed to comment on OCR infrastructure issue."
+              annotate_existing_issue "${EXISTING_ISSUE}"
               converge_duplicate_tracking_issues
               return 0
             fi
@@ -268,6 +355,7 @@ jobs:
             fi
             if [ -n "$EXISTING_ISSUE" ]; then
               gh issue comment "${EXISTING_ISSUE}" --body-file "$body_file" || echo "::warning::Failed to comment on OCR infrastructure issue after recheck."
+              annotate_existing_issue "${EXISTING_ISSUE}"
               converge_duplicate_tracking_issues
               return 0
             fi

@@ -305,6 +305,56 @@ describe('nightly failure notifier repository targeting', () => {
     },
   );
 
+  // Issue #3064: expanding an EMPTY array as "${NAME[@]}" is an unbound
+  // variable error under `set -u` on bash 3.2, so the notifiers use the `+`
+  // alternate form. The scanner must resolve it exactly like the plain form,
+  // otherwise these repository-targeting assertions would silently stop
+  // covering the guarded call sites.
+  it('resolves the set -u guarded array expansion like the plain form', () => {
+    expect(() =>
+      assertIssueCreateRepositoryTargeting([
+        'LABEL_ARGS=(--label "ci/cd")',
+        'CREATE_ARGS=(--repo "${GH_REPO}" --title title)',
+        'CREATE_ARGS+=(${LABEL_ARGS[@]+"${LABEL_ARGS[@]}"})',
+        'retry_gh gh issue create "${CREATE_ARGS[@]}"',
+      ]),
+    ).not.toThrow();
+  });
+
+  it('resolves a guarded expansion of an empty array', () => {
+    expect(() =>
+      assertIssueCreateRepositoryTargeting([
+        'MILESTONE_ARGS=()',
+        'CREATE_ARGS=(--repo "${GH_REPO}" --title title)',
+        'CREATE_ARGS+=(${MILESTONE_ARGS[@]+"${MILESTONE_ARGS[@]}"})',
+        'retry_gh gh issue create "${CREATE_ARGS[@]}"',
+      ]),
+    ).not.toThrow();
+  });
+
+  it('fails closed when a guarded expansion smuggles in a second repository', () => {
+    expect(() =>
+      assertIssueCreateRepositoryTargeting([
+        'LABEL_ARGS=(--repo other/repo)',
+        'CREATE_ARGS=(--repo "${GH_REPO}" --title title)',
+        'CREATE_ARGS+=(${LABEL_ARGS[@]+"${LABEL_ARGS[@]}"})',
+        'retry_gh gh issue create "${CREATE_ARGS[@]}"',
+      ]),
+    ).toThrow('gh issue create must target GH_REPO');
+  });
+
+  it('fails closed on a guarded expansion whose names disagree', () => {
+    expect(() =>
+      assertIssueCreateRepositoryTargeting([
+        'LABEL_ARGS=(--label "ci/cd")',
+        'MILESTONE_ARGS=(--milestone "0.11.0")',
+        'CREATE_ARGS=(--repo "${GH_REPO}" --title title)',
+        'CREATE_ARGS+=(${LABEL_ARGS[@]+"${MILESTONE_ARGS[@]}"})',
+        'retry_gh gh issue create "${CREATE_ARGS[@]}"',
+      ]),
+    ).toThrow('gh issue create must target GH_REPO');
+  });
+
   it('includes top-level arguments in the effective issue-create argv', () => {
     expect(() =>
       assertIssueCreateRepositoryTargeting([

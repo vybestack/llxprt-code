@@ -643,13 +643,41 @@ jobs:
             # gh issue --milestone accepts a milestone TITLE, not a number.
             # Resolve the title by exact match across ALL open milestone
             # pages (issue #3149), then return it for assignment.
-            local milestone_title
-            milestone_title="$(gh api --paginate --slurp "repos/${GH_REPO}/milestones?state=open&per_page=100" --jq "[.[][] | select(.title == \"${current_version}\")] | .[0].title // empty" 2>/dev/null)"
+            local milestone_title=""
+            if ! milestone_title="$(gh api --paginate --slurp "repos/${GH_REPO}/milestones?state=open&per_page=100" 2>/dev/null | jq -r --arg version "${current_version}" '[.[][] | select(.title == $version)] | .[0].title // empty' 2>/dev/null)"; then
+              echo "Warning: could not list open milestones; skipping milestone assignment" >&2
+              return
+            fi
             if [[ -z "${milestone_title}" ]]; then
               echo "Warning: no open milestone titled '${current_version}'; skipping milestone assignment" >&2
               return
             fi
             printf '%s' "${milestone_title}"
+          }
+
+          # Stamp the Bug issue type on the auto-created failure issue (issue
+          # #3064) so it lands in the same triage view as hand-filed bugs.
+          # `gh issue create` has no --type flag, so the type is applied over
+          # REST afterwards. Accepts the issue URL that create prints, or a
+          # bare number. Always returns 0: metadata must never sink the
+          # notification.
+          #
+          # This function is duplicated verbatim across the workflows that
+          # auto-create failure issues rather than sourced from a shared
+          # script, because this job (like the other notifiers) has no checkout
+          # step -- the same reason resolve_milestone reads package.json over
+          # the API instead of from disk.
+          apply_issue_type() {
+            local reference="$1"
+            local number="${reference##*/}"
+            if [[ ! "${number}" =~ ^[0-9]+$ ]]; then
+              echo "Warning: could not parse issue reference '${reference}'; skipping issue type assignment" >&2
+              return 0
+            fi
+            if ! gh api -X PATCH "repos/${GH_REPO}/issues/${number}" -f type=Bug >/dev/null 2>&1; then
+              echo "Warning: failed to set issue type Bug on issue #${number}" >&2
+              return 0
+            fi
           }
 
           LABEL_ARGS=()
@@ -679,6 +707,29 @@ jobs:
             echo "All retries exhausted for: $*" >&2
             return 1
           }
+
+          # Keep a reused failure issue on the current release milestone and
+          # issue type, whether it was found by the outer search or by the
+          # inner race check inside create_issue_once (issues #3149, #3064).
+          annotate_issue() {
+            local reference="$1"
+            local number="${reference##*/}"
+            # Validate before touching the API: retry_gh would otherwise burn
+            # four attempts and three sleeps editing a reference that can never
+            # resolve.
+            if [[ ! "${number}" =~ ^[0-9]+$ ]]; then
+              echo "Warning: could not parse issue reference '${reference}'; skipping milestone and issue type assignment" >&2
+              return 0
+            fi
+            if [[ -n "${MILESTONE_TITLE}" ]]; then
+              retry_gh gh issue edit "${number}" \
+                --repo "${GH_REPO}" \
+                --milestone "${MILESTONE_TITLE}" || \
+                echo "Warning: failed to set milestone '${MILESTONE_TITLE}' on issue #${number}" >&2
+            fi
+            apply_issue_type "${number}"
+          }
+
 
           build_body_file() {
             local body_file="$1"
@@ -720,22 +771,43 @@ jobs:
               echo "ERROR: Failed to comment on existing issue #${EXISTING_ISSUE}" >&2
               exit 1
             }
-            # Keep a long-lived failure issue on the current release milestone
-            # too, not just on first creation (issue #3149).
-            if [[ -n "${MILESTONE_TITLE}" ]]; then
-              retry_gh gh issue edit "${EXISTING_ISSUE}" \
-                --repo "${GH_REPO}" \
-                --milestone "${MILESTONE_TITLE}" || \
-                echo "Warning: failed to set milestone '${MILESTONE_TITLE}' on existing issue #${EXISTING_ISSUE}" >&2
-            fi
+            annotate_issue "${EXISTING_ISSUE}"
           else
             INTRODUCTION="The nightly test workflow failed. Affected jobs: ${FAILED_JOBS_TEXT}."
             build_body_file "${BODY_FILE}" "${INTRODUCTION}"
             CREATE_ARGS=(--repo "${GH_REPO}" --title "${ISSUE_TITLE}" --body-file "${BODY_FILE}")
-            CREATE_ARGS+=("${LABEL_ARGS[@]}")
-            CREATE_ARGS+=("${MILESTONE_ARGS[@]}")
-            retry_gh gh issue create "${CREATE_ARGS[@]}" || {
+            # Empty arrays expand to an unbound variable under `set -u` on bash
+            # 3.2, so guard every expansion with the `+` alternate form.
+            CREATE_ARGS+=(${LABEL_ARGS[@]+"${LABEL_ARGS[@]}"})
+            CREATE_ARGS+=(${MILESTONE_ARGS[@]+"${MILESTONE_ARGS[@]}"})
+            # Issue creation is not idempotent, so a create that reaches GitHub
+            # but reports failure to the client would have retry_gh open a
+            # second "Nightly workflow failed" issue. Re-search before each
+            # attempt, matching evals-nightly.
+            create_issue_once() {
+              local found=""
+              # A failed lookup is not evidence that no issue exists. Treating
+              # it as empty would fall through to create and could open a
+              # duplicate; returning failure makes retry_gh recheck first.
+              if ! found="$(gh issue list --repo "${GH_REPO}" --search "\"${ISSUE_TITLE}\" in:title is:issue state:open" --limit 30 --json number,title --jq "[.[] | select(.title == \"${ISSUE_TITLE}\") | .number] | .[0] // empty" 2>/dev/null)"; then
+                echo "Failed to recheck for an existing issue before creating." >&2
+                return 1
+              fi
+              if [[ -n "${found}" ]]; then
+                echo "Issue #${found} already exists; skipping creation." >&2
+                printf '%s\n' "${found}"
+                return 0
+              fi
+              gh issue create "${CREATE_ARGS[@]}"
+            }
+            CREATED_ISSUE_FILE=created_issue.txt
+            retry_gh create_issue_once > "${CREATED_ISSUE_FILE}" || {
               echo "ERROR: Failed to create nightly failure issue" >&2
               exit 1
             }
+            cat "${CREATED_ISSUE_FILE}"
+            # The reference may be a URL from a fresh create or a bare number
+            # from the race check above; annotate_issue handles both and, on
+            # the race path, supplies the milestone CREATE_ARGS never applied.
+            annotate_issue "$(tail -n 1 "${CREATED_ISSUE_FILE}")"
           fi

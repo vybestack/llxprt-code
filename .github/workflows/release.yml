@@ -615,9 +615,116 @@ jobs:
       - name: Create Issue on Failure
         if: failure()
         run: |
-          gh issue create \
-            --title "Release Failed for ${{ steps.version.outputs.RELEASE_TAG || 'N/A' }} on $(date +'%Y-%m-%d')" \
-            --body "The release workflow failed. See the full run for details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --label "ci/cd"
+          ensure_label() {
+            local name="$1"
+            local color="$2"
+            local description="$3"
+            local existing=""
+            local create_err=""
+            # Capture stderr in create_err while discarding stdout; redirect order matters.
+            if create_err="$(gh label create "${name}" --repo "${GH_REPO}" --color "${color}" --description "${description}" 2>&1 >/dev/null)"; then
+              return
+            fi
+            if ! existing="$(gh label list --repo "${GH_REPO}" --search "${name}" --json name --jq ".[] | select(.name == \"${name}\") | .name" 2>&1)"; then
+              echo "Failed to check for label: ${name}" >&2
+              echo "  create error: ${create_err}" >&2
+              echo "  list error: ${existing}" >&2
+              return 1
+            fi
+            if [[ "${existing}" != "${name}" ]]; then
+              echo "Failed to create or find label: ${name}" >&2
+              return 1
+            fi
+          }
+
+          # Resolve the milestone for the version currently being worked on in
+          # main, so the auto-created failure issue surfaces in the release
+          # view (issue #3064). Source of truth is the root package.json
+          # `version` on main -- not the released ref, which may have bumped
+          # it. Resolved by exact title match against open milestones (not
+          # nearest due date). Fails soft: an unresolvable milestone logs a
+          # warning and returns empty, so the notification still goes out.
+          resolve_milestone() {
+            local package_json
+            if ! package_json="$(gh api "repos/${GH_REPO}/contents/package.json?ref=main" -H 'Accept: application/vnd.github.raw' 2>/dev/null)"; then
+              echo "Warning: could not read package.json from main; skipping milestone resolution" >&2
+              return
+            fi
+            local current_version
+            current_version="$(printf '%s' "${package_json}" | jq -r '.version // empty' 2>/dev/null)"
+            if [[ -z "${current_version}" ]]; then
+              echo "Warning: package.json on main has no version field; skipping milestone resolution" >&2
+              return
+            fi
+            # gh issue --milestone accepts a milestone TITLE, not a number.
+            # Resolve the title by exact match across ALL open milestone pages,
+            # then return it for assignment.
+            local milestone_title=""
+            if ! milestone_title="$(gh api --paginate --slurp "repos/${GH_REPO}/milestones?state=open&per_page=100" 2>/dev/null | jq -r --arg version "${current_version}" '[.[][] | select(.title == $version)] | .[0].title // empty' 2>/dev/null)"; then
+              echo "Warning: could not list open milestones; skipping milestone assignment" >&2
+              return
+            fi
+            if [[ -z "${milestone_title}" ]]; then
+              echo "Warning: no open milestone titled '${current_version}'; skipping milestone assignment" >&2
+              return
+            fi
+            printf '%s' "${milestone_title}"
+          }
+
+          # Stamp the Bug issue type on the auto-created failure issue (issue
+          # #3064) so it lands in the same triage view as hand-filed bugs.
+          # `gh issue create` has no --type flag, so the type is applied over
+          # REST afterwards. Accepts the issue URL that create prints, or a
+          # bare number. Always returns 0: metadata must never sink the
+          # notification.
+          #
+          # This function is duplicated verbatim across the workflows that
+          # auto-create failure issues rather than sourced from a shared
+          # script, because the other notifier jobs have no checkout step --
+          # the same reason resolve_milestone reads package.json over the API
+          # instead of from disk.
+          apply_issue_type() {
+            local reference="$1"
+            local number="${reference##*/}"
+            if [[ ! "${number}" =~ ^[0-9]+$ ]]; then
+              echo "Warning: could not parse issue reference '${reference}'; skipping issue type assignment" >&2
+              return 0
+            fi
+            if ! gh api -X PATCH "repos/${GH_REPO}/issues/${number}" -f type=Bug >/dev/null 2>&1; then
+              echo "Warning: failed to set issue type Bug on issue #${number}" >&2
+              return 0
+            fi
+          }
+
+          MILESTONE_TITLE="$(resolve_milestone)"
+          MILESTONE_ARGS=()
+          if [[ -n "${MILESTONE_TITLE}" ]]; then
+            MILESTONE_ARGS+=(--milestone "${MILESTONE_TITLE}")
+          fi
+
+          CREATE_ARGS=(--repo "${GH_REPO}")
+          CREATE_ARGS+=(--title "Release Failed for ${RELEASE_TAG} on $(date +'%Y-%m-%d')")
+          CREATE_ARGS+=(--body "The release workflow failed. See the full run for details: ${RUN_URL}")
+          LABEL_ARGS=()
+          if ensure_label "ci/cd" "e33539" "Issues with github and the workflow scripts and CI CD environment."; then
+            LABEL_ARGS+=(--label "ci/cd")
+          else
+            echo "Warning: continuing without ci/cd label" >&2
+          fi
+
+          CREATE_ARGS+=(${LABEL_ARGS[@]+"${LABEL_ARGS[@]}"})
+          # Empty arrays expand to an unbound variable under `set -u` on bash
+          # 3.2, so guard every expansion with the `+` alternate form.
+          CREATE_ARGS+=(${MILESTONE_ARGS[@]+"${MILESTONE_ARGS[@]}"})
+
+          CREATED_ISSUE_FILE=created_issue.txt
+          gh issue create "${CREATE_ARGS[@]}" > "${CREATED_ISSUE_FILE}"
+          cat "${CREATED_ISSUE_FILE}"
+          apply_issue_type "$(tail -n 1 "${CREATED_ISSUE_FILE}")"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          # Interpolated through env rather than straight into the run body, so
+          # a value carrying shell metacharacters cannot alter the script.
+          RELEASE_TAG: ${{ steps.version.outputs.RELEASE_TAG || 'N/A' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
