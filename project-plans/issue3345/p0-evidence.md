@@ -843,3 +843,65 @@ and must be covered before the patch ships:
   are the remount triggers from E10.
 - Screen-reader mode, which takes a different renderer branch
   (`ink.js:233-261`).
+
+## E33. Render-path text-cache growth, which applies in every render mode
+
+E9 through E12 concern `fullStaticOutput`, which only accumulates when a
+`<Static>` node emits. Per E21 and E25 that never happens in alternate-buffer
+mode, which is the default. The styled-character cache is different: it is
+exercised by every text render in every mode.
+
+Measured with `text-cache.mjs` (renderer path, 20,000 distinct ~227-character
+strings, `heapUsed` after forced GC), two runs per build:
+
+| Ink build | run 1 | run 2 |
+| --- | ---: | ---: |
+| pinned fork 6.4.8 | 131,891,024 | 131,983,120 |
+| fork 7.1.0 | **1,903,840** | **1,904,416** |
+| upstream 7.1.1 | 120,134,360 | 120,137,800 |
+
+Source of the difference:
+
+- fork 6.4.8 `build/measure-text.js`: `toStyledCharactersCache = new
+  DataLimitedLruMap(10_000, 1_000_000)`, caching arrays of `StyledChar` objects.
+- fork 7.1.0 `build/measure-text.js`: `DataLimitedLruMap(2000, 100_000)`, with a
+  compact `StyledLine` representation (E23).
+- upstream 7.1.1: unbounded `Map` in `measure-text.js` and unbounded object
+  cache in `wrap-text.js` (E11).
+
+On this axis fork 7.1.0 is roughly 69 times better than the current pin, and
+upstream 7.1.1 is not an improvement over the pin. Upstream master's QuickLRU
+change (E12) would alter the upstream number, but it is unreleased.
+
+Limits: JS heap only, synthetic, one string shape with a varying numeric prefix.
+This does not measure native allocations, and says nothing about IOAccelerator or
+IOSurface.
+
+## E34. Prior memory investigations in this repository
+
+Recorded because they establish both the measurement criteria and which leaks are
+already attributed.
+
+| Issue | State | Subject |
+| --- | --- | --- |
+| #2852 | closed | Long-running Bun/Ink memory amplification on macOS. Allocator churn root-caused to an O(N-squared) streaming pipeline and fixed in #2885 |
+| #2905 | **open** | Attribute and bound native IOSurface/IOAccelerator growth for image-bearing sessions. The #2852 phenomenology that was deliberately not claimed as fixed |
+| #3114 | closed | Unbounded long-session growth. Added post-GC plateau verdicts for JSC heap, Bun external memory, and dirty WebKit Malloc |
+| #3329 / #3343 | closed / merged | Per-execution shell process and buffer retention |
+
+Two findings from #2852 that constrain any future leak claim:
+
+1. RSS is not a valid leak criterion under Bun and JSC. That work measured
+   190 MB RSS against a 24 MB physical footprint in the same run. Physical
+   footprint and dirty pages are the criteria.
+2. LLxprt's own source makes no direct use of Metal, IOSurface, IOAccelerator, or
+   WebGPU. Those surfaces originate in Bun's runtime, JavaScriptCore, or macOS
+   frameworks.
+
+#2905 records the unattributed signature as a 22.8 GB physical footprint with
+approximately 13.8 GB dirty WebKit Malloc and 8.6 GB IOAccelerator on an
+image-bearing resumed session, and notes that the JS media path was measured and
+refuted as the cause.
+
+Existing tooling: `npm run mem:profile` (documented in `docs/memory-profiling.md`)
+and `scripts/issue-2852-memory-{target,runner,benchmark}.ts`.

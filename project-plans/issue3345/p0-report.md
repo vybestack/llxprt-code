@@ -55,6 +55,23 @@ approximately 137 direct `Text` import sites (E29). A bounded prototype against
 upstream, scoped to the mounted alternate-buffer viewport, decides the
 conditional gate.
 
+### Scope correction on the memory rationale
+
+Issue #3345's first stated reason is memory, specifically `fullStaticOutput`.
+That accumulator is unreachable in the default configuration, because alternate
+buffer is the default and mounts no `<Static>` (E21, E25). Memory growth observed
+in ordinary use is therefore a different problem with its own history in this
+repository: #2852 (closed, allocator churn from an O(N-squared) streaming
+pipeline), #3114 (closed, plateau verdicts for JSC heap, Bun external memory, and
+dirty WebKit Malloc), and #2905, which is **open** and holds the unattributed
+native signature (E34). This report should not be read as addressing those.
+
+The one finding here that does apply in the default mode is the render-path text
+cache: the current pin grows the heap by about 131.9 MB over 20,000 distinct
+rendered strings, fork 7.1.0 by about 1.9 MB, and upstream 7.1.1 by about
+120.1 MB (E33). That makes a 6.4.8 to 7.1.0 bump a candidate improvement on its
+own terms, separate from both the static accumulator and the migration.
+
 ## Spike configuration
 
 The spike was collected on 2026-08-26 on darwin arm64 with Node v25.2.1 (E0). It
@@ -303,6 +320,30 @@ fork modules without asserting that those exact modules must be reimplemented.
 
 ## Memory findings
 
+### Scope note: which leak this section is about
+
+Issue #3345 frames its memory rationale entirely around `fullStaticOutput`. That
+accumulator only grows when a `<Static>` node emits, which per E21 and E25 never
+happens in alternate-buffer mode, and alternate buffer is the default. So the
+static-retention analysis below describes a defect that the default configuration
+does not reach.
+
+Reports of memory growth in ordinary use are therefore a different problem, and
+this repository has already investigated it. #2852 attributed allocator churn to
+an O(N-squared) streaming pipeline and fixed it; #3114 added post-GC plateau
+verdicts for JSC heap, Bun external memory, and dirty WebKit Malloc; #2905
+remains **open** and holds the unattributed native signature, a 22.8 GB physical
+footprint with roughly 13.8 GB dirty WebKit Malloc and 8.6 GB IOAccelerator on an
+image-bearing resumed session (E34). Any claim about a leak seen in normal use
+belongs against those issues and their tooling, not against this one.
+
+Two constraints from that prior work apply to anything in this section: RSS is
+not a valid leak criterion under Bun and JSC, and none of the native surfaces are
+allocated by LLxprt source (E34).
+
+The one Ink-side memory behavior in this report that does apply in every render
+mode is the styled-character cache, covered under "Render-path text cache" below.
+
 ### Renderer-level static retention
 
 Upstream 7.1.1 still has `fullStaticOutput` and the same append/replay pattern as
@@ -369,6 +410,36 @@ The upstream cache fix, commit `ad9e3ea`, changes both full-string caches to a
 4,096-entry `QuickLRU`. It is on upstream master but in no published release as
 of the P0 capture; PR vadimdemedes/ink#987 was closed without merge and the commit landed
 separately (E1, E12, E13).
+
+### Render-path text cache
+
+This is the one memory behavior in this report that applies in every render mode,
+including the default alternate buffer. Rendering 20,000 distinct strings through
+Ink and sampling `heapUsed` after forced GC, reproducible across two runs (E33):
+
+| Ink build | heap growth |
+| --- | ---: |
+| pinned fork 6.4.8 | ~131.9 MB |
+| fork 7.1.0 | **~1.9 MB** |
+| upstream 7.1.1 | ~120.1 MB |
+
+The pin caches arrays of `StyledChar` objects bounded at 10,000 entries and
+1,000,000 units. Fork 7.1.0 uses a compact `StyledLine` bounded at 2,000 and
+100,000. Upstream 7.1.1's equivalent caches are unbounded (E11, E23, E33).
+
+Two consequences that cut against conclusions elsewhere in this report:
+
+1. On this axis the current pin is close to the worst of the three, and moving to
+   upstream 7.1.1 as published would not improve it. Upstream master's QuickLRU
+   change would, but it is unreleased (E12).
+2. Fork 7.1.0 is roughly 69 times better here, and compiling against it costs 3
+   diagnostics in one test file (E30). A 6.4.8 to 7.1.0 bump is therefore a
+   candidate default-mode memory improvement that is independent of both the
+   static accumulator and the migration decision. It does not change the
+   destination argument, since the fork remains inactive.
+
+Limits: JS heap only, synthetic, one string shape. It measures nothing native and
+says nothing about IOAccelerator or IOSurface (E33).
 
 ### Effect on the issue rationale
 
