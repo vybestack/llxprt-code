@@ -135,6 +135,10 @@ roughly 512 KiB of text.
 | `MAX_PROVIDER_BUFFERED_TEXT_BYTES` | 8 MiB     | ~16x                                  |
 | `MAX_UNCLOSED_FENCE_LENGTH`        | 512 KiB   | ~1x, see below                        |
 
+Sizing uses the largest `maxOutputTokens` the catalog declares. Review pointed
+out that figure is 131,072 (Kimi), not the 128,000 Anthropic value used above,
+so these ratios are marginally optimistic. No cap changes rank as a result.
+
 `MAX_UNCLOSED_FENCE_LENGTH` is the one tight number and it is deliberate. Only a
 maximum-length response consisting *entirely* of one unbroken code block can
 reach it, and the consequence when that happens is cosmetic: the block renders
@@ -148,6 +152,50 @@ accumulated buffer, an O(1) length pre-check settles the common case:
 UTF-8 length is bounded by three times `String.length`, so a cheap comparison
 proves the value is under the limit without scanning it. Otherwise the guard
 would be quadratic in exactly the pathological case it exists to catch.
+
+## What review changed
+
+Two independent reviews ran against this branch and produced 31 findings
+between them. Everything ranked HIGH or MEDIUM that this change introduced is
+fixed. The ones worth a reviewer's attention:
+
+**A memory fix that introduced a crash.** Making the vercel reasoning parser
+throw on the byte limit was correct, but its promise is stored detached with no
+rejection handler. If the consumer never reaches its `await` (the SDK stream
+throws first, the signal aborts, the generator goes un-iterated) that is an
+unobserved rejection, which is a process-level crash. The outcome is now
+captured and rethrown where a caller exists.
+
+**The same bypass in two parsers, fixed in one.** The SSE byte guard measured
+only the trailing incomplete remainder, so appending a newline defeated it: the
+line arrived complete and went to `JSON.parse` unmeasured. I fixed that in the
+vercel parser and did not check its sibling, which had the identical shape.
+Both now share one guard in `streamLimits.ts`.
+
+**Reasoning was counted quadratically.** Providers carrying a `streamId`
+re-emit the whole accumulated thought on every delta, so summing them counted an
+N-character thought about N²/2 times. On a high-reasoning profile, the family
+this incident came from, that would trip the budget during legitimate work. A
+guard that stops healthy runs is worse than no guard.
+
+**Prose was being rendered as code.** The scanner toggles fence state on any
+backtick run, including one inline in prose, while the renderer only honours a
+fence that begins a line. The forced split then reopened the retained tail with
+a synthesized fence. Line-anchoring the scanner broke a test asserting its split
+points match the batch helper exactly, so instead the scanner records whether
+the run was renderable and the split synthesizes a fence only when it was.
+
+**Two behaviour changes beyond scope, caught by the full suite.** The
+interactive loop was re-checking `max_turns` mid-turn, so a subagent on its last
+allowed turn discarded the tool calls it had just emitted. Run-config resolution
+had moved after runtime assembly, so a launch that failed during assembly
+dereferenced a runtime that did not exist and masked the real error. Both were
+confirmed passing on `main` before being treated as regressions.
+
+Findings deliberately left for follow-up, with reasons, are in
+`project-plans/issue3335/REVIEW-NOTES.md`. They are all either pre-existing or
+would widen a memory-bounds change into markdown parsing, tool-call framing, or
+launch ordering.
 
 ## Reviewer Test Plan
 
