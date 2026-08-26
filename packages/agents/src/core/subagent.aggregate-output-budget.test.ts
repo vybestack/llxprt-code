@@ -356,6 +356,33 @@ describe('subagent aggregate output token budget', () => {
       expect(recordTurnOutputTokens(ctx, 6, 400)).toBe(6);
     });
 
+    it('counts code blocks, which a runaway can emit exclusively', () => {
+      const counter = new GeneratedOutputCounter();
+      counter.add([{ type: 'code', code: 'x'.repeat(40) }] as never);
+
+      expect(counter.total).toBe(40);
+    });
+
+    it('ignores tool results and media, which the model did not generate', () => {
+      // Charging a large tool result against a budget meant to stop runaway
+      // generation would stop healthy runs.
+      const counter = new GeneratedOutputCounter();
+      counter.add([
+        { type: 'tool_response', result: 'y'.repeat(5000) },
+        { type: 'media', data: 'z'.repeat(5000) },
+      ] as never);
+
+      expect(counter.total).toBe(0);
+    });
+
+    it('reports zero when both the usage report and the output are empty', () => {
+      const ctx = { output: {} } as unknown as Parameters<
+        typeof recordTurnOutputTokens
+      >[0];
+
+      expect(recordTurnOutputTokens(ctx, 0, 0)).toBe(0);
+    });
+
     it('treats a budget of 0 as stop-immediately, not unlimited', () => {
       // -1 is the only unlimited sentinel. A `> 0` guard anywhere in the chain
       // would turn a deliberate 0 into its opposite.

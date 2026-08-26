@@ -86,6 +86,11 @@ const FALLBACK_CHARACTERS_PER_TOKEN = 4;
  *
  * Thinking without a `streamId` is treated as a true delta and summed, which is
  * what providers that emit incremental thoughts actually send.
+ *
+ * `tool_response` and `media` blocks are deliberately excluded. This budget
+ * bounds what the *model* generated, and those two carry tool results and
+ * inputs the model did not produce. Counting them would let a large tool result
+ * consume a budget meant to stop runaway generation, stopping healthy runs.
  */
 export class GeneratedOutputCounter {
   private plainCharacters = 0;
@@ -95,6 +100,9 @@ export class GeneratedOutputCounter {
     for (const block of blocks) {
       if (block.type === 'text') {
         this.plainCharacters += block.text.length;
+      } else if (block.type === 'code') {
+        // Model-generated like text, and a runaway can emit it exclusively.
+        this.plainCharacters += block.code.length;
       } else if (block.type === 'thinking') {
         this.addThinking(block);
       } else if (block.type === 'tool_call') {

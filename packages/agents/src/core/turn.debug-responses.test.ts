@@ -216,7 +216,7 @@ describe('Turn - debug responses and finished event outcome', () => {
       // Must exceed the trim high-water mark (twice MAX_DEBUG_RESPONSE_CHUNKS),
       // otherwise the stream ends before any trimming is due and the test
       // passes without exercising the bound at all.
-      const chunkCount = 3000;
+      const chunkCount = MAX_DEBUG_RESPONSE_CHUNKS * 3;
       const mockResponseStream = (async function* () {
         for (let index = 0; index < chunkCount; index++) {
           yield {

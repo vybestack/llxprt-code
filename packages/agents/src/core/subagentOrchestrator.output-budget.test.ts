@@ -129,6 +129,33 @@ describe('SubagentOrchestrator aggregate output budget resolution', () => {
     expect(resolved).toBeLessThan(1000 * 16_384);
   });
 
+  it.each([
+    ['Infinity', Number.POSITIVE_INFINITY],
+    ['NaN', Number.NaN],
+  ])(
+    'falls back to the derived default when an explicit budget is %s',
+    async (_label, value) => {
+      // checkOutputBudget tests `total >= budget`, which is false for both, so
+      // a non-finite value would look configured while disabling enforcement.
+      const profile: Profile = {
+        ...baseProfile,
+        modelParams: { max_tokens: 100 },
+        ephemeralSettings: { maxTurnsPerPrompt: 4 },
+      };
+      const { orchestrator, factory } = createOrchestratorForTurns({
+        subagentName: 'nonfinite-output-budget-helper',
+        profile,
+        foregroundConfig: foregroundWithOutputBudget(value),
+      });
+
+      await orchestrator.launch({ name: 'nonfinite-output-budget-helper' });
+
+      const resolved = extractRunConfig(factory).max_output_tokens_total;
+      expect(Number.isFinite(resolved)).toBe(true);
+      expect(resolved).toBe(400);
+    },
+  );
+
   it('omits the aggregate budget when -1 is selected at any higher-precedence source', async () => {
     const profile: Profile = {
       ...baseProfile,

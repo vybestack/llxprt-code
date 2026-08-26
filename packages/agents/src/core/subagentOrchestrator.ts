@@ -515,10 +515,19 @@ export class SubagentOrchestrator {
     // Testing `> 0` instead would silently discard a deliberate 0 (stop
     // immediately) and turn it into no budget at all, which is its opposite.
     // checkOutputBudget treats -1 the same way, and the two must agree.
-    if (maxOutputTokensTotal !== UNLIMITED_OUTPUT_TOKENS_TOTAL) {
+    // A non-finite value must not reach the budget. `checkOutputBudget` tests
+    // `total >= budget`, which is false for both Infinity and NaN, so either
+    // one silently disables enforcement entirely while looking configured.
+    // Falling back to the derived default keeps a bad explicit value from being
+    // more permissive than supplying none at all.
+    const usableMaxOutputTokensTotal = Number.isFinite(maxOutputTokensTotal)
+      ? maxOutputTokensTotal
+      : defaultMaxOutputTokensTotal;
+
+    if (usableMaxOutputTokensTotal !== UNLIMITED_OUTPUT_TOKENS_TOTAL) {
       runConfig.max_output_tokens_total = Math.max(
         0,
-        Math.floor(maxOutputTokensTotal),
+        Math.floor(usableMaxOutputTokensTotal),
       );
     }
 
