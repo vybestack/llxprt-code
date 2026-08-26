@@ -20,7 +20,6 @@
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
-  ContentBlock,
   IContent,
   ToolCallBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -49,6 +48,7 @@ import {
 import type { ExecutionLoopContext } from './subagentExecution.js';
 import {
   checkTerminationConditions,
+  GeneratedOutputCounter,
   processNonInteractiveTextResponse,
   handleExecutionError,
   checkGoalCompletion,
@@ -161,39 +161,6 @@ export function collectNonInteractiveChunk(
     .map((b) => b.text)
     .join('');
   return { text: filteredText, hookRestrictedAllowedTools: allowedTools };
-}
-
-/**
- * Characters the model generated in one chunk, used to estimate output tokens
- * when a provider reports no usage metadata.
- *
- * Counts thinking/reasoning alongside visible text and tool-call arguments,
- * because reasoning is generated output and is billed as such. A profile
- * running high reasoning effort produces far more reasoning than visible text,
- * so omitting it would leave the aggregate budget badly under-counted for
- * exactly the configuration that motivated it (#3335).
- *
- * Deliberately avoids `JSON.stringify`: this runs once per streamed delta, so
- * serialising here would add a per-delta allocation to the hot path this change
- * exists to make cheaper, and JSON syntax would inflate the count well above
- * the characters the model actually produced.
- */
-function countGeneratedCharacters(blocks: readonly ContentBlock[]): number {
-  let total = 0;
-  for (const block of blocks) {
-    if (block.type === 'text') {
-      total += block.text.length;
-    } else if (block.type === 'thinking') {
-      total += block.thought.length;
-    } else if (block.type === 'tool_call') {
-      total += block.name.length;
-      total +=
-        typeof block.parameters === 'string'
-          ? block.parameters.length
-          : JSON.stringify(block.parameters ?? '').length;
-    }
-  }
-  return total;
 }
 
 /** Aggregated result of consuming the full non-interactive stream. */
@@ -321,7 +288,7 @@ async function readStreamToCompletion(
   let parseableTextResponse = '';
   let hookRestrictedAllowedTools: string[] | undefined;
   let reportedOutputTokens: number | undefined;
-  let outputCharacterCount = 0;
+  const outputCounter = new GeneratedOutputCounter();
 
   let result = await readNextNonInteractiveEvent(
     iterator,
@@ -339,14 +306,12 @@ async function readStreamToCompletion(
         parseableTextResponse,
         hookRestrictedAllowedTools,
         reportedOutputTokens,
-        outputCharacterCount,
+        outputCharacterCount: outputCounter.total,
         aborted: true,
       };
     }
     if (resp.type === StreamEventType.CHUNK) {
-      outputCharacterCount += countGeneratedCharacters(
-        resp.value.content.blocks,
-      );
+      outputCounter.add(resp.value.content.blocks);
       reportedOutputTokens =
         resp.value.usage?.completionTokens ?? reportedOutputTokens;
       const chunkResult = collectNonInteractiveChunk(
@@ -376,7 +341,7 @@ async function readStreamToCompletion(
     parseableTextResponse,
     hookRestrictedAllowedTools,
     reportedOutputTokens,
-    outputCharacterCount,
+    outputCharacterCount: outputCounter.total,
     aborted: false,
   };
 }

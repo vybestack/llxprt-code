@@ -24,6 +24,8 @@ import { SubAgentScope } from './subagent.js';
 import {
   checkOutputBudget,
   checkTerminationConditions,
+  GeneratedOutputCounter,
+  recordTurnOutputTokens,
 } from './subagentExecution.js';
 import {
   createMockConfig,
@@ -302,6 +304,56 @@ describe('subagent aggregate output token budget', () => {
 
       expect(result.shouldStop).toBe(true);
       expect(result.reason).toBe(SubagentTerminateMode.MAX_TURNS);
+    });
+
+    it('counts a cumulative reasoning span once, not once per delta', () => {
+      // Providers that carry a streamId re-emit the whole accumulated thought
+      // on every delta. Summing them counts an N-character thought about N^2/2
+      // times, which would trip an aggregate budget during legitimate work on a
+      // high-reasoning profile.
+      const counter = new GeneratedOutputCounter();
+      for (let length = 1; length <= 100; length += 1) {
+        counter.add([
+          {
+            type: 'thinking',
+            thought: 'x'.repeat(length),
+            streamId: 'span-1',
+          },
+        ] as never);
+      }
+
+      expect(counter.total).toBe(100);
+    });
+
+    it('sums thinking deltas that carry no stream identity', () => {
+      // Without a streamId the provider is sending true increments, so they do
+      // add up. Collapsing these would undercount reasoning to nearly nothing.
+      const counter = new GeneratedOutputCounter();
+      for (let index = 0; index < 10; index += 1) {
+        counter.add([{ type: 'thinking', thought: 'xxx' }] as never);
+      }
+
+      expect(counter.total).toBe(30);
+    });
+
+    it('falls back to the estimate when usage reports zero despite output', () => {
+      // Some providers normalise a missing completion count to 0. Treating that
+      // as authoritative stops the run being counted at all.
+      const ctx = { output: {} } as unknown as Parameters<
+        typeof recordTurnOutputTokens
+      >[0];
+
+      expect(recordTurnOutputTokens(ctx, 0, 400)).toBe(100);
+    });
+
+    it('trusts an accurate report even when text is denser than the estimate', () => {
+      // Real tokenizers pack code and JSON far tighter than four characters per
+      // token. Overriding the provider here would stop runs early.
+      const ctx = { output: {} } as unknown as Parameters<
+        typeof recordTurnOutputTokens
+      >[0];
+
+      expect(recordTurnOutputTokens(ctx, 6, 400)).toBe(6);
     });
 
     it('treats a budget of 0 as stop-immediately, not unlimited', () => {
