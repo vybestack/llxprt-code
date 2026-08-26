@@ -16,7 +16,7 @@ describe('dispatchAgentEvent usage events', () => {
 
   afterEach(() => {
     if (initialCount !== undefined) {
-      uiTelemetryService.setLastPromptTokenCount?.(initialCount);
+      uiTelemetryService.setLastPromptTokenCount(initialCount);
     }
   });
 
