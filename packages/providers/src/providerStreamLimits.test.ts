@@ -121,8 +121,22 @@ describe('provider stream byte limits', () => {
 
     await expect(result).rejects.toBeInstanceOf(ProviderStreamProtocolError);
     await expect(result).rejects.toThrow(
-      `incomplete SSE line exceeded ${MAX_PROVIDER_SSE_LINE_BYTES}-byte limit`,
+      `SSE line exceeded ${MAX_PROVIDER_SSE_LINE_BYTES}-byte limit`,
     );
+  });
+
+  it('rejects an oversized COMPLETE OpenAI Responses SSE line', async () => {
+    // Measuring only the unfinished remainder after the newline split is
+    // bypassed by a single terminating newline: the oversized value then lands
+    // in the completed lines and is parsed unmeasured. The only difference from
+    // the test above is that newline.
+    const oversizedLine = `${'x'.repeat(MAX_PROVIDER_SSE_LINE_BYTES + 1)}\n`;
+
+    const result = collect(
+      parseResponsesStream(createSseStream([oversizedLine])),
+    );
+
+    await expect(result).rejects.toBeInstanceOf(ProviderStreamProtocolError);
   });
 
   it('rejects oversized OpenAI Responses tool arguments per call', async () => {
