@@ -12,21 +12,22 @@
  * is terminal, but the request MAY still repair auth for FUTURE requests by
  * invoking the auth error handler once (never replaying this request).
  *
- * The one-shot flag lives in a WeakSet keyed on the RetryRequestContext —
- * the same lifecycle as the commit state — so repair can never run twice for
- * one request and never leaks across requests.
+ * The one-shot flag is claimed on the shared metadata record (the same
+ * record the commit state lives on, via claimRequestAuthRepair), so repair
+ * can never run twice for one request — even when nested orchestrator
+ * layers resolve their own RetryRequestContext for that request — and
+ * never leaks across requests.
  */
 
 import type { GenerateChatOptions } from './IProvider.js';
 import {
+  claimRequestAuthRepair,
   getRequestCommitState,
   type RetryRequestContext,
 } from './retryRequestContext.js';
 import type { RetryFailure } from './retryFailureTaxonomy.js';
 import { getOnAuthErrorHandlerFromOptions } from './retryConfigHandlers.js';
 import { getRequestSignal } from './utils/abortSignal.js';
-
-const authRepairAttempted = new WeakSet<RetryRequestContext>();
 
 export interface RetryDecision {
   readonly type: 'throw';
@@ -54,8 +55,7 @@ async function repairAuthForFutureRequests(
   if (getRequestCommitState(request).committed !== true) return;
   if (failure.kind !== 'auth') return;
   if (getOnAuthErrorHandlerFromOptions(request.options) === undefined) return;
-  if (authRepairAttempted.has(request)) return;
-  authRepairAttempted.add(request);
+  if (!claimRequestAuthRepair(request.options)) return;
   try {
     await invoke(
       failure.cause,

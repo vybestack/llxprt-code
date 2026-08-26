@@ -95,6 +95,10 @@ function readStringProperty(
  * envelope (`error.code`), the Codex/ChatGPT `detail` envelope, and the
  * `providerErrorType` field that parseErrorResponse lifts onto thrown
  * errors. Mirrors the positions recognized by quota classification.
+ *
+ * The error's own top-level `code` property is deliberately NOT read: Node
+ * transport errors store errno identifiers there (ECONNRESET, ETIMEDOUT,
+ * UND_ERR_SOCKET) which would pollute telemetry as fake provider codes.
  */
 function getProviderCode(error: unknown): string | undefined {
   const envelope = readRecordProperty(error, 'error');
@@ -104,7 +108,6 @@ function getProviderCode(error: unknown): string | undefined {
     [detail, 'type'],
     [envelope, 'type'],
     [error, 'type'],
-    [error, 'code'],
     [error, 'providerErrorType'],
     [envelope, 'code'],
     [openAiDetail, 'code'],

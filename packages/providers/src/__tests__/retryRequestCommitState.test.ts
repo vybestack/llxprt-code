@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { GenerateChatOptions } from '../IProvider.js';
 import {
+  claimRequestAuthRepair,
   getRequestCommitState,
   markRequestCommitted,
   markTerminalSeen,
@@ -130,6 +131,32 @@ describe('retry request commit state', () => {
     });
     nested.releaseBudget();
     outer.releaseBudget();
+  });
+
+  it('grants the one-shot auth repair slot once per request across nested contexts', () => {
+    const outer = createContext();
+    // A nested orchestrator (e.g. an LB backend attempt) resolves its own
+    // context object for the same live request; both must contend for the
+    // single repair slot on the shared metadata record, not per-context.
+    const nested = createContext(outer.options);
+
+    expect(claimRequestAuthRepair(outer.options)).toBe(true);
+    expect(claimRequestAuthRepair(nested.options)).toBe(false);
+    expect(claimRequestAuthRepair(outer.options)).toBe(false);
+
+    nested.releaseBudget();
+    outer.releaseBudget();
+  });
+
+  it('does not leak the auth repair slot into the next request', () => {
+    const first = createContext();
+    const second = createContext();
+
+    expect(claimRequestAuthRepair(first.options)).toBe(true);
+    expect(claimRequestAuthRepair(second.options)).toBe(true);
+
+    second.releaseBudget();
+    first.releaseBudget();
   });
 
   it('retains transport budget release semantics', () => {

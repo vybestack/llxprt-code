@@ -9,6 +9,7 @@ import { attachProviderErrorObservationContext } from './providerErrorObservatio
 import type { StreamExposure } from './retryFailureTaxonomy.js';
 import {
   attachTransportAttemptBudget,
+  readTransportAttemptBudgetFromRecord,
   RETRY_REQUEST_CONTEXT_KEY,
   type TransportAttemptBudget,
 } from './transportAttemptBudget.js';
@@ -429,6 +430,28 @@ export function markTerminalSeen(context: RetryRequestContext): void {
 }
 
 /**
+ * Claims the request's one-shot post-commitment auth repair slot.
+ *
+ * The flag lives on the shared metadata record — not on the per-layer
+ * RetryRequestContext object — because nested orchestrators (e.g. a
+ * load-balancer backend attempt) resolve their own context for the same
+ * live request while sharing one record. Repair therefore runs at most
+ * once per request regardless of how many layers observe the committed
+ * auth failure.
+ *
+ * @returns True when this call won the slot; false when repair already ran.
+ */
+export function claimRequestAuthRepair(options: GenerateChatOptions): boolean {
+  const record = options.metadata?.[RETRY_REQUEST_CONTEXT_KEY];
+  if (!isMutableRequestCommitState(record)) {
+    throw new TypeError('Retry request metadata context was not attached');
+  }
+  if (record.authRepairAttempted === true) return false;
+  record.authRepairAttempted = true;
+  return true;
+}
+
+/**
  * Options-only handle for recording recovery accounting from delegate
  * layers (e.g. load-balancer backend attempts) that hold request options
  * rather than the request context object.
@@ -473,8 +496,8 @@ export function findRequestAttemptFacts(options: GenerateChatOptions):
       readonly committed: boolean;
       readonly exposure: StreamExposure;
       readonly terminalSeen: boolean;
-      readonly budgetUsed: number;
-      readonly budgetLimit: number;
+      readonly budgetUsed?: number;
+      readonly budgetLimit?: number;
       readonly totalWaitMs: number;
       readonly visitedTargetCount: number;
       readonly visitedCredentialCount: number;
@@ -483,14 +506,7 @@ export function findRequestAttemptFacts(options: GenerateChatOptions):
   | undefined {
   const record = options.metadata?.[RETRY_REQUEST_CONTEXT_KEY];
   if (!isMutableRequestCommitState(record)) return undefined;
-  const budget = (
-    record as {
-      transportAttemptBudget?: { used?: unknown; limit?: unknown };
-    }
-  ).transportAttemptBudget;
-  const budgetUsed = typeof budget?.used === 'number' ? budget.used : 0;
-  const budgetLimit =
-    typeof budget?.limit === 'number' ? budget.limit : budgetUsed;
+  const budget = readTransportAttemptBudgetFromRecord(record);
   const tracking = record[RETRY_REQUEST_CONTEXT_KEYS.recoveryTracking];
   const trackingFacts = isRecoveryTracking(tracking) ? tracking : undefined;
   const totalWaitMs = trackingFacts?.totalWaitMs ?? 0;
@@ -504,8 +520,9 @@ export function findRequestAttemptFacts(options: GenerateChatOptions):
     committed: record.committed,
     exposure: record.exposure,
     terminalSeen: record.terminalSeen,
-    budgetUsed,
-    budgetLimit,
+    ...(budget !== undefined
+      ? { budgetUsed: budget.used, budgetLimit: budget.limit }
+      : {}),
     totalWaitMs,
     visitedTargetCount,
     visitedCredentialCount,

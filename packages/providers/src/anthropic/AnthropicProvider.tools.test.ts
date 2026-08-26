@@ -168,8 +168,6 @@ describe('AnthropicProvider', () => {
             delta: { stop_reason: 'end_turn' },
           };
           throw new Error('Connection terminated after terminal metadata');
-
-          yield { type: 'message_stop' };
         },
       };
 

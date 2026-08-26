@@ -285,7 +285,7 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
   describe('composed with the retry orchestrator', () => {
     interface ScriptedAnthropicOptions {
       readonly scripts: ReadonlyArray<
-        (events: Event[]) => AsyncGenerator<Anthropic.MessageStreamEvent>
+        () => AsyncGenerator<Anthropic.MessageStreamEvent>
       >;
     }
 
@@ -308,8 +308,7 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
           const script =
             options.scripts[Math.min(calls, options.scripts.length - 1)];
           calls++;
-          const events: Event[] = [];
-          return processAnthropicStream(script(events), {
+          return processAnthropicStream(script(), {
             ...baseProcessorOptions,
             commitState: findRequestCommitState(resolved),
           });

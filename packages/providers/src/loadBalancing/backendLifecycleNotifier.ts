@@ -111,8 +111,12 @@ export function notifyBackendEnd(
         ? {
             committed: facts.committed,
             exposure: facts.exposure,
-            budgetUsed: facts.budgetUsed,
-            budgetLimit: facts.budgetLimit,
+            ...(facts.budgetUsed !== undefined
+              ? { budgetUsed: facts.budgetUsed }
+              : {}),
+            ...(facts.budgetLimit !== undefined
+              ? { budgetLimit: facts.budgetLimit }
+              : {}),
             totalWaitMs: facts.totalWaitMs,
             visitedTargetCount: facts.visitedTargetCount,
             visitedCredentialCount: facts.visitedCredentialCount,

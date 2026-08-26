@@ -22,6 +22,12 @@ interface FailureCase {
   readonly label: string;
   readonly error: unknown;
   readonly expected: Readonly<Record<string, unknown>>;
+  /**
+   * Pinned pre-commit retryability of this shape, asserted literally so a
+   * regression against intended policy fails the case instead of comparing
+   * the implementation to itself.
+   */
+  readonly retryable: boolean;
 }
 
 function errorWithStatus(status: number): Error & { status: number } {
@@ -42,6 +48,7 @@ const mappingCases: FailureCase[] = [
     label: '429 without Retry-After',
     error: errorWithStatus(429),
     expected: { phase: 'headers', kind: 'rate_limit', status: 429 },
+    retryable: true,
   },
   {
     label: '429 with Retry-After',
@@ -54,66 +61,81 @@ const mappingCases: FailureCase[] = [
       status: 429,
       retryAfterMs: 2_000,
     },
+    retryable: true,
   },
   {
     label: '5xx server response',
     error: errorWithStatus(503),
     expected: { phase: 'headers', kind: 'server', status: 503 },
+    retryable: true,
   },
   {
     label: '401 authentication response',
     error: errorWithStatus(401),
     expected: { phase: 'auth', kind: 'auth', status: 401 },
+    retryable: true,
   },
   {
     label: '403 authentication response',
     error: errorWithStatus(403),
     expected: { phase: 'auth', kind: 'auth', status: 403 },
+    retryable: false,
   },
   {
     label: '402 payment response',
     error: errorWithStatus(402),
     expected: { phase: 'auth', kind: 'payment', status: 402 },
+    retryable: false,
   },
   {
     label: '400 invalid request',
     error: errorWithStatus(400),
     expected: { phase: 'headers', kind: 'invalid_request', status: 400 },
+    retryable: false,
   },
   {
     label: '404 invalid request',
     error: errorWithStatus(404),
     expected: { phase: 'headers', kind: 'invalid_request', status: 404 },
+    retryable: false,
   },
   {
     label: '422 invalid request',
     error: errorWithStatus(422),
     expected: { phase: 'headers', kind: 'invalid_request', status: 422 },
+    retryable: false,
   },
   {
     label: 'network transient',
     error: Object.assign(new Error('socket reset'), { code: 'ECONNRESET' }),
     expected: { phase: 'connect', kind: 'network' },
+    retryable: true,
+  },
+  {
+    // Deliberate divergence: load-balancer request timeouts are governed by
+    // the load balancer's own failover settings, not orchestrator retry.
+    label: 'request timeout message',
+    error: new Error('Request timeout after 1000ms'),
+    expected: { phase: 'stream', kind: 'timeout' },
+    retryable: false,
   },
   {
     label: 'stream timeout message',
     error: new Error('Stream timeout after 1000ms'),
     expected: { phase: 'stream', kind: 'timeout' },
-  },
-  {
-    label: 'request timeout message',
-    error: new Error('Request timeout after 1000ms'),
-    expected: { phase: 'stream', kind: 'timeout' },
+    retryable: true,
   },
   {
     label: 'AbortError cancellation',
     error: new DOMException('request cancelled', 'AbortError'),
     expected: { phase: 'cancellation', kind: 'cancelled' },
+    retryable: false,
   },
   {
     label: 'unknown error',
     error: new Error('unclassified provider failure'),
     expected: { phase: 'protocol', kind: 'unknown' },
+    retryable: false,
   },
   {
     label: 'Anthropic overloaded_error body',
@@ -123,6 +145,7 @@ const mappingCases: FailureCase[] = [
       kind: 'overload',
       providerCode: 'overloaded_error',
     },
+    retryable: true,
   },
   {
     label: 'Anthropic rate_limit_error body',
@@ -132,6 +155,7 @@ const mappingCases: FailureCase[] = [
       kind: 'rate_limit',
       providerCode: 'rate_limit_error',
     },
+    retryable: true,
   },
   {
     label: 'Anthropic api_error body',
@@ -141,6 +165,7 @@ const mappingCases: FailureCase[] = [
       kind: 'server',
       providerCode: 'api_error',
     },
+    retryable: true,
   },
   {
     label: 'Anthropic overloaded_error body with 529 status',
@@ -153,6 +178,7 @@ const mappingCases: FailureCase[] = [
       status: 529,
       providerCode: 'overloaded_error',
     },
+    retryable: true,
   },
 ];
 
@@ -189,11 +215,12 @@ describe('decodeRetryFailure', () => {
 });
 
 describe('isRetryableFailure', () => {
-  it.each(mappingCases)('matches shouldRetryError for $label', ({ error }) => {
-    const failure = decodeRetryFailure(error);
-
-    expect(isRetryableFailure(failure)).toBe(shouldRetryError(error));
-  });
+  it.each(mappingCases)(
+    'classifies $label as retryable=$retryable before commitment',
+    ({ error, retryable }) => {
+      expect(isRetryableFailure(decodeRetryFailure(error))).toBe(retryable);
+    },
+  );
 
   it('publishes the pre-commit retryable kinds', () => {
     expect([...RETRYABLE_FAILURE_KINDS]).toStrictEqual([
@@ -220,7 +247,7 @@ describe('isRetryableFailure', () => {
 
   it('decides eligibility from the full failure: terminal-quota 429 does not retry', () => {
     const terminalQuota = Object.assign(errorWithStatus(429), {
-      code: 'insufficient_quota',
+      error: { code: 'insufficient_quota' },
     });
 
     expect(decodeRetryFailure(terminalQuota).kind).toBe('rate_limit');
@@ -311,29 +338,63 @@ describe('isRetryableFailure', () => {
     expect(isRetryableFailure(failure)).toBe(false);
   });
 
-  it('agrees with shouldRetryError across representative error shapes', () => {
-    const representative: unknown[] = [
-      errorWithStatus(400),
-      errorWithStatus(404),
-      errorWithStatus(422),
-      errorWithStatus(429),
-      errorWithStatus(500),
-      errorWithStatus(503),
-      errorWithStatus(401),
-      errorWithStatus(403),
-      errorWithStatus(402),
-      Object.assign(errorWithStatus(429), { code: 'insufficient_quota' }),
-      { name: 'AbortError', message: 'aborted' },
-      new Error('ECONNRESET style transient'),
-      new RequestTimeoutError(250),
-      new StreamTruncatedError(),
-      new MalformedStreamEventError('input_json_delta without tool block'),
-    ];
+  it('pins retryability for shapes outside the mapping table', () => {
+    // Terminal-quota 429: rate_limit kind, but quota exhaustion is terminal.
+    expect(
+      isRetryableFailure(
+        decodeRetryFailure(
+          Object.assign(errorWithStatus(429), {
+            error: { code: 'insufficient_quota' },
+          }),
+        ),
+      ),
+    ).toBe(false);
+    // Name-only abort object (no DOMException class).
+    expect(
+      isRetryableFailure(
+        decodeRetryFailure({ name: 'AbortError', message: 'aborted' }),
+      ),
+    ).toBe(false);
+    // Message-only transient WITHOUT an errno code property: the classifier
+    // still recognizes known transport phrases in the message itself.
+    expect(
+      isRetryableFailure(
+        decodeRetryFailure(new Error('ECONNRESET style transient')),
+      ),
+    ).toBe(true);
+    expect(
+      isRetryableFailure(
+        decodeRetryFailure(new Error('provider failed for no stated reason')),
+      ),
+    ).toBe(false);
+    expect(
+      isRetryableFailure(decodeRetryFailure(new StreamTruncatedError())),
+    ).toBe(true);
+    expect(
+      isRetryableFailure(
+        decodeRetryFailure(
+          new MalformedStreamEventError('input_json_delta without tool block'),
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      isRetryableFailure(decodeRetryFailure(new RequestTimeoutError(250))),
+    ).toBe(false);
+  });
 
-    for (const error of representative) {
-      expect(isRetryableFailure(decodeRetryFailure(error))).toBe(
-        shouldRetryError(error),
-      );
-    }
+  it('routes shouldRetryError through the taxonomy policy', () => {
+    // shouldRetryError is the compatibility seam over isRetryableFailure;
+    // these two assertions would catch it being re-derived independently.
+    expect(shouldRetryError(errorWithStatus(503))).toBe(true);
+    expect(shouldRetryError(errorWithStatus(403))).toBe(false);
+  });
+
+  it('never reports transport errno codes as provider codes', () => {
+    const failure = decodeRetryFailure(
+      Object.assign(new Error('socket reset'), { code: 'ECONNRESET' }),
+    );
+
+    expect(failure.kind).toBe('network');
+    expect(failure.providerCode).toBeUndefined();
   });
 });
