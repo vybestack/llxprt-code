@@ -244,8 +244,10 @@ export function useCancellation(
   const cancelOngoingRequest = useCallback(() => {
     // Slash commands run outside the streaming lifecycle: they set neither
     // isResponding nor toolCalls, so streamingState is Idle while one is in
-    // flight and the gate below would swallow the Esc (issue #2976). Cancel
-    // the slash command first, then fall through to turn cancellation.
+    // flight and the gate below would swallow the Esc (issue #2976). Hence
+    // this runs ahead of the gate. In the usual case the state IS Idle and the
+    // gate then returns, leaving turn cancellation untouched; the turn is only
+    // cancelled as well when one is genuinely in flight.
     if (cancelActiveSlashCommand()) {
       addItem(
         { type: MessageType.INFO, text: SLASH_COMMAND_CANCELLED },
