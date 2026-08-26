@@ -39,18 +39,6 @@ describe('LoggingProviderWrapper Metrics', () => {
         return 'no-usage-model';
       }
 
-      getServerTools(): string[] {
-        return [];
-      }
-
-      async invokeServerTool(
-        _toolName: string,
-        _params: unknown,
-        _config?: unknown,
-      ): Promise<unknown> {
-        return {};
-      }
-
       async *generateChatCompletion(
         options: GenerateChatOptions,
       ): AsyncIterableIterator<IContent> {
@@ -246,12 +234,6 @@ describe('LoggingProviderWrapper Metrics', () => {
         getDefaultModel(): string {
           return 'multi-chunk-model';
         }
-        getServerTools(): string[] {
-          return [];
-        }
-        async invokeServerTool(): Promise<unknown> {
-          return {};
-        }
         async *generateChatCompletion(
           options: GenerateChatOptions,
         ): AsyncIterableIterator<IContent> {
@@ -310,12 +292,6 @@ describe('LoggingProviderWrapper Metrics', () => {
         }
         getDefaultModel(): string {
           return 'tool-model';
-        }
-        getServerTools(): string[] {
-          return [];
-        }
-        async invokeServerTool(): Promise<unknown> {
-          return {};
         }
         async *generateChatCompletion(
           options: GenerateChatOptions,

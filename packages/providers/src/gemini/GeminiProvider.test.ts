@@ -139,7 +139,6 @@ describe('GeminiProvider', () => {
 
     const provider = new GeminiProvider('override-key');
     const overrides = {
-      serverTools: [],
       toolConfig: {
         functionCallingConfig: {
           mode: 'NONE',
@@ -165,7 +164,6 @@ describe('GeminiProvider', () => {
     await generator.next();
 
     const request = generateContentStreamMock.mock.calls[0][0];
-    expect(request.config.serverTools).toStrictEqual([]);
     expect(request.config.toolConfig).toStrictEqual(overrides.toolConfig);
   });
 

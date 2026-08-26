@@ -39,8 +39,6 @@ interface StubToken {
 function makeStubProvider(baseUrl: string | undefined): IProvider {
   return {
     name: 'codex',
-    getServerTools: () => [],
-    invokeServerTool: () => Promise.resolve(undefined),
     generateChatCompletion: (() =>
       undefined) as unknown as IProvider['generateChatCompletion'],
     baseProviderConfig: baseUrl ? { baseURL: baseUrl } : undefined,

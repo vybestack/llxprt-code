@@ -76,8 +76,6 @@ function createCapturingProvider(name: string): CapturingProvider {
     },
     getModels: async () => [],
     getDefaultModel: () => 'test',
-    getServerTools: () => [],
-    invokeServerTool: async () => ({}),
   };
 }
 
@@ -303,8 +301,6 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
         },
         getModels: async () => [],
         getDefaultModel: () => 'model-a',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
       const secondary: IProvider = {
         name: 'anthropic',
@@ -321,8 +317,6 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
         },
         getModels: async () => [],
         getDefaultModel: () => 'model-b',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
       providerManager.registerProvider(primary);
       providerManager.registerProvider(secondary);
@@ -400,8 +394,6 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
         },
         getModels: async () => [],
         getDefaultModel: () => 'model-a',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
       providerManager.registerProvider(delegate);
 
@@ -495,8 +487,6 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
         },
         getModels: async () => [],
         getDefaultModel: () => 'model-a',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       providerManager.setTokenizerFactory(createTokenizerFactory({}));
@@ -684,8 +674,6 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
         },
         getModels: async () => [],
         getDefaultModel: () => 'model-a',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       providerManager.setTokenizerFactory(createTokenizerFactory({}));

@@ -122,8 +122,6 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
         getModels: vi.fn(async () => []),
         getDefaultModel: () => 'stub-model',
         generateChatCompletion: vi.fn(async function* () {}),
-        getServerTools: () => [],
-        invokeServerTool: vi.fn(),
       };
       localManager.registerProvider(provider);
       localManager.setActiveProvider('stub');
@@ -175,8 +173,6 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
         getModels: vi.fn(async () => []),
         getDefaultModel: () => 'stub-model',
         generateChatCompletion: vi.fn(async function* () {}),
-        getServerTools: () => [],
-        invokeServerTool: vi.fn(),
       };
       localManager.registerProvider(provider);
       localManager.setActiveProvider('stub');
@@ -290,8 +286,6 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
             legacyEstimate: () => Promise.resolve(10),
           };
         },
-        getServerTools: () => [],
-        invokeServerTool: vi.fn(),
       };
       localManager.registerProvider(provider);
       localManager.setActiveProvider('stub');
@@ -416,8 +410,6 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
             legacyEstimate: () => Promise.resolve(10),
           };
         },
-        getServerTools: () => [],
-        invokeServerTool: vi.fn(),
       };
       localManager.registerProvider(provider);
       localManager.setActiveProvider('stub');

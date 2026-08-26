@@ -143,8 +143,6 @@ describe('Issue #3130 slice 3b — attempt-level token-usage records', () => {
       getModels: async () => [],
       getDefaultModel: () => 'stub-model',
       generateChatCompletion,
-      getServerTools: () => [],
-      invokeServerTool: async () => ({}),
     };
     manager.registerProvider(provider);
   }

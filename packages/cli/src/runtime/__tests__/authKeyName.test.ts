@@ -80,8 +80,6 @@ function createStubProvider(): IProvider {
     getModels: async () => [],
     async *generateChatCompletion() {},
     getDefaultModel: () => 'test-model',
-    getServerTools: () => [],
-    invokeServerTool: async () => ({}),
     isPaidMode: () => false,
   } as IProvider;
 }

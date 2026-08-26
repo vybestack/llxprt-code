@@ -130,8 +130,6 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       getDefaultModel: () => 'stub-model',
       generateChatCompletion:
         generateChatCompletion as IProvider['generateChatCompletion'],
-      getServerTools: () => [],
-      invokeServerTool: vi.fn(),
       getAuthToken: vi.fn(async () => 'stub-auth-token'),
     } as unknown as IProvider;
     manager.registerProvider(provider);
@@ -614,8 +612,6 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       },
       getModels: async () => [],
       getDefaultModel: () => 'stub-model',
-      getServerTools: () => [],
-      invokeServerTool: async () => undefined,
     };
     const orchestrator = new RetryOrchestrator(delegate, {
       maxAttempts: 1,
@@ -664,8 +660,6 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       },
       getModels: async () => [],
       getDefaultModel: () => 'stub-model',
-      getServerTools: () => [],
-      invokeServerTool: async () => undefined,
     };
     const orchestrator = new RetryOrchestrator(delegate, {
       maxAttempts: 1,

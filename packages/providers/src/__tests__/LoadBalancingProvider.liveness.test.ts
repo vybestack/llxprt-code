@@ -55,8 +55,6 @@ describe('LoadBalancingProvider — onStreamLiveness propagation (issue #2607 fi
         },
         getModels: async () => [],
         getDefaultModel: () => 'delegate-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       } as unknown as IProvider;
     }
 

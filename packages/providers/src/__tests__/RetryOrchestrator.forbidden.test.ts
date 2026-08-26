@@ -64,12 +64,6 @@ function createTestProvider(config: {
     getDefaultModel(): string {
       return 'test-model';
     },
-    getServerTools(): string[] {
-      return [];
-    },
-    async invokeServerTool(): Promise<unknown> {
-      return null;
-    },
   };
 }
 

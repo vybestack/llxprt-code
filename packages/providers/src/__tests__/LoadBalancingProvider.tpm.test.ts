@@ -43,7 +43,6 @@ function createMockProviderWithUsage(
         },
       } as unknown as IContent;
     },
-    getServerTools: () => [],
   };
 }
 

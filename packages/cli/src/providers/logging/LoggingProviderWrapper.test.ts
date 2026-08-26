@@ -54,8 +54,6 @@ function createMockProvider(name: string): IProvider {
       };
     }),
     getDefaultModel: vi.fn().mockReturnValue(`${name}-default-model`),
-    getServerTools: vi.fn().mockReturnValue([]),
-    invokeServerTool: vi.fn().mockResolvedValue({}),
   };
 }
 
@@ -422,8 +420,6 @@ describe('Multi-Provider Conversation Logging', () => {
         };
       },
       getDefaultModel: vi.fn().mockReturnValue('streaming-default-model'),
-      getServerTools: vi.fn().mockReturnValue([]),
-      invokeServerTool: vi.fn().mockResolvedValue({}),
     };
 
     config = createConfigWithLogging(true);

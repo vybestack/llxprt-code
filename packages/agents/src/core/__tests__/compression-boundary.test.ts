@@ -127,8 +127,6 @@ function buildMockProvider(summaryText: string): RuntimeProvider {
     }),
     getModels: vi.fn(async () => []),
     getDefaultModel: vi.fn(() => 'test-model'),
-    getServerTools: vi.fn(() => []),
-    invokeServerTool: vi.fn(async () => undefined),
   };
 }
 

@@ -88,8 +88,6 @@ describe('OpenAIVercelProvider', () => {
       expect(typeof provider.getModels).toBe('function');
       expect(typeof provider.generateChatCompletion).toBe('function');
       expect(typeof provider.getDefaultModel).toBe('function');
-      expect(typeof provider.getServerTools).toBe('function');
-      expect(typeof provider.invokeServerTool).toBe('function');
     });
 
     it('should have name property set to "openaivercel"', () => {
@@ -115,21 +113,6 @@ describe('OpenAIVercelProvider', () => {
       const provider = new OpenAIVercelProvider('test-api-key');
       const defaultModel = provider.getDefaultModel();
       expect(defaultModel).toBe('custom-model');
-    });
-  });
-
-  describe('Server Tools', () => {
-    it('should return empty array for getServerTools', () => {
-      const provider = new OpenAIVercelProvider('test-api-key');
-      const serverTools = provider.getServerTools();
-      expect(serverTools).toStrictEqual([]);
-    });
-
-    it('should throw error for invokeServerTool', async () => {
-      const provider = new OpenAIVercelProvider('test-api-key');
-      await expect(provider.invokeServerTool('some-tool', {})).rejects.toThrow(
-        "Server tool 'some-tool' not supported",
-      );
     });
   });
 

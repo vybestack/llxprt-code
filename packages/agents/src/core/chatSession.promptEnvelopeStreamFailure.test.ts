@@ -51,8 +51,6 @@ function createMidStreamFailingProvider(): IProvider {
     getDefaultModel: () => 'test-model',
     getCurrentModel: () => 'test-model',
     getModels: () => Promise.resolve([]),
-    getServerTools: () => [],
-    invokeServerTool: () => Promise.resolve(undefined),
     async *generateChatCompletion(): AsyncIterableIterator<IContent> {
       yield {
         speaker: 'ai',

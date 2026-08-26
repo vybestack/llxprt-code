@@ -73,8 +73,6 @@ describe('LoadBalancingProvider', () => {
           },
           getModels: async () => [],
           getDefaultModel: () => 'gemini-flash',
-          getServerTools: () => [],
-          invokeServerTool: async () => ({}),
         };
 
         const originalGetProvider =
@@ -153,8 +151,6 @@ describe('LoadBalancingProvider', () => {
           },
           getModels: async () => [],
           getDefaultModel: () => 'gemini-flash',
-          getServerTools: () => [],
-          invokeServerTool: async () => ({}),
         };
 
         const originalGetProvider =
@@ -218,8 +214,6 @@ describe('LoadBalancingProvider', () => {
           },
           getModels: async () => [],
           getDefaultModel: () => 'gemini-flash',
-          getServerTools: () => [],
-          invokeServerTool: async () => ({}),
         };
 
         const originalGetProvider =
@@ -285,8 +279,6 @@ describe('LoadBalancingProvider', () => {
           },
           getModels: async () => [],
           getDefaultModel: () => 'gemini-flash',
-          getServerTools: () => [],
-          invokeServerTool: async () => ({}),
         };
 
         const originalGetProvider =
@@ -376,8 +368,6 @@ describe('LoadBalancingProvider', () => {
           },
           getModels: async () => [],
           getDefaultModel: () => 'claude-opus-4-8',
-          getServerTools: () => [],
-          invokeServerTool: async () => ({}),
         };
 
         const originalGetProvider =
@@ -453,8 +443,6 @@ describe('LoadBalancingProvider', () => {
           },
           getModels: async () => [],
           getDefaultModel: () => 'claude-test',
-          getServerTools: () => [],
-          invokeServerTool: async () => ({}),
         };
         const originalGetProvider =
           providerManager.getProviderByName.bind(providerManager);
@@ -522,8 +510,6 @@ describe('LoadBalancingProvider', () => {
           },
           getModels: async () => [],
           getDefaultModel: () => 'gemini-flash',
-          getServerTools: () => [],
-          invokeServerTool: async () => ({}),
         };
 
         const originalGetProvider =
@@ -587,8 +573,6 @@ describe('LoadBalancingProvider', () => {
           },
           getModels: async () => [],
           getDefaultModel: () => 'gemini-flash',
-          getServerTools: () => [],
-          invokeServerTool: async () => ({}),
         };
 
         const originalGetProvider =
@@ -652,8 +636,6 @@ describe('LoadBalancingProvider', () => {
           },
           getModels: async () => [],
           getDefaultModel: () => 'gemini-flash',
-          getServerTools: () => [],
-          invokeServerTool: async () => ({}),
         };
 
         const originalGetProvider =
@@ -725,8 +707,6 @@ describe('LoadBalancingProvider', () => {
           },
           getModels: async () => [],
           getDefaultModel: () => 'gemini-flash',
-          getServerTools: () => [],
-          invokeServerTool: async () => ({}),
         };
 
         const originalGetProvider =
@@ -796,8 +776,6 @@ describe('LoadBalancingProvider', () => {
           },
           getModels: async () => [],
           getDefaultModel: () => 'gpt-4',
-          getServerTools: () => [],
-          invokeServerTool: async () => ({}),
         };
 
         const originalGetProvider =

@@ -82,8 +82,6 @@ function createEstimatingProvider(
     getDefaultModel: () => 'test-model',
     getCurrentModel: () => 'test-model',
     getModels: () => Promise.resolve([]),
-    getServerTools: () => [],
-    invokeServerTool: () => Promise.resolve(undefined),
     async *generateChatCompletion(
       options: GenerateChatOptions,
     ): AsyncIterableIterator<IContent> {
@@ -480,8 +478,6 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
       getDefaultModel: () => 'test-model',
       getCurrentModel: () => 'test-model',
       getModels: () => Promise.resolve([]),
-      getServerTools: () => [],
-      invokeServerTool: () => Promise.resolve(undefined),
       async *generateChatCompletion(
         options: GenerateChatOptions,
       ): AsyncIterableIterator<IContent> {
@@ -567,8 +563,6 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
       getDefaultModel: () => 'test-model',
       getCurrentModel: () => 'test-model',
       getModels: () => Promise.resolve([]),
-      getServerTools: () => [],
-      invokeServerTool: () => Promise.resolve(undefined),
       async *generateChatCompletion(
         _options: GenerateChatOptions,
       ): AsyncIterableIterator<IContent> {
@@ -599,8 +593,6 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
       getDefaultModel: () => 'test-model',
       getCurrentModel: () => 'test-model',
       getModels: () => Promise.resolve([]),
-      getServerTools: () => [],
-      invokeServerTool: () => Promise.resolve(undefined),
       async *generateChatCompletion(
         _options: GenerateChatOptions,
       ): AsyncIterableIterator<IContent> {
@@ -628,8 +620,6 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
       getDefaultModel: () => 'test-model',
       getCurrentModel: () => 'test-model',
       getModels: () => Promise.resolve([]),
-      getServerTools: () => [],
-      invokeServerTool: () => Promise.resolve(undefined),
       async *generateChatCompletion(
         options: GenerateChatOptions,
       ): AsyncIterableIterator<IContent> {

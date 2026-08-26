@@ -50,8 +50,6 @@ function makeFakeProvider(
     },
     getModels: async () => [],
     getDefaultModel: () => 'test-model',
-    getServerTools: () => [],
-    invokeServerTool: async () => ({ content: [] }),
   };
   return { provider, counter };
 }

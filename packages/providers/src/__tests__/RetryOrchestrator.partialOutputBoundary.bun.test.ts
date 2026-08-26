@@ -69,14 +69,6 @@ describe('RetryOrchestrator partial-output boundary (issue 3048 fence)', () => {
       getDefaultModel(): string {
         return 'test-model';
       }
-
-      getServerTools(): string[] {
-        return [];
-      }
-
-      async invokeServerTool(): Promise<unknown> {
-        return null;
-      }
     }
     const provider = new PartialOutputProvider();
 

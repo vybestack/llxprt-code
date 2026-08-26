@@ -43,8 +43,6 @@ describe('LoadBalancingProvider selection emits a dedicated selection event', ()
       },
       getModels: async () => [],
       getDefaultModel: () => 'delegate-model',
-      getServerTools: () => [],
-      invokeServerTool: async () => ({}),
     } as unknown as IProvider;
   }
 
@@ -193,8 +191,6 @@ describe('LoadBalancingProvider selection emits a dedicated selection event', ()
       },
       getModels: async () => [],
       getDefaultModel: () => 'gpt-5.5',
-      getServerTools: () => [],
-      invokeServerTool: async () => ({}),
     } as unknown as IProvider;
 
     const originalGetProvider =

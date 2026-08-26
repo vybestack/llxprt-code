@@ -71,7 +71,6 @@ describe('generateAutoPrompt', () => {
       expect.objectContaining({
         message: expect.stringContaining('Review Python code'),
         config: expect.objectContaining({
-          serverTools: [],
           toolConfig: {
             functionCallingConfig: {
               mode: 'NONE',
@@ -97,7 +96,6 @@ describe('generateAutoPrompt', () => {
     expect(client.generateDirectMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         config: expect.objectContaining({
-          serverTools: [],
           toolConfig: {
             functionCallingConfig: {
               mode: 'NONE',

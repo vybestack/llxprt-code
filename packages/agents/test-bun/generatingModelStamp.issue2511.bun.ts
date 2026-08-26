@@ -93,8 +93,6 @@ function buildConversationManager(
     getModels: async () => [],
     getDefaultModel: () => runtimeModel,
     generateChatCompletion: async function* () {},
-    getServerTools: () => [],
-    invokeServerTool: async () => undefined,
     getAuthToken: async () => 'stub-auth-token',
   };
   if (liveProvider?.liveModel === 'throw') {
@@ -244,8 +242,6 @@ function buildChatSessionWithLiveProvider(
         blocks: [{ type: 'text', text: 'Quiet morning dew.' }],
       } satisfies IContent;
     },
-    getServerTools: () => [],
-    invokeServerTool: async () => undefined,
     getAuthToken: async () => 'stub-auth-token',
   };
   if (liveProvider?.liveModel !== undefined) {

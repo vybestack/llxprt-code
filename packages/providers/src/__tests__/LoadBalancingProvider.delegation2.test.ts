@@ -53,8 +53,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'gemini-flash',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const originalGetProvider =
@@ -106,8 +104,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'gemini-flash',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const originalGetProvider =
@@ -160,8 +156,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'model-1',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const mockProvider2 = {
@@ -172,8 +166,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'model-2',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const originalGetProvider =
@@ -336,8 +328,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'model-1',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const callCount = { count: 0 };
@@ -421,8 +411,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'gemini-flash',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const originalGetProvider =
@@ -471,8 +459,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'gemini-flash',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const originalGetProvider =
@@ -520,8 +506,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'gemini-flash',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const originalGetProvider =

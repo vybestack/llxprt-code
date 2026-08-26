@@ -209,10 +209,6 @@ describe('LoadBalancingProvider', () => {
           this.calls += 1;
           yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
         },
-        getServerTools: () => [],
-        invokeServerTool: async () => {
-          throw new Error('unexpected server tool invocation');
-        },
       };
       providerManager.registerProvider(delegateProvider);
       const provider = new LoadBalancingProvider(
@@ -247,55 +243,6 @@ describe('LoadBalancingProvider', () => {
 
       await expect(iterator.next()).rejects.toThrow(/context limit exceeded/);
       expect(delegateProvider.calls).toBe(0);
-    });
-
-    it('should have getServerTools method that returns an array', () => {
-      expect(
-        LoadBalancingProvider,
-        'LoadBalancingProvider class not found',
-      ).toBeDefined();
-
-      const lbConfig: LoadBalancingProviderConfig = {
-        profileName: 'test-lb-profile',
-        strategy: 'round-robin',
-        subProfiles: [
-          {
-            name: 'sub-profile-1',
-            providerName: 'gemini',
-          },
-        ],
-      };
-
-      const provider = new LoadBalancingProvider(lbConfig, providerManager);
-
-      expect(provider).toHaveProperty('getServerTools');
-      expect(typeof provider.getServerTools).toBe('function');
-
-      const result = provider.getServerTools();
-      expect(Array.isArray(result)).toBe(true);
-    });
-
-    it('should have invokeServerTool method', () => {
-      expect(
-        LoadBalancingProvider,
-        'LoadBalancingProvider class not found',
-      ).toBeDefined();
-
-      const lbConfig: LoadBalancingProviderConfig = {
-        profileName: 'test-lb-profile',
-        strategy: 'round-robin',
-        subProfiles: [
-          {
-            name: 'sub-profile-1',
-            providerName: 'gemini',
-          },
-        ],
-      };
-
-      const provider = new LoadBalancingProvider(lbConfig, providerManager);
-
-      expect(provider).toHaveProperty('invokeServerTool');
-      expect(typeof provider.invokeServerTool).toBe('function');
     });
   });
   describe('constructor configuration acceptance', () => {

@@ -64,8 +64,6 @@ function providerStub(overrides: Partial<IProvider> = {}): IProvider {
     getModels: vi.fn().mockResolvedValue([]),
     getDefaultModel: vi.fn().mockReturnValue('default-model'),
     generateChatCompletion: vi.fn(),
-    getServerTools: vi.fn().mockReturnValue([]),
-    invokeServerTool: vi.fn().mockRejectedValue(new Error('not implemented')),
     ...overrides,
   } as unknown as IProvider;
 }
@@ -347,7 +345,6 @@ describe('extracted provider helper behavior', () => {
     const provider = providerStub({
       name: 'openai',
       getDefaultModel: vi.fn().mockReturnValue('gpt-4o'),
-      getServerTools: vi.fn().mockReturnValue(['web_search']),
     });
     const capabilitiesMap = new Map();
     const service = new ProviderCapabilitiesService(capabilitiesMap);
@@ -371,7 +368,6 @@ describe('extracted provider helper behavior', () => {
     capabilitiesMap.set('openai', capabilities);
 
     expect(getBaseUrlFromProvider(wrapper)).toBe('https://inner.example.test');
-    expect(capabilities.supportsTools).toBe(true);
     expect(capabilities.supportsVision).toBe(true);
     expect(
       service.createProviderContext(

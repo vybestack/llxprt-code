@@ -231,8 +231,6 @@ function createDefaultProviderAdapter(): AgentRuntimeProviderAdapter {
             yield { speaker: 'ai', blocks: [] };
           }),
           getDefaultModel: () => defaultModelConfig.model,
-          getServerTools: () => [],
-          invokeServerTool: vi.fn(),
         }) as unknown as IProvider,
     ),
     setActiveProvider: vi.fn(),

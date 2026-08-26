@@ -171,14 +171,6 @@ describe('headless provider-manager construction (issue #1594)', () => {
       async getAuthToken(): Promise<string> {
         return 'inline-fake-token';
       }
-
-      getServerTools(): string[] {
-        return [];
-      }
-
-      async invokeServerTool(): Promise<unknown> {
-        throw new Error('InlineFakeProvider does not support server tools');
-      }
     }
 
     const { manager } = createHeadlessProviderManager({ provider: 'openai' });

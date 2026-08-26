@@ -26,12 +26,6 @@ class FakeProviderBase implements IProvider {
   getDefaultModel(): string {
     return 'fake-model';
   }
-  getServerTools(): string[] {
-    return [];
-  }
-  async invokeServerTool(): Promise<unknown> {
-    return {};
-  }
   async *generateChatCompletion(
     _contentOrOptions: IContent[] | GenerateChatOptions,
     _tools?: ProviderToolset,

@@ -24,8 +24,6 @@ export function makeMockProvider(name: string): IProvider {
     },
     getModels: async () => [],
     getDefaultModel: () => 'model',
-    getServerTools: () => [],
-    invokeServerTool: async () => ({}),
   } as unknown as IProvider;
 }
 
@@ -61,8 +59,6 @@ export function makeThrowingProvider(name: string): IProvider {
     },
     getModels: async () => [],
     getDefaultModel: () => 'model',
-    getServerTools: () => [],
-    invokeServerTool: async () => ({}),
   } as unknown as IProvider;
 }
 

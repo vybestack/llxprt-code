@@ -143,8 +143,6 @@ describe('System prompt provider — non-foreground subagent (issue #3176, D5)',
         capturedCalls.push(optionsOrContents);
         yield { speaker: 'ai', blocks: [{ type: 'text', text: 'done' }] };
       }),
-      getServerTools: () => [],
-      invokeServerTool: vi.fn(),
     };
     const manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);

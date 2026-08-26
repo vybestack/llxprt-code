@@ -52,8 +52,6 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => null,
       };
       providerManager.registerProvider(delegate);
       const provider = new LoadBalancingProvider(
@@ -123,8 +121,6 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'primary-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => null,
       };
       const secondary: IProvider = {
         name: 'secondary-provider',
@@ -137,8 +133,6 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'secondary-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => null,
       };
       providerManager.registerProvider(primary);
       providerManager.registerProvider(secondary);
@@ -203,8 +197,6 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => null,
       };
       providerManager.registerProvider(delegate);
       const provider = new LoadBalancingProvider(
@@ -254,8 +246,6 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => null,
       };
       providerManager.registerProvider(delegate);
       const provider = new LoadBalancingProvider(
@@ -311,8 +301,6 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({ content: [] }),
       };
 
       providerManager.registerProvider(mockProvider);
@@ -363,8 +351,6 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({ content: [] }),
       };
 
       providerManager.registerProvider(mockProvider);
@@ -415,8 +401,6 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({ content: [] }),
       };
 
       providerManager.registerProvider(mockProvider);
@@ -474,8 +458,6 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({ content: [] }),
       };
 
       providerManager.registerProvider(mockProvider);
@@ -544,8 +526,6 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({ content: [] }),
       };
 
       providerManager.registerProvider(mockProvider);
@@ -680,8 +660,6 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'gemini-flash',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const originalGetProvider =

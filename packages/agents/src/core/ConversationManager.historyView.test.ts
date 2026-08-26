@@ -72,8 +72,6 @@ function buildConversationManager(): {
     getModels: vi.fn(async () => []),
     getDefaultModel: () => GENERATING_MODEL,
     generateChatCompletion: vi.fn(async function* () {}),
-    getServerTools: () => [],
-    invokeServerTool: vi.fn(),
     getAuthToken: vi.fn(async () => 'stub-auth-token'),
   };
   manager.registerProvider(provider);

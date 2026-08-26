@@ -39,8 +39,6 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({ content: [] }),
       };
 
       providerManager.registerProvider(mockProvider);
@@ -97,8 +95,6 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({ content: [] }),
       };
 
       providerManager.registerProvider(mockProvider);
@@ -166,8 +162,6 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({ content: [] }),
       };
 
       providerManager.registerProvider(mockProvider);
@@ -229,8 +223,6 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({ content: [] }),
       };
 
       providerManager.registerProvider(mockProvider);
@@ -291,8 +283,6 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({ content: [] }),
       };
 
       providerManager.registerProvider(mockProvider);
@@ -366,8 +356,6 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({ content: [] }),
       };
 
       providerManager.registerProvider(mockProvider);
@@ -418,8 +406,6 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({ content: [] }),
       };
 
       providerManager.registerProvider(mockProvider);
@@ -472,8 +458,6 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({ content: [] }),
       };
 
       providerManager.registerProvider(mockProvider);
@@ -549,8 +533,6 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({ content: [] }),
       };
 
       providerManager.registerProvider(mockProvider);

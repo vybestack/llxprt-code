@@ -33,12 +33,6 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
       getDefaultModel(): string {
         return 'test-model';
       }
-      getServerTools(): string[] {
-        return [];
-      }
-      async invokeServerTool(): Promise<unknown> {
-        return {};
-      }
       async *generateChatCompletion(
         options: GenerateChatOptions,
       ): AsyncIterableIterator<IContent> {
@@ -74,12 +68,6 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
       }
       getDefaultModel(): string {
         return 'test-model';
-      }
-      getServerTools(): string[] {
-        return [];
-      }
-      async invokeServerTool(): Promise<unknown> {
-        return {};
       }
       async *generateChatCompletion(
         options: GenerateChatOptions,
@@ -118,12 +106,6 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
       }
       getDefaultModel(): string {
         return 'test-model';
-      }
-      getServerTools(): string[] {
-        return [];
-      }
-      async invokeServerTool(): Promise<unknown> {
-        return {};
       }
       async *generateChatCompletion(
         options: GenerateChatOptions,
@@ -169,12 +151,6 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
       }
       getDefaultModel(): string {
         return 'test-model';
-      }
-      getServerTools(): string[] {
-        return [];
-      }
-      async invokeServerTool(): Promise<unknown> {
-        return {};
       }
       async *generateChatCompletion(
         options: GenerateChatOptions,
@@ -435,12 +411,6 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
       getDefaultModel(): string {
         return 'test-model';
       }
-      getServerTools(): string[] {
-        return [];
-      }
-      async invokeServerTool(): Promise<unknown> {
-        return {};
-      }
       async *generateChatCompletion(
         options: GenerateChatOptions,
       ): AsyncIterableIterator<IContent> {
@@ -539,12 +509,6 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
       }
       getDefaultModel(): string {
         return 'test-model';
-      }
-      getServerTools(): string[] {
-        return [];
-      }
-      async invokeServerTool(): Promise<unknown> {
-        return {};
       }
       async *generateChatCompletion(
         options: GenerateChatOptions,

@@ -94,8 +94,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'gemini-flash',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       // Mock ProviderManager.getProviderByName to return our mock
@@ -154,8 +152,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'gemini-flash',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const mockOpenAIProvider = {
@@ -165,8 +161,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'gpt-4',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const originalGetProvider =
@@ -232,8 +226,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'gemini-flash',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const originalGetProvider =
@@ -287,8 +279,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'gemini-flash',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const originalGetProvider =
@@ -349,8 +339,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'gemini-flash',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const originalGetProvider =
@@ -407,8 +395,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'gemini-flash',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const originalGetProvider =
@@ -472,8 +458,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'gemini-flash',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const mockOpenAI = {
@@ -483,8 +467,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'gpt-4',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const mockAnthropic = {
@@ -494,8 +476,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'claude-3',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const originalGetProvider =
@@ -555,8 +535,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'gemini-flash',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const mockOpenAI = {
@@ -569,8 +547,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'gpt-4',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const originalGetProvider =

@@ -61,12 +61,6 @@ class RetryThenSucceedProvider implements IProvider {
   getDefaultModel(): string {
     return 'retry-model';
   }
-  getServerTools(): string[] {
-    return [];
-  }
-  async invokeServerTool(): Promise<unknown> {
-    return {};
-  }
 
   generateChatCompletion(
     _options: GenerateChatOptions,
@@ -118,12 +112,6 @@ class AbortableProvider implements IProvider {
   getDefaultModel(): string {
     return 'abort-model';
   }
-  getServerTools(): string[] {
-    return [];
-  }
-  async invokeServerTool(): Promise<unknown> {
-    return {};
-  }
 
   generateChatCompletion(
     _options: GenerateChatOptions,
@@ -166,12 +154,6 @@ class AlwaysErrorProvider implements IProvider {
   }
   getDefaultModel(): string {
     return 'error-model';
-  }
-  getServerTools(): string[] {
-    return [];
-  }
-  async invokeServerTool(): Promise<unknown> {
-    return {};
   }
 
   generateChatCompletion(
@@ -219,12 +201,6 @@ class CacheDataProvider implements IProvider {
   }
   getDefaultModel(): string {
     return 'cache-model';
-  }
-  getServerTools(): string[] {
-    return [];
-  }
-  async invokeServerTool(): Promise<unknown> {
-    return {};
   }
 
   generateChatCompletion(

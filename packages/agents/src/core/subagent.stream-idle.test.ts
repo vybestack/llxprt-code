@@ -171,8 +171,6 @@ describe('subagent.ts', () => {
                 name: config.getProvider(),
                 generateChatCompletion: vi.fn(async function* () {}),
                 getDefaultModel: () => config.getModel(),
-                getServerTools: () => [],
-                invokeServerTool: vi.fn(),
               }) as IProvider,
           ),
           setActiveProvider: vi.fn(),
