@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent, ToolResponseBlock } from './IContent.js';
 import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
@@ -514,20 +514,16 @@ describe('HistoryService.replaceToolResponseBlock', () => {
 
     const recalculationStarted = createDeferred();
     const continueRecalculation = createDeferred();
-    let failReplacementEstimate = true;
+    const countTokens = vi
+      .fn<() => Promise<number>>()
+      .mockResolvedValue(1)
+      .mockImplementationOnce(async () => {
+        recalculationStarted.resolve();
+        await continueRecalculation.promise;
+        throw new Error('replacement tokenization failed');
+      });
     const tokenizerFactory: RuntimeTokenizerFactory = {
-      getTokenizer: () => ({
-        fallbackPolicy: 'deny',
-        countTokens: async () => {
-          if (failReplacementEstimate) {
-            failReplacementEstimate = false;
-            recalculationStarted.resolve();
-            await continueRecalculation.promise;
-            throw new Error('replacement tokenization failed');
-          }
-          return 1;
-        },
-      }),
+      getTokenizer: () => ({ fallbackPolicy: 'deny', countTokens }),
       estimatePrompt: async (request) => ({
         count: 0,
         method: 'calibrated',
@@ -582,19 +578,16 @@ describe('HistoryService.replaceToolResponseBlock', () => {
 
     const recalculationStarted = createDeferred();
     const continueRecalculation = createDeferred();
-    let holdFirstEstimate = true;
+    const countTokens = vi
+      .fn<() => Promise<number>>()
+      .mockResolvedValue(1)
+      .mockImplementationOnce(async () => {
+        recalculationStarted.resolve();
+        await continueRecalculation.promise;
+        return 1;
+      });
     const tokenizerFactory: RuntimeTokenizerFactory = {
-      getTokenizer: () => ({
-        fallbackPolicy: 'deny',
-        countTokens: async () => {
-          if (holdFirstEstimate) {
-            holdFirstEstimate = false;
-            recalculationStarted.resolve();
-            await continueRecalculation.promise;
-          }
-          return 1;
-        },
-      }),
+      getTokenizer: () => ({ fallbackPolicy: 'deny', countTokens }),
       estimatePrompt: async (request) => ({
         count: 0,
         method: 'calibrated',

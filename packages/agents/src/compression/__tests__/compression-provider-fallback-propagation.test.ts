@@ -165,6 +165,10 @@ function estimateBookkeepingProjection(contents: IContent[]): Promise<number> {
   return Promise.resolve(hasCommittedSnapshot ? 10 : 150_000);
 }
 
+function restoredPromptTokenBaseline(baseline: number | null): number {
+  return baseline ?? 0;
+}
+
 // ---------------------------------------------------------------------------
 // Finding 1: Provider fallback failure propagation through real wiring
 // ---------------------------------------------------------------------------
@@ -574,7 +578,7 @@ describe('Finding 2: stage-aware projection errors in ProviderContentEnforcer (I
         promptTokenBaseline = 0;
       },
       restorePromptTokenBaseline: (baseline) => {
-        promptTokenBaseline = baseline ?? 0;
+        promptTokenBaseline = restoredPromptTokenBaseline(baseline);
       },
     });
     harness.deps.performCompression.mockResolvedValue(
@@ -632,7 +636,7 @@ describe('Finding 2: stage-aware projection errors in ProviderContentEnforcer (I
         promptTokenBaseline = 0;
       },
       restorePromptTokenBaseline: (baseline) => {
-        promptTokenBaseline = baseline ?? 0;
+        promptTokenBaseline = restoredPromptTokenBaseline(baseline);
       },
     });
     harness.deps.performCompression.mockResolvedValue(
@@ -683,7 +687,7 @@ describe('Finding 2: stage-aware projection errors in ProviderContentEnforcer (I
         throw new Error('prompt baseline reset failed');
       },
       restorePromptTokenBaseline: (baseline) => {
-        promptTokenBaseline = baseline ?? 0;
+        promptTokenBaseline = restoredPromptTokenBaseline(baseline);
       },
     });
     harness.deps.performCompression.mockResolvedValue(
