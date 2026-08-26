@@ -171,6 +171,8 @@ describe('LoadBalancingProvider attempt telemetry (issue #2532)', () => {
     expect(failed.committed).toBe(false);
     expect(failed.exposure).toBe('none');
     expect(failed.budgetUsed).toBeGreaterThanOrEqual(1);
+    expect(failed.budgetUsed).toBeDefined();
+    expect(failed.budgetLimit).toBeDefined();
     expect(failed.budgetLimit).toBeGreaterThanOrEqual(failed.budgetUsed!);
 
     expect(succeeded.status).toBe('success');

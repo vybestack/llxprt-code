@@ -103,10 +103,10 @@ function startDelegateIterator(
 ): { attempt: DelegateAttempt; iterator: AsyncGenerator<IContent> } {
   const tracking = findRequestRecoveryTracking(resolvedOptions);
   tracking?.recordTarget(subProfile.name);
-  if (subProfile.authToken !== undefined) {
+  if (tracking && subProfile.authToken !== undefined) {
     // Only an opaque digest is stored; the token itself never enters the
     // request budget record (issue #2532 telemetry-no-secrets rule).
-    tracking?.recordCredentialId(
+    tracking.recordCredentialId(
       createHash('sha256')
         .update(subProfile.authToken)
         .digest('hex')
