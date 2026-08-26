@@ -87,20 +87,26 @@ export async function* guardStream(
               attemptController.signal,
             )
           : await nextPromise;
-      firstChunk = false;
       if (result.done === true) {
+        // A stream that completes without content on its FIRST next() is a
+        // normal empty stream, not a failure: leave it uncommitted and do not
+        // close it. No chunk could have escaped before this point.
         completed = true;
         return chunksYielded;
       }
+      firstChunk = false;
       chunksYielded = true;
       markRequestCommitted(context, exposureOf(result.value));
       yield result.value;
     }
   } catch (error) {
     failed = true;
-    const propagatedFailure = chunksYielded
-      ? markErrorAfterStreamOutput(error)
-      : error;
+    // A failure raised while still waiting on (or racing) the FIRST next() can
+    // never follow a yielded chunk, so it stays retryable; only errors after
+    // an outward yield are marked terminal.
+    const propagatedFailure = firstChunk
+      ? error
+      : markErrorAfterStreamOutput(error);
     failure = propagatedFailure;
     throw propagatedFailure;
   } finally {

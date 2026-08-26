@@ -60,6 +60,7 @@ import {
 } from './utils/abortSignal.js';
 import {
   resolveRetryRequestContext,
+  getRequestCommitState,
   type RetryRequestContext,
 } from './retryRequestContext.js';
 import {
@@ -75,6 +76,8 @@ import {
   resetRetryErrorCounters,
   updateRetryErrorCounters,
 } from './retryErrorClassification.js';
+import { decodeRetryFailure } from './retryFailureTaxonomy.js';
+import { decideCommittedFailure } from './retryCommitGate.js';
 import {
   createRetriesExhaustedError,
   throwIfEmptyStreamExhaustsBudget,
@@ -402,13 +405,14 @@ export class RetryOrchestrator implements IProvider {
       if (attemptError === undefined) continue;
       const action = await this.handleRetryError(
         attemptError,
+        request,
         requestOptions,
+        signal,
         retryState,
         maxAttempts,
         initialDelayMs,
         1,
         bucketFailoverHandler,
-        signal,
         authRetryTimeoutMs,
         budget,
       );
@@ -497,7 +501,9 @@ export class RetryOrchestrator implements IProvider {
 
   private async handleRetryError(
     error: unknown,
+    request: RetryRequestContext,
     options: GenerateChatOptions,
+    signal: AbortSignal | undefined,
     state: {
       attempt: number;
       currentDelay: number;
@@ -510,12 +516,32 @@ export class RetryOrchestrator implements IProvider {
     initialDelayMs: number,
     failoverThreshold: number,
     bucketFailoverHandler: BucketFailoverHandler | undefined,
-    signal: AbortSignal | undefined,
     authRetryTimeoutMs: number,
     budget: { used: number; limit: number },
   ): Promise<{ type: 'throw'; error: unknown } | { type: 'continue' }> {
     state.attempt = budget.used;
-    if (isTerminalRetryError(error)) return { type: 'throw', error };
+    const terminalFailure =
+      isTerminalRetryError(error) || getRequestCommitState(request).committed
+        ? decodeRetryFailure(error)
+        : undefined;
+    if (terminalFailure !== undefined) {
+      // Post-exposure failures are terminal: the guarded stream commits
+      // before every outward yield, and its post-yield errors also carry the
+      // WeakSet terminal mark. A committed request may still repair auth for
+      // FUTURE requests (one-shot, no replay), then the error surfaces.
+      return decideCommittedFailure(
+        error,
+        request,
+        terminalFailure,
+        (authError, authOptions, errorStatus, authSignal) =>
+          this.invokeAuthErrorHandler(
+            authError,
+            authOptions,
+            errorStatus,
+            authSignal,
+          ),
+      );
+    }
 
     const classification = classifyRetryError(error);
     const { status: errorStatus, category, ...f } = classification;
