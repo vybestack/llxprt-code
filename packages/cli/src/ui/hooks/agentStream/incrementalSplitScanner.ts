@@ -214,11 +214,24 @@ export class IncrementalSplitScanner {
     );
   }
 
+  /**
+   * Split offset for a forced split, never landing inside a surrogate pair.
+   *
+   * Both halves matter. Landing on a low surrogate would strip its leading
+   * partner from the retained tail; landing on a high surrogate would leave
+   * that half at the end of the committed text with its partner in the tail.
+   * Either way the pair is torn and both sides render a replacement character.
+   */
   private forcedSplitPoint(): number {
     const candidate = this.text.length - FORCED_SPLIT_RETAINED_LENGTH;
     const code = this.text.charCodeAt(candidate);
-    const splitsSurrogatePair = code >= 0xdc00 && code <= 0xdfff;
-    return splitsSurrogatePair ? candidate + 1 : candidate;
+    const isLowSurrogate = code >= 0xdc00 && code <= 0xdfff;
+    if (isLowSurrogate) {
+      return candidate + 1;
+    }
+    const isHighSurrogate = code >= 0xd800 && code <= 0xdbff;
+    // Retain the whole pair rather than committing a lone high surrogate.
+    return isHighSurrogate ? candidate - 1 : candidate;
   }
 
   private captureFenceHeaderCharacter(char: string): void {

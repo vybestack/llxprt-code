@@ -110,9 +110,13 @@ export class TurnDebugResponses {
     const existing = this.chunks[location.chunkIndex];
     const blocks = [...existing.content.blocks];
     blocks[location.blockIndex] = block;
+    // Spread the chunk being replaced, not the incoming one. The retained chunk
+    // is a record of what arrived at that point in the stream, so taking the
+    // newer chunk's finishReason, usage and metadata would rewrite history with
+    // values that belong to a later position.
     this.chunks[location.chunkIndex] = {
-      ...chunk,
-      content: { ...chunk.content, blocks },
+      ...existing,
+      content: { ...existing.content, blocks },
     };
     return true;
   }

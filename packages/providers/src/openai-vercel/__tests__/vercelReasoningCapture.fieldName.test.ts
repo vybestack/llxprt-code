@@ -233,8 +233,34 @@ describe('parseReasoningFromSseStream — configurable field name (#2488)', () =
 
     await expect(result).rejects.toBeInstanceOf(ProviderStreamProtocolError);
     await expect(result).rejects.toThrow(
-      `incomplete SSE line exceeded ${MAX_PROVIDER_SSE_LINE_BYTES}-byte limit`,
+      `SSE line exceeded ${MAX_PROVIDER_SSE_LINE_BYTES}-byte limit`,
     );
+  });
+
+  it('rejects an oversized COMPLETE SSE line, not just an incomplete one', async () => {
+    // Bounding only the trailing incomplete remainder is bypassed by appending
+    // a newline: the line then arrives complete and would go straight to
+    // JSON.parse unmeasured. The only difference from the test above is the
+    // terminating newline, and it must still be rejected.
+    const captureBuffer = createCaptureBuffer();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(
+            `${'x'.repeat(MAX_PROVIDER_SSE_LINE_BYTES + 1)}\n`,
+          ),
+        );
+        controller.close();
+      },
+    });
+
+    const result = parseReasoningFromSseStream(
+      stream.getReader(),
+      captureBuffer,
+      logger,
+    );
+
+    await expect(result).rejects.toBeInstanceOf(ProviderStreamProtocolError);
   });
 
   it('rejects retained reasoning that exceeds its byte limit', async () => {

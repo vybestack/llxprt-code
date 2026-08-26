@@ -38,6 +38,11 @@ export interface CaptureBuffer {
   finalized: boolean;
   headers?: Headers;
   parsePromise?: Promise<void>;
+  /**
+   * Failure from the detached parser, captured so the rejection is always
+   * observed and can be re-surfaced by whoever awaits `parsePromise`.
+   */
+  parseError?: Error;
   fieldName?: string;
   actualFieldName?: string;
 }
@@ -49,6 +54,7 @@ export function createCaptureBuffer(fieldName?: string): CaptureBuffer {
     finalized: false,
     headers: undefined,
     parsePromise: undefined,
+    parseError: undefined,
     fieldName,
   };
 }
@@ -135,15 +141,21 @@ export async function parseReasoningFromSseStream(
       // Parse SSE chunks (data: {...}\n\n)
       const lines = buffer.split('\n');
       buffer = lines.pop() ?? '';
-      // Cheap length pre-check first: this re-examines a growing accumulator on
-      // every read, so measuring it exactly each time would be O(n^2) in the
-      // no-newline case this limit exists to catch.
-      if (exceedsUtf8ByteLimit(buffer, MAX_PROVIDER_SSE_LINE_BYTES)) {
-        assertProviderStreamByteLimit(
-          'incomplete SSE line',
-          utf8ByteLength(buffer),
-          MAX_PROVIDER_SSE_LINE_BYTES,
-        );
+      // Every line is checked, not just the incomplete remainder. Bounding only
+      // the remainder is trivially bypassed by appending a newline: the line
+      // then arrives complete and goes straight to JSON.parse unmeasured.
+      //
+      // The cheap length pre-check comes first because this re-examines a
+      // growing accumulator on every read, so measuring exactly each time would
+      // be O(n^2) in the no-newline case the limit exists to catch.
+      for (const candidate of [...lines, buffer]) {
+        if (exceedsUtf8ByteLimit(candidate, MAX_PROVIDER_SSE_LINE_BYTES)) {
+          assertProviderStreamByteLimit(
+            'SSE line',
+            utf8ByteLength(candidate),
+            MAX_PROVIDER_SSE_LINE_BYTES,
+          );
+        }
       }
 
       const dataLines = lines.filter(
@@ -193,12 +205,25 @@ export function createReasoningCaptureFetch(
     }
 
     const [parserStream, sdkStream] = response.body.tee();
+    // The parser runs detached from the SDK stream and can now reject (the
+    // byte limits throw). Nothing guarantees the consumer reaches its `await`:
+    // the SDK stream can throw first, the signal can abort, or the generator
+    // can simply not be iterated to completion. An unobserved rejection is a
+    // process-level crash, so the outcome is captured here and re-surfaced by
+    // whoever awaits, rather than left to escape.
     captureBuffer.parsePromise = parseReasoningFromSseStream(
       parserStream.getReader(),
       captureBuffer,
       logger,
       init?.signal ?? undefined,
-    );
+    ).catch((error: unknown) => {
+      captureBuffer.parseError =
+        error instanceof Error ? error : new Error(String(error));
+      logger.debug(
+        () =>
+          `[vercel:reasoning] detached parser failed: ${captureBuffer.parseError?.message}`,
+      );
+    });
 
     return new Response(sdkStream, {
       status: response.status,
