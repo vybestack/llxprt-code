@@ -346,9 +346,10 @@ describe('SessionMetricsAggregator', () => {
     });
 
     it('exact union across many disjoint intervals (no compaction)', () => {
-      // Insert far more disjoint intervals than any internal limit.
-      // The union must remain exact — every interval contributes its
-      // duration, gaps are never bridged, and no interval is evicted.
+      // Below-cap exactness: 250 disjoint intervals stay under the 8192
+      // interval cap, so the union must remain exact — every interval
+      // contributes its duration, gaps are never bridged, and no interval
+      // is evicted.
       const clockNow = vi.spyOn(performance, 'now');
       const fixedNow = 1_000_000;
       clockNow.mockReturnValue(fixedNow);
@@ -693,6 +694,51 @@ describe('SessionMetricsAggregator', () => {
       );
       const afterInner = agg.getSnapshot();
       expect(afterInner.agentActiveTimeMs).toBe(expectedDisjoint + 5);
+    });
+  });
+
+  /** @plan PLAN-20260825-SHELLMEM.P02 @requirement REQ-3329-06 */
+  describe('bounded recent-ID deduplication', () => {
+    /** @plan PLAN-20260825-SHELLMEM.P02 @requirement REQ-3329-06 */
+    it('accepts an evicted attempt ID while retaining recent attempt deduplication', () => {
+      for (let index = 0; index < 2_000; index += 1) {
+        agg.recordApiAttempt(makeAttempt({ attemptId: `attempt-${index}` }));
+      }
+
+      const oldestAcceptedAgain = agg.recordApiAttempt(
+        makeAttempt({ attemptId: 'attempt-0' }),
+      );
+      const newestStillDuplicate = agg.recordApiAttempt(
+        makeAttempt({ attemptId: 'attempt-1999' }),
+      );
+
+      expect(oldestAcceptedAgain).toBe(true);
+      expect(newestStillDuplicate).toBe(false);
+      expect(agg.getSnapshot().totalApiRequests).toBe(2_001);
+    });
+
+    /** @plan PLAN-20260825-SHELLMEM.P02 @requirement REQ-3329-06 */
+    it('accepts an evicted tool call ID while retaining recent tool deduplication', () => {
+      for (let index = 0; index < 2_000; index += 1) {
+        agg.recordToolActivity('tool', 1, true, `call-${index}`);
+      }
+
+      const oldestAcceptedAgain = agg.recordToolActivity(
+        'tool',
+        1,
+        true,
+        'call-0',
+      );
+      const newestStillDuplicate = agg.recordToolActivity(
+        'tool',
+        1,
+        true,
+        'call-1999',
+      );
+
+      expect(oldestAcceptedAgain).toBe(true);
+      expect(newestStillDuplicate).toBe(false);
+      expect(agg.getSnapshot().totalToolCalls).toBe(2_001);
     });
   });
 

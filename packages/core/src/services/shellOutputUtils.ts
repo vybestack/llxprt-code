@@ -63,30 +63,52 @@ export function ensureNativeExitCodePropagated(
   return `${POWERSHELL_EXIT_CODE_PRELUDE}\n${command}\n${POWERSHELL_EXIT_CODE_SUFFIX}`;
 }
 
-/** Shared inactivity timer factory used by both CP and PTY paths. */
+/**
+ * Shared inactivity timer factory used by both CP and PTY paths.
+ * Cancellation is terminal: reset() is a no-op after cancel().
+ *
+ * @plan PLAN-20260825-SHELLMEM.P01
+ * @requirement REQ-3329-01
+ */
 export function makeInactivityTimer(
   timeoutMs: number | undefined,
   exitedGuard: { isExited(): boolean },
 ): {
   reset: () => void;
+  cancel: () => void;
   controller: AbortController;
 } {
   const controller = new AbortController();
   let timeout: NodeJS.Timeout | null = null;
+  let cancelled = false;
 
   const reset = () => {
-    if (timeoutMs === undefined || timeoutMs <= 0 || exitedGuard.isExited()) {
+    if (
+      cancelled ||
+      timeoutMs === undefined ||
+      timeoutMs <= 0 ||
+      exitedGuard.isExited()
+    ) {
       return;
     }
     if (timeout !== null) {
       clearTimeout(timeout);
     }
     timeout = setTimeout(() => {
+      timeout = null;
       if (!exitedGuard.isExited()) {
         controller.abort('inactivity_timeout');
       }
     }, timeoutMs);
   };
 
-  return { reset, controller };
+  const cancel = () => {
+    cancelled = true;
+    if (timeout !== null) {
+      clearTimeout(timeout);
+      timeout = null;
+    }
+  };
+
+  return { reset, cancel, controller };
 }

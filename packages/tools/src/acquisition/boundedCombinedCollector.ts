@@ -28,6 +28,15 @@ interface TaggedBytes {
   readonly stderrBits: Uint8Array;
 }
 
+interface CollectorStorage {
+  readonly headBytes: Buffer;
+  readonly headStderrBits: Uint8Array;
+  readonly tailBytes: Buffer;
+  readonly tailStderrBits: Uint8Array;
+}
+
+const EMPTY_BUFFER = Buffer.alloc(0);
+const EMPTY_BITS = new Uint8Array(0);
 const OUTPUT_BLOCK_SIZE = 64 * 1024;
 
 function normalizedEncoding(encoding: string): string {
@@ -253,17 +262,17 @@ function decodeTagged(
  * source alternation has fixed overhead of budget / 8 instead of one object or
  * byte-sized tag per retained byte. Decoding uses independent streaming
  * decoders per source while preserving the retained combined arrival order.
+ *
+ * @plan PLAN-20260825-SHELLMEM.P01
+ * @requirement REQ-3329-04
  */
 export class BoundedCombinedCollector {
   private readonly budget: ByteBudget;
   private readonly encoding: string;
   private readonly headCapacity: number;
   private readonly tailCapacity: number;
-  private readonly headBytes: Buffer;
-  private readonly headStderrBits: Uint8Array;
+  private storage: CollectorStorage | null = null;
   private headLength = 0;
-  private readonly tailBytes: Buffer;
-  private readonly tailStderrBits: Uint8Array;
   private tailWritePosition = 0;
   private tailLength = 0;
   private observedBytes = 0;
@@ -275,14 +284,21 @@ export class BoundedCombinedCollector {
     const fraction = Math.min(Math.max(options.headFraction ?? 0.5, 0), 1);
     this.headCapacity = Math.floor(this.budget.bytes * fraction);
     this.tailCapacity = this.budget.bytes - this.headCapacity;
-    this.headBytes = Buffer.allocUnsafe(this.headCapacity);
-    this.headStderrBits = new Uint8Array(Math.ceil(this.headCapacity / 8));
-    this.tailBytes = Buffer.allocUnsafe(this.tailCapacity);
-    this.tailStderrBits = new Uint8Array(Math.ceil(this.tailCapacity / 8));
   }
 
   get observedByteCount(): number {
     return this.observedBytes;
+  }
+
+  /** @plan PLAN-20260825-SHELLMEM.P01 @requirement REQ-3329-04 */
+  private ensureStorage(): CollectorStorage {
+    this.storage ??= {
+      headBytes: Buffer.allocUnsafe(this.headCapacity),
+      headStderrBits: new Uint8Array(Math.ceil(this.headCapacity / 8)),
+      tailBytes: Buffer.allocUnsafe(this.tailCapacity),
+      tailStderrBits: new Uint8Array(Math.ceil(this.tailCapacity / 8)),
+    };
+    return this.storage;
   }
 
   append(chunk: Buffer | string, source: StreamSource): void {
@@ -290,6 +306,7 @@ export class BoundedCombinedCollector {
     if (bytes.length === 0) {
       return;
     }
+    const storage = this.ensureStorage();
     this.observedBytes += bytes.length;
     this.cachedTail = null;
 
@@ -298,9 +315,9 @@ export class BoundedCombinedCollector {
       this.headCapacity - this.headLength,
     );
     if (headTake > 0) {
-      bytes.copy(this.headBytes, this.headLength, 0, headTake);
+      bytes.copy(storage.headBytes, this.headLength, 0, headTake);
       fillBits(
-        this.headStderrBits,
+        storage.headStderrBits,
         this.headLength,
         headTake,
         sourceBit(source),
@@ -308,7 +325,7 @@ export class BoundedCombinedCollector {
       this.headLength += headTake;
     }
     if (headTake < bytes.length) {
-      this.appendTail(bytes.subarray(headTake), source);
+      this.appendTail(storage, bytes.subarray(headTake), source);
     }
   }
 
@@ -326,8 +343,11 @@ export class BoundedCombinedCollector {
 
   getHeadBytes(maxBytes: number): Buffer {
     const length = Math.min(Math.max(Math.floor(maxBytes), 0), this.headLength);
+    if (this.storage === null || length === 0) {
+      return EMPTY_BUFFER;
+    }
     const output = Buffer.allocUnsafe(length);
-    this.headBytes.copy(output, 0, 0, length);
+    this.storage.headBytes.copy(output, 0, 0, length);
     return output;
   }
 
@@ -386,7 +406,11 @@ export class BoundedCombinedCollector {
     };
   }
 
-  private appendTail(bytes: Buffer, source: StreamSource): void {
+  private appendTail(
+    storage: CollectorStorage,
+    bytes: Buffer,
+    source: StreamSource,
+  ): void {
     if (this.tailCapacity === 0) {
       return;
     }
@@ -395,6 +419,7 @@ export class BoundedCombinedCollector {
     const skipped = sourceOffset;
     const writeStart = (this.tailWritePosition + skipped) % this.tailCapacity;
     this.writeTailSlice(
+      storage,
       bytes,
       sourceOffset,
       retainedLength,
@@ -410,6 +435,7 @@ export class BoundedCombinedCollector {
   }
 
   private writeTailSlice(
+    storage: CollectorStorage,
     sourceBytes: Buffer,
     sourceOffset: number,
     length: number,
@@ -418,28 +444,36 @@ export class BoundedCombinedCollector {
   ): void {
     const firstLength = Math.min(length, this.tailCapacity - writeStart);
     sourceBytes.copy(
-      this.tailBytes,
+      storage.tailBytes,
       writeStart,
       sourceOffset,
       sourceOffset + firstLength,
     );
-    fillBits(this.tailStderrBits, writeStart, firstLength, sourceBit(source));
+    fillBits(
+      storage.tailStderrBits,
+      writeStart,
+      firstLength,
+      sourceBit(source),
+    );
     const remaining = length - firstLength;
     if (remaining > 0) {
       sourceBytes.copy(
-        this.tailBytes,
+        storage.tailBytes,
         0,
         sourceOffset + firstLength,
         sourceOffset + length,
       );
-      fillBits(this.tailStderrBits, 0, remaining, sourceBit(source));
+      fillBits(storage.tailStderrBits, 0, remaining, sourceBit(source));
     }
   }
 
   private headTagged(): TaggedBytes {
+    if (this.storage === null) {
+      return { bytes: EMPTY_BUFFER, stderrBits: EMPTY_BITS };
+    }
     return {
-      bytes: this.headBytes.subarray(0, this.headLength),
-      stderrBits: this.headStderrBits,
+      bytes: this.storage.headBytes.subarray(0, this.headLength),
+      stderrBits: this.storage.headStderrBits,
     };
   }
 
@@ -447,11 +481,12 @@ export class BoundedCombinedCollector {
     if (this.cachedTail !== null) {
       return this.cachedTail;
     }
-    if (this.tailCapacity === 0 || this.tailLength === 0) {
-      this.cachedTail = {
-        bytes: Buffer.alloc(0),
-        stderrBits: new Uint8Array(0),
-      };
+    if (
+      this.storage === null ||
+      this.tailCapacity === 0 ||
+      this.tailLength === 0
+    ) {
+      this.cachedTail = { bytes: EMPTY_BUFFER, stderrBits: EMPTY_BITS };
       return this.cachedTail;
     }
     const bytes = Buffer.allocUnsafe(this.tailLength);
@@ -461,8 +496,8 @@ export class BoundedCombinedCollector {
       this.tailCapacity;
     for (let index = 0; index < this.tailLength; index += 1) {
       const ringIndex = (start + index) % this.tailCapacity;
-      bytes[index] = this.tailBytes[ringIndex];
-      setBit(stderrBits, index, getBit(this.tailStderrBits, ringIndex));
+      bytes[index] = this.storage.tailBytes[ringIndex];
+      setBit(stderrBits, index, getBit(this.storage.tailStderrBits, ringIndex));
     }
     this.cachedTail = { bytes, stderrBits };
     return this.cachedTail;

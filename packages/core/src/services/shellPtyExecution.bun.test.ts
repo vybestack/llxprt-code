@@ -28,6 +28,18 @@ interface FakePtyHarness {
   resumeCount(): number;
 }
 
+/**
+ * Null-guarded collector access: a harness refactor that skips collector
+ * initialization must fail with a clear assertion, not a TypeError from a
+ * non-null assertion.
+ * @plan PLAN-20260825-SHELLMEM.P01
+ * @requirement REQ-3329-04
+ */
+function requireCollector(state: PtyExecState): BoundedCombinedCollector {
+  expect(state.rawCollector).not.toBeNull();
+  return state.rawCollector as BoundedCombinedCollector;
+}
+
 function createFakePtyState(supportsBackpressure: boolean): FakePtyHarness {
   let dataListener: ((data: string) => void) | undefined;
   let pauses = 0;
@@ -177,7 +189,7 @@ describe('PTY bounded processing queue', () => {
 
     expect(overflows).toHaveLength(1);
     expect(harness.state.queueOverflowed).toBe(true);
-    expect(harness.state.rawCollector.observedByteCount).toBe(
+    expect(requireCollector(harness.state).observedByteCount).toBe(
       PTY_QUEUE_HARD_LIMIT_ITEMS + 1,
     );
     await harness.state.processingChain;
@@ -203,11 +215,11 @@ describe('PTY bounded processing queue', () => {
 
     expect(overflows).toHaveLength(1);
     expect(harness.state.queueOverflowed).toBe(true);
-    expect(harness.state.rawCollector.observedByteCount).toBe(
+    expect(requireCollector(harness.state).observedByteCount).toBe(
       Buffer.byteLength(output),
     );
     expect(
-      harness.state.rawCollector.getResult().tailText.endsWith(tailMarker),
+      requireCollector(harness.state).getResult().tailText.endsWith(tailMarker),
     ).toBe(true);
     await harness.state.processingChain;
     expect(harness.state.pendingQueueItems).toBe(0);

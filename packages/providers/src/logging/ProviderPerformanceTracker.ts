@@ -29,10 +29,14 @@ function toSafePositiveMs(value: number | null | undefined): number | null {
 }
 
 /**
- * Performance tracking utility for provider operations
+ * Performance tracking utility for provider operations.
+ * @plan PLAN-20260825-SHELLMEM.P02
+ * @requirement REQ-3329-07
  */
 export class ProviderPerformanceTracker {
+  private static readonly MAX_RETAINED_ERRORS = 50;
   private metrics: ProviderPerformanceMetrics;
+  private totalErrors = 0;
   private totalGenerationTimeMs = 0;
   private totalTokensWithMeasuredTime = 0;
   // Complete session TPM accumulators (duration-based, not wall-time)
@@ -102,6 +106,7 @@ export class ProviderPerformanceTracker {
     const safeOutputTokenCount = sanitizeNonNegative(outputTokenCount);
     const safeChunkCount = sanitizeNonNegative(chunkCount);
     this.metrics.totalRequests++;
+    this.updateErrorRate();
     this.metrics.totalTokens += safeTotalTokenCount;
     this.metrics.averageLatency =
       (this.metrics.averageLatency * (this.metrics.totalRequests - 1) +
@@ -167,21 +172,30 @@ export class ProviderPerformanceTracker {
       this.metrics.chunksReceived = sanitizeNonNegative(chunkCount);
     }
 
+    this.totalErrors += 1;
     this.metrics.errors.push({
       timestamp: Date.now(),
       duration: safeDuration,
       error: error.substring(0, 200), // Truncate long errors
     });
+    if (
+      this.metrics.errors.length >
+      ProviderPerformanceTracker.MAX_RETAINED_ERRORS
+    ) {
+      this.metrics.errors.splice(
+        0,
+        this.metrics.errors.length -
+          ProviderPerformanceTracker.MAX_RETAINED_ERRORS,
+      );
+    }
+    this.updateErrorRate();
+  }
 
-    // Update error rate — clamp to [0, 1].
-    // Denominator is total attempts (successes + errors), not just
-    // successes + 1, so multiple errors produce correct ratios.
-    const totalAttempts =
-      this.metrics.totalRequests + this.metrics.errors.length;
-    this.metrics.errorRate = Math.min(
-      1,
-      totalAttempts > 0 ? this.metrics.errors.length / totalAttempts : 0,
-    );
+  /** @plan PLAN-20260825-SHELLMEM.P02 @requirement REQ-3329-07 */
+  private updateErrorRate(): void {
+    const totalAttempts = this.metrics.totalRequests + this.totalErrors;
+    this.metrics.errorRate =
+      totalAttempts > 0 ? this.totalErrors / totalAttempts : 0;
   }
 
   /**
@@ -202,6 +216,9 @@ export class ProviderPerformanceTracker {
   getLatestMetrics(): ProviderPerformanceMetrics {
     return {
       ...this.metrics,
+      // Copy: the errors array is trimmed in place when the retention cap
+      // is exceeded, and previously returned snapshots must not lose entries.
+      errors: [...this.metrics.errors],
       averageLatency: sanitizeNonNegative(this.metrics.averageLatency),
       tokensPerSecond: sanitizeNonNegative(this.metrics.tokensPerSecond),
       tokensPerMinute: sanitizeNonNegative(this.metrics.tokensPerMinute),
@@ -215,6 +232,7 @@ export class ProviderPerformanceTracker {
    */
   reset(): void {
     this.metrics = this.initializeMetrics();
+    this.totalErrors = 0;
     this.totalGenerationTimeMs = 0;
     this.totalTokensWithMeasuredTime = 0;
     this.completeTpmSumTokens = 0;

@@ -39,13 +39,13 @@ import { isWindows } from './runtime.js';
 import { doesToolInvocationMatch } from './tool-utils.js';
 import {
   isParserAvailable,
-  parseShellCommandForLanguage,
   extractCommandNamesForLanguage,
   hasCommandSubstitutionForLanguage,
   splitCommandsWithTreeForLanguage,
   parseCommandDetailsForLanguage,
   hasPromptCommandTransform,
 } from './shell-parser.js';
+import { withParsedTreeForLanguage } from './shell-parser-lifetime.js';
 import type { ParserLanguage, ParsedCommandDetail } from './shell-parser.js';
 import { debugLogger } from './debugLogger.js';
 
@@ -182,6 +182,8 @@ export interface SplitCommandsOptions {
  * @param options Optional settings for split behavior
  * @param shellType Optional shell type override; defaults to bash grammar
  * @returns An array of individual command strings
+ * @plan PLAN-20260825-SHELLMEM.P02
+ * @requirement REQ-3329-08
  */
 export function splitCommands(
   command: string,
@@ -193,14 +195,11 @@ export function splitCommands(
 
   // Try tree-sitter first for accurate parsing
   if (isParserAvailable(language)) {
-    const tree = parseShellCommandForLanguage(command, language);
-    if (tree) {
-      const result = splitCommandsWithTreeForLanguage(tree, language, {
-        splitOnPipes,
-      });
-      if (result.length > 0) {
-        return result;
-      }
+    const result = withParsedTreeForLanguage(command, language, (tree) =>
+      splitCommandsWithTreeForLanguage(tree, language, { splitOnPipes }),
+    );
+    if (result !== null && result.length > 0) {
+      return result;
     }
   }
 
@@ -373,6 +372,7 @@ export function getCommandRoot(command: string): string | undefined {
   return undefined;
 }
 
+/** @plan PLAN-20260825-SHELLMEM.P02 @requirement REQ-3329-08 */
 export function getCommandRoots(
   command: string,
   shellType?: ShellType,
@@ -385,17 +385,19 @@ export function getCommandRoots(
 
   // Try tree-sitter first for accurate parsing
   if (isParserAvailable(language)) {
-    const tree = parseShellCommandForLanguage(command, language);
-    if (tree) {
+    const parsed = withParsedTreeForLanguage(command, language, (tree) => ({
+      hasPromptTransform:
+        language === 'bash' && hasPromptCommandTransform(tree.rootNode),
+      commandNames: extractCommandNamesForLanguage(tree, language),
+    }));
+    if (parsed !== null) {
       // Prompt transformations (${var@P}) can execute arbitrary commands, so
       // the command is treated as unsafe and no roots are returned.
-      // This is a Bash-specific check; skip for PowerShell.
-      if (language === 'bash' && hasPromptCommandTransform(tree.rootNode)) {
+      if (parsed.hasPromptTransform) {
         return [];
       }
-      const result = extractCommandNamesForLanguage(tree, language);
-      if (result.length > 0) {
-        return result;
+      if (parsed.commandNames.length > 0) {
+        return parsed.commandNames;
       }
       // When the PowerShell parser is available and found no static command
       // names (e.g., a pure .NET expression), do not fall back to regex —
@@ -509,6 +511,8 @@ function matchShellWrapperPrefix(cmd: string): number {
  * **PowerShell**: `$()` subexpressions only.  Backticks are escapes, not
  * substitution.  When the PowerShell parser is unavailable, fail closed
  * (return true) because structural substitution detection cannot be trusted.
+ * @plan PLAN-20260825-SHELLMEM.P02
+ * @requirement REQ-3329-08
  */
 export function detectCommandSubstitution(
   command: string,
@@ -517,17 +521,19 @@ export function detectCommandSubstitution(
   const language = shellTypeToParserLanguage(shellType);
 
   if (isParserAvailable(language)) {
-    const tree = parseShellCommandForLanguage(command, language);
-    if (tree) {
-      const detected = hasCommandSubstitutionForLanguage(tree, language);
+    const parsed = withParsedTreeForLanguage(command, language, (tree) => ({
+      detected: hasCommandSubstitutionForLanguage(tree, language),
+      hasError: tree.rootNode.hasError,
+    }));
+    if (parsed !== null) {
       if (language === 'powershell') {
         // Fail closed on parse errors: a malformed tree may have missed
         // $() subexpressions during error recovery. PowerShell backticks
         // are escapes, not substitution — only valid trees are trusted.
-        return detected || tree.rootNode.hasError;
+        return parsed.detected || parsed.hasError;
       }
-      if (detected || !tree.rootNode.hasError) {
-        return detected;
+      if (parsed.detected || !parsed.hasError) {
+        return parsed.detected;
       }
     }
   }

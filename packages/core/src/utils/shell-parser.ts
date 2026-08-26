@@ -27,6 +27,14 @@ import { createRequire } from 'node:module';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { isBunRuntime } from './runtime.js';
 import {
+  hasShellSubstitutionSyntax,
+  hasUnrepresentedHeredocBacktickSubstitution,
+} from './shell-substitution-syntax.js';
+import {
+  withParsedTree,
+  withParsedTreeForLanguage,
+} from './shell-parser-lifetime.js';
+import {
   collectPwshCommandDetailsFromTree,
   hasPwshCommandSubstitution,
   splitPwshCommandsWithTree,
@@ -36,7 +44,7 @@ import { buildPwshCommandParseResult } from './powershell-parse-result.js';
 const require = createRequire(import.meta.url);
 const debugLogger = new DebugLogger('llxprt:shell-parser');
 
-const PARSE_TIMEOUT_MICROS = 1000 * 1000; // 1 second
+export const PARSE_TIMEOUT_MICROS = 1000 * 1000; // 1 second
 
 /**
  * Shape of the dynamically imported `web-tree-sitter` module. In 0.25.x the
@@ -399,7 +407,10 @@ export function parseShellCommandForLanguage(
   return parseShellCommand(command, timeoutMicros);
 }
 
-function parsePwshCommand(command: string, timeoutMicros: number): Tree | null {
+export function parsePwshCommand(
+  command: string,
+  timeoutMicros: number,
+): Tree | null {
   if (!pwshParser || !command.trim()) {
     return null;
   }
@@ -518,168 +529,6 @@ export interface CommandParseResult {
   errorReason?: string;
 }
 
-type SourceRange = {
-  startIndex: number;
-  endIndex: number;
-};
-
-function findNamedChild(node: Node, type: string): Node | null {
-  for (let index = 0; index < node.namedChildCount; index += 1) {
-    const child = node.namedChild(index);
-    if (child?.type === type) {
-      return child;
-    }
-  }
-  return null;
-}
-
-function collectHeredocRedirects(root: Node): Node[] {
-  const redirects: Node[] = [];
-  const stack: Node[] = [root];
-
-  while (stack.length > 0) {
-    const current = stack.pop();
-    if (!current) {
-      continue;
-    }
-
-    if (current.type === 'heredoc_redirect') {
-      redirects.push(current);
-    }
-
-    for (let index = current.namedChildCount - 1; index >= 0; index -= 1) {
-      const child = current.namedChild(index);
-      if (child) {
-        stack.push(child);
-      }
-    }
-  }
-
-  return redirects;
-}
-
-function isQuotedHeredocStart(node: Node, source: string): boolean {
-  const delimiter = source.slice(node.startIndex, node.endIndex);
-  return (
-    delimiter.includes("'") ||
-    delimiter.includes('"') ||
-    delimiter.includes('\\')
-  );
-}
-
-function collectLiteralHeredocBodyRanges(
-  root: Node,
-  source: string,
-): SourceRange[] {
-  const ranges: SourceRange[] = [];
-
-  for (const redirect of collectHeredocRedirects(root)) {
-    const start = findNamedChild(redirect, 'heredoc_start');
-    const body = findNamedChild(redirect, 'heredoc_body');
-    if (start && body && isQuotedHeredocStart(start, source)) {
-      ranges.push({
-        startIndex: body.startIndex,
-        endIndex: body.endIndex,
-      });
-    }
-  }
-
-  return ranges;
-}
-
-function getLiteralRange(
-  ranges: SourceRange[],
-  index: number,
-): SourceRange | null {
-  if (index < 0 || index >= ranges.length) {
-    return null;
-  }
-  return ranges[index];
-}
-
-function hasShellSubstitutionSyntax(command: string, root: Node): boolean {
-  const literalRanges = collectLiteralHeredocBodyRanges(root, command);
-  let literalRangeIndex = 0;
-  let inSingleQuotes = false;
-  let inDoubleQuotes = false;
-  let skipCurrent = false;
-
-  for (let i = 0; i < command.length; i += 1) {
-    const literalRange = getLiteralRange(literalRanges, literalRangeIndex);
-    if (literalRange !== null && i >= literalRange.endIndex) {
-      literalRangeIndex += 1;
-    } else if (literalRange !== null && i >= literalRange.startIndex) {
-      i = literalRange.endIndex - 1;
-      continue;
-    }
-
-    const char = command[i];
-    if (skipCurrent) {
-      skipCurrent = false;
-    } else if (char === '\\' && !inSingleQuotes) {
-      skipCurrent = true;
-    } else if (char === "'" && !inDoubleQuotes) {
-      inSingleQuotes = !inSingleQuotes;
-    } else if (char === '"' && !inSingleQuotes) {
-      inDoubleQuotes = !inDoubleQuotes;
-    } else if (
-      !inSingleQuotes &&
-      isShellSubstitutionStart(command, i, inDoubleQuotes)
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function isShellSubstitutionStart(
-  command: string,
-  index: number,
-  inDoubleQuotes: boolean,
-): boolean {
-  return (
-    isCommandSubstitutionStart(command, index) ||
-    isProcessSubstitutionStart(command, index, inDoubleQuotes) ||
-    command[index] === '`'
-  );
-}
-
-function isCommandSubstitutionStart(command: string, index: number): boolean {
-  if (command[index] !== '$') {
-    return false;
-  }
-  if (command[index + 1] !== '(') {
-    return false;
-  }
-  // Exclude arithmetic expansion $(( )) which is not command substitution
-  if (index + 2 < command.length && command[index + 2] === '(') {
-    return false;
-  }
-  return true;
-}
-
-function isProcessSubstitutionStart(
-  command: string,
-  index: number,
-  inDoubleQuotes: boolean,
-): boolean {
-  if (inDoubleQuotes) {
-    return false;
-  }
-  return (
-    isProcessSubstitutionOperator(command[index]) &&
-    index + 1 < command.length &&
-    command[index + 1] === '('
-  );
-}
-
-function isProcessSubstitutionOperator(char: string | undefined): boolean {
-  return char === '<' || char === '>';
-}
-
-/**
- * Normalize a command name by removing quotes and extracting the base name.
- */
 function normalizeCommandName(raw: string): string {
   if (raw.length >= 2) {
     const first = raw[0];
@@ -815,58 +664,61 @@ function hasPromptTransformInExpansion(node: Node): boolean {
  * Parse a shell command and extract all command details including nested commands.
  * Returns null if parsing fails or tree-sitter is not available.
  */
+/** @plan PLAN-20260825-SHELLMEM.P02 @requirement REQ-3329-08 */
 export function parseCommandDetails(
   command: string,
 ): CommandParseResult | null {
   if (!parser || !bashLanguage) {
     return null;
   }
+  const activeBashLanguage = bashLanguage;
 
   try {
-    const tree = parseShellCommand(command);
-    if (!tree) {
-      return { details: [], hasError: true };
-    }
+    return (
+      withParsedTree(command, (tree) => {
+        const details = collectCommandDetails(tree, command);
 
-    const details = collectCommandDetails(tree, command);
+        // Check for syntax errors, empty command list, dangerous prompt transformations,
+        // or substitution syntax that the grammar failed to expose as executable commands.
+        const hasMissingSubstitutionDetails =
+          hasUnrepresentedHeredocBacktickSubstitution(tree.rootNode, command) ||
+          (hasShellSubstitutionSyntax(command, tree.rootNode) &&
+            !hasParsedCommandSubstitution(tree));
+        const hasError =
+          tree.rootNode.hasError ||
+          details.length === 0 ||
+          hasPromptCommandTransform(tree.rootNode) ||
+          hasMissingSubstitutionDetails;
 
-    // Check for syntax errors, empty command list, dangerous prompt transformations,
-    // or substitution syntax that the grammar failed to expose as executable commands.
-    const hasMissingSubstitutionDetails =
-      hasUnrepresentedHeredocBacktickSubstitution(tree.rootNode, command) ||
-      (hasShellSubstitutionSyntax(command, tree.rootNode) &&
-        !hasParsedCommandSubstitution(tree));
-    const hasError =
-      tree.rootNode.hasError ||
-      details.length === 0 ||
-      hasPromptCommandTransform(tree.rootNode) ||
-      hasMissingSubstitutionDetails;
+        if (hasError) {
+          let query: QueryType | null = null;
+          try {
+            query = activeBashLanguage.query(
+              '(ERROR) @error (MISSING) @missing',
+            );
+            const captures = query.captures(tree.rootNode) as QueryCapture[];
+            const syntaxErrors = captures.map((capture) => {
+              const { node, name } = capture;
+              const type = name === 'missing' ? 'Missing' : 'Error';
+              return `${type} node: "${node.text}" at ${node.startPosition.row}:${node.startPosition.column}`;
+            });
 
-    if (hasError) {
-      let query: QueryType | null = null;
-      try {
-        query = bashLanguage.query('(ERROR) @error (MISSING) @missing');
-        const captures = query.captures(tree.rootNode) as QueryCapture[];
-        const syntaxErrors = captures.map((capture) => {
-          const { node, name } = capture;
-          const type = name === 'missing' ? 'Missing' : 'Error';
-          return `${type} node: "${node.text}" at ${node.startPosition.row}:${node.startPosition.column}`;
-        });
+            debugLogger.log(
+              'Bash command parsing error detected for command:',
+              command,
+              'Syntax Errors:',
+              syntaxErrors,
+            );
+          } catch {
+            // AST query failed - ignore syntax error detection
+          } finally {
+            query?.delete();
+          }
+        }
 
-        debugLogger.log(
-          'Bash command parsing error detected for command:',
-          command,
-          'Syntax Errors:',
-          syntaxErrors,
-        );
-      } catch {
-        // AST query failed - ignore syntax error detection
-      } finally {
-        query?.delete();
-      }
-    }
-
-    return { details, hasError };
+        return { details, hasError };
+      }) ?? { details: [], hasError: true }
+    );
   } catch {
     return null;
   }
@@ -890,37 +742,6 @@ function hasParsedCommandSubstitution(tree: Tree): boolean {
   } finally {
     query.delete();
   }
-}
-
-function containsUnescapedBacktick(text: string): boolean {
-  for (let index = 0; index < text.length; index += 1) {
-    if (text[index] === '\\') {
-      index += 1;
-    } else if (text[index] === '`') {
-      return true;
-    }
-  }
-  return false;
-}
-
-function hasUnrepresentedHeredocBacktickSubstitution(
-  root: Node,
-  source: string,
-): boolean {
-  for (const redirect of collectHeredocRedirects(root)) {
-    const start = findNamedChild(redirect, 'heredoc_start');
-    const body = findNamedChild(redirect, 'heredoc_body');
-    if (
-      start &&
-      body &&
-      !isQuotedHeredocStart(start, source) &&
-      containsUnescapedBacktick(body.text)
-    ) {
-      return true;
-    }
-  }
-
-  return false;
 }
 
 /**
@@ -1061,34 +882,34 @@ export interface TrailingBackgroundResult {
  * 3. There must be at least one named child before the `&` (the command).
  * 4. Strip ONLY the operator and return the remainder.
  */
+/** @plan PLAN-20260825-SHELLMEM.P02 @requirement REQ-3329-08 */
 export function detectTrailingBackgroundOperator(
   command: string,
 ): TrailingBackgroundResult {
-  const tree = parseShellCommand(command);
-  if (tree === null) {
-    return { promoted: false, command };
-  }
+  return (
+    withParsedTree(command, (tree) => {
+      const root = tree.rootNode;
+      if (root.type !== 'program' || root.hasError) {
+        return { promoted: false, command };
+      }
 
-  const root = tree.rootNode;
-  if (root.type !== 'program' || root.hasError) {
-    return { promoted: false, command };
-  }
+      const lastChild = root.child(root.childCount - 1);
+      if (lastChild === null || lastChild.type !== '&') {
+        return { promoted: false, command };
+      }
 
-  const lastChild = root.child(root.childCount - 1);
-  if (lastChild === null || lastChild.type !== '&') {
-    return { promoted: false, command };
-  }
+      if (root.namedChildCount === 0) {
+        return { promoted: false, command };
+      }
 
-  if (root.namedChildCount === 0) {
-    return { promoted: false, command };
-  }
+      const stripped = command.slice(0, lastChild.startIndex).trimEnd();
+      if (stripped.length === 0) {
+        return { promoted: false, command };
+      }
 
-  const stripped = command.slice(0, lastChild.startIndex).trimEnd();
-  if (stripped.length === 0) {
-    return { promoted: false, command };
-  }
-
-  return { promoted: true, command: stripped };
+      return { promoted: true, command: stripped };
+    }) ?? { promoted: false, command }
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1125,15 +946,21 @@ export function splitCommandsWithTreeForLanguage(
  * (returns null = parser-unavailable) rather than propagating (#3181 OCR
  * Finding 7).
  */
+/** @plan PLAN-20260825-SHELLMEM.P02 @requirement REQ-3329-08 */
 function parsePwshCommandDetails(command: string): CommandParseResult | null {
   if (pwshParser === null || pwshLanguage === null) {
     return null;
   }
   try {
-    return buildPwshCommandParseResult(
-      parsePwshCommand(command, PARSE_TIMEOUT_MICROS),
-      command,
-      parseCommandDetailsForLanguage,
+    return (
+      withParsedTreeForLanguage(command, 'powershell', (tree) =>
+        buildPwshCommandParseResult(
+          tree,
+          command,
+          parseCommandDetailsForLanguage,
+        ),
+      ) ??
+      buildPwshCommandParseResult(null, command, parseCommandDetailsForLanguage)
     );
   } catch (error) {
     debugLogger.error('PowerShell parse threw (command text omitted):', error);
