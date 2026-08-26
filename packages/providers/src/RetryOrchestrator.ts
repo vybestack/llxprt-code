@@ -31,9 +31,7 @@ import {
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { IModel } from './IModel.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type {
-  BucketFailoverHandler,
-} from '@vybestack/llxprt-code-core/config/config.js';
+import type { BucketFailoverHandler } from '@vybestack/llxprt-code-core/config/config.js';
 import { AllBucketsExhaustedError } from './errors.js';
 import type { StructuredErrorCategory } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
@@ -480,7 +478,12 @@ export class RetryOrchestrator implements IProvider {
   ): void {
     linked.controller.abort();
     linked.dispose();
-    accountProviderAttempt(this.wrappedProvider, attemptOptions, budget, usedBefore);
+    accountProviderAttempt(
+      this.wrappedProvider,
+      attemptOptions,
+      budget,
+      usedBefore,
+    );
     notification.notifyEnd(
       terminalStatus,
       resolveAttemptErrorMessage(terminalStatus, attemptError),
@@ -565,7 +568,9 @@ export class RetryOrchestrator implements IProvider {
   private async resolveCommittedFailureAction(
     error: unknown,
     request: RetryRequestContext,
-  ): Promise<{ type: 'throw'; error: unknown } | { type: 'continue' } | undefined> {
+  ): Promise<
+    { type: 'throw'; error: unknown } | { type: 'continue' } | undefined
+  > {
     const failure =
       isTerminalRetryError(error) || getRequestCommitState(request).committed
         ? decodeRetryFailure(error)
@@ -667,7 +672,6 @@ export class RetryOrchestrator implements IProvider {
       errorStatus,
     );
   }
-
 
   private async handleFailoverDecision(
     errorStatus: number | undefined,
@@ -823,7 +827,6 @@ export class RetryOrchestrator implements IProvider {
       }
     }
   }
-
 
   /**
    * Creates an AllBucketsExhaustedError with failure reasons

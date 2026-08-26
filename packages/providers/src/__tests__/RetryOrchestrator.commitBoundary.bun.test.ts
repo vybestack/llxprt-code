@@ -155,9 +155,7 @@ function trackedStream(factory: StreamFactory): {
   return { factory: wrapper, returns: () => returnCount };
 }
 
-function onAuthErrorOptions(
-  handler: OnAuthErrorHandler,
-): GenerateChatOptions {
+function onAuthErrorOptions(handler: OnAuthErrorHandler): GenerateChatOptions {
   return {
     contents: [],
     resolved: { authToken: 'revoked-token' },
@@ -436,14 +434,12 @@ describe('RetryOrchestrator commitment boundary (issue #2532 AC-04/AC-05)', () =
     });
 
     it('e: first-chunk timeout before output → retries within budget, losing iterator closed', async () => {
-      const tracked = trackedStream(
-        async function* (signal) {
-          // Abort-aware the way a real SDK stream is: the pending next()
-          // settles when the attempt is aborted, letting return() through.
-          await delay(5000, signal);
-          yield textChunk;
-        },
-      );
+      const tracked = trackedStream(async function* (signal) {
+        // Abort-aware the way a real SDK stream is: the pending next()
+        // settles when the attempt is aborted, letting return() through.
+        await delay(5000, signal);
+        yield textChunk;
+      });
       const { provider, calls } = createScriptedProvider({
         script: [
           tracked.factory,
@@ -469,12 +465,10 @@ describe('RetryOrchestrator commitment boundary (issue #2532 AC-04/AC-05)', () =
     });
 
     it('g: cancellation during first-chunk race → AbortError surfaces, no retry, iterator closed', async () => {
-      const tracked = trackedStream(
-        async function* (signal) {
-          await delay(50, signal);
-          yield textChunk;
-        },
-      );
+      const tracked = trackedStream(async function* (signal) {
+        await delay(50, signal);
+        yield textChunk;
+      });
       const { provider, calls } = createScriptedProvider({
         script: [
           tracked.factory,
@@ -501,9 +495,9 @@ describe('RetryOrchestrator commitment boundary (issue #2532 AC-04/AC-05)', () =
 
       expect(chunks).toStrictEqual([]);
       expect(error).toBeDefined();
-      expect(
-        error instanceof Error ? error.name : String(error),
-      ).toBe('AbortError');
+      expect(error instanceof Error ? error.name : String(error)).toBe(
+        'AbortError',
+      );
       expect(calls()).toBe(1);
       expect(tracked.returns()).toBeGreaterThanOrEqual(1);
     });

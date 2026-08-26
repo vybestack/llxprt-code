@@ -8,15 +8,15 @@ and load-balancer failover.
 
 ## Ownership model
 
-| Concern | Owner | Not owner |
-| --- | --- | --- |
-| Decode provider errors into the taxonomy | Provider adapters (Anthropic, OpenAI, ...) | RetryOrchestrator, LoadBalancingProvider |
-| Observe terminal protocol events (`message_stop` et al.) | Provider adapters | RetryOrchestrator |
-| Set the commit flag before every outward event | Guarded stream (`guardedStream.ts`) | Adapters |
-| Close losing iterators on timeout/cancel | Guarded stream | Callers |
-| Retry / backoff / auth repair / bucket rotation policy | `RetryOrchestrator` | Adapters |
-| Target selection and failover policy | `LoadBalancingProvider` | Adapters |
-| Aggregate attempt budget accounting | `TransportAttemptBudget` shared via request context | Any single layer |
+| Concern                                                  | Owner                                               | Not owner                                |
+| -------------------------------------------------------- | --------------------------------------------------- | ---------------------------------------- |
+| Decode provider errors into the taxonomy                 | Provider adapters (Anthropic, OpenAI, ...)          | RetryOrchestrator, LoadBalancingProvider |
+| Observe terminal protocol events (`message_stop` et al.) | Provider adapters                                   | RetryOrchestrator                        |
+| Set the commit flag before every outward event           | Guarded stream (`guardedStream.ts`)                 | Adapters                                 |
+| Close losing iterators on timeout/cancel                 | Guarded stream                                      | Callers                                  |
+| Retry / backoff / auth repair / bucket rotation policy   | `RetryOrchestrator`                                 | Adapters                                 |
+| Target selection and failover policy                     | `LoadBalancingProvider`                             | Adapters                                 |
+| Aggregate attempt budget accounting                      | `TransportAttemptBudget` shared via request context | Any single layer                         |
 
 Adapters never decide retries. They throw decoded failures (including
 in-band HTTP-200 SSE errors) and let shared policy decide. Shared policy
@@ -60,7 +60,7 @@ Every logical request gets a `TransportAttemptBudget` created in
 - `RetryOrchestrator` counts one unit per raw provider attempt for ordinary
   providers (`transportAttemptOwnership` unset).
 - Providers that own their transport attempts (`transportAttemptOwnership:
-  'provider'`, currently `LoadBalancingProvider`) consume units themselves as
+'provider'`, currently `LoadBalancingProvider`) consume units themselves as
   they rotate backends; the orchestrator does not double-count them.
 - Retry-After delays are normalized (`retryDelayPolicy`, capped) and honored
   within the same budget; attempts, not wall-clock time, bound the budget.

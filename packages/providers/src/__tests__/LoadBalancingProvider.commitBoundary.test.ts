@@ -71,7 +71,9 @@ function makeScriptedProvider(
   const calls = { value: 0 };
   const provider: IProvider = {
     name,
-    generateChatCompletion(optionsOrContents: GenerateChatOptions | IContent[]) {
+    generateChatCompletion(
+      optionsOrContents: GenerateChatOptions | IContent[],
+    ) {
       const options = optionsOrContents as GenerateChatOptions;
       const script = scripts[Math.min(calls.value, scripts.length - 1)];
       calls.value++;
@@ -85,10 +87,7 @@ function makeScriptedProvider(
   return { provider, calls };
 }
 
-function yieldThenThrow(
-  chunk: IContent,
-  error: Error,
-): Script {
+function yieldThenThrow(chunk: IContent, error: Error): Script {
   return async function* script() {
     yield chunk;
     throw error;

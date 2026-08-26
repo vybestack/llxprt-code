@@ -19,7 +19,10 @@ import {
   type AttemptLifecycleObserver,
 } from '../logging/attemptLifecycle.js';
 
-function statusError(status: number, message: string): Error & { status: number } {
+function statusError(
+  status: number,
+  message: string,
+): Error & { status: number } {
   const error = new Error(message) as Error & { status: number };
   error.status = status;
   return error;
@@ -91,9 +94,7 @@ describe('attempt lifecycle taxonomy and commitment telemetry (issue #2532)', ()
     const { provider } = scriptedTransport([
       { error: statusError(503, 'Service unavailable') },
       {
-        chunks: [
-          { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] },
-        ],
+        chunks: [{ speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] }],
       },
     ]);
     const orchestrator = new RetryOrchestrator(provider, {
