@@ -21,7 +21,6 @@ import {
 } from '@vybestack/llxprt-code-tools/tools/tools.js';
 import {
   type ToolCallConfirmationDetails,
-  type ToolContext,
   type ToolInvocation,
   type ToolResult,
 } from '@vybestack/llxprt-code-tools';
@@ -157,12 +156,7 @@ function makeGovernance(
 
 function makeMockRegistry(tool?: MockTool | null) {
   return {
-    getTool: vi.fn((_name: string, context?: ToolContext) => {
-      if (tool instanceof ContextAwareMockTool && context) {
-        tool.context = context;
-      }
-      return tool ?? null;
-    }),
+    getTool: vi.fn((_name: string) => tool ?? null),
     getAllToolNames: vi.fn().mockReturnValue(tool ? [tool.name] : []),
   };
 }
@@ -374,6 +368,13 @@ describe('ToolDispatcher', () => {
 
     it('sets context on ContextAwareTool during resolveAndValidate', () => {
       const tool = new ContextAwareMockTool('context_tool');
+      // Pre-set a stale context to prove the dispatcher (not the registry
+      // mock) overwrites it; keeps the assertion order-independent.
+      tool.context = {
+        sessionId: 'stale-session',
+        agentId: 'stale-agent',
+        interactiveMode: false,
+      };
       const registry = makeMockRegistry(tool);
       const dispatcher = new ToolDispatcher(registry as never, config);
 
@@ -384,9 +385,9 @@ describe('ToolDispatcher', () => {
       );
 
       expect(tool.context).toBeDefined();
-      expect(tool.context?.sessionId).toBe('test-session-id');
-      expect(tool.context?.agentId).toBe('primary');
-      expect(tool.context?.interactiveMode).toBe(true);
+      expect(tool.context.sessionId).toBe('test-session-id');
+      expect(tool.context.agentId).toBe('primary');
+      expect(tool.context.interactiveMode).toBe(true);
     });
 
     it('returns ValidatingToolCall for a successfully resolved tool', () => {
