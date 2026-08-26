@@ -65,7 +65,7 @@ export async function summarizeToolOutput(
   if (!textToSummarize || textToSummarize.length < maxOutputTokens) {
     return textToSummarize;
   }
-  if (utilityModel === undefined) {
+  if (!utilityModel || utilityModel.trim() === '') {
     debugLogger.log(
       'summarizeToolOutput enabled but no utilityModel configured — skipping',
     );

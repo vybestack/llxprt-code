@@ -18,7 +18,9 @@
  * Usage metadata for a model response, capturing token counts consumed
  * during generation.
  *
- * Only the fields consumed by telemetry event logging are modeled.
+ * Only the scalar token counts are consumed by telemetry event logging.
+ * The *TokensDetails arrays carry provider-reported breakdown detail for
+ * structural completeness; no current event emits them.
  */
 export interface UsageMetadata {
   inputTokenCount?: number;

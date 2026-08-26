@@ -74,6 +74,26 @@ describe('summarizers', () => {
       logSpy.mockRestore();
     });
 
+    it('should treat a blank utilityModel as unconfigured and skip generateContent', async () => {
+      const longText = 'This is a very long text.'.repeat(200);
+      const logSpy = vi.spyOn(debugLogger, 'log').mockImplementation(() => {});
+
+      const result = await summarizeToolOutput(
+        longText,
+        mockAgentClient,
+        abortSignal,
+        2000,
+        '   ',
+      );
+
+      expect(mockAgentClient.generateContent).not.toHaveBeenCalled();
+      expect(result).toBe(longText);
+      expect(logSpy).toHaveBeenCalledWith(
+        'summarizeToolOutput enabled but no utilityModel configured — skipping',
+      );
+      logSpy.mockRestore();
+    });
+
     it('should call generateContent with the utilityModel when configured', async () => {
       const longText = 'This is a very long text.'.repeat(200);
       const summary = 'This is a summary.';

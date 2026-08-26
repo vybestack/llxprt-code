@@ -31,6 +31,13 @@ export interface ProviderModelInput {
   settingsModel: string | undefined;
   envDefaultModel: string | undefined;
   envGeminiModel: string | undefined;
+  /**
+   * Base-provider default model (level-6 fallback), sourced from the
+   * provider registry by the caller (e.g. the registered gemini
+   * provider's getDefaultModel()). Undefined or empty means "no provider
+   * default" and resolves to an empty model string; the resolver never
+   * substitutes a hardcoded model name.
+   */
   providerDefaultModel?: string;
 }
 
