@@ -57,7 +57,22 @@ export const FORCED_SPLIT_RETAINED_LENGTH = 64 * 1024;
  * literal ``` inside the retained tail would then close it early, inverting
  * fence parity for the rest of the stream.
  */
-const FENCE_INFO_PATTERN = new RegExp('^[ \\t]*([^`\\n]{0,100}?)[ \\t]*$');
+const MAX_FENCE_INFO_LENGTH = 100;
+
+/**
+ * The info string for an opening fence, or '' when there is not a usable one.
+ *
+ * Done with trim and a scan rather than a pattern: an anchored pattern with a
+ * lazy body and optional surrounding whitespace backtracks super-linearly, and
+ * this runs on model-controlled text.
+ */
+function readFenceInfo(header: string): string {
+  const info = header.trim();
+  if (info.length > MAX_FENCE_INFO_LENGTH || info.includes('`')) {
+    return '';
+  }
+  return info;
+}
 
 export class IncrementalSplitScanner {
   private text = '';
@@ -265,8 +280,7 @@ export class IncrementalSplitScanner {
     if (char === '\n') {
       // openFence was recorded from the actual backtick run, so only the info
       // string is derived here.
-      const language = this.openFenceHeader.match(FENCE_INFO_PATTERN)?.[1];
-      this.openFenceLanguage = language ?? '';
+      this.openFenceLanguage = readFenceInfo(this.openFenceHeader);
       this.capturingFenceHeader = false;
       return;
     }
