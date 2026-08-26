@@ -42,6 +42,15 @@ class ImageCapabilityHolder {
   }
 }
 
+function completeImageOperation(signal: AbortSignal): {
+  absoluteOutputPath: string;
+} {
+  if (signal.aborted) {
+    throw new Error('The operation was aborted.');
+  }
+  return { absoluteOutputPath: '/workspace/out.png' };
+}
+
 function makeMockContext(overrides?: {
   runImageOperation?: (req: {
     prompt: string;
@@ -210,10 +219,7 @@ describe('imageCommand', () => {
           capturedSignal = req.signal;
           // Hold until SIGINT is emitted so the abort happens mid-operation.
           await gate;
-          if (req.signal.aborted) {
-            throw new Error('The operation was aborted.');
-          }
-          return { absoluteOutputPath: '/workspace/out.png' };
+          return completeImageOperation(req.signal);
         },
       );
     const ctx = makeMockContext({ runImageOperation: runner });

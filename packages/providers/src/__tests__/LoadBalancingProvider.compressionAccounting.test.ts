@@ -111,6 +111,22 @@ async function consumeIterator(
   return results;
 }
 
+function createRateLimitedOpenAiProvider(recordCall: () => number): IProvider {
+  return {
+    name: 'openai',
+    async *generateChatCompletion(): AsyncGenerator<IContent> {
+      if (recordCall() === 1) {
+        throw new Error('429 rate limited');
+      }
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+    },
+    getModels: async () => [],
+    getDefaultModel: () => 'gpt-4.1',
+    getServerTools: () => [],
+    invokeServerTool: async () => ({}),
+  };
+}
+
 describe('LoadBalancingProvider - compression accounting (issue #2207)', () => {
   let settingsService: SettingsService;
   let config: Config;
@@ -457,20 +473,9 @@ describe('LoadBalancingProvider - compression accounting (issue #2207)', () => {
     providerManager.setTokenizerFactory(factory);
 
     let gptCallCount = 0;
-    providerManager.registerProvider({
-      name: 'openai',
-      async *generateChatCompletion(): AsyncGenerator<IContent> {
-        gptCallCount++;
-        if (gptCallCount === 1) {
-          throw new Error('429 rate limited');
-        }
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
-      },
-      getModels: async () => [],
-      getDefaultModel: () => 'gpt-4.1',
-      getServerTools: () => [],
-      invokeServerTool: async () => ({}),
-    });
+    providerManager.registerProvider(
+      createRateLimitedOpenAiProvider(() => ++gptCallCount),
+    );
     let anthropicCallCount = 0;
     providerManager.registerProvider(
       createMockProvider({

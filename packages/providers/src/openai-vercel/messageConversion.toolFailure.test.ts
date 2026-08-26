@@ -57,6 +57,40 @@ function firstToolResultOutput(contents: IContent[]): ToolResultPart['output'] {
   return parts[0].output;
 }
 
+function getToolOutputValue(
+  output: ToolResultPart['output'],
+  expectedType: 'text' | 'error-text',
+): string {
+  if (output.type !== 'text' && output.type !== 'error-text') {
+    throw new Error(`expected ${expectedType} output, got ${output.type}`);
+  }
+  if (output.type !== expectedType) {
+    throw new Error(`expected ${expectedType} output, got ${output.type}`);
+  }
+  return output.value;
+}
+
+function requireToolResponse(
+  blocks: readonly ToolResponseBlock[],
+  toolName: string,
+): ToolResponseBlock {
+  const block = blocks.find((candidate) => candidate.toolName === toolName);
+  if (!block) {
+    throw new Error(`expected a ${toolName} block`);
+  }
+  return block;
+}
+
+function toolResponseBlocks(
+  contents: readonly IContent[],
+): ToolResponseBlock[] {
+  return contents.flatMap((content) =>
+    content.blocks.flatMap((block) =>
+      block.type === 'tool_response' ? [block] : [],
+    ),
+  );
+}
+
 function roundTripToolResponses(
   ...blocks: ToolResponseBlock[]
 ): ToolResponseBlock[] {
@@ -93,10 +127,7 @@ describe('messageConversion tool-failure round trip (issue #3076)', () => {
         error: 'boom',
       }),
     ]);
-    if (output.type !== 'error-text') {
-      throw new Error(`expected error-text output, got ${output.type}`);
-    }
-    expect(output.value).toBe('partial data');
+    expect(getToolOutputValue(output, 'error-text')).toBe('partial data');
   });
 
   it('AC1.3 — a failed block with no result yields the error text, not [no tool result]', () => {
@@ -109,10 +140,7 @@ describe('messageConversion tool-failure round trip (issue #3076)', () => {
         error: 'the tool exploded',
       }),
     ]);
-    if (output.type !== 'error-text') {
-      throw new Error(`expected error-text output, got ${output.type}`);
-    }
-    expect(output.value).toBe('the tool exploded');
+    expect(getToolOutputValue(output, 'error-text')).toBe('the tool exploded');
   });
 
   it('AC1.4 — a tool_response without error still yields a text output (regression guard, incl. empty placeholder)', () => {
@@ -124,10 +152,7 @@ describe('messageConversion tool-failure round trip (issue #3076)', () => {
         result: { output: 'all good' },
       }),
     ]);
-    if (successOutput.type !== 'text') {
-      throw new Error(`expected text output, got ${successOutput.type}`);
-    }
-    expect(successOutput.value).toBe('all good');
+    expect(getToolOutputValue(successOutput, 'text')).toBe('all good');
 
     const emptyOutput = firstToolResultOutput([
       toolContent({
@@ -137,10 +162,7 @@ describe('messageConversion tool-failure round trip (issue #3076)', () => {
         result: undefined,
       }),
     ]);
-    if (emptyOutput.type !== 'text') {
-      throw new Error(`expected text output, got ${emptyOutput.type}`);
-    }
-    expect(emptyOutput.value).toBe('[no tool result]');
+    expect(getToolOutputValue(emptyOutput, 'text')).toBe('[no tool result]');
   });
 
   it('AC1.5 — round trip convertTo -> convertFrom keeps failures marked failed and successes clean', () => {
@@ -160,19 +182,10 @@ describe('messageConversion tool-failure round trip (issue #3076)', () => {
       }),
     ];
 
-    const blocks = roundTripToolResponses(
-      ...contents.flatMap((content) =>
-        content.blocks.flatMap((block) =>
-          block.type === 'tool_response' ? [block] : [],
-        ),
-      ),
-    );
+    const blocks = roundTripToolResponses(...toolResponseBlocks(contents));
 
-    const failed = blocks.find((b) => b.toolName === 'failingTool');
-    const succeeded = blocks.find((b) => b.toolName === 'okTool');
-    if (!failed || !succeeded) {
-      throw new Error('expected both a failed and a succeeded block');
-    }
+    const failed = requireToolResponse(blocks, 'failingTool');
+    const succeeded = requireToolResponse(blocks, 'okTool');
 
     // The pre-existing inbound decoder (parseToolResultPart) sets the reconstructed
     // `error` to the OUTPUT TEXT rather than the original error string, so the
@@ -203,11 +216,11 @@ describe('messageConversion tool-failure round trip (issue #3076)', () => {
       },
     );
 
-    expect(blocks.map((block) => block.error)).toEqual([
+    expect(blocks.map((block) => block.error)).toStrictEqual([
       'undefined result failed',
       'null result failed',
     ]);
-    expect(blocks.map((block) => block.result)).toEqual([
+    expect(blocks.map((block) => block.result)).toStrictEqual([
       'undefined result failed',
       'null result failed',
     ]);
@@ -246,9 +259,6 @@ describe('messageConversion tool-failure round trip (issue #3076)', () => {
         error: 'the tool exploded',
       }),
     ]);
-    if (output.type !== 'error-text') {
-      throw new Error(`expected error-text output, got ${output.type}`);
-    }
-    expect(output.value).toBe('the tool exploded');
+    expect(getToolOutputValue(output, 'error-text')).toBe('the tool exploded');
   });
 });

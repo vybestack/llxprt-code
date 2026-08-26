@@ -25,6 +25,36 @@ import {
   type LoadBalancingProviderConfig,
 } from '../LoadBalancingProvider.js';
 
+function createLivenessDelegate(name: string): IProvider {
+  return {
+    name,
+    async *generateChatCompletion(
+      optionsOrContents: GenerateChatOptions | IContent[],
+    ): AsyncIterableIterator<IContent> {
+      const opts = Array.isArray(optionsOrContents)
+        ? undefined
+        : optionsOrContents;
+      opts?.onStreamLiveness?.({
+        sourceEvent: 'response.created',
+        sseObserved: true,
+      });
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+    },
+    getModels: async () => [],
+    getDefaultModel: () => 'delegate-model',
+    getServerTools: () => [],
+    invokeServerTool: async () => ({}),
+  } as unknown as IProvider;
+}
+
+function resolveLivenessDelegate(
+  name: string,
+  fallback: (providerName: string) => IProvider | undefined,
+): IProvider | undefined {
+  if (name === 'gemini') return createLivenessDelegate('gemini');
+  return fallback(name);
+}
+
 describe('LoadBalancingProvider — onStreamLiveness propagation (issue #2607 finding 6)', () => {
   let settingsService: SettingsService;
   let providerManager: ProviderManager;
@@ -38,28 +68,6 @@ describe('LoadBalancingProvider — onStreamLiveness propagation (issue #2607 fi
   it('onStreamLiveness invoked at the delegate reaches the original caller callback', async () => {
     const captured: StreamLivenessEvent[] = [];
 
-    function createLivenessDelegate(name: string): IProvider {
-      return {
-        name,
-        async *generateChatCompletion(
-          optionsOrContents: GenerateChatOptions | IContent[],
-        ): AsyncIterableIterator<IContent> {
-          const opts = Array.isArray(optionsOrContents)
-            ? undefined
-            : optionsOrContents;
-          opts?.onStreamLiveness?.({
-            sourceEvent: 'response.created',
-            sseObserved: true,
-          });
-          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
-        },
-        getModels: async () => [],
-        getDefaultModel: () => 'delegate-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
-      } as unknown as IProvider;
-    }
-
     const lbConfig: LoadBalancingProviderConfig = {
       profileName: 'lb',
       strategy: 'round-robin',
@@ -70,10 +78,8 @@ describe('LoadBalancingProvider — onStreamLiveness propagation (issue #2607 fi
 
     const originalGetProvider =
       providerManager.getProviderByName.bind(providerManager);
-    providerManager.getProviderByName = (name: string) => {
-      if (name === 'gemini') return createLivenessDelegate('gemini');
-      return originalGetProvider(name);
-    };
+    providerManager.getProviderByName = (name: string) =>
+      resolveLivenessDelegate(name, originalGetProvider);
 
     try {
       const iterator = provider.generateChatCompletion({

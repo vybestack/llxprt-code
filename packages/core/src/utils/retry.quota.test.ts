@@ -27,6 +27,86 @@ function statusError(message: string, status: number): Error {
 }
 
 /**
+ * Builds a mock that throws `errorFactory()` for the first `failures` calls and
+ * then returns `successValue`. The error is freshly built on every call.
+ */
+function rejectingTimes<T>(
+  failures: number,
+  errorFactory: () => Error,
+  successValue: T,
+): ReturnType<typeof vi.fn> {
+  let attempts = 0;
+  return vi.fn(async (): Promise<T> => {
+    attempts++;
+    if (attempts <= failures) {
+      throw errorFactory();
+    }
+    return successValue;
+  });
+}
+
+/**
+ * Builds a mock that throws a fresh RetryableQuotaError wrapping
+ * `googleError` (with the given retryDelaySeconds) for `failures` calls and
+ * then returns `successValue`.
+ */
+function rejectingQuotaTimes(
+  failures: number,
+  googleError: GoogleApiError,
+  message: string,
+  retryDelaySeconds: number | undefined,
+  successValue: string,
+): ReturnType<typeof vi.fn> {
+  return rejectingTimes(
+    failures,
+    () => new RetryableQuotaError(message, googleError, retryDelaySeconds),
+    successValue,
+  );
+}
+
+function hasLazyDebugRetryAfterMessage(
+  calls: ReadonlyArray<readonly unknown[]>,
+  delayMs: number,
+): boolean {
+  const delayLabel = `Retrying after ${delayMs}ms`;
+  return calls.some((call) => {
+    const message = call[0];
+    return (
+      typeof message === 'function' && String(message()).includes(delayLabel)
+    );
+  });
+}
+
+function hasDirectConsoleRetryAfterMessage(
+  calls: ReadonlyArray<readonly unknown[]>,
+  delayMs: number,
+): boolean {
+  const delayLabel = `Retrying after ${delayMs}ms`;
+  return calls.some((call) => {
+    const message = call[0];
+    return typeof message === 'string' && message.includes(delayLabel);
+  });
+}
+
+/**
+ * Searches captured DebugLogger warning calls for a rendered message that reports a
+ * failed attempt and the exhaustion of the retry budget.
+ */
+function hasMaxAttemptsMessage(calls: unknown[][]): boolean {
+  return calls.some((call) => {
+    const messageFn = call[0];
+    if (typeof messageFn === 'function') {
+      const message = String(messageFn());
+      return (
+        message.includes('Attempt 2 failed') &&
+        message.includes('Max attempts reached')
+      );
+    }
+    return false;
+  });
+}
+
+/**
  * @plan PLAN-20250219-GMERGE021.R13.P02
  * @requirement REQ-R13-003 Unit tests for retry precedence
  */
@@ -203,8 +283,15 @@ describe('RetryableQuotaError with exponential backoff', () => {
       details: [],
     };
 
-    let attemptCount = 0;
     const delays: number[] = [];
+
+    const mockFn = rejectingQuotaTimes(
+      3,
+      mockGoogleApiError,
+      'Quota exceeded',
+      undefined, // undefined retryDelaySeconds
+      'success',
+    );
 
     // Mock delay to capture actual delay values and advance time
     const delayModule = await import('./delay.js');
@@ -212,19 +299,6 @@ describe('RetryableQuotaError with exponential backoff', () => {
       delays.push(ms);
       vi.advanceTimersByTime(ms);
       return Promise.resolve();
-    });
-
-    const mockFn = vi.fn(async () => {
-      attemptCount++;
-      if (attemptCount <= 3) {
-        // Create RetryableQuotaError with undefined retryDelayMs
-        throw new RetryableQuotaError(
-          'Quota exceeded',
-          mockGoogleApiError,
-          undefined, // undefined retryDelaySeconds
-        );
-      }
-      return 'success';
     });
 
     const promise = retryWithBackoff(mockFn, {
@@ -265,27 +339,21 @@ describe('RetryableQuotaError with exponential backoff', () => {
       details: [],
     };
 
-    let attemptCount = 0;
     const delays: number[] = [];
+
+    const mockFn = rejectingQuotaTimes(
+      2,
+      mockGoogleApiError,
+      'Quota exceeded',
+      10, // 10 seconds
+      'success',
+    );
 
     const delayModule = await import('./delay.js');
     vi.spyOn(delayModule, 'delay').mockImplementation(async (ms: number) => {
       delays.push(ms);
       vi.advanceTimersByTime(ms);
       return Promise.resolve();
-    });
-
-    const mockFn = vi.fn(async () => {
-      attemptCount++;
-      if (attemptCount <= 2) {
-        // Create RetryableQuotaError with explicit retryDelayMs=10000 (10 seconds)
-        throw new RetryableQuotaError(
-          'Quota exceeded',
-          mockGoogleApiError,
-          10, // 10 seconds
-        );
-      }
-      return 'success';
     });
 
     const promise = retryWithBackoff(mockFn, {
@@ -345,21 +413,7 @@ describe('RetryableQuotaError with exponential backoff', () => {
 
     // Get the actual logged message by calling the function
     const warnCalls = debugLoggerWarnSpy.mock.calls;
-    let foundMaxAttemptsMessage = false;
-    for (const call of warnCalls) {
-      const messageFn = call[0];
-      if (typeof messageFn === 'function') {
-        const message = String(messageFn());
-        if (
-          message.includes('Attempt 2 failed') &&
-          message.includes('Max attempts reached')
-        ) {
-          foundMaxAttemptsMessage = true;
-          break;
-        }
-      }
-    }
-    expect(foundMaxAttemptsMessage).toBe(true);
+    expect(hasMaxAttemptsMessage(warnCalls)).toBe(true);
   });
 
   it('should use debugLogger.warn instead of console.warn for explicit retryDelayMs', async () => {
@@ -378,18 +432,13 @@ describe('RetryableQuotaError with exponential backoff', () => {
       return Promise.resolve();
     });
 
-    let attemptCount = 0;
-    const mockFn = vi.fn(async () => {
-      attemptCount++;
-      if (attemptCount === 1) {
-        throw new RetryableQuotaError(
-          'Quota with delay',
-          mockGoogleApiError,
-          10, // 10 seconds
-        );
-      }
-      return 'success';
-    });
+    const mockFn = rejectingQuotaTimes(
+      1,
+      mockGoogleApiError,
+      'Quota with delay',
+      10, // 10 seconds
+      'success',
+    );
 
     const promise = retryWithBackoff(mockFn, {
       maxAttempts: 3,
@@ -407,35 +456,14 @@ describe('RetryableQuotaError with exponential backoff', () => {
 
     // Get the actual logged message - check all warn calls
     const warnCalls = debugLoggerWarnSpy.mock.calls;
-    let foundRetryMessage = false;
-    for (const call of warnCalls) {
-      const messageFn = call[0];
-      if (typeof messageFn === 'function') {
-        const message = String(messageFn());
-        // Look for the message with attempt number and retry delay
-        if (
-          message.includes('failed') &&
-          message.includes('Retrying after 10000ms')
-        ) {
-          foundRetryMessage = true;
-          break;
-        }
-      }
-    }
-    expect(foundRetryMessage).toBe(true);
+    expect(hasLazyDebugRetryAfterMessage(warnCalls, 10000)).toBe(true);
 
     // Verify console.warn was NOT called for this specific retry message
     // (console.warn might be called for other reasons, so we check it wasn't called with our specific message)
     const consoleWarnCalls = consoleWarnSpy.mock.calls;
-    let foundConsoleWarnRetryMessage = false;
-    for (const call of consoleWarnCalls) {
-      const message = String(call[0] ?? '');
-      if (message.includes('Retrying after 10000ms')) {
-        foundConsoleWarnRetryMessage = true;
-        break;
-      }
-    }
-    expect(foundConsoleWarnRetryMessage).toBe(false);
+    expect(hasDirectConsoleRetryAfterMessage(consoleWarnCalls, 10000)).toBe(
+      false,
+    );
   });
 });
 
@@ -452,14 +480,11 @@ describe('retryWithBackoff Windows timeout retry (issue #2557)', () => {
   });
 
   it('retries a DOMException TimeoutError and succeeds when a later attempt succeeds', async () => {
-    let attemptCount = 0;
-    const mockFn = vi.fn(async () => {
-      attemptCount++;
-      if (attemptCount <= 2) {
-        throw new DOMException('The operation timed out.', 'TimeoutError');
-      }
-      return 'success';
-    });
+    const mockFn = rejectingTimes(
+      2,
+      () => new DOMException('The operation timed out.', 'TimeoutError'),
+      'success',
+    );
 
     // Settle the promise into a tagged outcome up front. The fake-timer drain
     // below is what actually runs the retry loop, so a rejection would

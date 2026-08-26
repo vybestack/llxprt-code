@@ -155,25 +155,35 @@ describe('request-shape measurement cost guards (issue #3130)', () => {
   });
 
   it('keeps one turn identity across the attempts of a single logical turn', () => {
-    // A discard-restart re-enters the send path with the same promptId. Both
-    // attempts describe the same conversation turn, so both records must name
-    // the same turn_id or the retry cannot be joined to the turn it replaced.
-    const contents: IContent[] = [textTurn(1)];
-    const first = stampTurnIdentityOnInput(contents[0], {
-      promptId: 'p-1',
-      turnId: 'turn-1',
-    });
-    const retried = stampTurnIdentityOnInput(first, {
-      promptId: 'p-1',
-      turnId: 'turn-2-should-not-win',
-    });
-
+    const { retried, turnIdObservation, promptIdObservation } =
+      observeKeepsOneTurnIdentityAcrossTheAttemptsOfASingleLogicalTurn();
     expect(Array.isArray(retried)).toBe(false);
-    if (Array.isArray(retried))
-      throw new Error('expected a single content, not an array');
-    expect(retried.metadata?.turnId).toBe('turn-1');
-    expect(retried.metadata?.promptId).toBe('p-1');
+    expect(turnIdObservation).toBe('turn-1');
+    expect(promptIdObservation).toBe('p-1');
   });
+
+  const observeKeepsOneTurnIdentityAcrossTheAttemptsOfASingleLogicalTurn =
+    () => {
+      // A discard-restart re-enters the send path with the same promptId. Both
+      // attempts describe the same conversation turn, so both records must name
+      // the same turn_id or the retry cannot be joined to the turn it replaced.
+      const contents: IContent[] = [textTurn(1)];
+      const first = stampTurnIdentityOnInput(contents[0], {
+        promptId: 'p-1',
+        turnId: 'turn-1',
+      });
+      const retried = stampTurnIdentityOnInput(first, {
+        promptId: 'p-1',
+        turnId: 'turn-2-should-not-win',
+      });
+
+      if (Array.isArray(retried))
+        throw new Error('expected a single content, not an array');
+
+      const turnIdObservation = retried.metadata?.turnId;
+      const promptIdObservation = retried.metadata?.promptId;
+      return { retried, turnIdObservation, promptIdObservation };
+    };
 
   it('tokenizes a carried content once, not once per send', () => {
     // The whole point: a big tool result that rides along for many turns must
@@ -224,6 +234,13 @@ describe('request-shape measurement cost guards (issue #3130)', () => {
 
 describe('bucket attribution against the real history pipeline (issue #3130)', () => {
   it('counts a tool result as history, not as an injection', async () => {
+    const { toolTurnIsFlagged, shape } =
+      await observeCountsAToolResultAsHistoryNotAsAnInjection();
+    expect(toolTurnIsFlagged).toBe(true);
+    expect(shape.injectedTokens).toBe(0);
+  });
+
+  const observeCountsAToolResultAsHistoryNotAsAnInjection = async () => {
     // The provider pipeline rebuilds every tool turn through
     // ensureToolResponseAdjacency and stamps synthetic:true with
     // reason:'reordered_tool_responses' even when nothing was reordered. Reading
@@ -280,7 +297,6 @@ describe('bucket attribution against the real history pipeline (issue #3130)', (
     const toolTurnIsFlagged = requestContents.some(
       (c) => c.speaker === 'tool' && c.metadata?.synthetic === true,
     );
-    expect(toolTurnIsFlagged).toBe(true);
 
     const shape = computeRequestShape({
       requestContents,
@@ -290,6 +306,6 @@ describe('bucket attribution against the real history pipeline (issue #3130)', (
       previouslySentCallIds: new Set<string>(),
     });
 
-    expect(shape.injectedTokens).toBe(0);
-  });
+    return { toolTurnIsFlagged, shape };
+  };
 });

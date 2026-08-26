@@ -27,6 +27,19 @@ import type {
 // Mock fetch globally
 global.fetch = vi.fn();
 
+function containsThinkingWithoutToolCall(content: IContent): boolean {
+  return (
+    content.blocks.some((block) => block.type === 'thinking') &&
+    !content.blocks.some((block) => block.type === 'tool_call')
+  );
+}
+
+function getReasoningContextSetting(key: string): unknown {
+  if (key === 'reasoning.includeInContext') return true;
+  if (key === 'reasoning.stripFromContext') return 'none';
+  return undefined;
+}
+
 describe('OpenAIProvider DeepSeek-reasoner reasoning+tool_calls co-emission (issue #1142)', () => {
   let provider: OpenAIProvider;
   let settingsService: SettingsService;
@@ -242,9 +255,7 @@ describe('OpenAIProvider DeepSeek-reasoner reasoning+tool_calls co-emission (iss
     // Verify there is NO separate IContent that has only a ThinkingBlock
     // (the old behavior that caused the bug)
     const thinkingOnlyContent = contents.filter(
-      (c) =>
-        c.blocks.some((b) => b.type === 'thinking') &&
-        !c.blocks.some((b) => b.type === 'tool_call'),
+      containsThinkingWithoutToolCall,
     );
     expect(thinkingOnlyContent).toHaveLength(0);
   });
@@ -370,13 +381,7 @@ describe('OpenAIProvider DeepSeek-reasoner reasoning+tool_calls co-emission (iss
     const messages = buildMessagesWithReasoning(
       [combinedContent],
       {
-        settings: {
-          get: (key: string) => {
-            if (key === 'reasoning.includeInContext') return true;
-            if (key === 'reasoning.stripFromContext') return 'none';
-            return undefined;
-          },
-        },
+        settings: { get: getReasoningContextSetting },
         invocation: { requestId: 'test', timestamp: Date.now() },
         resolved: {
           model: 'deepseek-reasoner',
@@ -436,13 +441,7 @@ describe('OpenAIProvider DeepSeek-reasoner reasoning+tool_calls co-emission (iss
     const messages = buildMessagesWithReasoning(
       [thinkingContent, toolCallContent],
       {
-        settings: {
-          get: (key: string) => {
-            if (key === 'reasoning.includeInContext') return true;
-            if (key === 'reasoning.stripFromContext') return 'none';
-            return undefined;
-          },
-        },
+        settings: { get: getReasoningContextSetting },
         invocation: { requestId: 'test', timestamp: Date.now() },
         resolved: {
           model: 'deepseek-reasoner',

@@ -5,6 +5,17 @@ import type {
 } from './buildResponsesRequest.js';
 import { buildResponsesRequest } from './buildResponsesRequest.js';
 
+function getInputMessageContent(message: unknown): unknown {
+  if (
+    typeof message !== 'object' ||
+    message === null ||
+    !('content' in message)
+  ) {
+    return undefined;
+  }
+  return message.content;
+}
+
 describe('buildResponsesRequest', () => {
   let warnSpy: ReturnType<typeof vi.spyOn>;
 
@@ -278,15 +289,9 @@ describe('buildResponsesRequest', () => {
       const msg0 = result.input?.[0];
       const msg1 = result.input?.[1];
       const msg2 = result.input?.[2];
-      expect(msg0 && 'content' in msg0 ? msg0.content : undefined).toBe(
-        'Second message',
-      );
-      expect(msg1 && 'content' in msg1 ? msg1.content : undefined).toBe(
-        'Second response',
-      );
-      expect(msg2 && 'content' in msg2 ? msg2.content : undefined).toBe(
-        'Third message',
-      );
+      expect(getInputMessageContent(msg0)).toBe('Second message');
+      expect(getInputMessageContent(msg1)).toBe('Second response');
+      expect(getInputMessageContent(msg2)).toBe('Third message');
     });
 
     it('should not trim messages when conversationId is used with 2 or fewer messages', () => {

@@ -400,7 +400,7 @@ describe('parseAnthropicImageDimensionLimit (@issue:3216)', () => {
 
 describe('resolveRecoveryImageBudget (@issue:3216 H3)', () => {
   it('uses the parsed error limit alone when no budget is configured', () => {
-    expect(resolveRecoveryImageBudget(undefined, 2000)).toEqual({
+    expect(resolveRecoveryImageBudget(undefined, 2000)).toStrictEqual({
       maxDimension: 2000,
     });
   });
@@ -412,21 +412,29 @@ describe('resolveRecoveryImageBudget (@issue:3216 H3)', () => {
   it('retains a pixel-only config and applies the parsed error dimension', () => {
     // A 3000x500 image (1.5M px) is under the 4M pixel cap but its 3000 width
     // exceeds the error-derived 2000 dimension — both must be enforced.
-    expect(resolveRecoveryImageBudget({ maxPixels: 4_000_000 }, 2000)).toEqual({
+    expect(
+      resolveRecoveryImageBudget({ maxPixels: 4_000_000 }, 2000),
+    ).toStrictEqual({
       maxDimension: 2000,
       maxPixels: 4_000_000,
     });
   });
 
   it('uses the stricter max dimension when the configured one is looser', () => {
-    expect(resolveRecoveryImageBudget({ maxDimension: 3000 }, 2000)).toEqual({
+    expect(
+      resolveRecoveryImageBudget({ maxDimension: 3000 }, 2000),
+    ).toStrictEqual({
       maxDimension: 2000,
+      maxPixels: undefined,
     });
   });
 
   it('uses the stricter max dimension when the configured one is stricter', () => {
-    expect(resolveRecoveryImageBudget({ maxDimension: 1500 }, 2000)).toEqual({
+    expect(
+      resolveRecoveryImageBudget({ maxDimension: 1500 }, 2000),
+    ).toStrictEqual({
       maxDimension: 1500,
+      maxPixels: undefined,
     });
   });
 
@@ -436,19 +444,22 @@ describe('resolveRecoveryImageBudget (@issue:3216 H3)', () => {
         { maxDimension: 1500, maxPixels: 2_000_000 },
         2000,
       ),
-    ).toEqual({ maxDimension: 1500, maxPixels: 2_000_000 });
+    ).toStrictEqual({ maxDimension: 1500, maxPixels: 2_000_000 });
   });
 
   it('keeps the exact boundary when configured dimension equals the error limit', () => {
-    expect(resolveRecoveryImageBudget({ maxDimension: 2000 }, 2000)).toEqual({
+    expect(
+      resolveRecoveryImageBudget({ maxDimension: 2000 }, 2000),
+    ).toStrictEqual({
       maxDimension: 2000,
+      maxPixels: undefined,
     });
   });
 
   it('keeps a pixel-only configured budget when the error limit is missing', () => {
     expect(
       resolveRecoveryImageBudget({ maxPixels: 4_000_000 }, undefined),
-    ).toEqual({ maxPixels: 4_000_000 });
+    ).toStrictEqual({ maxDimension: undefined, maxPixels: 4_000_000 });
   });
 });
 
@@ -508,6 +519,10 @@ function isImageBlock(block: unknown): block is AnthropicImageBlock {
   );
 }
 
+function imageBlockData(block: unknown): string {
+  return isImageBlock(block) ? block.source.data : '';
+}
+
 function isTextBlock(block: unknown): block is AnthropicTextBlock {
   return (
     typeof block === 'object' &&
@@ -524,26 +539,28 @@ function isToolResultBlock(block: unknown): block is AnthropicToolResultBlock {
   );
 }
 
-/**
- * Assert the block type and return the narrowed value. Avoids conditional
- * expect calls inside if-blocks (jest/no-conditional-expect).
- * The type assertion is safe because it is guarded by the runtime type guard.
- */
-function expectImageBlock(block: AnthropicContentBlock): AnthropicImageBlock {
-  expect(isImageBlock(block)).toBe(true);
-  return block as AnthropicImageBlock;
-}
-
-function expectTextBlock(block: AnthropicContentBlock): AnthropicTextBlock {
-  expect(isTextBlock(block)).toBe(true);
-  return block as AnthropicTextBlock;
-}
-
-function expectToolResultBlock(
+function requireImageBlock(
   block: AnthropicContentBlock,
-): AnthropicToolResultBlock {
-  expect(isToolResultBlock(block)).toBe(true);
-  return block as AnthropicToolResultBlock;
+): asserts block is AnthropicImageBlock {
+  if (!isImageBlock(block)) {
+    throw new Error('Expected an Anthropic image block');
+  }
+}
+
+function requireTextBlock(
+  block: AnthropicContentBlock,
+): asserts block is AnthropicTextBlock {
+  if (!isTextBlock(block)) {
+    throw new Error('Expected an Anthropic text block');
+  }
+}
+
+function requireToolResultBlock(
+  block: AnthropicContentBlock,
+): asserts block is AnthropicToolResultBlock {
+  if (!isToolResultBlock(block)) {
+    throw new Error('Expected an Anthropic tool_result block');
+  }
 }
 
 describe('sanitizeAnthropicRequestBodyImages nested tool_result traversal (@issue:3216)', () => {
@@ -604,23 +621,30 @@ describe('sanitizeAnthropicRequestBodyImages nested tool_result traversal (@issu
 
     expect(result.replacedCount).toBe(1);
     const userMessage = result.body['messages'] as typeof body.messages;
-    const toolResult = expectToolResultBlock(userMessage[1].content[0]);
+    const toolResult = userMessage[1].content[0];
+    expect(isToolResultBlock(toolResult)).toBe(true);
+    requireToolResultBlock(toolResult);
     // Wrapper identity preserved: exact pairing and error flag.
     expect(toolResult.tool_use_id).toBe('toolu_123');
     expect(toolResult.is_error).toBeUndefined();
     const nested = toolResult.content as readonly AnthropicContentBlock[];
     // Sibling text preserved, first (oversized) image replaced, valid image
     // retained, ordering intact.
-    expect(expectTextBlock(nested[0]).text).toBe('file content here');
+    const textBlock = nested[0];
+    expect(isTextBlock(textBlock)).toBe(true);
+    requireTextBlock(textBlock);
+    expect(textBlock.text).toBe('file content here');
     expect(isTextBlock(nested[1])).toBe(true);
-    const img2 = expectImageBlock(nested[2]);
+    const img2 = nested[2];
+    expect(isImageBlock(img2)).toBe(true);
+    requireImageBlock(img2);
     expect(img2.source.data).toBe(okNested);
     // Bytes of the oversized image must be gone from the nested content.
     expect(JSON.stringify(toolResult)).not.toContain(bigNested);
     // Unrelated top-level fields preserved.
     expect(result.body['model']).toBe('claude-opus-5');
     // The input body is NOT mutated at any level.
-    expect(body).toEqual(original);
+    expect(body).toStrictEqual(original);
   });
 
   it('sanitizes multiple nested oversized images across multiple tool_results', async () => {
@@ -675,8 +699,12 @@ describe('sanitizeAnthropicRequestBodyImages nested tool_result traversal (@issu
     expect(serialized).not.toContain(big1);
     expect(serialized).not.toContain(big2);
     const userMessage = result.body['messages'] as typeof body.messages;
-    const firstToolResult = expectToolResultBlock(userMessage[0].content[0]);
-    const secondToolResult = expectToolResultBlock(userMessage[0].content[1]);
+    const firstToolResult = userMessage[0].content[0];
+    const secondToolResult = userMessage[0].content[1];
+    expect(isToolResultBlock(firstToolResult)).toBe(true);
+    requireToolResultBlock(firstToolResult);
+    expect(isToolResultBlock(secondToolResult)).toBe(true);
+    requireToolResultBlock(secondToolResult);
     expect(firstToolResult.tool_use_id).toBe('toolu_a');
     expect(secondToolResult.tool_use_id).toBe('toolu_b');
     expect(secondToolResult.is_error).toBe(false);
@@ -831,7 +859,7 @@ describe('sanitizeAnthropicRequestBodyImages nested tool_result traversal (@issu
     expect(result.replacedCount).toBe(0);
     // No replacements: the SAME body object is returned (identity).
     expect(result.body).toBe(body as unknown as Record<string, unknown>);
-    expect(body).toEqual(original);
+    expect(body).toStrictEqual(original);
   });
 
   it('is immutable: nested arrays and objects are fresh copies, never the originals', async () => {
@@ -879,8 +907,6 @@ describe('sanitizeAnthropicRequestBodyImages nested tool_result traversal (@issu
     expect(newToolResult.content).not.toBe(nestedBefore);
     // Originals untouched.
     expect(isImageBlock(nestedBefore[0])).toBe(true);
-    expect(
-      isImageBlock(nestedBefore[0]) ? nestedBefore[0].source.data : '',
-    ).toBe(big);
+    expect(imageBlockData(nestedBefore[0])).toBe(big);
   });
 });

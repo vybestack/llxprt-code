@@ -36,6 +36,10 @@ function buildOptions(
   } as unknown as NormalizedGenerateChatOptions;
 }
 
+function disabledPdfSetting(key: string): false | undefined {
+  return key === 'media.pdf.enabled' ? false : undefined;
+}
+
 describe('isResponsesPdfEnabled optional settings seam (issue #2817)', () => {
   it('defaults to enabled when settings omits the optional get method', () => {
     const settingsWithoutGet = { set: () => {} };
@@ -47,9 +51,7 @@ describe('isResponsesPdfEnabled optional settings seam (issue #2817)', () => {
   });
 
   it('honors an explicit disable from a settings service that implements get', () => {
-    const settings = {
-      get: (key: string) => (key === 'media.pdf.enabled' ? false : undefined),
-    };
+    const settings = { get: disabledPdfSetting };
 
     expect(isResponsesPdfEnabled(buildOptions(settings))).toBe(false);
   });

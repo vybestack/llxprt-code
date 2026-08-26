@@ -93,6 +93,17 @@ function installFetch(
   };
 }
 
+async function preOutputFailureThenSuccess(call: number): Promise<Response> {
+  if (call === 0) throw new TypeError('fetch failed');
+  return new Response(
+    encodeSse([
+      'data: {"type":"response.output_text.delta","delta":"ok"}\n\n',
+      TERMINAL_EVENT,
+    ]),
+    { status: 200 },
+  );
+}
+
 function buildNormalizedOptions(
   overrides: {
     ephemerals?: Record<string, unknown>;
@@ -243,16 +254,7 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049', () => {
   });
 
   it('AC1 control: a pre-output failure still retries and then succeeds', async () => {
-    fetchMock = installFetch(async (call) => {
-      if (call === 0) throw new TypeError('fetch failed');
-      return new Response(
-        encodeSse([
-          'data: {"type":"response.output_text.delta","delta":"ok"}\n\n',
-          TERMINAL_EVENT,
-        ]),
-        { status: 200 },
-      );
-    });
+    fetchMock = installFetch(preOutputFailureThenSuccess);
     const options = buildNormalizedOptions({
       ephemerals: { retries: 3, retrywait: 0 },
     });

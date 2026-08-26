@@ -33,7 +33,7 @@ async function disposeCreatedSessions(): Promise<void> {
 describe('Zed Session - session_info_update findings (issue #1611 remediation)', () => {
   afterEach(disposeCreatedSessions);
 
-  it('finding 1: the first ACCEPTED prompt wins the title even if a later overlapping prompt finishes first', async () => {
+  async function verifyFinding1TheFirstACCEPTEDPromptWinsTheTitleEvenIfALaterOverlappingPromptFinishesFirst() {
     let promptCount = 0;
     const { agent } = buildScriptedAgent(() => {
       promptCount += 1;
@@ -68,11 +68,22 @@ describe('Zed Session - session_info_update findings (issue #1611 remediation)',
     const firstResponse = await firstPrompt;
     const secondResponse = await secondPrompt;
 
-    expect(firstResponse.stopReason).toBe('cancelled');
-    expect(secondResponse.stopReason).toBe('end_turn');
+    return {
+      firstStopReason: firstResponse.stopReason,
+      secondStopReason: secondResponse.stopReason,
+      session,
+    };
+  }
 
-    const info = session.getLifecycleInfo();
-    expect(info.title).toBe('Prompt A title');
+  it('finding 1: the first ACCEPTED prompt wins the title even if a later overlapping prompt finishes first', async () => {
+    const behaviorResult =
+      await verifyFinding1TheFirstACCEPTEDPromptWinsTheTitleEvenIfALaterOverlappingPromptFinishesFirst();
+
+    expect(behaviorResult.firstStopReason).toBe('cancelled');
+    expect(behaviorResult.secondStopReason).toBe('end_turn');
+    expect(behaviorResult.session.getLifecycleInfo().title).toBe(
+      'Prompt A title',
+    );
   });
 
   it('finding 1: a no-text first prompt consumes eligibility so a later text prompt does not retitle', async () => {

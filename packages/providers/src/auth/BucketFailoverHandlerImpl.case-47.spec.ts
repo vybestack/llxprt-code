@@ -12,6 +12,28 @@ import {
   MemoryTokenStore,
 } from './BucketFailoverHandlerImpl.test-helpers.js';
 
+interface LateEagerTokenReadState {
+  calls: number;
+  readonly firstReadGate: Promise<void>;
+  readonly tokenStore: MemoryTokenStore;
+}
+
+async function readTokenAfterFirstGate(
+  state: LateEagerTokenReadState,
+  bucket: string | undefined,
+): Promise<Awaited<ReturnType<MemoryTokenStore['getToken']>>> {
+  state.calls += 1;
+  if (state.calls === 1) {
+    await state.firstReadGate;
+    return null;
+  }
+  return state.tokenStore.getToken('anthropic', bucket);
+}
+
+function resolveForegroundAuthBucket(bucket: string | undefined): string {
+  return bucket ?? 'default';
+}
+
 describe('BucketFailoverHandlerImpl #47', () => {
   it('re-checks late-started eager auth before pass-3 foreground reauth', async () => {
     // Arrange
@@ -27,16 +49,15 @@ describe('BucketFailoverHandlerImpl #47', () => {
       releaseEagerAuth = resolve;
     });
 
-    let getOAuthTokenCalls = 0;
+    const tokenReadState: LateEagerTokenReadState = {
+      calls: 0,
+      firstReadGate: firstGetOAuthTokenGate,
+      tokenStore,
+    };
     const oauthManager = {
-      getOAuthToken: vi.fn(async (_provider: string, bucket?: string) => {
-        getOAuthTokenCalls += 1;
-        if (getOAuthTokenCalls === 1) {
-          await firstGetOAuthTokenGate;
-          return null;
-        }
-        return tokenStore.getToken('anthropic', bucket);
-      }),
+      getOAuthToken: vi.fn((_provider: string, bucket?: string) =>
+        readTokenAfterFirstGate(tokenReadState, bucket),
+      ),
       getTokenStore: vi.fn(() => tokenStore),
       setSessionBucket: vi.fn(),
       getSessionBucket: vi.fn(() => 'bucket-b'),
@@ -44,7 +65,7 @@ describe('BucketFailoverHandlerImpl #47', () => {
         await tokenStore.saveToken(
           'anthropic',
           makeToken('pass3-token'),
-          bucket ?? 'default',
+          resolveForegroundAuthBucket(bucket),
         );
       }),
       authenticateMultipleBuckets: vi.fn(async () => {
@@ -77,7 +98,7 @@ describe('BucketFailoverHandlerImpl #47', () => {
     await ensurePromise;
 
     await expect(failoverPromise).resolves.toBe(true);
-    expect(getOAuthTokenCalls).toBe(2);
+    expect(tokenReadState.calls).toBe(2);
     expect(oauthManager.authenticate).not.toHaveBeenCalled();
     expect(handler.getCurrentBucket()).toBe('bucket-a');
   });

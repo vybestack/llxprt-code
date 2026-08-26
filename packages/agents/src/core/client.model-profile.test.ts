@@ -360,45 +360,53 @@ describe('AgentClient (client.ts)', () => {
     });
 
     it('preserves stored conversation history when refreshing tools before the next turn', async () => {
-      const committedHistory: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'We are fixing issue 2049.' }],
-        },
-        {
-          speaker: 'ai',
-          blocks: [
-            { type: 'text', text: 'Profile switches must preserve context.' },
-          ],
-        },
-      ];
-      client.storeHistoryForLaterUse(committedHistory);
-      client['chat'] = undefined;
-      const startChatSpy = vi
-        .spyOn(client, 'startChat')
-        .mockImplementation(async (extraHistory?: IContent[]) => {
-          const restoredHistory = extraHistory ?? [];
-          return {
-            getHistory: vi.fn().mockReturnValue(restoredHistory),
-            getHistoryService: vi.fn().mockReturnValue({
-              clear: vi.fn(),
-              findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
-              getCurated: vi.fn().mockReturnValue([]),
-              getTotalTokens: vi.fn().mockReturnValue(0),
-            }),
-            getLastPromptTokenCount: vi.fn().mockReturnValue(0),
-            getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
-            setTools: vi.fn(),
-          } as unknown as ChatSession;
-        });
-
-      await client.setTools();
-
+      const { startChatSpy, committedHistory, restoredHistory } =
+        await observePreservesStoredConversationHistoryWhenRefreshingToolsBeforeTheNextTurn();
       expect(startChatSpy).toHaveBeenCalledWith(committedHistory);
-      const restoredHistory =
-        await AgentClient.prototype.getHistory.call(client);
       expect(restoredHistory).toStrictEqual(committedHistory);
     });
+
+    const observePreservesStoredConversationHistoryWhenRefreshingToolsBeforeTheNextTurn =
+      async () => {
+        const committedHistory: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'We are fixing issue 2049.' }],
+          },
+          {
+            speaker: 'ai',
+            blocks: [
+              { type: 'text', text: 'Profile switches must preserve context.' },
+            ],
+          },
+        ];
+        client.storeHistoryForLaterUse(committedHistory);
+        client['chat'] = undefined;
+        const startChatSpy = vi
+          .spyOn(client, 'startChat')
+          .mockImplementation(async (extraHistory?: IContent[]) => {
+            const restoredHistory = extraHistory ?? [];
+            return {
+              getHistory: vi.fn().mockReturnValue(restoredHistory),
+              getHistoryService: vi.fn().mockReturnValue({
+                clear: vi.fn(),
+                findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
+                getCurated: vi.fn().mockReturnValue([]),
+                getTotalTokens: vi.fn().mockReturnValue(0),
+              }),
+              getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+              getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
+              setTools: vi.fn(),
+            } as unknown as ChatSession;
+          });
+
+        await client.setTools();
+
+        const restoredHistory =
+          await AgentClient.prototype.getHistory.call(client);
+
+        return { startChatSpy, committedHistory, restoredHistory };
+      };
     it('also resets currentSequenceModel on ModelChanged', () => {
       client['currentSequenceModel'] = 'sticky-model';
       coreEvents.emitModelChanged('other-model');
@@ -455,53 +463,63 @@ describe('AgentClient (client.ts)', () => {
     }
 
     it('emits exactly one additional ModelInfo when model changes during InvalidStream continuation', async () => {
-      // Stream 2: continuation succeeds
-      const mockStream2 = (async function* () {
-        yield { type: AgentEventType.Content, value: 'Continued' };
-        yield { type: AgentEventType.Finished, value: { reason: 'STOP' } };
-      })();
-
-      getModelSpy.mockReturnValue('test-model');
-
-      // Intercept between stream1 and stream2 to simulate a model change.
-      // After the first Turn.run returns InvalidStream, change config.getModel
-      // so the continuation's _buildModelInfo reads a different effective model.
-      mockTurnRunFn.mockReset();
-      let callCount = 0;
-      mockTurnRunFn.mockImplementation(() => {
-        callCount++;
-        if (callCount === 1) {
-          const stream = (async function* () {
-            yield { type: AgentEventType.InvalidStream };
-          })();
-          // Simulate model change before continuation
-          getModelSpy.mockReturnValue('changed-model');
-          // Reset sequence model so orchestrator re-reads from config
-          coreEvents.emitModelProfileChanged({
-            model: 'changed-model',
-            providerName: 'anthropic',
-            profileName: null,
-            displayLabel: 'changed-model',
-          });
-          return stream;
-        }
-        return mockStream2;
-      });
-
-      const stream = client.sendMessageStream(
-        [{ type: 'text', text: 'Hi' }],
-        new AbortController().signal,
-        'prompt-change-mid-seq',
-      );
-
-      const infos = await collectModelInfos(stream);
-
-      // First emission for the initial model, then exactly one additional
-      // ModelInfo for the changed identity — no duplicates.
+      const { infos, modelObservation, modelObservation2 } =
+        await observeEmitsExactlyOneAdditionalModelInfoWhenModelChangesDuringInvalidStreamContinuation();
       expect(infos).toHaveLength(2);
-      expect(infos[0]?.model).toBe('test-model');
-      expect(infos[1]?.model).toBe('changed-model');
+      expect(modelObservation).toBe('test-model');
+      expect(modelObservation2).toBe('changed-model');
     });
+
+    const observeEmitsExactlyOneAdditionalModelInfoWhenModelChangesDuringInvalidStreamContinuation =
+      async () => {
+        // Stream 2: continuation succeeds
+        const mockStream2 = (async function* () {
+          yield { type: AgentEventType.Content, value: 'Continued' };
+          yield { type: AgentEventType.Finished, value: { reason: 'STOP' } };
+        })();
+
+        getModelSpy.mockReturnValue('test-model');
+
+        // Intercept between stream1 and stream2 to simulate a model change.
+        // After the first Turn.run returns InvalidStream, change config.getModel
+        // so the continuation's _buildModelInfo reads a different effective model.
+        mockTurnRunFn.mockReset();
+        let callCount = 0;
+        mockTurnRunFn.mockImplementation(() => {
+          callCount++;
+          if (callCount === 1) {
+            const stream = (async function* () {
+              yield { type: AgentEventType.InvalidStream };
+            })();
+            // Simulate model change before continuation
+            getModelSpy.mockReturnValue('changed-model');
+            // Reset sequence model so orchestrator re-reads from config
+            coreEvents.emitModelProfileChanged({
+              model: 'changed-model',
+              providerName: 'anthropic',
+              profileName: null,
+              displayLabel: 'changed-model',
+            });
+            return stream;
+          }
+          return mockStream2;
+        });
+
+        const stream = client.sendMessageStream(
+          [{ type: 'text', text: 'Hi' }],
+          new AbortController().signal,
+          'prompt-change-mid-seq',
+        );
+
+        const infos = await collectModelInfos(stream);
+
+        // First emission for the initial model, then exactly one additional
+        // ModelInfo for the changed identity — no duplicates.
+
+        const modelObservation = infos[0]?.model;
+        const modelObservation2 = infos[1]?.model;
+        return { infos, modelObservation, modelObservation2 };
+      };
 
     it('does not emit additional ModelInfo when identity is unchanged during continuation', async () => {
       const mockStream1 = (async function* () {
@@ -532,6 +550,13 @@ describe('AgentClient (client.ts)', () => {
     });
 
     it('keeps the routed provider stable during continuation', async () => {
+      const { infos, providerNameObservation } =
+        await observeKeepsTheRoutedProviderStableDuringContinuation();
+      expect(infos).toHaveLength(1);
+      expect(providerNameObservation).toBe('gemini');
+    });
+
+    const observeKeepsTheRoutedProviderStableDuringContinuation = async () => {
       const mockStream2 = (async function* () {
         yield { type: AgentEventType.Content, value: 'ok' };
         yield { type: AgentEventType.Finished, value: { reason: 'STOP' } };
@@ -597,8 +622,8 @@ describe('AgentClient (client.ts)', () => {
 
       getContentGenSpy.mockRestore();
 
-      expect(infos).toHaveLength(1);
-      expect(infos[0]?.providerName).toBe('gemini');
-    });
+      const providerNameObservation = infos[0]?.providerName;
+      return { infos, providerNameObservation };
+    };
   });
 });

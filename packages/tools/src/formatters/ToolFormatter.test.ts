@@ -182,7 +182,7 @@ describe('ToolFormatter four conversion mappings', () => {
         type: 'string',
         enum: [1, 2, 3],
       }) as { enum: unknown[] };
-      expect(schema.enum).toEqual(['1', '2', '3']);
+      expect(schema.enum).toStrictEqual(['1', '2', '3']);
     });
 
     it('converts string minLength/maxLength to numbers', () => {
@@ -315,7 +315,7 @@ describe('ToolFormatter direct format mappings', () => {
         'anthropic',
       );
       expect(blocks[0]?.name).toBe('echo');
-      expect(blocks[0]?.parameters).toEqual({ msg: 'hi' });
+      expect(blocks[0]?.parameters).toStrictEqual({ msg: 'hi' });
     });
 
     it('throws on invalid OpenAI tool call', () => {

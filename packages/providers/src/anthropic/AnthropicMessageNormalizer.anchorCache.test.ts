@@ -99,6 +99,37 @@ function cacheControlCount(messages: AnthropicMessage[]): number {
   return count;
 }
 
+function contentBlocks(
+  message: AnthropicMessage,
+): Array<Record<string, unknown>> {
+  if (!Array.isArray(message.content)) {
+    return [];
+  }
+  return message.content as Array<Record<string, unknown>>;
+}
+
+function nonLastContentBlocks(
+  messages: AnthropicMessage[],
+): Array<Record<string, unknown>> {
+  return messages.slice(0, -1).flatMap(contentBlocks);
+}
+
+function contentBlockKeys(messages: AnthropicMessage[]): string[] {
+  return messages.flatMap(contentBlocks).flatMap((block) => Object.keys(block));
+}
+
+function isAnchoredToolResultMessage(message: AnthropicMessage): boolean {
+  return (
+    message.role === 'user' &&
+    Array.isArray(message.content) &&
+    message.content.some(
+      (block) =>
+        (block as { type?: string }).type === 'tool_result' &&
+        'cache_control' in block,
+    )
+  );
+}
+
 describe('Anthropic anchor cache breakpoint — message-level (#3070)', () => {
   it('places cache_control on the message derived from the anchored content', () => {
     const contents: IContent[] = [
@@ -176,12 +207,8 @@ describe('Anthropic anchor cache breakpoint — message-level (#3070)', () => {
       ),
     ).toBe(true);
     // No non-last message carries a breakpoint.
-    for (let i = 0; i < messages.length - 1; i++) {
-      const blocks = messages[i].content;
-      if (!Array.isArray(blocks)) continue;
-      for (const b of blocks) {
-        expect((b as Record<string, unknown>).cache_control).toBeUndefined();
-      }
+    for (const block of nonLastContentBlocks(messages)) {
+      expect(block.cache_control).toBeUndefined();
     }
   });
 
@@ -218,34 +245,26 @@ describe('Anthropic anchor cache breakpoint — message-level (#3070)', () => {
     expect(serialized).not.toContain('anthropicCacheAnchor');
     expect(serialized).not.toContain('Symbol');
 
-    for (const msg of messages) {
-      if (!Array.isArray(msg.content)) {
-        continue;
-      }
-      for (const block of msg.content) {
-        const keys = Object.keys(block);
-        // Every key must be a known Anthropic content-block field.
-        for (const key of keys) {
-          expect(
-            [
-              'type',
-              'text',
-              'id',
-              'name',
-              'input',
-              'tool_use_id',
-              'content',
-              'is_error',
-              'thinking',
-              'signature',
-              'data',
-              'source',
-              'title',
-              'cache_control',
-            ].includes(key),
-          ).toBe(true);
-        }
-      }
+    for (const key of contentBlockKeys(messages)) {
+      // Every key must be a known Anthropic content-block field.
+      expect(
+        [
+          'type',
+          'text',
+          'id',
+          'name',
+          'input',
+          'tool_use_id',
+          'content',
+          'is_error',
+          'thinking',
+          'signature',
+          'data',
+          'source',
+          'title',
+          'cache_control',
+        ].includes(key),
+      ).toBe(true);
     }
   });
 
@@ -316,16 +335,7 @@ describe('Anthropic anchor cache breakpoint — message-level (#3070)', () => {
     // The anchored tool content flushes into a user message carrying the
     // tool_result; that message must carry the anchor breakpoint, and it must
     // NOT be the last message.
-    const anchoredToolMessage = messages.find(
-      (m) =>
-        m.role === 'user' &&
-        Array.isArray(m.content) &&
-        m.content.some(
-          (b) =>
-            (b as { type?: string }).type === 'tool_result' &&
-            'cache_control' in b,
-        ),
-    );
+    const anchoredToolMessage = messages.find(isAnchoredToolResultMessage);
     expect(anchoredToolMessage).toBeDefined();
     expect(anchoredToolMessage).not.toBe(messages[messages.length - 1]);
   });

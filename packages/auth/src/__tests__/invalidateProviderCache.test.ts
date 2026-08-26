@@ -71,6 +71,42 @@ const baseConfig: AuthPrecedenceConfig = {
   providerId: 'anthropic',
 };
 
+/**
+ * Returns a provider-scoped token stub that counts tokens per provider.
+ */
+function profileToken(
+  profileId: string | undefined,
+  fallback: string,
+  count: number,
+): string {
+  return `token-${profileId ?? fallback}-${count}`;
+}
+
+function knownProviderToken(
+  provider: string,
+  vend: (provider: string) => string,
+): string | null {
+  return provider === 'anthropic' || provider === 'gemini'
+    ? vend(provider)
+    : null;
+}
+
+type ProviderTokenVendor = ((provider: string) => string) & {
+  readonly count: (provider: string) => number;
+};
+
+function providerTokenVendor(): ProviderTokenVendor {
+  const counts = new Map<string, number>();
+  return Object.assign(
+    (provider: string): string => {
+      const count = (counts.get(provider) ?? 0) + 1;
+      counts.set(provider, count);
+      return `${provider}-token-${count}`;
+    },
+    { count: (provider: string): number => counts.get(provider) ?? 0 },
+  );
+}
+
 describe('AuthPrecedenceResolver invalidateProviderCache', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -165,7 +201,7 @@ describe('AuthPrecedenceResolver invalidateProviderCache', () => {
     const getTokenMock = vi.fn(
       async (_provider: string, metadata?: OAuthTokenRequestMetadata) => {
         tokenCallCount++;
-        return `token-${metadata?.profileId ?? 'default'}-${tokenCallCount}`;
+        return profileToken(metadata?.profileId, 'default', tokenCallCount);
       },
     );
 
@@ -225,20 +261,10 @@ describe('AuthPrecedenceResolver invalidateProviderCache', () => {
       settingsService,
     );
 
-    let anthropicCallCount = 0;
-    let geminiCallCount = 0;
-
+    const vend = providerTokenVendor();
     const getTokenMock = vi.fn(
-      async (provider: string, _metadata?: OAuthTokenRequestMetadata) => {
-        if (provider === 'anthropic') {
-          anthropicCallCount++;
-          return `anthropic-token-${anthropicCallCount}`;
-        } else if (provider === 'gemini') {
-          geminiCallCount++;
-          return `gemini-token-${geminiCallCount}`;
-        }
-        return null;
-      },
+      async (provider: string, _metadata?: OAuthTokenRequestMetadata) =>
+        knownProviderToken(provider, vend),
     );
 
     const oauthManager: OAuthManager = {
@@ -293,8 +319,8 @@ describe('AuthPrecedenceResolver invalidateProviderCache', () => {
 
     expect(anthropicToken2).toBe('anthropic-token-2'); // New token
     expect(geminiToken2).toBe('gemini-token-1'); // Cached token
-    expect(anthropicCallCount).toBe(2);
-    expect(geminiCallCount).toBe(1); // No additional calls for gemini
+    expect(vend.count('anthropic')).toBe(2);
+    expect(vend.count('gemini')).toBe(1); // No additional calls for gemini
   });
 
   /**

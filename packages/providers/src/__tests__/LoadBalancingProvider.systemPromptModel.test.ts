@@ -38,6 +38,70 @@ function createTextContent(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
 }
 
+function requireGenerateOptions(
+  options: GenerateChatOptions | IContent[],
+): GenerateChatOptions {
+  if (Array.isArray(options)) {
+    throw new Error(
+      'legacy array overload of generateChatCompletion is not exercised by these tests',
+    );
+  }
+  return options;
+}
+
+async function* generatePrimaryFailoverAttempt(
+  options: GenerateChatOptions | IContent[],
+  captured: GenerateChatOptions[],
+  recordAttempt: () => number,
+): AsyncGenerator<IContent> {
+  const resolvedOptions = requireGenerateOptions(options);
+  captured.push(resolvedOptions);
+  if (recordAttempt() === 1) throw new Error('primary down');
+  yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+}
+
+async function* generateCapturedSuccess(
+  options: GenerateChatOptions | IContent[],
+  captured: GenerateChatOptions[],
+): AsyncGenerator<IContent> {
+  captured.push(requireGenerateOptions(options));
+  yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+}
+
+async function* generateRetriedPromptResponse(
+  options: GenerateChatOptions | IContent[],
+  captured: GenerateChatOptions[],
+  recordAttempt: () => number,
+): AsyncGenerator<IContent> {
+  const resolvedOptions = requireGenerateOptions(options);
+  captured.push(resolvedOptions);
+  if (recordAttempt() === 1) {
+    const error = new Error('rate limited') as Error & { status: number };
+    error.status = 429;
+    throw error;
+  }
+  yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+}
+
+function systemInstructionOrNone(options: GenerateChatOptions): string {
+  return options.systemInstruction ?? '<none>';
+}
+
+function resolvedModelOrDefault(options: GenerateChatOptions): string {
+  return options.resolved?.model ?? 'model-a';
+}
+
+function estimateCompressedContents(
+  options: GenerateChatOptions,
+): Promise<number> {
+  const containsCompressedText = options.contents.some((content) =>
+    content.blocks.some(
+      (block) => block.type === 'text' && block.text === 'compressed',
+    ),
+  );
+  return Promise.resolve(containsCompressedText ? 5 : 20);
+}
+
 function createResolvedSubProfile(
   overrides: Partial<ResolvedSubProfile>,
 ): ResolvedSubProfile {
@@ -210,7 +274,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       );
 
       // Assembler invoked exactly once per selected request.
-      expect(invocations).toEqual(['model-a', 'model-b']);
+      expect(invocations).toStrictEqual(['model-a', 'model-b']);
     });
 
     it('two members on the same model: each request still renders that model', async () => {
@@ -274,7 +338,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       );
 
       // One render per selected request.
-      expect(invocations).toEqual(['shared-model', 'shared-model']);
+      expect(invocations).toStrictEqual(['shared-model', 'shared-model']);
     });
   });
 
@@ -286,21 +350,12 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
 
       const primary: IProvider = {
         name: 'openai',
-        async *generateChatCompletion(
-          options: GenerateChatOptions | IContent[],
-        ): AsyncGenerator<IContent> {
-          if (Array.isArray(options)) {
-            throw new Error(
-              'legacy array overload of generateChatCompletion is not exercised by these tests',
-            );
-          }
-          primaryCaptured.push(options);
-          primaryAttempts++;
-          if (primaryAttempts === 1) {
-            throw new Error('primary down');
-          }
-          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
-        },
+        generateChatCompletion: (options: GenerateChatOptions | IContent[]) =>
+          generatePrimaryFailoverAttempt(
+            options,
+            primaryCaptured,
+            () => ++primaryAttempts,
+          ),
         getModels: async () => [],
         getDefaultModel: () => 'model-a',
         getServerTools: () => [],
@@ -308,17 +363,8 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       };
       const secondary: IProvider = {
         name: 'anthropic',
-        async *generateChatCompletion(
-          options: GenerateChatOptions | IContent[],
-        ): AsyncGenerator<IContent> {
-          if (Array.isArray(options)) {
-            throw new Error(
-              'legacy array overload of generateChatCompletion is not exercised by these tests',
-            );
-          }
-          secondaryCaptured.push(options);
-          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
-        },
+        generateChatCompletion: (options: GenerateChatOptions | IContent[]) =>
+          generateCapturedSuccess(options, secondaryCaptured),
         getModels: async () => [],
         getDefaultModel: () => 'model-b',
         getServerTools: () => [],
@@ -371,7 +417,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       );
 
       // Each attempted backend was rendered once.
-      expect(invocations).toEqual(['model-a', 'model-b']);
+      expect(invocations).toStrictEqual(['model-a', 'model-b']);
     });
 
     it('re-renders once per retry attempt on the same backend when retryCount > 1 (pre-yield failure)', async () => {
@@ -379,25 +425,8 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       let attempts = 0;
       const delegate: IProvider = {
         name: 'openai',
-        async *generateChatCompletion(
-          options: GenerateChatOptions | IContent[],
-        ): AsyncGenerator<IContent> {
-          if (Array.isArray(options)) {
-            throw new Error(
-              'legacy array overload of generateChatCompletion is not exercised by these tests',
-            );
-          }
-          captured.push(options);
-          attempts++;
-          if (attempts === 1) {
-            const err = new Error('rate limited') as Error & {
-              status: number;
-            };
-            err.status = 429;
-            throw err;
-          }
-          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
-        },
+        generateChatCompletion: (options: GenerateChatOptions | IContent[]) =>
+          generateRetriedPromptResponse(options, captured, () => ++attempts),
         getModels: async () => [],
         getDefaultModel: () => 'model-a',
         getServerTools: () => [],
@@ -444,7 +473,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       // succeeded) — both invocations are model-a, proving the retry stayed on
       // sub-profile 'a' rather than advancing to 'b'.
       expect(captured).toHaveLength(2);
-      expect(invocations).toEqual(['model-a', 'model-a']);
+      expect(invocations).toStrictEqual(['model-a', 'model-a']);
 
       // The successful (second) attempt rendered its own model.
       expect(captured[1].systemInstruction).toBe('[model=model-a]');
@@ -462,11 +491,9 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       const delegate: IProvider = {
         name: 'openai',
         async projectPromptEnvelope(options: GenerateChatOptions) {
-          projectedSystemInstructions.push(
-            options.systemInstruction ?? '<none>',
-          );
+          projectedSystemInstructions.push(systemInstructionOrNone(options));
           return {
-            model: options.resolved?.model ?? 'model-a',
+            model: resolvedModelOrDefault(options),
             protocol: 'openai-responses',
             method: 'responses/v1',
             projectionRevision: 1,
@@ -485,12 +512,8 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
         async *generateChatCompletion(
           options: GenerateChatOptions | IContent[],
         ): AsyncGenerator<IContent> {
-          if (Array.isArray(options)) {
-            throw new Error(
-              'legacy array overload of generateChatCompletion is not exercised by these tests',
-            );
-          }
-          sentSystemInstructions.push(options.systemInstruction ?? '<none>');
+          const resolvedOptions = requireGenerateOptions(options);
+          sentSystemInstructions.push(systemInstructionOrNone(resolvedOptions));
           yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
         },
         getModels: async () => [],
@@ -527,8 +550,8 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       });
 
       // Projection and transport both saw the sub-profile-rendered prompt.
-      expect(projectedSystemInstructions).toEqual(['[model=model-a]']);
-      expect(sentSystemInstructions).toEqual(['[model=model-a]']);
+      expect(projectedSystemInstructions).toStrictEqual(['[model=model-a]']);
+      expect(sentSystemInstructions).toStrictEqual(['[model=model-a]']);
     });
   });
 
@@ -621,7 +644,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       expect(aggregate.failures.length).toBe(2);
 
       // The assembler was invoked once per backend attempt.
-      expect(invocations).toEqual(['model-a', 'model-b']);
+      expect(invocations).toStrictEqual(['model-a', 'model-b']);
 
       // The delegate was never reached.
       expect(delegate.captured).toHaveLength(0);
@@ -642,11 +665,9 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
             seq: projectionTokens.length,
           });
           projectionTokens.push(transportToken);
-          projectedSystemInstructions.push(
-            options.systemInstruction ?? '<none>',
-          );
+          projectedSystemInstructions.push(systemInstructionOrNone(options));
           return {
-            model: options.resolved?.model ?? 'model-a',
+            model: resolvedModelOrDefault(options),
             protocol: 'openai-responses',
             method: 'responses/v1',
             projectionRevision: 1,
@@ -657,29 +678,15 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
               protocol: 'test',
               promptText: 'proj',
             }),
-            legacyEstimate: () =>
-              Promise.resolve(
-                options.contents.some((content) =>
-                  content.blocks.some(
-                    (block) =>
-                      block.type === 'text' && block.text === 'compressed',
-                  ),
-                )
-                  ? 5
-                  : 20,
-              ),
+            legacyEstimate: () => estimateCompressedContents(options),
           };
         },
         async *generateChatCompletion(
           options: GenerateChatOptions | IContent[],
         ): AsyncGenerator<IContent> {
-          if (Array.isArray(options)) {
-            throw new Error(
-              'legacy array overload of generateChatCompletion is not exercised by these tests',
-            );
-          }
-          sentSystemInstructions.push(options.systemInstruction ?? '<none>');
-          sentTokens.push(options.promptEnvelopeTransportToken);
+          const resolvedOptions = requireGenerateOptions(options);
+          sentSystemInstructions.push(systemInstructionOrNone(resolvedOptions));
+          sentTokens.push(resolvedOptions.promptEnvelopeTransportToken);
           yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
         },
         getModels: async () => [],
@@ -718,13 +725,13 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
 
       // Two projections fired: pre-compression (over-limit) and
       // post-compression (under-limit). Both observed the selected-model prompt.
-      expect(projectedSystemInstructions).toEqual([
+      expect(projectedSystemInstructions).toStrictEqual([
         '[model=model-a]',
         '[model=model-a]',
       ]);
 
       // The final delegate transport saw the same selected-model prompt.
-      expect(sentSystemInstructions).toEqual(['[model=model-a]']);
+      expect(sentSystemInstructions).toStrictEqual(['[model=model-a]']);
 
       // Two projection tokens were created; only the post-compression token
       // was transmitted to the delegate.
@@ -792,7 +799,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       });
 
       expect(delegate.captured[0].systemInstruction).toBeUndefined();
-      expect(invocations).toEqual([]);
+      expect(invocations).toStrictEqual([]);
     });
 
     it('legacy sub-profile without modelId: prompt untouched and assembler never invoked', async () => {
@@ -826,7 +833,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       });
 
       expect(delegate.captured[0].systemInstruction).toBe('CALLER_PROMPT');
-      expect(invocations).toEqual([]);
+      expect(invocations).toStrictEqual([]);
     });
   });
 });

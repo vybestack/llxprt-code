@@ -67,15 +67,8 @@ const P10_READ_OPS: readonly string[] = [
   'label.list',
 ];
 
-function assertAllOpsNonMutating(): void {
-  for (const name of P10_READ_OPS) {
-    const desc = OP_REGISTRY[name];
-    expect(desc, `${name} must be registered`).toBeDefined();
-    expect(desc.mutating, `${name} must be non-mutating`).toBe(false);
-  }
-  for (const [name, desc] of Object.entries(OP_REGISTRY)) {
-    expect('repo' in desc.params, `${name} must accept repo`).toBe(true);
-  }
+function labelFlagIndex(value: string, index: number): number {
+  return value === '--label' ? index : -1;
 }
 
 // ─── Registry structure tests ────────────────────────────────────────────────
@@ -101,15 +94,19 @@ describe('GitHub broker P10 op registry', () => {
       'label.list',
     ];
     for (const opName of expectedOps) {
-      expect(
-        OP_REGISTRY[opName],
-        `${opName} should be registered`,
-      ).toBeDefined();
+      expect(OP_REGISTRY[opName]).toBeDefined();
     }
   });
 
   it('all ops are non-mutating and accept repo', () => {
-    assertAllOpsNonMutating();
+    for (const name of P10_READ_OPS) {
+      const descriptor = OP_REGISTRY[name];
+      expect(descriptor).toBeDefined();
+      expect(descriptor.mutating).toBe(false);
+    }
+    for (const [, descriptor] of Object.entries(OP_REGISTRY)) {
+      expect('repo' in descriptor.params).toBe(true);
+    }
     expect(Object.keys(OP_REGISTRY).length).toBeGreaterThanOrEqual(11);
   });
 
@@ -165,9 +162,7 @@ describe('issue.list pure functions (P10)', () => {
 
     it('includes --label for each label when array provided', () => {
       const argv = buildIssueListArgv({ label: ['bug', 'enhancement'] });
-      const indices = argv
-        .map((v, i) => (v === '--label' ? i : -1))
-        .filter((i) => i >= 0);
+      const indices = argv.map(labelFlagIndex).filter((i) => i >= 0);
       expect(indices.length).toBe(2);
       expect(argv[indices[0] + 1]).toBe('bug');
       expect(argv[indices[1] + 1]).toBe('enhancement');

@@ -101,8 +101,12 @@ describe('history size breakdown via HistoryService.getRawHistory', () => {
     service.add(toolResponseItem('read_file', 'c1', 'a'.repeat(100_000)));
 
     const breakdown = sizeOf(service);
-    const toolBytes = breakdown.bytesByBlockType['tool_response'] ?? 0;
-    const textBytes = breakdown.bytesByBlockType['text'] ?? 0;
+    const toolBytes = bytesFor(breakdown, 'tool_response');
+    const textBytes = bytesFor(breakdown, 'text');
     expect(toolBytes).toBeGreaterThan(textBytes * 10);
   });
 });
+
+function bytesFor(breakdown: ReturnType<typeof sizeOf>, key: string): number {
+  return breakdown.bytesByBlockType[key] ?? 0;
+}

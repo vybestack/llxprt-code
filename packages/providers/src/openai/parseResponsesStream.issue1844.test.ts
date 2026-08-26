@@ -15,6 +15,12 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 
 let parseResponsesStream: typeof import('./parseResponsesStream.js').parseResponsesStream;
 
+function hasTerminalMetadata(message: IContent): boolean {
+  return (
+    message.metadata?.usage != null || message.metadata?.stopReason != null
+  );
+}
+
 function createSSEStream(chunks: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   let index = 0;
@@ -52,9 +58,7 @@ describe('issue #1844 – parseResponsesStream terminal metadata', () => {
     }
 
     // Find the usage/terminal message
-    const terminalMessage = messages.find(
-      (m) => m.metadata?.usage != null || m.metadata?.stopReason != null,
-    );
+    const terminalMessage = messages.find(hasTerminalMetadata);
     expect(terminalMessage).toBeDefined();
 
     // Should have usage
@@ -84,9 +88,7 @@ describe('issue #1844 – parseResponsesStream terminal metadata', () => {
       messages.push(message);
     }
 
-    const terminalMessage = messages.find(
-      (m) => m.metadata?.usage != null || m.metadata?.stopReason != null,
-    );
+    const terminalMessage = messages.find(hasTerminalMetadata);
     expect(terminalMessage).toBeDefined();
     // stopReason is normalized (completed → end_turn), finishReason preserves raw value
     expect(terminalMessage!.metadata!.stopReason).toBe('end_turn');

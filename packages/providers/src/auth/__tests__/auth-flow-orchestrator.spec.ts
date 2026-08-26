@@ -38,6 +38,23 @@ const mockGetEphemeralSetting = vi.fn((key: string) => {
 // Helpers
 // ---------------------------------------------------------------------------
 
+function getPromptEnabledSetting(key: string): true | 0 | undefined {
+  if (key === 'auth-bucket-prompt') return true;
+  if (key === 'auth-bucket-delay') return 0;
+  return undefined;
+}
+
+function createAuthenticatedBucketLookup(
+  validToken: OAuthToken,
+): TokenStore['getToken'] {
+  return async (_provider: string, bucket?: string) => {
+    if (bucket === 'bucket1' || bucket === 'bucket2') {
+      return validToken;
+    }
+    return null;
+  };
+}
+
 function makeToken(accessToken: string, expiryOffset = 3600): OAuthToken {
   return {
     access_token: accessToken,
@@ -663,23 +680,14 @@ describe('AuthFlowOrchestrator', () => {
 
   describe('authenticateMultipleBuckets() — progress display (issue #1620)', () => {
     it('passes unauthenticated bucket count to onPrompt, not total bucket count', async () => {
-      mockGetEphemeralSetting.mockImplementation((key: string) => {
-        if (key === 'auth-bucket-prompt') return true;
-        if (key === 'auth-bucket-delay') return 0;
-        return undefined;
-      });
+      mockGetEphemeralSetting.mockImplementation(getPromptEnabledSetting);
 
       const tokenStore = createTokenStore();
       const validToken = makeToken('already-authed', 3600);
 
       (
         tokenStore.getToken as Mock<typeof tokenStore.getToken>
-      ).mockImplementation(async (_provider: string, bucket?: string) => {
-        if (bucket === 'bucket1' || bucket === 'bucket2') {
-          return validToken;
-        }
-        return null;
-      });
+      ).mockImplementation(createAuthenticatedBucketLookup(validToken));
 
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
@@ -727,11 +735,7 @@ describe('AuthFlowOrchestrator', () => {
   describe('requireRuntimeMessageBus()', () => {
     it('throws descriptive error when no messageBus is configured and auth-bucket-prompt is enabled', async () => {
       // Enable prompt mode so the onPrompt callback is invoked and calls requireRuntimeMessageBus
-      mockGetEphemeralSetting.mockImplementation((key: string) => {
-        if (key === 'auth-bucket-prompt') return true;
-        if (key === 'auth-bucket-delay') return 0;
-        return undefined;
-      });
+      mockGetEphemeralSetting.mockImplementation(getPromptEnabledSetting);
 
       const tokenStore = createTokenStore();
       const registry = new ProviderRegistry();

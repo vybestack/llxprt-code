@@ -305,30 +305,8 @@ describe('ToolDispatcher', () => {
     });
 
     it('drops requests blocked by hookRestrictedAllowed before validation', () => {
-      const allowedTool = new MockTool('read_file');
-      const disallowedTool = new MockTool('run_shell_command');
-      const tools = new Map([
-        ['read_file', allowedTool],
-        ['run_shell_command', disallowedTool],
-      ]);
-      const registry = {
-        getTool: vi.fn((name: string) => tools.get(name) ?? null),
-        getAllToolNames: vi
-          .fn()
-          .mockReturnValue(['read_file', 'run_shell_command']),
-      };
-      const dispatcher = new ToolDispatcher(registry as never, config);
-      const governance = makeGovernance();
-
-      const results = dispatcher.resolveAndValidate(
-        [
-          makeRequest('read_file', 'c-allowed', ['read_file']),
-          makeRequest('run_shell_command', 'c-blocked', ['read_file']),
-        ],
-        governance,
-        false,
-      );
-
+      const { results, registry } =
+        observeDropsRequestsBlockedByHookRestrictedAllowedBeforeValidation();
       expect(results).toHaveLength(1);
       expect(results[0].status).toBe('validating');
       expect(registry.getTool).toHaveBeenCalledTimes(1);
@@ -338,6 +316,35 @@ describe('ToolDispatcher', () => {
         interactiveMode: false,
       });
     });
+
+    const observeDropsRequestsBlockedByHookRestrictedAllowedBeforeValidation =
+      () => {
+        const allowedTool = new MockTool('read_file');
+        const disallowedTool = new MockTool('run_shell_command');
+        const tools = new Map([
+          ['read_file', allowedTool],
+          ['run_shell_command', disallowedTool],
+        ]);
+        const registry = {
+          getTool: vi.fn((name: string) => tools.get(name) ?? null),
+          getAllToolNames: vi
+            .fn()
+            .mockReturnValue(['read_file', 'run_shell_command']),
+        };
+        const dispatcher = new ToolDispatcher(registry as never, config);
+        const governance = makeGovernance();
+
+        const results = dispatcher.resolveAndValidate(
+          [
+            makeRequest('read_file', 'c-allowed', ['read_file']),
+            makeRequest('run_shell_command', 'c-blocked', ['read_file']),
+          ],
+          governance,
+          false,
+        );
+
+        return { results, registry };
+      };
 
     it('drops all requests when hookRestrictedAllowed is empty', () => {
       const tool = new MockTool('read_file');
@@ -409,6 +416,13 @@ describe('ToolDispatcher', () => {
     });
 
     it('handles multiple requests mixing success and error', () => {
+      const { results } = observeHandlesMultipleRequestsMixingSuccessAndError();
+      expect(results).toHaveLength(2);
+      expect(results[0].status).toBe('validating');
+      expect(results[1].status).toBe('error');
+    });
+
+    const observeHandlesMultipleRequestsMixingSuccessAndError = () => {
       const goodTool = new MockTool('good_tool');
       const registry = {
         getTool: vi.fn((name: string) =>
@@ -424,10 +438,8 @@ describe('ToolDispatcher', () => {
         false,
       );
 
-      expect(results).toHaveLength(2);
-      expect(results[0].status).toBe('validating');
-      expect(results[1].status).toBe('error');
-    });
+      return { results };
+    };
   });
 
   // ── getToolSuggestion ──────────────────────────────────────────────────────

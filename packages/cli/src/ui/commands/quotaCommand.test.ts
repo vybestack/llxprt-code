@@ -67,6 +67,23 @@ function getLastUiItem(ctx: CommandContext): {
   throw new Error('Expected an informational or error UI item to be added');
 }
 
+function isUiHistoryItem(
+  value: unknown,
+): value is { readonly text: string; readonly type: unknown } {
+  if (typeof value !== 'object' || value === null) return false;
+  if (!('text' in value) || typeof value.text !== 'string') return false;
+  return 'type' in value;
+}
+
+function isInfoUiCallContaining(
+  call: readonly unknown[],
+  textFragment: string,
+): boolean {
+  const item = call[0];
+  if (!isUiHistoryItem(item)) return false;
+  return item.text.includes(textFragment) && item.type === MessageType.INFO;
+}
+
 function makeCodexCreditsMap(
   entries: Array<{
     bucket: string;
@@ -478,22 +495,14 @@ describe('quotaCommand', () => {
       const calls = (
         mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
       ).mock.calls;
-      const successItem = calls.find((call) => {
-        const item = call[0] as { text: string; type: MessageType };
-        return (
-          item.text.includes('reset successfully') &&
-          item.type === MessageType.INFO
-        );
-      });
+      const successItem = calls.find((call) =>
+        isInfoUiCallContaining(call, 'reset successfully'),
+      );
       expect(successItem).toBeDefined();
 
-      const quotaItem = calls.find((call) => {
-        const item = call[0] as { text: string; type: MessageType };
-        return (
-          item.text.includes('Codex Quota Information') &&
-          item.type === MessageType.INFO
-        );
-      });
+      const quotaItem = calls.find((call) =>
+        isInfoUiCallContaining(call, 'Codex Quota Information'),
+      );
       expect(quotaItem).toBeDefined();
     });
 
@@ -515,22 +524,14 @@ describe('quotaCommand', () => {
       const calls = (
         mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
       ).mock.calls;
-      const alreadyItem = calls.find((call) => {
-        const item = call[0] as { text: string; type: MessageType };
-        return (
-          item.text.includes('already redeemed') &&
-          item.type === MessageType.INFO
-        );
-      });
+      const alreadyItem = calls.find((call) =>
+        isInfoUiCallContaining(call, 'already redeemed'),
+      );
       expect(alreadyItem).toBeDefined();
 
-      const quotaItem = calls.find((call) => {
-        const item = call[0] as { text: string; type: MessageType };
-        return (
-          item.text.includes('Codex Quota Information') &&
-          item.type === MessageType.INFO
-        );
-      });
+      const quotaItem = calls.find((call) =>
+        isInfoUiCallContaining(call, 'Codex Quota Information'),
+      );
       expect(quotaItem).toBeDefined();
     });
 
@@ -710,13 +711,9 @@ describe('quotaCommand', () => {
       const calls = (
         mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
       ).mock.calls;
-      const successItem = calls.find((call) => {
-        const item = call[0] as { text: string; type: MessageType };
-        return (
-          item.text.includes('reset successfully') &&
-          item.type === MessageType.INFO
-        );
-      });
+      const successItem = calls.find((call) =>
+        isInfoUiCallContaining(call, 'reset successfully'),
+      );
       expect(successItem).toBeDefined();
     });
 

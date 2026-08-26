@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'bun:test';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { parseResponsesStream } from './parseResponsesStream.js';
+
+function hasExpectedInterleavedText(message: IContent): boolean {
+  return message.blocks.some(
+    (block) =>
+      block.type === 'text' && block.text === 'Let me search for that...',
+  );
+}
 
 function createSSEStream(chunks: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
@@ -186,16 +194,7 @@ describe('parseResponsesStream - Responses API Tool Calls', () => {
     }
 
     // Should have content message and tool call message
-    expect(
-      messages.some((m) =>
-        m.blocks.some(
-          (block) =>
-            block.type === 'text' &&
-            (block as { type: 'text'; text: string }).text ===
-              'Let me search for that...',
-        ),
-      ),
-    ).toBe(true);
+    expect(messages.some(hasExpectedInterleavedText)).toBe(true);
     expect(
       messages.some((m) =>
         m.blocks.some((block) => block.type === 'tool_call'),

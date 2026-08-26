@@ -37,26 +37,32 @@ async function collect(stream: AsyncIterable<IContent>): Promise<IContent[]> {
   return chunks;
 }
 
+interface AttemptCounter {
+  count: number;
+}
+
+async function* failFirstTwoAnthropicAttempts(
+  attempts: AttemptCounter,
+): AsyncGenerator<IContent> {
+  attempts.count++;
+  if (attempts.count < 3) {
+    yield* processAnthropicStream(failingAnthropicStream(), streamOptions);
+    return;
+  }
+  yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+}
+
 describe('Anthropic stream retry ownership', () => {
   afterEach(() => {
     vi.useRealTimers();
   });
 
   it('uses only the central transport attempt budget for stream network failures', async () => {
-    let transportCalls = 0;
+    const transportAttempts: AttemptCounter = { count: 0 };
     const transport: IProvider = {
       name: 'anthropic',
-      async *generateChatCompletion() {
-        transportCalls++;
-        if (transportCalls < 3) {
-          yield* processAnthropicStream(
-            failingAnthropicStream(),
-            streamOptions,
-          );
-          return;
-        }
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
-      },
+      generateChatCompletion: () =>
+        failFirstTwoAnthropicAttempts(transportAttempts),
       getModels: async () => [],
       getDefaultModel: () => 'claude-test',
       getServerTools: () => [],
@@ -75,7 +81,7 @@ describe('Anthropic stream retry ownership', () => {
       }),
     );
 
-    expect(transportCalls).toBe(3);
+    expect(transportAttempts.count).toBe(3);
     expect(chunks).toStrictEqual([
       { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] },
     ]);

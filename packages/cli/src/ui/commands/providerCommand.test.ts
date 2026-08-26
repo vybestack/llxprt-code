@@ -85,6 +85,10 @@ void vi.mock('../contexts/RuntimeContext.js', () => ({
 import { providerCommand } from './providerCommand.js';
 import { assertDefined } from '../../test-utils/assertions.js';
 
+function baseUrlSetting(key: string, baseUrl: string): string | undefined {
+  return key === 'base-url' ? baseUrl : undefined;
+}
+
 describe('providerCommand /provider save', () => {
   let tempDir: string;
   let originalHome: string | undefined;
@@ -161,9 +165,7 @@ describe('providerCommand /provider save', () => {
     const configMock = {
       getEphemeralSetting: vi
         .fn()
-        .mockImplementation((key: string) =>
-          key === 'base-url' ? baseUrl : undefined,
-        ),
+        .mockImplementation((key: string) => baseUrlSetting(key, baseUrl)),
     };
 
     const context = createMockCommandContext({

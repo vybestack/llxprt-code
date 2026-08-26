@@ -18,6 +18,45 @@ import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-util
 const originalFetch = global.fetch;
 const mockFetch = vi.fn();
 
+function completedResponse(): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(
+        encoder.encode(
+          'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
+        ),
+      );
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+      controller.close();
+    },
+  });
+  return new Response(stream, {
+    status: 200,
+    headers: { 'content-type': 'text/event-stream' },
+  });
+}
+
+function createRequestCapturingFetch(
+  captureBody: (body: string) => void,
+  captureUrl: (url: string) => void = () => {},
+): (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> {
+  return async (input, init): Promise<Response> => {
+    captureUrl(String(input));
+    if (init?.body instanceof Blob) {
+      captureBody(await init.body.text());
+    }
+    return completedResponse();
+  };
+}
+
+function requireCapturedBody(body: string | undefined): string {
+  if (body === undefined) {
+    throw new Error('Request body was not captured');
+  }
+  return body;
+}
+
 describe('OpenAIResponsesProvider reasoning.effort', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -61,32 +100,9 @@ describe('OpenAIResponsesProvider reasoning.effort', () => {
     let capturedBody: string | undefined;
 
     mockFetch.mockImplementation(
-      async (
-        _input: RequestInfo | URL,
-        init?: RequestInit,
-      ): Promise<Response> => {
-        if (init?.body instanceof Blob) {
-          capturedBody = await init.body.text();
-        }
-
-        const encoder = new TextEncoder();
-        const stream = new ReadableStream({
-          start(controller) {
-            controller.enqueue(
-              encoder.encode(
-                'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
-              ),
-            );
-            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-            controller.close();
-          },
-        });
-
-        return new Response(stream, {
-          status: 200,
-          headers: { 'content-type': 'text/event-stream' },
-        });
-      },
+      createRequestCapturingFetch((body) => {
+        capturedBody = body;
+      }),
     );
 
     const options = createProviderCallOptions({
@@ -127,31 +143,14 @@ describe('OpenAIResponsesProvider reasoning.effort', () => {
     let capturedUrl: string | undefined;
 
     mockFetch.mockImplementation(
-      async (
-        input: RequestInfo | URL,
-        init?: RequestInit,
-      ): Promise<Response> => {
-        capturedUrl = String(input);
-        if (init?.body instanceof Blob) {
-          capturedBody = await init.body.text();
-        }
-        const encoder = new TextEncoder();
-        const stream = new ReadableStream({
-          start(controller) {
-            controller.enqueue(
-              encoder.encode(
-                'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
-              ),
-            );
-            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-            controller.close();
-          },
-        });
-        return new Response(stream, {
-          status: 200,
-          headers: { 'content-type': 'text/event-stream' },
-        });
-      },
+      createRequestCapturingFetch(
+        (body) => {
+          capturedBody = body;
+        },
+        (url) => {
+          capturedUrl = url;
+        },
+      ),
     );
 
     const options = createProviderCallOptions({
@@ -169,7 +168,7 @@ describe('OpenAIResponsesProvider reasoning.effort', () => {
     expect(capturedUrl).toBeDefined();
     expect(capturedUrl).toContain('/responses');
     expect(capturedBody).toBeDefined();
-    const parsedBody: unknown = JSON.parse(capturedBody ?? '');
+    const parsedBody: unknown = JSON.parse(requireCapturedBody(capturedBody));
     expect(parsedBody).toMatchObject({
       model: 'gpt-5.6-sol',
       reasoning: { effort: 'max' },
@@ -192,30 +191,9 @@ describe('OpenAIResponsesProvider reasoning.effort', () => {
     let capturedBody: string | undefined;
 
     mockFetch.mockImplementation(
-      async (
-        _input: RequestInfo | URL,
-        init?: RequestInit,
-      ): Promise<Response> => {
-        if (init?.body instanceof Blob) {
-          capturedBody = await init.body.text();
-        }
-        const encoder = new TextEncoder();
-        const stream = new ReadableStream({
-          start(controller) {
-            controller.enqueue(
-              encoder.encode(
-                'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
-              ),
-            );
-            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-            controller.close();
-          },
-        });
-        return new Response(stream, {
-          status: 200,
-          headers: { 'content-type': 'text/event-stream' },
-        });
-      },
+      createRequestCapturingFetch((body) => {
+        capturedBody = body;
+      }),
     );
 
     const options = createProviderCallOptions({
@@ -231,7 +209,7 @@ describe('OpenAIResponsesProvider reasoning.effort', () => {
     }
 
     expect(capturedBody).toBeDefined();
-    const parsedBody: unknown = JSON.parse(capturedBody ?? '');
+    const parsedBody: unknown = JSON.parse(requireCapturedBody(capturedBody));
     expect(parsedBody).toMatchObject({ reasoning: { effort: 'none' } });
   });
 
@@ -251,30 +229,9 @@ describe('OpenAIResponsesProvider reasoning.effort', () => {
     let capturedBody: string | undefined;
 
     mockFetch.mockImplementation(
-      async (
-        _input: RequestInfo | URL,
-        init?: RequestInit,
-      ): Promise<Response> => {
-        if (init?.body instanceof Blob) {
-          capturedBody = await init.body.text();
-        }
-        const encoder = new TextEncoder();
-        const stream = new ReadableStream({
-          start(controller) {
-            controller.enqueue(
-              encoder.encode(
-                'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
-              ),
-            );
-            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-            controller.close();
-          },
-        });
-        return new Response(stream, {
-          status: 200,
-          headers: { 'content-type': 'text/event-stream' },
-        });
-      },
+      createRequestCapturingFetch((body) => {
+        capturedBody = body;
+      }),
     );
 
     const options = createProviderCallOptions({
@@ -290,7 +247,7 @@ describe('OpenAIResponsesProvider reasoning.effort', () => {
     }
 
     expect(capturedBody).toBeDefined();
-    const parsedBody: unknown = JSON.parse(capturedBody ?? '');
+    const parsedBody: unknown = JSON.parse(requireCapturedBody(capturedBody));
     expect(parsedBody).toMatchObject({ reasoning: { effort: 'minimal' } });
   });
 });

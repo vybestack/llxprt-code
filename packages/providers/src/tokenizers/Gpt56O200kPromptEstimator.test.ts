@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { deepStrictEqual } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'bun:test';
 import { get_encoding } from '@dqbd/tiktoken';
@@ -85,21 +84,33 @@ function requestForProtocol(
   };
 }
 
+interface FixtureTokenEstimationObservation {
+  readonly count: number;
+  readonly pinnedTokens: readonly number[] | undefined;
+}
+
+function observeFixtureTokenEstimation(
+  fixture: Fixture,
+): FixtureTokenEstimationObservation {
+  const encoder = get_encoding('o200k_base');
+  try {
+    const tokens = [...encoder.encode(fixtureText(fixture), [], [])];
+    return {
+      count: tokens.length,
+      pinnedTokens: fixture.tokens === undefined ? undefined : tokens,
+    };
+  } finally {
+    encoder.free();
+  }
+}
+
 describe('GPT-5.6 o200k fixtures', () => {
   it.each(fixtureFile.fixtures)(
     '$name',
     async (fixture) => {
-      const text = fixtureText(fixture);
-      const encoder = get_encoding('o200k_base');
-      try {
-        const tokens = [...encoder.encode(text, [], [])];
-        expect(tokens).toHaveLength(fixture.count);
-        if (fixture.tokens !== undefined) {
-          deepStrictEqual(tokens, fixture.tokens);
-        }
-      } finally {
-        encoder.free();
-      }
+      const observation = observeFixtureTokenEstimation(fixture);
+      expect(observation.count).toBe(fixture.count);
+      expect(observation.pinnedTokens).toStrictEqual(fixture.tokens);
     },
     40_000,
   );

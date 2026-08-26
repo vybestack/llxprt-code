@@ -125,6 +125,15 @@ describe('AnthropicProvider Issue #1150: Thinking blocks disappear after tool ca
       ...overrides,
     });
 
+  const isAssistantWithToolUse = (
+    message: AnthropicRequestBody['messages'][number],
+  ): boolean =>
+    message.role === 'assistant' &&
+    Array.isArray(message.content) &&
+    message.content.some((block) => block.type === 'tool_use');
+
+  const isThinkingOrRedacted = (block: AnthropicContentBlock): boolean =>
+    block.type === 'thinking' || block.type === 'redacted_thinking';
   it('should preserve thinking blocks after first tool call in multi-turn conversation', async () => {
     mockMessagesCreate.mockResolvedValueOnce({
       content: [{ type: 'text', text: 'Final response' }],
@@ -242,19 +251,14 @@ describe('AnthropicProvider Issue #1150: Thinking blocks disappear after tool ca
     expect(request.thinking).toBeDefined();
 
     const assistantMsgWithToolCall = request.messages.find(
-      (m) =>
-        m.role === 'assistant' &&
-        Array.isArray(m.content) &&
-        m.content.some((b) => b.type === 'tool_use'),
+      isAssistantWithToolUse,
     );
 
     expect(assistantMsgWithToolCall).toBeDefined();
 
     const content = assistantMsgWithToolCall!
       .content as AnthropicContentBlock[];
-    const hasThinkingOrRedacted = content.some(
-      (b) => b.type === 'thinking' || b.type === 'redacted_thinking',
-    );
+    const hasThinkingOrRedacted = content.some(isThinkingOrRedacted);
     expect(hasThinkingOrRedacted).toBe(true);
   });
 
@@ -635,9 +639,7 @@ describe('AnthropicProvider Issue #1150: Thinking blocks disappear after tool ca
     expect(assistantMessages).toHaveLength(1);
 
     const merged = assistantMessages[0].content as AnthropicContentBlock[];
-    const hasThinking = merged.some(
-      (b) => b.type === 'thinking' || b.type === 'redacted_thinking',
-    );
+    const hasThinking = merged.some(isThinkingOrRedacted);
     expect(hasThinking).toBe(true);
 
     const hasText = merged.some((b) => b.type === 'text');

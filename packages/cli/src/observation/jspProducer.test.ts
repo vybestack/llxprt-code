@@ -487,7 +487,7 @@ describe('JspProducer', () => {
     producer.stop();
   });
 
-  it('retries registration after a transport failure and then succeeds', async () => {
+  async function createRegistrationRetryScenario() {
     let registerCalls = 0;
     const identity = makeHarness().hooks.createIdentity(bootstrap);
     const published: JspBoundDocument[] = [];
@@ -518,17 +518,38 @@ describe('JspProducer', () => {
     });
     producer.start();
     await producer.flush();
-    expect(registerCalls).toBe(1);
-    expect(heartbeatStarted).toBe(false);
-    // Advance the clock past the backoff window, then trigger another event.
-    clock += 6_000;
-    producer.observeTurnStarted();
-    await producer.flush();
-    expect(registerCalls).toBe(2);
-    // Give the short heartbeat interval time to fire.
-    await new Promise<void>((resolve) => setTimeout(resolve, 30));
+
+    return {
+      initialRegisterCalls: registerCalls,
+      heartbeatStartedBeforeRetry: heartbeatStarted,
+      async retryRegistration() {
+        // Advance the clock past the backoff window, then trigger another event.
+        clock += 6_000;
+        producer.observeTurnStarted();
+        await producer.flush();
+        return registerCalls;
+      },
+      async waitForHeartbeat() {
+        // Give the short heartbeat interval time to fire.
+        await new Promise<void>((resolve) => setTimeout(resolve, 30));
+        return heartbeatStarted;
+      },
+      stop: () => producer.stop(),
+    };
+  }
+
+  it('retries registration after a transport failure and then succeeds', async () => {
+    const scenario = await createRegistrationRetryScenario();
+
+    expect(scenario.initialRegisterCalls).toBe(1);
+    expect(scenario.heartbeatStartedBeforeRetry).toBe(false);
+
+    const registerCallsAfterRetry = await scenario.retryRegistration();
+    expect(registerCallsAfterRetry).toBe(2);
+
+    const heartbeatStarted = await scenario.waitForHeartbeat();
     expect(heartbeatStarted).toBe(true);
-    producer.stop();
+    scenario.stop();
   });
 
   it('starts the heartbeat after a successful registration', async () => {
@@ -773,7 +794,7 @@ describe('heartbeat resilience', () => {
     }
   });
 
-  it('a stale in-flight heartbeat cannot stop a restarted producer', async () => {
+  async function createStaleInFlightHeartbeatScenario() {
     vi.useFakeTimers();
     try {
       const identity = makeHarness().hooks.createIdentity(bootstrap);
@@ -797,24 +818,46 @@ describe('heartbeat resilience', () => {
       producer.start();
       await producer.flush();
       await advanceTimersByTimeAsync(15);
-      expect(pending.length).toBeGreaterThan(0);
 
-      // Restart, then let the stale heartbeat resolve with a credential
-      // failure. Without lifecycle binding this would stop the new lifecycle.
-      producer.stop();
-      stallHeartbeats = false;
-      producer.start();
-      await producer.flush();
-      for (const resolve of pending) {
-        resolve(REJECTED_401);
-      }
-      await advanceTimersByTimeAsync(0);
+      const restartAfterRejectedHeartbeat = async () => {
+        // Restart, then let the stale heartbeat resolve with a credential
+        // failure. Without lifecycle binding this would stop the new lifecycle.
+        producer.stop();
+        stallHeartbeats = false;
+        producer.start();
+        await producer.flush();
+        for (const resolve of pending) {
+          resolve(REJECTED_401);
+        }
+        await advanceTimersByTimeAsync(0);
 
-      // The restarted producer is still live and still publishing.
-      const before = producer.snapshot().source_sequence;
-      producer.observeTurnStarted();
-      expect(producer.snapshot().source_sequence).toBeGreaterThan(before);
-      producer.stop();
+        // The restarted producer is still live and still publishing.
+        const before = producer.snapshot().source_sequence;
+        producer.observeTurnStarted();
+        return {
+          before,
+          after: producer.snapshot().source_sequence,
+        };
+      };
+
+      return {
+        pendingCount: pending.length,
+        restartAfterRejectedHeartbeat,
+        stop: () => producer.stop(),
+      };
+    } catch (error: unknown) {
+      vi.useRealTimers();
+      throw error;
+    }
+  }
+
+  it('a stale in-flight heartbeat cannot stop a restarted producer', async () => {
+    const scenario = await createStaleInFlightHeartbeatScenario();
+    try {
+      expect(scenario.pendingCount).toBeGreaterThan(0);
+      const restarted = await scenario.restartAfterRejectedHeartbeat();
+      expect(restarted.after).toBeGreaterThan(restarted.before);
+      scenario.stop();
     } finally {
       vi.useRealTimers();
     }

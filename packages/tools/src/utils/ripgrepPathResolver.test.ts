@@ -51,35 +51,38 @@ describe('findInPath executability semantics', () => {
     }
   });
 
-  it.skipIf(isWindows)('ignores a non-executable candidate named rg', () => {
-    const { dirs, cleanup } = makeTempDirs(1);
-    try {
-      const candidate = join(dirs[0], 'rg');
-      writeFileSync(candidate, '#!/bin/sh\necho fake\n');
-      chmodSync(candidate, 0o644);
-      process.env.PATH = dirs[0];
-      expect(findInPath('rg', false)).toBeNull();
-    } finally {
-      cleanup();
-    }
+  describe.skipIf(isWindows)('POSIX executable candidates', () => {
+    it('ignores a non-executable candidate named rg', () => {
+      const { dirs, cleanup } = makeTempDirs(1);
+      try {
+        const candidate = join(dirs[0], 'rg');
+        writeFileSync(candidate, '#!/bin/sh\necho fake\n');
+        chmodSync(candidate, 0o644);
+        process.env.PATH = dirs[0];
+        expect(findInPath('rg', false)).toBeNull();
+      } finally {
+        cleanup();
+      }
+    });
   });
 
-  it.skipIf(isWindows)('selects an executable candidate named rg', () => {
-    const { dirs, cleanup } = makeTempDirs(1);
-    try {
-      const candidate = join(dirs[0], 'rg');
-      writeFileSync(candidate, '#!/bin/sh\necho real\n');
-      chmodSync(candidate, 0o755);
-      process.env.PATH = dirs[0];
-      expect(findInPath('rg', false)).toBe(candidate);
-    } finally {
-      cleanup();
-    }
+  describe.skipIf(isWindows)('POSIX executable selection', () => {
+    it('selects an executable candidate named rg', () => {
+      const { dirs, cleanup } = makeTempDirs(1);
+      try {
+        const candidate = join(dirs[0], 'rg');
+        writeFileSync(candidate, '#!/bin/sh\necho real\n');
+        chmodSync(candidate, 0o755);
+        process.env.PATH = dirs[0];
+        expect(findInPath('rg', false)).toBe(candidate);
+      } finally {
+        cleanup();
+      }
+    });
   });
 
-  it.skipIf(isWindows)(
-    'falls back to a later PATH entry when the first is non-executable',
-    () => {
+  describe.skipIf(isWindows)('POSIX PATH fallback', () => {
+    it('falls back to a later PATH entry when the first is non-executable', () => {
       const { dirs, cleanup } = makeTempDirs(2);
       try {
         const nonExec = join(dirs[0], 'rg');
@@ -95,8 +98,8 @@ describe('findInPath executability semantics', () => {
       } finally {
         cleanup();
       }
-    },
-  );
+    });
+  });
 });
 
 describe('findInPath Windows extension resolution', () => {

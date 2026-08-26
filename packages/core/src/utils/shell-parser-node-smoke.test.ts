@@ -42,6 +42,60 @@ function bufferToText(value: string | Buffer | undefined): string {
   return '';
 }
 
+/** Best available diagnostic fragment for a failed child-process spawn. */
+function nodeSpawnFailureDetail(error: unknown): string {
+  if (!isNodeExecError(error)) {
+    return String(error);
+  }
+  const parts = [
+    bufferToText(error.stderr),
+    bufferToText(error.stdout),
+    error.message,
+  ];
+  return parts.find((p) => p.length > 0) ?? String(error);
+}
+
+/** Exit status string for a failed child-process spawn ('unknown' when absent). */
+function spawnExitStatus(error: unknown): string {
+  return isNodeExecError(error) && error.status !== undefined
+    ? String(error.status)
+    : 'unknown';
+}
+
+/** Throws when Bun.build failed, surfacing every reported log line. */
+function assertBuildSucceeded(buildResult: {
+  success: boolean;
+  logs: Array<{ toString(): string }>;
+}): void {
+  if (!buildResult.success) {
+    throw new Error(
+      'Bun.build failed: ' + buildResult.logs.map((l) => String(l)).join('; '),
+    );
+  }
+}
+
+/** Throws when Bun.build succeeded but the expected entry file was not emitted. */
+function assertBuildEmittedEntry(outPath: string): void {
+  if (!existsSync(outPath)) {
+    throw new Error(
+      `Bun.build reported success but output file was not created: ${outPath}`,
+    );
+  }
+}
+
+/** Reads the JSON verdict emitted by the spawned Node process. */
+function parseNodeSmokeVerdict(stdout: string): {
+  initOk: boolean;
+  bashAvailable: boolean;
+  pwshAvailable: boolean;
+} {
+  return JSON.parse(stdout.trim()) as {
+    initOk: boolean;
+    bashAvailable: boolean;
+    pwshAvailable: boolean;
+  };
+}
+
 /**
  * Out-of-process Node smoke of the **production** shell-parser module (#3181).
  *
@@ -134,20 +188,8 @@ console.log(JSON.stringify(result));
         ],
       });
 
-      if (!buildResult.success) {
-        throw new Error(
-          'Bun.build failed: ' +
-            buildResult.logs.map((l) => String(l)).join('; '),
-        );
-      }
-
-      // Explicit output-file existence check: verify Bun.build actually
-      // emitted the entry point before spawning Node (#3181 OCR).
-      if (!existsSync(outPath)) {
-        throw new Error(
-          `Bun.build reported success but output file was not created: ${outPath}`,
-        );
-      }
+      assertBuildSucceeded(buildResult);
+      assertBuildEmittedEntry(outPath);
 
       // Spawn Node to run the bundled production code. Keep only the spawn
       // in the try so the catch reports real spawn/exit failures; assertion
@@ -161,27 +203,13 @@ console.log(JSON.stringify(result));
           env: { ...process.env },
         });
       } catch (error: unknown) {
-        const status = isNodeExecError(error) ? error.status : undefined;
-        const stderrText = isNodeExecError(error)
-          ? bufferToText(error.stderr)
-          : '';
-        const stdoutText = isNodeExecError(error)
-          ? bufferToText(error.stdout)
-          : '';
-        const messageText = isNodeExecError(error) ? error.message : '';
-        const parts = [stderrText, stdoutText, messageText];
-        const detail = parts.find((p): p is string => !!p && p.length > 0);
         throw new Error(
-          `Node production smoke failed (exit ${status ?? 'unknown'}): ` +
-            `${detail ?? String(error)}`,
+          `Node production smoke failed (exit ${spawnExitStatus(error)}): ` +
+            nodeSpawnFailureDetail(error),
         );
       }
 
-      const result = JSON.parse(stdout.trim()) as {
-        initOk: boolean;
-        bashAvailable: boolean;
-        pwshAvailable: boolean;
-      };
+      const result = parseNodeSmokeVerdict(stdout);
 
       // Bash grammar must load and be available under Node.
       expect(result.initOk).toBe(true);

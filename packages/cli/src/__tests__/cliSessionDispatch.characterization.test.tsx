@@ -305,7 +305,7 @@ describe('session-dispatch characterization', () => {
       // Observable effect: the non-interactive branch reached the runner (NOT
       // the interactive render path).
       expect(dispatchTrace).toContain('runNonInteractive');
-      expect(renderCalls.length).toBe(0);
+      expect(renderCalls).toHaveLength(0);
     });
   });
 
@@ -627,7 +627,7 @@ describe('session-dispatch characterization', () => {
       expect(dispatchTrace).toContain('runNonInteractive');
     });
 
-    it('exits 1 when piped stdin and prompt are both empty (no-input non-interactive path)', async () => {
+    async function verifyExits1WhenPipedStdinAndPromptAreBothEmptyNoInputNonInteractivePath() {
       const config = createMinimalConfig({
         interactive: false,
         question: '',
@@ -661,8 +661,18 @@ describe('session-dispatch characterization', () => {
       // Observable effect: the real code took the no-input early-exit branch:
       // process.exit(1) fired via the safe sentinel (NOT the runner's exit), and
       // the non-interactive runner was never reached.
-      expect(caught).toBeDefined();
-      expect(caught!.exitCode).toBe(1);
+      return {
+        caughtExit: caught,
+        exitCode: caught?.exitCode,
+      };
+    }
+
+    it('exits 1 when piped stdin and prompt are both empty (no-input non-interactive path)', async () => {
+      const behaviorResult =
+        await verifyExits1WhenPipedStdinAndPromptAreBothEmptyNoInputNonInteractivePath();
+
+      expect(behaviorResult.caughtExit).toBeDefined();
+      expect(behaviorResult.exitCode).toBe(1);
       // The runner must NOT have been reached (no input).
       expect(dispatchTrace).not.toContain('runNonInteractive');
     });

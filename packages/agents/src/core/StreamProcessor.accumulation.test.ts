@@ -98,33 +98,40 @@ describe('StreamProcessor.processStreamResponse — accumulation efficiency (#28
   });
 
   it('produces correct final accumulated output with many text chunks', async () => {
-    const chunkCount = 500;
-    const words: string[] = [];
-    for (let i = 0; i < chunkCount; i++) {
-      words.push(`word${i}`);
-    }
-
-    async function* largeStream(): AsyncGenerator<ModelStreamChunk> {
-      for (let i = 0; i < chunkCount; i++) {
-        yield makeChunk(words[i]);
-      }
-      yield makeFinishChunk('END', 'STOP');
-    }
-
-    const yielded: string[] = [];
-    for await (const chunk of processor.processStreamResponse(
-      largeStream(),
-      createUserInput(),
-    )) {
-      for (const block of chunk.content.blocks) {
-        if (block.type === 'text') {
-          yielded.push(block.text);
-        }
-      }
-    }
-
+    const { yielded, words } =
+      await observeProducesCorrectFinalAccumulatedOutputWithManyTextChunks();
     expect(yielded).toStrictEqual([...words, 'END']);
   });
+
+  const observeProducesCorrectFinalAccumulatedOutputWithManyTextChunks =
+    async () => {
+      const chunkCount = 500;
+      const words: string[] = [];
+      for (let i = 0; i < chunkCount; i++) {
+        words.push(`word${i}`);
+      }
+
+      async function* largeStream(): AsyncGenerator<ModelStreamChunk> {
+        for (let i = 0; i < chunkCount; i++) {
+          yield makeChunk(words[i]);
+        }
+        yield makeFinishChunk('END', 'STOP');
+      }
+
+      const yielded: string[] = [];
+      for await (const chunk of processor.processStreamResponse(
+        largeStream(),
+        createUserInput(),
+      )) {
+        for (const block of chunk.content.blocks) {
+          if (block.type === 'text') {
+            yielded.push(block.text);
+          }
+        }
+      }
+
+      return { yielded, words };
+    };
 
   it('accumulates metadata from later chunks (finishReason, usage)', async () => {
     const usageChunk: ModelStreamChunk = {

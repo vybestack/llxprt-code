@@ -62,87 +62,18 @@ describe('tokenUsagePrivacy (AC-10) — no sensitive content in JSONL', () => {
   });
 
   it('does not leak prompt text, tool arguments, or tool result bodies', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
-
-    const contents: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: `user wrote ${PROMPT_SENTINEL}` }],
-      },
-      {
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'tool_call',
-            id: 'call-priv-1',
-            name: 'read_file',
-            parameters: { path: `/secret/${ARGS_SENTINEL}.txt` },
-          },
-        ],
-      },
-      {
-        speaker: 'tool',
-        blocks: [
-          {
-            type: 'tool_response',
-            callId: 'call-priv-1',
-            toolName: 'read_file',
-            result: `file body contains ${RESULT_SENTINEL}`,
-          },
-        ],
-      },
-    ];
-
-    const tools = [
-      { name: 'read_file', description: `tool desc ${TOOL_SCHEMA_SENTINEL}` },
-    ];
-    const instructionsText = `system instructions with ${INSTRUCTIONS_SENTINEL}`;
-
-    // Compute and attach the request-shape context (slice 4 fields).
-    recordRequestShapeContext(
-      logger,
-      'prompt-priv',
-      contents,
-      tools,
-      instructionsText,
+    const { record, toolCalls, firstCall, toolCall, raw } =
+      await observeDoesNotLeakPromptTextToolArgumentsOrToolResultBodies();
+    expect(ALL_SENTINELS.some((sentinel) => raw.includes(sentinel))).toBe(
+      false,
     );
-
-    // Complete the estimate + actual to write the record.
-    logger.recordEstimate('prompt-priv', {
-      provider: 'openai',
-      model: 'gpt-4',
-      estimatedTokens: 100,
-      estimator: 'openai-tiktoken',
-      tiktokenTokens: 90,
-    });
-    await logger.recordActual('prompt-priv', {
-      actualPromptTokens: 120,
-      cachedTokens: 0,
-    });
-
-    // Read the raw JSONL file contents.
-    const raw = fs.readFileSync(logFile, 'utf-8');
-
-    // Assert NO sentinel appears anywhere in the file.
-    for (const sentinel of ALL_SENTINELS) {
-      expect(raw).not.toContain(sentinel);
-    }
-
-    // Sanity: the record WAS written and carries the new slice-4 fields.
-    const record = JSON.parse(raw.trim()) as Record<string, unknown>;
     expect(record.record_type).toBe('turn');
     expect(record.tool_calls).toBeDefined();
     expect(record.instructions_tokens).toBeDefined();
-    // Exactly one tool_call block is in the fixture, so the recorded array
-    // must have length 1 — the value, not just field presence, is the
-    // contract. The entry must carry only privacy-safe fields.
-    const toolCalls = record.tool_calls;
     expect(Array.isArray(toolCalls)).toBe(true);
     expect(toolCalls).toHaveLength(1);
-    const firstCall = Array.isArray(toolCalls) ? toolCalls[0] : undefined;
     expect(typeof firstCall).toBe('object');
     expect(firstCall).not.toBeNull();
-    const toolCall = firstCall as Record<string, unknown>;
     expect(toolCall.call_id).toBe('call-priv-1');
     expect(toolCall.tool_name).toBe('read_file');
     expect(toolCall.result_tokens).toBe(9);
@@ -150,6 +81,84 @@ describe('tokenUsagePrivacy (AC-10) — no sensitive content in JSONL', () => {
     expect(record.prefix_fingerprint).toBeDefined();
     expect(record.new_tool_result_tokens).toBeDefined();
   });
+
+  const observeDoesNotLeakPromptTextToolArgumentsOrToolResultBodies =
+    async () => {
+      const logger = new TokenUsageLogger(true, logFile);
+
+      const contents: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: `user wrote ${PROMPT_SENTINEL}` }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'call-priv-1',
+              name: 'read_file',
+              parameters: { path: `/secret/${ARGS_SENTINEL}.txt` },
+            },
+          ],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'call-priv-1',
+              toolName: 'read_file',
+              result: `file body contains ${RESULT_SENTINEL}`,
+            },
+          ],
+        },
+      ];
+
+      const tools = [
+        { name: 'read_file', description: `tool desc ${TOOL_SCHEMA_SENTINEL}` },
+      ];
+      const instructionsText = `system instructions with ${INSTRUCTIONS_SENTINEL}`;
+
+      // Compute and attach the request-shape context (slice 4 fields).
+      recordRequestShapeContext(
+        logger,
+        'prompt-priv',
+        contents,
+        tools,
+        instructionsText,
+      );
+
+      // Complete the estimate + actual to write the record.
+      logger.recordEstimate('prompt-priv', {
+        provider: 'openai',
+        model: 'gpt-4',
+        estimatedTokens: 100,
+        estimator: 'openai-tiktoken',
+        tiktokenTokens: 90,
+      });
+      await logger.recordActual('prompt-priv', {
+        actualPromptTokens: 120,
+        cachedTokens: 0,
+      });
+
+      // Read the raw JSONL file contents.
+      const raw = fs.readFileSync(logFile, 'utf-8');
+
+      // Sanity: the record WAS written and carries the new slice-4 fields.
+      const record = JSON.parse(raw.trim()) as Record<string, unknown>;
+
+      // Exactly one tool_call block is in the fixture, so the recorded array
+      // must have length 1 — the value, not just field presence, is the
+      // contract. The entry must carry only privacy-safe fields.
+      const toolCalls = record.tool_calls;
+
+      const firstCall = Array.isArray(toolCalls) ? toolCalls[0] : undefined;
+
+      const toolCall = firstCall as Record<string, unknown>;
+
+      return { record, toolCalls, firstCall, toolCall, raw };
+    };
 
   it('the prefix fingerprint is a hash, not prompt text', async () => {
     const logger = new TokenUsageLogger(true, logFile);
@@ -190,65 +199,15 @@ describe('tokenUsagePrivacy (AC-10) — no sensitive content in JSONL', () => {
   });
 
   it('tool_calls array carries only call_id, tool_name, result_tokens, was_truncated — never bodies or args', async () => {
-    const logger = new TokenUsageLogger(true, logFile);
-
-    recordRequestShapeContext(
-      logger,
-      'prompt-tc',
-      [
-        {
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'tool_call',
-              id: 'call-tc',
-              name: 'search',
-              parameters: { query: ARGS_SENTINEL },
-            },
-          ],
-        },
-        {
-          speaker: 'tool',
-          blocks: [
-            {
-              type: 'tool_response',
-              callId: 'call-tc',
-              toolName: 'search',
-              result: RESULT_SENTINEL,
-            },
-          ],
-        },
-      ],
-      [],
-      undefined,
-    );
-
-    logger.recordEstimate('prompt-tc', {
-      provider: 'openai',
-      model: 'gpt-4',
-      estimatedTokens: 100,
-      estimator: 'openai-tiktoken',
-      tiktokenTokens: 90,
-    });
-    await logger.recordActual('prompt-tc', {
-      actualPromptTokens: 120,
-      cachedTokens: 0,
-    });
-
-    const raw = fs.readFileSync(logFile, 'utf-8');
+    const { raw, toolCalls, entry, entryRec } =
+      await observeToolCallsArrayCarriesOnlyCallIdToolNameResultTokensWas();
     expect(raw).not.toContain(ARGS_SENTINEL);
     expect(raw).not.toContain(RESULT_SENTINEL);
-
-    const record = JSON.parse(raw.trim()) as Record<string, unknown>;
-    const toolCalls = record.tool_calls;
     expect(Array.isArray(toolCalls)).toBe(true);
-    const entry = Array.isArray(toolCalls) ? toolCalls[0] : undefined;
     expect(entry).toBeDefined();
     expect(typeof entry).toBe('object');
     expect(entry).not.toBeNull();
-    const entryRec = entry as Record<string, unknown>;
-    // Only these four keys are permitted per entry.
-    expect(Object.keys(entryRec).sort()).toEqual(
+    expect(Object.keys(entryRec).sort()).toStrictEqual(
       ['call_id', 'result_tokens', 'tool_name', 'was_truncated'].sort(),
     );
     expect(entryRec.call_id).toBe('call-tc');
@@ -256,4 +215,64 @@ describe('tokenUsagePrivacy (AC-10) — no sensitive content in JSONL', () => {
     expect(typeof entryRec.result_tokens).toBe('number');
     expect(entryRec.was_truncated).toBe(false);
   });
+
+  const observeToolCallsArrayCarriesOnlyCallIdToolNameResultTokensWas =
+    async () => {
+      const logger = new TokenUsageLogger(true, logFile);
+
+      recordRequestShapeContext(
+        logger,
+        'prompt-tc',
+        [
+          {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'tool_call',
+                id: 'call-tc',
+                name: 'search',
+                parameters: { query: ARGS_SENTINEL },
+              },
+            ],
+          },
+          {
+            speaker: 'tool',
+            blocks: [
+              {
+                type: 'tool_response',
+                callId: 'call-tc',
+                toolName: 'search',
+                result: RESULT_SENTINEL,
+              },
+            ],
+          },
+        ],
+        [],
+        undefined,
+      );
+
+      logger.recordEstimate('prompt-tc', {
+        provider: 'openai',
+        model: 'gpt-4',
+        estimatedTokens: 100,
+        estimator: 'openai-tiktoken',
+        tiktokenTokens: 90,
+      });
+      await logger.recordActual('prompt-tc', {
+        actualPromptTokens: 120,
+        cachedTokens: 0,
+      });
+
+      const raw = fs.readFileSync(logFile, 'utf-8');
+
+      const record = JSON.parse(raw.trim()) as Record<string, unknown>;
+      const toolCalls = record.tool_calls;
+
+      const entry = Array.isArray(toolCalls) ? toolCalls[0] : undefined;
+
+      const entryRec = entry as Record<string, unknown>;
+      // Only these four keys are permitted per entry.
+
+      return { raw, toolCalls, entry, entryRec };
+    };
 });

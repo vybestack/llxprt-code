@@ -72,7 +72,7 @@ describe('AgenticEventQueue', () => {
 
     expect(updates).toHaveLength(2);
     expect(updates[0].toolCalls[0].request.callId).toBe('cancelled');
-    expect(updates[1].toolCalls).toEqual([]);
+    expect(updates[1].toolCalls).toStrictEqual([]);
   });
 
   it('bounds many tiny append events by item count and reports the loss', () => {
@@ -98,6 +98,27 @@ describe('AgenticEventQueue', () => {
   });
 
   it('bounds one oversized UTF-8 chunk without splitting a character', () => {
+    const {
+      retained,
+      retainedBytes,
+      notice,
+      chunk,
+      queue,
+      chunkObservation,
+      chunkObservation2,
+    } = observeBoundsOneOversizedUTF8ChunkWithoutSplittingACharacter();
+    expect(retained).toBeDefined();
+    expect(retainedBytes).toBeGreaterThan(0);
+    expect(retainedBytes).toBeLessThanOrEqual(1024);
+    expect(chunkObservation).not.toContain('�');
+    expect(notice).toBeDefined();
+    expect(chunkObservation2).toContain(
+      `${(Buffer.byteLength(chunk, 'utf8') - retainedBytes).toLocaleString('en-US')} bytes`,
+    );
+    expect(queue.bufferedLiveOutputBytes).toBe(0);
+  });
+
+  const observeBoundsOneOversizedUTF8ChunkWithoutSplittingACharacter = () => {
     const queue = new AgenticEventQueue({
       maxBufferedEvents: 8,
       maxBufferedOutputBytes: 1024,
@@ -110,21 +131,40 @@ describe('AgenticEventQueue', () => {
     const outputs = toolOutputEvents(drain(queue));
     const retained = outputs.find((event) => event.chunk.startsWith('🙂'));
     const retainedBytes = Buffer.byteLength(retained?.chunk ?? '', 'utf8');
-    expect(retained).toBeDefined();
-    expect(retainedBytes).toBeGreaterThan(0);
-    expect(retainedBytes).toBeLessThanOrEqual(1024);
-    expect(retained?.chunk).not.toContain('�');
+
     const notice = outputs.find((event) =>
       event.chunk.includes('LLXPRT live tool output omitted'),
     );
-    expect(notice).toBeDefined();
-    expect(notice?.chunk).toContain(
-      `${(Buffer.byteLength(chunk, 'utf8') - retainedBytes).toLocaleString('en-US')} bytes`,
-    );
-    expect(queue.bufferedLiveOutputBytes).toBe(0);
-  });
+
+    const chunkObservation = retained?.chunk;
+    const chunkObservation2 = notice?.chunk;
+    return {
+      retained,
+      retainedBytes,
+      notice,
+      chunk,
+      queue,
+      chunkObservation,
+      chunkObservation2,
+    };
+  };
 
   it('aggregates excess call IDs without losing omission accounting', () => {
+    const { queue, notices, omittedBytes } =
+      observeAggregatesExcessCallIDsWithoutLosingOmissionAccounting();
+    expect(queue.bufferedEventCount).toBeLessThanOrEqual(16);
+    expect(queue.bufferedLiveOutputBytes).toBeLessThanOrEqual(1024);
+    expect(notices.length).toBeGreaterThan(0);
+    expect(notices.length).toBeLessThanOrEqual(4);
+    expect(omittedBytes).toBe(10);
+    expect(
+      notices.some((event) =>
+        event.chunk.includes('across additional tool calls'),
+      ),
+    ).toBe(true);
+  });
+
+  const observeAggregatesExcessCallIDsWithoutLosingOmissionAccounting = () => {
     const queue = new AgenticEventQueue({
       maxBufferedEvents: 16,
       maxBufferedOutputBytes: 1024,
@@ -141,8 +181,6 @@ describe('AgenticEventQueue', () => {
     }
     queue.push({ kind: 'tools_complete', completed: [] });
 
-    expect(queue.bufferedEventCount).toBeLessThanOrEqual(16);
-    expect(queue.bufferedLiveOutputBytes).toBeLessThanOrEqual(1024);
     const notices = toolOutputEvents(drain(queue)).filter((event) =>
       event.chunk.includes('LLXPRT live tool output omitted'),
     );
@@ -151,15 +189,8 @@ describe('AgenticEventQueue', () => {
       return total + Number((match?.[1] ?? '0').replaceAll(',', ''));
     }, 0);
 
-    expect(notices.length).toBeGreaterThan(0);
-    expect(notices.length).toBeLessThanOrEqual(4);
-    expect(omittedBytes).toBe(10);
-    expect(
-      notices.some((event) =>
-        event.chunk.includes('across additional tool calls'),
-      ),
-    ).toBe(true);
-  });
+    return { queue, notices, omittedBytes };
+  };
 
   it('reserves report and completion capacity after output is omitted', () => {
     const queue = new AgenticEventQueue({

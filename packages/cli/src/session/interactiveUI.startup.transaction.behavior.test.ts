@@ -131,26 +131,6 @@ async function makeStartedOwner(scheduler: CountingScheduler) {
   return owner!;
 }
 
-beforeEach(() => {
-  dir = fs.mkdtempSync(join(tmpdir(), 'perf-tx-startup-'));
-  setInteractiveStdoutObserver(null);
-  setInteractiveRenderObserver(null);
-  setPerfPhaseObserver(null);
-  __resetInteractiveUIStateForTesting();
-});
-
-afterEach(async () => {
-  __resetInteractiveUIStateForTesting();
-  setInteractiveStdoutObserver(null);
-  setInteractiveRenderObserver(null);
-  setPerfPhaseObserver(null);
-  try {
-    await fsp.rm(dir, { recursive: true, force: true });
-  } catch {
-    // ignore
-  }
-});
-
 /**
  * Asserts the perf owner was fully disposed after a failed startup: observers
  * cleared, timer cleared, claim removed.
@@ -180,6 +160,26 @@ function errorMessages(err: unknown): string[] {
 }
 
 describe('Finding B — transactional interactive startup', () => {
+  beforeEach(() => {
+    dir = fs.mkdtempSync(join(tmpdir(), 'perf-tx-startup-'));
+    setInteractiveStdoutObserver(null);
+    setInteractiveRenderObserver(null);
+    setPerfPhaseObserver(null);
+    __resetInteractiveUIStateForTesting();
+  });
+
+  afterEach(async () => {
+    __resetInteractiveUIStateForTesting();
+    setInteractiveStdoutObserver(null);
+    setInteractiveRenderObserver(null);
+    setPerfPhaseObserver(null);
+    try {
+      await fsp.rm(dir, { recursive: true, force: true });
+    } catch {
+      // ignore
+    }
+  });
+
   it('render-options failure: owner disposed, no mouse staged, primary error preserved', async () => {
     const scheduler = new CountingScheduler();
     const owner = await makeStartedOwner(scheduler);

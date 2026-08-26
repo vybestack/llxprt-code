@@ -67,6 +67,14 @@ type RuntimeServices = {
   profileManager?: ProfileManagerStub;
 };
 
+function loadBalancerEphemeralSettingKeys(
+  config: {
+    lbProfileEphemeralSettings?: Record<string, unknown>;
+  } | null,
+): string[] {
+  return Object.keys(config?.lbProfileEphemeralSettings ?? {});
+}
+
 const switchActiveProviderMock = vi.fn<
   (providerName: string) => Promise<{
     infoMessages: string[];
@@ -503,9 +511,7 @@ describe('profileApplication - Failover Policy Mapping', () => {
       } | null;
       expect(config).not.toBeNull();
       expect(config?.lbProfileEphemeralSettings).toBeDefined();
-      expect(
-        Object.keys(config?.lbProfileEphemeralSettings ?? {}),
-      ).toHaveLength(0);
+      expect(loadBalancerEphemeralSettingKeys(config)).toHaveLength(0);
     });
   });
 

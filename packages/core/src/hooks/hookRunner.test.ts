@@ -11,7 +11,7 @@
  */
 
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
-import { setGlobal, restoreGlobals } from '@vybestack/llxprt-code-test-utils';
+import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { Mock } from 'bun:test';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
@@ -22,9 +22,10 @@ import type { HookInput } from './types.js';
 import type { Readable, Writable } from 'node:stream';
 
 const realDebugModule = { ...(await import('../debug/index.js')) };
-afterEach(() => {
+
+function restoreHookRunnerGlobals(): void {
   restoreGlobals();
-});
+}
 
 function decodeSpawnCommand(args: readonly string[]): string {
   const shellCommand = String(args.at(-1) ?? '');
@@ -154,6 +155,7 @@ describe('HookRunner', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    restoreHookRunnerGlobals();
   });
 
   /** Configures mockProcessOn to fire the `close` event with the given exit code. */
@@ -192,6 +194,112 @@ describe('HookRunner', () => {
     );
   };
 
+  const configureTimeoutProcess = (): { readonly wasKilled: () => boolean } => {
+    let closeCallback: ((code: number) => void) | undefined;
+    let killWasCalled = false;
+    mockSpawn.mockProcessOn.mockImplementation(
+      (event: string, callback: (code: number) => void) => {
+        if (event === 'close') closeCallback = callback;
+      },
+    );
+    mockSpawn.kill = vi.fn().mockImplementation((_signal: string) => {
+      killWasCalled = true;
+      const callback = closeCallback;
+      if (callback) setTimeout(() => callback(128), 5);
+      return true;
+    });
+    return { wasKilled: () => killWasCalled };
+  };
+
+  const configureSigkillEscalation = (signals: string[]): void => {
+    let closeCallback: ((code: number) => void) | undefined;
+    mockSpawn.mockProcessOn.mockImplementation(
+      (event: string, callback: (code: number) => void) => {
+        if (event === 'close') closeCallback = callback;
+      },
+    );
+    mockSpawn.kill = vi.fn().mockImplementation((signal: string) => {
+      signals.push(signal);
+      mockSpawn.killed = true;
+      const callback = closeCallback;
+      if (signal === 'SIGKILL' && callback) {
+        mockSpawn.exitCode = null;
+        mockSpawn.signalCode = 'SIGKILL';
+        queueMicrotask(() => callback(137));
+      }
+      return true;
+    });
+  };
+
+  const expandedProjectCommand = (): string =>
+    process.platform === 'win32'
+      ? "'/test/project'/hooks/test.sh"
+      : '/test/project/hooks/test.sh';
+
+  const configureMixedCloseResults = (): void => {
+    let callCount = 0;
+    mockSpawn.mockProcessOn.mockImplementation(
+      (event: string, callback: (code: number) => void) => {
+        if (event === 'close') {
+          const exitCode = callCount++ === 0 ? 0 : 1;
+          setTimeout(() => callback(exitCode), 10);
+        }
+      },
+    );
+  };
+
+  const configureSequentialOrder = (executionOrder: string[]): void => {
+    mockSpawn.mockProcessOn.mockImplementation(
+      (event: string, callback: (code: number) => void) => {
+        if (event === 'close') {
+          const call = (spawn as Mock<typeof spawn>).mock.calls[
+            executionOrder.length
+          ];
+          executionOrder.push(decodeSpawnCommand(call[1]));
+          setImmediate(() => callback(0));
+        }
+      },
+    );
+  };
+
+  const configureContinueAfterFailure = (): void => {
+    let callCount = 0;
+    mockSpawn.mockStderrOn.mockImplementation(
+      (event: string, callback: (data: Buffer) => void) => {
+        if (event === 'data' && callCount === 1) {
+          setTimeout(() => callback(Buffer.from('Hook 2 failed')), 10);
+        }
+      },
+    );
+    mockSpawn.mockProcessOn.mockImplementation(
+      (event: string, callback: (code: number) => void) => {
+        if (event === 'close') {
+          const exitCode = callCount++ === 1 ? 1 : 0;
+          setTimeout(() => callback(exitCode), 20);
+        }
+      },
+    );
+  };
+
+  const configureFirstHookOutput = (output: unknown): void => {
+    let hookCallCount = 0;
+    mockSpawn.mockStdoutOn.mockImplementation(
+      (event: string, callback: (data: Buffer) => void) => {
+        if (event === 'data' && hookCallCount === 0) {
+          setTimeout(() => callback(Buffer.from(JSON.stringify(output))), 10);
+        }
+      },
+    );
+    mockSpawn.mockProcessOn.mockImplementation(
+      (event: string, callback: (code: number) => void) => {
+        if (event === 'close') {
+          hookCallCount++;
+          setTimeout(() => callback(0), 20);
+        }
+      },
+    );
+  };
+
   describe('executeHook', () => {
     describe('command hooks', () => {
       const commandConfig: HookConfig = {
@@ -200,15 +308,9 @@ describe('HookRunner', () => {
         timeout: 5000,
       };
 
-      if (process.platform === 'win32') {
+      describe.skipIf(process.platform !== 'win32')('on Windows', () => {
         it('should preserve native and PowerShell command failures', async () => {
-          mockSpawn.mockProcessOn.mockImplementation(
-            (event: string, callback: (code: number) => void) => {
-              if (event === 'close') {
-                setImmediate(() => callback(2));
-              }
-            },
-          );
+          onClose(2, (callback) => setImmediate(callback));
 
           const result = await hookRunner.executeHook(
             commandConfig,
@@ -239,23 +341,13 @@ describe('HookRunner', () => {
             expect.objectContaining({ shell: false }),
           );
         });
-      }
+      });
 
       it('should execute command hook successfully', async () => {
         const mockOutput = { decision: 'allow', reason: 'All good' };
 
         // Mock successful execution
-        mockSpawn.mockStdoutOn.mockImplementation(
-          (event: string, callback: (data: Buffer) => void) => {
-            if (event === 'data') {
-              setTimeout(
-                () => callback(Buffer.from(JSON.stringify(mockOutput))),
-                10,
-              );
-            }
-          },
-        );
-
+        onStdoutData(JSON.stringify(mockOutput));
         onClose(0);
 
         const result = await hookRunner.executeHook(
@@ -275,14 +367,7 @@ describe('HookRunner', () => {
       it('should handle command hook failure', async () => {
         const errorMessage = 'Command failed';
 
-        mockSpawn.mockStderrOn.mockImplementation(
-          (event: string, callback: (data: Buffer) => void) => {
-            if (event === 'data') {
-              setTimeout(() => callback(Buffer.from(errorMessage)), 10);
-            }
-          },
-        );
-
+        onStderrData(errorMessage);
         onClose(1);
 
         const result = await hookRunner.executeHook(
@@ -328,29 +413,7 @@ describe('HookRunner', () => {
           timeout: 50, // Very short timeout for testing
         };
 
-        let closeCallback: ((code: number) => void) | undefined;
-        let killWasCalled = false;
-
-        // Mock a hanging process that registers the close handler but doesn't call it initially
-        mockSpawn.mockProcessOn.mockImplementation(
-          (event: string, callback: (code: number) => void) => {
-            if (event === 'close') {
-              closeCallback = callback; // Store the callback but don't call it yet
-            }
-          },
-        );
-
-        // Mock the kill method to simulate the process being killed
-        mockSpawn.kill = vi.fn().mockImplementation((_signal: string) => {
-          killWasCalled = true;
-          // Simulate that killing the process triggers the close event
-          if (closeCallback) {
-            setTimeout(() => {
-              closeCallback!(128); // Exit code 128 indicates process was killed by signal
-            }, 5);
-          }
-          return true;
-        });
+        const timeoutProcess = configureTimeoutProcess();
 
         const result = await hookRunner.executeHook(
           shortTimeoutConfig,
@@ -359,7 +422,7 @@ describe('HookRunner', () => {
         );
 
         expect(result.success).toBe(false);
-        expect(killWasCalled).toBe(true);
+        expect(timeoutProcess.wasKilled()).toBe(true);
         expect(result.error?.message).toContain('timed out');
         expect(mockSpawn.kill).toHaveBeenCalledWith('SIGTERM');
       });
@@ -372,7 +435,6 @@ describe('HookRunner', () => {
           timeout: 50,
         };
 
-        let closeCallback: ((code: number) => void) | undefined;
         const signals: string[] = [];
 
         Object.assign(mockSpawn, {
@@ -380,26 +442,7 @@ describe('HookRunner', () => {
           signalCode: null,
           killed: false,
         });
-
-        mockSpawn.mockProcessOn.mockImplementation(
-          (event: string, callback: (code: number) => void) => {
-            if (event === 'close') {
-              closeCallback = callback;
-            }
-          },
-        );
-
-        mockSpawn.kill = vi.fn().mockImplementation((signal: string) => {
-          signals.push(signal);
-          // Node sets killed=true when the signal is sent, even if ignored.
-          mockSpawn.killed = true;
-          if (signal === 'SIGKILL' && closeCallback) {
-            mockSpawn.exitCode = null;
-            mockSpawn.signalCode = 'SIGKILL';
-            queueMicrotask(() => closeCallback!(137));
-          }
-          return true;
-        });
+        configureSigkillEscalation(signals);
 
         try {
           const resultPromise = hookRunner.executeHook(
@@ -456,20 +499,9 @@ describe('HookRunner', () => {
           }),
         );
         const expandedCommand = decodeSpawnCommand(spawnCall[1]);
-        expect(expandedCommand).toContain(
-          process.platform === 'win32'
-            ? "'/test/project'/hooks/test.sh"
-            : '/test/project/hooks/test.sh',
-        );
+        expect(expandedCommand).toContain(expandedProjectCommand());
       });
 
-      /**
-       * SECURITY TEST: Command injection via LLXPRT_PROJECT_DIR
-       * GIVEN: HookInput.cwd contains shell injection payload "; echo pwned"
-       * WHEN: Hook command uses $LLXPRT_PROJECT_DIR variable
-       * THEN: Injection payload must be escaped, not executed
-       * @requirement: Prevent shell injection via environment variable expansion
-       */
       it('should not allow command injection via LLXPRT_PROJECT_DIR (SECURITY)', async () => {
         const maliciousCwd = '/test/project; echo "pwned" > /tmp/pwned';
         const mockMaliciousInput: HookInput = {
@@ -536,15 +568,7 @@ describe('HookRunner', () => {
         { type: HookType.Command, command: './hook2.sh' },
       ];
 
-      let callCount = 0;
-      mockSpawn.mockProcessOn.mockImplementation(
-        (event: string, callback: (code: number) => void) => {
-          if (event === 'close') {
-            const exitCode = callCount++ === 0 ? 0 : 1; // First succeeds, second fails
-            setTimeout(() => callback(exitCode), 10);
-          }
-        },
-      );
+      configureMixedCloseResults();
 
       const results = await hookRunner.executeHooksParallel(
         configs,
@@ -568,18 +592,7 @@ describe('HookRunner', () => {
       const executionOrder: string[] = [];
 
       // Mock both commands to succeed
-      mockSpawn.mockProcessOn.mockImplementation(
-        (event: string, callback: (code: number) => void) => {
-          if (event === 'close') {
-            // Extract command from shell args instead of command directly
-            const args = (spawn as Mock<typeof spawn>).mock.calls[
-              executionOrder.length
-            ][1] as string[];
-            executionOrder.push(decodeSpawnCommand(args));
-            setImmediate(() => callback(0));
-          }
-        },
-      );
+      configureSequentialOrder(executionOrder);
 
       const results = await hookRunner.executeHooksSequential(
         configs,
@@ -601,24 +614,7 @@ describe('HookRunner', () => {
         { type: HookType.Command, command: './hook3.sh' },
       ];
 
-      let callCount = 0;
-      mockSpawn.mockStderrOn.mockImplementation(
-        (event: string, callback: (data: Buffer) => void) => {
-          if (event === 'data' && callCount === 1) {
-            // Second hook fails
-            setTimeout(() => callback(Buffer.from('Hook 2 failed')), 10);
-          }
-        },
-      );
-
-      mockSpawn.mockProcessOn.mockImplementation(
-        (event: string, callback: (code: number) => void) => {
-          if (event === 'close') {
-            const exitCode = callCount++ === 1 ? 1 : 0; // Second fails, others succeed
-            setTimeout(() => callback(exitCode), 20);
-          }
-        },
-      );
+      configureContinueAfterFailure();
 
       const results = await hookRunner.executeHooksSequential(
         configs,
@@ -651,26 +647,7 @@ describe('HookRunner', () => {
         },
       };
 
-      let hookCallCount = 0;
-      mockSpawn.mockStdoutOn.mockImplementation(
-        (event: string, callback: (data: Buffer) => void) => {
-          if (event === 'data' && hookCallCount === 0) {
-            setTimeout(
-              () => callback(Buffer.from(JSON.stringify(mockOutput1))),
-              10,
-            );
-          }
-        },
-      );
-
-      mockSpawn.mockProcessOn.mockImplementation(
-        (event: string, callback: (code: number) => void) => {
-          if (event === 'close') {
-            hookCallCount++;
-            setTimeout(() => callback(0), 20);
-          }
-        },
-      );
+      configureFirstHookOutput(mockOutput1);
 
       const results = await hookRunner.executeHooksSequential(
         configs,
@@ -714,26 +691,7 @@ describe('HookRunner', () => {
         },
       };
 
-      let hookCallCount = 0;
-      mockSpawn.mockStdoutOn.mockImplementation(
-        (event: string, callback: (data: Buffer) => void) => {
-          if (event === 'data' && hookCallCount === 0) {
-            setTimeout(
-              () => callback(Buffer.from(JSON.stringify(mockOutput1))),
-              10,
-            );
-          }
-        },
-      );
-
-      mockSpawn.mockProcessOn.mockImplementation(
-        (event: string, callback: (code: number) => void) => {
-          if (event === 'close') {
-            hookCallCount++;
-            setTimeout(() => callback(0), 20);
-          }
-        },
-      );
+      configureFirstHookOutput(mockOutput1);
 
       const results = await hookRunner.executeHooksSequential(
         configs,
@@ -761,13 +719,7 @@ describe('HookRunner', () => {
 
       onStderrData('Hook failed');
 
-      mockSpawn.mockProcessOn.mockImplementation(
-        (event: string, callback: (code: number) => void) => {
-          if (event === 'close') {
-            setTimeout(() => callback(1), 20); // All hooks fail
-          }
-        },
-      );
+      onClose(1, (callback) => setTimeout(callback, 20));
 
       const results = await hookRunner.executeHooksSequential(
         configs,

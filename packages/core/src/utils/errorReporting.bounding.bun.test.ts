@@ -54,7 +54,7 @@ describe('errorReport bounding and compact output (issue 3113)', () => {
 
   function expectStderrContaining(fragment: string): void {
     const found = stderrCalls.some((call) => call.includes(fragment));
-    expect(found, `Expected stderr to contain "${fragment}"`).toBe(true);
+    expect(found).toBe(true);
   }
 
   async function listReportFiles(): Promise<string[]> {
@@ -84,7 +84,7 @@ describe('errorReport bounding and compact output (issue 3113)', () => {
     const raw = await fs.readFile(path.join(testDir, files[0]), 'utf-8');
     expect(raw.includes('\n')).toBe(false);
     const parsed = JSON.parse(raw);
-    expect(parsed).toEqual({
+    expect(parsed).toStrictEqual({
       error: { message: 'B1 compact report test', stack: 'B1 stack' },
       context: { data: 'B1 context' },
     });
@@ -101,7 +101,7 @@ describe('errorReport bounding and compact output (issue 3113)', () => {
     const raw = await fs.readFile(path.join(testDir, files[0]), 'utf-8');
     expect(raw.includes('\n')).toBe(false);
     const parsed = JSON.parse(raw);
-    expect(parsed).toEqual({
+    expect(parsed).toStrictEqual({
       error: { message: 'B2 bigint test', stack: 'B2 stack' },
     });
   });
@@ -184,7 +184,7 @@ describe('errorReport bounding and compact output (issue 3113)', () => {
     const parsed = await readReport(files[0]);
     const context = parsed.context as unknown[];
     expect(context.length).toBe(8);
-    expect(context).toEqual(entries.slice(-8));
+    expect(context).toStrictEqual(entries.slice(-8));
     const truncated = parsed.contextTruncated as { omittedEntries: number };
     expect(truncated.omittedEntries).toBe(192);
   });
@@ -293,8 +293,8 @@ describe('errorReport bounding and compact output (issue 3113)', () => {
 
     const files = await listReportFiles();
     const parsed = await readReport(files[0]);
-    expect(Object.keys(parsed).sort()).toEqual(['context', 'error']);
-    expect(parsed.context).toEqual({ data: 'test context' });
+    expect(Object.keys(parsed).sort()).toStrictEqual(['context', 'error']);
+    expect(parsed.context).toStrictEqual({ data: 'test context' });
   });
 
   // B9: Stack clamping
@@ -380,8 +380,8 @@ describe('errorReport bounding and compact output (issue 3113)', () => {
 
     const files = await listReportFiles();
     const parsed = await readReport(files[0]);
-    expect(Object.keys(parsed).sort()).toEqual(['error']);
-    expect(parsed.error).toEqual({
+    expect(Object.keys(parsed).sort()).toStrictEqual(['error']);
+    expect(parsed.error).toStrictEqual({
       message: 'B13 no context test',
       stack: 'B13 stack',
     });

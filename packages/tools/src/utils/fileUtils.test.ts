@@ -13,6 +13,23 @@ import os from 'node:os';
 import sharp from 'sharp';
 import { detectFileType, processSingleFileContent } from './fileUtils.js';
 
+function textOrEmpty(value: string | null | undefined): string {
+  return value ?? '';
+}
+
+type ProcessedFileResult = Awaited<ReturnType<typeof processSingleFileContent>>;
+type InlineFileResult = ProcessedFileResult & {
+  readonly llmContent: Exclude<ProcessedFileResult['llmContent'], string>;
+};
+
+function requireInlineFileResult(
+  result: ProcessedFileResult,
+): asserts result is InlineFileResult {
+  if (typeof result.llmContent === 'string') {
+    throw new Error(result.llmContent);
+  }
+}
+
 const mockMimeLookup = vi.fn<(filename: string) => string | false>();
 
 void vi.mock('mime-types', () => ({
@@ -334,69 +351,75 @@ describe('processSingleFileContent image resizing', () => {
     vi.restoreAllMocks();
   });
 
+  const observeResizesRealImageBytesThroughTheSharedMediaPathAt337 =
+    async () => {
+      const imagePath = path.join(tempRootDir, 'large.png');
+      const original = await sharp({
+        create: {
+          width: 240,
+          height: 120,
+          channels: 3,
+          background: { r: 40, g: 80, b: 120 },
+        },
+      })
+        .png()
+        .toBuffer();
+      actualNodeFs.writeFileSync(imagePath, original);
+      const result = await processSingleFileContent(
+        imagePath,
+        tempRootDir,
+        undefined,
+        undefined,
+        { maxLongEdge: 120 },
+      );
+      requireInlineFileResult(result);
+      const resized = Buffer.from(
+        result.llmContent.inlineData?.data ?? '',
+        'base64',
+      );
+      const metadata = await sharp(resized).metadata();
+      return { result, metadata };
+    };
+
   it('resizes real image bytes through the shared media path', async () => {
-    const imagePath = path.join(tempRootDir, 'large.png');
-    const original = await sharp({
-      create: {
-        width: 240,
-        height: 120,
-        channels: 3,
-        background: { r: 40, g: 80, b: 120 },
-      },
-    })
-      .png()
-      .toBuffer();
-    actualNodeFs.writeFileSync(imagePath, original);
-
-    const result = await processSingleFileContent(
-      imagePath,
-      tempRootDir,
-      undefined,
-      undefined,
-      { maxLongEdge: 120 },
-    );
-    if (typeof result.llmContent === 'string') {
-      throw new Error(result.llmContent);
-    }
-    const resized = Buffer.from(
-      result.llmContent.inlineData?.data ?? '',
-      'base64',
-    );
-    const metadata = await sharp(resized).metadata();
-
-    expect(metadata.autoOrient).toEqual({ width: 120, height: 60 });
+    const { result, metadata } =
+      await observeResizesRealImageBytesThroughTheSharedMediaPathAt337();
+    expect(metadata.autoOrient).toStrictEqual({ width: 120, height: 60 });
     expect(result.llmContent.inlineData?.mimeType).toBe('image/png');
     expect(result.llmContent.inlineData?.displayName).toBe('large.png');
   });
 
+  const observeKeepsCompliantImageBytesUnchangedThroughTheSharedMediaPathAt372 =
+    async () => {
+      const imagePath = path.join(tempRootDir, 'small.png');
+      const original = await sharp({
+        create: {
+          width: 40,
+          height: 20,
+          channels: 3,
+          background: { r: 20, g: 40, b: 60 },
+        },
+      })
+        .png()
+        .toBuffer();
+      actualNodeFs.writeFileSync(imagePath, original);
+      const result = await processSingleFileContent(
+        imagePath,
+        tempRootDir,
+        undefined,
+        undefined,
+        { maxLongEdge: 120 },
+      );
+      requireInlineFileResult(result);
+      return { original, result };
+    };
+
   it('keeps compliant image bytes unchanged through the shared media path', async () => {
-    const imagePath = path.join(tempRootDir, 'small.png');
-    const original = await sharp({
-      create: {
-        width: 40,
-        height: 20,
-        channels: 3,
-        background: { r: 20, g: 40, b: 60 },
-      },
-    })
-      .png()
-      .toBuffer();
-    actualNodeFs.writeFileSync(imagePath, original);
-
-    const result = await processSingleFileContent(
-      imagePath,
-      tempRootDir,
-      undefined,
-      undefined,
-      { maxLongEdge: 120 },
-    );
-    if (typeof result.llmContent === 'string') {
-      throw new Error(result.llmContent);
-    }
-
+    const { original, result } =
+      await observeKeepsCompliantImageBytesUnchangedThroughTheSharedMediaPathAt372();
     expect(
-      Buffer.from(result.llmContent.inlineData?.data ?? '', 'base64'),
-    ).toEqual(original);
+      Buffer.from(textOrEmpty(result.llmContent.inlineData?.data), 'base64'),
+    ).toStrictEqual(original);
   });
 
   it('does not apply image policy to SVG or other media', async () => {

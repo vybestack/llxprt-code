@@ -215,14 +215,8 @@ describe('config factory migration — public factories produce real clients/sch
       new AbortController().signal,
       'factory-migration-prompt',
     );
-    try {
-      for await (const event of stream) {
-        collectedEvents.push(event);
-      }
-    } catch (err) {
-      throw new Error(
-        `sendMessageStream pipeline threw unexpectedly: ${err instanceof Error ? err.message : String(err)}`,
-      );
+    for await (const event of stream) {
+      collectedEvents.push(event);
     }
 
     // Observable behavior: the REAL dispatch pipeline emitted at least one

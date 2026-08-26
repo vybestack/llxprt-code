@@ -27,14 +27,6 @@ import type { SubAgentScope } from '../subagent.js';
 import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import { createRuntimeBundle } from './subagentOrchestrator-test-helpers.js';
 
-// handle.activate() uses a persistent enterWith that leaks the AsyncLocalStorage
-// store across tests; reset between every test so each launch starts from a
-// clean runtime identity.
-afterEach(() => {
-  runtimeModule.resetRuntimeScopeForTesting();
-  runtimeModule.resetCliRuntimeRegistryForTesting();
-});
-
 const subagentConfig: SubagentConfig = {
   name: 'helper',
   profile: 'helper-profile',
@@ -99,6 +91,14 @@ async function launchSubagent(
 }
 
 describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () => {
+  // handle.activate() uses a persistent enterWith that leaks the AsyncLocalStorage
+  // store across tests; reset between every test so each launch starts from a
+  // clean runtime identity.
+  afterEach(() => {
+    runtimeModule.resetRuntimeScopeForTesting();
+    runtimeModule.resetCliRuntimeRegistryForTesting();
+  });
+
   it('inherits the foreground on mode in the isolated settings service', async () => {
     const foreground = new SettingsService();
     foreground.setSessionScoped('dumpcontext', 'on');
@@ -238,6 +238,45 @@ describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () 
   });
 
   it('inherits the foreground dumpcontext for a load-balancer subagent', async () => {
+    const {
+      applyProfileSpy,
+      loadBalancerProfile,
+      isolatedSettings,
+      capturedSettings,
+      foreground,
+      result,
+      isolatedSpy,
+    } = await prepareLoadBalancerDumpcontextScenario();
+
+    try {
+      // The LB activation seam was selected/called (applyProfileWithGuards)
+      // rather than the ordinary executeProviderActivation path.
+      expect(applyProfileSpy).toHaveBeenCalledTimes(1);
+      expect(applyProfileSpy.mock.calls[0][0]).toBe(loadBalancerProfile);
+
+      // The runtime loader receives the foreground on mode through the
+      // production-constructed isolated settings service.
+      expect(isolatedSettings).toBe(capturedSettings);
+      expect(isolatedSettings).not.toBe(foreground);
+      expect(isolatedSettings.get('dumpcontext')).toBe('on');
+      expect(isolatedSettings.getAllGlobalSettings().dumpcontext).toBe('on');
+
+      // The same already-created isolated service observes later live
+      // foreground changes through the shared session overlay.
+      foreground.setSessionScoped('dumpcontext', 'error');
+      expect(isolatedSettings.get('dumpcontext')).toBe('error');
+
+      foreground.setSessionScoped('dumpcontext', 'off');
+      expect(isolatedSettings.get('dumpcontext')).toBe('off');
+      expect(isolatedSettings.getAllGlobalSettings().dumpcontext).toBe('off');
+    } finally {
+      await result.dispose();
+      isolatedSpy.mockRestore();
+      applyProfileSpy.mockRestore();
+    }
+  });
+
+  const prepareLoadBalancerDumpcontextScenario = async () => {
     // Launch a genuine load-balancer profile through SubagentOrchestrator.launch
     // so the private createRuntimeBundle load-balancer branch is exercised end
     // to end. The real LB provider/client activation (which intermittently
@@ -323,46 +362,28 @@ describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () 
         requestedProvider: 'load-balancer',
       });
 
-    try {
-      const orchestrator = new SubagentOrchestrator({
-        subagentManager: { loadSubagent } as unknown as SubagentManager,
-        profileManager: { loadProfile } as unknown as ProfileManager,
-        foregroundConfig: makeConfigWithSettings(foreground),
-        scopeFactory,
-        runtimeLoader,
-      });
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager: { loadSubagent } as unknown as SubagentManager,
+      profileManager: { loadProfile } as unknown as ProfileManager,
+      foregroundConfig: makeConfigWithSettings(foreground),
+      scopeFactory,
+      runtimeLoader,
+    });
 
-      const result = await orchestrator.launch({
-        name: subagentConfig.name,
-      });
+    const result = await orchestrator.launch({
+      name: subagentConfig.name,
+    });
+    const isolatedSettings = runtimeLoader.mock.calls[0][0].profile
+      .providerRuntime.settingsService as SettingsService;
 
-      // The LB activation seam was selected/called (applyProfileWithGuards)
-      // rather than the ordinary executeProviderActivation path.
-      expect(applyProfileSpy).toHaveBeenCalledTimes(1);
-      expect(applyProfileSpy.mock.calls[0][0]).toBe(loadBalancerProfile);
-
-      // The runtime loader receives the foreground on mode through the
-      // production-constructed isolated settings service.
-      const isolatedSettings = runtimeLoader.mock.calls[0][0].profile
-        .providerRuntime.settingsService as SettingsService;
-      expect(isolatedSettings).toBe(capturedSettings);
-      expect(isolatedSettings).not.toBe(foreground);
-      expect(isolatedSettings.get('dumpcontext')).toBe('on');
-      expect(isolatedSettings.getAllGlobalSettings().dumpcontext).toBe('on');
-
-      // The same already-created isolated service observes later live
-      // foreground changes through the shared session overlay.
-      foreground.setSessionScoped('dumpcontext', 'error');
-      expect(isolatedSettings.get('dumpcontext')).toBe('error');
-
-      foreground.setSessionScoped('dumpcontext', 'off');
-      expect(isolatedSettings.get('dumpcontext')).toBe('off');
-      expect(isolatedSettings.getAllGlobalSettings().dumpcontext).toBe('off');
-
-      await result.dispose();
-    } finally {
-      isolatedSpy.mockRestore();
-      applyProfileSpy.mockRestore();
-    }
-  });
+    return {
+      applyProfileSpy,
+      loadBalancerProfile,
+      isolatedSettings,
+      capturedSettings,
+      foreground,
+      result,
+      isolatedSpy,
+    };
+  };
 });

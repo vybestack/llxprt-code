@@ -23,6 +23,34 @@ import {
 } from './test-utils/anthropicThinkingTestSetup.js';
 import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
+function isAssistantMessageWithToolUse(
+  message: AnthropicRequestBody['messages'][number],
+): boolean {
+  return (
+    message.role === 'assistant' &&
+    Array.isArray(message.content) &&
+    message.content.some((block) => block.type === 'tool_use')
+  );
+}
+
+function isThinkingOrRedacted(block: AnthropicContentBlock): boolean {
+  return block.type === 'thinking' || block.type === 'redacted_thinking';
+}
+
+function isAssistantArrayMessage(
+  message: AnthropicRequestBody['messages'][number],
+): boolean {
+  return message.role === 'assistant' && Array.isArray(message.content);
+}
+
+function messageTextContent(
+  message: AnthropicRequestBody['messages'][number],
+): string | undefined {
+  if (Array.isArray(message.content)) {
+    return message.content.find((block) => block.type === 'text')?.text;
+  }
+  return message.content;
+}
 describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', () => {
   let provider: ThinkingTestSetup['provider'];
   let settingsService: ThinkingTestSetup['settingsService'];
@@ -126,17 +154,12 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       expect(request.thinking?.type).toBe('enabled');
 
       // Verify the tool call message includes thinking block
-      const assistantMsg = request.messages.find(
-        (m) =>
-          m.role === 'assistant' &&
-          Array.isArray(m.content) &&
-          m.content.some((b) => b.type === 'tool_use'),
-      );
+      const assistantMsg = request.messages.find(isAssistantMessageWithToolUse);
       expect(assistantMsg).toBeDefined();
 
       const hasThinking = (
         assistantMsg!.content as AnthropicContentBlock[]
-      ).some((b) => b.type === 'thinking' || b.type === 'redacted_thinking');
+      ).some(isThinkingOrRedacted);
       expect(hasThinking).toBe(true);
     });
 
@@ -241,10 +264,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       // The two consecutive tool_call assistant messages get merged into one
       // to maintain Anthropic's role alternation requirement
       const assistantMessages = request.messages.filter(
-        (m) =>
-          m.role === 'assistant' &&
-          Array.isArray(m.content) &&
-          m.content.some((block) => block.type === 'tool_use'),
+        isAssistantMessageWithToolUse,
       );
       expect(assistantMessages).toHaveLength(1);
 
@@ -256,10 +276,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       expect(toolUseBlocks).toHaveLength(2);
 
       // Orphaned thinking should NOT be attached (human message intervened)
-      const hasThinking = mergedContent.some(
-        (block) =>
-          block.type === 'thinking' || block.type === 'redacted_thinking',
-      );
+      const hasThinking = mergedContent.some(isThinkingOrRedacted);
       expect(hasThinking).toBe(false);
     });
 
@@ -351,7 +368,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       const request = mockMessagesCreate.mock
         .calls[0][0] as AnthropicRequestBody;
       const assistantMessages = request.messages.filter(
-        (m) => m.role === 'assistant' && Array.isArray(m.content),
+        isAssistantArrayMessage,
       );
 
       const lastAssistant = assistantMessages[assistantMessages.length - 1];
@@ -447,9 +464,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       const request = mockMessagesCreate.mock
         .calls[0][0] as AnthropicRequestBody;
 
-      const assistantMsg = request.messages.find(
-        (m) => m.role === 'assistant' && Array.isArray(m.content),
-      );
+      const assistantMsg = request.messages.find(isAssistantArrayMessage);
       expect(assistantMsg).toBeDefined();
 
       const content = assistantMsg?.content as AnthropicContentBlock[];
@@ -496,11 +511,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       const lastMessage = request.messages[request.messages.length - 1];
       expect(lastMessage.role).toBe('user');
       // Content may be wrapped in array by prompt caching
-      const textContent = Array.isArray(lastMessage.content)
-        ? (lastMessage.content as Array<{ type: string; text?: string }>).find(
-            (b) => b.type === 'text',
-          )?.text
-        : lastMessage.content;
+      const textContent = messageTextContent(lastMessage);
       expect(textContent).toBe('Continue the conversation');
     });
 
@@ -564,11 +575,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       const lastMessage = request.messages[request.messages.length - 1];
       expect(lastMessage.role).toBe('user');
       // Content may be wrapped in array by prompt caching — extract text to verify
-      const textContent = Array.isArray(lastMessage.content)
-        ? (lastMessage.content as Array<{ type: string; text?: string }>).find(
-            (b) => b.type === 'text',
-          )?.text
-        : lastMessage.content;
+      const textContent = messageTextContent(lastMessage);
       expect(textContent).not.toBe('Continue the conversation');
     });
   });

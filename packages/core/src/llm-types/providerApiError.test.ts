@@ -127,6 +127,24 @@ describe('isProviderApiError', () => {
 // Property-based tests
 // ============================================================================
 
+/**
+ * Builds a candidate error object from a required message plus the optional fields
+ * yielded by fast-check, omitting the optional fields when they are null. Lives
+ * outside the test callback so the property body stays free of conditionals.
+ */
+function buildCandidateWithOptionalFields(
+  message: string,
+  status: number | null,
+  code: string | null,
+  provider: string | null,
+): Record<string, unknown> {
+  const obj: Record<string, unknown> = { message };
+  if (status !== null) obj.status = status;
+  if (code !== null) obj.code = code;
+  if (provider !== null) obj.provider = provider;
+  return obj;
+}
+
 describe('providerApiError property-based', () => {
   it('any object with string message and valid optional fields is a ProviderApiError', () =>
     fc.assert(
@@ -137,13 +155,10 @@ describe('providerApiError property-based', () => {
           fc.option(fc.string()),
           fc.option(fc.string()),
         ),
-        ([message, status, code, provider]) => {
-          const obj: Record<string, unknown> = { message };
-          if (status !== null) obj.status = status;
-          if (code !== null) obj.code = code;
-          if (provider !== null) obj.provider = provider;
-          return isProviderApiError(obj) === true;
-        },
+        ([message, status, code, provider]) =>
+          isProviderApiError(
+            buildCandidateWithOptionalFields(message, status, code, provider),
+          ) === true,
       ),
     ));
 

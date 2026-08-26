@@ -98,7 +98,9 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
       assertImplements<IToolHost>(host);
       expect(host.getTargetDir()).toBe('/tmp/workspace');
       expect(typeof host.getTargetDir()).toBe('string');
-      expect(host.getReadManyFilesExclusions()).toEqual(['**/fixtures/**']);
+      expect(host.getReadManyFilesExclusions()).toStrictEqual([
+        '**/fixtures/**',
+      ]);
     });
 
     it('requires getWorkspaceRoots returning string array', () => {
@@ -135,8 +137,8 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
       } satisfies IToolRegistryHost;
       assertImplements<IToolRegistryHost>(registryHost);
 
-      expect(registryHost.getCoreTools()).toEqual(['shell', 'read-file']);
-      expect(registryHost.getExcludeTools()).toEqual(['dangerous-tool']);
+      expect(registryHost.getCoreTools()).toStrictEqual(['shell', 'read-file']);
+      expect(registryHost.getExcludeTools()).toStrictEqual(['dangerous-tool']);
       expect(registryHost.getToolDiscoveryCommand()).toBe('llm-tools discover');
       expect(registryHost.getToolCallCommand()).toBe('llm-tools call');
       expect(registryHost.isToolEnabled('shell')).toBe(true);
@@ -191,24 +193,27 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
   });
 
   describe('IToolKeyStorage contract', () => {
-    it('maskKeyForDisplay masks keys correctly with a concrete implementation', () => {
-      // Behavioral test: a real maskKeyForDisplay implementation
-      // must mask all but the last 4 characters
-      const keyStorage: IToolKeyStorage = {
-        saveKey: async (_toolName: string, _key: string) => {},
-        getKey: async (_toolName: string) => null,
-        deleteKey: async (_toolName: string) => {},
-        hasKey: async (_toolName: string) => false,
-        resolveKey: async (_toolName: string) => null,
-        maskKeyForDisplay: (key: string) => {
-          if (key.length <= 8) return '****';
-          return '*'.repeat(key.length - 4) + key.slice(-4);
-        },
-        getSupportedToolNames: () => ['codesearch', 'exa'],
+    const observeMaskKeyForDisplayMasksKeysCorrectlyWithAConcreteImplementationAt196 =
+      () => {
+        const keyStorage: IToolKeyStorage = {
+          saveKey: async (_toolName: string, _key: string) => {},
+          getKey: async (_toolName: string) => null,
+          deleteKey: async (_toolName: string) => {},
+          hasKey: async (_toolName: string) => false,
+          resolveKey: async (_toolName: string) => null,
+          maskKeyForDisplay: (key: string) => {
+            if (key.length <= 8) return '****';
+            return '*'.repeat(key.length - 4) + key.slice(-4);
+          },
+          getSupportedToolNames: () => ['codesearch', 'exa'],
+        };
+        assertImplements<IToolKeyStorage>(keyStorage);
+        return { keyStorage };
       };
-      assertImplements<IToolKeyStorage>(keyStorage);
 
-      // 'sk-1234567890abcdef' = 19 chars → 15 stars + last 4 chars
+    it('maskKeyForDisplay masks keys correctly with a concrete implementation', () => {
+      const { keyStorage } =
+        observeMaskKeyForDisplayMasksKeysCorrectlyWithAConcreteImplementationAt196();
       expect(keyStorage.maskKeyForDisplay('sk-1234567890abcdef')).toBe(
         '***************cdef',
       );
@@ -272,32 +277,36 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
   });
 
   describe('ISubagentService contract', () => {
-    it('requires executeSubagent, listSubagents, getSubagentConfig', async () => {
-      const service: ISubagentService = {
-        executeSubagent: async (request) => ({
-          output: `Ran ${request.name}`,
-          success: true,
-        }),
-        listSubagents: async () => [
-          { name: 'typescript-expert', description: 'TS expert' },
-        ],
-        getSubagentConfig: async (name: string) =>
-          name === 'typescript-expert'
-            ? { name: 'typescript-expert', instructions: 'Be helpful' }
-            : undefined,
+    const observeRequiresExecuteSubagentListSubagentsGetSubagentConfigAt277 =
+      async () => {
+        const service: ISubagentService = {
+          executeSubagent: async (request) => ({
+            output: `Ran ${request.name}`,
+            success: true,
+          }),
+          listSubagents: async () => [
+            { name: 'typescript-expert', description: 'TS expert' },
+          ],
+          getSubagentConfig: async (name: string) =>
+            name === 'typescript-expert'
+              ? { name: 'typescript-expert', instructions: 'Be helpful' }
+              : undefined,
+        };
+        assertImplements<ISubagentService>(service);
+        const result = await service.executeSubagent({
+          name: 'typescript-expert',
+          prompt: 'Fix this',
+        });
+        return { service, result };
       };
-      assertImplements<ISubagentService>(service);
 
-      const result = await service.executeSubagent({
-        name: 'typescript-expert',
-        prompt: 'Fix this',
-      });
+    it('requires executeSubagent, listSubagents, getSubagentConfig', async () => {
+      const { service, result } =
+        await observeRequiresExecuteSubagentListSubagentsGetSubagentConfigAt277();
       expect(result.success).toBe(true);
       expect(result.output).toContain('typescript-expert');
-
       const agents = await service.listSubagents();
       expect(agents).toHaveLength(1);
-
       const config = await service.getSubagentConfig('typescript-expert');
       expect(config?.name).toBe('typescript-expert');
       expect(await service.getSubagentConfig('nonexistent')).toBeUndefined();
@@ -305,49 +314,55 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
   });
 
   describe('IAsyncTaskService contract', () => {
-    it('requires status, lookup, output, and cancellation operations', async () => {
-      const workItems: AsyncWorkInfo[] = [
-        {
-          kind: 'subagent',
-          id: 'task-1',
-          subagentName: 'typescript-expert',
-          goalPrompt: 'Fix the typecheck diagnostics',
-          status: 'completed',
-          output: 'Typecheck passed',
-        },
-        {
-          kind: 'shell',
-          id: 'task-2',
-          command: 'npm run typecheck',
-          cwd: '/tmp/workspace',
-          status: 'running',
-          pid: 3141,
-        },
-      ];
-      const service: IAsyncTaskService = {
-        checkAsyncTask: async (id: string) =>
-          id === 'task-1' ? 'completed' : 'running',
-        getTaskStatus: () => workItems,
-        getTask: (id: string) => workItems.find((task) => task.id === id),
-        getTaskByPrefix: (prefix: string) => {
-          const candidates = workItems.filter((task) =>
-            task.id.startsWith(prefix),
-          );
-          const [task] = candidates;
-          if (candidates.length === 1) {
-            return { task };
-          }
-          return { candidates };
-        },
-        getOutputTail: (id: string) => ({
-          id,
-          output: id === 'task-2' ? 'Checking types...' : '',
-          truncated: false,
-        }),
-        cancel: async (id: string) => id === 'task-2',
+    const observeRequiresStatusLookupOutputAndCancellationOperationsAt310 =
+      async () => {
+        const workItems: AsyncWorkInfo[] = [
+          {
+            kind: 'subagent',
+            id: 'task-1',
+            subagentName: 'typescript-expert',
+            goalPrompt: 'Fix the typecheck diagnostics',
+            status: 'completed',
+            output: 'Typecheck passed',
+          },
+          {
+            kind: 'shell',
+            id: 'task-2',
+            command: 'npm run typecheck',
+            cwd: '/tmp/workspace',
+            status: 'running',
+            pid: 3141,
+          },
+        ];
+        const service: IAsyncTaskService = {
+          checkAsyncTask: async (id: string) =>
+            id === 'task-1' ? 'completed' : 'running',
+          getTaskStatus: () => workItems,
+          getTask: (id: string) => workItems.find((task) => task.id === id),
+          getTaskByPrefix: (prefix: string) => {
+            const candidates = workItems.filter((task) =>
+              task.id.startsWith(prefix),
+            );
+            const [task] = candidates;
+            if (candidates.length === 1) {
+              return { task };
+            }
+            return { candidates };
+          },
+          getOutputTail: (id: string) => ({
+            id,
+            output: id === 'task-2' ? 'Checking types...' : '',
+            truncated: false,
+          }),
+          cancel: async (id: string) => id === 'task-2',
+        };
+        assertImplements<IAsyncTaskService>(service);
+        return { service };
       };
-      assertImplements<IAsyncTaskService>(service);
 
+    it('requires status, lookup, output, and cancellation operations', async () => {
+      const { service } =
+        await observeRequiresStatusLookupOutputAndCancellationOperationsAt310();
       expect(await service.checkAsyncTask('task-1')).toBe('completed');
       expect(await service.checkAsyncTask('task-2')).toBe('running');
       const tasks = service.getTaskStatus();
@@ -358,7 +373,7 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
           command: 'npm run typecheck',
         }),
       );
-      expect(service.getTask('task-1')).toEqual(
+      expect(service.getTask('task-1')).toStrictEqual(
         expect.objectContaining({ kind: 'subagent' }),
       );
       expect(service.getTaskByPrefix('task-2').task?.id).toBe('task-2');
@@ -368,57 +383,69 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
   });
 
   describe('IIdeService contract', () => {
-    it('requires applyDiff, getConnectionStatus, openDiff', async () => {
-      const service: IIdeService = {
-        applyDiff: async (params): Promise<DiffUpdateResult> =>
-          params.diff.length > 0
-            ? { status: 'accepted', content: params.diff }
-            : { status: 'rejected', content: undefined },
-        getConnectionStatus: () => 'connected',
-        openDiff: async () => {},
+    const observeRequiresApplyDiffGetConnectionStatusOpenDiffAt373 =
+      async () => {
+        const service: IIdeService = {
+          applyDiff: async (params): Promise<DiffUpdateResult> =>
+            params.diff.length > 0
+              ? { status: 'accepted', content: params.diff }
+              : { status: 'rejected', content: undefined },
+          getConnectionStatus: () => 'connected',
+          openDiff: async () => {},
+        };
+        assertImplements<IIdeService>(service);
+        const result = await service.applyDiff({
+          filePath: '/tmp/test.ts',
+          diff: 'some diff content',
+        });
+        return { service, result };
       };
-      assertImplements<IIdeService>(service);
 
-      const result = await service.applyDiff({
-        filePath: '/tmp/test.ts',
-        diff: 'some diff content',
-      });
+    it('requires applyDiff, getConnectionStatus, openDiff', async () => {
+      const { service, result } =
+        await observeRequiresApplyDiffGetConnectionStatusOpenDiffAt373();
       expect(result.status).toBe('accepted');
       expect(result.content).toBe('some diff content');
-
       expect(service.getConnectionStatus()).toBe('connected');
-
       const rejected = await service.applyDiff({
         filePath: '/tmp/test.ts',
         diff: '',
       });
-      expect(rejected).toEqual({ status: 'rejected', content: undefined });
+      expect(rejected).toStrictEqual({
+        status: 'rejected',
+        content: undefined,
+      });
     });
   });
 
   describe('ILspService contract', () => {
-    it('requires diagnostics operations and LSP configuration', async () => {
-      const service: ILspService = {
-        getDiagnostics: (filePath: string) =>
-          filePath.endsWith('.ts')
-            ? [{ message: 'Type error', severity: 'error', line: 10 }]
-            : [],
-        waitForDiagnostics: async (filePath: string, _timeout: number) =>
-          service.getDiagnostics(filePath),
-        getLspConfig: () => ({
-          includeSeverities: ['error', 'warning'],
-          maxDiagnosticsPerFile: 25,
-        }),
+    const observeRequiresDiagnosticsOperationsAndLSPConfigurationAt405 =
+      async () => {
+        const service: ILspService = {
+          getDiagnostics: (filePath: string) =>
+            filePath.endsWith('.ts')
+              ? [{ message: 'Type error', severity: 'error', line: 10 }]
+              : [],
+          waitForDiagnostics: async (filePath: string, _timeout: number) =>
+            service.getDiagnostics(filePath),
+          getLspConfig: () => ({
+            includeSeverities: ['error', 'warning'],
+            maxDiagnosticsPerFile: 25,
+          }),
+        };
+        assertImplements<ILspService>(service);
+        const diags = service.getDiagnostics('/tmp/test.ts');
+        return { service, diags };
       };
-      assertImplements<ILspService>(service);
 
-      const diags = service.getDiagnostics('/tmp/test.ts');
+    it('requires diagnostics operations and LSP configuration', async () => {
+      const { service, diags } =
+        await observeRequiresDiagnosticsOperationsAndLSPConfigurationAt405();
       expect(diags).toHaveLength(1);
       expect(diags[0].message).toBe('Type error');
-
       const waited = await service.waitForDiagnostics('/tmp/test.ts', 5000);
       expect(waited).toHaveLength(1);
-      expect(service.getLspConfig()).toEqual({
+      expect(service.getLspConfig()).toStrictEqual({
         includeSeverities: ['error', 'warning'],
         maxDiagnosticsPerFile: 25,
       });
@@ -474,24 +501,30 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
   });
 
   describe('ISettingsService contract', () => {
-    it('requires getSettingsService, getSetting, setSetting', async () => {
-      const service: ISettingsService = {
-        getSettingsService: () => ({
-          get: (key: string) => (key === 'theme' ? 'dark' : undefined),
-          set: () => {},
-        }),
-        getSetting: (key: string) => (key === 'theme' ? 'dark' : undefined),
-        setSetting: async () => {},
+    const observeRequiresGetSettingsServiceGetSettingSetSettingAt482 =
+      async () => {
+        const service: ISettingsService = {
+          getSettingsService: () => ({
+            get: (key: string) => (key === 'theme' ? 'dark' : undefined),
+            set: () => {},
+          }),
+          getSetting: (key: string) => (key === 'theme' ? 'dark' : undefined),
+          setSetting: async () => {},
+        };
+        assertImplements<ISettingsService>(service);
+        return { service };
       };
-      assertImplements<ISettingsService>(service);
 
+    it('requires getSettingsService, getSetting, setSetting', async () => {
+      const { service } =
+        await observeRequiresGetSettingsServiceGetSettingSetSettingAt482();
       expect(service.getSetting('theme')).toBe('dark');
       expect(service.getSetting('nonexistent')).toBeUndefined();
     });
   });
 
   describe('IPromptRegistryService contract', () => {
-    it('requires getPromptRegistry and getPrompt', () => {
+    const observeRequiresGetPromptRegistryAndGetPromptAt499 = () => {
       const service: IPromptRegistryService = {
         getPromptRegistry: () => ({
           getPrompt: (name: string) =>
@@ -506,46 +539,56 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
             : undefined,
       };
       assertImplements<IPromptRegistryService>(service);
-
       const prompt = service.getPrompt('system');
+      return { service, prompt };
+    };
+
+    it('requires getPromptRegistry and getPrompt', () => {
+      const { service, prompt } =
+        observeRequiresGetPromptRegistryAndGetPromptAt499();
       expect(prompt?.name).toBe('system');
       expect(service.getPrompt('nonexistent')).toBeUndefined();
     });
   });
 
   describe('ISkillService contract', () => {
-    it('requires activation, discovery, lookup, and resource operations', async () => {
-      const skills: SkillInfo[] = [
-        {
-          name: 'pr-creator',
-          description: 'Creates pull requests',
-          location: '/skills/pr-creator',
-        },
-      ];
-      const service: ISkillService = {
-        activateSkill: async (name: string) =>
-          name === 'pr-creator'
-            ? { success: true, instructions: 'PR creation skill' }
-            : { success: false, availableSkills: ['pr-creator'] },
-        getSkillManager: () => ({
-          getSkills: () => skills,
+    const observeRequiresActivationDiscoveryLookupAndResourceOperationsAt522 =
+      async () => {
+        const skills: SkillInfo[] = [
+          {
+            name: 'pr-creator',
+            description: 'Creates pull requests',
+            location: '/skills/pr-creator',
+          },
+        ];
+        const service: ISkillService = {
+          activateSkill: async (name: string) =>
+            name === 'pr-creator'
+              ? { success: true, instructions: 'PR creation skill' }
+              : { success: false, availableSkills: ['pr-creator'] },
+          getSkillManager: () => ({
+            getSkills: () => skills,
+            getSkill: (name: string) =>
+              skills.find((skill) => skill.name === name) ?? null,
+          }),
+          listSkills: () => skills,
           getSkill: (name: string) =>
             skills.find((skill) => skill.name === name) ?? null,
-        }),
-        listSkills: () => skills,
-        getSkill: (name: string) =>
-          skills.find((skill) => skill.name === name) ?? null,
-        getFolderStructure: async (name: string) => `${name}/SKILL.md`,
+          getFolderStructure: async (name: string) => `${name}/SKILL.md`,
+        };
+        assertImplements<ISkillService>(service);
+        const result = await service.activateSkill('pr-creator');
+        return { skills, service, result };
       };
-      assertImplements<ISkillService>(service);
 
-      const result = await service.activateSkill('pr-creator');
+    it('requires activation, discovery, lookup, and resource operations', async () => {
+      const { skills, service, result } =
+        await observeRequiresActivationDiscoveryLookupAndResourceOperationsAt522();
       expect(result.success).toBe(true);
       expect(result.instructions).toBe('PR creation skill');
-
       const mgr = service.getSkillManager();
       expect(mgr.getSkills?.()).toHaveLength(1);
-      expect(service.listSkills()).toEqual(skills);
+      expect(service.listSkills()).toStrictEqual(skills);
       expect(service.getSkill('pr-creator')?.description).toBe(
         'Creates pull requests',
       );
@@ -557,32 +600,38 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
   });
 
   describe('IMcpToolService contract', () => {
-    it('requires one-argument callTool and permits trusted-folder queries', async () => {
-      const service: IMcpToolService = {
-        callTool: async (functionCalls) =>
-          functionCalls.map((functionCall) => ({
-            text: functionCall.name ?? 'unnamed',
-            functionResponse: {
-              name: functionCall.name,
-              response: { content: functionCall.args ?? {} },
-            },
-          })),
-        isTrustedFolder: () => true,
+    const observeRequiresOneArgumentCallToolAndPermitsTrustedFolderQueriesAt565 =
+      async () => {
+        const service: IMcpToolService = {
+          callTool: async (functionCalls) =>
+            functionCalls.map((functionCall) => ({
+              text: functionCall.name ?? 'unnamed',
+              functionResponse: {
+                name: functionCall.name,
+                response: { content: functionCall.args ?? {} },
+              },
+            })),
+          isTrustedFolder: () => true,
+        };
+        assertImplements<IMcpToolService>(service);
+        const functionCalls: McpFunctionCall[] = [
+          { name: 'search', args: { query: 'interface contracts' } },
+        ];
+        const parts = await service.callTool(functionCalls);
+        return { service, parts };
       };
-      assertImplements<IMcpToolService>(service);
 
-      const functionCalls: McpFunctionCall[] = [
-        { name: 'search', args: { query: 'interface contracts' } },
-      ];
-      const parts = await service.callTool(functionCalls);
+    it('requires one-argument callTool and permits trusted-folder queries', async () => {
+      const { service, parts } =
+        await observeRequiresOneArgumentCallToolAndPermitsTrustedFolderQueriesAt565();
       expect(parts).toHaveLength(1);
       expect(parts[0]?.text).toBe('search');
       expect(parts[0]?.functionResponse?.name).toBe('search');
-      expect(parts[0]?.functionResponse?.response?.content).toEqual({
+      expect(parts[0]?.functionResponse?.response?.content).toStrictEqual({
         query: 'interface contracts',
       });
       expect(service.isTrustedFolder?.()).toBe(true);
-      expect(await service.callTool([])).toEqual([]);
+      expect(await service.callTool([])).toStrictEqual([]);
     });
   });
 

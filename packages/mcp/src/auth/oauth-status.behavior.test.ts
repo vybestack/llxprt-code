@@ -160,6 +160,13 @@ describe('getMcpServerOAuthStatus — REQ-001 canonical helper', () => {
     );
   });
 
+  function expectedRequiredStatus(
+    hint: boolean,
+    runtime: boolean,
+  ): 'none' | 'not-required' {
+    return hint || runtime ? 'none' : 'not-required';
+  }
+
   // PROP2: OR-combine requiredness (hint || runtime).
   it('OR-combines requiresOAuth hint with the runtime map (property)', async () => {
     await fc.assert(
@@ -172,7 +179,7 @@ describe('getMcpServerOAuthStatus — REQ-001 canonical helper', () => {
           const result = await mcpAuth.getMcpServerOAuthStatus(name, {
             requiresOAuth: hint,
           });
-          const expected = hint || runtime ? 'none' : 'not-required';
+          const expected = expectedRequiredStatus(hint, runtime);
           expect(result).toBe(expected);
         },
       ),

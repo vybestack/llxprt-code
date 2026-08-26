@@ -310,7 +310,7 @@ describe('oauth_exchange handler', () => {
       expect(exchange.ok).toBe(true);
       expect(exchange.data?.access_token).toBe('access_token_value');
       expect(exchange.data?.refresh_token).toBeUndefined();
-      expect('refresh_token' in (exchange.data ?? {})).toBe(false);
+      expect(exchange.data).not.toHaveProperty('refresh_token');
     });
 
     it('backing store DOES contain refresh_token', async () => {

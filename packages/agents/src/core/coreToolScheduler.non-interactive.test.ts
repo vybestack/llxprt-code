@@ -246,108 +246,130 @@ describe('CoreToolScheduler non-interactive mode', () => {
   });
 
   it('should handle mixed batch: safe tool executes, dangerous tool errors in non-interactive', async () => {
-    // ARRANGE
-    const safeTool = new MockTool({ name: 'safeTool' });
-    safeTool.shouldConfirm = false; // No confirmation needed
-
-    const dangerousTool = new MockTool({ name: 'dangerousTool' });
-    dangerousTool.shouldConfirm = true; // Requires confirmation
-
-    const mockToolRegistry = {
-      getTool: (name: string) =>
-        name === 'safeTool' ? safeTool : dangerousTool,
-      getFunctionDeclarations: () => [],
-      tools: new Map([
-        ['safeTool', safeTool],
-        ['dangerousTool', dangerousTool],
-      ]),
-      discovery: {},
-      registerTool: () => {},
-      getToolByName: (name: string) =>
-        name === 'safeTool' ? safeTool : dangerousTool,
-      getToolByDisplayName: (name: string) =>
-        name === 'safeTool' ? safeTool : dangerousTool,
-      getTools: () => [safeTool, dangerousTool],
-      discoverTools: async () => {},
-      getAllTools: () => [safeTool, dangerousTool],
-      getToolsByServer: () => [],
-    } as unknown as ToolRegistry;
-
-    const onAllToolCallsComplete = vi.fn();
-    const onToolCallsUpdate = vi.fn();
-
-    const mockPolicyEngine = createMockPolicyEngine();
-    mockPolicyEngine.evaluate = vi
-      .fn()
-      .mockReturnValue(PolicyDecision.ASK_USER);
-
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      isInteractive: () => false, // Non-interactive
-      getApprovalMode: () => ApprovalMode.DEFAULT,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({ model: 'test-model' }),
-      getToolRegistry: () => mockToolRegistry,
-      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
-      getEnableHooks: () => false,
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-      getModel: () => DEFAULT_GEMINI_MODEL,
-    } as unknown as Config;
-
-    const scheduler = new CoreToolScheduler({
-      config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
-      toolRegistry: mockConfig.getToolRegistry(),
+    const {
       onAllToolCallsComplete,
-      onToolCallsUpdate,
-      getPreferredEditor: () => 'vscode',
-    });
-
-    // ACT - Schedule both tools in a batch
-    await scheduler.schedule(
-      [
-        {
-          callId: 'safe-call',
-          name: 'safeTool',
-          args: {},
-          isClientInitiated: false,
-          prompt_id: 'prompt-1',
-        },
-        {
-          callId: 'dangerous-call',
-          name: 'dangerousTool',
-          args: {},
-          isClientInitiated: false,
-          prompt_id: 'prompt-1',
-        },
-      ],
-      new AbortController().signal,
-    );
-
-    // ASSERT
+      completedCalls,
+      errorMessage,
+      statusObservation,
+      statusObservation2,
+    } =
+      await observeHandleMixedBatchSafeToolExecutesDangerousToolErrorsInNonInteractive();
     expect(onAllToolCallsComplete).toHaveBeenCalled();
-    const completedCalls = onAllToolCallsComplete.mock
-      .calls[0][0] as ToolCall[];
     expect(completedCalls).toHaveLength(2);
-
-    const safeCall = completedCalls.find(
-      (c) => c.request.callId === 'safe-call',
-    );
-    const dangerousCall = completedCalls.find(
-      (c) => c.request.callId === 'dangerous-call',
-    );
-
-    expect(safeCall?.status).toBe('success');
-    expect(dangerousCall?.status).toBe('error');
-
-    const erroredCall = dangerousCall as ErroredToolCall;
-    const errorParts = erroredCall.response.responseParts;
-    const errorMessage = (errorParts[0] as { result?: { error?: string } })
-      .result?.error;
+    expect(statusObservation).toBe('success');
+    expect(statusObservation2).toBe('error');
     expect(errorMessage).toContain('requires user confirmation');
     expect(errorMessage).toContain('non-interactive mode');
   });
+
+  const observeHandleMixedBatchSafeToolExecutesDangerousToolErrorsInNonInteractive =
+    async () => {
+      // ARRANGE
+      const safeTool = new MockTool({ name: 'safeTool' });
+      safeTool.shouldConfirm = false; // No confirmation needed
+
+      const dangerousTool = new MockTool({ name: 'dangerousTool' });
+      dangerousTool.shouldConfirm = true; // Requires confirmation
+
+      const mockToolRegistry = {
+        getTool: (name: string) =>
+          name === 'safeTool' ? safeTool : dangerousTool,
+        getFunctionDeclarations: () => [],
+        tools: new Map([
+          ['safeTool', safeTool],
+          ['dangerousTool', dangerousTool],
+        ]),
+        discovery: {},
+        registerTool: () => {},
+        getToolByName: (name: string) =>
+          name === 'safeTool' ? safeTool : dangerousTool,
+        getToolByDisplayName: (name: string) =>
+          name === 'safeTool' ? safeTool : dangerousTool,
+        getTools: () => [safeTool, dangerousTool],
+        discoverTools: async () => {},
+        getAllTools: () => [safeTool, dangerousTool],
+        getToolsByServer: () => [],
+      } as unknown as ToolRegistry;
+
+      const onAllToolCallsComplete = vi.fn();
+      const onToolCallsUpdate = vi.fn();
+
+      const mockPolicyEngine = createMockPolicyEngine();
+      mockPolicyEngine.evaluate = vi
+        .fn()
+        .mockReturnValue(PolicyDecision.ASK_USER);
+
+      const mockConfig = {
+        getSessionId: () => 'test-session-id',
+        getUsageStatisticsEnabled: () => true,
+        getDebugMode: () => false,
+        isInteractive: () => false, // Non-interactive
+        getApprovalMode: () => ApprovalMode.DEFAULT,
+        getEphemeralSettings: () => ({}),
+        getAllowedTools: () => [],
+        getContentGeneratorConfig: () => ({ model: 'test-model' }),
+        getToolRegistry: () => mockToolRegistry,
+        getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+        getEnableHooks: () => false,
+        getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
+        getModel: () => DEFAULT_GEMINI_MODEL,
+      } as unknown as Config;
+
+      const scheduler = new CoreToolScheduler({
+        config: mockConfig,
+        messageBus: mockConfig.getMessageBus(),
+        toolRegistry: mockConfig.getToolRegistry(),
+        onAllToolCallsComplete,
+        onToolCallsUpdate,
+        getPreferredEditor: () => 'vscode',
+      });
+
+      // ACT - Schedule both tools in a batch
+      await scheduler.schedule(
+        [
+          {
+            callId: 'safe-call',
+            name: 'safeTool',
+            args: {},
+            isClientInitiated: false,
+            prompt_id: 'prompt-1',
+          },
+          {
+            callId: 'dangerous-call',
+            name: 'dangerousTool',
+            args: {},
+            isClientInitiated: false,
+            prompt_id: 'prompt-1',
+          },
+        ],
+        new AbortController().signal,
+      );
+
+      // ASSERT
+
+      const completedCalls = onAllToolCallsComplete.mock
+        .calls[0][0] as ToolCall[];
+
+      const safeCall = completedCalls.find(
+        (c) => c.request.callId === 'safe-call',
+      );
+      const dangerousCall = completedCalls.find(
+        (c) => c.request.callId === 'dangerous-call',
+      );
+
+      const erroredCall = dangerousCall as ErroredToolCall;
+      const errorParts = erroredCall.response.responseParts;
+      const errorMessage = (errorParts[0] as { result?: { error?: string } })
+        .result?.error;
+
+      const statusObservation = safeCall?.status;
+      const statusObservation2 = dangerousCall?.status;
+      return {
+        onAllToolCallsComplete,
+        completedCalls,
+        errorMessage,
+        statusObservation,
+        statusObservation2,
+      };
+    };
 });

@@ -78,6 +78,21 @@ const createTrustedConfig = (): Config =>
     isTrustedFolder: () => true,
   }) as Config;
 
+function waitForDiscoveryAbort(
+  _params: unknown,
+  options: { readonly signal?: AbortSignal } | undefined,
+): Promise<void> {
+  return new Promise<void>((_resolve, reject) => {
+    if (options?.signal?.aborted === true) {
+      reject(new Error('Operation aborted'));
+      return;
+    }
+    options?.signal?.addEventListener('abort', () => {
+      reject(new Error('Operation aborted'));
+    });
+  });
+}
+
 describe('mcp-client', () => {
   let workspaceContext: WorkspaceContext;
   let testWorkspace: string;
@@ -515,19 +530,7 @@ describe('mcp-client', () => {
           .mockReturnValue({ tools: { listChanged: true } }),
         setNotificationHandler: vi.fn(),
         // Mock listTools to simulate a long running process that respects the abort signal
-        listTools: vi.fn().mockImplementation(
-          async (params, options) =>
-            new Promise<void>((_resolve, reject) => {
-              if (options?.signal?.aborted === true) {
-                reject(new Error('Operation aborted'));
-                return;
-              }
-              options?.signal?.addEventListener('abort', () => {
-                reject(new Error('Operation aborted'));
-              });
-              // Intentionally do not resolve immediately to simulate lag
-            }),
-        ),
+        listTools: vi.fn().mockImplementation(waitForDiscoveryAbort),
         listPrompts: vi.fn().mockResolvedValue({ prompts: [] }),
         request: vi.fn().mockResolvedValue({}),
         registerCapabilities: vi.fn().mockResolvedValue({}),

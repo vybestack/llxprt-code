@@ -621,6 +621,15 @@ describe('StreamProcessor.makeApiCallAndProcessStream — cancellation before fi
 
 describe('StreamProcessor._executeStreamApiCall — retry integration (#1750)', () => {
   it('should have API call errors caught by retryWithBackoff', async () => {
+    const { _attemptCount, mockApiCall, firstChunk } =
+      await observeHaveAPICallErrorsCaughtByRetryWithBackoff();
+    expect(_attemptCount).toBe(3);
+    expect(mockApiCall).toHaveBeenCalledTimes(3);
+    expect(firstChunk.done).toBe(false);
+    expect(firstChunk.value).toBeDefined();
+  });
+
+  const observeHaveAPICallErrorsCaughtByRetryWithBackoff = async () => {
     // Import the actual retryWithBackoff to test integration
     const { retryWithBackoff: actualRetry } = realRetryModule;
 
@@ -655,16 +664,21 @@ describe('StreamProcessor._executeStreamApiCall — retry integration (#1750)', 
     });
 
     // Verify retries happened
-    expect(_attemptCount).toBe(3);
-    expect(mockApiCall).toHaveBeenCalledTimes(3);
 
     // Verify we got a working generator
     const firstChunk = await result.next();
-    expect(firstChunk.done).toBe(false);
-    expect(firstChunk.value).toBeDefined();
-  });
+
+    return { _attemptCount, mockApiCall, firstChunk };
+  };
 
   it('should trigger bucket failover on persistent 429 errors', async () => {
+    const { _failoverCalled, mockOnPersistent429 } =
+      await observeTriggerBucketFailoverOnPersistent429Errors();
+    expect(_failoverCalled).toBe(true);
+    expect(mockOnPersistent429).toHaveBeenCalled();
+  });
+
+  const observeTriggerBucketFailoverOnPersistent429Errors = async () => {
     const { retryWithBackoff: actualRetry } = realRetryModule;
 
     let _failoverCalled = false;
@@ -706,7 +720,7 @@ describe('StreamProcessor._executeStreamApiCall — retry integration (#1750)', 
     }
 
     // Verify failover was attempted
-    expect(_failoverCalled).toBe(true);
-    expect(mockOnPersistent429).toHaveBeenCalled();
-  });
+
+    return { _failoverCalled, mockOnPersistent429 };
+  };
 });

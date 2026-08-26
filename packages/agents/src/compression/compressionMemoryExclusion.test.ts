@@ -292,32 +292,40 @@ describe('Compression memory exclusion (issue #3174)', () => {
   });
 
   it('strategy request excludes memory/MCP, keeps the state_snapshot template, and applies a valid snapshot', async () => {
-    const captured: RuntimeGenerateChatOptions[] = [];
-    const provider = createOptionsCapturingProvider(captured, VALID_SNAPSHOT);
-    const context = buildCompressionContext({
-      history: generateHistory(20),
-      config: createMcpConfigDouble(MCP_SENTINEL),
-      provider,
-    });
-
-    const strategy = new OneShotStrategy();
-    const result = await strategy.compress(context);
-
+    const { captured, sysInstr, requestText, result, summarizedHistory } =
+      await observeStrategyRequestExcludesMemoryMCPKeepsTheStateSnapshotTemplateAndApplies();
     expect(captured.length).toBeGreaterThanOrEqual(1);
-    const request = captured[0];
-    const sysInstr = request.systemInstruction;
     expect(typeof sysInstr).toBe('string');
     expect((sysInstr as string).length).toBeGreaterThan(0);
     expect(sysInstr).not.toContain(CORE_MEMORY_SENTINEL);
     expect(sysInstr).not.toContain(MCP_SENTINEL);
     expect(sysInstr).not.toContain(CORE_MEMORY_WRAPPER);
-
-    const requestText = extractText(request.contents);
     expect(requestText).toContain('<state_snapshot>');
-
     expect(result.kind).toBe('applied');
-    const summarizedHistory =
-      result.kind === 'applied' ? result.newHistory : [];
     expect(extractText(summarizedHistory)).toContain('<state_snapshot>');
   });
+
+  const observeStrategyRequestExcludesMemoryMCPKeepsTheStateSnapshotTemplateAndApplies =
+    async () => {
+      const captured: RuntimeGenerateChatOptions[] = [];
+      const provider = createOptionsCapturingProvider(captured, VALID_SNAPSHOT);
+      const context = buildCompressionContext({
+        history: generateHistory(20),
+        config: createMcpConfigDouble(MCP_SENTINEL),
+        provider,
+      });
+
+      const strategy = new OneShotStrategy();
+      const result = await strategy.compress(context);
+
+      const request = captured[0];
+      const sysInstr = request.systemInstruction;
+
+      const requestText = extractText(request.contents);
+
+      const summarizedHistory =
+        result.kind === 'applied' ? result.newHistory : [];
+
+      return { captured, sysInstr, requestText, result, summarizedHistory };
+    };
 });

@@ -484,7 +484,7 @@ describe('useSubmitQuery — operation lifecycle integration (AC-3, AC-4)', () =
     expect(records).toHaveLength(1);
     expect(records[0].status).toBe('error');
     expect(records[0].operation_id).toBe('sess-1#agentic-loop#uuid-post-begin');
-    expect(deps.setIsRespondingCalls).toEqual([true, false]);
+    expect(deps.setIsRespondingCalls).toStrictEqual([true, false]);
     expect(runStream).not.toHaveBeenCalled();
   });
 });

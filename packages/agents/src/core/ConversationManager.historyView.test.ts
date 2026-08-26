@@ -203,7 +203,10 @@ describe('ConversationManager.getHistory() — reference semantics (issue #3109)
 
         const after = conversationManager.getHistory(curated);
         expect(after).toHaveLength(2);
-        expect(after.map((entry) => entry.speaker)).toEqual(['human', 'ai']);
+        expect(after.map((entry) => entry.speaker)).toStrictEqual([
+          'human',
+          'ai',
+        ]);
       });
 
       it(`splicing the returned array does not affect a later getHistory() (curated: ${curated})`, () => {
@@ -214,7 +217,10 @@ describe('ConversationManager.getHistory() — reference semantics (issue #3109)
 
         const after = conversationManager.getHistory(curated);
         expect(after).toHaveLength(2);
-        expect(after.map((entry) => entry.speaker)).toEqual(['human', 'ai']);
+        expect(after.map((entry) => entry.speaker)).toStrictEqual([
+          'human',
+          'ai',
+        ]);
       });
     }
 
@@ -288,12 +294,12 @@ describe('ConversationManager.getHistory() — reference semantics (issue #3109)
   describe('AC4 — curation semantics unchanged', () => {
     it('empty history returns an empty array for curated: false', () => {
       const result = conversationManager.getHistory(false);
-      expect(result).toEqual([]);
+      expect(result).toStrictEqual([]);
     });
 
     it('empty history returns an empty array for curated: true', () => {
       const result = conversationManager.getHistory(true);
-      expect(result).toEqual([]);
+      expect(result).toStrictEqual([]);
     });
 
     it('curated:true drops an invalid/empty AI entry while getAll keeps it', () => {
@@ -366,10 +372,10 @@ describe('ConversationManager.getHistory() — reference semantics (issue #3109)
 
           const result = conversationManager.getHistory();
           expect(result).toHaveLength(entries.length);
-          expect(result.map((entry) => entry.speaker)).toEqual(
+          expect(result.map((entry) => entry.speaker)).toStrictEqual(
             entries.map((entry) => entry.speaker),
           );
-          expect(result.map((entry) => entry.blocks.length)).toEqual(
+          expect(result.map((entry) => entry.blocks.length)).toStrictEqual(
             entries.map((entry) => entry.blocks.length),
           );
         }),

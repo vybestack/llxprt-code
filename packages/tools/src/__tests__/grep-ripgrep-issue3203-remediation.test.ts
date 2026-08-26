@@ -22,7 +22,35 @@ import type { ToolResult } from '../index.js';
 import type { GrepToolParams } from '../tools/grep/types.js';
 import type { RipGrepToolParams } from '../tools/ripGrep.js';
 
-const itPosix = process.platform === 'win32' ? it.skip : it;
+const textOrEmpty = (value: string | null | undefined): string => value ?? '';
+
+const stringContent = (value: unknown): string =>
+  typeof value === 'string' ? value : '';
+
+function restorePath(originalPath: string | undefined): void {
+  if (originalPath === undefined) {
+    delete process.env.PATH;
+  } else {
+    process.env.PATH = originalPath;
+  }
+}
+
+function createTwoRootHost(root: string): {
+  readonly rootA: string;
+  readonly rootB: string;
+  readonly host: IToolHost;
+} {
+  const rootA = join(root, 'rootA');
+  const rootB = join(root, 'rootB');
+  mkdirSync(rootA, { recursive: true });
+  mkdirSync(rootB, { recursive: true });
+  const host: IToolHost = {
+    ...createToolHost(root),
+    getWorkspaceRoots: () => [rootA, rootB],
+  };
+  return { rootA, rootB, host };
+}
+
 function createTempDir(prefix = 'llxprt-grep-remediation-'): {
   dir: string;
   cleanup: () => void;
@@ -131,22 +159,27 @@ describe('Exact-limit evidence: producer at exactly the cap is exhaustive (item 
     cleanup();
   });
 
-  it(
-    'grep with exactly max_results matches is NOT marked incomplete',
+  const observeGrepWithExactlyMaxResultsMatchesIsNOTMarkedIncompleteAt133 =
     async () => {
       for (let i = 0; i < 5; i++) {
         writeFileSync(join(tempDir, `f${i}.txt`), `match_line_${i}\n`);
       }
-
       const result = await executeGrep(createToolHost(tempDir), {
         pattern: 'match_line',
         max_results: 5,
         max_files: 100,
         max_per_file: 1,
       });
-
       const text =
         typeof result.llmContent === 'string' ? result.llmContent : '';
+      return { result, text };
+    };
+
+  it(
+    'grep with exactly max_results matches is NOT marked incomplete',
+    async () => {
+      const { result, text } =
+        await observeGrepWithExactlyMaxResultsMatchesIsNOTMarkedIncompleteAt133();
       expect(result.error).toBeUndefined();
       expect(text).not.toMatch(/incomplete|showing.*may be/i);
       expect(text).toMatch(/^Found 5 matches for pattern/m);
@@ -154,22 +187,25 @@ describe('Exact-limit evidence: producer at exactly the cap is exhaustive (item 
     { timeout: 15000 },
   );
 
+  const observeGrepWithMaxResults1MatchesISMarkedIncompleteAt156 = async () => {
+    for (let i = 0; i < 6; i++) {
+      writeFileSync(join(tempDir, `f${i}.txt`), `match_line_${i}\n`);
+    }
+    const result = await executeGrep(createToolHost(tempDir), {
+      pattern: 'match_line',
+      max_results: 5,
+      max_files: 100,
+      max_per_file: 1,
+    });
+    const text = typeof result.llmContent === 'string' ? result.llmContent : '';
+    return { result, text };
+  };
+
   it(
     'grep with max_results+1 matches IS marked incomplete',
     async () => {
-      for (let i = 0; i < 6; i++) {
-        writeFileSync(join(tempDir, `f${i}.txt`), `match_line_${i}\n`);
-      }
-
-      const result = await executeGrep(createToolHost(tempDir), {
-        pattern: 'match_line',
-        max_results: 5,
-        max_files: 100,
-        max_per_file: 1,
-      });
-
-      const text =
-        typeof result.llmContent === 'string' ? result.llmContent : '';
+      const { result, text } =
+        await observeGrepWithMaxResults1MatchesISMarkedIncompleteAt156();
       expect(result.error).toBeUndefined();
       expect(text).toMatch(/incomplete|showing.*may be/i);
       expect(text).not.toMatch(/^Found 5 matches for pattern/m);
@@ -177,21 +213,26 @@ describe('Exact-limit evidence: producer at exactly the cap is exhaustive (item 
     { timeout: 15000 },
   );
 
-  it(
-    'ripgrep with fewer matches than cap is NOT marked incomplete',
+  const observeRipgrepWithFewerMatchesThanCapIsNOTMarkedIncompleteAt179 =
     async () => {
       const lines: string[] = [];
       for (let i = 0; i < 100; i++) {
         lines.push(`match_${i}`);
       }
       writeFileSync(join(tempDir, 'big.txt'), lines.join('\n'));
-
       const result = await executeRipgrep(createToolHost(tempDir), {
         pattern: 'match_',
       });
-
       const text =
         typeof result.llmContent === 'string' ? result.llmContent : '';
+      return { text };
+    };
+
+  it(
+    'ripgrep with fewer matches than cap is NOT marked incomplete',
+    async () => {
+      const { text } =
+        await observeRipgrepWithFewerMatchesThanCapIsNOTMarkedIncompleteAt179();
       expect(text).not.toMatch(/incomplete|results may be incomplete/i);
       expect(text).toMatch(/Found 100 matches/);
     },
@@ -200,65 +241,72 @@ describe('Exact-limit evidence: producer at exactly the cap is exhaustive (item 
 });
 
 describe('Strategy budget rollback: failed strategy does not starve fallback (item 4)', () => {
-  itPosix(
-    'restores the budget consumed by a failed git grep before system grep',
-    async () => {
-      const { performGrepSearch } = await import(
-        '../tools/grep/search-strategies.js'
+  describe.skipIf(process.platform === 'win32')(
+    'POSIX grep strategy budget rollback',
+    () => {
+      it(
+        'restores the budget consumed by a failed git grep before system grep',
+        async () => {
+          const { performGrepSearch } = await import(
+            '../tools/grep/search-strategies.js'
+          );
+          const workspace = createTempDir('llxprt-budget-rollback-');
+          const fakeCommand = createTempDir('llxprt-fake-git-');
+          const originalPath = process.env.PATH;
+          try {
+            initGitRepo(workspace.dir);
+            for (let i = 0; i < 10; i++) {
+              writeFileSync(
+                join(workspace.dir, `f${i}.txt`),
+                `match_line_${i}\n`,
+              );
+            }
+            gitAdd(workspace.dir);
+
+            const fakeOutput = join(fakeCommand.dir, 'output.txt');
+            const fakeGit = join(fakeCommand.dir, 'git');
+            writeFileSync(
+              fakeOutput,
+              `f0.txt:1:match_line_${'x'.repeat(3000)}\n`,
+            );
+            writeFileSync(
+              fakeGit,
+              `#!/bin/sh\nif [ "$1" = "--version" ]; then\n  echo "git version test"\n  exit 0\nfi\ncat ${JSON.stringify(fakeOutput)}\necho "forced failure" >&2\nexit 2\n`,
+            );
+            chmodSync(fakeGit, 0o755);
+            process.env.PATH = `${fakeCommand.dir}:${textOrEmpty(originalPath)}`;
+
+            const budget: SemanticBudget = {
+              remainingBytes: 4000,
+              remainingObjects: 100,
+              sourceBytes: DEFAULT_SOURCE_BUDGET_BYTES,
+            };
+            const result = await performGrepSearch(
+              {
+                pattern: 'match_line',
+                path: workspace.dir,
+                signal: new AbortController().signal,
+                maxResults: 100,
+                maxFiles: 100,
+                maxPerFile: 50,
+                semanticBudget: budget,
+              },
+              ['node_modules'],
+            );
+
+            expect(result.results).toHaveLength(10);
+            expect(result.incomplete).not.toBe(true);
+            expect(budget.remainingObjects).toBe(90);
+            expect(budget.remainingBytes).toBeGreaterThan(0);
+          } finally {
+            restorePath(originalPath);
+            fakeCommand.cleanup();
+            workspace.cleanup();
+          }
+        },
+        { timeout: 15000 },
       );
-      const workspace = createTempDir('llxprt-budget-rollback-');
-      const fakeCommand = createTempDir('llxprt-fake-git-');
-      const originalPath = process.env.PATH;
-      try {
-        initGitRepo(workspace.dir);
-        for (let i = 0; i < 10; i++) {
-          writeFileSync(join(workspace.dir, `f${i}.txt`), `match_line_${i}\n`);
-        }
-        gitAdd(workspace.dir);
-
-        const fakeOutput = join(fakeCommand.dir, 'output.txt');
-        const fakeGit = join(fakeCommand.dir, 'git');
-        writeFileSync(fakeOutput, `f0.txt:1:match_line_${'x'.repeat(3000)}\n`);
-        writeFileSync(
-          fakeGit,
-          `#!/bin/sh\nif [ "$1" = "--version" ]; then\n  echo "git version test"\n  exit 0\nfi\ncat ${JSON.stringify(fakeOutput)}\necho "forced failure" >&2\nexit 2\n`,
-        );
-        chmodSync(fakeGit, 0o755);
-        process.env.PATH = `${fakeCommand.dir}:${originalPath ?? ''}`;
-
-        const budget: SemanticBudget = {
-          remainingBytes: 4000,
-          remainingObjects: 100,
-          sourceBytes: DEFAULT_SOURCE_BUDGET_BYTES,
-        };
-        const result = await performGrepSearch(
-          {
-            pattern: 'match_line',
-            path: workspace.dir,
-            signal: new AbortController().signal,
-            maxResults: 100,
-            maxFiles: 100,
-            maxPerFile: 50,
-            semanticBudget: budget,
-          },
-          ['node_modules'],
-        );
-
-        expect(result.results).toHaveLength(10);
-        expect(result.incomplete).not.toBe(true);
-        expect(budget.remainingObjects).toBe(90);
-        expect(budget.remainingBytes).toBeGreaterThan(0);
-      } finally {
-        if (originalPath === undefined) {
-          delete process.env.PATH;
-        } else {
-          process.env.PATH = originalPath;
-        }
-        fakeCommand.cleanup();
-        workspace.cleanup();
-      }
     },
-    { timeout: 15000 },
   );
 });
 
@@ -369,8 +417,7 @@ describe('Ripgrep multi-root budget exhaustion stops further spawns (item 11)', 
           pattern: 'matchprefix',
         });
 
-        const text =
-          typeof result.llmContent === 'string' ? result.llmContent : '';
+        const text = stringContent(result.llmContent);
         expect(text).toMatch(/incomplete|showing|limited/i);
         expect(text).not.toContain('Found 6 matches');
       } finally {
@@ -619,7 +666,7 @@ describe('Grep exact-cap evidence with per-file limits', () => {
     expect(laterUsableMatchStopped).toBe(true);
     expect(state.earlyStopped).toBe(true);
     expect(state.observedCount).toBe(4);
-    expect(state.matches.map((match) => match.line)).toEqual([
+    expect(state.matches.map((match) => match.line)).toStrictEqual([
       'match 1',
       'match 2',
     ]);
@@ -640,128 +687,106 @@ describe('Exact-cap multi-root completeness: skipped roots mark incomplete (item
     cleanup();
   });
 
-  it(
-    'grep: first root fills exact cap, later root skipped => incomplete/non-exact',
+  const observeGrepFirstRootFillsExactCapLaterRootSkippedIncompleteNonExactAt653 =
     async () => {
-      const rootA = join(tempDir, 'rootA');
-      const rootB = join(tempDir, 'rootB');
-      mkdirSync(rootA, { recursive: true });
-      mkdirSync(rootB, { recursive: true });
+      const { rootA, rootB, host } = createTwoRootHost(tempDir);
       for (let i = 0; i < 5; i++) {
         writeFileSync(join(rootA, `f${i}.txt`), `capmatch_${i}\n`);
       }
       writeFileSync(join(rootB, 'extra.txt'), 'capmatch_extra\n');
-
-      const host: IToolHost = {
-        ...createToolHost(tempDir),
-        getWorkspaceRoots: () => [rootA, rootB],
-      };
-
       const result = await executeGrep(host, {
         pattern: 'capmatch',
         max_results: 5,
         max_files: 100,
         max_per_file: 1,
       });
-
       const text =
         typeof result.llmContent === 'string' ? result.llmContent : '';
-      // Root A filled the cap; root B was skipped => incomplete
+      return { text };
+    };
+
+  it(
+    'grep: first root fills exact cap, later root skipped => incomplete/non-exact',
+    async () => {
+      const { text } =
+        await observeGrepFirstRootFillsExactCapLaterRootSkippedIncompleteNonExactAt653();
       expect(text).toMatch(/incomplete|showing.*may be/i);
       expect(text).not.toMatch(/^Found 5 matches for pattern/m);
     },
     { timeout: 15000 },
   );
 
+  const observeGrepAllRootsFullyExhaustedAtCapRemainsExactAt686 = async () => {
+    const { rootA, rootB, host } = createTwoRootHost(tempDir);
+    writeFileSync(join(rootA, 'f1.txt'), 'exactmatch_1\n');
+    writeFileSync(join(rootA, 'f2.txt'), 'exactmatch_2\n');
+    writeFileSync(join(rootB, 'f3.txt'), 'exactmatch_3\n');
+    writeFileSync(join(rootB, 'f4.txt'), 'exactmatch_4\n');
+    writeFileSync(join(rootB, 'f5.txt'), 'exactmatch_5\n');
+    const result = await executeGrep(host, {
+      pattern: 'exactmatch',
+      max_results: 5,
+      max_files: 100,
+      max_per_file: 1,
+    });
+    const text = typeof result.llmContent === 'string' ? result.llmContent : '';
+    return { text };
+  };
+
   it(
     'grep: all roots fully exhausted at cap remains exact',
     async () => {
-      const rootA = join(tempDir, 'rootA');
-      const rootB = join(tempDir, 'rootB');
-      mkdirSync(rootA, { recursive: true });
-      mkdirSync(rootB, { recursive: true });
-      // Root A: 2 matches, Root B: 3 matches, total = 5 = maxResults
-      writeFileSync(join(rootA, 'f1.txt'), 'exactmatch_1\n');
-      writeFileSync(join(rootA, 'f2.txt'), 'exactmatch_2\n');
-      writeFileSync(join(rootB, 'f3.txt'), 'exactmatch_3\n');
-      writeFileSync(join(rootB, 'f4.txt'), 'exactmatch_4\n');
-      writeFileSync(join(rootB, 'f5.txt'), 'exactmatch_5\n');
-
-      const host: IToolHost = {
-        ...createToolHost(tempDir),
-        getWorkspaceRoots: () => [rootA, rootB],
-      };
-
-      const result = await executeGrep(host, {
-        pattern: 'exactmatch',
-        max_results: 5,
-        max_files: 100,
-        max_per_file: 1,
-      });
-
-      const text =
-        typeof result.llmContent === 'string' ? result.llmContent : '';
-      // All 5 matches across both roots, no root skipped => exact
+      const { text } =
+        await observeGrepAllRootsFullyExhaustedAtCapRemainsExactAt686();
       expect(text).not.toMatch(/incomplete|showing.*may be/i);
       expect(text).toMatch(/^Found 5 matches for pattern/m);
     },
     { timeout: 15000 },
   );
 
-  it(
-    'ripgrep: first root fills exact cap, later root skipped => incomplete',
+  const observeRipgrepFirstRootFillsExactCapLaterRootSkippedIncompleteAt721 =
     async () => {
-      const rootA = join(tempDir, 'rootA');
-      const rootB = join(tempDir, 'rootB');
-      mkdirSync(rootA, { recursive: true });
-      mkdirSync(rootB, { recursive: true });
-
-      // Root A: exactly 20000 matches (fills the default cap)
+      const { rootA, rootB, host } = createTwoRootHost(tempDir);
       const linesA: string[] = [];
       for (let i = 0; i < 20000; i++) {
         linesA.push(`rgcapmatch_${i}`);
       }
       writeFileSync(join(rootA, 'big.txt'), linesA.join('\n'));
-      // Root B: at least one match
       writeFileSync(join(rootB, 'extra.txt'), 'rgcapmatch_extra\n');
-
-      const host: IToolHost = {
-        ...createToolHost(tempDir),
-        getWorkspaceRoots: () => [rootA, rootB],
-      };
-
       const result = await executeRipgrep(host, {
         pattern: 'rgcapmatch',
       });
-
       const text =
         typeof result.llmContent === 'string' ? result.llmContent : '';
+      return { text };
+    };
+
+  it(
+    'ripgrep: first root fills exact cap, later root skipped => incomplete',
+    async () => {
+      const { text } =
+        await observeRipgrepFirstRootFillsExactCapLaterRootSkippedIncompleteAt721();
       expect(text).toMatch(/incomplete|showing/i);
     },
     { timeout: 30000 },
   );
 
+  const observeRipgrepAllRootsFullyExhaustedRemainsExactAt754 = async () => {
+    const { rootA, rootB, host } = createTwoRootHost(tempDir);
+    writeFileSync(join(rootA, 'f1.txt'), 'rgexact_1\nrgexact_2\n');
+    writeFileSync(join(rootB, 'f2.txt'), 'rgexact_3\n');
+    const result = await executeRipgrep(host, {
+      pattern: 'rgexact',
+    });
+    const text = typeof result.llmContent === 'string' ? result.llmContent : '';
+    return { text };
+  };
+
   it(
     'ripgrep: all roots fully exhausted remains exact',
     async () => {
-      const rootA = join(tempDir, 'rootA');
-      const rootB = join(tempDir, 'rootB');
-      mkdirSync(rootA, { recursive: true });
-      mkdirSync(rootB, { recursive: true });
-      writeFileSync(join(rootA, 'f1.txt'), 'rgexact_1\nrgexact_2\n');
-      writeFileSync(join(rootB, 'f2.txt'), 'rgexact_3\n');
-
-      const host: IToolHost = {
-        ...createToolHost(tempDir),
-        getWorkspaceRoots: () => [rootA, rootB],
-      };
-
-      const result = await executeRipgrep(host, {
-        pattern: 'rgexact',
-      });
-
-      const text =
-        typeof result.llmContent === 'string' ? result.llmContent : '';
+      const { text } =
+        await observeRipgrepAllRootsFullyExhaustedRemainsExactAt754();
       expect(text).not.toMatch(/incomplete|showing/i);
       expect(text).toMatch(/Found 3 matches/);
     },
@@ -852,7 +877,7 @@ describe('grep directory partial metadata.outputTruncation consistency (issue #3
     expect(result.metadata).toHaveProperty('outputTruncation');
     expect(
       (result.metadata as Record<string, unknown>).outputTruncation,
-    ).toEqual({ truncated: true });
+    ).toStrictEqual({ truncated: true });
   });
 
   it('exact directory result does NOT include metadata.outputTruncation', async () => {

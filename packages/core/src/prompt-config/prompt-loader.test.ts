@@ -10,6 +10,8 @@ import * as path from 'path';
 import * as os from 'os';
 import { PromptLoader } from './prompt-loader.js';
 
+const bunIt = it;
+
 // Helper to check if we're on Windows
 const isWindows = (): boolean => os.platform() === 'win32';
 
@@ -138,9 +140,9 @@ describe('PromptLoader', () => {
       expect(result.error).toBe('Invalid UTF-8 encoding');
     });
 
-    it.skipIf(isWindows())(
-      'should handle permission errors gracefully on Unix',
-      async () => {
+    {
+      const it = isWindows() ? bunIt.skip : bunIt;
+      it('should handle permission errors gracefully on Unix', async () => {
         const filePath = path.join(tempDir, 'no-read.md');
         await fs.writeFile(filePath, 'content', 'utf8');
         await fs.chmod(filePath, 0o000); // Remove all permissions
@@ -153,19 +155,22 @@ describe('PromptLoader', () => {
 
         // Restore permissions for cleanup
         await fs.chmod(filePath, 0o644);
-      },
-    );
+      });
+    }
 
-    it.skipIf(!isWindows())('should handle files on Windows', async () => {
-      const filePath = path.join(tempDir, 'no-read.md');
-      await fs.writeFile(filePath, 'content', 'utf8');
+    {
+      const it = !isWindows() ? bunIt.skip : bunIt;
+      it('should handle files on Windows', async () => {
+        const filePath = path.join(tempDir, 'no-read.md');
+        await fs.writeFile(filePath, 'content', 'utf8');
 
-      // On Windows, test with a file that's locked by another process
-      // Since we can't easily simulate this, just test the file exists and can be read
-      const result = await loader.loadFile(filePath, false);
-      expect(result.success).toBe(true);
-      expect(result.content).toBe('content');
-    });
+        // On Windows, test with a file that's locked by another process
+        // Since we can't easily simulate this, just test the file exists and can be read
+        const result = await loader.loadFile(filePath, false);
+        expect(result.success).toBe(true);
+        expect(result.content).toBe('content');
+      });
+    }
 
     it('should return error for null or undefined file path', async () => {
       const resultNull = await loader.loadFile(
@@ -432,13 +437,12 @@ describe('PromptLoader', () => {
       expect(env.hasIdeCompanion).toBe(true);
     });
 
-    it('should handle permission errors gracefully', () => {
-      // Even with an invalid path, should not throw
-      const invalidPath = isWindows()
-        ? 'C:\\System Volume Information'
-        : '/root/no-access';
-      const env = loader.detectEnvironment(invalidPath);
+    function invalidDetectionPath(): string {
+      return isWindows() ? 'C:\\System Volume Information' : '/root/no-access';
+    }
 
+    it('should handle permission errors gracefully', () => {
+      const env = loader.detectEnvironment(invalidDetectionPath());
       expect(env.isGitRepository).toBe(false);
       expect(env.isSandboxed).toBe(false);
       expect(env.hasIdeCompanion).toBe(false);

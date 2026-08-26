@@ -27,6 +27,10 @@ import * as path from 'path';
 import * as os from 'os';
 import { ToolConfirmationOutcome } from '../types/tool-confirmation-types.js';
 import { ToolErrorType } from '../types/tool-error.js';
+import type {
+  ToolCallConfirmationDetails,
+  ToolEditConfirmationDetails,
+} from './tools.js';
 import type { IStorageService } from '../interfaces/index.js';
 
 // Mock dependencies
@@ -55,6 +59,17 @@ interface FsAdapter {
     path: string,
     options: { recursive: boolean },
   ) => Promise<string | undefined>;
+}
+
+function requireEditConfirmation(
+  details: ToolCallConfirmationDetails | false,
+): asserts details is ToolEditConfirmationDetails {
+  if (details === false) {
+    throw new Error('Expected result to be a confirmation, not false');
+  }
+  if (details.type !== 'edit') {
+    throw new Error('Expected edit confirmation type');
+  }
 }
 
 describe('MemoryTool', () => {
@@ -359,13 +374,7 @@ describe('MemoryTool', () => {
 
       // Verify result is an edit confirmation
       expect(result).not.toBe(false);
-      if (result === false) {
-        throw new Error('Expected result to be a confirmation, not false');
-      }
-
-      if (result.type !== 'edit') {
-        throw new Error('Expected edit confirmation type');
-      }
+      requireEditConfirmation(result);
 
       const expectedPath = path.join('~', '.llxprt', 'LLXPRT.md');
       expect(result.title).toBe(`Confirm Memory Save: ${expectedPath}`);
@@ -415,13 +424,7 @@ describe('MemoryTool', () => {
       expect(result).not.toBe(false);
 
       // Verify result is an edit confirmation
-      if (result === false) {
-        throw new Error('Expected result to be a confirmation, not false');
-      }
-
-      if (result.type !== 'edit') {
-        throw new Error('Expected edit confirmation type');
-      }
+      requireEditConfirmation(result);
 
       // Simulate the onConfirm callback
       await result.onConfirm(ToolConfirmationOutcome.ProceedAlways);
@@ -451,13 +454,7 @@ describe('MemoryTool', () => {
       expect(result).not.toBe(false);
 
       // Verify result is an edit confirmation
-      if (result === false) {
-        throw new Error('Expected result to be a confirmation, not false');
-      }
-
-      if (result.type !== 'edit') {
-        throw new Error('Expected edit confirmation type');
-      }
+      requireEditConfirmation(result);
 
       // Simulate the onConfirm callback with different outcomes
       await result.onConfirm(ToolConfirmationOutcome.ProceedOnce);
@@ -489,13 +486,7 @@ describe('MemoryTool', () => {
       expect(result).not.toBe(false);
 
       // Verify result is an edit confirmation
-      if (result === false) {
-        throw new Error('Expected result to be a confirmation, not false');
-      }
-
-      if (result.type !== 'edit') {
-        throw new Error('Expected edit confirmation type');
-      }
+      requireEditConfirmation(result);
 
       const expectedPath = path.join('~', '.llxprt', 'LLXPRT.md');
       expect(result.title).toBe(`Confirm Memory Save: ${expectedPath}`);
@@ -648,13 +639,7 @@ describe('MemoryTool', () => {
       const result = await invocation.shouldConfirmExecute(mockAbortSignal);
 
       expect(result).not.toBe(false);
-      if (result === false) {
-        throw new Error('Expected confirmation details');
-      }
-
-      if (result.type !== 'edit') {
-        throw new Error('Expected edit confirmation type');
-      }
+      requireEditConfirmation(result);
 
       // Normalize paths for cross-platform compatibility (Windows uses backslashes)
       const normalizedTitle = result.title.replace(/\\/g, '/');
@@ -705,12 +690,7 @@ describe('MemoryTool', () => {
       const result = await invocation.shouldConfirmExecute(mockAbortSignal);
 
       expect(result).not.toBe(false);
-      if (result === false) {
-        throw new Error('Expected confirmation details');
-      }
-      if (result.type !== 'edit') {
-        throw new Error('Expected edit confirmation type');
-      }
+      requireEditConfirmation(result);
 
       const normalizedFileName = result.fileName.replace(/\\/g, '/');
       expect(normalizedFileName).toContain(tempHomeDir.replace(/\\/g, '/'));
@@ -730,12 +710,7 @@ describe('MemoryTool', () => {
       const result = await invocation.shouldConfirmExecute(mockAbortSignal);
 
       expect(result).not.toBe(false);
-      if (result === false) {
-        throw new Error('Expected confirmation details');
-      }
-      if (result.type !== 'edit') {
-        throw new Error('Expected edit confirmation type');
-      }
+      requireEditConfirmation(result);
 
       const normalizedFileName = result.fileName.replace(/\\/g, '/');
       expect(normalizedFileName).toContain(mockWorkingDir.replace(/\\/g, '/'));

@@ -101,50 +101,57 @@ describe('Unified truncation actually stops on concurrent history mutation (issu
   });
 
   it('stops the loop (not skips) when history is mutated mid-replacement', async () => {
-    historyService.add(
-      makeToolResponseEntry('call-1', 'tool', 'x'.repeat(4000)),
-    );
-    historyService.add(
-      makeToolResponseEntry('call-2', 'tool', 'y'.repeat(4000)),
-    );
-    await historyService.waitForTokenUpdates();
-
-    let projectionCallCount = 0;
-    const deps = {
-      historyService,
-      logger: noopLogger,
-      pendingContents: [] as IContent[],
-      estimateBlockTokensAsync: async (block: ContentBlock) =>
-        estimateBlockByLength(block),
-      computeProjected: async () => {
-        projectionCallCount++;
-        // On the first projection call (after first replacement succeeds),
-        // simulate a concurrent add that changes history length. The guard
-        // should detect this on the NEXT candidate and stop immediately.
-        if (projectionCallCount === 1) {
-          historyService.add(makeTextEntry('human', 'concurrent'));
-        }
-        let total = 0;
-        for (const entry of historyService.getRawHistory()) {
-          for (const block of entry.blocks) {
-            total += estimateBlockByLength(block);
-          }
-        }
-        return total;
-      },
-      resetBaseline: () => {},
-      getRuntimeModel: () => 'test-model',
-    };
-
-    const result = await truncateOversizedToolResponsesUnified(deps, 50);
-
+    const { result } =
+      await observeStopsTheLoopNotSkipsWhenHistoryIsMutatedMidReplacement();
     expect(result.replacedCount).toBe(1);
     expect(result.success).toBe(false);
-
-    // The loop stopped after detecting the mutation — the second candidate
-    // was NOT processed. History grew due to the concurrent add.
     expect(historyService.getRawHistory().length).toBe(3);
   });
+
+  const observeStopsTheLoopNotSkipsWhenHistoryIsMutatedMidReplacement =
+    async () => {
+      historyService.add(
+        makeToolResponseEntry('call-1', 'tool', 'x'.repeat(4000)),
+      );
+      historyService.add(
+        makeToolResponseEntry('call-2', 'tool', 'y'.repeat(4000)),
+      );
+      await historyService.waitForTokenUpdates();
+
+      let projectionCallCount = 0;
+      const deps = {
+        historyService,
+        logger: noopLogger,
+        pendingContents: [] as IContent[],
+        estimateBlockTokensAsync: async (block: ContentBlock) =>
+          estimateBlockByLength(block),
+        computeProjected: async () => {
+          projectionCallCount++;
+          // On the first projection call (after first replacement succeeds),
+          // simulate a concurrent add that changes history length. The guard
+          // should detect this on the NEXT candidate and stop immediately.
+          if (projectionCallCount === 1) {
+            historyService.add(makeTextEntry('human', 'concurrent'));
+          }
+          let total = 0;
+          for (const entry of historyService.getRawHistory()) {
+            for (const block of entry.blocks) {
+              total += estimateBlockByLength(block);
+            }
+          }
+          return total;
+        },
+        resetBaseline: () => {},
+        getRuntimeModel: () => 'test-model',
+      };
+
+      const result = await truncateOversizedToolResponsesUnified(deps, 50);
+
+      // The loop stopped after detecting the mutation — the second candidate
+      // was NOT processed. History grew due to the concurrent add.
+
+      return { result };
+    };
 });
 
 describe('Legacy truncateLargestToolResponses history guard (issue #1321)', () => {
@@ -155,62 +162,76 @@ describe('Legacy truncateLargestToolResponses history guard (issue #1321)', () =
   });
 
   it('aborts safely when history is concurrently cleared during ranking', async () => {
-    historyService.add(
-      makeToolResponseEntry('call-hist', 'tool', 'x'.repeat(4000)),
-    );
-    await historyService.waitForTokenUpdates();
-
-    let estimateCallCount = 0;
-    const deps = buildTruncatorDeps(historyService, {
-      estimateBlockTokensAsync: async (block: ContentBlock) => {
-        estimateCallCount++;
-        if (estimateCallCount === 1) {
-          historyService.clear();
-        }
-        return estimateBlockByLength(block);
-      },
-    });
-
-    const result = await truncateLargestToolResponses(deps, 50);
-
+    const { result } =
+      await observeAbortsSafelyWhenHistoryIsConcurrentlyClearedDuringRanking();
     expect(result.success).toBe(false);
     expect(result.replacedCount).toBe(0);
   });
 
-  it('aborts safely when history is concurrently mutated mid-replacement', async () => {
-    historyService.add(
-      makeToolResponseEntry('call-1', 'tool', 'x'.repeat(4000)),
-    );
-    historyService.add(
-      makeToolResponseEntry('call-2', 'tool', 'y'.repeat(4000)),
-    );
-    await historyService.waitForTokenUpdates();
+  const observeAbortsSafelyWhenHistoryIsConcurrentlyClearedDuringRanking =
+    async () => {
+      historyService.add(
+        makeToolResponseEntry('call-hist', 'tool', 'x'.repeat(4000)),
+      );
+      await historyService.waitForTokenUpdates();
 
-    let projectionCallCount = 0;
-    const deps = buildTruncatorDeps(historyService, {
-      computeProjected: () => {
-        projectionCallCount++;
-        // On the first projection call (after first replacement), add an entry.
-        if (projectionCallCount === 1) {
-          historyService.add(makeTextEntry('human', 'concurrent'));
-        }
-        let total = 0;
-        for (const entry of historyService.getRawHistory()) {
-          for (const block of entry.blocks) {
-            total += estimateBlockByLength(block);
+      let estimateCallCount = 0;
+      const deps = buildTruncatorDeps(historyService, {
+        estimateBlockTokensAsync: async (block: ContentBlock) => {
+          estimateCallCount++;
+          if (estimateCallCount === 1) {
+            historyService.clear();
           }
-        }
-        return total;
-      },
-    });
+          return estimateBlockByLength(block);
+        },
+      });
 
-    const result = await truncateLargestToolResponses(deps, 50);
+      const result = await truncateLargestToolResponses(deps, 50);
 
+      return { result };
+    };
+
+  it('aborts safely when history is concurrently mutated mid-replacement', async () => {
+    const { result } =
+      await observeAbortsSafelyWhenHistoryIsConcurrentlyMutatedMidReplacement();
     expect(result.replacedCount).toBe(1);
     expect(result.success).toBe(false);
-
-    // The loop stopped after detecting the mutation — the second candidate
-    // was NOT processed. History grew due to the concurrent add.
     expect(historyService.getRawHistory().length).toBe(3);
   });
+
+  const observeAbortsSafelyWhenHistoryIsConcurrentlyMutatedMidReplacement =
+    async () => {
+      historyService.add(
+        makeToolResponseEntry('call-1', 'tool', 'x'.repeat(4000)),
+      );
+      historyService.add(
+        makeToolResponseEntry('call-2', 'tool', 'y'.repeat(4000)),
+      );
+      await historyService.waitForTokenUpdates();
+
+      let projectionCallCount = 0;
+      const deps = buildTruncatorDeps(historyService, {
+        computeProjected: () => {
+          projectionCallCount++;
+          // On the first projection call (after first replacement), add an entry.
+          if (projectionCallCount === 1) {
+            historyService.add(makeTextEntry('human', 'concurrent'));
+          }
+          let total = 0;
+          for (const entry of historyService.getRawHistory()) {
+            for (const block of entry.blocks) {
+              total += estimateBlockByLength(block);
+            }
+          }
+          return total;
+        },
+      });
+
+      const result = await truncateLargestToolResponses(deps, 50);
+
+      // The loop stopped after detecting the mutation — the second candidate
+      // was NOT processed. History grew due to the concurrent add.
+
+      return { result };
+    };
 });

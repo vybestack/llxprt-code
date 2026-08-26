@@ -170,202 +170,214 @@ describe('ChatSession runtime streaming and abort behavior', () => {
   });
 
   it('aborts a stalled non-stream sendMessage response after partial provider output instead of hanging forever', async () => {
-    vi.useFakeTimers();
-    const testTimeoutMs = 30_000; // 30 second timeout for this test
+    const {
+      observation,
+      generateChatCompletionMock,
+      runPromise,
+      testTimeoutMs,
+    } = prepareStalledSendMessageScenario();
 
     try {
-      // Set explicit timeout via ephemeral setting
-      config.setEphemeralSetting('stream-idle-timeout-ms', testTimeoutMs);
-
-      let capturedSignal: AbortSignal | undefined;
-      const generateChatCompletionMock = vi.fn(async function* (
-        options: GenerateChatOptions,
-      ) {
-        capturedSignal = options.invocation?.signal;
-        yield {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'partial' }],
-        };
-        await new Promise((_, reject) => {
-          capturedSignal?.addEventListener(
-            'abort',
-            () => reject(capturedSignal?.reason ?? new Error('Aborted')),
-            { once: true },
-          );
-        });
-      });
-
-      const provider: IProvider = {
-        name: 'stub',
-        isDefault: true,
-        getModels: vi.fn(async () => []),
-        getDefaultModel: () => 'stub-model',
-        generateChatCompletion: generateChatCompletionMock,
-        getServerTools: () => [],
-        invokeServerTool: vi.fn(),
-        getAuthToken: vi.fn(async () => 'stub-auth-token'),
-      };
-
-      manager.registerProvider(provider);
-
-      const runtimeState = createAgentRuntimeState({
-        runtimeId: 'runtime-test',
-        provider: provider.name,
-        model: config.getModel(),
-        sessionId: config.getSessionId(),
-      });
-      const historyService = new HistoryService();
-      const view = createAgentRuntimeContext({
-        state: runtimeState,
-        history: historyService,
-        settings: {
-          compressionThreshold: 0.8,
-          contextLimit: 128000,
-          preserveThreshold: 0.2,
-          telemetry: {
-            enabled: true,
-            target: null,
-          },
-          'reasoning.includeInContext': true,
-        },
-        provider: createProviderAdapterFromManager(config.getProviderManager()),
-        telemetry: createTelemetryAdapterFromConfig(config),
-        tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
-        providerRuntime: { ...providerRuntime },
-      });
-
-      const chat = new ChatSession(
-        view,
-        {} as unknown as ContentGenerator,
-        {},
-        [],
-      );
-
-      const runPromise = chat.sendMessage(
-        { message: 'Hello there!' },
-        'prompt-stalled-send',
-      );
-      const rejection = runPromise.then(
-        () => {
-          throw new Error('Expected stalled sendMessage response to abort');
-        },
-        (error) => {
-          expect(error).toMatchObject({
-            name: 'AbortError',
-          });
-        },
-      );
-
-      expect(await waitForCondition(() => capturedSignal !== undefined)).toBe(
-        true,
-      );
+      expect(
+        await waitForCondition(() => observation.capturedSignal !== undefined),
+      ).toBe(true);
       await advanceTimersByTimeAsync(testTimeoutMs + 1);
 
-      await rejection;
-      expect(capturedSignal?.aborted).toBe(true);
+      await expect(runPromise).rejects.toMatchObject({ name: 'AbortError' });
+      expect(observation.capturedSignal?.aborted).toBe(true);
       expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
     }
   });
+
+  const prepareStalledSendMessageScenario = () => {
+    vi.useFakeTimers();
+    const testTimeoutMs = 30_000; // 30 second timeout for this test
+    // Set explicit timeout via ephemeral setting
+    config.setEphemeralSetting('stream-idle-timeout-ms', testTimeoutMs);
+
+    const observation: { capturedSignal?: AbortSignal } = {};
+    const generateChatCompletionMock = vi.fn(async function* (
+      options: GenerateChatOptions,
+    ) {
+      observation.capturedSignal = options.invocation?.signal;
+      yield {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'partial' }],
+      };
+      await new Promise((_, reject) => {
+        observation.capturedSignal?.addEventListener(
+          'abort',
+          () =>
+            reject(observation.capturedSignal?.reason ?? new Error('Aborted')),
+          { once: true },
+        );
+      });
+    });
+
+    const provider: IProvider = {
+      name: 'stub',
+      isDefault: true,
+      getModels: vi.fn(async () => []),
+      getDefaultModel: () => 'stub-model',
+      generateChatCompletion: generateChatCompletionMock,
+      getServerTools: () => [],
+      invokeServerTool: vi.fn(),
+      getAuthToken: vi.fn(async () => 'stub-auth-token'),
+    };
+
+    manager.registerProvider(provider);
+
+    const runtimeState = createAgentRuntimeState({
+      runtimeId: 'runtime-test',
+      provider: provider.name,
+      model: config.getModel(),
+      sessionId: config.getSessionId(),
+    });
+    const historyService = new HistoryService();
+    const view = createAgentRuntimeContext({
+      state: runtimeState,
+      history: historyService,
+      settings: {
+        compressionThreshold: 0.8,
+        contextLimit: 128000,
+        preserveThreshold: 0.2,
+        telemetry: {
+          enabled: true,
+          target: null,
+        },
+        'reasoning.includeInContext': true,
+      },
+      provider: createProviderAdapterFromManager(config.getProviderManager()),
+      telemetry: createTelemetryAdapterFromConfig(config),
+      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+      providerRuntime: { ...providerRuntime },
+    });
+
+    const chat = new ChatSession(
+      view,
+      {} as unknown as ContentGenerator,
+      {},
+      [],
+    );
+
+    const runPromise = chat.sendMessage(
+      { message: 'Hello there!' },
+      'prompt-stalled-send',
+    );
+
+    return {
+      observation,
+      generateChatCompletionMock,
+      runPromise,
+      testTimeoutMs,
+    };
+  };
 
   it('aborts a stalled direct-message response after partial provider output instead of hanging forever', async () => {
-    vi.useFakeTimers();
-    const testTimeoutMs = 30_000; // 30 second timeout for this test
+    const {
+      observation,
+      generateChatCompletionMock,
+      runPromise,
+      testTimeoutMs,
+    } = prepareStalledDirectMessageScenario();
 
     try {
-      // Set explicit timeout via ephemeral setting
-      config.setEphemeralSetting('stream-idle-timeout-ms', testTimeoutMs);
-
-      let capturedSignal: AbortSignal | undefined;
-      const generateChatCompletionMock = vi.fn(async function* (
-        options: GenerateChatOptions,
-      ) {
-        capturedSignal = options.invocation?.signal;
-        yield {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'partial direct' }],
-        };
-        await new Promise((_, reject) => {
-          capturedSignal?.addEventListener(
-            'abort',
-            () => reject(capturedSignal?.reason ?? new Error('Aborted')),
-            { once: true },
-          );
-        });
-      });
-
-      const provider: IProvider = {
-        name: 'stub',
-        isDefault: true,
-        getModels: vi.fn(async () => []),
-        getDefaultModel: () => 'stub-model',
-        generateChatCompletion: generateChatCompletionMock,
-        getServerTools: () => [],
-        invokeServerTool: vi.fn(),
-        getAuthToken: vi.fn(async () => 'stub-auth-token'),
-      };
-
-      manager.registerProvider(provider);
-
-      const runtimeState = createAgentRuntimeState({
-        runtimeId: 'runtime-test',
-        provider: provider.name,
-        model: config.getModel(),
-        sessionId: config.getSessionId(),
-      });
-      const historyService = new HistoryService();
-      const view = createAgentRuntimeContext({
-        state: runtimeState,
-        history: historyService,
-        settings: {
-          compressionThreshold: 0.8,
-          contextLimit: 128000,
-          preserveThreshold: 0.2,
-          telemetry: {
-            enabled: true,
-            target: null,
-          },
-          'reasoning.includeInContext': true,
-        },
-        provider: createProviderAdapterFromManager(config.getProviderManager()),
-        telemetry: createTelemetryAdapterFromConfig(config),
-        tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
-        providerRuntime: { ...providerRuntime },
-      });
-
-      const chat = new ChatSession(
-        view,
-        {} as unknown as ContentGenerator,
-        {},
-        [],
-      );
-
-      const runPromise = chat.generateDirectMessage(
-        { message: 'Hello there!' },
-        'prompt-stalled-direct',
-      );
-      const rejection = runPromise.then(
-        () => {
-          throw new Error('Expected stalled direct-message response to abort');
-        },
-        (error) => {
-          expect(error).toMatchObject({
-            name: 'AbortError',
-          });
-        },
-      );
-
-      expect(await waitForCondition(() => capturedSignal !== undefined)).toBe(
-        true,
-      );
+      expect(
+        await waitForCondition(() => observation.capturedSignal !== undefined),
+      ).toBe(true);
       await advanceTimersByTimeAsync(testTimeoutMs + 1);
 
-      await rejection;
-      expect(capturedSignal?.aborted).toBe(true);
+      await expect(runPromise).rejects.toMatchObject({ name: 'AbortError' });
+      expect(observation.capturedSignal?.aborted).toBe(true);
       expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
     }
   });
+
+  const prepareStalledDirectMessageScenario = () => {
+    vi.useFakeTimers();
+    const testTimeoutMs = 30_000; // 30 second timeout for this test
+    // Set explicit timeout via ephemeral setting
+    config.setEphemeralSetting('stream-idle-timeout-ms', testTimeoutMs);
+
+    const observation: { capturedSignal?: AbortSignal } = {};
+    const generateChatCompletionMock = vi.fn(async function* (
+      options: GenerateChatOptions,
+    ) {
+      observation.capturedSignal = options.invocation?.signal;
+      yield {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'partial direct' }],
+      };
+      await new Promise((_, reject) => {
+        observation.capturedSignal?.addEventListener(
+          'abort',
+          () =>
+            reject(observation.capturedSignal?.reason ?? new Error('Aborted')),
+          { once: true },
+        );
+      });
+    });
+
+    const provider: IProvider = {
+      name: 'stub',
+      isDefault: true,
+      getModels: vi.fn(async () => []),
+      getDefaultModel: () => 'stub-model',
+      generateChatCompletion: generateChatCompletionMock,
+      getServerTools: () => [],
+      invokeServerTool: vi.fn(),
+      getAuthToken: vi.fn(async () => 'stub-auth-token'),
+    };
+
+    manager.registerProvider(provider);
+
+    const runtimeState = createAgentRuntimeState({
+      runtimeId: 'runtime-test',
+      provider: provider.name,
+      model: config.getModel(),
+      sessionId: config.getSessionId(),
+    });
+    const historyService = new HistoryService();
+    const view = createAgentRuntimeContext({
+      state: runtimeState,
+      history: historyService,
+      settings: {
+        compressionThreshold: 0.8,
+        contextLimit: 128000,
+        preserveThreshold: 0.2,
+        telemetry: {
+          enabled: true,
+          target: null,
+        },
+        'reasoning.includeInContext': true,
+      },
+      provider: createProviderAdapterFromManager(config.getProviderManager()),
+      telemetry: createTelemetryAdapterFromConfig(config),
+      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+      providerRuntime: { ...providerRuntime },
+    });
+
+    const chat = new ChatSession(
+      view,
+      {} as unknown as ContentGenerator,
+      {},
+      [],
+    );
+
+    const runPromise = chat.generateDirectMessage(
+      { message: 'Hello there!' },
+      'prompt-stalled-direct',
+    );
+
+    return {
+      observation,
+      generateChatCompletionMock,
+      runPromise,
+      testTimeoutMs,
+    };
+  };
 });

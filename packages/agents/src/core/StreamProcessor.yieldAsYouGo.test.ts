@@ -143,45 +143,65 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
   });
 
   it('yields chunks immediately even when the source stream stalls', async () => {
-    let resolveStall: (() => void) | undefined;
-    const stallPromise = new Promise<void>((resolve) => {
-      resolveStall = resolve;
-    });
-
-    async function* stallingSource(): AsyncGenerator<ModelStreamChunk> {
-      yield makeChunk('first chunk');
-      // Simulate an API stall — the stream just stops producing
-      await stallPromise;
-      yield makeFinishChunk('resumed', 'STOP');
-    }
-
-    const userInput: IContent = {
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'Hi' }],
-    } as IContent;
-
-    const gen = processor.processStreamResponse(stallingSource(), userInput);
-
-    // We should get the first chunk immediately, even though the stream stalls
-    const result1 = await gen.next();
+    const {
+      result1,
+      result2,
+      typeObservation,
+      yieldsChunksImmediatelyEvenWhenTheSourceStreamStallsObservation2,
+    } = await observeYieldsChunksImmediatelyEvenWhenTheSourceStreamStalls();
     expect(result1.done).toBe(false);
-
-    const chunk = result1.value;
-    const firstBlock = chunk.content.blocks[0];
-    expect(firstBlock?.type).toBe('text');
-    expect(firstBlock?.type === 'text' ? firstBlock.text : undefined).toBe(
-      'first chunk',
-    );
-
-    // Unstall the stream so the test can complete
-    resolveStall?.();
-
-    // Drain remaining
-    const result2 = await gen.next();
+    expect(typeObservation).toBe('text');
+    expect(
+      yieldsChunksImmediatelyEvenWhenTheSourceStreamStallsObservation2,
+    ).toBe('first chunk');
     expect(result2.done).toBe(false);
-
-    await gen.next(); // generator done
   });
+
+  const observeYieldsChunksImmediatelyEvenWhenTheSourceStreamStalls =
+    async () => {
+      let resolveStall: (() => void) | undefined;
+      const stallPromise = new Promise<void>((resolve) => {
+        resolveStall = resolve;
+      });
+
+      async function* stallingSource(): AsyncGenerator<ModelStreamChunk> {
+        yield makeChunk('first chunk');
+        // Simulate an API stall — the stream just stops producing
+        await stallPromise;
+        yield makeFinishChunk('resumed', 'STOP');
+      }
+
+      const userInput: IContent = {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Hi' }],
+      } as IContent;
+
+      const gen = processor.processStreamResponse(stallingSource(), userInput);
+
+      // We should get the first chunk immediately, even though the stream stalls
+      const result1 = await gen.next();
+
+      const chunk = result1.value;
+      const firstBlock = chunk.content.blocks[0];
+
+      // Unstall the stream so the test can complete
+      resolveStall?.();
+
+      // Drain remaining
+      const result2 = await gen.next();
+
+      await gen.next(); // generator done
+
+      const typeObservation = firstBlock?.type;
+      const yieldsChunksImmediatelyEvenWhenTheSourceStreamStallsObservation2 =
+        firstBlock?.type === 'text' ? firstBlock.text : undefined;
+      return {
+        result1,
+        result2,
+        typeObservation,
+        yieldsChunksImmediatelyEvenWhenTheSourceStreamStallsObservation2,
+      };
+    };
 
   it('yields an empty-block chunk after hook restrictions filter every tool call', async () => {
     const neutralChunk = toModelStreamChunk({

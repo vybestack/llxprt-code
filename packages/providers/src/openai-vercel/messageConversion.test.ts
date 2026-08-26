@@ -42,6 +42,15 @@ import {
   convertFromVercelMessages,
 } from './messageConversion.js';
 
+function isImagePart(part: unknown): part is { image?: string } {
+  return (
+    typeof part === 'object' &&
+    part !== null &&
+    'type' in part &&
+    part.type === 'image'
+  );
+}
+
 describe('messageConversion', () => {
   describe('convertToVercelMessages', () => {
     describe('human/user messages', () => {
@@ -137,12 +146,7 @@ describe('messageConversion', () => {
         const message = result[0] as UserModelMessage;
         expect(Array.isArray(message.content)).toBe(true);
         const parts = message.content as unknown[];
-        const imagePart = parts.find(
-          (part) =>
-            typeof part === 'object' &&
-            part !== null &&
-            part['type'] === 'image',
-        ) as { image?: string } | undefined;
+        const imagePart = parts.find(isImagePart);
         expect(imagePart?.image).toContain('base64');
       });
     });

@@ -69,6 +69,47 @@ void vi.mock('../hooks/useKittyKeyboardProtocol.js', () =>
   automock(realUseKittyKeyboardProtocolModule),
 );
 
+function reverseSearchSuggestions(
+  active: boolean,
+): Array<{ label: string; value: string }> {
+  return active
+    ? [
+        { label: 'echo hello', value: 'echo hello' },
+        { label: 'echo world', value: 'echo world' },
+        { label: 'ls', value: 'ls' },
+      ]
+    : [];
+}
+
+function restoredSearchSuggestions(
+  active: boolean,
+): Array<{ label: string; value: string }> {
+  return active ? [{ label: 'history item', value: 'history item' }] : [];
+}
+
+function commandSearchSuggestions(
+  active: boolean,
+): Array<{ label: string; value: string }> {
+  return active
+    ? [
+        { label: 'git commit -m "msg"', value: 'git commit -m "msg"' },
+        { label: 'git push', value: 'git push' },
+      ]
+    : [];
+}
+
+function activeSearchSuggestionIndex(active: boolean): number {
+  return active ? 0 : -1;
+}
+
+function promptFrameOrEmpty(frame: string | undefined): string {
+  return frame ?? '';
+}
+
+function acceptCallCount(shouldAcceptCall: boolean): number {
+  return shouldAcceptCall ? 1 : 0;
+}
+
 const mockSlashCommands: SlashCommand[] = [
   {
     name: 'clear',
@@ -375,15 +416,10 @@ describe('InputPrompt', () => {
       mockedUseReverseSearchCompletion.mockImplementation(
         (buffer, shellHistory, reverseSearchActive) => ({
           ...mockReverseSearchCompletion,
-          suggestions: reverseSearchActive
-            ? [
-                { label: 'echo hello', value: 'echo hello' },
-                { label: 'echo world', value: 'echo world' },
-                { label: 'ls', value: 'ls' },
-              ]
-            : [],
+          suggestions: reverseSearchSuggestions(reverseSearchActive),
           showSuggestions: reverseSearchActive,
-          activeSuggestionIndex: reverseSearchActive ? 0 : -1,
+          activeSuggestionIndex:
+            activeSearchSuggestionIndex(reverseSearchActive),
           handleAutocomplete: mockHandleAutocomplete,
         }),
       );
@@ -461,9 +497,9 @@ describe('InputPrompt', () => {
       mockedUseReverseSearchCompletion.mockImplementation(
         (buffer, shellHistory, reverseSearchActiveFromInputPrompt) => ({
           ...mockReverseSearchCompletion,
-          suggestions: reverseSearchActiveFromInputPrompt
-            ? [{ label: 'history item', value: 'history item' }]
-            : [],
+          suggestions: restoredSearchSuggestions(
+            reverseSearchActiveFromInputPrompt,
+          ),
           showSuggestions: reverseSearchActiveFromInputPrompt,
         }),
       );
@@ -549,14 +585,9 @@ describe('InputPrompt', () => {
         useReverseSearchCompletion as Mock<typeof useReverseSearchCompletion>
       ).mockImplementation((buffer, data, isActive) => ({
         ...mockReverseSearchCompletion,
-        suggestions: isActive
-          ? [
-              { label: 'git commit -m "msg"', value: 'git commit -m "msg"' },
-              { label: 'git push', value: 'git push' },
-            ]
-          : [],
+        suggestions: commandSearchSuggestions(isActive),
         showSuggestions: !!isActive,
-        activeSuggestionIndex: isActive ? 0 : -1,
+        activeSuggestionIndex: activeSearchSuggestionIndex(isActive),
       }));
 
       const { stdin, stdout, unmount } = renderWithProviders(
@@ -568,7 +599,7 @@ describe('InputPrompt', () => {
       });
 
       await waitFor(() => {
-        const frame = stdout.lastFrame() ?? '';
+        const frame = promptFrameOrEmpty(stdout.lastFrame());
         expect(frame).toContain('(r:)');
         expect(frame).toContain('git commit');
         expect(frame).toContain('git push');
@@ -762,7 +793,7 @@ describe('InputPrompt', () => {
           // useShellFocusAutoReset.test.ts. What belongs here is whether Tab
           // consumes the ghost text, which is InputPrompt's own decision.
           expect(mockAccept).toHaveBeenCalledTimes(
-            expectedAcceptCall === true ? 1 : 0,
+            acceptCallCount(expectedAcceptCall),
           );
         });
         unmount();

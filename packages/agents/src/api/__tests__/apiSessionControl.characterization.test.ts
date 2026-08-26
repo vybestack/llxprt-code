@@ -169,7 +169,15 @@ describe('SessionControl (characterization)', () => {
 
   describe('property-based: history content shapes', () => {
     it('getHistory preserves arbitrary content lengths', async () => {
-      await fc.assert(
+      const { getHistoryPreservesArbitraryContentLengthsProperty } =
+        await observeGetHistoryPreservesArbitraryContentLengths();
+      await fc.assert(getHistoryPreservesArbitraryContentLengthsProperty, {
+        numRuns: 8,
+      });
+    });
+
+    const observeGetHistoryPreservesArbitraryContentLengths = async () => {
+      const getHistoryPreservesArbitraryContentLengthsProperty =
         fc.asyncProperty(
           fc.array(fc.string({ minLength: 1 }), { maxLength: 10 }),
           async (texts) => {
@@ -180,9 +188,8 @@ describe('SessionControl (characterization)', () => {
             const got = await client.getHistory();
             return got.length === texts.length;
           },
-        ),
-        { numRuns: 8 },
-      );
-    });
+        );
+      return { getHistoryPreservesArbitraryContentLengthsProperty };
+    };
   });
 });

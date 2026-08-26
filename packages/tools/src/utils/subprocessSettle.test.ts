@@ -153,7 +153,7 @@ describe('createSettleFn', () => {
     expect((reason as Error).message).toBe('boom');
   });
 
-  it('removes the abort listener after settling', async () => {
+  const observeRemovesTheAbortListenerAfterSettlingAt156 = async () => {
     const ctx = makeSettlement();
     let handlerRemoved = false;
     const origRemove = ctx.controller.signal.removeEventListener.bind(
@@ -168,7 +168,6 @@ describe('createSettleFn', () => {
       }
       origRemove(type, listener);
     }) as typeof ctx.controller.signal.removeEventListener;
-
     const settle = createSettleFn(
       ctx.settlement,
       ctx.controller.signal,
@@ -179,6 +178,12 @@ describe('createSettleFn', () => {
     );
     settle(() => ctx.resolveSpy('ok'));
     await ctx.promise;
+    return { handlerRemoved };
+  };
+
+  it('removes the abort listener after settling', async () => {
+    const { handlerRemoved } =
+      await observeRemovesTheAbortListenerAfterSettlingAt156();
     expect(handlerRemoved).toBe(true);
   });
 });

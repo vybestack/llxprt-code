@@ -139,6 +139,16 @@ function createReadinessFactory(
 
 describe('fromConfig tokenizer readiness @requirement:REQ-3217-001 @requirement:REQ-3217-003', () => {
   it('awaits post-activation provider/model preparation before returning a usable Agent', async () => {
+    const observation = await observeTokenizerReadiness();
+    expect(observation.completedBeforeRelease).toBe(false);
+    expect(observation.tokenizerFactory).toBe(observation.factory);
+    expect(observation.doneCount).toBe(1);
+    expect(observation.events[0]).toBe('prepare:fake:ready-model');
+    expect(observation.events[1]).toBe('prepared');
+    expect(observation.sawReadyModelTokenization).toBe(true);
+  });
+
+  const observeTokenizerReadiness = async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     const preparationStarted = createSignal();
     const releasePreparation = createSignal();
@@ -178,20 +188,23 @@ describe('fromConfig tokenizer readiness @requirement:REQ-3217-001 @requirement:
         return agent;
       });
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      expect(completed).toBe(false);
+      const completedBeforeRelease = completed;
 
       releasePreparation.resolve();
       const agent = await observedAgent;
       try {
-        expect(built.config.getTokenizerFactory()).toBe(factory);
-
+        const tokenizerFactory = built.config.getTokenizerFactory();
         const turnEvents = await drain(agent.stream('hello'));
-        expect(countType(turnEvents, 'done')).toBe(1);
-        expect(events[0]).toBe('prepare:fake:ready-model');
-        expect(events[1]).toBe('prepared');
-        expect(
-          events.some((event) => event === 'tokenize:fake:ready-model'),
-        ).toBe(true);
+        return {
+          completedBeforeRelease,
+          tokenizerFactory,
+          factory,
+          doneCount: countType(turnEvents, 'done'),
+          events,
+          sawReadyModelTokenization: events.some(
+            (event) => event === 'tokenize:fake:ready-model',
+          ),
+        };
       } finally {
         await agent.dispose();
       }
@@ -199,53 +212,79 @@ describe('fromConfig tokenizer readiness @requirement:REQ-3217-001 @requirement:
       releasePreparation.resolve();
       await built.cleanup();
     }
-  });
+  };
 
   it('rejects with the causal preparation failure reached through authoritative post-activation state (not stale Config state) and removes the isolated runtime', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
-    const failure = new Error('mandatory tokenizer readiness failed causally');
-    const runtimeId = 'from-config-rejected-tokenizer-readiness';
-    // Mutate the Config's provider field to stale state. The isolated runtime
-    // manager still has 'fake' active (authoritative). fromConfig must derive
-    // the readiness target from the manager, not from this stale Config field.
-    built.config.setProvider('stale-config-provider');
-    let readinessTarget:
-      | { readonly provider: string; readonly model: string }
-      | undefined;
-    built.config.setTokenizerFactory(
-      createReadinessFactory(
-        async (providerName, model) => {
-          readinessTarget = { provider: providerName, model: model ?? '' };
-          throw failure;
-        },
-        () => {
-          throw new Error('unreachable tokenizer use');
-        },
+    const {
+      runtimeId,
+      failure,
+      rejection,
+      readinessTarget,
+      providerObservation,
+    } =
+      await observeRejectsWithTheCausalPreparationFailureReachedThroughAuthoritativePostActivationState();
+    expect(rejection).toBe(failure);
+    expect(readinessTarget).toStrictEqual({
+      provider: 'fake',
+      model: 'fake-model',
+    });
+    expect(providerObservation).not.toBe('stale-config-provider');
+    expect(() =>
+      runWithRuntimeScope({ runtimeId, metadata: {} }, () =>
+        getCliRuntimeServices(),
       ),
-    );
-
-    try {
-      await expect(
-        fromConfig({ config: built.config, sessionId: runtimeId }),
-      ).rejects.toBe(failure);
-      // Authoritative post-activation manager state ('fake'/'fake-model')
-      // reached readiness — NOT the stale Config provider
-      // ('stale-config-provider').
-      expect(readinessTarget).toEqual({
-        provider: 'fake',
-        model: 'fake-model',
-      });
-      expect(readinessTarget?.provider).not.toBe('stale-config-provider');
-      expect(() =>
-        runWithRuntimeScope({ runtimeId, metadata: {} }, () =>
-          getCliRuntimeServices(),
-        ),
-      ).toThrow(/runtime registration|runtime.*not/i);
-    } finally {
-      disposeCliRuntime(runtimeId);
-      await built.cleanup();
-    }
+    ).toThrow(/runtime registration|runtime.*not/i);
   });
+
+  const observeRejectsWithTheCausalPreparationFailureReachedThroughAuthoritativePostActivationState =
+    async () => {
+      const built = await buildCliStyleConfig('plain-text.jsonl');
+      const failure = new Error(
+        'mandatory tokenizer readiness failed causally',
+      );
+      const runtimeId = 'from-config-rejected-tokenizer-readiness';
+      // Mutate the Config's provider field to stale state. The isolated runtime
+      // manager still has 'fake' active (authoritative). fromConfig must derive
+      // the readiness target from the manager, not from this stale Config field.
+      built.config.setProvider('stale-config-provider');
+      let readinessTarget:
+        | { readonly provider: string; readonly model: string }
+        | undefined;
+      built.config.setTokenizerFactory(
+        createReadinessFactory(
+          async (providerName, model) => {
+            readinessTarget = { provider: providerName, model: model ?? '' };
+            throw failure;
+          },
+          () => {
+            throw new Error('unreachable tokenizer use');
+          },
+        ),
+      );
+
+      try {
+        // Authoritative post-activation manager state ('fake'/'fake-model')
+        // reached readiness — NOT the stale Config provider
+        // ('stale-config-provider').
+        let rejection: unknown;
+        try {
+          await fromConfig({ config: built.config, sessionId: runtimeId });
+        } catch (error: unknown) {
+          rejection = error;
+        }
+        const providerObservation = readinessTarget?.provider;
+        return {
+          runtimeId,
+          failure,
+          rejection,
+          readinessTarget,
+          providerObservation,
+        };
+      } finally {
+        disposeCliRuntime(runtimeId);
+        await built.cleanup();
+      }
+    };
 });
 
 describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:REQ-001 @requirement:REQ-INT-001', () => {
@@ -408,57 +447,86 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
   });
 
   it('T7c ownership: a caller-supplied messageBus stays caller-owned and FUNCTIONAL after agent.dispose() — the caller bus still accepts subscriptions and reports live listener counts (not torn down) @requirement:REQ-001.3 @scenario:caller-owned-bus @given:a fromConfig agent with a caller-supplied messageBus, and a pre-existing subscription recorded on that caller bus @when:agent.dispose() runs @then:the caller bus listenerCount still reflects the caller subscription (count unchanged by dispose), a NEW subscribe increases the observable count, and removeAllListeners() runs without throwing — the bus is alive', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
-    try {
-      const callerBus: MessageBus = built.messageBus;
-      // Probe the caller bus via the SAME documented structural-narrowing idiom
-      // used by captureProviderManager (no deep imports for MessageBusType).
-      const bus = asRecord(callerBus);
-      const eventType = 'tool-confirmation-request';
-      const listenerCountOf = (b: RecordLike): number => {
-        const fn = b['listenerCount'];
-        return typeof fn === 'function'
-          ? (fn.call(callerBus, eventType) as number)
-          : -1;
-      };
-      const subscribeOn = (b: RecordLike): boolean => {
-        const fn = b['subscribe'];
-        if (typeof fn !== 'function') return false;
-        fn.call(callerBus, eventType, () => undefined);
-        return true;
-      };
-      const removeAllOn = (b: RecordLike): boolean => {
-        const fn = b['removeAllListeners'];
-        if (typeof fn !== 'function') return false;
-        fn.call(callerBus);
-        return true;
-      };
-      expect(bus).not.toBeNull();
-      // Record a caller-side subscription BEFORE the agent exists.
-      expect(subscribeOn(bus as RecordLike)).toBe(true);
-      const before = listenerCountOf(bus as RecordLike);
-      expect(before).toBeGreaterThanOrEqual(1);
-
-      const agent: Agent = await fromConfig({
-        config: built.config,
-        messageBus: callerBus,
-      });
-      await agent.dispose();
-
-      // The caller bus must still be ALIVE: its observable listener count is
-      // unchanged by agent.dispose() (the caller subscription survived), a NEW
-      // subscribe still takes effect (count grows), and removeAllListeners()
-      // runs without throwing (count collapses to 0).
-      const afterDispose = listenerCountOf(bus as RecordLike);
-      expect(afterDispose).toBe(before);
-      expect(subscribeOn(bus as RecordLike)).toBe(true);
-      expect(listenerCountOf(bus as RecordLike)).toBe(afterDispose + 1);
-      expect(removeAllOn(bus as RecordLike)).toBe(true);
-      expect(listenerCountOf(bus as RecordLike)).toBe(0);
-    } finally {
-      await built.cleanup();
-    }
+    const observation =
+      await observeT7cOwnershipACallerSuppliedMessageBusStaysCallerOwnedAndFUNCTIONALAfter();
+    expect(observation.busPresent).toBe(true);
+    expect(observation.firstSubscriptionAccepted).toBe(true);
+    expect(observation.before).toBeGreaterThanOrEqual(1);
+    expect(observation.afterDispose).toBe(observation.before);
+    expect(observation.secondSubscriptionAccepted).toBe(true);
+    expect(observation.afterSecondSubscription).toBe(
+      observation.afterDispose + 1,
+    );
+    expect(observation.listenersRemoved).toBe(true);
+    expect(observation.finalListenerCount).toBe(0);
   });
+
+  const observeT7cOwnershipACallerSuppliedMessageBusStaysCallerOwnedAndFUNCTIONALAfter =
+    async () => {
+      const built = await buildCliStyleConfig('plain-text.jsonl');
+      try {
+        const callerBus: MessageBus = built.messageBus;
+        // Probe the caller bus via the SAME documented structural-narrowing idiom
+        // used by captureProviderManager (no deep imports for MessageBusType).
+        const bus = asRecord(callerBus);
+        const eventType = 'tool-confirmation-request';
+        const listenerCountOf = (b: RecordLike): number => {
+          const fn = b['listenerCount'];
+          return typeof fn === 'function'
+            ? (fn.call(callerBus, eventType) as number)
+            : -1;
+        };
+        const subscribeOn = (b: RecordLike): boolean => {
+          const fn = b['subscribe'];
+          if (typeof fn !== 'function') return false;
+          fn.call(callerBus, eventType, () => undefined);
+          return true;
+        };
+        const removeAllOn = (b: RecordLike): boolean => {
+          const fn = b['removeAllListeners'];
+          if (typeof fn !== 'function') return false;
+          fn.call(callerBus);
+          return true;
+        };
+
+        // Record a caller-side subscription BEFORE the agent exists.
+        const busPresent = bus !== null;
+        if (bus === null) {
+          throw new Error('Expected caller MessageBus record');
+        }
+        const firstSubscriptionAccepted = subscribeOn(bus);
+        const before = listenerCountOf(bus);
+
+        const agent: Agent = await fromConfig({
+          config: built.config,
+          messageBus: callerBus,
+        });
+        await agent.dispose();
+
+        // The caller bus must still be ALIVE: its observable listener count is
+        // unchanged by agent.dispose() (the caller subscription survived), a NEW
+        // subscribe still takes effect (count grows), and removeAllListeners()
+        // runs without throwing (count collapses to 0).
+        const afterDispose = listenerCountOf(bus);
+        const secondSubscriptionAccepted = subscribeOn(bus);
+        const afterSecondSubscription = listenerCountOf(bus);
+        const listenersRemoved = removeAllOn(bus);
+        const finalListenerCount = listenerCountOf(bus);
+
+        return {
+          busPresent,
+          firstSubscriptionAccepted,
+          before,
+          afterDispose,
+          secondSubscriptionAccepted,
+          afterSecondSubscription,
+          listenersRemoved,
+          finalListenerCount,
+        };
+      } finally {
+        await built.cleanup();
+      }
+    };
 
   it('T10 smoke: a single turn via agent.stream() over the FakeProvider fixture yields exactly one done event @requirement:REQ-INT-001 @scenario:turn-drive @given:a fromConfig agent over the plain-text fixture @when:agent.stream("hello") is drained @then:exactly one done event is emitted', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
@@ -518,77 +586,89 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
   it(
     'PROP3 for any subset of optional handlers provided, internalConfig(agent) identity holds @requirement:REQ-001 @scenario:property-handler-subset @given:any subset of { onApproval, onOAuthPrompt, editorCallbacks } @when:fromConfig({ config, ...subset }) @then:internalConfig(agent) === the caller Config for every generated subset',
     async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.record({
-            withApproval: fc.boolean(),
-            withOauth: fc.boolean(),
-            withEditor: fc.boolean(),
-          }),
-          async (subset) => {
-            const built = await buildCliStyleConfig('plain-text.jsonl');
-            try {
-              const opts: Record<string, unknown> = { config: built.config };
-              if (subset.withApproval) {
-                opts['onApproval'] = () => ({
-                  outcome: ToolConfirmationOutcome.ProceedOnce,
-                });
-              }
-              if (subset.withOauth) {
-                opts['onOAuthPrompt'] = () => true;
-              }
-              if (subset.withEditor) {
-                opts['editorCallbacks'] = {};
-              }
-              const agent: Agent = await fromConfig(
-                opts as unknown as Parameters<typeof fromConfig>[0],
-              );
-              return internalConfig(agent) === built.config;
-            } finally {
-              await built.cleanup();
-            }
-          },
+      await expect(
+        fc.assert(
+          createPROP3ForAnySubsetOfOptionalHandlersProvidedInternalConfigAgentIdentityHoldsProperty(),
         ),
-      );
+      ).resolves.toBeUndefined();
     },
     IDENTITY_PROPERTY_TIMEOUT_MS,
   );
 
+  function createPROP3ForAnySubsetOfOptionalHandlersProvidedInternalConfigAgentIdentityHoldsProperty() {
+    return fc.asyncProperty(
+      fc.record({
+        withApproval: fc.boolean(),
+        withOauth: fc.boolean(),
+        withEditor: fc.boolean(),
+      }),
+      async (subset) => {
+        const built = await buildCliStyleConfig('plain-text.jsonl');
+        try {
+          const opts: Record<string, unknown> = { config: built.config };
+          if (subset.withApproval) {
+            opts['onApproval'] = () => ({
+              outcome: ToolConfirmationOutcome.ProceedOnce,
+            });
+          }
+          if (subset.withOauth) {
+            opts['onOAuthPrompt'] = () => true;
+          }
+          if (subset.withEditor) {
+            opts['editorCallbacks'] = {};
+          }
+          const agent: Agent = await fromConfig(
+            opts as unknown as Parameters<typeof fromConfig>[0],
+          );
+          return internalConfig(agent) === built.config;
+        } finally {
+          await built.cleanup();
+        }
+      },
+    );
+  }
+
   it(
     'PROP4 for any subset of optional handlers provided, the no-second-manager invariant holds (the runtime manager IS the caller manager) @requirement:REQ-001 @scenario:property-no-double-manager @given:any subset of optional handlers @when:fromConfig({ config, ...subset }) @then:captureProviderManager(agent) === config.getProviderManager() for every generated subset',
     async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.record({
-            withApproval: fc.boolean(),
-            withOauth: fc.boolean(),
-          }),
-          async (subset) => {
-            const built = await buildCliStyleConfig('plain-text.jsonl');
-            try {
-              const opts: Record<string, unknown> = { config: built.config };
-              if (subset.withApproval) {
-                opts['onApproval'] = () => ({
-                  outcome: ToolConfirmationOutcome.ProceedOnce,
-                });
-              }
-              if (subset.withOauth) {
-                opts['onOAuthPrompt'] = () => true;
-              }
-              const agent: Agent = await fromConfig(
-                opts as unknown as Parameters<typeof fromConfig>[0],
-              );
-              const callerManager = built.config.getProviderManager();
-              return captureProviderManager(agent) === callerManager;
-            } finally {
-              await built.cleanup();
-            }
-          },
+      await expect(
+        fc.assert(
+          createPROP4ForAnySubsetOfOptionalHandlersProvidedTheNoSecondManagerProperty(),
         ),
-      );
+      ).resolves.toBeUndefined();
     },
     IDENTITY_PROPERTY_TIMEOUT_MS,
   );
+
+  function createPROP4ForAnySubsetOfOptionalHandlersProvidedTheNoSecondManagerProperty() {
+    return fc.asyncProperty(
+      fc.record({
+        withApproval: fc.boolean(),
+        withOauth: fc.boolean(),
+      }),
+      async (subset) => {
+        const built = await buildCliStyleConfig('plain-text.jsonl');
+        try {
+          const opts: Record<string, unknown> = { config: built.config };
+          if (subset.withApproval) {
+            opts['onApproval'] = () => ({
+              outcome: ToolConfirmationOutcome.ProceedOnce,
+            });
+          }
+          if (subset.withOauth) {
+            opts['onOAuthPrompt'] = () => true;
+          }
+          const agent: Agent = await fromConfig(
+            opts as unknown as Parameters<typeof fromConfig>[0],
+          );
+          const callerManager = built.config.getProviderManager();
+          return captureProviderManager(agent) === callerManager;
+        } finally {
+          await built.cleanup();
+        }
+      },
+    );
+  }
 
   it(
     'PROP5 for any non-empty sessionId, the caller-supplied MessageBus adoption invariant holds (the runtime bus IS the caller bus) @requirement:REQ-001 @scenario:property-caller-bus @given:any non-empty sessionId and a caller-supplied messageBus @when:fromConfig({ config, messageBus, sessionId }) @then:captureAgentMessageBus(agent) === callerBus for every generated sessionId',
@@ -638,26 +718,32 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
   it(
     'PROP7 for any non-empty sessionId, fromConfig with a caller bus AND sessionId preserves both the config identity AND the caller-bus identity @requirement:REQ-001 @scenario:property-combined-identity @given:any non-empty sessionId and a caller-supplied messageBus @when:fromConfig({ config, messageBus, sessionId }) @then:both internalConfig(agent) === config AND captureAgentMessageBus(agent) === callerBus hold for every generated sessionId',
     async () => {
-      await fc.assert(
-        fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
-          const built = await buildCliStyleConfig('plain-text.jsonl');
-          try {
-            const callerBus: MessageBus = built.messageBus;
-            const agent: Agent = await fromConfig({
-              config: built.config,
-              messageBus: callerBus,
-              sessionId,
-            });
-            return (
-              internalConfig(agent) === built.config &&
-              captureAgentMessageBus(agent) === callerBus
-            );
-          } finally {
-            await built.cleanup();
-          }
-        }),
-      );
+      await expect(
+        fc.assert(
+          createPROP7ForAnyNonEmptySessionIdFromConfigWithACallerBusANDProperty(),
+        ),
+      ).resolves.toBeUndefined();
     },
     IDENTITY_PROPERTY_TIMEOUT_MS,
   );
+
+  function createPROP7ForAnyNonEmptySessionIdFromConfigWithACallerBusANDProperty() {
+    return fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
+      const built = await buildCliStyleConfig('plain-text.jsonl');
+      try {
+        const callerBus: MessageBus = built.messageBus;
+        const agent: Agent = await fromConfig({
+          config: built.config,
+          messageBus: callerBus,
+          sessionId,
+        });
+        return (
+          internalConfig(agent) === built.config &&
+          captureAgentMessageBus(agent) === callerBus
+        );
+      } finally {
+        await built.cleanup();
+      }
+    });
+  }
 });

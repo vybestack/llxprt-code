@@ -57,24 +57,96 @@ const LOAD_BEARING_ROOT_KEYS: readonly string[] = [
   ...LOAD_BEARING_ROOT_CLASSES,
 ];
 
+type EnumMemberCase =
+  | {
+      readonly enumName: 'approvalMode';
+      readonly memberName: 'YOLO' | 'AUTO_EDIT' | 'DEFAULT';
+      readonly expectedValue: string;
+    }
+  | {
+      readonly enumName: 'policyDecision';
+      readonly memberName: 'ASK_USER' | 'ALLOW' | 'DENY';
+      readonly expectedValue: string;
+    };
+
+interface EnumMemberObservation {
+  readonly memberName: string;
+  readonly value: string;
+  readonly expectedValue: string;
+}
+
+const ENUM_MEMBER_CASES = [
+  {
+    enumName: 'approvalMode',
+    memberName: 'YOLO',
+    expectedValue: 'yolo',
+  },
+  {
+    enumName: 'approvalMode',
+    memberName: 'AUTO_EDIT',
+    expectedValue: 'autoEdit',
+  },
+  {
+    enumName: 'approvalMode',
+    memberName: 'DEFAULT',
+    expectedValue: 'default',
+  },
+  {
+    enumName: 'policyDecision',
+    memberName: 'ASK_USER',
+    expectedValue: 'ask_user',
+  },
+  {
+    enumName: 'policyDecision',
+    memberName: 'ALLOW',
+    expectedValue: 'allow',
+  },
+  {
+    enumName: 'policyDecision',
+    memberName: 'DENY',
+    expectedValue: 'deny',
+  },
+] satisfies readonly EnumMemberCase[];
+
+function inspectEnumMember(enumCase: EnumMemberCase): EnumMemberObservation {
+  if (enumCase.enumName === 'approvalMode') {
+    return {
+      memberName: enumCase.memberName,
+      value: root.ApprovalMode[enumCase.memberName],
+      expectedValue: enumCase.expectedValue,
+    };
+  }
+  return {
+    memberName: enumCase.memberName,
+    value: root.PolicyDecision[enumCase.memberName],
+    expectedValue: enumCase.expectedValue,
+  };
+}
+
 describe('REQ-006 @plan:PLAN-20260621-COREAPIREMED.P21 — agents public export surface is non-breaking', () => {
   it('Test A: curated root barrel exposes every load-bearing #1594-era runtime value (superset)', () => {
     // Dynamic enumeration: read the actual keys the built barrel ships, then
     // assert the #1594-era load-bearing set is a SUBSET (the barrel may grow
     // additively but MUST never drop one of these).
     const rootKeys = new Set(Object.keys(root));
-    for (const key of LOAD_BEARING_ROOT_FUNCTIONS) {
-      expect(rootKeys.has(key), `root barrel must export "${key}"`).toBe(true);
-      expect(typeof (root as Record<string, unknown>)[key]).toBe('function');
-    }
-
-    // Classes are also `typeof 'function'` at runtime.
-    // P05: AgenticLoop (concrete low-level class) removed from the root
-    // surface; consumers use createAgenticLoop from the curated api barrel.
-    for (const key of LOAD_BEARING_ROOT_CLASSES) {
-      expect(rootKeys.has(key), `root barrel must export "${key}"`).toBe(true);
-      expect(typeof (root as Record<string, unknown>)[key]).toBe('function');
-    }
+    // Classes are also `typeof 'function'` at runtime. P05 removed the
+    // concrete AgenticLoop class while retaining createAgenticLoop.
+    expect(
+      LOAD_BEARING_ROOT_FUNCTIONS.filter((key) => !rootKeys.has(key)),
+    ).toStrictEqual([]);
+    expect(
+      LOAD_BEARING_ROOT_FUNCTIONS.filter(
+        (key) => typeof (root as Record<string, unknown>)[key] !== 'function',
+      ),
+    ).toStrictEqual([]);
+    expect(
+      LOAD_BEARING_ROOT_CLASSES.filter((key) => !rootKeys.has(key)),
+    ).toStrictEqual([]);
+    expect(
+      LOAD_BEARING_ROOT_CLASSES.filter(
+        (key) => typeof (root as Record<string, unknown>)[key] !== 'function',
+      ),
+    ).toStrictEqual([]);
   });
 
   it('Test B: createAgent(AgentConfig) arity is 1 (single-arg signature unchanged)', () => {
@@ -117,16 +189,15 @@ describe('REQ-006 @plan:PLAN-20260621-COREAPIREMED.P21 — agents public export 
     // remains).
     const rootKeys = new Set(Object.keys(root));
     fc.assert(
-      fc.property(fc.constantFrom(...LOAD_BEARING_ROOT_KEYS), (key) =>
-        rootKeys.has(key),
-      ),
+      fc.property(fc.constantFrom(...LOAD_BEARING_ROOT_KEYS), (key) => {
+        expect(rootKeys).toContain(key);
+      }),
     );
     // A second distinct property: each sampled value-symbol is callable.
     fc.assert(
-      fc.property(
-        fc.constantFrom(...LOAD_BEARING_ROOT_KEYS),
-        (key) => typeof (root as Record<string, unknown>)[key] === 'function',
-      ),
+      fc.property(fc.constantFrom(...LOAD_BEARING_ROOT_KEYS), (key) => {
+        expect(typeof (root as Record<string, unknown>)[key]).toBe('function');
+      }),
     );
   }, 30000);
 });
@@ -157,9 +228,7 @@ describe('REQ-009 @plan:PLAN-20260622-COREAPIGAP.P18 — additive surface is non
     // P05: AgenticLoop removed from the root (curated createAgenticLoop
     // remains).
     for (const key of LOAD_BEARING_ROOT_KEYS) {
-      expect(rootKeys.has(key), `prior root key "${key}" must remain`).toBe(
-        true,
-      );
+      expect(rootKeys).toContain(key);
       expect(typeof (root as Record<string, unknown>)[key]).toBe('function');
     }
   });
@@ -173,10 +242,7 @@ describe('REQ-009 @plan:PLAN-20260622-COREAPIGAP.P18 — additive surface is non
     expect(internals.PostTurnAction).not.toBeUndefined();
     // Root DENY: AgentClient must NOT appear on the root barrel after
     // depollution.
-    expect(
-      (root as Record<string, unknown>).AgentClient,
-      'root.AgentClient must be undefined after depollution (P05)',
-    ).toBeUndefined();
+    expect((root as Record<string, unknown>).AgentClient).toBeUndefined();
   });
 
   it('Test C: new value enums are present and round-trip (additive surface growth)', () => {
@@ -198,39 +264,18 @@ describe('REQ-009 @plan:PLAN-20260622-COREAPIGAP.P18 — additive surface is non
       fc.property(fc.constantFrom(...LOAD_BEARING_ROOT_KEYS), (key) => {
         expect(rootKeys.has(key)).toBe(true);
         expect(typeof (root as Record<string, unknown>)[key]).toBe('function');
-        return true;
       }),
     );
   }, 30000);
 
   it('PROP 2: each sampled new enum member round-trips to its expected string value (REQ-009)', () => {
-    const approvalModeEntries: ReadonlyArray<readonly [string, string]> = [
-      ['YOLO', 'yolo'],
-      ['AUTO_EDIT', 'autoEdit'],
-      ['DEFAULT', 'default'],
-    ];
-    const policyDecisionEntries: ReadonlyArray<readonly [string, string]> = [
-      ['ASK_USER', 'ask_user'],
-      ['ALLOW', 'allow'],
-      ['DENY', 'deny'],
-    ];
     fc.assert(
-      fc.property(
-        fc.constantFrom(...approvalModeEntries, ...policyDecisionEntries),
-        ([memberName, expectedValue]) => {
-          const enumObj =
-            memberName === 'ASK_USER' ||
-            memberName === 'ALLOW' ||
-            memberName === 'DENY'
-              ? root.PolicyDecision
-              : root.ApprovalMode;
-          const value = (enumObj as Record<string, string>)[memberName];
-          expect(typeof value).toBe('string');
-          expect(value.length).toBeGreaterThan(0);
-          expect(value).toBe(expectedValue);
-          return true;
-        },
-      ),
+      fc.property(fc.constantFrom(...ENUM_MEMBER_CASES), (enumCase) => {
+        const observation = inspectEnumMember(enumCase);
+        expect(typeof observation.value).toBe('string');
+        expect(observation.value.length).toBeGreaterThan(0);
+        expect(observation.value).toBe(observation.expectedValue);
+      }),
     );
   }, 30000);
 });
@@ -279,7 +324,6 @@ describe('REQ-004 @plan:PLAN-20260622-MCPOAUTHTRUTH.P07 — additive MCP OAuth s
           sessionAuthenticated: false,
         };
         expect(sample.oauthStatus).toBe(status);
-        return true;
       }),
     );
   });

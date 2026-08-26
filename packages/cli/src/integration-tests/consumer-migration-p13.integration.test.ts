@@ -130,7 +130,11 @@ describe('CLI provider manager creation uses concrete providers', () => {
    * from the providers package and sets it as active. This proves the
    * FakeProvider wiring path is reachable through the CLI creation path.
    */
-  it('registers FakeProvider from providers package when LLXPRT_FAKE_RESPONSES is set', () => {
+  function observeFakeProviderRegistration(): {
+    readonly registeredProviderNames: readonly string[];
+    readonly activeProviderName: string | undefined;
+    readonly activeProviderImplementationName: string | undefined;
+  } {
     const tempDir = fs.mkdtempSync(path.join(nodeOs.tmpdir(), 'p13-fake-'));
     try {
       // Write a minimal JSONL fixture
@@ -164,14 +168,11 @@ describe('CLI provider manager creation uses concrete providers', () => {
           config: cfg,
         });
 
-        // FakeProvider must be registered and active
-        expect(manager.listProviders()).toContain('fake');
-        expect(manager.getActiveProviderName()).toBe('fake');
-
-        // The active provider is wrapped for logging, but it must expose
-        // FakeProvider behavior registered from the providers package.
-        const provider = manager.getActiveProvider();
-        expect(provider?.name).toBe('fake');
+        return {
+          registeredProviderNames: manager.listProviders(),
+          activeProviderName: manager.getActiveProviderName(),
+          activeProviderImplementationName: manager.getActiveProvider()?.name,
+        };
       } finally {
         if (originalEnv === undefined) {
           delete process.env.LLXPRT_FAKE_RESPONSES;
@@ -182,6 +183,20 @@ describe('CLI provider manager creation uses concrete providers', () => {
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
+  }
+
+  it('registers FakeProvider from providers package when LLXPRT_FAKE_RESPONSES is set', () => {
+    const fakeProviderRegistration = observeFakeProviderRegistration();
+
+    // FakeProvider must be registered and active
+    expect(fakeProviderRegistration.registeredProviderNames).toContain('fake');
+    expect(fakeProviderRegistration.activeProviderName).toBe('fake');
+
+    // The active provider is wrapped for logging, but it must expose
+    // FakeProvider behavior registered from the providers package.
+    expect(fakeProviderRegistration.activeProviderImplementationName).toBe(
+      'fake',
+    );
   });
 
   /**
@@ -688,6 +703,7 @@ describe('Provider-backed content generator path reachable through runtime', () 
  * behavioral boundary tests that would fail if a provider re-export
  * or forbidden import was accidentally added.
  */
+
 describe('Core no-shim and dependency-direction boundary', () => {
   /**
    * @plan:PLAN-20260603-ISSUE1584.P13
@@ -696,20 +712,29 @@ describe('Core no-shim and dependency-direction boundary', () => {
    * Core index.ts must not import from @vybestack/llxprt-code-providers.
    * This prevents provider re-exports from core.
    */
-  it('core index.ts has no imports from providers package', () => {
+  function coreIndexImportsProvidersPackage(): boolean {
     const coreIndexPath = path.resolve(__dirname, '../../../core/src/index.ts');
     const content = fs.readFileSync(coreIndexPath, 'utf-8');
-
-    // No import from the providers package
     const hasProvidersPackageImport =
       content.includes("from '@vybestack/llxprt-code-providers'") ||
       content.includes("from '@vybestack/llxprt-code-providers/") ||
       content.includes('from "@vybestack/llxprt-code-providers"') ||
       content.includes('from "@vybestack/llxprt-code-providers/');
-    expect(
-      hasProvidersPackageImport,
-      'core index.ts must not import from @vybestack/llxprt-code-providers',
-    ).toBe(false);
+
+    return hasProvidersPackageImport;
+  }
+
+  it('core index.ts has no imports from providers package', () => {
+    // No import from the providers package
+    const hasProvidersPackageImport = coreIndexImportsProvidersPackage();
+    try {
+      expect(hasProvidersPackageImport).toBe(false);
+    } catch (error) {
+      throw new Error(
+        'core index.ts must not import from @vybestack/llxprt-code-providers',
+        { cause: error },
+      );
+    }
   });
 
   /**
@@ -719,7 +744,10 @@ describe('Core no-shim and dependency-direction boundary', () => {
    * Core index.ts must not re-export provider-owned symbols like
    * IProvider, ProviderManager, ProviderContentGenerator, etc.
    */
-  it('core index.ts has no re-exports of provider-owned symbols', () => {
+  function findProviderSymbolReExports(): ReadonlyArray<{
+    readonly pattern: RegExp;
+    readonly match: RegExpMatchArray | null;
+  }> {
     const coreIndexPath = path.resolve(__dirname, '../../../core/src/index.ts');
     const content = fs.readFileSync(coreIndexPath, 'utf-8');
 
@@ -740,17 +768,29 @@ describe('Core no-shim and dependency-direction boundary', () => {
       /export.*\bAuthenticationError\b/,
     ];
 
-    for (const pattern of providerSymbolReExports) {
-      // Allow the pattern only in comments
-      const lines = content.split('\n');
-      const codeLines = lines.filter(
-        (line) => !line.trim().startsWith('//') && !line.trim().startsWith('*'),
-      );
-      const codeContent = codeLines.join('\n');
-      expect(
-        codeContent.match(pattern),
-        `core index.ts must not re-export provider symbol matching ${pattern}`,
-      ).toBeNull();
+    // Allow the pattern only in comments
+    const lines = content.split('\n');
+    const codeLines = lines.filter(
+      (line) => !line.trim().startsWith('//') && !line.trim().startsWith('*'),
+    );
+    const codeContent = codeLines.join('\n');
+    return providerSymbolReExports.map((pattern) => ({
+      pattern,
+      match: codeContent.match(pattern),
+    }));
+  }
+
+  it('core index.ts has no re-exports of provider-owned symbols', () => {
+    const providerSymbolReExports = findProviderSymbolReExports();
+    for (const { pattern, match } of providerSymbolReExports) {
+      try {
+        expect(match).toBeNull();
+      } catch (error) {
+        throw new Error(
+          `core index.ts must not re-export provider symbol matching ${pattern}`,
+          { cause: error },
+        );
+      }
     }
   });
 
@@ -762,7 +802,7 @@ describe('Core no-shim and dependency-direction boundary', () => {
    * @vybestack/llxprt-code-providers. Verifies the forbidden scan from
    * anti-shim-policy.md.
    */
-  it('core production source has no imports from providers package', () => {
+  function findCoreProductionProviderImports(): readonly string[] {
     const coreSrcDir = path.resolve(__dirname, '../../../core/src');
     const violations: string[] = [];
     const hasForbiddenProvidersImport = (content: string): boolean =>
@@ -770,15 +810,12 @@ describe('Core no-shim and dependency-direction boundary', () => {
       content.includes("from '@vybestack/llxprt-code-providers/") ||
       content.includes('from "@vybestack/llxprt-code-providers"') ||
       content.includes('from "@vybestack/llxprt-code-providers/');
-
     const isProductionTsFile = (name: string): boolean =>
       name.endsWith('.ts') &&
       !name.endsWith('.test.ts') &&
       !name.endsWith('.spec.ts');
-
     const isCommentLine = (line: string): boolean =>
       line.startsWith('//') || line.startsWith('*') || line.startsWith('/*');
-
     const collectFileViolations = (fullPath: string): void => {
       const lines = fs.readFileSync(fullPath, 'utf-8').split('\n');
       for (let i = 0; i < lines.length; i++) {
@@ -792,7 +829,6 @@ describe('Core no-shim and dependency-direction boundary', () => {
         }
       }
     };
-
     function scanDir(dir: string) {
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
@@ -804,12 +840,21 @@ describe('Core no-shim and dependency-direction boundary', () => {
         }
       }
     }
-
     scanDir(coreSrcDir);
-    expect(
-      violations,
-      `Forbidden core production imports from providers:\n${violations.join('\n')}`,
-    ).toHaveLength(0);
+
+    return violations;
+  }
+
+  it('core production source has no imports from providers package', () => {
+    const violations = findCoreProductionProviderImports();
+    try {
+      expect(violations).toHaveLength(0);
+    } catch (error) {
+      throw new Error(
+        `Forbidden core production imports from providers:${String.fromCharCode(10)}${violations.join(String.fromCharCode(10))}`,
+        { cause: error },
+      );
+    }
   });
 
   /**
@@ -818,14 +863,24 @@ describe('Core no-shim and dependency-direction boundary', () => {
    *
    * Core package.json must not depend on the providers package.
    */
-  it('core package.json has no providers dependency', () => {
+  function readCoreProvidersDependency(): unknown {
     const corePkgPath = path.resolve(__dirname, '../../../core/package.json');
     const pkg = JSON.parse(fs.readFileSync(corePkgPath, 'utf-8'));
     const deps = pkg.dependencies ?? {};
-    expect(
-      deps['@vybestack/llxprt-code-providers'],
-      'core package.json must not depend on @vybestack/llxprt-code-providers',
-    ).toBeUndefined();
+
+    return deps['@vybestack/llxprt-code-providers'];
+  }
+
+  it('core package.json has no providers dependency', () => {
+    const providersDependency = readCoreProvidersDependency();
+    try {
+      expect(providersDependency).toBeUndefined();
+    } catch (error) {
+      throw new Error(
+        'core package.json must not depend on @vybestack/llxprt-code-providers',
+        { cause: error },
+      );
+    }
   });
 
   /**
@@ -839,10 +894,15 @@ describe('Core no-shim and dependency-direction boundary', () => {
       __dirname,
       '../../../core/src/providers',
     );
-    expect(
-      fs.existsSync(coreProvidersDir),
-      'core/src/providers directory must not exist after migration',
-    ).toBe(false);
+    const coreProvidersDirectoryExists = fs.existsSync(coreProvidersDir);
+    try {
+      expect(coreProvidersDirectoryExists).toBe(false);
+    } catch (error) {
+      throw new Error(
+        'core/src/providers directory must not exist after migration',
+        { cause: error },
+      );
+    }
   });
 
   /**
@@ -852,11 +912,10 @@ describe('Core no-shim and dependency-direction boundary', () => {
    * No V2/Compat/New/Copy suffixed provider files in core.
    * Per anti-shim policy, these naming patterns indicate shims.
    */
-  it('no V2/Compat/New/Copy suffixed provider files in core', () => {
+  function findShimNamedProviderFilesInCore(): readonly string[] {
     const coreSrcDir = path.resolve(__dirname, '../../../core/src');
     const forbiddenSuffixes = ['V2', 'Compat', 'New', 'Copy'];
     const violations: string[] = [];
-
     const isShimNamedProviderFile = (name: string): boolean => {
       const basename = name
         .replace(/\.ts$/, '')
@@ -867,7 +926,6 @@ describe('Core no-shim and dependency-direction boundary', () => {
       }
       return forbiddenSuffixes.some((suffix) => basename.endsWith(suffix));
     };
-
     function scanForShimFiles(dir: string) {
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
@@ -883,12 +941,21 @@ describe('Core no-shim and dependency-direction boundary', () => {
         }
       }
     }
-
     scanForShimFiles(coreSrcDir);
-    expect(
-      violations,
-      `Forbidden shim-named files in core: ${violations.join(', ')}`,
-    ).toHaveLength(0);
+
+    return violations;
+  }
+
+  it('no V2/Compat/New/Copy suffixed provider files in core', () => {
+    const violations = findShimNamedProviderFilesInCore();
+    try {
+      expect(violations).toHaveLength(0);
+    } catch (error) {
+      throw new Error(
+        `Forbidden shim-named files in core: ${violations.join(', ')}`,
+        { cause: error },
+      );
+    }
   });
 
   /**
@@ -900,10 +967,9 @@ describe('Core no-shim and dependency-direction boundary', () => {
    * so any remaining './providers/' re-export would be a broken
    * or shim reference.
    */
-  it('core index.ts has no re-exports from ./providers/ path', () => {
+  function findCoreProvidersPathReExport(): RegExpMatchArray | null {
     const coreIndexPath = path.resolve(__dirname, '../../../core/src/index.ts');
     const content = fs.readFileSync(coreIndexPath, 'utf-8');
-
     const codeLines = content
       .split('\n')
       .filter(
@@ -911,11 +977,20 @@ describe('Core no-shim and dependency-direction boundary', () => {
       );
     const codeContent = codeLines.join('\n');
 
+    return codeContent.match(/from\s+['"]\.\/providers\//);
+  }
+
+  it('core index.ts has no re-exports from ./providers/ path', () => {
     // Any export from ./providers/ would be a stale or shim re-export
-    expect(
-      codeContent.match(/from\s+['"]\.\/providers\//),
-      'core index.ts must not re-export from ./providers/ path',
-    ).toBeNull();
+    const providersPathReExport = findCoreProvidersPathReExport();
+    try {
+      expect(providersPathReExport).toBeNull();
+    } catch (error) {
+      throw new Error(
+        'core index.ts must not re-export from ./providers/ path',
+        { cause: error },
+      );
+    }
   });
 });
 

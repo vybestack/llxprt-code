@@ -249,52 +249,15 @@ describe('AgentExecutor (Recovery Turn)', () => {
   });
 
   it('should give a recovery turn on protocol violation (no tool calls) and return GOAL if complete_task is called', async () => {
-    const definition = createTestDefinition([LSTool.Name]);
-    const executor = await AgentExecutor.create(
-      definition,
-      fixture.mockConfig,
-      getTestRuntimeMessageBus(fixture.mockConfig),
-      fixture.onActivity,
-    );
-
-    // Turn 1: model stops with no tool calls (protocol violation)
-    mockModelResponse(mockSendMessageStream, [], 'I think I am done.');
-
-    // Recovery turn: model calls complete_task
-    mockModelResponse(mockSendMessageStream, [
-      {
-        name: TASK_COMPLETE_TOOL_NAME,
-        args: { finalResult: 'Recovered from protocol violation' },
-        id: 'recovery1',
-      },
-    ]);
-
-    const output = await executor.run(
-      { goal: 'Recovery protocol violation' },
-      fixture.signal,
-    );
-
+    const { output, recoveryEvents, errorEvents, outcomeEvents } =
+      await observeGiveARecoveryTurnOnProtocolViolationNoToolCallsAndReturn();
     expect(output.terminate_reason).toBe(AgentTerminateMode.GOAL);
     expect(output.result).toBe('Recovered from protocol violation');
-
-    const recoveryEvents = fixture.activities.filter(
-      (a) => a.type === 'RECOVERY_ATTEMPT',
-    );
     expect(recoveryEvents).toHaveLength(1);
     expect(recoveryEvents[0].data['originalReason']).toBe(
       AgentTerminateMode.ERROR_NO_COMPLETE_TASK_CALL,
     );
-
-    // The protocol violation path should NOT have emitted an ERROR because
-    // we now go directly into recovery.
-    const errorEvents = fixture.activities.filter(
-      (a) => a.type === 'ERROR' && a.data['context'] === 'protocol_violation',
-    );
     expect(errorEvents).toHaveLength(0);
-
-    const outcomeEvents = fixture.activities.filter(
-      (a) => a.type === 'RECOVERY_OUTCOME',
-    );
     expect(outcomeEvents).toHaveLength(1);
     expect(outcomeEvents[0].data['originalReason']).toBe(
       AgentTerminateMode.ERROR_NO_COMPLETE_TASK_CALL,
@@ -305,6 +268,50 @@ describe('AgentExecutor (Recovery Turn)', () => {
     );
     expect(outcomeEvents[0].data['gracePeriodSeconds']).toBe(60);
   });
+
+  const observeGiveARecoveryTurnOnProtocolViolationNoToolCallsAndReturn =
+    async () => {
+      const definition = createTestDefinition([LSTool.Name]);
+      const executor = await AgentExecutor.create(
+        definition,
+        fixture.mockConfig,
+        getTestRuntimeMessageBus(fixture.mockConfig),
+        fixture.onActivity,
+      );
+
+      // Turn 1: model stops with no tool calls (protocol violation)
+      mockModelResponse(mockSendMessageStream, [], 'I think I am done.');
+
+      // Recovery turn: model calls complete_task
+      mockModelResponse(mockSendMessageStream, [
+        {
+          name: TASK_COMPLETE_TOOL_NAME,
+          args: { finalResult: 'Recovered from protocol violation' },
+          id: 'recovery1',
+        },
+      ]);
+
+      const output = await executor.run(
+        { goal: 'Recovery protocol violation' },
+        fixture.signal,
+      );
+
+      const recoveryEvents = fixture.activities.filter(
+        (a) => a.type === 'RECOVERY_ATTEMPT',
+      );
+
+      // The protocol violation path should NOT have emitted an ERROR because
+      // we now go directly into recovery.
+      const errorEvents = fixture.activities.filter(
+        (a) => a.type === 'ERROR' && a.data['context'] === 'protocol_violation',
+      );
+
+      const outcomeEvents = fixture.activities.filter(
+        (a) => a.type === 'RECOVERY_OUTCOME',
+      );
+
+      return { output, recoveryEvents, errorEvents, outcomeEvents };
+    };
 
   it('should give a recovery turn on protocol violation and return ERROR_NO_COMPLETE_TASK_CALL if recovery fails', async () => {
     const definition = createTestDefinition([LSTool.Name]);
@@ -617,44 +624,11 @@ describe('AgentExecutor (Recovery Turn)', () => {
   });
 
   it('should fail recovery immediately when model calls complete_task plus another tool', async () => {
-    const MAX = 1;
-    const definition = createTestDefinition([LSTool.Name], {
-      max_turns: MAX,
-    });
-    const executor = await AgentExecutor.create(
-      definition,
-      fixture.mockConfig,
-      getTestRuntimeMessageBus(fixture.mockConfig),
-      fixture.onActivity,
-    );
-
-    mockWorkResponse(mockSendMessageStream, mockExecuteToolCall, 't1');
-
-    // Recovery response includes both complete_task AND another tool
-    mockModelResponse(mockSendMessageStream, [
-      { name: LSTool.Name, args: { path: '.' }, id: 'recovery-tool-1' },
-      {
-        name: TASK_COMPLETE_TOOL_NAME,
-        args: { finalResult: 'Combo result' },
-        id: 'recovery-ct-1',
-      },
-    ]);
-
-    const output = await executor.run(
-      { goal: 'Recovery combo complete_task plus tool' },
-      fixture.signal,
-    );
-
-    // Should terminate with original reason, not GOAL
+    const { output, outcomeEvents, lsCallStarts } =
+      await observeFailRecoveryImmediatelyWhenModelCallsCompleteTaskPlusAnotherTool();
     expect(output.terminate_reason).toBe(AgentTerminateMode.MAX_TURNS);
     expect(output.result).toContain('Recovery turn attempted but agent');
-
-    // No tool from the recovery response should have been executed
     expect(mockExecuteToolCall).toHaveBeenCalledTimes(1);
-
-    const outcomeEvents = fixture.activities.filter(
-      (a) => a.type === 'RECOVERY_OUTCOME',
-    );
     expect(outcomeEvents).toHaveLength(1);
     expect(outcomeEvents[0].data['originalReason']).toBe(
       AgentTerminateMode.MAX_TURNS,
@@ -664,13 +638,54 @@ describe('AgentExecutor (Recovery Turn)', () => {
       AgentTerminateMode.MAX_TURNS,
     );
     expect(outcomeEvents[0].data['gracePeriodSeconds']).toBe(60);
-
-    // Only one TOOL_CALL_START for LSTool (from the first normal turn)
-    const lsCallStarts = fixture.activities.filter(
-      (a) => a.type === 'TOOL_CALL_START' && a.data['name'] === LSTool.Name,
-    );
     expect(lsCallStarts).toHaveLength(1);
   });
+
+  const observeFailRecoveryImmediatelyWhenModelCallsCompleteTaskPlusAnotherTool =
+    async () => {
+      const MAX = 1;
+      const definition = createTestDefinition([LSTool.Name], {
+        max_turns: MAX,
+      });
+      const executor = await AgentExecutor.create(
+        definition,
+        fixture.mockConfig,
+        getTestRuntimeMessageBus(fixture.mockConfig),
+        fixture.onActivity,
+      );
+
+      mockWorkResponse(mockSendMessageStream, mockExecuteToolCall, 't1');
+
+      // Recovery response includes both complete_task AND another tool
+      mockModelResponse(mockSendMessageStream, [
+        { name: LSTool.Name, args: { path: '.' }, id: 'recovery-tool-1' },
+        {
+          name: TASK_COMPLETE_TOOL_NAME,
+          args: { finalResult: 'Combo result' },
+          id: 'recovery-ct-1',
+        },
+      ]);
+
+      const output = await executor.run(
+        { goal: 'Recovery combo complete_task plus tool' },
+        fixture.signal,
+      );
+
+      // Should terminate with original reason, not GOAL
+
+      // No tool from the recovery response should have been executed
+
+      const outcomeEvents = fixture.activities.filter(
+        (a) => a.type === 'RECOVERY_OUTCOME',
+      );
+
+      // Only one TOOL_CALL_START for LSTool (from the first normal turn)
+      const lsCallStarts = fixture.activities.filter(
+        (a) => a.type === 'TOOL_CALL_START' && a.data['name'] === LSTool.Name,
+      );
+
+      return { output, outcomeEvents, lsCallStarts };
+    };
 
   it('should terminate as ABORTED when parent aborts during active recovery', async () => {
     const MAX = 1;

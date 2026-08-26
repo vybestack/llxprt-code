@@ -49,6 +49,13 @@ import {
   setupOAuthTestSpies,
 } from './oauthProviderTestSetup.js';
 
+function createIssuerMetadataDiscovery(
+  matchingIssuer: string,
+  metadata: OAuthAuthorizationServerMetadata,
+): typeof OAuthUtils.discoverAuthorizationServerMetadata {
+  return async (issuer) => (issuer === matchingIssuer ? metadata : null);
+}
+
 describe('MCPOAuthProvider', () => {
   let saveTokenSpy: ReturnType<typeof vi.spyOn>;
   let getCredentialsSpy: ReturnType<typeof vi.spyOn>;
@@ -704,12 +711,12 @@ describe('MCPOAuthProvider', () => {
       vi.spyOn(
         OAuthUtils,
         'discoverAuthorizationServerMetadata',
-      ).mockImplementation(async (issuer) => {
-        if (issuer === 'http://localhost:8888/realms/my-realm') {
-          return registrationMetadata;
-        }
-        return null;
-      });
+      ).mockImplementation(
+        createIssuerMetadataDiscovery(
+          'http://localhost:8888/realms/my-realm',
+          registrationMetadata,
+        ),
+      );
 
       const result =
         await providerWithAccess.discoverAuthServerMetadataForRegistration(
@@ -756,10 +763,10 @@ describe('MCPOAuthProvider', () => {
         'discoverAuthorizationServerMetadata',
       ).mockImplementation(async (issuer) => {
         attempts.push(issuer);
-        if (issuer === 'https://auth.okta.local/oauth2/default') {
-          return oktaMetadata;
-        }
-        return null;
+        return createIssuerMetadataDiscovery(
+          'https://auth.okta.local/oauth2/default',
+          oktaMetadata,
+        )(issuer);
       });
 
       const result =

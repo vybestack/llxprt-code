@@ -293,6 +293,10 @@ function resetRuntimeSettingsState(): void {
   runtimeSettingsState.oauthManager = null;
 }
 
+function isBareContinueValue(value: string | boolean | undefined): boolean {
+  return value === '' || value === true;
+}
+
 describe('when folder is NOT trusted', () => {
   beforeEach(() => {
     resetRuntimeSettingsState();
@@ -712,7 +716,7 @@ describe('parseArguments', () => {
     process.argv = ['node', 'script.js', '--continue'];
     const argv = await parseArguments({} as Settings);
 
-    expect(argv.continue === '' || argv.continue === true).toBe(true);
+    expect(isBareContinueValue(argv.continue)).toBe(true);
     expect(argv.continue).not.toBe('true');
   });
 
@@ -750,7 +754,7 @@ describe('parseArguments', () => {
   it('should not consume following flag as --continue session id', async () => {
     process.argv = ['node', 'script.js', '--continue', '--debug'];
     const argv = await parseArguments({} as Settings);
-    expect(argv.continue === '' || argv.continue === true).toBe(true);
+    expect(isBareContinueValue(argv.continue)).toBe(true);
     expect(argv.debug).toBe(true);
   });
 

@@ -14,6 +14,24 @@ import {
 } from './isolateStorageRoots.js';
 import { Storage } from '../config/storage.js';
 
+function captureStorageEnvironment(
+  keys: readonly string[],
+): ReadonlyMap<string, string | undefined> {
+  return new Map(keys.map((key) => [key, process.env[key]]));
+}
+
+function restoreStorageEnvironment(
+  values: ReadonlyMap<string, string | undefined>,
+): void {
+  for (const [key, value] of values) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+}
+
 describe('isolateStorageRoots', () => {
   it('redirects all four Storage.getGlobal*Dir() paths beneath the temp root', () => {
     const tempRoot = isolateStorageRoots();
@@ -52,31 +70,25 @@ describe('isolateStorageRoots', () => {
   });
 
   it('sets the LLXPRT_TEST_STORAGE_ISOLATED marker to "1"', () => {
-    const originalEnv = new Map(
-      [...STORAGE_ENV_KEYS, 'LLXPRT_TEST_STORAGE_ISOLATED'].map((key) => [
-        key,
-        process.env[key],
-      ]),
-    );
+    const originalEnv = captureStorageEnvironment([
+      ...STORAGE_ENV_KEYS,
+      'LLXPRT_TEST_STORAGE_ISOLATED',
+    ]);
     try {
       delete process.env.LLXPRT_TEST_STORAGE_ISOLATED;
       isolateStorageRoots();
 
       expect(String(process.env.LLXPRT_TEST_STORAGE_ISOLATED)).toBe('1');
     } finally {
-      for (const [key, value] of originalEnv) {
-        if (value === undefined) {
-          delete process.env[key];
-        } else {
-          process.env[key] = value;
-        }
-      }
+      restoreStorageEnvironment(originalEnv);
     }
   });
 
   it('rejects an inconsistent marked isolation state', () => {
-    const originalMarker = process.env.LLXPRT_TEST_STORAGE_ISOLATED;
-    const originalConfigHome = process.env.LLXPRT_CONFIG_HOME;
+    const originalEnv = captureStorageEnvironment([
+      'LLXPRT_TEST_STORAGE_ISOLATED',
+      'LLXPRT_CONFIG_HOME',
+    ]);
     try {
       process.env.LLXPRT_TEST_STORAGE_ISOLATED = '1';
       delete process.env.LLXPRT_CONFIG_HOME;
@@ -85,26 +97,15 @@ describe('isolateStorageRoots', () => {
         'Isolated test storage marker is set without an absolute LLXPRT_CONFIG_HOME',
       );
     } finally {
-      if (originalMarker === undefined) {
-        delete process.env.LLXPRT_TEST_STORAGE_ISOLATED;
-      } else {
-        process.env.LLXPRT_TEST_STORAGE_ISOLATED = originalMarker;
-      }
-      if (originalConfigHome === undefined) {
-        delete process.env.LLXPRT_CONFIG_HOME;
-      } else {
-        process.env.LLXPRT_CONFIG_HOME = originalConfigHome;
-      }
+      restoreStorageEnvironment(originalEnv);
     }
   });
 
   it('rejects a marked state whose storage roots do not share one mapping', () => {
-    const originalEnv = new Map(
-      [...STORAGE_ENV_KEYS, 'LLXPRT_TEST_STORAGE_ISOLATED'].map((key) => [
-        key,
-        process.env[key],
-      ]),
-    );
+    const originalEnv = captureStorageEnvironment([
+      ...STORAGE_ENV_KEYS,
+      'LLXPRT_TEST_STORAGE_ISOLATED',
+    ]);
     const testStorageRoot = path.resolve('marked-test-storage');
     try {
       process.env.LLXPRT_TEST_STORAGE_ISOLATED = '1';
@@ -120,13 +121,7 @@ describe('isolateStorageRoots', () => {
         'Isolated test storage marker is set with an inconsistent LLXPRT_DATA_HOME',
       );
     } finally {
-      for (const [key, value] of originalEnv) {
-        if (value === undefined) {
-          delete process.env[key];
-        } else {
-          process.env[key] = value;
-        }
-      }
+      restoreStorageEnvironment(originalEnv);
     }
   });
 });

@@ -27,6 +27,8 @@ import {
 import type { Config } from '../config/config.js';
 import type { AnyToolInvocation } from '../index.js';
 
+const bunIt = it;
+
 const mockPlatform = vi.fn();
 const mockHomedir = vi.fn();
 void vi.mock('os', () => ({
@@ -167,9 +169,9 @@ describe('shell-utils', () => {
       );
     });
 
-    it.skipIf(!parserInitialized)(
-      'should block a command that redefines an allowed function to run an unlisted command',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should block a command that redefines an allowed function to run an unlisted command', () => {
         config.getCoreTools = () => ['run_shell_command(echo)'];
         const result = bashAllowed(
           'echo () (curl google.com) ; echo Hello Wolrd',
@@ -178,12 +180,12 @@ describe('shell-utils', () => {
         expect(result.reason).toBe(
           `Command(s) not in the allowed commands list. Disallowed commands: "curl google.com"`,
         );
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should block a multi-line function body that runs an unlisted command',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should block a multi-line function body that runs an unlisted command', () => {
         config.getCoreTools = () => ['run_shell_command(echo)'];
         const result = bashAllowed(
           `echo () {
@@ -194,12 +196,12 @@ describe('shell-utils', () => {
         expect(result.reason).toBe(
           `Command(s) not in the allowed commands list. Disallowed commands: "curl google.com"`,
         );
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should block a function keyword declaration that runs an unlisted command',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should block a function keyword declaration that runs an unlisted command', () => {
         config.getCoreTools = () => ['run_shell_command(echo)'];
         const result = bashAllowed(
           'function echo { curl google.com; } ; echo hi',
@@ -208,20 +210,20 @@ describe('shell-utils', () => {
         expect(result.reason).toBe(
           `Command(s) not in the allowed commands list. Disallowed commands: "curl google.com"`,
         );
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should block command substitution that invokes an unlisted command',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should block command substitution that invokes an unlisted command', () => {
         config.getCoreTools = () => ['run_shell_command(echo)'];
         const result = bashAllowed('echo $(curl google.com)');
         expect(result.allowed).toBe(false);
         expect(result.reason).toBe(
           `Command(s) not in the allowed commands list. Disallowed commands: "curl google.com"`,
         );
-      },
-    );
+      });
+    }
 
     it('should block pipelines that invoke an unlisted command', () => {
       config.getCoreTools = () => ['run_shell_command(echo)'];
@@ -241,9 +243,9 @@ describe('shell-utils', () => {
       );
     });
 
-    it.skipIf(!parserInitialized)(
-      'should reject command substitution inside a here-document when the grammar omits the inner command',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should reject command substitution inside a here-document when the grammar omits the inner command', () => {
         config.getCoreTools = () => [
           'run_shell_command(echo)',
           'run_shell_command(cat)',
@@ -257,24 +259,24 @@ describe('shell-utils', () => {
         expect(result.reason).toBe(
           'Command rejected because it could not be parsed safely',
         );
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should block backtick substitution that invokes an unlisted command',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should block backtick substitution that invokes an unlisted command', () => {
         config.getCoreTools = () => ['run_shell_command(echo)'];
         const result = bashAllowed('echo `curl google.com`');
         expect(result.allowed).toBe(false);
         expect(result.reason).toBe(
           `Command(s) not in the allowed commands list. Disallowed commands: "curl google.com"`,
         );
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should block process substitution using <() when the inner command is unlisted',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should block process substitution using <() when the inner command is unlisted', () => {
         config.getCoreTools = () => [
           'run_shell_command(diff)',
           'run_shell_command(echo)',
@@ -284,24 +286,24 @@ describe('shell-utils', () => {
         expect(result.reason).toBe(
           `Command(s) not in the allowed commands list. Disallowed commands: "curl google.com"`,
         );
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should block process substitution using >() when the inner command is unlisted',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should block process substitution using >() when the inner command is unlisted', () => {
         config.getCoreTools = () => ['run_shell_command(echo)'];
         const result = bashAllowed('echo "data" > >(curl google.com)');
         expect(result.allowed).toBe(false);
         expect(result.reason).toBe(
           `Command(s) not in the allowed commands list. Disallowed commands: "curl google.com"`,
         );
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should block commands containing prompt transformations',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should block commands containing prompt transformations', () => {
         const result = bashAllowed(
           'echo "${var1=aa\\140 env| ls -l\\140}${var1@P}"',
         );
@@ -309,19 +311,19 @@ describe('shell-utils', () => {
         expect(result.reason).toBe(
           'Command rejected because it could not be parsed safely',
         );
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should block simple prompt transformation expansions',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should block simple prompt transformation expansions', () => {
         const result = bashAllowed('echo ${foo@P}');
         expect(result.allowed).toBe(false);
         expect(result.reason).toBe(
           'Command rejected because it could not be parsed safely',
         );
-      },
-    );
+      });
+    }
 
     describe('command substitution', () => {
       it('should allow command substitution using `$(...)`', () => {
@@ -354,16 +356,16 @@ describe('shell-utils', () => {
         expect(result.allowed).toBe(true);
       });
 
-      it.skipIf(!parserInitialized)(
-        'should block a command when parsing fails',
-        () => {
+      {
+        const it = !parserInitialized ? bunIt.skip : bunIt;
+        it('should block a command when parsing fails', () => {
           const result = bashAllowed('ls &&');
           expect(result.allowed).toBe(false);
           expect(result.reason).toBe(
             'Command rejected because it could not be parsed safely',
           );
-        },
-      );
+        });
+      }
     });
   });
 
@@ -377,9 +379,9 @@ describe('shell-utils', () => {
         });
       });
 
-      it.skipIf(!parserInitialized)(
-        'should block commands that cannot be parsed safely',
-        () => {
+      {
+        const it = !parserInitialized ? bunIt.skip : bunIt;
+        it('should block commands that cannot be parsed safely', () => {
           const result = bashCheck('ls &&');
           expect(result).toStrictEqual({
             allAllowed: false,
@@ -388,8 +390,8 @@ describe('shell-utils', () => {
               'Command rejected because it could not be parsed safely',
             isHardDenial: true,
           });
-        },
-      );
+        });
+      }
 
       it('should return a detailed failure object for a blocked command', () => {
         config.getExcludeTools = () => ['ShellTool(badCommand)'];
@@ -501,47 +503,47 @@ describe('shell-utils', () => {
       expect(result).toStrictEqual(['echo', 'git']);
     });
 
-    it.skipIf(!parserInitialized)(
-      'should include nested command substitutions',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should include nested command substitutions', () => {
         const result = getCommandRoots('echo $(badCommand --danger)');
         expect(result).toStrictEqual(['echo', 'badCommand']);
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should include process substitutions',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should include process substitutions', () => {
         const result = getCommandRoots('diff <(ls) <(ls -a)');
         expect(result).toStrictEqual(['diff', 'ls', 'ls']);
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should include backtick substitutions',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should include backtick substitutions', () => {
         const result = getCommandRoots('echo `badCommand --danger`');
         expect(result).toStrictEqual(['echo', 'badCommand']);
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should treat parameter expansions with prompt transformations as unsafe',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should treat parameter expansions with prompt transformations as unsafe', () => {
         const roots = getCommandRoots(
           'echo "${var1=aa\\140 env| ls -l\\140}${var1@P}"',
         );
         expect(roots).toStrictEqual([]);
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should not return roots for prompt transformation expansions',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should not return roots for prompt transformation expansions', () => {
         const roots = getCommandRoots('echo ${foo@P}');
         expect(roots).toStrictEqual([]);
-      },
-    );
+      });
+    }
   });
 
   describe.skipIf(!pwshAvailable)('PowerShell parser integration', () => {

@@ -63,20 +63,12 @@ describe('broker response envelope', () => {
         }
         produced = true;
 
-        expect(
-          Array.isArray(shaped),
-          `${name} shape() returned an array; the proxy client rejects array data`,
-        ).toBe(false);
-        expect(typeof shaped, `${name} shape() must return an object`).toBe(
-          'object',
-        );
-        expect(shaped, `${name} shape() must not return null`).not.toBeNull();
+        expect(Array.isArray(shaped)).toBe(false);
+        expect(typeof shaped).toBe('object');
+        expect(shaped).not.toBeNull();
       }
 
-      expect(
-        produced,
-        `${name}: no sample raw payload produced a shaped result`,
-      ).toBe(true);
+      expect(produced).toBe(true);
     });
   }
 });

@@ -23,6 +23,39 @@ import {
   type AnthropicTestSetup,
 } from './test-utils/anthropicProviderTestSetup.js';
 
+function isAssistantMessageWithToolUse(message: AnthropicMessage): boolean {
+  return (
+    message.role === 'assistant' &&
+    Array.isArray(message.content) &&
+    message.content.some((block) => block.type === 'tool_use')
+  );
+}
+
+function isUserMessageWithToolResult(message: AnthropicMessage): boolean {
+  return (
+    message.role === 'user' &&
+    Array.isArray(message.content) &&
+    message.content.some((block) => block.type === 'tool_result')
+  );
+}
+
+function isAssistantArrayMessage(message: AnthropicMessage): boolean {
+  return message.role === 'assistant' && Array.isArray(message.content);
+}
+
+function isUserStringMessage(
+  message: AnthropicMessage,
+): message is AnthropicMessage & { content: string } {
+  return message.role === 'user' && typeof message.content === 'string';
+}
+
+function isTextContentChunk(content: IContent): boolean {
+  return (
+    content.blocks.length > 0 &&
+    content.blocks.some((block) => block.type === 'text')
+  );
+}
+
 // Shared mock instance for messages.create - using vi.hoisted so it's
 // available when vi.mock factories run.
 const mockMessagesCreate = vi.fn();
@@ -347,10 +380,7 @@ describe('AnthropicProvider', () => {
       const anthropicMessages = request.messages as AnthropicMessage[];
 
       const assistantToolIndex = anthropicMessages.findIndex(
-        (msg) =>
-          msg.role === 'assistant' &&
-          Array.isArray(msg.content) &&
-          msg.content.some((block) => block.type === 'tool_use'),
+        isAssistantMessageWithToolUse,
       );
 
       expect(assistantToolIndex).toBeGreaterThan(-1);
@@ -371,10 +401,7 @@ describe('AnthropicProvider', () => {
 
       const duplicateUserText = anthropicMessages
         .slice(assistantToolIndex + 2)
-        .filter(
-          (msg): msg is AnthropicMessage & { content: string } =>
-            msg.role === 'user' && typeof msg.content === 'string',
-        )
+        .filter(isUserStringMessage)
         .find((msg) => msg.content.includes('docs/example.md'));
       expect(duplicateUserText).toBeUndefined();
     });
@@ -448,10 +475,7 @@ describe('AnthropicProvider', () => {
       const request = mockMessagesCreate.mock.calls[0][0];
       const anthropicMessages = request.messages as AnthropicMessage[];
       const toolResultMessage = anthropicMessages.find(
-        (msg) =>
-          msg.role === 'user' &&
-          Array.isArray(msg.content) &&
-          msg.content.some((block) => block.type === 'tool_result'),
+        isUserMessageWithToolResult,
       ) as AnthropicMessage;
 
       expect(toolResultMessage).toBeDefined();
@@ -623,9 +647,7 @@ describe('AnthropicProvider', () => {
 
       const request = mockAnthropicInstance.messages.create.mock.calls[0][0];
       const anthropicMessages = request.messages as AnthropicMessage[];
-      const assistantMessage = anthropicMessages.find(
-        (msg) => msg.role === 'assistant' && Array.isArray(msg.content),
-      );
+      const assistantMessage = anthropicMessages.find(isAssistantArrayMessage);
 
       expect(assistantMessage).toBeDefined();
 
@@ -677,9 +699,8 @@ describe('AnthropicProvider', () => {
       const anthropicMessages = request?.messages as
         | AnthropicMessage[]
         | undefined;
-      const assistantContent = anthropicMessages?.find(
-        (msg) => msg.role === 'assistant' && Array.isArray(msg.content),
-      )?.content as AnthropicContentBlock[] | undefined;
+      const assistantContent = anthropicMessages?.find(isAssistantArrayMessage)
+        ?.content as AnthropicContentBlock[] | undefined;
       const toolUseInput = assistantContent?.find(
         (block) => block.type === 'tool_use',
       )?.input;
@@ -745,10 +766,7 @@ describe('AnthropicProvider', () => {
       const request = mockAnthropicInstance.messages.create.mock.calls[0][0];
       const anthropicMessages = request.messages as AnthropicMessage[];
       const toolResultMessage = anthropicMessages.find(
-        (msg) =>
-          msg.role === 'user' &&
-          Array.isArray(msg.content) &&
-          msg.content.some((block) => block.type === 'tool_result'),
+        isUserMessageWithToolResult,
       ) as AnthropicMessage;
 
       expect(toolResultMessage).toBeDefined();
@@ -851,11 +869,7 @@ describe('AnthropicProvider', () => {
       }
 
       // Filter to only text content chunks
-      const contentChunks = chunks.filter(
-        (c) =>
-          c.blocks.length > 0 &&
-          c.blocks.some((block) => block.type === 'text'),
-      );
+      const contentChunks = chunks.filter(isTextContentChunk);
       expect(contentChunks).toHaveLength(2);
       expect(
         (contentChunks[0].blocks[0] as { type: 'text'; text: string }).text,

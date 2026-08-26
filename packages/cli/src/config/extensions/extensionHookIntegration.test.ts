@@ -91,7 +91,9 @@ describe('extension hook integration: gemini-extension.json -> HookRegistry', ()
     expect(extension?.hooks?.[HookEventName.BeforeTool]).toBeDefined();
 
     // Build a minimal Config carrying this extension
-    const extensions: LlxprtExtension[] = extension ? [extension] : [];
+    const extensions = [extension].filter(
+      (candidate): candidate is LlxprtExtension => candidate !== null,
+    );
     const config = {
       getEnableHooks: () => true,
       getHooks: () => undefined,
@@ -155,7 +157,9 @@ describe('extension hook integration: gemini-extension.json -> HookRegistry', ()
     expect(extension).not.toBeNull();
     expect(extension?.hooks?.[HookEventName.AfterModel]).toBeDefined();
 
-    const extensions: LlxprtExtension[] = extension ? [extension] : [];
+    const extensions = [extension].filter(
+      (candidate): candidate is LlxprtExtension => candidate !== null,
+    );
     const config = {
       getEnableHooks: () => true,
       getHooks: () => undefined,

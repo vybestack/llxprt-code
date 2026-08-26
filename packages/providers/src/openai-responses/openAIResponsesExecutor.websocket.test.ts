@@ -150,6 +150,16 @@ function makeRecordingTransport(behavior: 'success' | 'connect-failure'): {
   };
 }
 
+function transportUnlessSticky(
+  isSticky: () => boolean,
+  transport: ReturnType<typeof makeRecordingTransport>,
+): () => WebSocketTransport | undefined {
+  return () => {
+    if (isSticky()) return undefined;
+    return transport.getWebSocketTransport();
+  };
+}
+
 describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:2041', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -248,10 +258,10 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
     let stickyFallback = false;
 
     const deps = buildDeps({
-      getWebSocketTransport: () => {
-        if (stickyFallback) return undefined;
-        return transport.getWebSocketTransport();
-      },
+      getWebSocketTransport: transportUnlessSticky(
+        () => stickyFallback,
+        transport,
+      ),
       onWebSocketFallback: () => {
         stickyFallback = true;
       },
@@ -386,7 +396,7 @@ describe('executeOpenAIResponsesRequest WebSocket reconnect keeps the conversati
     const userTexts = userTextsOf(sent['input']);
     // Exact equality, not toContain: an empty array would satisfy both a
     // toContain-absent and a not.toContain assertion, hiding a total failure.
-    expect(userTexts).toEqual(['second question']);
+    expect(userTexts).toStrictEqual(['second question']);
 
     transport.close();
   });

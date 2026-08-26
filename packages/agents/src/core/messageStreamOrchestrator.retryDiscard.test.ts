@@ -288,6 +288,15 @@ describe('MessageStreamOrchestrator — per-attempt discard on Retry (issue #304
   });
 
   it('drops deferred citations from the abandoned attempt', async () => {
+    const discardResult =
+      await observeDropsDeferredCitationsFromTheAbandonedAttempt();
+    expect(discardResult).toStrictEqual({
+      citationCount: 0,
+      keptContentPresent: true,
+    });
+  });
+
+  const observeDropsDeferredCitationsFromTheAbandonedAttempt = async () => {
     const { orchestrator } = buildHarness({
       stream: [
         content('abandoned '),
@@ -300,14 +309,15 @@ describe('MessageStreamOrchestrator — per-attempt discard on Retry (issue #304
 
     const events = await drain(orchestrator);
     const citations = events.filter((e) => e.type === AgentEventType.Citation);
+    const keptContentPresent = events.some(
+      (e) => e.type === AgentEventType.Content && e.value === 'kept',
+    );
 
-    expect(citations).toHaveLength(0);
-    expect(
-      events.some(
-        (e) => e.type === AgentEventType.Content && e.value === 'kept',
-      ),
-    ).toBe(true);
-  });
+    return {
+      citationCount: citations.length,
+      keptContentPresent,
+    };
+  };
 
   it('reports hadContent false when the only content belonged to the abandoned attempt', async () => {
     // An InvalidStream after the retry can only trigger recovery when
@@ -341,24 +351,33 @@ describe('MessageStreamOrchestrator — per-attempt discard on Retry (issue #304
   });
 
   it('still yields the Retry event to consumers before replacement content', async () => {
-    const { orchestrator } = buildHarness({
-      stream: [
-        content('abandoned'),
-        retryEvent(),
-        content('kept'),
-        finishedEvent(VISIBLE()),
-      ],
-    });
-
-    const events = await drain(orchestrator);
-    const retryIndex = events.findIndex((e) => e.type === AgentEventType.Retry);
-    const keptIndex = events.findIndex(
-      (e) => e.type === AgentEventType.Content && e.value === 'kept',
-    );
-
+    const { retryIndex, keptIndex } =
+      await observeStillYieldsTheRetryEventToConsumersBeforeReplacementContent();
     expect(retryIndex).toBeGreaterThanOrEqual(0);
     expect(retryIndex).toBeLessThan(keptIndex);
   });
+
+  const observeStillYieldsTheRetryEventToConsumersBeforeReplacementContent =
+    async () => {
+      const { orchestrator } = buildHarness({
+        stream: [
+          content('abandoned'),
+          retryEvent(),
+          content('kept'),
+          finishedEvent(VISIBLE()),
+        ],
+      });
+
+      const events = await drain(orchestrator);
+      const retryIndex = events.findIndex(
+        (e) => e.type === AgentEventType.Retry,
+      );
+      const keptIndex = events.findIndex(
+        (e) => e.type === AgentEventType.Content && e.value === 'kept',
+      );
+
+      return { retryIndex, keptIndex };
+    };
 
   it('does not reset finishedOutcome when discarding an abandoned attempt', async () => {
     // Fence: a Finished outcome set before the retry must survive the

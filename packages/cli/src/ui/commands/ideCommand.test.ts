@@ -23,6 +23,12 @@ void vi.mock('@vybestack/llxprt-code-core', () => ({
   getIdeInstaller: vi.fn(),
 }));
 
+function commandSubcommands(
+  command: ReturnType<typeof ideCommand>,
+): NonNullable<ReturnType<typeof ideCommand>>['subCommands'] {
+  return command?.subCommands ?? [];
+}
+
 describe('ideCommand', () => {
   let mockContext: CommandContext;
   let mockConfig: Config;
@@ -95,8 +101,8 @@ describe('ideCommand', () => {
       }),
     } as ReturnType<Config['getIdeClient']>);
     const command = ideCommand(mockConfig);
-    for (const sub of command?.subCommands ?? []) {
-      expect(sub.autoExecute).toBe(true);
+    for (const subcommand of commandSubcommands(command)) {
+      expect(subcommand.autoExecute).toBe(true);
     }
   });
 
@@ -114,8 +120,8 @@ describe('ideCommand', () => {
       }),
     } as ReturnType<Config['getIdeClient']>);
     const command = ideCommand(mockConfig);
-    for (const sub of command?.subCommands ?? []) {
-      expect(sub.autoExecute).toBe(true);
+    for (const subcommand of commandSubcommands(command)) {
+      expect(subcommand.autoExecute).toBe(true);
     }
   });
 

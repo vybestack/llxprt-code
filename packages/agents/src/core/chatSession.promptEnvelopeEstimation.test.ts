@@ -462,6 +462,31 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
   });
 
   it('A7: re-estimates each attempt so a materially changed retry gets a fresh estimate', async () => {
+    const {
+      observation,
+      estimateHistory,
+      transportedBodies,
+      chat,
+      sendPromise,
+    } = prepareRetryEstimationScenario();
+    expect(await waitForCondition(() => observation.attempt >= 1)).toBe(true);
+
+    // Advance past the default 5s retry backoff delay so no real wall-clock
+    // time is consumed by the test.
+    await advanceTimersByTimeAsync(10_000);
+    await sendPromise;
+
+    expect(observation.attempt).toBeGreaterThanOrEqual(2);
+    expect(estimateHistory.length).toBe(observation.attempt);
+    expect(estimateHistory[1]).toBeGreaterThan(estimateHistory[0]);
+    expect(transportedBodies).toHaveLength(observation.attempt);
+    expect(transportedBodies[1]).not.toBe(transportedBodies[0]);
+    expect(chat.getPromptEnvelopeEstimate()?.estimatedPromptTokens).toBe(
+      estimateHistory.at(-1),
+    );
+  });
+
+  const prepareRetryEstimationScenario = () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'Date'] });
     // Restore real timers even if an assertion below throws, so fake timers
     // cannot leak into subsequent tests.
@@ -472,7 +497,7 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
     const transportedBodies: string[] = [];
     const preparedBodies = new WeakMap<object, string>();
     let preparationAttempt = 0;
-    let attempt = 0;
+    const observation = { attempt: 0 };
 
     const retryingProvider: IProvider = {
       name: 'retrying-estimating-provider',
@@ -492,8 +517,8 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
           throw new Error('retry transport did not consume a prepared body');
         }
         transportedBodies.push(body);
-        attempt += 1;
-        if (attempt === 1) {
+        observation.attempt += 1;
+        if (observation.attempt === 1) {
           const transient: Error & { status?: number } = new Error(
             'upstream temporarily unavailable',
           );
@@ -544,21 +569,14 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
       'retry-1',
     );
 
-    // Advance past the default 5s retry backoff delay so no real wall-clock
-    // time is consumed by the test.
-    expect(await waitForCondition(() => attempt >= 1)).toBe(true);
-    await advanceTimersByTimeAsync(10_000);
-    await sendPromise;
-
-    expect(attempt).toBeGreaterThanOrEqual(2);
-    expect(estimateHistory.length).toBe(attempt);
-    expect(estimateHistory[1]).toBeGreaterThan(estimateHistory[0]);
-    expect(transportedBodies).toHaveLength(attempt);
-    expect(transportedBodies[1]).not.toBe(transportedBodies[0]);
-    expect(chat.getPromptEnvelopeEstimate()?.estimatedPromptTokens).toBe(
-      estimateHistory.at(-1),
-    );
-  });
+    return {
+      observation,
+      estimateHistory,
+      transportedBodies,
+      chat,
+      sendPromise,
+    };
+  };
 
   it('fails fast before transport when finalized projection preparation fails', async () => {
     const failingProjectionProvider: IProvider = {
@@ -620,6 +638,27 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
   });
 
   it('clears the failed-request estimate when the provider call throws, preserving the prior authoritative token count (issue #2817)', async () => {
+    const { chat, fixture, reportedPromptTokens } =
+      prepareFailedRequestEstimateScenario();
+    await expect(
+      chat.sendMessage({ message: [{ text: 'Boom' }] }, 'prompt-fails'),
+    ).rejects.toThrow('upstream provider exploded after estimation');
+    expect(chat.getPromptEnvelopeEstimate()).toBeNull();
+
+    await chat.sendMessage(
+      { message: [{ text: 'Now succeed' }] },
+      'prompt-succeeds',
+    );
+
+    const estimate = chat.getPromptEnvelopeEstimate();
+    expect(estimate).not.toBeNull();
+    expect(estimate!.estimatedPromptTokens).toBeGreaterThan(0);
+
+    await fixture.historyService.waitForTokenUpdates();
+    expect(fixture.historyService.getTotalTokens()).toBe(reportedPromptTokens);
+  });
+
+  const prepareFailedRequestEstimateScenario = () => {
     const reportedPromptTokens = 1234;
     let attempt = 0;
     const failingThenRecoveringProvider: IProvider = {
@@ -674,22 +713,6 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
     const fixture = createTestFixture(failingThenRecoveringProvider);
     const chat = buildChatSession(fixture);
 
-    await expect(
-      chat.sendMessage({ message: [{ text: 'Boom' }] }, 'prompt-fails'),
-    ).rejects.toThrow('upstream provider exploded after estimation');
-
-    expect(chat.getPromptEnvelopeEstimate()).toBeNull();
-
-    await chat.sendMessage(
-      { message: [{ text: 'Now succeed' }] },
-      'prompt-succeeds',
-    );
-
-    const estimate = chat.getPromptEnvelopeEstimate();
-    expect(estimate).not.toBeNull();
-    expect(estimate!.estimatedPromptTokens).toBeGreaterThan(0);
-
-    await fixture.historyService.waitForTokenUpdates();
-    expect(fixture.historyService.getTotalTokens()).toBe(reportedPromptTokens);
-  });
+    return { chat, fixture, reportedPromptTokens };
+  };
 });

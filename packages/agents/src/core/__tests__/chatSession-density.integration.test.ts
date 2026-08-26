@@ -48,53 +48,61 @@ describe('Density Optimization Integration (P19)', () => {
      * below threshold, compression does NOT trigger.
      */
     it('runs density before threshold check — avoids compression when density suffices', async () => {
-      const runtimeContext = buildRuntimeContext(historyService, {
-        compressionStrategy: 'high-density',
-        compressionThreshold: 0.8,
-        contextLimit: 131134,
-      });
-
-      // Add prunable content
-      historyService.add(makeUserMessage('Update the file'));
-      addPrunableReadWritePair(
-        historyService,
-        '/workspace/app.ts',
-        'x'.repeat(1000),
-        'y'.repeat(100),
-      );
-      historyService.add(makeAiText('File updated'));
-
-      const chat = new ChatSession(
-        runtimeContext,
-        mockContentGenerator,
-        {},
-        [],
-      );
-      const internals = getInternals(chat);
-      internals.densityDirty = true;
-      const compressionSpy = vi.spyOn(
-        internals.compressionHandler,
-        'performCompression',
-      );
-
-      // Ensure tokens are settled
-      await historyService.waitForTokenUpdates();
-
-      // With these token counts, shouldCompress is false (well below threshold)
-      // Density optimization still runs (because dirty) but compression shouldn't trigger
-      await internals.ensureCompressionBeforeSend('test-prompt', 0, 'send');
-
-      // History may have been modified by density (prunable pair), but
-      // full compression (which produces summaries) should NOT have triggered
-      const historyAfter = historyService.getRawHistory();
-      const hasSummary = historyAfter.some((msg) =>
-        msg.blocks.some(
-          (b) => b.type === 'text' && b.text.includes('state_snapshot'),
-        ),
-      );
+      const { compressionSpy, hasSummary } =
+        await observeRunsDensityBeforeThresholdCheckAvoidsCompressionWhenDensitySuffices();
       expect(compressionSpy).not.toHaveBeenCalled();
       expect(hasSummary).toBe(false);
     });
+
+    const observeRunsDensityBeforeThresholdCheckAvoidsCompressionWhenDensitySuffices =
+      async () => {
+        const runtimeContext = buildRuntimeContext(historyService, {
+          compressionStrategy: 'high-density',
+          compressionThreshold: 0.8,
+          contextLimit: 131134,
+        });
+
+        // Add prunable content
+        historyService.add(makeUserMessage('Update the file'));
+        addPrunableReadWritePair(
+          historyService,
+          '/workspace/app.ts',
+          'x'.repeat(1000),
+          'y'.repeat(100),
+        );
+        historyService.add(makeAiText('File updated'));
+
+        const chat = new ChatSession(
+          runtimeContext,
+          mockContentGenerator,
+          {},
+          [],
+        );
+        const internals = getInternals(chat);
+        internals.densityDirty = true;
+        const compressionSpy = vi.spyOn(
+          internals.compressionHandler,
+          'performCompression',
+        );
+
+        // Ensure tokens are settled
+        await historyService.waitForTokenUpdates();
+
+        // With these token counts, shouldCompress is false (well below threshold)
+        // Density optimization still runs (because dirty) but compression shouldn't trigger
+        await internals.ensureCompressionBeforeSend('test-prompt', 0, 'send');
+
+        // History may have been modified by density (prunable pair), but
+        // full compression (which produces summaries) should NOT have triggered
+        const historyAfter = historyService.getRawHistory();
+        const hasSummary = historyAfter.some((msg) =>
+          msg.blocks.some(
+            (b) => b.type === 'text' && b.text.includes('state_snapshot'),
+          ),
+        );
+
+        return { compressionSpy, hasSummary };
+      };
 
     /**
      * @requirement REQ-HD-002.1
@@ -216,6 +224,14 @@ describe('Density Optimization Integration (P19)', () => {
      * If density frees enough space, compression is skipped.
      */
     it('skips compression if density freed enough space', async () => {
+      const { densityOptRan, internals, compressionSpy } =
+        await observeSkipsCompressionIfDensityFreedEnoughSpace();
+      expect(densityOptRan).toBe(true);
+      expect(internals.densityDirty).toBe(false);
+      expect(compressionSpy).not.toHaveBeenCalled();
+    });
+
+    const observeSkipsCompressionIfDensityFreedEnoughSpace = async () => {
       const runtimeContext = buildRuntimeContext(historyService, {
         compressionStrategy: 'high-density',
         contextLimit: 200_000,
@@ -266,10 +282,9 @@ describe('Density Optimization Integration (P19)', () => {
       await internals.enforceContextWindow(100, 'test-prompt');
 
       // Density optimization ran, applied changes, and the flag was cleared
-      expect(densityOptRan).toBe(true);
-      expect(internals.densityDirty).toBe(false);
-      expect(compressionSpy).not.toHaveBeenCalled();
-    });
+
+      return { densityOptRan, internals, compressionSpy };
+    };
   });
 
   // =========================================================================
@@ -329,37 +344,45 @@ describe('Density Optimization Integration (P19)', () => {
      * This is a structural verification via code analysis.
      */
     it('ensureDensityOptimized is only called from ensureCompressionBeforeSend and enforceContextWindow', async () => {
-      // Read the CompressionHandler source file and verify call sites
-      // (compression methods were extracted to CompressionHandler in Phase 03)
-      const fs = await import('fs');
-      const source = fs.readFileSync(
-        new URL(
-          '../../compression/CompressionHandler.ts',
-          import.meta.url,
-        ).pathname.replace(/^\/([A-Z]:)/, '$1'),
-        'utf-8',
-      );
-
-      const callSites = source
-        .split('\n')
-        .filter(
-          (line) =>
-            line.includes('ensureDensityOptimized') &&
-            !line.includes('async ensureDensityOptimized') &&
-            !line.includes('@pseudocode') &&
-            !line.includes('* '),
-        );
-
-      const directAwaitCalls = callSites.filter((line) =>
-        line.includes('await this.ensureDensityOptimized()'),
-      );
-      const injectedSequentialCalls = callSites.filter((line) =>
-        line.includes(
-          'ensureDensityOptimized: () => this.ensureDensityOptimized()',
-        ),
-      );
+      const { directAwaitCalls, injectedSequentialCalls } =
+        await observeEnsureDensityOptimizedIsOnlyCalledFromEnsureCompressionBeforeSendAndEnforceContextWindow();
       expect(directAwaitCalls.length).toBe(1);
       expect(injectedSequentialCalls.length).toBe(2);
     });
+
+    const observeEnsureDensityOptimizedIsOnlyCalledFromEnsureCompressionBeforeSendAndEnforceContextWindow =
+      async () => {
+        // Read the CompressionHandler source file and verify call sites
+        // (compression methods were extracted to CompressionHandler in Phase 03)
+        const fs = await import('fs');
+        const source = fs.readFileSync(
+          new URL(
+            '../../compression/CompressionHandler.ts',
+            import.meta.url,
+          ).pathname.replace(/^\/([A-Z]:)/, '$1'),
+          'utf-8',
+        );
+
+        const callSites = source
+          .split('\n')
+          .filter(
+            (line) =>
+              line.includes('ensureDensityOptimized') &&
+              !line.includes('async ensureDensityOptimized') &&
+              !line.includes('@pseudocode') &&
+              !line.includes('* '),
+          );
+
+        const directAwaitCalls = callSites.filter((line) =>
+          line.includes('await this.ensureDensityOptimized()'),
+        );
+        const injectedSequentialCalls = callSites.filter((line) =>
+          line.includes(
+            'ensureDensityOptimized: () => this.ensureDensityOptimized()',
+          ),
+        );
+
+        return { directAwaitCalls, injectedSequentialCalls };
+      };
   });
 });

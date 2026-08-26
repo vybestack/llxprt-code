@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
-import type { ToolCallBlock, ToolResponseBlock } from './IContent.js';
+import type { IContent, ToolCallBlock, ToolResponseBlock } from './IContent.js';
 
 describe('Circular Reference Bug', () => {
   let historyService: HistoryService;
@@ -14,6 +14,20 @@ describe('Circular Reference Bug', () => {
   beforeEach(() => {
     historyService = new HistoryService();
   });
+
+  function syntheticResponseCount(curated: IContent[]): number {
+    return curated.filter(
+      (c) => c.speaker === 'tool' && c.metadata?.synthetic === true,
+    ).length;
+  }
+
+  function hasToolResponseFor(curated: IContent[], id: string): boolean {
+    return curated.some(
+      (c) =>
+        c.speaker === 'tool' &&
+        c.blocks.some((b) => (b as ToolResponseBlock).callId === id),
+    );
+  }
 
   it('should not create circular references when getCurated is called during tool execution', () => {
     // This simulates the actual flow where getCurated is called while a tool is executing
@@ -238,10 +252,7 @@ describe('Circular Reference Bug', () => {
     const curated = historyService.getCurated();
 
     // Should NOT have synthetic response since real one exists
-    const syntheticResponses = curated.filter(
-      (c) => c.speaker === 'tool' && c.metadata?.synthetic === true,
-    );
-    expect(syntheticResponses).toHaveLength(0);
+    expect(syntheticResponseCount(curated)).toBe(0);
 
     // Should be serializable
     expect(() => JSON.stringify(curated)).not.toThrow();
@@ -290,21 +301,11 @@ describe('Circular Reference Bug', () => {
     const curated = historyService.getCurated();
 
     // getCurated should NOT have synthetic response
-    const hasOrphanInCurated = curated.some(
-      (c) =>
-        c.speaker === 'tool' &&
-        c.blocks.some((b) => (b as ToolResponseBlock).callId === toolCallId),
-    );
-    expect(hasOrphanInCurated).toBe(false);
+    expect(hasToolResponseFor(curated, toolCallId)).toBe(false);
 
     // getCuratedForProvider DOES add synthetic responses for orphaned tool calls (strict mode always enabled)
     const curatedForProvider = historyService.getCuratedForProvider();
-    const hasOrphanInProvider = curatedForProvider.some(
-      (c) =>
-        c.speaker === 'tool' &&
-        c.blocks.some((b) => (b as ToolResponseBlock).callId === toolCallId),
-    );
-    expect(hasOrphanInProvider).toBe(true); // Synthetic response synthesized for orphaned call
+    expect(hasToolResponseFor(curatedForProvider, toolCallId)).toBe(true); // Synthetic response synthesized for orphaned call
 
     // Should be able to stringify the curated-for-provider version
     // Even though original params have circular refs - this is the main test goal

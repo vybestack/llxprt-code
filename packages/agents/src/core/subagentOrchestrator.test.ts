@@ -361,258 +361,298 @@ describe('SubagentOrchestrator - Config Resolution', () => {
   });
 
   it('defaults max_turns to the foreground config current maxTurnsPerPrompt when neither profile nor request specify limits', async () => {
-    const subagentConfig: SubagentConfig = {
-      name: 'parent-default-helper',
-      profile: 'default-profile',
-      systemPrompt: 'Assist without additional limits.',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
-    const subagentManager = {
-      loadSubagent,
-    } as unknown as SubagentManager;
-
-    const loadProfile = vi.fn().mockResolvedValue(baseProfile);
-    const profileManager = {
-      loadProfile,
-    } as unknown as ProfileManager;
-
-    const configWithParentTurns = {
-      ...foregroundConfig,
-      getEphemeralSetting: (key: string) => {
-        if (key === 'maxTurnsPerPrompt') {
-          return 75;
-        }
-        return undefined;
-      },
-    } as unknown as Config;
-
-    const { factory } = createScopeFactory();
-    const runtimeBundle = createRuntimeBundle('parent-turns');
-    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
-
-    const orchestrator = new SubagentOrchestrator({
-      subagentManager,
-      profileManager,
-      foregroundConfig: configWithParentTurns,
-      scopeFactory: factory,
-      runtimeLoader,
-    });
-
-    await orchestrator.launch({ name: subagentConfig.name });
-
-    const [, , , , runConfigArg] = factory.mock.calls[0];
+    const { runConfigArg } =
+      await observeDefaultsMaxTurnsToTheForegroundConfigCurrentMaxTurnsPerPromptWhenNeitherProfile();
     expect(runConfigArg.max_time_minutes).toBe(Number.POSITIVE_INFINITY);
     expect(runConfigArg.max_turns).toBe(75);
   });
 
-  it('reads the foreground config maxTurnsPerPrompt dynamically at launch time through a single orchestrator instance', async () => {
-    const subagentConfig: SubagentConfig = {
-      name: 'dynamic-parent-helper',
-      profile: 'default-profile',
-      systemPrompt: 'Assist.',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+  const observeDefaultsMaxTurnsToTheForegroundConfigCurrentMaxTurnsPerPromptWhenNeitherProfile =
+    async () => {
+      const subagentConfig: SubagentConfig = {
+        name: 'parent-default-helper',
+        profile: 'default-profile',
+        systemPrompt: 'Assist without additional limits.',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
+      const subagentManager = {
+        loadSubagent,
+      } as unknown as SubagentManager;
+
+      const loadProfile = vi.fn().mockResolvedValue(baseProfile);
+      const profileManager = {
+        loadProfile,
+      } as unknown as ProfileManager;
+
+      const configWithParentTurns = {
+        ...foregroundConfig,
+        getEphemeralSetting: (key: string) => {
+          if (key === 'maxTurnsPerPrompt') {
+            return 75;
+          }
+          return undefined;
+        },
+      } as unknown as Config;
+
+      const { factory } = createScopeFactory();
+      const runtimeBundle = createRuntimeBundle('parent-turns');
+      const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
+
+      const orchestrator = new SubagentOrchestrator({
+        subagentManager,
+        profileManager,
+        foregroundConfig: configWithParentTurns,
+        scopeFactory: factory,
+        runtimeLoader,
+      });
+
+      await orchestrator.launch({ name: subagentConfig.name });
+
+      const [, , , , runConfigArg] = factory.mock.calls[0];
+
+      return { runConfigArg };
     };
 
-    let parentMaxTurns = 50;
-    const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
-    const subagentManager = {
-      loadSubagent,
-    } as unknown as SubagentManager;
-
-    const loadProfile = vi.fn().mockResolvedValue(baseProfile);
-    const profileManager = {
-      loadProfile,
-    } as unknown as ProfileManager;
-
-    const configWithDynamicTurns = {
-      ...foregroundConfig,
-      getEphemeralSetting: (key: string) => {
-        if (key === 'maxTurnsPerPrompt') {
-          return parentMaxTurns;
-        }
-        return undefined;
-      },
-    } as unknown as Config;
-
-    const { factory } = createScopeFactory();
-    const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
-
-    const orchestrator = new SubagentOrchestrator({
-      subagentManager,
-      profileManager,
-      foregroundConfig: configWithDynamicTurns,
-      scopeFactory: factory,
-      runtimeLoader,
-    });
-
-    await orchestrator.launch({ name: subagentConfig.name });
-
-    parentMaxTurns = 250;
-
-    await orchestrator.launch({ name: subagentConfig.name });
-
-    const [, , , , firstRunConfig] = factory.mock.calls[0];
+  it('reads the foreground config maxTurnsPerPrompt dynamically at launch time through a single orchestrator instance', async () => {
+    const { firstRunConfig, secondRunConfig } =
+      await observeReadsTheForegroundConfigMaxTurnsPerPromptDynamicallyAtLaunchTimeThroughASingle();
     expect(firstRunConfig.max_turns).toBe(50);
-
-    const [, , , , secondRunConfig] = factory.mock.calls[1];
     expect(secondRunConfig.max_turns).toBe(250);
   });
 
-  it('respects explicit request max_turns over foreground config maxTurnsPerPrompt', async () => {
-    const subagentConfig: SubagentConfig = {
-      name: 'explicit-over-parent-helper',
-      profile: 'default-profile',
-      systemPrompt: 'Assist.',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+  const observeReadsTheForegroundConfigMaxTurnsPerPromptDynamicallyAtLaunchTimeThroughASingle =
+    async () => {
+      const subagentConfig: SubagentConfig = {
+        name: 'dynamic-parent-helper',
+        profile: 'default-profile',
+        systemPrompt: 'Assist.',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      let parentMaxTurns = 50;
+      const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
+      const subagentManager = {
+        loadSubagent,
+      } as unknown as SubagentManager;
+
+      const loadProfile = vi.fn().mockResolvedValue(baseProfile);
+      const profileManager = {
+        loadProfile,
+      } as unknown as ProfileManager;
+
+      const configWithDynamicTurns = {
+        ...foregroundConfig,
+        getEphemeralSetting: (key: string) => {
+          if (key === 'maxTurnsPerPrompt') {
+            return parentMaxTurns;
+          }
+          return undefined;
+        },
+      } as unknown as Config;
+
+      const { factory } = createScopeFactory();
+      const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
+
+      const orchestrator = new SubagentOrchestrator({
+        subagentManager,
+        profileManager,
+        foregroundConfig: configWithDynamicTurns,
+        scopeFactory: factory,
+        runtimeLoader,
+      });
+
+      await orchestrator.launch({ name: subagentConfig.name });
+
+      parentMaxTurns = 250;
+
+      await orchestrator.launch({ name: subagentConfig.name });
+
+      const [, , , , firstRunConfig] = factory.mock.calls[0];
+
+      const [, , , , secondRunConfig] = factory.mock.calls[1];
+
+      return { firstRunConfig, secondRunConfig };
     };
 
-    const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
-    const subagentManager = {
-      loadSubagent,
-    } as unknown as SubagentManager;
-
-    const loadProfile = vi.fn().mockResolvedValue(baseProfile);
-    const profileManager = {
-      loadProfile,
-    } as unknown as ProfileManager;
-
-    const configWithParentTurns = {
-      ...foregroundConfig,
-      getEphemeralSetting: (key: string) => {
-        if (key === 'maxTurnsPerPrompt') {
-          return 75;
-        }
-        return undefined;
-      },
-    } as unknown as Config;
-
-    const { factory } = createScopeFactory();
-    const runtimeBundle = createRuntimeBundle('explicit-over-parent');
-    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
-
-    const orchestrator = new SubagentOrchestrator({
-      subagentManager,
-      profileManager,
-      foregroundConfig: configWithParentTurns,
-      scopeFactory: factory,
-      runtimeLoader,
-    });
-
-    await orchestrator.launch({
-      name: subagentConfig.name,
-      runConfig: { max_turns: 10 },
-    });
-
-    const [, , , , runConfigArg] = factory.mock.calls[0];
+  it('respects explicit request max_turns over foreground config maxTurnsPerPrompt', async () => {
+    const { runConfigArg } =
+      await observeRespectsExplicitRequestMaxTurnsOverForegroundConfigMaxTurnsPerPrompt();
     expect(runConfigArg.max_turns).toBe(10);
   });
 
+  const observeRespectsExplicitRequestMaxTurnsOverForegroundConfigMaxTurnsPerPrompt =
+    async () => {
+      const subagentConfig: SubagentConfig = {
+        name: 'explicit-over-parent-helper',
+        profile: 'default-profile',
+        systemPrompt: 'Assist.',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
+      const subagentManager = {
+        loadSubagent,
+      } as unknown as SubagentManager;
+
+      const loadProfile = vi.fn().mockResolvedValue(baseProfile);
+      const profileManager = {
+        loadProfile,
+      } as unknown as ProfileManager;
+
+      const configWithParentTurns = {
+        ...foregroundConfig,
+        getEphemeralSetting: (key: string) => {
+          if (key === 'maxTurnsPerPrompt') {
+            return 75;
+          }
+          return undefined;
+        },
+      } as unknown as Config;
+
+      const { factory } = createScopeFactory();
+      const runtimeBundle = createRuntimeBundle('explicit-over-parent');
+      const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
+
+      const orchestrator = new SubagentOrchestrator({
+        subagentManager,
+        profileManager,
+        foregroundConfig: configWithParentTurns,
+        scopeFactory: factory,
+        runtimeLoader,
+      });
+
+      await orchestrator.launch({
+        name: subagentConfig.name,
+        runConfig: { max_turns: 10 },
+      });
+
+      const [, , , , runConfigArg] = factory.mock.calls[0];
+
+      return { runConfigArg };
+    };
+
   it('respects profile maxTurnsPerPrompt over foreground config maxTurnsPerPrompt', async () => {
-    const subagentConfig: SubagentConfig = {
-      name: 'profile-over-parent-helper',
-      profile: 'profile-with-turns',
-      systemPrompt: 'Assist.',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    const profileWithTurns: Profile = {
-      ...baseProfile,
-      ephemeralSettings: {
-        ...baseProfile.ephemeralSettings,
-        maxTurnsPerPrompt: 500,
-      },
-    };
-
-    const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
-    const subagentManager = {
-      loadSubagent,
-    } as unknown as SubagentManager;
-
-    const loadProfile = vi.fn().mockResolvedValue(profileWithTurns);
-    const profileManager = {
-      loadProfile,
-    } as unknown as ProfileManager;
-
-    const configWithParentTurns = {
-      ...foregroundConfig,
-      getEphemeralSetting: (key: string) => {
-        if (key === 'maxTurnsPerPrompt') {
-          return 75;
-        }
-        return undefined;
-      },
-    } as unknown as Config;
-
-    const { factory } = createScopeFactory();
-    const runtimeBundle = createRuntimeBundle('profile-over-parent');
-    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
-
-    const orchestrator = new SubagentOrchestrator({
-      subagentManager,
-      profileManager,
-      foregroundConfig: configWithParentTurns,
-      scopeFactory: factory,
-      runtimeLoader,
-    });
-
-    await orchestrator.launch({ name: subagentConfig.name });
-
-    const [, , , , runConfigArg] = factory.mock.calls[0];
+    const { runConfigArg } =
+      await observeRespectsProfileMaxTurnsPerPromptOverForegroundConfigMaxTurnsPerPrompt();
     expect(runConfigArg.max_turns).toBe(500);
   });
 
-  it('omits max_turns when foreground config maxTurnsPerPrompt is unlimited (-1)', async () => {
-    const subagentConfig: SubagentConfig = {
-      name: 'unlimited-parent-helper',
-      profile: 'default-profile',
-      systemPrompt: 'Assist.',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+  const observeRespectsProfileMaxTurnsPerPromptOverForegroundConfigMaxTurnsPerPrompt =
+    async () => {
+      const subagentConfig: SubagentConfig = {
+        name: 'profile-over-parent-helper',
+        profile: 'profile-with-turns',
+        systemPrompt: 'Assist.',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const profileWithTurns: Profile = {
+        ...baseProfile,
+        ephemeralSettings: {
+          ...baseProfile.ephemeralSettings,
+          maxTurnsPerPrompt: 500,
+        },
+      };
+
+      const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
+      const subagentManager = {
+        loadSubagent,
+      } as unknown as SubagentManager;
+
+      const loadProfile = vi.fn().mockResolvedValue(profileWithTurns);
+      const profileManager = {
+        loadProfile,
+      } as unknown as ProfileManager;
+
+      const configWithParentTurns = {
+        ...foregroundConfig,
+        getEphemeralSetting: (key: string) => {
+          if (key === 'maxTurnsPerPrompt') {
+            return 75;
+          }
+          return undefined;
+        },
+      } as unknown as Config;
+
+      const { factory } = createScopeFactory();
+      const runtimeBundle = createRuntimeBundle('profile-over-parent');
+      const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
+
+      const orchestrator = new SubagentOrchestrator({
+        subagentManager,
+        profileManager,
+        foregroundConfig: configWithParentTurns,
+        scopeFactory: factory,
+        runtimeLoader,
+      });
+
+      await orchestrator.launch({ name: subagentConfig.name });
+
+      const [, , , , runConfigArg] = factory.mock.calls[0];
+
+      return { runConfigArg };
     };
 
-    const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
-    const subagentManager = {
-      loadSubagent,
-    } as unknown as SubagentManager;
-
-    const loadProfile = vi.fn().mockResolvedValue(baseProfile);
-    const profileManager = {
-      loadProfile,
-    } as unknown as ProfileManager;
-
-    const configWithUnlimitedParentTurns = {
-      ...foregroundConfig,
-      getEphemeralSetting: (key: string) => {
-        if (key === 'maxTurnsPerPrompt') {
-          return -1;
-        }
-        return undefined;
-      },
-    } as unknown as Config;
-
-    const { factory } = createScopeFactory();
-    const runtimeBundle = createRuntimeBundle('unlimited-parent-turns');
-    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
-
-    const orchestrator = new SubagentOrchestrator({
-      subagentManager,
-      profileManager,
-      foregroundConfig: configWithUnlimitedParentTurns,
-      scopeFactory: factory,
-      runtimeLoader,
-    });
-
-    await orchestrator.launch({ name: subagentConfig.name });
-
-    const [, , , , runConfigArg] = factory.mock.calls[0];
+  it('omits max_turns when foreground config maxTurnsPerPrompt is unlimited (-1)', async () => {
+    const { runConfigArg } =
+      await observeOmitsMaxTurnsWhenForegroundConfigMaxTurnsPerPromptIsUnlimited1();
     expect(runConfigArg.max_turns).toBeUndefined();
   });
+
+  const observeOmitsMaxTurnsWhenForegroundConfigMaxTurnsPerPromptIsUnlimited1 =
+    async () => {
+      const subagentConfig: SubagentConfig = {
+        name: 'unlimited-parent-helper',
+        profile: 'default-profile',
+        systemPrompt: 'Assist.',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
+      const subagentManager = {
+        loadSubagent,
+      } as unknown as SubagentManager;
+
+      const loadProfile = vi.fn().mockResolvedValue(baseProfile);
+      const profileManager = {
+        loadProfile,
+      } as unknown as ProfileManager;
+
+      const configWithUnlimitedParentTurns = {
+        ...foregroundConfig,
+        getEphemeralSetting: (key: string) => {
+          if (key === 'maxTurnsPerPrompt') {
+            return -1;
+          }
+          return undefined;
+        },
+      } as unknown as Config;
+
+      const { factory } = createScopeFactory();
+      const runtimeBundle = createRuntimeBundle('unlimited-parent-turns');
+      const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
+
+      const orchestrator = new SubagentOrchestrator({
+        subagentManager,
+        profileManager,
+        foregroundConfig: configWithUnlimitedParentTurns,
+        scopeFactory: factory,
+        runtimeLoader,
+      });
+
+      await orchestrator.launch({ name: subagentConfig.name });
+
+      const [, , , , runConfigArg] = factory.mock.calls[0];
+
+      return { runConfigArg };
+    };
 
   it.each([
     {
@@ -665,37 +705,45 @@ describe('SubagentOrchestrator - Config Resolution', () => {
   );
 
   it('keeps explicit task max_turns -1 unlimited even when profile and foreground both cap', async () => {
-    const profileWithCap: Profile = {
-      ...baseProfile,
-      ephemeralSettings: {
-        ...baseProfile.ephemeralSettings,
-        maxTurnsPerPrompt: 300,
-      },
-    };
-
-    const configWithForegroundCap = {
-      ...foregroundConfig,
-      getEphemeralSetting: (key: string) =>
-        key === 'maxTurnsPerPrompt' ? 75 : undefined,
-    } as unknown as Config;
-
-    const { orchestrator, factory } = createOrchestratorForTurns({
-      subagentName: 'task-unlimited-helper',
-      profileName: 'capped-profile',
-      profile: profileWithCap,
-      foregroundConfig: configWithForegroundCap,
-    });
-
-    await orchestrator.launch({
-      name: 'task-unlimited-helper',
-      runConfig: { max_turns: -1 },
-    });
-
-    const runConfigArg = extractRunConfig(factory);
-    // -1 means unlimited: max_turns is omitted entirely so neither the
-    // 300-turn profile cap nor the 75-turn foreground cap is applied.
+    const { runConfigArg } =
+      await observeKeepsExplicitTaskMaxTurns1UnlimitedEvenWhenProfileAndForeground();
     expect(runConfigArg.max_turns).toBeUndefined();
   });
+
+  const observeKeepsExplicitTaskMaxTurns1UnlimitedEvenWhenProfileAndForeground =
+    async () => {
+      const profileWithCap: Profile = {
+        ...baseProfile,
+        ephemeralSettings: {
+          ...baseProfile.ephemeralSettings,
+          maxTurnsPerPrompt: 300,
+        },
+      };
+
+      const configWithForegroundCap = {
+        ...foregroundConfig,
+        getEphemeralSetting: (key: string) =>
+          key === 'maxTurnsPerPrompt' ? 75 : undefined,
+      } as unknown as Config;
+
+      const { orchestrator, factory } = createOrchestratorForTurns({
+        subagentName: 'task-unlimited-helper',
+        profileName: 'capped-profile',
+        profile: profileWithCap,
+        foregroundConfig: configWithForegroundCap,
+      });
+
+      await orchestrator.launch({
+        name: 'task-unlimited-helper',
+        runConfig: { max_turns: -1 },
+      });
+
+      const runConfigArg = extractRunConfig(factory);
+      // -1 means unlimited: max_turns is omitted entirely so neither the
+      // 300-turn profile cap nor the 75-turn foreground cap is applied.
+
+      return { runConfigArg };
+    };
 
   it('honors an already-aborted signal before beginning launch work', async () => {
     const subagentConfig: SubagentConfig = {

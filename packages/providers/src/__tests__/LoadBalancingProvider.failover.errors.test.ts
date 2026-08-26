@@ -19,6 +19,72 @@ import type { IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '../GenerateChatOptions.js';
 
+async function* generateNestedFailoverThenSuccess(
+  recordCall: () => number,
+  noContent: readonly IContent[],
+  nestedFailure: LoadBalancerFailoverError,
+): AsyncGenerator<IContent> {
+  if (recordCall() === 1) {
+    yield* noContent;
+    throw nestedFailure;
+  }
+  yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+}
+
+async function* generateTerminalFailureThenUnexpectedContent(
+  recordCall: () => number,
+  terminalFailure: RetriesExhaustedError,
+): AsyncGenerator<IContent> {
+  if (recordCall() === 1) throw terminalFailure;
+  yield {
+    speaker: 'ai',
+    blocks: [{ type: 'text', text: 'unexpected' }],
+  };
+}
+
+async function* generatePerBackendMessageFailures(
+  recordCall: () => number,
+): AsyncGenerator<IContent> {
+  const callCount = recordCall();
+  if (callCount === 1) throw new Error('rate limited by vendor');
+  if (callCount === 2) throw new Error('authentication failed');
+  yield* [];
+}
+
+async function* generatePerBackendStatusFailures(
+  recordCall: () => number,
+): AsyncGenerator<IContent> {
+  const callCount = recordCall();
+  if (callCount === 1) {
+    const error = new Error('Unauthorized') as Error & { status: number };
+    error.status = 401;
+    throw error;
+  }
+  if (callCount === 2) {
+    const error = new Error('Rate limit') as Error & { status: number };
+    error.status = 429;
+    throw error;
+  }
+  yield* [];
+}
+
+async function* generateCapturedFailoverResponse(
+  options: GenerateChatOptions,
+  recordInvocation: () => number,
+  captureOptions: (options: GenerateChatOptions) => void,
+): AsyncGenerator<IContent> {
+  const invocationCount = recordInvocation();
+  captureOptions(options);
+  if (invocationCount === 1) {
+    const error = new Error('primary rate limited') as Error & {
+      status: number;
+    };
+    error.status = 429;
+    throw error;
+  }
+  yield { role: 'model', parts: [{ text: 'response' }] };
+}
+
 describe('LoadBalancingProvider - Failover Strategy', () => {
   let settingsService: SettingsService;
   let config: Config;
@@ -42,14 +108,12 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       let calls = 0;
       const delegate: IProvider = {
         name: 'test-provider',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          calls++;
-          if (calls === 1) {
-            yield* noContent;
-            throw nestedFailure;
-          }
-          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
-        },
+        generateChatCompletion: () =>
+          generateNestedFailoverThenSuccess(
+            () => ++calls,
+            noContent,
+            nestedFailure,
+          ),
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
         getServerTools: () => [],
@@ -193,14 +257,11 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       let calls = 0;
       const delegate: IProvider = {
         name: 'test-provider',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          calls++;
-          if (calls === 1) throw terminalFailure;
-          yield {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'unexpected' }],
-          };
-        },
+        generateChatCompletion: () =>
+          generateTerminalFailureThenUnexpectedContent(
+            () => ++calls,
+            terminalFailure,
+          ),
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
         getServerTools: () => [],
@@ -462,16 +523,8 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       let callCount = 0;
       const mockProvider: IProvider = {
         name: 'test-provider',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          callCount++;
-          if (callCount === 1) {
-            throw new Error('rate limited by vendor');
-          }
-          if (callCount === 2) {
-            throw new Error('authentication failed');
-          }
-          yield undefined as unknown as IContent; // unreachable
-        },
+        generateChatCompletion: () =>
+          generatePerBackendMessageFailures(() => ++callCount),
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
         getServerTools: () => [],
@@ -524,24 +577,8 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       let callCount = 0;
       const mockProvider: IProvider = {
         name: 'test-provider',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          callCount++;
-          if (callCount === 1) {
-            const error = new Error('Unauthorized') as Error & {
-              status: number;
-            };
-            error.status = 401;
-            throw error;
-          }
-          if (callCount === 2) {
-            const error = new Error('Rate limit') as Error & {
-              status: number;
-            };
-            error.status = 429;
-            throw error;
-          }
-          yield undefined as unknown as IContent; // unreachable
-        },
+        generateChatCompletion: () =>
+          generatePerBackendStatusFailures(() => ++callCount),
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
         getServerTools: () => [],
@@ -664,20 +701,14 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       let invocationCount = 0;
       const mockProvider = {
         name: 'gemini',
-        async *generateChatCompletion(
-          options: GenerateChatOptions,
-        ): AsyncIterableIterator<IContent> {
-          invocationCount += 1;
-          capturedOptions = options;
-          if (invocationCount === 1) {
-            const error = new Error('primary rate limited') as Error & {
-              status: number;
-            };
-            error.status = 429;
-            throw error;
-          }
-          yield { role: 'model', parts: [{ text: 'response' }] };
-        },
+        generateChatCompletion: (options: GenerateChatOptions) =>
+          generateCapturedFailoverResponse(
+            options,
+            () => ++invocationCount,
+            (receivedOptions) => {
+              capturedOptions = receivedOptions;
+            },
+          ),
         getModels: async () => [],
         getDefaultModel: () => 'gemini-flash',
         getServerTools: () => [],

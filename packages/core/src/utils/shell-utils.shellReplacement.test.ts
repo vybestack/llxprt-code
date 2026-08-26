@@ -17,6 +17,8 @@ import {
   isParserAvailable,
 } from './shell-parser.js';
 
+const bunIt = it;
+
 await initializeShellParsers();
 
 // All cases in this file exercise Bash substitution syntax; pass 'bash'
@@ -276,9 +278,9 @@ describe('Shell replacement settings', () => {
       expect(result.blockReason).toContain('Command substitution');
     });
 
-    it.skipIf(isParserAvailable())(
-      'should handle arithmetic expansion $((1+2)): regex path flags $(',
-      () => {
+    {
+      const it = isParserAvailable() ? bunIt.skip : bunIt;
+      it('should handle arithmetic expansion $((1+2)): regex path flags $(', () => {
         // Tree-sitter does NOT treat $((...)) as command_substitution (it is
         // arithmetic expansion, not command substitution). The regex fallback
         // sees '$(' and flags it. The two paths intentionally differ — the
@@ -287,22 +289,22 @@ describe('Shell replacement settings', () => {
         const result = detectCommandSubstitution('echo $((1+2))');
         // Regex path: '$(' is detected → true
         expect(result).toBe(true);
-      },
-    );
+      });
+    }
 
-    it.skipIf(!isParserAvailable())(
-      'should handle arithmetic expansion via tree-sitter when available',
-      () => {
+    {
+      const it = !isParserAvailable() ? bunIt.skip : bunIt;
+      it('should handle arithmetic expansion via tree-sitter when available', () => {
         // Tree-sitter correctly identifies $((1+2)) as arithmetic expansion,
         // NOT command substitution, so hasCommandSubstitution returns false.
         const result = detectCommandSubstitution('echo $((1+2))');
         expect(result).toBe(false);
-      },
-    );
+      });
+    }
 
-    it.skipIf(!isParserAvailable())(
-      'should NOT flag quoted heredoc body as substitution via tree-sitter',
-      () => {
+    {
+      const it = !isParserAvailable() ? bunIt.skip : bunIt;
+      it('should NOT flag quoted heredoc body as substitution via tree-sitter', () => {
         // A heredoc with a quoted delimiter (<<'EOF') treats its body as literal
         // text — $(rm -rf /) inside it is NOT command substitution.
         const cmd = `cat <<'EOF'
@@ -310,24 +312,24 @@ $(rm -rf /)
 EOF`;
         const result = detectCommandSubstitution(cmd);
         expect(result).toBe(false);
-      },
-    );
+      });
+    }
 
-    it.skipIf(!isParserAvailable())(
-      'should flag unquoted heredoc body as substitution via tree-sitter',
-      () => {
+    {
+      const it = !isParserAvailable() ? bunIt.skip : bunIt;
+      it('should flag unquoted heredoc body as substitution via tree-sitter', () => {
         // An unquoted heredoc (<<EOF) does expand $(...).
         const cmd = `cat <<EOF
 $(rm -rf /)
 EOF`;
         const result = detectCommandSubstitution(cmd);
         expect(result).toBe(true);
-      },
-    );
+      });
+    }
 
-    it.skipIf(!isParserAvailable())(
-      'should hard-deny malformed command in allowlist mode with restricted coreTools (tree-sitter)',
-      () => {
+    {
+      const it = !isParserAvailable() ? bunIt.skip : bunIt;
+      it('should hard-deny malformed command in allowlist mode with restricted coreTools (tree-sitter)', () => {
         // When tree-sitter is available, parseCommandDetails reports hasError
         // for malformed input, and the allowlist mode treats that as a hard denial.
         const restrictedConfig = new Config({
@@ -351,12 +353,12 @@ EOF`;
         expect(result.allAllowed).toBe(false);
         expect(result.isHardDenial).toBe(true);
         expect(result.blockReason).toContain('could not be parsed safely');
-      },
-    );
+      });
+    }
 
-    it.skipIf(isParserAvailable())(
-      'should allow malformed command via regex fallback when root matches allowlist',
-      () => {
+    {
+      const it = isParserAvailable() ? bunIt.skip : bunIt;
+      it('should allow malformed command via regex fallback when root matches allowlist', () => {
         // When tree-sitter is NOT available, the regex fallback extracts the
         // command root "echo" which matches the allowlist, so the command passes.
         const restrictedConfig = new Config({
@@ -378,8 +380,8 @@ EOF`;
           restrictedConfig,
         );
         expect(result.allAllowed).toBe(true);
-      },
-    );
+      });
+    }
 
     it('should detect process substitution >(...) on both paths', () => {
       expect(detectCommandSubstitution('tee >(wc -l)')).toBe(true);

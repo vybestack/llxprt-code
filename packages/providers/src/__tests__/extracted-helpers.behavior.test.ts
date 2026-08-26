@@ -74,6 +74,12 @@ function statusError(status: number): Error {
   return Object.assign(new Error(`status ${status}`), { status });
 }
 
+function normalizationEphemeralSetting(key: string): string | undefined {
+  if (key === 'auth-key') return 'global-token';
+  if (key === 'base-url') return 'https://config.example.test';
+  return undefined;
+}
+
 async function collectChunks(
   stream: AsyncIterable<IContent>,
 ): Promise<IContent[]> {
@@ -400,15 +406,7 @@ describe('extracted provider helper behavior', () => {
     );
     const config = {
       getModel: () => 'config-model',
-      getEphemeralSetting: (key: string) => {
-        if (key === 'auth-key') {
-          return 'global-token';
-        }
-        if (key === 'base-url') {
-          return 'https://config.example.test';
-        }
-        return undefined;
-      },
+      getEphemeralSetting: normalizationEphemeralSetting,
       getSettingsService: () => settingsService,
       getUserMemory: () => 'remember this',
     } as unknown as Config;
@@ -499,15 +497,7 @@ describe('extracted provider helper behavior', () => {
     const configOwnedSettingsService = new SettingsService();
     const config = createRuntimeConfigStub(configOwnedSettingsService, {
       getModel: () => 'config-model',
-      getEphemeralSetting: (key: string) => {
-        if (key === 'auth-key') {
-          return 'global-token';
-        }
-        if (key === 'base-url') {
-          return 'https://config.example.test';
-        }
-        return undefined;
-      },
+      getEphemeralSetting: normalizationEphemeralSetting,
       getUserMemory: () => 'remember this',
     });
     const rawOptions: GenerateChatOptions = {

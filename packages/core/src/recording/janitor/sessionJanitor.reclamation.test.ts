@@ -126,6 +126,37 @@ function incompressible(bytes: number): string {
   return chunks.join('').slice(0, bytes);
 }
 
+/**
+ * Ensure unlinks of the registry file fail with a perm-error while other
+ * files remain deletable.  The injected callback re-throws EPERM faults only
+ * for the given path and passes everything else through to the real unlink.
+ */
+function unlinkFaultFor(filePath: string): (p: string) => Promise<void> {
+  return async (p: string) => {
+    if (p === filePath) {
+      const err = new Error('EPERM') as NodeJS.ErrnoException;
+      err.code = 'EPERM';
+      throw err;
+    }
+    await fs.unlink(p);
+  };
+}
+
+/**
+ * Ensure unlinks of the given path report ENOENT while other files remain
+ * deletable (the file vanished between scan and unlink).
+ */
+function enoentFaultFor(filePath: string): (p: string) => Promise<void> {
+  return async (p: string) => {
+    if (p === filePath) {
+      const err = new Error('ENOENT') as NodeJS.ErrnoException;
+      err.code = 'ENOENT';
+      throw err;
+    }
+    await fs.unlink(p);
+  };
+}
+
 async function fileExists(filePath: string): Promise<boolean> {
   try {
     await fs.access(filePath);
@@ -210,14 +241,7 @@ describe('Item 1 — actual-byte size reclamation (no fixed estimate)', () => {
     });
 
     // Inject an unlink fault for the oldest session's raw only.
-    setUnlinkFaultForTest(async (filePath: string) => {
-      if (filePath === oldest.filePath) {
-        const err = new Error('EPERM') as NodeJS.ErrnoException;
-        err.code = 'EPERM';
-        throw err;
-      }
-      await fs.unlink(filePath);
-    });
+    setUnlinkFaultForTest(unlinkFaultFor(oldest.filePath));
 
     try {
       const config = resolveRetentionConfig({ maxTotalSizeMB: 0.001 });
@@ -686,14 +710,7 @@ describe('Item 4 — failure isolation and diagnostics', () => {
 
     // Inject unlink fault for the oldest only — the archive succeeds but
     // unlink fails.  The sweep must continue to the newer session.
-    setUnlinkFaultForTest(async (filePath: string) => {
-      if (filePath === oldest.filePath) {
-        const err = new Error('EPERM') as NodeJS.ErrnoException;
-        err.code = 'EPERM';
-        throw err;
-      }
-      await fs.unlink(filePath);
-    });
+    setUnlinkFaultForTest(unlinkFaultFor(oldest.filePath));
 
     const config = resolveRetentionConfig({ maxTotalSizeMB: 0.001 });
     const result = await runSessionCleanup({ globalTempDir: tempDir, config });
@@ -771,14 +788,7 @@ describe('Item 4 — failure isolation and diagnostics', () => {
     });
 
     // Fault on the first session only.
-    setUnlinkFaultForTest(async (filePath: string) => {
-      if (filePath === session1.filePath) {
-        const err = new Error('EPERM') as NodeJS.ErrnoException;
-        err.code = 'EPERM';
-        throw err;
-      }
-      await fs.unlink(filePath);
-    });
+    setUnlinkFaultForTest(unlinkFaultFor(session1.filePath));
 
     const config = resolveRetentionConfig({ maxTotalSizeMB: 0.001 });
     const result = await runSessionCleanup({ globalTempDir: tempDir, config });
@@ -810,14 +820,7 @@ describe('Item 4 — failure isolation and diagnostics', () => {
 
     // Inject ENOENT for the archive path — the file vanished between scan
     // and unlink (concurrent process or prior sweep).
-    setUnlinkFaultForTest(async (filePath: string) => {
-      if (filePath === archivePath) {
-        const err = new Error('ENOENT') as NodeJS.ErrnoException;
-        err.code = 'ENOENT';
-        throw err;
-      }
-      await fs.unlink(filePath);
-    });
+    setUnlinkFaultForTest(enoentFaultFor(archivePath));
 
     // maxTotalSizeMB: 0 forces immediate eviction of all archives.
     const config = resolveRetentionConfig({
@@ -851,14 +854,7 @@ describe('Item 4 — failure isolation and diagnostics', () => {
       10 * 24 * 60 * 60 * 1000,
     );
 
-    setUnlinkFaultForTest(async (filePath: string) => {
-      if (filePath === archivePath) {
-        const err = new Error('EPERM') as NodeJS.ErrnoException;
-        err.code = 'EPERM';
-        throw err;
-      }
-      await fs.unlink(filePath);
-    });
+    setUnlinkFaultForTest(unlinkFaultFor(archivePath));
 
     const config = resolveRetentionConfig({
       maxTotalSizeMB: 0.001,

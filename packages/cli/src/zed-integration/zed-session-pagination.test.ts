@@ -36,19 +36,40 @@ const sessions: readonly LifecycleSession[] = [
 ];
 
 describe('session lifecycle pagination', () => {
+  function observeFirstCreatedAtOrderedPage() {
+    return paginateSessions(sessions, { cwd: null, cursor: null }, 2);
+  }
+
+  function observeSecondCreatedAtOrderedPage(
+    first: ReturnType<typeof paginateSessions>,
+  ) {
+    return paginateSessions(
+      sessions,
+      { cwd: null, cursor: first.nextCursor ?? null },
+      2,
+    );
+  }
+
+  function firstPaginatedSessionId(
+    page: ReturnType<typeof paginateSessions>,
+  ): string {
+    const session = page.sessions.at(0);
+    if (session === undefined) {
+      throw new Error('Expected the page to contain a session');
+    }
+    return session.sessionId;
+  }
+
   it('orders by createdAt then sessionId descending and continues with an opaque cursor', () => {
-    const first = paginateSessions(sessions, { cwd: null, cursor: null }, 2);
+    const first = observeFirstCreatedAtOrderedPage();
+
     expect(first.sessions.map((session) => session.sessionId)).toStrictEqual([
       'b',
       'a',
     ]);
     expect(first.nextCursor).toStrictEqual(expect.any(String));
 
-    const second = paginateSessions(
-      sessions,
-      { cwd: null, cursor: first.nextCursor ?? null },
-      2,
-    );
+    const second = observeSecondCreatedAtOrderedPage(first);
     expect(second).toStrictEqual({ sessions: [sessions[2]] });
   });
 
@@ -95,32 +116,44 @@ describe('session lifecycle pagination', () => {
     );
   });
 
-  it('continues pagination with the same cwd filter', () => {
+  function verifyContinuesPaginationWithTheSameCwdFilter() {
     const first = paginateSessions(sessions, { cwd: '/a', cursor: null }, 1);
     const second = paginateSessions(
       sessions,
       { cwd: '/a', cursor: first.nextCursor ?? null },
       1,
     );
-    expect(second.sessions).toStrictEqual([sessions[1]]);
+
+    return second.sessions;
+  }
+
+  it('continues pagination with the same cwd filter', () => {
+    const secondPageSessions = verifyContinuesPaginationWithTheSameCwdFilter();
+    expect(secondPageSessions).toStrictEqual([sessions[1]]);
   });
 
-  it('rejects a cursor created for a different cwd filter', () => {
+  function verifyRejectsACursorCreatedForADifferentCwdFilter() {
     const first = paginateSessions(sessions, { cwd: '/a', cursor: null }, 1);
-    expect(() =>
+
+    return () =>
       paginateSessions(
         sessions,
         { cwd: '/b', cursor: first.nextCursor ?? null },
         1,
-      ),
-    ).toThrow(/cursor/i);
+      );
+  }
+
+  it('rejects a cursor created for a different cwd filter', () => {
+    const paginateWithMismatchedCwd =
+      verifyRejectsACursorCreatedForADifferentCwdFilter();
+    expect(paginateWithMismatchedCwd).toThrow(/cursor/i);
   });
 
-  it('updatedAt changes cannot omit sessions: immutable createdAt ordering (issue #1611)', () => {
+  function verifyUpdatedAtChangesCannotOmitSessionsImmutableCreatedAtOrderingIssue1611() {
     // Two sessions with different createdAt and updatedAt values. Ordering must
     // remain stable when a session is updated mid-pagination because it uses
     // createdAt + sessionId, so the cursor is not invalidated.
-    const stable: LifecycleSession[] = [
+    const stable = [
       {
         sessionId: 'x',
         cwd: '/w',
@@ -133,10 +166,16 @@ describe('session lifecycle pagination', () => {
         updatedAt: '2026-07-12T13:00:00.000Z',
         createdAt: '2026-07-10T09:00:00.000Z',
       },
-    ];
+    ] satisfies [LifecycleSession, LifecycleSession];
     const first = paginateSessions(stable, { cwd: null, cursor: null }, 1);
-    expect(first.sessions[0].sessionId).toBe('x');
 
+    return { stable, first };
+  }
+
+  function observePageAfterUpdatedAtMutation(
+    stable: readonly [LifecycleSession, LifecycleSession],
+    first: ReturnType<typeof paginateSessions>,
+  ) {
     // Simulate the "updatedAt changed between pages" scenario:
     // After page 1, the first session's updatedAt changes — but createdAt
     // is immutable, so the cursor still correctly filters.
@@ -145,12 +184,26 @@ describe('session lifecycle pagination', () => {
       updatedAt: '2026-07-12T23:59:59.000Z',
     };
     const secondSet = [firstAfterMutation, stable[1]];
-    const second = paginateSessions(
+    return paginateSessions(
       secondSet,
       { cwd: null, cursor: first.nextCursor ?? null },
       10,
     );
-    expect(second.sessions.map((s) => s.sessionId)).toStrictEqual(['y']);
+  }
+
+  it('updatedAt changes cannot omit sessions: immutable createdAt ordering (issue #1611)', () => {
+    const behaviorResult =
+      verifyUpdatedAtChangesCannotOmitSessionsImmutableCreatedAtOrderingIssue1611();
+
+    expect(firstPaginatedSessionId(behaviorResult.first)).toBe('x');
+
+    const second = observePageAfterUpdatedAtMutation(
+      behaviorResult.stable,
+      behaviorResult.first,
+    );
+    expect(second.sessions.map((session) => session.sessionId)).toStrictEqual([
+      'y',
+    ]);
   });
 
   it('v2 cursor is self-contained and process-independent (issue #1611)', () => {
@@ -209,22 +262,25 @@ describe('session lifecycle pagination', () => {
     ]);
   });
 
-  it('continues a legacy page when updatedAt is valid but not canonical', () => {
+  function verifyContinuesALegacyPageWhenUpdatedAtIsValidButNotCanonical() {
     const legacy: LifecycleSession[] = [
       { sessionId: 'new', cwd: '/w', updatedAt: '2026-06-01T00:00:00Z' },
       { sessionId: 'old', cwd: '/w', updatedAt: '2026-01-01T00:00:00Z' },
     ];
     const first = paginateSessions(legacy, { cwd: null, cursor: null }, 1);
-
     const second = paginateSessions(
       legacy,
       { cwd: null, cursor: first.nextCursor ?? null },
       1,
     );
 
-    expect(second.sessions.map((session) => session.sessionId)).toStrictEqual([
-      'old',
-    ]);
+    return second.sessions.map((session) => session.sessionId);
+  }
+
+  it('continues a legacy page when updatedAt is valid but not canonical', () => {
+    const sessionIds =
+      verifyContinuesALegacyPageWhenUpdatedAtIsValidButNotCanonical();
+    expect(sessionIds).toStrictEqual(['old']);
   });
 
   it('continues from a legacy v1 cursor using its updatedAt boundary', () => {

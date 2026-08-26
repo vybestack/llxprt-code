@@ -10,29 +10,36 @@ import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 const originalFetch = globalThis.fetch;
 const originalTimeout = AbortSignal.timeout;
 
-afterEach(() => {
-  globalThis.fetch = originalFetch;
-  AbortSignal.timeout = originalTimeout;
-});
+function createPendingFetch(
+  captureSignal: (signal: AbortSignal | undefined) => void,
+): typeof fetch {
+  return mock(async (_input: string | URL | Request, init?: RequestInit) => {
+    const requestSignal = init?.signal ?? undefined;
+    captureSignal(requestSignal);
+    await new Promise<void>((_resolve, reject) => {
+      requestSignal?.addEventListener(
+        'abort',
+        () => reject(requestSignal.reason),
+        { once: true },
+      );
+    });
+    throw new Error('unreachable');
+  }) as typeof fetch;
+}
 
 describe('OpenAIVercelProvider model listing timeout', () => {
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    AbortSignal.timeout = originalTimeout;
+  });
+
   it('bounds the external request and falls back after cancellation', async () => {
     const controller = new AbortController();
     let requestSignal: AbortSignal | undefined;
     AbortSignal.timeout = mock(() => controller.signal);
-    globalThis.fetch = mock(
-      async (_input: string | URL | Request, init?: RequestInit) => {
-        requestSignal = init?.signal ?? undefined;
-        await new Promise<void>((_resolve, reject) => {
-          requestSignal?.addEventListener(
-            'abort',
-            () => reject(requestSignal?.reason),
-            { once: true },
-          );
-        });
-        throw new Error('unreachable');
-      },
-    ) as typeof fetch;
+    globalThis.fetch = createPendingFetch((signal) => {
+      requestSignal = signal;
+    });
 
     const provider = new OpenAIVercelProvider('test-api-key');
     const modelsPromise = provider.getModels();

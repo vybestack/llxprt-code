@@ -37,6 +37,14 @@ import {
   generateRustFixture,
 } from './ast-edit-3242-fixtures.js';
 
+function countMatches(value: string, pattern: RegExp): number {
+  return (value.match(pattern) ?? []).length;
+}
+
+function numberOrNegativeOne(value: number | undefined): number {
+  return value ?? -1;
+}
+
 const PREVIEW_MAX_DECLARATIONS = 128;
 const PREVIEW_MAX_SNIPPETS = 64;
 const PREVIEW_LLM_MAX_BYTES = 256 * 1024;
@@ -151,6 +159,13 @@ function utf8Bytes(text: string): number {
 // REQ-3242-1: preview repository relationship fan-out is unreachable.
 // ---------------------------------------------------------------------------
 
+function requirePreviewSnippetLine(line: string | undefined): string {
+  if (line === undefined) {
+    throw new Error('preview omitted the capped relevant-snippet summary');
+  }
+  return line;
+}
+
 describe('REQ-3242-1: ast_edit preview repository opt-out', () => {
   const ctx = useTempDir();
 
@@ -220,9 +235,7 @@ describe('REQ-3242-2: bounded proximity declaration context', () => {
   it('fixture is 5,250 lines with at least 170 real parsed declarations', async () => {
     const fixture = generateRustFixture();
     expect(fixture.lineCount).toBe(RUST_FIXTURE_LINE_COUNT);
-    expect((fixture.content.match(/\n/g) ?? []).length).toBe(
-      RUST_FIXTURE_LINE_COUNT,
-    );
+    expect(countMatches(fixture.content, /\n/g)).toBe(RUST_FIXTURE_LINE_COUNT);
     const target = join(ctx.tempDir, 'target.rs');
     writeFileSync(target, fixture.content, 'utf-8');
 
@@ -254,14 +267,14 @@ describe('REQ-3242-2: bounded proximity declaration context', () => {
       declarations,
       fixture.edits.middle.line,
     );
-    expect(rendered.map((entry) => entry.raw)).toEqual(expected);
+    expect(rendered.map((entry) => entry.raw)).toStrictEqual(expected);
 
     const lines = rendered.map((entry) => entry.line);
     const sorted = [...lines].sort((a, b) => a - b);
-    expect(lines).toEqual(sorted);
+    expect(lines).toStrictEqual(sorted);
 
     const marker = boundedMarker(output);
-    expect(marker).toEqual({ shown: PREVIEW_MAX_DECLARATIONS, total });
+    expect(marker).toStrictEqual({ shown: PREVIEW_MAX_DECLARATIONS, total });
     expect(output).toContain(`- Context: rust file with ${total} declarations`);
     expect(output).toContain('- function: worker_090 (line');
     expect(output).not.toContain('- function: worker_000 (line');
@@ -337,7 +350,7 @@ describe('REQ-3242-2: bounded proximity declaration context', () => {
     expect(renderedDeclarations(output)).toHaveLength(128);
     expect(output).toContain('- function: f127 (line 128)');
     expect(output).not.toContain('- function: f128 (line 129)');
-    expect(boundedMarker(output)).toEqual({ shown: 128, total: 129 });
+    expect(boundedMarker(output)).toStrictEqual({ shown: 128, total: 129 });
   });
 
   it('prefers the nearest declarations across large line gaps in a sparse file', async () => {
@@ -364,7 +377,7 @@ describe('REQ-3242-2: bounded proximity declaration context', () => {
     const output = String(result.llmContent);
     const rendered = renderedDeclarations(output);
     expect(rendered).toHaveLength(128);
-    expect(boundedMarker(output)).toEqual({ shown: 128, total: 130 });
+    expect(boundedMarker(output)).toStrictEqual({ shown: 128, total: 130 });
     expect(output).not.toContain('sparse_decl_000');
     expect(output).not.toContain('sparse_decl_001');
     expect(output).toContain('- function: sparse_decl_127 (line 2541)');
@@ -377,7 +390,7 @@ describe('REQ-3242-2: bounded proximity declaration context', () => {
       ),
       anchorLine,
     );
-    expect(rendered.map((entry) => entry.raw)).toEqual(expected);
+    expect(rendered.map((entry) => entry.raw)).toStrictEqual(expected);
   });
 
   it('breaks distance ties deterministically in favor of the earlier line', async () => {
@@ -402,7 +415,7 @@ describe('REQ-3242-2: bounded proximity declaration context', () => {
     expect(result.error).toBeUndefined();
     const output = String(result.llmContent);
     expect(renderedDeclarations(output)).toHaveLength(128);
-    expect(boundedMarker(output)).toEqual({ shown: 128, total: 129 });
+    expect(boundedMarker(output)).toStrictEqual({ shown: 128, total: 129 });
     expect(output).toContain('- function: d001 (line 1)');
     expect(output).not.toContain('dSpecial');
   });
@@ -433,7 +446,7 @@ describe('REQ-3242-2: bounded proximity declaration context', () => {
     const output = String(result.llmContent);
     const rendered = renderedDeclarations(output);
     expect(rendered).toHaveLength(PREVIEW_MAX_DECLARATIONS);
-    expect(boundedMarker(output)).toEqual({ shown: 128, total: 129 });
+    expect(boundedMarker(output)).toStrictEqual({ shown: 128, total: 129 });
     // The same-line tie resolves by original extractor index, not column:
     // the function wins the final slot over the column-earlier variable.
     expect(output).toContain('- function: dSpecial (line 1)');
@@ -445,7 +458,7 @@ describe('REQ-3242-2: bounded proximity declaration context', () => {
       ),
       anchorLine,
     );
-    expect(rendered.map((entry) => entry.raw)).toEqual(expected);
+    expect(rendered.map((entry) => entry.raw)).toStrictEqual(expected);
   });
 
   it('succeeds with zero declaration context for a new file', async () => {
@@ -538,7 +551,9 @@ describe('REQ-3242-3: bounded preview llmContent byte budget', () => {
     expect(marker).not.toBeNull();
     expect(marker?.total).toBe(129);
     expect(marker?.shown).toBeLessThan(PREVIEW_MAX_DECLARATIONS);
-    expect(renderedDeclarations(output)).toHaveLength(marker?.shown ?? -1);
+    expect(renderedDeclarations(output)).toHaveLength(
+      numberOrNegativeOne(marker?.shown),
+    );
     // Mandatory lines survive the budget drop.
     expect(output).toContain('- Timestamp: ');
     expect(output).toContain(NEXT_STEP);
@@ -579,7 +594,7 @@ describe('REQ-3242-3: bounded preview llmContent byte budget', () => {
     // index), never a byte-truncated fragment — and the rendered count
     // matches the marker's truthful shown count.
     const rendered = renderedDeclarations(output);
-    expect(rendered).toHaveLength(marker?.shown ?? -1);
+    expect(rendered).toHaveLength(numberOrNegativeOne(marker?.shown));
     const completeNames = new Set(
       Array.from(
         { length: 129 },
@@ -615,12 +630,9 @@ describe('REQ-3242-3: bounded preview llmContent byte budget', () => {
     expect(result.error).toBeUndefined();
     const output = String(result.llmContent);
     const prefix = `- Relevant snippets: ${PREVIEW_MAX_SNIPPETS} found (capped from `;
-    const snippetLine = output
-      .split('\n')
-      .find((line) => line.startsWith(prefix));
-    if (snippetLine === undefined) {
-      throw new Error('preview omitted the capped relevant-snippet summary');
-    }
+    const snippetLine = requirePreviewSnippetLine(
+      output.split('\n').find((line) => line.startsWith(prefix)),
+    );
 
     const totalText = snippetLine.slice(prefix.length, -1);
     const total = Number(totalText);
@@ -648,7 +660,7 @@ describe('REQ-3242-4: preview then force apply on the large fixture', () => {
     const previewOutput = String(preview.llmContent);
     const timestampMatch = /- Timestamp: (\d+)/.exec(previewOutput);
     expect(timestampMatch).not.toBeNull();
-    expect(boundedMarker(previewOutput)).toEqual({
+    expect(boundedMarker(previewOutput)).toStrictEqual({
       shown: PREVIEW_MAX_DECLARATIONS,
       total: 184,
     });

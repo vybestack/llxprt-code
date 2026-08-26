@@ -263,26 +263,78 @@ describe('Event adapter projection @plan:PLAN-20260617-COREAPI.P14 @requirement:
   // ─── stop-info optional-field omission ────────────────────────────────────
 
   it('AgentExecutionStopped without systemMessage/contextCleared omits BOTH optional keys on stop @plan:PLAN-20260617-COREAPI.P14 @requirement:REQ-003', async () => {
-    const events = await runAdapterStatic(loopStream(streamStopped('bare')));
-    const done = events.filter(isDoneEvent);
+    const {
+      done,
+      stop,
+      reasonObservation,
+      agentExecutionStoppedWithoutSystemMessageContextClearedOmitsBOTHOptionalKeysOnStopObservation2,
+      agentExecutionStoppedWithoutSystemMessageContextClearedOmitsBOTHOptionalKeysOnStopObservation3,
+    } =
+      await observeAgentExecutionStoppedWithoutSystemMessageContextClearedOmitsBOTHOptionalKeysOnStop();
     expect(done).toHaveLength(1);
-    const stop = done[0].stop;
     expect(stop).toBeDefined();
-    expect(stop?.reason).toBe('bare');
-    expect('systemMessage' in (stop ?? {})).toBe(false);
-    expect('contextCleared' in (stop ?? {})).toBe(false);
+    expect(reasonObservation).toBe('bare');
+    expect(
+      agentExecutionStoppedWithoutSystemMessageContextClearedOmitsBOTHOptionalKeysOnStopObservation2,
+    ).toBe(false);
+    expect(
+      agentExecutionStoppedWithoutSystemMessageContextClearedOmitsBOTHOptionalKeysOnStopObservation3,
+    ).toBe(false);
   });
 
+  const observeAgentExecutionStoppedWithoutSystemMessageContextClearedOmitsBOTHOptionalKeysOnStop =
+    async () => {
+      const events = await runAdapterStatic(loopStream(streamStopped('bare')));
+      const done = events.filter(isDoneEvent);
+
+      const stop = done[0].stop;
+
+      const reasonObservation = stop?.reason;
+      const agentExecutionStoppedWithoutSystemMessageContextClearedOmitsBOTHOptionalKeysOnStopObservation2 =
+        'systemMessage' in (stop ?? {});
+      const agentExecutionStoppedWithoutSystemMessageContextClearedOmitsBOTHOptionalKeysOnStopObservation3 =
+        'contextCleared' in (stop ?? {});
+      return {
+        done,
+        stop,
+        reasonObservation,
+        agentExecutionStoppedWithoutSystemMessageContextClearedOmitsBOTHOptionalKeysOnStopObservation2,
+        agentExecutionStoppedWithoutSystemMessageContextClearedOmitsBOTHOptionalKeysOnStopObservation3,
+      };
+    };
+
   it('AgentExecutionStopped WITH systemMessage but WITHOUT contextCleared surfaces only systemMessage @plan:PLAN-20260617-COREAPI.P14 @requirement:REQ-003', async () => {
-    const events = await runAdapterStatic(
-      loopStream(streamStopped('partial', 'a system note')),
-    );
-    const done = events.filter(isDoneEvent);
+    const {
+      done,
+      systemMessageObservation,
+      agentExecutionStoppedWITHSystemMessageButWITHOUTContextClearedSurfacesOnlySystemMessageObservation2,
+    } =
+      await observeAgentExecutionStoppedWITHSystemMessageButWITHOUTContextClearedSurfacesOnlySystemMessage();
     expect(done).toHaveLength(1);
-    const stop = done[0].stop;
-    expect(stop?.systemMessage).toBe('a system note');
-    expect('contextCleared' in (stop ?? {})).toBe(false);
+    expect(systemMessageObservation).toBe('a system note');
+    expect(
+      agentExecutionStoppedWITHSystemMessageButWITHOUTContextClearedSurfacesOnlySystemMessageObservation2,
+    ).toBe(false);
   });
+
+  const observeAgentExecutionStoppedWITHSystemMessageButWITHOUTContextClearedSurfacesOnlySystemMessage =
+    async () => {
+      const events = await runAdapterStatic(
+        loopStream(streamStopped('partial', 'a system note')),
+      );
+      const done = events.filter(isDoneEvent);
+
+      const stop = done[0].stop;
+
+      const systemMessageObservation = stop?.systemMessage;
+      const agentExecutionStoppedWITHSystemMessageButWITHOUTContextClearedSurfacesOnlySystemMessageObservation2 =
+        'contextCleared' in (stop ?? {});
+      return {
+        done,
+        systemMessageObservation,
+        agentExecutionStoppedWITHSystemMessageButWITHOUTContextClearedSurfacesOnlySystemMessageObservation2,
+      };
+    };
 
   it('AgentExecutionBlocked without systemMessage omits the systemMessage key on the blocked info @plan:PLAN-20260617-COREAPI.P14 @requirement:REQ-003', async () => {
     const events = await runAdapterStatic(
@@ -454,20 +506,51 @@ describe('Event adapter projection @plan:PLAN-20260617-COREAPI.P14 @requirement:
   // ─── property-based invariants ───────────────────────────────────────────
 
   it('property: tools_complete projects tool-result.isError matching the success/error discriminant for any boolean @plan:PLAN-20260617-COREAPI.P14 @requirement:REQ-003', async () => {
+    const {
+      propertyToolsCompleteProjectsToolResultIsErrorMatchingTheSuccessErrorDiscriminantProperty,
+      observations,
+    } =
+      await observePropertyToolsCompleteProjectsToolResultIsErrorMatchingTheSuccessErrorDiscriminant();
     await fc.assert(
-      fc.asyncProperty(fc.boolean(), async (isError) => {
-        // Choose the REAL builder by the generated discriminant: an errored
-        // completion must project isError true, a successful one false.
-        const loopEvent = isError
-          ? loopToolsCompleteError('c-prop', 'search')
-          : loopToolsComplete('c-prop', 'search', 'found it');
-        const events = await runAdapterStatic([loopEvent]);
-        const results = events.filter(isToolResultEvent);
-        expect(results).toHaveLength(1);
-        expect(results[0].result.isError).toBe(isError);
-      }),
+      propertyToolsCompleteProjectsToolResultIsErrorMatchingTheSuccessErrorDiscriminantProperty,
+    );
+    expect(observations.map(({ resultCount }) => resultCount)).toStrictEqual(
+      observations.map(() => 1),
+    );
+    expect(observations.map(({ actual }) => actual)).toStrictEqual(
+      observations.map(({ expected }) => expected),
     );
   });
+
+  const observePropertyToolsCompleteProjectsToolResultIsErrorMatchingTheSuccessErrorDiscriminant =
+    async () => {
+      const observations: Array<{
+        resultCount: number;
+        actual: boolean;
+        expected: boolean;
+      }> = [];
+      const propertyToolsCompleteProjectsToolResultIsErrorMatchingTheSuccessErrorDiscriminantProperty =
+        fc.asyncProperty(fc.boolean(), async (isError) => {
+          // Choose the REAL builder by the generated discriminant: an errored
+          // completion must project isError true, a successful one false.
+          const loopEvent = isError
+            ? loopToolsCompleteError('c-prop', 'search')
+            : loopToolsComplete('c-prop', 'search', 'found it');
+          const events = await runAdapterStatic([loopEvent]);
+          const results = events.filter(isToolResultEvent);
+          const actual = results[0]?.result.isError;
+          observations.push({
+            resultCount: results.length,
+            actual: actual ?? !isError,
+            expected: isError,
+          });
+          return results.length === 1 && actual === isError;
+        });
+      return {
+        propertyToolsCompleteProjectsToolResultIsErrorMatchingTheSuccessErrorDiscriminantProperty,
+        observations,
+      };
+    };
 
   it('property: a stream of N Content events projects to N text events preserving order and exact values @plan:PLAN-20260617-COREAPI.P14 @requirement:REQ-003', async () => {
     await fc.assert(

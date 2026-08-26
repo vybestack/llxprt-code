@@ -255,40 +255,51 @@ describe('TokenUsageLogger — lifecycle event emission (issue #3130 slice 5)', 
   // -------------------------------------------------------------------------
 
   it('emits a compression record when a real compression completes', async () => {
-    installCompressingStrategy();
-    const { handler } = buildCompressionHandler(logFile);
-
-    await handler.performCompression('test-prompt-lifecycle');
-
-    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
-    const compressionRecords = records.filter(
-      (r) => r.record_type === 'compression',
-    );
+    const { compressionRecords, record, tokensAfter, tokensBefore } =
+      await observeEmitsACompressionRecordWhenARealCompressionCompletes();
     expect(compressionRecords).toHaveLength(1);
-
-    const record = compressionRecords[0];
     expect(record.record_type).toBe('compression');
     expect(record.schema_version).toBe(TOKEN_USAGE_SCHEMA_VERSION);
     expect(record.session_id).toBe(SESSION_ID);
     expect(record.tokens_before).toBe(TOKENS_BEFORE);
     expect(record.tokens_after).toBe(TOKENS_AFTER);
-    // AC-12: tokens_after < tokens_before. The record is read back as plain
-    // JSON, so narrow the unknown numeric fields before comparing them.
-    const tokensBefore = record.tokens_before;
-    const tokensAfter = record.tokens_after;
-    if (typeof tokensBefore !== 'number' || typeof tokensAfter !== 'number') {
-      throw new Error(
-        `tokens_before/tokens_after must be numbers (got ${typeof tokensBefore}, ${typeof tokensAfter})`,
-      );
-    }
     expect(tokensAfter).toBeLessThan(tokensBefore);
-    // The compression model is carried
     expect(record.compression_model).toBe(COMPRESSION_MODEL);
     expect(record.compression_provider).toBe(COMPRESSION_PROVIDER);
-    // The compression call's own usage
     expect(record.compression_prompt_tokens).toBe(8000);
     expect(record.compression_output_tokens).toBe(500);
   });
+
+  const observeEmitsACompressionRecordWhenARealCompressionCompletes =
+    async () => {
+      installCompressingStrategy();
+      const { handler } = buildCompressionHandler(logFile);
+
+      await handler.performCompression('test-prompt-lifecycle');
+
+      const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+      const compressionRecords = records.filter(
+        (r) => r.record_type === 'compression',
+      );
+
+      const record = compressionRecords[0];
+
+      // AC-12: tokens_after < tokens_before. The record is read back as plain
+      // JSON, so narrow the unknown numeric fields before comparing them.
+      const tokensBefore = record.tokens_before;
+      const tokensAfter = record.tokens_after;
+      if (typeof tokensBefore !== 'number' || typeof tokensAfter !== 'number') {
+        throw new Error(
+          `tokens_before/tokens_after must be numbers (got ${typeof tokensBefore}, ${typeof tokensAfter})`,
+        );
+      }
+
+      // The compression model is carried
+
+      // The compression call's own usage
+
+      return { compressionRecords, record, tokensAfter, tokensBefore };
+    };
 
   it('does not emit a compression record when compression is a structural no-op', async () => {
     vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
@@ -399,21 +410,31 @@ describe('TokenUsageLogger — lifecycle event emission (issue #3130 slice 5)', 
   });
 
   it('the compression record round-trips through parseTokenUsageLogRecord', async () => {
-    installCompressingStrategy();
-    const { handler } = buildCompressionHandler(logFile);
-
-    await handler.performCompression('test-prompt-roundtrip');
-
-    const raw = fs.readFileSync(logFile, 'utf-8').trim();
-    const parsed = parseTokenUsageLogRecord(JSON.parse(raw));
+    const { parsed } =
+      await observeTheCompressionRecordRoundTripsThroughParseTokenUsageLogRecord();
     expect(parsed).not.toBeNull();
-    if (parsed === null) throw new Error('expected a parseable record');
     expect(parsed.record_type).toBe('compression');
-    if (parsed.record_type !== 'compression')
-      throw new Error('expected a compression record');
     expect(parsed.tokens_before).toBe(TOKENS_BEFORE);
     expect(parsed.tokens_after).toBe(TOKENS_AFTER);
     expect(parsed.compression_model).toBe(COMPRESSION_MODEL);
     expect(parsed.compression_provider).toBe(COMPRESSION_PROVIDER);
   });
+
+  const observeTheCompressionRecordRoundTripsThroughParseTokenUsageLogRecord =
+    async () => {
+      installCompressingStrategy();
+      const { handler } = buildCompressionHandler(logFile);
+
+      await handler.performCompression('test-prompt-roundtrip');
+
+      const raw = fs.readFileSync(logFile, 'utf-8').trim();
+      const parsed = parseTokenUsageLogRecord(JSON.parse(raw));
+
+      if (parsed === null) throw new Error('expected a parseable record');
+
+      if (parsed.record_type !== 'compression')
+        throw new Error('expected a compression record');
+
+      return { parsed };
+    };
 });

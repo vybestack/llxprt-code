@@ -197,6 +197,13 @@ void vi.mock('@vybestack/llxprt-code-core', () => {
 
 const FAILED_TOKEN = 'failed-access-token';
 
+function getMyProfileSessionBucket(
+  _provider: string,
+  metadata?: OAuthTokenRequestMetadata,
+): string | undefined {
+  return metadata?.profileId === 'my-profile' ? 'bucket-b' : undefined;
+}
+
 describe('TokenAccessCoordinator forceRefreshToken bucket resolution (issue #2131)', () => {
   beforeEach(() => {
     oauthRuntimeBridge.setAccessors({
@@ -387,12 +394,7 @@ describe('TokenAccessCoordinator forceRefreshToken bucket resolution (issue #213
     // profile. The unscoped lookup (no metadata) returns undefined, mirroring
     // subagent-isolation.behavioral.spec.ts where a scoped session bucket can
     // exist while the unscoped one is undefined.
-    facade.getSessionBucket = vi.fn(
-      (_p: string, metadata?: OAuthTokenRequestMetadata) =>
-        metadata?.profileId === 'my-profile'
-          ? 'bucket-b'
-          : (undefined as string | undefined),
-    );
+    facade.getSessionBucket = vi.fn(getMyProfileSessionBucket);
 
     const result = await coordinator.forceRefreshToken(
       'anthropic',

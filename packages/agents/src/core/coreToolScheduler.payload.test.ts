@@ -116,132 +116,154 @@ describe('CoreToolScheduler with payload', () => {
   });
 
   it('should update shell command args and execute when suggest edit payload is provided', async () => {
-    const executeFn = vi.fn().mockResolvedValue({
-      llmContent: 'Shell command executed',
-      returnDisplay: 'Shell command executed',
-    });
-
-    const originalOnConfirm = vi.fn(
-      async (
-        _outcome: ToolConfirmationOutcome,
-        _payload?: ToolConfirmationPayload,
-      ) => {},
-    );
-
-    const mockShellTool = new MockTool({
-      name: 'run_shell_command',
-      shouldConfirmExecute: (params) =>
-        Promise.resolve({
-          type: 'exec',
-          title: 'Confirm Shell Command',
-          command: String(params['command'] ?? ''),
-          rootCommand: 'npm',
-          onConfirm: originalOnConfirm,
-        }),
-      execute: (params) => executeFn(params),
-    });
-
-    const toolRegistry = {
-      getTool: () => mockShellTool,
-      getToolByName: () => mockShellTool,
-      getFunctionDeclarations: () => [],
-      tools: new Map(),
-      discovery: {},
-      registerTool: () => {},
-      getToolByDisplayName: () => mockShellTool,
-      getTools: () => [],
-      discoverTools: async () => {},
-      getAllTools: () => [],
-      getToolsByServer: () => [],
-    } as unknown as ToolRegistry;
-
-    const onAllToolCallsComplete = vi.fn();
-    const onToolCallsUpdate = vi.fn();
-
-    const mockPolicyEngine = createMockPolicyEngine();
-    mockPolicyEngine.evaluate = vi
-      .fn()
-      .mockReturnValue(PolicyDecision.ASK_USER);
-
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      isInteractive: () => true,
-      getApprovalMode: () => ApprovalMode.DEFAULT,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-      }),
-      getToolRegistry: () => toolRegistry,
-      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-      getModel: () => DEFAULT_GEMINI_MODEL,
-      getShellExecutionConfig: () => ({
-        terminalWidth: 80,
-        terminalHeight: 24,
-      }),
-      getTerminalWidth: vi.fn(() => 80),
-      getTerminalHeight: vi.fn(() => 24),
-      storage: {
-        getProjectTempDir: () => '/tmp',
-      },
-      getTruncateToolOutputThreshold: () =>
-        DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
-      getTruncateToolOutputLines: () => DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
-      getUseSmartEdit: () => false,
-      getUseModelRouter: () => false,
-      getAgentClient: () => null,
-    } as unknown as Config;
-
-    const scheduler = new CoreToolScheduler({
-      config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
-      toolRegistry: mockConfig.getToolRegistry(),
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
-      getPreferredEditor: () => 'vscode',
-      onEditorClose: vi.fn(),
-    });
-
-    const abortController = new AbortController();
-    const request = {
-      callId: 'shell-suggest-edit',
-      name: 'run_shell_command',
-      args: { command: 'npm instal' },
-      isClientInitiated: false,
-      prompt_id: 'prompt-shell-suggest-edit',
-    };
-
-    await scheduler.schedule([request], abortController.signal);
-
-    const awaitingCall = (await waitForStatus(
-      onToolCallsUpdate,
-      'awaiting_approval',
-    )) as WaitingToolCall;
-
-    expect(awaitingCall.confirmationDetails).toBeDefined();
-
-    const payload: ToolConfirmationPayload = {
-      editedCommand: 'npm install',
-    };
-
-    await awaitingCall.confirmationDetails.onConfirm(
-      ToolConfirmationOutcome.SuggestEdit,
+    const {
+      awaitingCall,
+      originalOnConfirm,
       payload,
-    );
-
-    await waitFor(() => {
-      expect(onAllToolCallsComplete).toHaveBeenCalled();
-    });
-
+      executeCall,
+      completionCallCount,
+    } =
+      await observeUpdateShellCommandArgsAndExecuteWhenSuggestEditPayloadIsProvided();
+    expect(completionCallCount).toBeGreaterThan(0);
+    expect(awaitingCall.confirmationDetails).toBeDefined();
     expect(originalOnConfirm).toHaveBeenCalledWith(
       ToolConfirmationOutcome.SuggestEdit,
       payload,
     );
-
-    const executeCall = executeFn.mock.calls[executeFn.mock.calls.length - 1];
     expect(executeCall[0]).toStrictEqual({ command: 'npm install' });
   });
+
+  const observeUpdateShellCommandArgsAndExecuteWhenSuggestEditPayloadIsProvided =
+    async () => {
+      const executeFn = vi.fn().mockResolvedValue({
+        llmContent: 'Shell command executed',
+        returnDisplay: 'Shell command executed',
+      });
+
+      const originalOnConfirm = vi.fn(
+        async (
+          _outcome: ToolConfirmationOutcome,
+          _payload?: ToolConfirmationPayload,
+        ) => {},
+      );
+
+      const mockShellTool = new MockTool({
+        name: 'run_shell_command',
+        shouldConfirmExecute: (params) =>
+          Promise.resolve({
+            type: 'exec',
+            title: 'Confirm Shell Command',
+            command: String(params['command'] ?? ''),
+            rootCommand: 'npm',
+            onConfirm: originalOnConfirm,
+          }),
+        execute: (params) => executeFn(params),
+      });
+
+      const toolRegistry = {
+        getTool: () => mockShellTool,
+        getToolByName: () => mockShellTool,
+        getFunctionDeclarations: () => [],
+        tools: new Map(),
+        discovery: {},
+        registerTool: () => {},
+        getToolByDisplayName: () => mockShellTool,
+        getTools: () => [],
+        discoverTools: async () => {},
+        getAllTools: () => [],
+        getToolsByServer: () => [],
+      } as unknown as ToolRegistry;
+
+      const onAllToolCallsComplete = vi.fn();
+      const onToolCallsUpdate = vi.fn();
+
+      const mockPolicyEngine = createMockPolicyEngine();
+      mockPolicyEngine.evaluate = vi
+        .fn()
+        .mockReturnValue(PolicyDecision.ASK_USER);
+
+      const mockConfig = {
+        getSessionId: () => 'test-session-id',
+        getUsageStatisticsEnabled: () => true,
+        getDebugMode: () => false,
+        isInteractive: () => true,
+        getApprovalMode: () => ApprovalMode.DEFAULT,
+        getEphemeralSettings: () => ({}),
+        getAllowedTools: () => [],
+        getContentGeneratorConfig: () => ({
+          model: 'test-model',
+        }),
+        getToolRegistry: () => toolRegistry,
+        getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+        getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
+        getModel: () => DEFAULT_GEMINI_MODEL,
+        getShellExecutionConfig: () => ({
+          terminalWidth: 80,
+          terminalHeight: 24,
+        }),
+        getTerminalWidth: vi.fn(() => 80),
+        getTerminalHeight: vi.fn(() => 24),
+        storage: {
+          getProjectTempDir: () => '/tmp',
+        },
+        getTruncateToolOutputThreshold: () =>
+          DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
+        getTruncateToolOutputLines: () => DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
+        getUseSmartEdit: () => false,
+        getUseModelRouter: () => false,
+        getAgentClient: () => null,
+      } as unknown as Config;
+
+      const scheduler = new CoreToolScheduler({
+        config: mockConfig,
+        messageBus: mockConfig.getMessageBus(),
+        toolRegistry: mockConfig.getToolRegistry(),
+        onAllToolCallsComplete,
+        onToolCallsUpdate,
+        getPreferredEditor: () => 'vscode',
+        onEditorClose: vi.fn(),
+      });
+
+      const abortController = new AbortController();
+      const request = {
+        callId: 'shell-suggest-edit',
+        name: 'run_shell_command',
+        args: { command: 'npm instal' },
+        isClientInitiated: false,
+        prompt_id: 'prompt-shell-suggest-edit',
+      };
+
+      await scheduler.schedule([request], abortController.signal);
+
+      const awaitingCall = (await waitForStatus(
+        onToolCallsUpdate,
+        'awaiting_approval',
+      )) as WaitingToolCall;
+
+      const payload: ToolConfirmationPayload = {
+        editedCommand: 'npm install',
+      };
+
+      await awaitingCall.confirmationDetails.onConfirm(
+        ToolConfirmationOutcome.SuggestEdit,
+        payload,
+      );
+
+      await waitFor(() => {
+        if (onAllToolCallsComplete.mock.calls.length === 0) {
+          throw new Error('Waiting for all tool calls to complete');
+        }
+      });
+
+      const executeCall = executeFn.mock.calls[executeFn.mock.calls.length - 1];
+      const completionCallCount = onAllToolCallsComplete.mock.calls.length;
+
+      return {
+        awaitingCall,
+        originalOnConfirm,
+        payload,
+        executeCall,
+        completionCallCount,
+      };
+    };
 });

@@ -84,6 +84,7 @@ function findViolatingLines(
 }
 
 // ─────────────────────────────────────────────────────────────────
+
 // 1. CLI auth source imports from auth package, not old core/auth
 // ─────────────────────────────────────────────────────────────────
 
@@ -102,18 +103,21 @@ describe('CLI auth migration: no old core/auth imports', () => {
       }
     }
 
-    expect(
-      violations,
-      `Forbidden core/auth imports in CLI auth source:\n${violations.join('\n')}`,
-    ).toStrictEqual([]);
+    try {
+      expect(violations).toStrictEqual([]);
+    } catch (error) {
+      throw new Error(
+        `Forbidden core/auth imports in CLI auth source:${String.fromCharCode(10)}${violations.join(String.fromCharCode(10))}`,
+        { cause: error },
+      );
+    }
   });
 
-  it('CLI test files have zero imports from core/auth subpath', () => {
+  function findCoreAuthImportsInCliTestFiles(): readonly string[] {
     const cliAuthDir = path.resolve(__dirname, '../auth');
     const testFiles = collectTsFiles(cliAuthDir, false).filter(
       (f) => f.endsWith('.test.ts') || f.endsWith('.spec.ts'),
     );
-
     const violations: string[] = [];
     for (const filePath of testFiles) {
       const relPath = path.relative(cliAuthDir, filePath);
@@ -122,10 +126,19 @@ describe('CLI auth migration: no old core/auth imports', () => {
       }
     }
 
-    expect(
-      violations,
-      `Forbidden core/auth imports in CLI auth tests:\n${violations.join('\n')}`,
-    ).toStrictEqual([]);
+    return violations;
+  }
+
+  it('CLI test files have zero imports from core/auth subpath', () => {
+    const violations = findCoreAuthImportsInCliTestFiles();
+    try {
+      expect(violations).toStrictEqual([]);
+    } catch (error) {
+      throw new Error(
+        `Forbidden core/auth imports in CLI auth tests:${String.fromCharCode(10)}${violations.join(String.fromCharCode(10))}`,
+        { cause: error },
+      );
+    }
   });
 
   it('CLI integration tests have zero imports from core/auth subpath', () => {
@@ -140,10 +153,14 @@ describe('CLI auth migration: no old core/auth imports', () => {
       }
     }
 
-    expect(
-      violations,
-      `Forbidden core/auth imports in CLI integration tests:\n${violations.join('\n')}`,
-    ).toStrictEqual([]);
+    try {
+      expect(violations).toStrictEqual([]);
+    } catch (error) {
+      throw new Error(
+        `Forbidden core/auth imports in CLI integration tests:${String.fromCharCode(10)}${violations.join(String.fromCharCode(10))}`,
+        { cause: error },
+      );
+    }
   });
 });
 
@@ -235,7 +252,7 @@ describe('CLI auth compile-time contract verification', () => {
     expect('ProxyProviderKeyStorage' in coreIndex).toBe(true);
   });
 
-  it('core package.json has no auth subpath exports', () => {
+  function findCoreAuthSubpathExports(): readonly string[] {
     const corePkgPath = path.resolve(__dirname, '../../../core/package.json');
     const pkg = JSON.parse(fs.readFileSync(corePkgPath, 'utf-8')) as Record<
       string,
@@ -245,10 +262,20 @@ describe('CLI auth compile-time contract verification', () => {
     const authSubpaths = Object.keys(exports).filter(
       (key) => key.startsWith('./auth/') || key === './auth',
     );
-    expect(
-      authSubpaths,
-      `core package.json must not have auth subpath exports: ${authSubpaths.join(', ')}`,
-    ).toStrictEqual([]);
+
+    return authSubpaths;
+  }
+
+  it('core package.json has no auth subpath exports', () => {
+    const authSubpaths = findCoreAuthSubpathExports();
+    try {
+      expect(authSubpaths).toStrictEqual([]);
+    } catch (error) {
+      throw new Error(
+        `core package.json must not have auth subpath exports: ${authSubpaths.join(', ')}`,
+        { cause: error },
+      );
+    }
   });
 });
 
@@ -300,12 +327,16 @@ describe('CLI auth device flows use auth-package exports', () => {
     // Check required interface methods exist on prototype
     const requiredMethods = ['getToken', 'isAuthenticated', 'authenticate'];
     for (const method of requiredMethods) {
-      expect(
-        typeof (OAuthManager.prototype as unknown as Record<string, unknown>)[
-          method
-        ],
-        `OAuthManager must have ${method} method`,
-      ).toBe('function');
+      const methodType = typeof (
+        OAuthManager.prototype as unknown as Record<string, unknown>
+      )[method];
+      try {
+        expect(methodType).toBe('function');
+      } catch (error) {
+        throw new Error(`OAuthManager must have ${method} method`, {
+          cause: error,
+        });
+      }
     }
   });
 });

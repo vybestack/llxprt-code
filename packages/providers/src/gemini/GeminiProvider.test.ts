@@ -51,6 +51,20 @@ const mockSettingsService = {
   getAllGlobalSettings: vi.fn().mockReturnValue({}),
 };
 
+function readGoogleApiKey(key: string): string | undefined {
+  if (key === 'GOOGLE_API_KEY') {
+    return 'settings-google-api-key';
+  }
+  return undefined;
+}
+
+function readGoogleApplicationCredentials(key: string): string | undefined {
+  if (key === 'GOOGLE_APPLICATION_CREDENTIALS') {
+    return '/settings/credentials.json';
+  }
+  return undefined;
+}
+
 void vi.mock('@vybestack/llxprt-code-settings', () => ({
   ...realLlxprtCodeSettingsModule,
   getSettingsService: vi.fn(() => mockSettingsService),
@@ -91,12 +105,7 @@ describe('GeminiProvider', () => {
   });
 
   it('uses runtime settings GOOGLE_API_KEY when checking paid mode', () => {
-    mockSettingsService.get.mockImplementation((key: string) => {
-      if (key === 'GOOGLE_API_KEY') {
-        return 'settings-google-api-key';
-      }
-      return undefined;
-    });
+    mockSettingsService.get.mockImplementation(readGoogleApiKey);
     const provider = new GeminiProvider();
     provider.setRuntimeSettingsService(
       mockSettingsService as unknown as SettingsService,
@@ -106,12 +115,9 @@ describe('GeminiProvider', () => {
   });
 
   it('uses runtime settings GOOGLE_APPLICATION_CREDENTIALS when checking paid mode', () => {
-    mockSettingsService.get.mockImplementation((key: string) => {
-      if (key === 'GOOGLE_APPLICATION_CREDENTIALS') {
-        return '/settings/credentials.json';
-      }
-      return undefined;
-    });
+    mockSettingsService.get.mockImplementation(
+      readGoogleApplicationCredentials,
+    );
     const provider = new GeminiProvider();
     provider.setRuntimeSettingsService(
       mockSettingsService as unknown as SettingsService,
@@ -272,9 +278,10 @@ describe('GeminiProvider', () => {
 
     const request = generateContentStreamMock.mock.calls[0][0];
     const toolMessage = request.contents.find((msg: { parts: Part[] }) =>
-      msg.parts.some(
-        (part: Part) =>
-          'functionResponse' in part && part.functionResponse != null,
+      msg.parts.some((part: Part) =>
+        ['functionResponse' in part, part.functionResponse != null].every(
+          Boolean,
+        ),
       ),
     ) as { parts: Part[] };
     const functionResponsePart = toolMessage.parts.find(
@@ -529,10 +536,11 @@ describe('GeminiProvider', () => {
       await generator.next();
 
       const request = generateContentStreamMock.mock.calls[0][0];
-      const toolMessage = request.contents.find(
-        (msg: { role: string }) =>
-          msg.role === 'user' &&
+      const toolMessage = request.contents.find((msg: { role: string }) =>
+        [
+          msg.role === 'user',
           msg.parts.some((p: Part) => 'functionResponse' in p),
+        ].every(Boolean),
       );
       expect(toolMessage).toBeDefined();
 
@@ -580,10 +588,11 @@ describe('GeminiProvider', () => {
       await generator.next();
 
       const request = generateContentStreamMock.mock.calls[0][0];
-      const toolMessage = request.contents.find(
-        (msg: { role: string }) =>
-          msg.role === 'user' &&
+      const toolMessage = request.contents.find((msg: { role: string }) =>
+        [
+          msg.role === 'user',
           msg.parts.some((p: Part) => 'functionResponse' in p),
+        ].every(Boolean),
       );
       expect(toolMessage).toBeDefined();
 
@@ -624,10 +633,11 @@ describe('GeminiProvider', () => {
       await generator.next();
 
       const request = generateContentStreamMock.mock.calls[0][0];
-      const toolMessage = request.contents.find(
-        (msg: { role: string }) =>
-          msg.role === 'user' &&
+      const toolMessage = request.contents.find((msg: { role: string }) =>
+        [
+          msg.role === 'user',
           msg.parts.some((p: Part) => 'functionResponse' in p),
+        ].every(Boolean),
       );
       const frPart = toolMessage.parts.find(
         (p: Part) => 'functionResponse' in p,
@@ -661,10 +671,11 @@ describe('GeminiProvider', () => {
       await generator.next();
 
       const request = generateContentStreamMock.mock.calls[0][0];
-      const toolMessage = request.contents.find(
-        (msg: { role: string }) =>
-          msg.role === 'user' &&
+      const toolMessage = request.contents.find((msg: { role: string }) =>
+        [
+          msg.role === 'user',
           msg.parts.some((p: Part) => 'functionResponse' in p),
+        ].every(Boolean),
       );
       const frPart = toolMessage.parts.find(
         (p: Part) => 'functionResponse' in p,
@@ -716,10 +727,11 @@ describe('GeminiProvider', () => {
       await generator.next();
 
       const request = generateContentStreamMock.mock.calls[0][0];
-      const toolMessage = request.contents.find(
-        (msg: { role: string }) =>
-          msg.role === 'user' &&
+      const toolMessage = request.contents.find((msg: { role: string }) =>
+        [
+          msg.role === 'user',
           msg.parts.some((p: Part) => 'functionResponse' in p),
+        ].every(Boolean),
       );
       const frPart = toolMessage.parts.find(
         (p: Part) => 'functionResponse' in p,

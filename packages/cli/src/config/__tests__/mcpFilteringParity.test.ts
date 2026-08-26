@@ -572,9 +572,7 @@ describe('mcpFilteringParity: MCP server filtering', () => {
 
     await config.reloadMcpServers();
 
-    expect(Object.keys(config.getMcpServers() ?? {})).toStrictEqual([
-      'allowed',
-    ]);
+    expect(Object.keys(config.getMcpServers()!)).toStrictEqual(['allowed']);
     expect(config.getBlockedMcpServers()).toStrictEqual([
       { name: 'blocked', extensionName: '' },
     ]);

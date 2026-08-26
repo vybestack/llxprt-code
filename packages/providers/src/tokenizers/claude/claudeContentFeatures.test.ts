@@ -55,7 +55,7 @@ function codePointBoundaries(text: string): readonly number[] {
 describe('one-pass Claude content features', () => {
   it('returns zeroed, frozen features for empty input', () => {
     const features = extractClaudeContentFeatures('');
-    expect(features).toEqual({
+    expect(features).toStrictEqual({
       codePoints: 0,
       nonAsciiCodePoints: 0,
       structuralCodePoints: 0,
@@ -65,9 +65,9 @@ describe('one-pass Claude content features', () => {
   });
 
   it('exposes exactly the declared feature names', () => {
-    expect(Object.keys(extractClaudeContentFeatures('abc')).sort()).toEqual(
-      [...CLAUDE_CONTENT_FEATURE_NAMES].sort(),
-    );
+    expect(
+      Object.keys(extractClaudeContentFeatures('abc')).sort(),
+    ).toStrictEqual([...CLAUDE_CONTENT_FEATURE_NAMES].sort());
   });
 
   it.each(Object.entries(SAMPLES))(
@@ -79,7 +79,7 @@ describe('one-pass Claude content features', () => {
           extractClaudeContentFeatures(text.slice(0, boundary)),
           extractClaudeContentFeatures(text.slice(boundary)),
         ];
-        expect(sumFeatures(parts)).toEqual(whole);
+        expect(sumFeatures(parts)).toStrictEqual(whole);
       }
     },
   );
@@ -96,7 +96,7 @@ describe('one-pass Claude content features', () => {
         extractClaudeContentFeatures(b),
         extractClaudeContentFeatures(c),
       ]),
-    ).toEqual(whole);
+    ).toStrictEqual(whole);
   });
 
   it('counts astral characters once, not once per UTF-16 unit', () => {
@@ -150,7 +150,7 @@ describe('one-pass Claude content features', () => {
 
   it('is deterministic for repeated extraction of long input', () => {
     const long = SAMPLES.markdown.repeat(2000);
-    expect(extractClaudeContentFeatures(long)).toEqual(
+    expect(extractClaudeContentFeatures(long)).toStrictEqual(
       extractClaudeContentFeatures(long),
     );
     expect(extractClaudeContentFeatures(long).codePoints).toBe(

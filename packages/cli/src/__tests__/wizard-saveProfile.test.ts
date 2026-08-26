@@ -63,9 +63,8 @@ describe('ProfileCreateWizard saveProfile — settings persistence API', () => {
     });
   });
 
-  it.skipIf(process.platform === 'win32')(
-    'creates a new profile with owner-only mode on POSIX',
-    async () => {
+  describe.skipIf(process.platform === 'win32')('POSIX behavior', () => {
+    it('creates a new profile with owner-only mode on POSIX', async () => {
       await saveProfile(
         'mode-profile',
         { version: 1, provider: 'openai', model: 'gpt-4' },
@@ -77,8 +76,8 @@ describe('ProfileCreateWizard saveProfile — settings persistence API', () => {
         'mode-profile.json',
       );
       expect(fs.statSync(profilePath).mode & 0o777).toBe(0o600);
-    },
-  );
+    });
+  });
 
   it('create collision returns alreadyExists without overwriting', async () => {
     const profilesDir = profilesDirForConfigHome(Storage.getGlobalConfigDir());

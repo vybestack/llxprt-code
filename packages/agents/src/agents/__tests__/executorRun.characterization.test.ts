@@ -177,36 +177,56 @@ describe('executorRun.characterization — property-based template', () => {
   });
 
   it('P: substitution is deterministic — same inputs always yield same output', () => {
+    const {
+      pSubstitutionIsDeterministicSameInputsAlwaysYieldSameOutputProperty,
+    } = observePSubstitutionIsDeterministicSameInputsAlwaysYieldSameOutput();
     fc.assert(
-      fc.property(
-        fc.record({
-          template: fc.string(),
-          inputs: fc.dictionary(
-            fc.string().filter((s) => /^\w+$/.test(s) && s.length > 0),
-            fc.string(),
-          ),
-        }),
-        ({ template, inputs }) => {
-          const placeholderKeys = Array.from(
-            template.matchAll(/\$\{(\w+)\}/g),
-            (m) => m[1],
-          );
-          const allKeysPresent = placeholderKeys.every((k) =>
-            Object.keys(inputs).includes(k),
-          );
-          if (!allKeysPresent) return true;
-
-          const r1 = templateString(template, inputs);
-          const r2 = templateString(template, inputs);
-          return r1 === r2;
-        },
-      ),
+      pSubstitutionIsDeterministicSameInputsAlwaysYieldSameOutputProperty,
       { numRuns: 50 },
     );
   });
 
+  const observePSubstitutionIsDeterministicSameInputsAlwaysYieldSameOutput =
+    () => {
+      const pSubstitutionIsDeterministicSameInputsAlwaysYieldSameOutputProperty =
+        fc.property(
+          fc.record({
+            template: fc.string(),
+            inputs: fc.dictionary(
+              fc.string().filter((s) => /^\w+$/.test(s) && s.length > 0),
+              fc.string(),
+            ),
+          }),
+          ({ template, inputs }) => {
+            const placeholderKeys = Array.from(
+              template.matchAll(/\$\{(\w+)\}/g),
+              (m) => m[1],
+            );
+            const allKeysPresent = placeholderKeys.every((k) =>
+              Object.keys(inputs).includes(k),
+            );
+            if (!allKeysPresent) return true;
+
+            const r1 = templateString(template, inputs);
+            const r2 = templateString(template, inputs);
+            return r1 === r2;
+          },
+        );
+      return {
+        pSubstitutionIsDeterministicSameInputsAlwaysYieldSameOutputProperty,
+      };
+    };
+
   it('P: template with N distinct placeholders substitutes all of them', () => {
-    fc.assert(
+    const { pTemplateWithNDistinctPlaceholdersSubstitutesAllOfThemProperty } =
+      observePTemplateWithNDistinctPlaceholdersSubstitutesAllOfThem();
+    fc.assert(pTemplateWithNDistinctPlaceholdersSubstitutesAllOfThemProperty, {
+      numRuns: 30,
+    });
+  });
+
+  const observePTemplateWithNDistinctPlaceholdersSubstitutesAllOfThem = () => {
+    const pTemplateWithNDistinctPlaceholdersSubstitutesAllOfThemProperty =
       fc.property(
         fc.uniqueArray(
           fc.string().filter((s) => isSafeTemplateKey(s) && s.length <= 10),
@@ -233,10 +253,9 @@ describe('executorRun.characterization — property-based template', () => {
 
           return keys.every((k) => text.includes(inputs[k]));
         },
-      ),
-      { numRuns: 30 },
-    );
-  });
+      );
+    return { pTemplateWithNDistinctPlaceholdersSubstitutesAllOfThemProperty };
+  };
 });
 
 // ─── Recovery warning message ──────────────────────────────

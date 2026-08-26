@@ -278,9 +278,8 @@ describe('permissions dialog multi-folder flow', () => {
     typeof process.getuid === 'function' &&
     process.getuid() !== 0;
 
-  it.skipIf(!canTestUnreadable)(
-    'C4: reports an unreadable folder distinctly from a missing one',
-    async () => {
+  describe.skipIf(!canTestUnreadable)('unreadable folders', () => {
+    it('C4: reports an unreadable folder distinctly from a missing one', async () => {
       const blocked = path.join(tempRoot, 'blocked');
       fs.mkdirSync(blocked);
       const target = path.join(blocked, 'inner');
@@ -301,8 +300,8 @@ describe('permissions dialog multi-folder flow', () => {
       } finally {
         fs.chmodSync(blocked, 0o700);
       }
-    },
-  );
+    });
+  });
 
   it('C4: reports a path whose parent component is a file as not a folder', async () => {
     const filePath = path.join(tempRoot, 'parent-is-a-file.txt');
@@ -547,7 +546,9 @@ describe('permissions dialog multi-folder flow', () => {
     );
   });
 
-  it('C9: trusting the working directory does not mention /directory add', async () => {
+  const observeWorkingDirectoryTrustMessages = async (): Promise<{
+    readonly mentionedDirectoryAdd: boolean;
+  }> => {
     const { result } = renderFlow();
 
     await act(async () => {
@@ -556,12 +557,17 @@ describe('permissions dialog multi-folder flow', () => {
 
     // The working directory is already in the workspace, so the hint would be
     // noise here.
-    const mentionedWorkspaceStep = addItem.mock.calls.some((call) =>
+    const mentionedDirectoryAdd = addItem.mock.calls.some((call) =>
       String((call[0] as { text?: string }).text ?? '').includes(
         '/directory add',
       ),
     );
-    expect(mentionedWorkspaceStep).toBe(false);
+    return { mentionedDirectoryAdd };
+  };
+
+  it('C9: trusting the working directory does not mention /directory add', async () => {
+    const trustMessages = await observeWorkingDirectoryTrustMessages();
+    expect(trustMessages.mentionedDirectoryAdd).toBe(false);
   });
 
   it('C9: a non-cwd commit does not grant the session the target folder trust', async () => {
@@ -654,7 +660,11 @@ describe('permissions dialog multi-folder flow', () => {
     expect(onExit).toHaveBeenCalledTimes(1);
   });
 
-  it('C12: the displayed current level follows the active target path', async () => {
+  const observeActiveTargetTrustDisplay = async (): Promise<{
+    readonly initialTrustLevel: TrustLevel | undefined;
+    readonly selectedTrustLevel: TrustLevel | undefined;
+    readonly displayText: string;
+  }> => {
     mockedTrustedConfig.value = { [otherFolder]: TrustLevel.DO_NOT_TRUST };
     mockedResolvePathTrust.mockImplementation((folderPath: string) =>
       folderPath === otherFolder
@@ -667,18 +677,27 @@ describe('permissions dialog multi-folder flow', () => {
         : undefined,
     );
     const { result } = renderFlow();
-
-    expect(result.current.currentTrustLevel).toBeUndefined();
+    const initialTrustLevel = result.current.currentTrustLevel;
 
     await act(async () => {
       await result.current.selectChoice(TrustFormAction.MANAGE_RULES);
     });
     act(() => result.current.selectRule(otherFolder));
 
-    expect(result.current.currentTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
-    expect(
-      result.current.getDisplayText(result.current.currentTrustLevel),
-    ).toBe('Not trusted');
+    return {
+      initialTrustLevel,
+      selectedTrustLevel: result.current.currentTrustLevel,
+      displayText: result.current.getDisplayText(
+        result.current.currentTrustLevel,
+      ),
+    };
+  };
+
+  it('C12: the displayed current level follows the active target path', async () => {
+    const trustDisplay = await observeActiveTargetTrustDisplay();
+    expect(trustDisplay.initialTrustLevel).toBeUndefined();
+    expect(trustDisplay.selectedTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
+    expect(trustDisplay.displayText).toBe('Not trusted');
   });
 
   it('C13: a removal failure is reported and the dialog stays open', async () => {

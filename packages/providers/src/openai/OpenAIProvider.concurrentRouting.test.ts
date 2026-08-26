@@ -112,6 +112,29 @@ async function extractBody(
   return undefined;
 }
 
+async function recordRoutedFetch(
+  records: CallRecord[],
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+): Promise<Response> {
+  const headerRecord = extractHeaderRecord(init?.headers);
+  records.push({
+    url: String(input),
+    authHeader: headerRecord.Authorization || headerRecord.authorization,
+    body: await extractBody(init),
+  });
+  const url = String(input);
+  return url.includes('/responses')
+    ? makeSseResponse()
+    : makeChatCompletionResponse();
+}
+
+function parsePromptCacheBody(body: string | undefined): {
+  prompt_cache_key?: string;
+} {
+  return JSON.parse(body ?? '{}') as { prompt_cache_key?: string };
+}
+
 describe('OpenAIProvider concurrent call-scoped routing isolation @issue:2483', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -139,19 +162,8 @@ describe('OpenAIProvider concurrent call-scoped routing isolation @issue:2483', 
     const records: CallRecord[] = [];
 
     mockFetch.mockImplementation(
-      async (input: RequestInfo | URL, init?: RequestInit) => {
-        const headerRecord = extractHeaderRecord(init?.headers);
-        records.push({
-          url: String(input),
-          authHeader: headerRecord.Authorization || headerRecord.authorization,
-          body: await extractBody(init),
-        });
-        const url = String(input);
-        if (url.includes('/responses')) {
-          return makeSseResponse();
-        }
-        return makeChatCompletionResponse();
-      },
+      async (input: RequestInfo | URL, init?: RequestInit) =>
+        recordRoutedFetch(records, input, init),
     );
 
     const canonicalSettings = new SettingsService();
@@ -225,9 +237,7 @@ describe('OpenAIProvider concurrent call-scoped routing isolation @issue:2483', 
     // prompt_cache_key sourced from the canonical call's runtime ID,
     // proving call-scoped cache-key isolation.
     expect(responsesCall?.body).toBeDefined();
-    const parsed = JSON.parse(responsesCall?.body ?? '{}') as {
-      prompt_cache_key?: string;
-    };
+    const parsed = parsePromptCacheBody(responsesCall?.body);
     expect(parsed.prompt_cache_key).toBeDefined();
     expect(parsed.prompt_cache_key).toContain('canonical-runtime-id');
   });

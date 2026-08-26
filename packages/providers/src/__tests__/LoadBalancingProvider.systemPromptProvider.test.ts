@@ -30,6 +30,33 @@ function createTextContent(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
 }
 
+function requireGenerateOptions(
+  options: GenerateChatOptions | IContent[],
+): GenerateChatOptions {
+  if (Array.isArray(options)) {
+    throw new Error('Legacy chat arguments are not used by this test');
+  }
+  return options;
+}
+
+async function* generateFailingOpenAiPrompt(
+  options: GenerateChatOptions | IContent[],
+  captured: GenerateChatOptions[],
+  recordAttempt: () => number,
+): AsyncGenerator<IContent> {
+  captured.push(requireGenerateOptions(options));
+  if (recordAttempt() === 1) throw new Error('primary down');
+  yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+}
+
+async function* generateCapturedAnthropicPrompt(
+  options: GenerateChatOptions | IContent[],
+  captured: GenerateChatOptions[],
+): AsyncGenerator<IContent> {
+  captured.push(requireGenerateOptions(options));
+  yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+}
+
 function createResolvedSubProfile(
   overrides: Partial<ResolvedSubProfile>,
 ): ResolvedSubProfile {
@@ -158,7 +185,7 @@ describe('LoadBalancingProvider - provider-specific prompt rendering (issue #317
       systemPromptAssembler: assembler,
     });
 
-    expect(invocations).toEqual([
+    expect(invocations).toStrictEqual([
       { provider: 'openai', model: 'model-a' },
       { provider: 'anthropic', model: 'model-b' },
     ]);
@@ -175,19 +202,14 @@ describe('LoadBalancingProvider - provider-specific prompt rendering (issue #317
     let openaiAttempts = 0;
     const openai: IProvider = {
       name: 'openai',
-      async *generateChatCompletion(
+      generateChatCompletion: (
         optionsOrContents: GenerateChatOptions | IContent[],
-      ): AsyncGenerator<IContent> {
-        if (Array.isArray(optionsOrContents)) {
-          throw new Error('Legacy chat arguments are not used by this test');
-        }
-        openaiCaptured.push(optionsOrContents);
-        openaiAttempts++;
-        if (openaiAttempts === 1) {
-          throw new Error('primary down');
-        }
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
-      },
+      ) =>
+        generateFailingOpenAiPrompt(
+          optionsOrContents,
+          openaiCaptured,
+          () => ++openaiAttempts,
+        ),
       getModels: async () => [],
       getDefaultModel: () => 'model-a',
       getServerTools: () => [],
@@ -196,15 +218,10 @@ describe('LoadBalancingProvider - provider-specific prompt rendering (issue #317
     const anthropicCaptured: GenerateChatOptions[] = [];
     const anthropic: IProvider = {
       name: 'anthropic',
-      async *generateChatCompletion(
+      generateChatCompletion: (
         optionsOrContents: GenerateChatOptions | IContent[],
-      ): AsyncGenerator<IContent> {
-        if (Array.isArray(optionsOrContents)) {
-          throw new Error('Legacy chat arguments are not used by this test');
-        }
-        anthropicCaptured.push(optionsOrContents);
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
-      },
+      ) =>
+        generateCapturedAnthropicPrompt(optionsOrContents, anthropicCaptured),
       getModels: async () => [],
       getDefaultModel: () => 'model-b',
       getServerTools: () => [],
@@ -244,7 +261,7 @@ describe('LoadBalancingProvider - provider-specific prompt rendering (issue #317
       systemPromptAssembler: assembler,
     });
 
-    expect(invocations).toEqual([
+    expect(invocations).toStrictEqual([
       { provider: 'openai', model: 'model-a' },
       { provider: 'anthropic', model: 'model-b' },
     ]);

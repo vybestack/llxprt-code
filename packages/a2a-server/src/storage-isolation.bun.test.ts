@@ -38,11 +38,8 @@ describe('Bun preload Storage isolation', () => {
       cache: Storage.getGlobalCacheDir(),
       log: Storage.getGlobalLogDir(),
     };
-    for (const [label, dir] of Object.entries(roots)) {
-      expect(
-        isUnderTemp(dir),
-        `${label} dir ${dir} is not under temp ${TMP}`,
-      ).toBe(true);
+    for (const [, dir] of Object.entries(roots)) {
+      expect(isUnderTemp(dir)).toBe(true);
     }
   });
 

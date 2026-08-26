@@ -186,44 +186,49 @@ describe('Density Optimization Property-Based Tests (P19)', () => {
     'empty result produces no history changes',
     { timeout: 60_000 },
     async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.integer({ min: 1, max: 5 }),
-          async (messageCount) => {
-            const hs = new HistoryService();
-            // Only add non-prunable content (plain messages)
-            for (let i = 0; i < messageCount; i++) {
-              hs.add(makeUserMessage(`Plain message ${i}`));
-              hs.add(makeAiText(`Plain response ${i}`));
-            }
-
-            const beforeHistory = hs.getRawHistory();
-            const lengthBefore = beforeHistory.length;
-            const signaturesBefore = historySignatures(beforeHistory);
-
-            const ctx = buildRuntimeContext(hs, {
-              compressionStrategy: 'high-density',
-            });
-            const gen = buildMockContentGenerator();
-            const chat = new ChatSession(ctx, gen, {}, []);
-            const internals = getInternals(chat);
-            internals.densityDirty = true;
-
-            await internals.ensureDensityOptimized();
-
-            const signaturesAfter = historySignatures(hs.getRawHistory());
-
-            return (
-              hs.getRawHistory().length === lengthBefore &&
-              JSON.stringify(signaturesAfter) ===
-                JSON.stringify(signaturesBefore)
-            );
-          },
-        ),
-        { numRuns: 5 },
-      );
+      const { emptyResultProducesNoHistoryChangesProperty } =
+        await observeEmptyResultProducesNoHistoryChanges();
+      await fc.assert(emptyResultProducesNoHistoryChangesProperty, {
+        numRuns: 5,
+      });
     },
   );
+
+  const observeEmptyResultProducesNoHistoryChanges = async () => {
+    const emptyResultProducesNoHistoryChangesProperty = fc.asyncProperty(
+      fc.integer({ min: 1, max: 5 }),
+      async (messageCount) => {
+        const hs = new HistoryService();
+        // Only add non-prunable content (plain messages)
+        for (let i = 0; i < messageCount; i++) {
+          hs.add(makeUserMessage(`Plain message ${i}`));
+          hs.add(makeAiText(`Plain response ${i}`));
+        }
+
+        const beforeHistory = hs.getRawHistory();
+        const lengthBefore = beforeHistory.length;
+        const signaturesBefore = historySignatures(beforeHistory);
+
+        const ctx = buildRuntimeContext(hs, {
+          compressionStrategy: 'high-density',
+        });
+        const gen = buildMockContentGenerator();
+        const chat = new ChatSession(ctx, gen, {}, []);
+        const internals = getInternals(chat);
+        internals.densityDirty = true;
+
+        await internals.ensureDensityOptimized();
+
+        const signaturesAfter = historySignatures(hs.getRawHistory());
+
+        return (
+          hs.getRawHistory().length === lengthBefore &&
+          JSON.stringify(signaturesAfter) === JSON.stringify(signaturesBefore)
+        );
+      },
+    );
+    return { emptyResultProducesNoHistoryChangesProperty };
+  };
 
   /**
    * Property: For any history, totalTokens after ≤ totalTokens before
@@ -318,7 +323,18 @@ describe('Density Optimization Property-Based Tests (P19)', () => {
     'optimization only removes entries, never fabricates new ones',
     { timeout: 60_000 },
     async () => {
+      const { optimizationOnlyRemovesEntriesNeverFabricatesNewOnesProperty } =
+        await observeOptimizationOnlyRemovesEntriesNeverFabricatesNewOnes();
       await fc.assert(
+        optimizationOnlyRemovesEntriesNeverFabricatesNewOnesProperty,
+        { numRuns: 5 },
+      );
+    },
+  );
+
+  const observeOptimizationOnlyRemovesEntriesNeverFabricatesNewOnes =
+    async () => {
+      const optimizationOnlyRemovesEntriesNeverFabricatesNewOnesProperty =
         fc.asyncProperty(fc.integer({ min: 1, max: 3 }), async (pairCount) => {
           resetCallIds();
           const hs = new HistoryService();
@@ -354,11 +370,9 @@ describe('Density Optimization Property-Based Tests (P19)', () => {
             signaturesAfter.length <= signaturesBefore.length &&
             isSignatureMultisetSubset(signaturesAfter, signaturesBefore)
           );
-        }),
-        { numRuns: 5 },
-      );
-    },
-  );
+        });
+      return { optimizationOnlyRemovesEntriesNeverFabricatesNewOnesProperty };
+    };
 
   /**
    * Property: Calling ensureDensityOptimized() twice without adding content
@@ -368,50 +382,54 @@ describe('Density Optimization Property-Based Tests (P19)', () => {
     'consecutive clean optimizations are no-ops',
     { timeout: 60_000 },
     async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.integer({ min: 1, max: 5 }),
-          async (messageCount) => {
-            resetCallIds();
-            const hs = new HistoryService();
-
-            hs.add(makeUserMessage('Hello'));
-            for (let i = 0; i < messageCount; i++) {
-              hs.add(makeAiText(`Response ${i}`));
-              hs.add(makeUserMessage(`Follow-up ${i}`));
-            }
-
-            const ctx = buildRuntimeContext(hs, {
-              compressionStrategy: 'high-density',
-            });
-            const gen = buildMockContentGenerator();
-            const chat = new ChatSession(ctx, gen, {}, []);
-            const internals = getInternals(chat);
-
-            // First optimization
-            internals.densityDirty = true;
-            await internals.ensureDensityOptimized();
-            const lengthAfterFirst = hs.getRawHistory().length;
-            const speakersAfterFirst = hs.getRawHistory().map((h) => h.speaker);
-
-            // Second optimization (should be no-op since dirty is false)
-            // Force dirty to true to actually run optimize again
-            internals.densityDirty = true;
-            await internals.ensureDensityOptimized();
-            const lengthAfterSecond = hs.getRawHistory().length;
-            const speakersAfterSecond = hs
-              .getRawHistory()
-              .map((h) => h.speaker);
-
-            return (
-              lengthAfterFirst === lengthAfterSecond &&
-              JSON.stringify(speakersAfterFirst) ===
-                JSON.stringify(speakersAfterSecond)
-            );
-          },
-        ),
-        { numRuns: 5 },
-      );
+      const { consecutiveCleanOptimizationsAreNoOpsProperty } =
+        await observeConsecutiveCleanOptimizationsAreNoOps();
+      await fc.assert(consecutiveCleanOptimizationsAreNoOpsProperty, {
+        numRuns: 5,
+      });
     },
   );
+
+  const observeConsecutiveCleanOptimizationsAreNoOps = async () => {
+    const consecutiveCleanOptimizationsAreNoOpsProperty = fc.asyncProperty(
+      fc.integer({ min: 1, max: 5 }),
+      async (messageCount) => {
+        resetCallIds();
+        const hs = new HistoryService();
+
+        hs.add(makeUserMessage('Hello'));
+        for (let i = 0; i < messageCount; i++) {
+          hs.add(makeAiText(`Response ${i}`));
+          hs.add(makeUserMessage(`Follow-up ${i}`));
+        }
+
+        const ctx = buildRuntimeContext(hs, {
+          compressionStrategy: 'high-density',
+        });
+        const gen = buildMockContentGenerator();
+        const chat = new ChatSession(ctx, gen, {}, []);
+        const internals = getInternals(chat);
+
+        // First optimization
+        internals.densityDirty = true;
+        await internals.ensureDensityOptimized();
+        const lengthAfterFirst = hs.getRawHistory().length;
+        const speakersAfterFirst = hs.getRawHistory().map((h) => h.speaker);
+
+        // Second optimization (should be no-op since dirty is false)
+        // Force dirty to true to actually run optimize again
+        internals.densityDirty = true;
+        await internals.ensureDensityOptimized();
+        const lengthAfterSecond = hs.getRawHistory().length;
+        const speakersAfterSecond = hs.getRawHistory().map((h) => h.speaker);
+
+        return (
+          lengthAfterFirst === lengthAfterSecond &&
+          JSON.stringify(speakersAfterFirst) ===
+            JSON.stringify(speakersAfterSecond)
+        );
+      },
+    );
+    return { consecutiveCleanOptimizationsAreNoOpsProperty };
+  };
 });

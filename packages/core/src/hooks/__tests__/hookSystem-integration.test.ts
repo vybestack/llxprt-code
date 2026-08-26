@@ -150,6 +150,10 @@ function makeDebugLogger(): DebugLogger {
   } as unknown as DebugLogger;
 }
 
+function logOrDebugCalled(logCalled: boolean, debugCalled: boolean): boolean {
+  return logCalled || debugCalled;
+}
+
 async function waitMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -558,7 +562,7 @@ describe('Integration: DebugLogger receives hook telemetry (DELTA-HTEL-001/002)'
       (spyLogger.log as ReturnType<typeof vi.fn>).mock.calls.length > 0;
     const debugCalled =
       (spyLogger.debug as ReturnType<typeof vi.fn>).mock.calls.length > 0;
-    expect(logCalled || debugCalled).toBe(true);
+    expect(logOrDebugCalled(logCalled, debugCalled)).toBe(true);
 
     system.dispose();
   });

@@ -168,91 +168,131 @@ describe('Issue #3130 slice 3b — attempt-level token-usage records', () => {
    *       and attempt_index 1 (success)
    */
   it('AC-12 retry turn: produces two records with attempt_index 0 and 1', async () => {
-    const logFile = makeTempLogPath();
-    let attempt = 0;
-    const generateChatCompletionMock = vi.fn(async function* (
-      _options: GenerateChatOptions | IContent[],
-    ): AsyncGenerator<IContent> {
-      attempt++;
-      if (attempt === 1) {
+    const {
+      attempt,
+      generateChatCompletionMock,
+      records,
+      abandonedRecord,
+      successRecord,
+      attempt_outcomeObservation,
+      actual_prompt_tokensObservation,
+      attempt_outcomeObservation2,
+      actual_prompt_tokensObservation2,
+      actual_prompt_tokensObservation3,
+      actual_prompt_tokensObservation4,
+    } = await observeAC12RetryTurnProducesTwoRecordsWithAttemptIndex0And();
+    expect(attempt).toBe(2);
+    expect(generateChatCompletionMock).toHaveBeenCalledTimes(2);
+    expect(records).toHaveLength(2);
+    expect(abandonedRecord).toBeDefined();
+    expect(attempt_outcomeObservation).toBe('abandoned');
+    expect(actual_prompt_tokensObservation).toBe(4000);
+    expect(successRecord).toBeDefined();
+    expect(attempt_outcomeObservation2).toBe('success');
+    expect(actual_prompt_tokensObservation2).toBe(4100);
+    expect(abandonedRecord).not.toBe(successRecord);
+    expect(actual_prompt_tokensObservation3).not.toBe(
+      actual_prompt_tokensObservation4,
+    );
+  });
+
+  const observeAC12RetryTurnProducesTwoRecordsWithAttemptIndex0And =
+    async () => {
+      const logFile = makeTempLogPath();
+      let attempt = 0;
+      const generateChatCompletionMock = vi.fn(async function* (
+        _options: GenerateChatOptions | IContent[],
+      ): AsyncGenerator<IContent> {
+        attempt++;
+        if (attempt === 1) {
+          yield {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'partial' }],
+            metadata: {
+              usage: {
+                promptTokens: 4000,
+                completionTokens: 5,
+                totalTokens: 4005,
+              },
+            },
+          };
+          throw createConnectionError();
+        }
         yield {
           speaker: 'ai',
-          blocks: [{ type: 'text', text: 'partial' }],
+          blocks: [{ type: 'text', text: 'recovered response' }],
+        };
+        yield {
+          speaker: 'ai',
+          blocks: [],
           metadata: {
             usage: {
-              promptTokens: 4000,
-              completionTokens: 5,
-              totalTokens: 4005,
+              promptTokens: 4100,
+              completionTokens: 10,
+              totalTokens: 4110,
             },
           },
         };
-        throw createConnectionError();
+      });
+      registerProvider(generateChatCompletionMock);
+
+      const { chat, logger } = buildChatSession(logFile);
+      const promptId = 'prompt-attempt-retry';
+      logger.recordEstimate(promptId, {
+        provider: 'stub',
+        model: 'stub-model',
+        estimatedTokens: 200,
+        estimator: 'core-fallback',
+        tiktokenTokens: 180,
+      });
+
+      const stream = await chat.sendMessageStream(
+        { message: 'trigger mid-stream connection error' },
+        promptId,
+      );
+      await collectEvents(stream);
+
+      const records = readJsonl(logFile);
+
+      // Attempt 0: abandoned (output was yielded before the failure)
+      const abandonedRecord = records.find((r) => r.attempt_index === 0);
+
+      // Attempt 1: success
+      const successRecord = records.find((r) => r.attempt_index === 1);
+
+      // The two records must NOT overwrite each other
+
+      // Cleanup
+      try {
+        fs.rmSync(path.dirname(logFile), { recursive: true, force: true });
+      } catch {
+        // best-effort
       }
-      yield {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'recovered response' }],
+
+      const attempt_outcomeObservation = abandonedRecord?.attempt_outcome;
+      const actual_prompt_tokensObservation =
+        abandonedRecord?.actual_prompt_tokens;
+      const attempt_outcomeObservation2 = successRecord?.attempt_outcome;
+      const actual_prompt_tokensObservation2 =
+        successRecord?.actual_prompt_tokens;
+      const actual_prompt_tokensObservation3 =
+        abandonedRecord?.actual_prompt_tokens;
+      const actual_prompt_tokensObservation4 =
+        successRecord?.actual_prompt_tokens;
+      return {
+        attempt,
+        generateChatCompletionMock,
+        records,
+        abandonedRecord,
+        successRecord,
+        attempt_outcomeObservation,
+        actual_prompt_tokensObservation,
+        attempt_outcomeObservation2,
+        actual_prompt_tokensObservation2,
+        actual_prompt_tokensObservation3,
+        actual_prompt_tokensObservation4,
       };
-      yield {
-        speaker: 'ai',
-        blocks: [],
-        metadata: {
-          usage: {
-            promptTokens: 4100,
-            completionTokens: 10,
-            totalTokens: 4110,
-          },
-        },
-      };
-    });
-    registerProvider(generateChatCompletionMock);
-
-    const { chat, logger } = buildChatSession(logFile);
-    const promptId = 'prompt-attempt-retry';
-    logger.recordEstimate(promptId, {
-      provider: 'stub',
-      model: 'stub-model',
-      estimatedTokens: 200,
-      estimator: 'core-fallback',
-      tiktokenTokens: 180,
-    });
-
-    const stream = await chat.sendMessageStream(
-      { message: 'trigger mid-stream connection error' },
-      promptId,
-    );
-    await collectEvents(stream);
-
-    expect(attempt).toBe(2);
-    expect(generateChatCompletionMock).toHaveBeenCalledTimes(2);
-
-    const records = readJsonl(logFile);
-    expect(records).toHaveLength(2);
-
-    // Attempt 0: abandoned (output was yielded before the failure)
-    const abandonedRecord = records.find((r) => r.attempt_index === 0);
-    expect(abandonedRecord).toBeDefined();
-    expect(abandonedRecord?.attempt_outcome).toBe('abandoned');
-    expect(abandonedRecord?.actual_prompt_tokens).toBe(4000);
-
-    // Attempt 1: success
-    const successRecord = records.find((r) => r.attempt_index === 1);
-    expect(successRecord).toBeDefined();
-    expect(successRecord?.attempt_outcome).toBe('success');
-    expect(successRecord?.actual_prompt_tokens).toBe(4100);
-
-    // The two records must NOT overwrite each other
-    expect(abandonedRecord).not.toBe(successRecord);
-    expect(abandonedRecord?.actual_prompt_tokens).not.toBe(
-      successRecord?.actual_prompt_tokens,
-    );
-
-    // Cleanup
-    try {
-      fs.rmSync(path.dirname(logFile), { recursive: true, force: true });
-    } catch {
-      // best-effort
-    }
-  });
+    };
 
   /**
    * @scenario Single-attempt turn records attempt_index 0 with success

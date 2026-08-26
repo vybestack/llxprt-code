@@ -214,6 +214,23 @@ describe('SubagentInvocation', () => {
     });
 
     it('should stream THOUGHT_CHUNK activities from the executor', async () => {
+      await observeStreamTHOUGHTCHUNKActivitiesFromTheExecutor();
+      expect(updateOutput).toHaveBeenCalledWith({
+        mode: 'append',
+        data: 'Subagent starting...\n',
+      });
+      expect(updateOutput).toHaveBeenCalledWith({
+        mode: 'append',
+        data: '🤖💭 Analyzing...',
+      });
+      expect(updateOutput).toHaveBeenCalledWith({
+        mode: 'append',
+        data: '🤖💭  Still thinking.',
+      });
+      expect(updateOutput).toHaveBeenCalledTimes(3);
+    });
+
+    const observeStreamTHOUGHTCHUNKActivitiesFromTheExecutor = async () => {
       mockExecutorInstance.run.mockImplementation(async () => {
         const onActivity = MockAgentExecutor.create.mock.calls[0][3] as
           | ((event: SubagentActivityEvent) => void)
@@ -238,22 +255,19 @@ describe('SubagentInvocation', () => {
 
       await invocation.execute(signal, updateOutput);
 
+      // Initial message + 2 thoughts
+    };
+
+    it('should NOT stream other activities (e.g., TOOL_CALL_START, ERROR)', async () => {
+      await observeNOTStreamOtherActivitiesEGTOOLCALLSTARTERROR();
+      expect(updateOutput).toHaveBeenCalledTimes(1);
       expect(updateOutput).toHaveBeenCalledWith({
         mode: 'append',
         data: 'Subagent starting...\n',
       });
-      expect(updateOutput).toHaveBeenCalledWith({
-        mode: 'append',
-        data: '🤖💭 Analyzing...',
-      });
-      expect(updateOutput).toHaveBeenCalledWith({
-        mode: 'append',
-        data: '🤖💭  Still thinking.',
-      });
-      expect(updateOutput).toHaveBeenCalledTimes(3); // Initial message + 2 thoughts
     });
 
-    it('should NOT stream other activities (e.g., TOOL_CALL_START, ERROR)', async () => {
+    const observeNOTStreamOtherActivitiesEGTOOLCALLSTARTERROR = async () => {
       mockExecutorInstance.run.mockImplementation(async () => {
         const onActivity = MockAgentExecutor.create.mock.calls[0][3] as
           | ((event: SubagentActivityEvent) => void)
@@ -279,14 +293,16 @@ describe('SubagentInvocation', () => {
       await invocation.execute(signal, updateOutput);
 
       // Should only contain the initial "Subagent starting..." message
-      expect(updateOutput).toHaveBeenCalledTimes(1);
-      expect(updateOutput).toHaveBeenCalledWith({
-        mode: 'append',
-        data: 'Subagent starting...\n',
-      });
-    });
+    };
 
     it('should run successfully without an updateOutput callback', async () => {
+      const { result } =
+        await observeRunSuccessfullyWithoutAnUpdateOutputCallback();
+      expect(result.error).toBeUndefined();
+      expect(result.returnDisplay).toContain('Result:\nDone');
+    });
+
+    const observeRunSuccessfullyWithoutAnUpdateOutputCallback = async () => {
       mockExecutorInstance.run.mockImplementation(async () => {
         const onActivity = MockAgentExecutor.create.mock.calls[0][3] as
           | ((event: SubagentActivityEvent) => void)
@@ -305,9 +321,9 @@ describe('SubagentInvocation', () => {
 
       // Execute without the optional callback
       const result = await invocation.execute(signal);
-      expect(result.error).toBeUndefined();
-      expect(result.returnDisplay).toContain('Result:\nDone');
-    });
+
+      return { result };
+    };
 
     it('should handle executor run failure', async () => {
       const error = new Error('Model failed during execution.');

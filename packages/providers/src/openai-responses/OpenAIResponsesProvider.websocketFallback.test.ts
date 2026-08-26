@@ -121,6 +121,25 @@ function httpSseResponse(): Response {
   });
 }
 
+async function requestBodyText(
+  init?: RequestInit,
+): Promise<string | undefined> {
+  if (init?.body instanceof Blob) {
+    return init.body.text();
+  }
+  if (typeof init?.body === 'string') {
+    return init.body;
+  }
+  return undefined;
+}
+
+function requireCapturedBody(body: string | undefined): string {
+  if (body === undefined) {
+    throw new Error('HTTP request body was not captured');
+  }
+  return body;
+}
+
 interface RequestOutcome {
   readonly text: string;
   readonly fetchCalls: number;
@@ -291,11 +310,7 @@ describe('OpenAIResponsesProvider WebSocket sticky-fallback threshold (issue #30
         _input: unknown,
         init?: RequestInit,
       ) => {
-        if (init?.body instanceof Blob) {
-          capturedBody = await init.body.text();
-        } else if (typeof init?.body === 'string') {
-          capturedBody = init.body;
-        }
+        capturedBody = await requestBodyText(init);
         return httpSseResponse();
       };
 
@@ -329,21 +344,21 @@ describe('OpenAIResponsesProvider WebSocket sticky-fallback threshold (issue #30
         // drain
       }
 
-      if (capturedBody === undefined) {
-        throw new Error('HTTP request body was not captured');
-      }
       // Prove the WebSocket was genuinely attempted and fell back; otherwise a
       // change that skipped the socket entirely would still satisfy the body
       // assertions below.
       expect(provider.wsAttempts.count).toBe(1);
 
-      const body = JSON.parse(capturedBody) as Record<string, unknown>;
+      const body = JSON.parse(requireCapturedBody(capturedBody)) as Record<
+        string,
+        unknown
+      >;
       expect(body['previous_response_id']).toBeUndefined();
       expect(body['store']).toBe(false);
 
       // Full history, since the HTTP endpoint cannot resolve the parent.
       const users = userTextsOf(body['input']);
-      expect(users).toEqual(['first question', 'second question']);
+      expect(users).toStrictEqual(['first question', 'second question']);
     });
   });
 });

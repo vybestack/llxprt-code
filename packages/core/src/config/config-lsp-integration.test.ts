@@ -23,12 +23,41 @@ import { setLlxprtMdFilename as _mockSetLlxprtMdFilename } from '@vybestack/llxp
 import * as lspServiceClientModule from '@vybestack/llxprt-code-ide-integration';
 import { debugLogger } from '../utils/debugLogger.js';
 
+const bunIt = it;
+
 const realLlxprtCodeSettingsModule = {
   ...(await import('@vybestack/llxprt-code-settings')),
 };
 
 function containsAllSubstrings(value: string, parts: string[]): boolean {
   return parts.every((p) => value.includes(p));
+}
+
+function getRegisteredLspNavigationTools(
+  config: Config,
+): Array<{ serverName?: string }> {
+  const tools = config
+    .getToolRegistry()
+    .getAllTools()
+    .filter(
+      (tool: { serverName?: string }) => tool.serverName === 'lsp-navigation',
+    );
+  if (tools.length === 0) {
+    throw new Error('LSP navigation tools are not registered yet');
+  }
+  return tools;
+}
+
+/**
+ * Reports whether the configured LSP service is running or recorded why it is
+ * unavailable.
+ */
+function isLspServiceRunningOrUnavailable(
+  client: ReturnType<Config['getLspServiceClient']>,
+): boolean {
+  const isAlive = client?.isAlive() === true;
+  const hasUnavailableReason = client?.getUnavailableReason() !== undefined;
+  return isAlive || hasUnavailableReason;
 }
 
 // Mock dependencies
@@ -456,9 +485,9 @@ describe('Config LSP Integration (P33)', () => {
 
     // Live MCP navigation registration depends on the Bun-backed LSP transport,
     // which is not currently supported by these native Windows test runs (#2509).
-    it.skipIf(isWindows)(
-      'should register MCP navigation when navigationTools is true',
-      async () => {
+    {
+      const it = isWindows ? bunIt.skip : bunIt;
+      it('should register MCP navigation when navigationTools is true', async () => {
         const params = createBaseConfigParams({
           lsp: {
             servers: [],
@@ -471,20 +500,16 @@ describe('Config LSP Integration (P33)', () => {
         const lspConfig = config.getLspConfig();
         expect(lspConfig?.navigationTools).toBe(true);
 
-        await waitFor(() => {
-          const tools = config.getToolRegistry().getAllTools();
-          const lspNavTools = tools.filter(
-            (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
-          );
-          expect(lspNavTools.length).toBeGreaterThan(0);
-        });
-      },
-    );
+        await waitFor(() => getRegisteredLspNavigationTools(config));
+        const lspNavTools = getRegisteredLspNavigationTools(config);
+        expect(lspNavTools.length).toBeGreaterThan(0);
+      });
+    }
 
     // Same transport limitation as the explicit navigationTools case above.
-    it.skipIf(isWindows)(
-      'should default to enabled when navigationTools is absent',
-      async () => {
+    {
+      const it = isWindows ? bunIt.skip : bunIt;
+      it('should default to enabled when navigationTools is absent', async () => {
         const params = createBaseConfigParams({
           lsp: {
             servers: [],
@@ -497,15 +522,11 @@ describe('Config LSP Integration (P33)', () => {
         const lspConfig = config.getLspConfig();
         expect(lspConfig?.navigationTools).toBeUndefined();
 
-        await waitFor(() => {
-          const tools = config.getToolRegistry().getAllTools();
-          const lspNavTools = tools.filter(
-            (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
-          );
-          expect(lspNavTools.length).toBeGreaterThan(0);
-        });
-      },
-    );
+        await waitFor(() => getRegisteredLspNavigationTools(config));
+        const lspNavTools = getRegisteredLspNavigationTools(config);
+        expect(lspNavTools.length).toBeGreaterThan(0);
+      });
+    }
   });
 
   describe('REQ-NAV-055: Register MCP only after service starts', () => {
@@ -616,10 +637,7 @@ describe('Config LSP Integration (P33)', () => {
 
       const lspClient = config.getLspServiceClient();
       expect(lspClient).toBeDefined();
-      expect(
-        lspClient?.isAlive() === true ||
-          lspClient?.getUnavailableReason() !== undefined,
-      ).toBe(true);
+      expect(isLspServiceRunningOrUnavailable(lspClient)).toBe(true);
     });
 
     it('should call shutdown() on LspServiceClient when shutdownLspService is called', async () => {
@@ -632,10 +650,7 @@ describe('Config LSP Integration (P33)', () => {
       await initializeTestConfig(config);
 
       const lspClient = config.getLspServiceClient();
-      expect(
-        lspClient?.isAlive() === true ||
-          lspClient?.getUnavailableReason() !== undefined,
-      ).toBe(true);
+      expect(isLspServiceRunningOrUnavailable(lspClient)).toBe(true);
 
       await config.shutdownLspService();
 
@@ -659,10 +674,7 @@ describe('Config LSP Integration (P33)', () => {
       // Service is created and start was attempted (empty servers is valid)
       const lspClient = config.getLspServiceClient();
       expect(lspClient).toBeDefined();
-      expect(
-        lspClient?.isAlive() === true ||
-          lspClient?.getUnavailableReason() !== undefined,
-      ).toBe(true);
+      expect(isLspServiceRunningOrUnavailable(lspClient)).toBe(true);
     });
 
     it('should preserve getLspConfig() after startup failure', async () => {
@@ -842,7 +854,7 @@ describe('Config LSP Integration (P33)', () => {
         expect(lspClient?.getUnavailableReason()).toContain('not found');
 
         expect(consoleErrorSpy).toHaveBeenCalled();
-        const errorMessage = String(consoleErrorSpy.mock.calls[0]?.[0] ?? '');
+        const errorMessage = String(consoleErrorSpy.mock.calls[0][0]);
         expect(
           containsAllSubstrings(errorMessage, [
             'LSP',

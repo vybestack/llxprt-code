@@ -124,6 +124,21 @@ describe('AnthropicProvider Issue #1494: thinking blocks without signatures must
       ...overrides,
     });
 
+  const isAssistantWithToolUse = (
+    message: AnthropicRequestBody['messages'][number],
+  ): boolean =>
+    message.role === 'assistant' &&
+    Array.isArray(message.content) &&
+    message.content.some((block) => block.type === 'tool_use');
+
+  const isDeepReasoningText = (block: AnthropicContentBlock): boolean =>
+    block.type === 'text' &&
+    (block as { text: string }).text.includes('Deep reasoning');
+
+  const isOldReasoningText = (block: AnthropicContentBlock): boolean =>
+    block.type === 'text' &&
+    (block as { text: string }).text.includes('Old reasoning');
+
   it('preserves unsigned thinking blocks as thinking type (z.ai GLM models)', async () => {
     // GLM-5 on z.ai uses the Anthropic API but does not produce cryptographic
     // signatures on thinking blocks. These must NOT be silently dropped.
@@ -179,12 +194,7 @@ describe('AnthropicProvider Issue #1494: thinking blocks without signatures must
     const request = mockMessagesCreate.mock.calls[0][0] as AnthropicRequestBody;
 
     // Find the assistant message that should contain the thinking block
-    const assistantMsg = request.messages.find(
-      (m) =>
-        m.role === 'assistant' &&
-        Array.isArray(m.content) &&
-        m.content.some((b) => b.type === 'tool_use'),
-    );
+    const assistantMsg = request.messages.find(isAssistantWithToolUse);
 
     expect(assistantMsg).toBeDefined();
     const blocks = assistantMsg!.content as AnthropicContentBlock[];
@@ -324,22 +334,13 @@ describe('AnthropicProvider Issue #1494: thinking blocks without signatures must
     const request = mockMessagesCreate.mock.calls[0][0] as AnthropicRequestBody;
 
     // Find the assistant message with tool_use
-    const assistantMsg = request.messages.find(
-      (m) =>
-        m.role === 'assistant' &&
-        Array.isArray(m.content) &&
-        m.content.some((b) => b.type === 'tool_use'),
-    );
+    const assistantMsg = request.messages.find(isAssistantWithToolUse);
 
     expect(assistantMsg).toBeDefined();
     const blocks = assistantMsg!.content as AnthropicContentBlock[];
 
     // The reasoning_content thinking should be preserved as a text block
-    const textBlock = blocks.find(
-      (b) =>
-        b.type === 'text' &&
-        (b as { text: string }).text.includes('Deep reasoning'),
-    );
+    const textBlock = blocks.find(isDeepReasoningText);
     expect(textBlock).toBeDefined();
   });
 
@@ -430,23 +431,19 @@ describe('AnthropicProvider Issue #1494: thinking blocks without signatures must
     }
 
     // Explicitly verify the redacted thinking was preserved as text fallback
-    const assistantWithToolUse = request.messages.find(
-      (m) =>
-        m.role === 'assistant' &&
-        Array.isArray(m.content) &&
-        m.content.some((b) => b.type === 'tool_use'),
-    );
+    const assistantWithToolUse = request.messages.find(isAssistantWithToolUse);
     expect(assistantWithToolUse).toBeDefined();
     const blocks = assistantWithToolUse!.content as AnthropicContentBlock[];
-    const textFallback = blocks.find(
-      (b) =>
-        b.type === 'text' &&
-        (b as { text: string }).text.includes('Old reasoning'),
-    );
-    expect(
-      textFallback,
-      'Unsigned thinking should be preserved as text when redacted',
-    ).toBeDefined();
+    const textFallback = blocks.find(isOldReasoningText);
+    expect({
+      observation:
+        'Unsigned thinking should be preserved as text when redacted',
+      textFallbackIsDefined: textFallback !== undefined,
+    }).toStrictEqual({
+      observation:
+        'Unsigned thinking should be preserved as text when redacted',
+      textFallbackIsDefined: true,
+    });
   });
 
   it('still uses proper thinking/redacted_thinking for signed blocks', async () => {
@@ -502,12 +499,7 @@ describe('AnthropicProvider Issue #1494: thinking blocks without signatures must
 
     const request = mockMessagesCreate.mock.calls[0][0] as AnthropicRequestBody;
 
-    const assistantMsg = request.messages.find(
-      (m) =>
-        m.role === 'assistant' &&
-        Array.isArray(m.content) &&
-        m.content.some((b) => b.type === 'tool_use'),
-    );
+    const assistantMsg = request.messages.find(isAssistantWithToolUse);
 
     expect(assistantMsg).toBeDefined();
     const blocks = assistantMsg!.content as AnthropicContentBlock[];

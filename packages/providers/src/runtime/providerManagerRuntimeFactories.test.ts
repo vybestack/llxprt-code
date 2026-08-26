@@ -34,6 +34,47 @@ interface ConfigWithRuntimeFactories extends Config {
   getTokenizerFactory(): RuntimeTokenizerFactory | undefined;
 }
 
+type PrepareTokenizer = NonNullable<
+  RuntimeTokenizerFactory['prepareTokenizer']
+>;
+
+function requirePrepareTokenizer(
+  factory: RuntimeTokenizerFactory,
+): PrepareTokenizer {
+  const prepareTokenizer = factory.prepareTokenizer;
+  if (prepareTokenizer === undefined) {
+    throw new Error('runtime tokenizer factory has no readiness operation');
+  }
+  return prepareTokenizer;
+}
+
+function requireError(error: unknown): Error {
+  if (!(error instanceof Error)) {
+    throw new Error('expected preparation to reject with an Error');
+  }
+  return error;
+}
+
+function createEncodeFailingLoader(encodeFailure: Error): TiktokenModuleLoader {
+  return async () => {
+    const tiktoken = await import('@dqbd/tiktoken');
+    return {
+      ...tiktoken,
+      get_encoding: (...args: Parameters<typeof tiktoken.get_encoding>) =>
+        new Proxy(tiktoken.get_encoding(...args), {
+          get(target, property, receiver) {
+            if (property === 'encode') {
+              return (): never => {
+                throw encodeFailure;
+              };
+            }
+            return Reflect.get(target, property, receiver);
+          },
+        }),
+    };
+  };
+}
+
 describe('configureProviderRuntimeFactories', () => {
   /**
    * @plan:PLAN-20260603-ISSUE1584.P16a
@@ -206,10 +247,7 @@ describe('configureProviderRuntimeFactories', () => {
       return import('@dqbd/tiktoken');
     };
     const factory = createRuntimeTokenizerFactory(loadModule);
-    const prepareTokenizer = factory.prepareTokenizer;
-    if (prepareTokenizer === undefined) {
-      throw new Error('runtime tokenizer factory has no readiness operation');
-    }
+    const prepareTokenizer = requirePrepareTokenizer(factory);
 
     const readiness = Promise.all([
       prepareTokenizer('codex-a', 'gpt-5.6-sol'),
@@ -227,7 +265,7 @@ describe('configureProviderRuntimeFactories', () => {
         first?.countTokens('The quick brown fox jumps over the lazy dog.'),
         second?.countTokens('The quick brown fox jumps over the lazy dog.'),
       ]),
-    ).toEqual([10, 10]);
+    ).toStrictEqual([10, 10]);
     expect(coldLoadCount).toBe(1);
     expect(loadCount).toBe(1);
   });
@@ -255,10 +293,7 @@ describe('configureProviderRuntimeFactories', () => {
       } as unknown as Awaited<ReturnType<TiktokenModuleLoader>>;
     };
     const factory = createRuntimeTokenizerFactory(loadModule);
-    const prepareTokenizer = factory.prepareTokenizer;
-    if (prepareTokenizer === undefined) {
-      throw new Error('runtime tokenizer factory has no readiness operation');
-    }
+    const prepareTokenizer = requirePrepareTokenizer(factory);
     const estimateRequest = {
       activeProvider: 'codex-a',
       canonicalModel: 'gpt-5.6-sol',
@@ -305,9 +340,9 @@ describe('configureProviderRuntimeFactories', () => {
     );
     expect(factory.prepareTokenizer).toBeDefined();
 
+    const prepareTokenizer = requirePrepareTokenizer(factory);
     const error = await captureRejection(
-      factory.prepareTokenizer?.('codex-alias', 'gpt-5.6-sol') ??
-        Promise.resolve(),
+      prepareTokenizer('codex-alias', 'gpt-5.6-sol'),
     );
 
     expect(error).toBeInstanceOf(ModelPromptEstimatorError);
@@ -321,36 +356,20 @@ describe('configureProviderRuntimeFactories', () => {
       },
       cause: loaderFailure,
     });
-    if (!(error instanceof Error)) {
-      throw new Error('expected preparation to reject with an Error');
-    }
-    expect(error.message).toContain('relocated codec initialization exploded');
+    const rejection = requireError(error);
+    expect(rejection.message).toContain(
+      'relocated codec initialization exploded',
+    );
   });
 
   it('reports readiness probe encode failure with exact context and cause identity', async () => {
     const encodeFailure = new Error('readiness probe encode exploded');
-    const loadModule: TiktokenModuleLoader = async () => {
-      const tiktoken = await import('@dqbd/tiktoken');
-      return {
-        ...tiktoken,
-        get_encoding: (...args: Parameters<typeof tiktoken.get_encoding>) =>
-          new Proxy(tiktoken.get_encoding(...args), {
-            get(target, property, receiver) {
-              if (property === 'encode') {
-                return (): never => {
-                  throw encodeFailure;
-                };
-              }
-              return Reflect.get(target, property, receiver);
-            },
-          }),
-      };
-    };
+    const loadModule = createEncodeFailingLoader(encodeFailure);
     const factory = createRuntimeTokenizerFactory(loadModule);
 
+    const prepareTokenizer = requirePrepareTokenizer(factory);
     const error = await captureRejection(
-      factory.prepareTokenizer?.('codex-alias', 'gpt-5.6-sol') ??
-        Promise.resolve(),
+      prepareTokenizer('codex-alias', 'gpt-5.6-sol'),
     );
 
     expect(error).toBeInstanceOf(ModelPromptEstimatorError);
@@ -364,9 +383,7 @@ describe('configureProviderRuntimeFactories', () => {
       },
       cause: encodeFailure,
     });
-    if (!(error instanceof Error)) {
-      throw new Error('expected preparation to reject with an Error');
-    }
-    expect(error.message).toContain('readiness probe encode exploded');
+    const rejection = requireError(error);
+    expect(rejection.message).toContain('readiness probe encode exploded');
   });
 });

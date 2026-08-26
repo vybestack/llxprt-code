@@ -46,6 +46,21 @@ void vi.mock(
   }),
 );
 
+function countRetainedThinkingCharacters(
+  responses: readonly ModelStreamChunk[],
+): number {
+  return responses.reduce(
+    (total, response) =>
+      total +
+      response.content.blocks.reduce(
+        (chunkTotal, block) =>
+          chunkTotal + (block.type === 'thinking' ? block.thought.length : 0),
+        0,
+      ),
+    0,
+  );
+}
+
 describe('Turn - debug responses and finished event outcome', () => {
   let turn: Turn;
   let mockChatInstance: MockedChatInstance;
@@ -141,20 +156,9 @@ describe('Turn - debug responses and finished event outcome', () => {
       }
 
       const debugResponses = turn.getDebugResponses();
-      const retainedCharacters = debugResponses.reduce(
-        (total, response) =>
-          total +
-          response.content.blocks.reduce(
-            (chunkTotal, block) =>
-              chunkTotal +
-              (block.type === 'thinking' ? block.thought.length : 0),
-            0,
-          ),
-        0,
-      );
       expect({
         retainedChunks: debugResponses.length,
-        retainedCharacters,
+        retainedCharacters: countRetainedThinkingCharacters(debugResponses),
       }).toStrictEqual({
         retainedChunks: 1,
         retainedCharacters: deltaCount,

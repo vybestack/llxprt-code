@@ -81,6 +81,24 @@ function createMockStreamingResponse() {
   });
 }
 
+function createRequestBodyCapturingFetch(
+  capture: (body: string) => void,
+): (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> {
+  return async (
+    _input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    if (init?.body != null) {
+      capture(
+        typeof init.body === 'string'
+          ? init.body
+          : await new Response(init.body).text(),
+      );
+    }
+    return createMockStreamingResponse();
+  };
+}
+
 describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -123,18 +141,9 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
 
     let capturedBody: string | undefined;
     mockFetch.mockImplementation(
-      async (
-        _input: RequestInfo | URL,
-        init?: RequestInit,
-      ): Promise<Response> => {
-        if (init?.body != null) {
-          capturedBody =
-            typeof init.body === 'string'
-              ? init.body
-              : await new Response(init.body).text();
-        }
-        return createMockStreamingResponse();
-      },
+      createRequestBodyCapturingFetch((body) => {
+        capturedBody = body;
+      }),
     );
 
     const settings = new SettingsService();
@@ -194,18 +203,9 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
 
     let capturedBody: string | undefined;
     mockFetch.mockImplementation(
-      async (
-        _input: RequestInfo | URL,
-        init?: RequestInit,
-      ): Promise<Response> => {
-        if (init?.body != null) {
-          capturedBody =
-            typeof init.body === 'string'
-              ? init.body
-              : await new Response(init.body).text();
-        }
-        return createMockStreamingResponse();
-      },
+      createRequestBodyCapturingFetch((body) => {
+        capturedBody = body;
+      }),
     );
 
     const settings = new SettingsService();
@@ -278,18 +278,9 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
 
     let capturedBody: string | undefined;
     mockFetch.mockImplementation(
-      async (
-        _input: RequestInfo | URL,
-        init?: RequestInit,
-      ): Promise<Response> => {
-        if (init?.body != null) {
-          capturedBody =
-            typeof init.body === 'string'
-              ? init.body
-              : await new Response(init.body).text();
-        }
-        return createMockStreamingResponse();
-      },
+      createRequestBodyCapturingFetch((body) => {
+        capturedBody = body;
+      }),
     );
 
     const settings = new SettingsService();
@@ -362,18 +353,9 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
 
     let capturedBody: string | undefined;
     mockFetch.mockImplementation(
-      async (
-        _input: RequestInfo | URL,
-        init?: RequestInit,
-      ): Promise<Response> => {
-        if (init?.body != null) {
-          capturedBody =
-            typeof init.body === 'string'
-              ? init.body
-              : await new Response(init.body).text();
-        }
-        return createMockStreamingResponse();
-      },
+      createRequestBodyCapturingFetch((body) => {
+        capturedBody = body;
+      }),
     );
 
     const settings = new SettingsService();
@@ -428,18 +410,9 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
 
     let capturedBody: string | undefined;
     mockFetch.mockImplementation(
-      async (
-        _input: RequestInfo | URL,
-        init?: RequestInit,
-      ): Promise<Response> => {
-        if (init?.body != null) {
-          capturedBody =
-            typeof init.body === 'string'
-              ? init.body
-              : await new Response(init.body).text();
-        }
-        return createMockStreamingResponse();
-      },
+      createRequestBodyCapturingFetch((body) => {
+        capturedBody = body;
+      }),
     );
 
     const settings = new SettingsService();
@@ -498,18 +471,9 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
 
     let capturedBody: string | undefined;
     mockFetch.mockImplementation(
-      async (
-        _input: RequestInfo | URL,
-        init?: RequestInit,
-      ): Promise<Response> => {
-        if (init?.body != null) {
-          capturedBody =
-            typeof init.body === 'string'
-              ? init.body
-              : await new Response(init.body).text();
-        }
-        return createMockStreamingResponse();
-      },
+      createRequestBodyCapturingFetch((body) => {
+        capturedBody = body;
+      }),
     );
 
     // 69-char compression-profile runtime ID as reported in issue #2135.
@@ -573,18 +537,9 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
 
     let capturedBody: string | undefined;
     mockFetch.mockImplementation(
-      async (
-        _input: RequestInfo | URL,
-        init?: RequestInit,
-      ): Promise<Response> => {
-        if (init?.body != null) {
-          capturedBody =
-            typeof init.body === 'string'
-              ? init.body
-              : await new Response(init.body).text();
-        }
-        return createMockStreamingResponse();
-      },
+      createRequestBodyCapturingFetch((body) => {
+        capturedBody = body;
+      }),
     );
 
     // Mirrors a subagent runtimeId: <uuid>#<subagent-name>#<8-char id> (69 chars)
@@ -655,18 +610,9 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
 
     let capturedBody: string | undefined;
     mockFetch.mockImplementation(
-      async (
-        _input: RequestInfo | URL,
-        init?: RequestInit,
-      ): Promise<Response> => {
-        if (init?.body != null) {
-          capturedBody =
-            typeof init.body === 'string'
-              ? init.body
-              : await new Response(init.body).text();
-        }
-        return createMockStreamingResponse();
-      },
+      createRequestBodyCapturingFetch((body) => {
+        capturedBody = body;
+      }),
     );
 
     const settings = new SettingsService();

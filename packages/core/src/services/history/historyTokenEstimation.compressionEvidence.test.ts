@@ -86,7 +86,7 @@ describe('HistoryService.estimateTokensForContents — image token evidence', ()
     const b64 = (content[0].blocks[0] as MediaBlock).data;
     // Guard the fixture: a dimensionless payload would silently collapse both
     // providers onto their unknown-dimension constants.
-    expect(parseImageDimensionsFromBase64(b64)).toEqual({
+    expect(parseImageDimensionsFromBase64(b64)).toStrictEqual({
       width: 1092,
       height: 1092,
     });

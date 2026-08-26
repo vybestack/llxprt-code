@@ -43,28 +43,35 @@ describe('REQ-3232-2: competing-limit reason precedence', () => {
     gitInit(ctx.tempDir);
   });
 
-  it('reports file-count when count, bytes, and declarations trip together', async () => {
-    // 50 retained files filling the byte budget and declaration cap exactly;
-    // the 51st candidate violates all three limits at once. The file-count
-    // limit is evaluated first, before any read of the 51st file.
-    const perFileBytes = Math.floor(WORKING_SET_BYTE_BUDGET / 50);
-    seedAndModify(
-      ctx.tempDir,
-      Array.from({ length: MAX_WORKING_SET_FILES + 1 }, (_, i) => {
-        const isSentinel = i === MAX_WORKING_SET_FILES;
-        const size = isSentinel ? 4096 : perFileBytes;
-        const decls = isSentinel ? 1 : 10;
-        return {
-          name: `c${String(i).padStart(3, '0')}.ts`,
-          seed: paddedDeclarations(decls, `s${i}_`, size),
-          modified: paddedDeclarations(decls, `m${i}_`, size),
-        };
-      }),
-    );
-    const target = writeTarget(ctx.tempDir);
+  const observeReportsFileCountWhenCountBytesAndDeclarationsTripTogetherAt46 =
+    async () => {
+      const perFileBytes = Math.floor(WORKING_SET_BYTE_BUDGET / 50);
+      seedAndModify(
+        ctx.tempDir,
+        Array.from({ length: MAX_WORKING_SET_FILES + 1 }, (_, i) => {
+          const isSentinel = i === MAX_WORKING_SET_FILES;
+          const size = isSentinel ? 4096 : perFileBytes;
+          const decls = isSentinel ? 1 : 10;
+          return {
+            name: `c${String(i).padStart(3, '0')}.ts`,
+            seed: paddedDeclarations(decls, `s${i}_`, size),
+            modified: paddedDeclarations(decls, `m${i}_`, size),
+          };
+        }),
+      );
+      const target = writeTarget(ctx.tempDir);
+      const observing = new ObservingExtractor();
+      const acquisition = await acquireWorkingSet(
+        target,
+        ctx.tempDir,
+        observing,
+      );
+      return { perFileBytes, observing, acquisition };
+    };
 
-    const observing = new ObservingExtractor();
-    const acquisition = await acquireWorkingSet(target, ctx.tempDir, observing);
+  it('reports file-count when count, bytes, and declarations trip together', async () => {
+    const { perFileBytes, observing, acquisition } =
+      await observeReportsFileCountWhenCountBytesAndDeclarationsTripTogetherAt46();
     expect(acquisition.status.partialReason).toBe('file-count');
     expect(acquisition.status.retainedFiles).toBe(MAX_WORKING_SET_FILES);
     expect(acquisition.status.retainedDeclarations).toBe(
@@ -76,34 +83,40 @@ describe('REQ-3232-2: competing-limit reason precedence', () => {
     expect(observing.extractionEnters).toHaveLength(MAX_WORKING_SET_FILES);
   });
 
-  it('reports source-bytes before declarations when both would trip', async () => {
-    // 25 files x 20 declarations fill the declaration cap exactly and leave
-    // fewer remaining bytes than the next file's size: the byte admission
-    // stops acquisition before declaration extraction could run.
-    const perFileBytes = 167721; // 25 x 167721 = budget - 1279 bytes
-    seedAndModify(
-      ctx.tempDir,
-      Array.from({ length: 26 }, (_, i) => {
-        const isOver = i === 25;
-        const size = isOver ? 2048 : perFileBytes;
-        const decls = isOver ? 2 : 20;
-        return {
-          name: `p${String(i).padStart(3, '0')}.ts`,
-          seed: paddedDeclarations(decls, `s${i}_`, size),
-          modified: paddedDeclarations(decls, `m${i}_`, size),
-        };
-      }),
-    );
-    const target = writeTarget(ctx.tempDir);
+  const observeReportsSourceBytesBeforeDeclarationsWhenBothWouldTripAt79 =
+    async () => {
+      const perFileBytes = 167721;
+      seedAndModify(
+        ctx.tempDir,
+        Array.from({ length: 26 }, (_, i) => {
+          const isOver = i === 25;
+          const size = isOver ? 2048 : perFileBytes;
+          const decls = isOver ? 2 : 20;
+          return {
+            name: `p${String(i).padStart(3, '0')}.ts`,
+            seed: paddedDeclarations(decls, `s${i}_`, size),
+            modified: paddedDeclarations(decls, `m${i}_`, size),
+          };
+        }),
+      );
+      const target = writeTarget(ctx.tempDir);
+      const observing = new ObservingExtractor();
+      const acquisition = await acquireWorkingSet(
+        target,
+        ctx.tempDir,
+        observing,
+      );
+      return { observing, acquisition };
+    };
 
-    const observing = new ObservingExtractor();
-    const acquisition = await acquireWorkingSet(target, ctx.tempDir, observing);
+  it('reports source-bytes before declarations when both would trip', async () => {
+    const { observing, acquisition } =
+      await observeReportsSourceBytesBeforeDeclarationsWhenBothWouldTripAt79();
     expect(acquisition.status.partialReason).toBe('source-bytes');
     expect(acquisition.status.retainedFiles).toBe(25);
     expect(acquisition.status.retainedDeclarations).toBe(
       MAX_WORKING_SET_DECLARATIONS,
     );
-    // The over-budget file was never read or parsed.
     expect(observing.extractionEnters).toHaveLength(25);
   });
 });

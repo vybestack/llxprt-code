@@ -107,6 +107,17 @@ function runProviderTurn(
   };
 }
 
+function shouldRetryComposedError(error: unknown): boolean {
+  return (
+    error instanceof EmptyStreamError ||
+    (!isTerminalRetryError(error) && isRetryableError(error))
+  );
+}
+
+function surfacedErrorMessage(thrown: unknown): string {
+  return thrown instanceof Error ? thrown.message : String(thrown);
+}
+
 describe('issue #2917 — composed two-layer retry (core retryWithBackoff around RetryOrchestrator)', () => {
   it('a persistent 403 with no recovery handlers costs a bounded number of transport calls and surfaces the provider error', async () => {
     let transportCalls = 0;
@@ -133,9 +144,7 @@ describe('issue #2917 — composed two-layer retry (core retryWithBackoff around
       // Mirrors StreamProcessor: _handleBucketFailover returns null when no
       // failover handler is configured.
       onPersistent429: async () => null,
-      shouldRetryOnError: (error) =>
-        error instanceof EmptyStreamError ||
-        (!isTerminalRetryError(error) && isRetryableError(error)),
+      shouldRetryOnError: shouldRetryComposedError,
     });
 
     let thrown: unknown;
@@ -154,7 +163,7 @@ describe('issue #2917 — composed two-layer retry (core retryWithBackoff around
 
     expect(thrown).toBeDefined();
     expect((thrown as Error & { status: number }).status).toBe(403);
-    const message = thrown instanceof Error ? thrown.message : String(thrown);
+    const message = surfacedErrorMessage(thrown);
     expect(message).toContain(
       "Request blocked: parameter 'reasoning' is not allowed",
     );
@@ -180,9 +189,7 @@ describe('issue #2917 — composed two-layer retry (core retryWithBackoff around
       initialDelayMs: 1,
       maxDelayMs: 5,
       onPersistent429: async () => null,
-      shouldRetryOnError: (error) =>
-        error instanceof EmptyStreamError ||
-        (!isTerminalRetryError(error) && isRetryableError(error)),
+      shouldRetryOnError: shouldRetryComposedError,
     });
 
     await expect(promise).rejects.toThrow('Unprocessable entity');

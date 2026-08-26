@@ -17,6 +17,41 @@ import {
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
+function createStatsMockProvider(name: string): IProvider {
+  return {
+    name,
+    async *generateChatCompletion(): AsyncIterableIterator<IContent> {
+      yield { role: 'model', parts: [{ text: `${name} response` }] };
+    },
+    getModels: async () => [],
+    getDefaultModel: () => 'model',
+    getServerTools: () => [],
+    invokeServerTool: async () => ({}),
+  };
+}
+
+function resolveStatsProvider(
+  name: string,
+  fallback: (providerName: string) => IProvider | undefined,
+): IProvider | undefined {
+  if (name === 'gemini') return createStatsMockProvider('gemini');
+  if (name === 'openai') return createStatsMockProvider('openai');
+  if (name === 'anthropic') return createStatsMockProvider('anthropic');
+  return fallback(name);
+}
+
+function calculatePercentage(count: number, total: number): number {
+  return total === 0 ? 0 : (count / total) * 100;
+}
+
+function areCountsZeroOrEmpty(counts: readonly number[]): boolean {
+  return counts.length === 0 || counts.every((count) => count === 0);
+}
+
+function isNullableString(value: string | null): boolean {
+  return value === null || typeof value === 'string';
+}
+
 describe('LoadBalancingProvider', () => {
   let settingsService: SettingsService;
   let config: Config;
@@ -54,26 +89,10 @@ describe('LoadBalancingProvider', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
 
-      const createMockProvider = (name: string) => ({
-        name,
-        async *generateChatCompletion(): AsyncIterableIterator<IContent> {
-          yield { role: 'model', parts: [{ text: `${name} response` }] };
-        },
-        getModels: async () => [],
-        getDefaultModel: () => 'model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
-      });
-
       const originalGetProvider =
         providerManager.getProviderByName.bind(providerManager);
-      providerManager.getProviderByName = (name: string) => {
-        if (name === 'gemini') return createMockProvider('gemini') as IProvider;
-        if (name === 'openai') return createMockProvider('openai') as IProvider;
-        if (name === 'anthropic')
-          return createMockProvider('anthropic') as IProvider;
-        return originalGetProvider(name);
-      };
+      providerManager.getProviderByName = (name: string) =>
+        resolveStatsProvider(name, originalGetProvider);
 
       try {
         // Make 6 requests (2 full round-robins)
@@ -155,9 +174,6 @@ describe('LoadBalancingProvider', () => {
         ).getStats();
 
         // Calculate percentages from stats
-        const calculatePercentage = (count: number, total: number): number =>
-          total === 0 ? 0 : (count / total) * 100;
-
         const percentage1 = calculatePercentage(
           stats.profileCounts['sub-1'],
           stats.totalRequests,
@@ -223,9 +239,6 @@ describe('LoadBalancingProvider', () => {
             };
           }
         ).getStats();
-
-        const calculatePercentage = (count: number, total: number): number =>
-          total === 0 ? 0 : (count / total) * 100;
 
         const percentage1 = calculatePercentage(
           stats.profileCounts['sub-1'],
@@ -320,8 +333,7 @@ describe('LoadBalancingProvider', () => {
         expect(stats.lastSelected).toBeNull();
 
         const counts = Object.values(stats.profileCounts);
-        const allZeroOrEmpty =
-          counts.length === 0 || counts.every((c) => c === 0);
+        const allZeroOrEmpty = areCountsZeroOrEmpty(counts);
         expect(allZeroOrEmpty).toBe(true);
       } finally {
         providerManager.getProviderByName = originalGetProvider;
@@ -422,9 +434,7 @@ describe('LoadBalancingProvider', () => {
 
       // Verify all required fields exist with correct types
       expect(typeof stats.profileName).toBe('string');
-      expect(
-        stats.lastSelected === null || typeof stats.lastSelected === 'string',
-      ).toBe(true);
+      expect(isNullableString(stats.lastSelected)).toBe(true);
       expect(typeof stats.totalRequests).toBe('number');
       expect(typeof stats.profileCounts).toBe('object');
       expect(stats.profileCounts).not.toBeNull();

@@ -226,14 +226,18 @@ describe('reasoning wire settings registry contract', () => {
   it('declares exactly the effort wire formats this test accepts', () => {
     const spec = getSettingSpec('reasoning.effortWireFormat');
 
-    expect(new Set(spec?.enumValues)).toEqual(new Set(EFFORT_WIRE_FORMATS));
+    expect(new Set(spec?.enumValues)).toStrictEqual(
+      new Set(EFFORT_WIRE_FORMATS),
+    );
     expect(spec?.enumValues?.length).toBe(EFFORT_WIRE_FORMATS.length);
   });
 
   it('declares exactly the enabled wire formats this test accepts', () => {
     const spec = getSettingSpec('reasoning.enabledWireFormat');
 
-    expect(new Set(spec?.enumValues)).toEqual(new Set(ENABLED_WIRE_FORMATS));
+    expect(new Set(spec?.enumValues)).toStrictEqual(
+      new Set(ENABLED_WIRE_FORMATS),
+    );
     expect(spec?.enumValues?.length).toBe(ENABLED_WIRE_FORMATS.length);
   });
 

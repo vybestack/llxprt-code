@@ -599,39 +599,68 @@ describe('agent.mcp OAuth + refresh parity + details @plan:PLAN-20260622-COREAPI
   });
 
   it('PROP for generated names NOT in a fixed config set, authenticate(name) returns authenticated:false and callLog stays [] (performOAuth never runs) @requirement:REQ-006 @scenario:prop-unknown', async () => {
-    const fixedConfig = {
-      known: fakeServerConfig({
-        oauth: { enabled: true },
-        httpUrl: 'https://x',
-      }),
-    };
-    const protoNames = new Set(Object.getOwnPropertyNames(Object.prototype));
+    const {
+      pROPForGeneratedNamesNOTInAFixedConfigSetAuthenticateNameProperty,
+      observations,
+    } =
+      await observePROPForGeneratedNamesNOTInAFixedConfigSetAuthenticateName();
     await fc.assert(
-      fc.asyncProperty(
-        fc
-          .string({ minLength: 1 })
-          .filter((n) => n !== 'known' && !protoNames.has(n)),
-        async (name) => {
-          const callLog: string[] = [];
-          const deps = buildOrderingDeps(callLog, {
-            manager: {
-              restartServer: async (n: string) => {
-                callLog.push('restart:' + n);
-              },
-              restart: async () => {
-                callLog.push('restart-all');
-              },
-            },
-            servers: fixedConfig,
-          });
-          const control = new McpControl(deps);
-          const status = await control.authenticate(name);
-          expect(status.authenticated).toBe(false);
-          expect(callLog).toStrictEqual([]);
-        },
-      ),
+      pROPForGeneratedNamesNOTInAFixedConfigSetAuthenticateNameProperty,
+    );
+    expect(
+      observations.map(({ authenticated }) => authenticated),
+    ).toStrictEqual(observations.map(() => false));
+    expect(observations.map(({ callLog }) => callLog)).toStrictEqual(
+      observations.map(() => []),
     );
   });
+
+  const observePROPForGeneratedNamesNOTInAFixedConfigSetAuthenticateName =
+    async () => {
+      const fixedConfig = {
+        known: fakeServerConfig({
+          oauth: { enabled: true },
+          httpUrl: 'https://x',
+        }),
+      };
+      const protoNames = new Set(Object.getOwnPropertyNames(Object.prototype));
+      const observations: Array<{
+        authenticated: boolean;
+        callLog: readonly string[];
+      }> = [];
+
+      const pROPForGeneratedNamesNOTInAFixedConfigSetAuthenticateNameProperty =
+        fc.asyncProperty(
+          fc
+            .string({ minLength: 1 })
+            .filter((n) => n !== 'known' && !protoNames.has(n)),
+          async (name) => {
+            const callLog: string[] = [];
+            const deps = buildOrderingDeps(callLog, {
+              manager: {
+                restartServer: async (n: string) => {
+                  callLog.push('restart:' + n);
+                },
+                restart: async () => {
+                  callLog.push('restart-all');
+                },
+              },
+              servers: fixedConfig,
+            });
+            const control = new McpControl(deps);
+            const status = await control.authenticate(name);
+            observations.push({
+              authenticated: status.authenticated,
+              callLog: [...callLog],
+            });
+            return !status.authenticated && callLog.length === 0;
+          },
+        );
+      return {
+        pROPForGeneratedNamesNOTInAFixedConfigSetAuthenticateNameProperty,
+        observations,
+      };
+    };
 
   it('PROP for generated server names present in configs, authenticate(name) records [oauth:name, restart:name, setTools] and returns authenticated:true @requirement:REQ-006 @scenario:prop-known', async () => {
     const nameArb = fc.constantFrom('srv-a', 'srv-b', 'srv-c', 'srv-d');

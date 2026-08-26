@@ -36,6 +36,10 @@ function expectParseExit() {
   return { mockExit, mockErr };
 }
 
+function isBareContinueValue(value: string | boolean | undefined): boolean {
+  return value === '' || value === true;
+}
+
 // ─── Suite ────────────────────────────────────────────────────────────────────
 
 describe('parseArgumentsParity: positional mapping', () => {
@@ -398,7 +402,7 @@ describe('parseArgumentsParity: --continue flag', () => {
   it('bare --continue → truthy sentinel (not the string "true")', async () => {
     process.argv = ['node', 'script.js', '--continue'];
     const argv = await parseArguments({} as Settings);
-    expect(argv.continue === '' || argv.continue === true).toBe(true);
+    expect(isBareContinueValue(argv.continue)).toBe(true);
     expect(argv.continue).not.toBe('true');
   });
 
@@ -411,7 +415,7 @@ describe('parseArgumentsParity: --continue flag', () => {
   it('--continue followed by flag → flag NOT consumed as session id', async () => {
     process.argv = ['node', 'script.js', '--continue', '--debug'];
     const argv = await parseArguments({} as Settings);
-    expect(argv.continue === '' || argv.continue === true).toBe(true);
+    expect(isBareContinueValue(argv.continue)).toBe(true);
     expect(argv.debug).toBe(true);
   });
 });

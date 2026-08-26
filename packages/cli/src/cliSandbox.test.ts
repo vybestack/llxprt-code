@@ -18,6 +18,17 @@ import {
   injectStdinIntoArgs,
 } from './cliSandbox.js';
 
+function restoreEnvironmentVariable(
+  name: 'LLXPRT_SANDBOX_MEMORY' | 'SANDBOX_MEMORY' | 'SANDBOX_FLAGS',
+  value: string | undefined,
+): void {
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
+}
+
 describe('resolveContainerMemoryMB', () => {
   it('returns undefined when no memory env vars are set', () => {
     const oldMem = process.env.LLXPRT_SANDBOX_MEMORY;
@@ -30,9 +41,9 @@ describe('resolveContainerMemoryMB', () => {
     try {
       expect(resolveContainerMemoryMB()).toBeUndefined();
     } finally {
-      if (oldMem !== undefined) process.env.LLXPRT_SANDBOX_MEMORY = oldMem;
-      if (oldSb !== undefined) process.env.SANDBOX_MEMORY = oldSb;
-      if (oldFlags !== undefined) process.env.SANDBOX_FLAGS = oldFlags;
+      restoreEnvironmentVariable('LLXPRT_SANDBOX_MEMORY', oldMem);
+      restoreEnvironmentVariable('SANDBOX_MEMORY', oldSb);
+      restoreEnvironmentVariable('SANDBOX_FLAGS', oldFlags);
     }
   });
 
@@ -43,8 +54,7 @@ describe('resolveContainerMemoryMB', () => {
     try {
       expect(resolveContainerMemoryMB()).toBeUndefined();
     } finally {
-      if (oldMem !== undefined) process.env.LLXPRT_SANDBOX_MEMORY = oldMem;
-      else delete process.env.LLXPRT_SANDBOX_MEMORY;
+      restoreEnvironmentVariable('LLXPRT_SANDBOX_MEMORY', oldMem);
     }
   });
 
@@ -56,8 +66,7 @@ describe('resolveContainerMemoryMB', () => {
       const result = resolveContainerMemoryMB();
       expect(result).toBe(2048);
     } finally {
-      if (oldMem !== undefined) process.env.LLXPRT_SANDBOX_MEMORY = oldMem;
-      else delete process.env.LLXPRT_SANDBOX_MEMORY;
+      restoreEnvironmentVariable('LLXPRT_SANDBOX_MEMORY', oldMem);
     }
   });
 
@@ -73,10 +82,9 @@ describe('resolveContainerMemoryMB', () => {
       const result = resolveContainerMemoryMB();
       expect(result).toBe(512);
     } finally {
-      if (oldMem !== undefined) process.env.LLXPRT_SANDBOX_MEMORY = oldMem;
-      if (oldSb !== undefined) process.env.SANDBOX_MEMORY = oldSb;
-      if (oldFlags !== undefined) process.env.SANDBOX_FLAGS = oldFlags;
-      else delete process.env.SANDBOX_FLAGS;
+      restoreEnvironmentVariable('LLXPRT_SANDBOX_MEMORY', oldMem);
+      restoreEnvironmentVariable('SANDBOX_MEMORY', oldSb);
+      restoreEnvironmentVariable('SANDBOX_FLAGS', oldFlags);
     }
   });
 
@@ -92,10 +100,9 @@ describe('resolveContainerMemoryMB', () => {
       const result = resolveContainerMemoryMB();
       expect(result).toBe(1024);
     } finally {
-      if (oldMem !== undefined) process.env.LLXPRT_SANDBOX_MEMORY = oldMem;
-      if (oldSb !== undefined) process.env.SANDBOX_MEMORY = oldSb;
-      if (oldFlags !== undefined) process.env.SANDBOX_FLAGS = oldFlags;
-      else delete process.env.SANDBOX_FLAGS;
+      restoreEnvironmentVariable('LLXPRT_SANDBOX_MEMORY', oldMem);
+      restoreEnvironmentVariable('SANDBOX_MEMORY', oldSb);
+      restoreEnvironmentVariable('SANDBOX_FLAGS', oldFlags);
     }
   });
 });

@@ -126,6 +126,12 @@ function hasNameEnum(
   );
 }
 
+function nameEnumIncludes(schema: unknown, serverName: string): boolean {
+  return (
+    hasNameEnum(schema) && schema.properties.name.enum.includes(serverName)
+  );
+}
+
 describe('ToolRegistry — MCP lazy schema deferral', () => {
   describe('A1-A5: lazy/eager/activation declaration behavior', () => {
     const lazyOffCases: ReadonlyArray<[string, Record<string, unknown>]> = [
@@ -144,7 +150,10 @@ describe('ToolRegistry — MCP lazy schema deferral', () => {
         registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
 
         const decls = registry.getFunctionDeclarations();
-        expect(namesOf(decls)).toEqual(['mcp__alpha__search', 'read_file']);
+        expect(namesOf(decls)).toStrictEqual([
+          'mcp__alpha__search',
+          'read_file',
+        ]);
       });
     }
 
@@ -156,7 +165,7 @@ describe('ToolRegistry — MCP lazy schema deferral', () => {
       registry.registerTool(builtinTool('read_file'));
 
       const decls = registry.getFunctionDeclarations();
-      expect(namesOf(decls)).toEqual(['read_file']);
+      expect(namesOf(decls)).toStrictEqual(['read_file']);
       expect(
         decls.find((d) => d.name === ACTIVATE_MCP_SERVER_TOOL_NAME),
       ).toBeUndefined();
@@ -199,7 +208,7 @@ describe('ToolRegistry — MCP lazy schema deferral', () => {
     ];
 
     for (const [label, value] of malformedEagerCases) {
-      it(`treats eagerServers ${label} as irrelevant/empty (A5)`, () => {
+      const observeTreatsEagerServersLabelAsIrrelevantEmptyA5At205 = () => {
         const ephemerals: Record<string, unknown> = { 'mcp.lazy': true };
         if (value !== undefined) {
           ephemerals['mcp.eagerServers'] = value;
@@ -209,8 +218,13 @@ describe('ToolRegistry — MCP lazy schema deferral', () => {
           createMessageBus(),
         );
         registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
-
         const decls = registry.getFunctionDeclarations();
+        return { decls };
+      };
+
+      it(`treats eagerServers ${label} as irrelevant/empty (A5)`, () => {
+        const { decls } =
+          observeTreatsEagerServersLabelAsIrrelevantEmptyA5At205();
         expect(
           decls.find((d) => d.name === 'mcp__alpha__search'),
         ).toBeUndefined();
@@ -255,14 +269,14 @@ describe('ToolRegistry — MCP lazy schema deferral', () => {
     registry.registerTool(mcpTool('mcp__beta__lookup', 'beta'));
     registry.registerTool(mcpTool('mcp__gamma__compute', 'gamma'));
 
-    expect(registry.listDeferredMcpServers()).toEqual(['alpha', 'beta']);
+    expect(registry.listDeferredMcpServers()).toStrictEqual(['alpha', 'beta']);
   });
 
   it('listDeferredMcpServers returns empty when lazy mode is off', () => {
     const registry = new ToolRegistry(createHost({}), createMessageBus());
     registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
 
-    expect(registry.listDeferredMcpServers()).toEqual([]);
+    expect(registry.listDeferredMcpServers()).toStrictEqual([]);
   });
 
   it('a fresh registry starts with no activation state (C5)', () => {
@@ -272,7 +286,7 @@ describe('ToolRegistry — MCP lazy schema deferral', () => {
     );
     registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
 
-    expect(registry.listDeferredMcpServers()).toEqual(['alpha']);
+    expect(registry.listDeferredMcpServers()).toStrictEqual(['alpha']);
   });
 });
 
@@ -354,14 +368,8 @@ describe('ActivateMcpServerTool — schema and description', () => {
     );
     const paramSchema = tool.schema.parametersJsonSchema;
     expect(hasNameEnum(paramSchema)).toBe(true);
-    expect(
-      hasNameEnum(paramSchema) &&
-        paramSchema.properties.name.enum.includes('alpha'),
-    ).toBe(true);
-    expect(
-      hasNameEnum(paramSchema) &&
-        paramSchema.properties.name.enum.includes('beta'),
-    ).toBe(true);
+    expect(nameEnumIncludes(paramSchema, 'alpha')).toBe(true);
+    expect(nameEnumIncludes(paramSchema, 'beta')).toBe(true);
   });
 
   it('description contains server names, tool counts, and tool names without full schemas (B2)', () => {

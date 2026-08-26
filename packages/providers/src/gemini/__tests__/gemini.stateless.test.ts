@@ -67,6 +67,10 @@ const queueGoogleStream = (responses: Array<Record<string, unknown>>): void => {
   googleGenAIState.streamPlans.push(responses);
 };
 
+function firstGoogleStreamRequest(): Record<string, unknown> {
+  return googleGenAIState.streamCalls[0]?.request ?? {};
+}
+
 function buildCallOptions(
   provider: GeminiProvider,
   overrides: Omit<ProviderCallOptionsInit, 'providerName'> = {},
@@ -392,7 +396,7 @@ describe('Gemini provider stateless contract tests', () => {
     authMock.restore();
 
     expect(googleGenAIState.streamCalls).toHaveLength(1);
-    const request = googleGenAIState.streamCalls[0]?.request ?? {};
+    const request = firstGoogleStreamRequest();
     const toolConfig = request.config as Record<string, unknown>;
     expect(toolConfig.tools).toStrictEqual(
       expect.arrayContaining([

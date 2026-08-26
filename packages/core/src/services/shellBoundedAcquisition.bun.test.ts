@@ -85,16 +85,6 @@ if (mode === 'tiny') {
 }
 `;
 
-beforeAll(() => {
-  producerDir = mkdtempSync(join(tmpdir(), 'llxprt-bounded-tests-'));
-  producerScript = join(producerDir, 'producer.mjs');
-  writeFileSync(producerScript, PRODUCER_CODE);
-});
-
-afterAll(() => {
-  rmSync(producerDir, { recursive: true, force: true });
-});
-
 /**
  * Build a cross-platform command that runs the producer script.
  *
@@ -180,165 +170,170 @@ async function executeAndCollect(
   return handle.result;
 }
 
-describe('Shell bounded acquisition - child_process path (cross-platform)', () => {
-  it('bounds output to the configured retention budget during acquisition', async () => {
-    const result = await executeAndCollect(
-      producerCommand(2 * 1024 * 1024, 'stdout', 'ascii'), // 2 MB
-      { outputRetentionMaxBytes: 65536 },
-    );
-
-    const outputLength = result.output.length;
-    // Output must be bounded well below the 2 MB produced.
-    expect(outputLength).toBeLessThan(200000);
-    // But should retain at least some content (head + tail + notice).
-    expect(outputLength).toBeGreaterThan(100);
+describe('Shell bounded acquisition', () => {
+  beforeAll(() => {
+    producerDir = mkdtempSync(join(tmpdir(), 'llxprt-bounded-tests-'));
+    producerScript = join(producerDir, 'producer.mjs');
+    writeFileSync(producerScript, PRODUCER_CODE);
   });
 
-  it('includes a visible truncation notice when output exceeds the budget', async () => {
-    const result = await executeAndCollect(
-      producerCommand(1024 * 1024, 'stdout', 'ascii'), // 1 MB
-      { outputRetentionMaxBytes: 8192 },
-    );
-
-    expect(result.output).toMatch(/truncat/i);
+  afterAll(() => {
+    rmSync(producerDir, { recursive: true, force: true });
   });
 
-  it('preserves exit code and completes despite bounded output', async () => {
-    // Produce output beyond the budget, then write a tail marker.
-    const cmd = chainOnSuccess(
-      producerCommand(524288, 'stdout', 'ascii'),
-      'echo END_MARKER_42',
-    );
-    const result = await executeAndCollect(cmd, {
-      outputRetentionMaxBytes: 4096,
+  describe('Shell bounded acquisition - child_process path (cross-platform)', () => {
+    it('bounds output to the configured retention budget during acquisition', async () => {
+      const result = await executeAndCollect(
+        producerCommand(2 * 1024 * 1024, 'stdout', 'ascii'), // 2 MB
+        { outputRetentionMaxBytes: 65536 },
+      );
+
+      const outputLength = result.output.length;
+      // Output must be bounded well below the 2 MB produced.
+      expect(outputLength).toBeLessThan(200000);
+      // But should retain at least some content (head + tail + notice).
+      expect(outputLength).toBeGreaterThan(100);
     });
 
-    expect(result.exitCode).toBe(0);
-    // The final marker should be present (tail retention).
-    expect(result.output).toContain('END_MARKER_42');
-  });
-
-  it('bounds rawOutput buffer to the retention budget', async () => {
-    const result = await executeAndCollect(
-      producerCommand(1024 * 1024, 'stdout', 'ascii'), // 1 MB
-      { outputRetentionMaxBytes: 16384 },
-    );
-
-    expect(result.rawOutput.length).toBeLessThanOrEqual(16384);
-  });
-
-  it('does not bound output when it fits within the budget', async () => {
-    const result = await executeAndCollect(
-      producerCommand(11, 'stdout', 'ascii'),
-      { outputRetentionMaxBytes: 65536 },
-    );
-
-    expect(result.output).toBe('A'.repeat(11));
-    expect(result.output).not.toMatch(/truncat/i);
-  });
-
-  it('bounds interleaved stdout and stderr under one shared budget', async () => {
-    const result = await executeAndCollect(
-      producerCommand(524288, 'both', 'ascii'), // stdout + stderr
-      { outputRetentionMaxBytes: 8192 },
-    );
-
-    // Both streams should have content in the head.
-    expect(result.output.length).toBeGreaterThan(0);
-  });
-
-  it('handles UTF-8 multibyte output without corruption', async () => {
-    const result = await executeAndCollect(
-      producerCommand(32768, 'stdout', 'multibyte'), // 32 KB of \u4e16
-      { outputRetentionMaxBytes: 16384 },
-    );
-
-    expect(result.output.length).toBeGreaterThan(0);
-    // Should contain valid multibyte chars without replacement chars.
-    expect(result.output).not.toContain('\uFFFD');
-  });
-
-  it('handles one huge chunk (large single write)', async () => {
-    const result = await executeAndCollect(
-      producerCommand(524288, 'stdout', 'ascii'), // 512 KB single write
-      { outputRetentionMaxBytes: 4096 },
-    );
-
-    expect(result.output.length).toBeLessThan(10000);
-    expect(result.rawOutput.length).toBeLessThanOrEqual(4096);
-  });
-
-  it('handles many tiny chunks (byte-at-a-time writes)', async () => {
-    const result = await executeAndCollect(
-      producerCommand(10000, 'stdout', 'tiny'), // 10000 single-byte writes
-      { outputRetentionMaxBytes: 4096 },
-    );
-
-    expect(result.exitCode).toBe(0);
-    expect(result.output.length).toBeLessThan(10000);
-  });
-
-  it('preserves exit status of a failing command despite bounded output', async () => {
-    const result = await executeAndCollect(
-      propagateExit(producerCommand(524288, 'stdout', 'ascii', 42)),
-      { outputRetentionMaxBytes: 4096 },
-    );
-
-    expect(result.exitCode).toBe(42);
-  });
-
-  it('does not duplicate rawOutput at full size', async () => {
-    const result = await executeAndCollect(
-      producerCommand(2 * 1024 * 1024, 'stdout', 'ascii'), // 2 MB
-      { outputRetentionMaxBytes: 32768 },
-    );
-
-    expect(result.rawOutput.length).toBeLessThanOrEqual(32768);
-  });
-});
-
-/**
- * Windows-specific tests for the child_process path. These only run on
- * win32 and test Windows-specific behaviors (PowerShell, CLIXML).
- */
-describe.skipIf(process.platform !== 'win32')(
-  'Shell bounded acquisition - Windows child_process path',
-  () => {
-    it('decodes genuine PowerShell CLIXML error records rather than leaking raw XML', async () => {
-      // A non-interactive PowerShell host serialises error/warning stream
-      // records as CLIXML (prefixed with "#< CLIXML") on stderr. The bounded
-      // acquisition path must decode these into human-readable text so the
-      // model never sees raw <S S="Error"> markup. We force a real error
-      // record via Write-Error which reliably produces CLIXML.
-      //
-      // 2000 records, not 50000: each CLIXML error record serialises to
-      // hundreds of bytes, so 2000 already overshoots the 8 KB retention
-      // budget by two orders of magnitude and still proves truncation. Driving
-      // 50000 Write-Error calls through the PowerShell pipeline took longer
-      // than the 180s per-test budget on a loaded CI runner, so the test timed
-      // out before it could assert anything.
+    it('includes a visible truncation notice when output exceeds the budget', async () => {
       const result = await executeAndCollect(
-        'powershell -NoProfile -Command "Write-Error LLXPRT_CLIXML_BOUND_MARKER; 1..2000 | ForEach-Object { Write-Error $_ }"',
+        producerCommand(1024 * 1024, 'stdout', 'ascii'), // 1 MB
         { outputRetentionMaxBytes: 8192 },
       );
 
-      expect(result.rawOutput.length).toBeLessThanOrEqual(8192);
-      expect(result.outputTruncation?.truncated).toBe(true);
-      expect(result.output).toContain('LLXPRT_CLIXML_BOUND_MARKER');
-      expect(result.output).not.toContain('<S S=');
-      expect(result.output).not.toContain('#< CLIXML');
+      expect(result.output).toMatch(/truncat/i);
     });
 
-    it('bounds and drains output from a Windows batch command', async () => {
+    it('preserves exit code and completes despite bounded output', async () => {
+      // Produce output beyond the budget, then write a tail marker.
+      const cmd = chainOnSuccess(
+        producerCommand(524288, 'stdout', 'ascii'),
+        'echo END_MARKER_42',
+      );
+      const result = await executeAndCollect(cmd, {
+        outputRetentionMaxBytes: 4096,
+      });
+
+      expect(result.exitCode).toBe(0);
+      // The final marker should be present (tail retention).
+      expect(result.output).toContain('END_MARKER_42');
+    });
+
+    it('bounds rawOutput buffer to the retention budget', async () => {
       const result = await executeAndCollect(
-        'cmd /d /s /c "(for /L %i in (1,1,20000) do @echo WINDOWS_OUTPUT_%i) & echo WINDOWS_FINAL_MARKER"',
+        producerCommand(1024 * 1024, 'stdout', 'ascii'), // 1 MB
+        { outputRetentionMaxBytes: 16384 },
+      );
+
+      expect(result.rawOutput.length).toBeLessThanOrEqual(16384);
+    });
+
+    it('does not bound output when it fits within the budget', async () => {
+      const result = await executeAndCollect(
+        producerCommand(11, 'stdout', 'ascii'),
+        { outputRetentionMaxBytes: 65536 },
+      );
+
+      expect(result.output).toBe('A'.repeat(11));
+      expect(result.output).not.toMatch(/truncat/i);
+    });
+
+    it('bounds interleaved stdout and stderr under one shared budget', async () => {
+      const result = await executeAndCollect(
+        producerCommand(524288, 'both', 'ascii'), // stdout + stderr
+        { outputRetentionMaxBytes: 8192 },
+      );
+
+      // Both streams should have content in the head.
+      expect(result.output.length).toBeGreaterThan(0);
+    });
+
+    it('handles UTF-8 multibyte output without corruption', async () => {
+      const result = await executeAndCollect(
+        producerCommand(32768, 'stdout', 'multibyte'), // 32 KB of \u4e16
+        { outputRetentionMaxBytes: 16384 },
+      );
+
+      expect(result.output.length).toBeGreaterThan(0);
+      // Should contain valid multibyte chars without replacement chars.
+      expect(result.output).not.toContain('\uFFFD');
+    });
+
+    it('handles one huge chunk (large single write)', async () => {
+      const result = await executeAndCollect(
+        producerCommand(524288, 'stdout', 'ascii'), // 512 KB single write
+        { outputRetentionMaxBytes: 4096 },
+      );
+
+      expect(result.output.length).toBeLessThan(10000);
+      expect(result.rawOutput.length).toBeLessThanOrEqual(4096);
+    });
+
+    it('handles many tiny chunks (byte-at-a-time writes)', async () => {
+      const result = await executeAndCollect(
+        producerCommand(10000, 'stdout', 'tiny'), // 10000 single-byte writes
         { outputRetentionMaxBytes: 4096 },
       );
 
       expect(result.exitCode).toBe(0);
-      expect(result.rawOutput.length).toBeLessThanOrEqual(4096);
-      expect(result.outputTruncation?.truncated).toBe(true);
-      expect(result.output).toContain('WINDOWS_FINAL_MARKER');
+      expect(result.output.length).toBeLessThan(10000);
     });
-  },
-);
+
+    it('preserves exit status of a failing command despite bounded output', async () => {
+      const result = await executeAndCollect(
+        propagateExit(producerCommand(524288, 'stdout', 'ascii', 42)),
+        { outputRetentionMaxBytes: 4096 },
+      );
+
+      expect(result.exitCode).toBe(42);
+    });
+
+    it('does not duplicate rawOutput at full size', async () => {
+      const result = await executeAndCollect(
+        producerCommand(2 * 1024 * 1024, 'stdout', 'ascii'), // 2 MB
+        { outputRetentionMaxBytes: 32768 },
+      );
+
+      expect(result.rawOutput.length).toBeLessThanOrEqual(32768);
+    });
+  });
+
+  /**
+   * Windows-specific tests for the child_process path. These only run on
+   * win32 and test Windows-specific behaviors (PowerShell, CLIXML).
+   */
+  describe.skipIf(process.platform !== 'win32')(
+    'Shell bounded acquisition - Windows child_process path',
+    () => {
+      it('decodes genuine PowerShell CLIXML error records rather than leaking raw XML', async () => {
+        // A non-interactive PowerShell host serialises error/warning stream
+        // records as CLIXML (prefixed with "#< CLIXML") on stderr. The bounded
+        // acquisition path must decode these into human-readable text so the
+        // model never sees raw <S S="Error"> markup. We force a real error
+        // record via Write-Error which reliably produces CLIXML.
+        const result = await executeAndCollect(
+          'powershell -NoProfile -Command "Write-Error LLXPRT_CLIXML_BOUND_MARKER; 1..2000 | ForEach-Object { Write-Error $_ }"',
+          { outputRetentionMaxBytes: 8192 },
+        );
+
+        expect(result.rawOutput.length).toBeLessThanOrEqual(8192);
+        expect(result.outputTruncation?.truncated).toBe(true);
+        expect(result.output).toContain('LLXPRT_CLIXML_BOUND_MARKER');
+        expect(result.output).not.toContain('<S S=');
+        expect(result.output).not.toContain('#< CLIXML');
+      });
+
+      it('bounds and drains output from a Windows batch command', async () => {
+        const result = await executeAndCollect(
+          'cmd /d /s /c "(for /L %i in (1,1,20000) do @echo WINDOWS_OUTPUT_%i) & echo WINDOWS_FINAL_MARKER"',
+          { outputRetentionMaxBytes: 4096 },
+        );
+
+        expect(result.exitCode).toBe(0);
+        expect(result.rawOutput.length).toBeLessThanOrEqual(4096);
+        expect(result.outputTruncation?.truncated).toBe(true);
+        expect(result.output).toContain('WINDOWS_FINAL_MARKER');
+      });
+    },
+  );
+});

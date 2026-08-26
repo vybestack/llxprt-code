@@ -108,6 +108,24 @@ class InMemoryTokenStore implements TokenStore {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+interface RetryRefreshState {
+  attempts: number;
+}
+
+async function failFirstRefreshThenSucceed(
+  state: RetryRefreshState,
+  _provider: string,
+  _currentToken: OAuthToken,
+): Promise<OAuthToken> {
+  state.attempts += 1;
+  if (state.attempts === 1) {
+    throw Object.assign(new Error('ECONNREFUSED'), {
+      code: 'ECONNREFUSED',
+    });
+  }
+  return makeToken({ access_token: 'retry-success' });
+}
+
 function makeToken(overrides: Partial<OAuthToken> = {}): OAuthToken {
   return {
     access_token: 'test-access-token',
@@ -497,21 +515,10 @@ describe('RefreshCoordinator', () => {
       vi.useRealTimers();
       await tokenStore.saveToken('anthropic', makeToken());
 
-      let attemptCount = 0;
+      const retryState: RetryRefreshState = { attempts: 0 };
       const retryCoordinator = new RefreshCoordinator({
         tokenStore,
-        refreshFn: async (
-          _provider: string,
-          _currentToken: OAuthToken,
-        ): Promise<OAuthToken> => {
-          attemptCount++;
-          if (attemptCount === 1) {
-            throw Object.assign(new Error('ECONNREFUSED'), {
-              code: 'ECONNREFUSED',
-            });
-          }
-          return makeToken({ access_token: 'retry-success' });
-        },
+        refreshFn: failFirstRefreshThenSucceed.bind(undefined, retryState),
         cooldownMs: 30_000,
       });
 
@@ -519,7 +526,7 @@ describe('RefreshCoordinator', () => {
 
       expect(result.status).toBe('ok');
       expect(result.token!.access_token).toBe('retry-success');
-      expect(attemptCount).toBe(2);
+      expect(retryState.attempts).toBe(2);
     });
   });
 

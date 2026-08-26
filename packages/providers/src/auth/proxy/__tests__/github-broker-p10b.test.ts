@@ -519,148 +519,147 @@ describe('limit above 100 rejected on list/search ops (P10)', () => {
  * @requirement REQ-002, REQ-009, REQ-013
  * @pseudocode 003-github-broker.md lines T1-T14
  */
-describe.skipIf(skipNetwork)('GitHub broker P10 end-to-end (real gh)', () => {
-  let tokenStore: InMemoryTokenStore;
-  let keyStorage: InMemoryProviderKeyStorage;
-  let server: CredentialProxyServer;
-  let client: ProxySocketClient;
+describe('GitHub broker P10 network tests', () => {
+  describe.skipIf(skipNetwork)('GitHub broker P10 end-to-end (real gh)', () => {
+    let tokenStore: InMemoryTokenStore;
+    let keyStorage: InMemoryProviderKeyStorage;
+    let server: CredentialProxyServer;
+    let client: ProxySocketClient;
 
-  beforeEach(() => {
-    tokenStore = new InMemoryTokenStore();
-    keyStorage = new InMemoryProviderKeyStorage();
-  });
+    beforeEach(() => {
+      tokenStore = new InMemoryTokenStore();
+      keyStorage = new InMemoryProviderKeyStorage();
+    });
 
-  afterEach(async () => {
-    try {
-      client.close();
-    } catch {
-      // client may not be initialized
+    afterEach(async () => {
+      try {
+        client.close();
+      } catch {
+        // client may not be initialized
+      }
+      try {
+        await server.stop();
+      } catch {
+        // server may not be started
+      }
+    });
+
+    /**
+     * Asserts that a list result excludes bodies. Extracted so network tests
+     * can validate body exclusion without placing `expect` inside an `if`
+     * block (vitest/no-conditional-expect).
+     *
+     * @plan PLAN-20260731-GHBROKER.P10
+     * @requirement REQ-013
+     * @pseudocode 003-github-broker.md lines 120-123
+     */
+    function assertListExcludesBodies(data: unknown, key: string): void {
+      const resp = data as Record<string, unknown>;
+      expect(Array.isArray(resp)).toBe(false);
+      const items = resp[key] as unknown[];
+      expect(Array.isArray(items)).toBe(true);
+      items.forEach((item) => {
+        const record = item as Record<string, unknown>;
+        expect(record).not.toHaveProperty('body');
+      });
     }
-    try {
-      await server.stop();
-    } catch {
-      // server may not be started
-    }
+
+    /**
+     * issue.list against vybestack/llxprt-code returns issues without bodies.
+     *
+     * @plan PLAN-20260731-GHBROKER.P10
+     * @requirement REQ-009, REQ-013
+     * @pseudocode 003-github-broker.md lines 120-123
+     */
+    it('issue.list returns issues without bodies (repo: vybestack/llxprt-code)', async () => {
+      server = new CredentialProxyServer(
+        serverOptionsWithBroker(tokenStore, keyStorage),
+      );
+      const socketPath = await server.start();
+      client = new ProxySocketClient(socketPath);
+      await client.ensureConnected();
+
+      const result = await client.request('github', {
+        op: 'issue.list',
+        repo: 'vybestack/llxprt-code',
+        limit: 5,
+      });
+
+      expect(result.ok).toBe(true);
+      assertListExcludesBodies(result.data, 'issues');
+    }, 30000);
+
+    /**
+     * pr.list against vybestack/llxprt-code returns PRs without bodies.
+     *
+     * @plan PLAN-20260731-GHBROKER.P10
+     * @requirement REQ-009, REQ-013
+     * @pseudocode 003-github-broker.md lines 120-123
+     */
+    it('pr.list returns PRs without bodies (repo: vybestack/llxprt-code)', async () => {
+      server = new CredentialProxyServer(
+        serverOptionsWithBroker(tokenStore, keyStorage),
+      );
+      const socketPath = await server.start();
+      client = new ProxySocketClient(socketPath);
+      await client.ensureConnected();
+
+      const result = await client.request('github', {
+        op: 'pr.list',
+        repo: 'vybestack/llxprt-code',
+        limit: 5,
+      });
+
+      expect(result.ok).toBe(true);
+      assertListExcludesBodies(result.data, 'prs');
+    }, 30000);
+
+    /**
+     * label.list against vybestack/llxprt-code returns labels.
+     *
+     * @plan PLAN-20260731-GHBROKER.P10
+     * @requirement REQ-009, REQ-013
+     */
+    it('label.list returns labels (repo: vybestack/llxprt-code)', async () => {
+      server = new CredentialProxyServer(
+        serverOptionsWithBroker(tokenStore, keyStorage),
+      );
+      const socketPath = await server.start();
+      client = new ProxySocketClient(socketPath);
+      await client.ensureConnected();
+
+      const result = await client.request('github', {
+        op: 'label.list',
+        repo: 'vybestack/llxprt-code',
+        limit: 5,
+      });
+
+      expect(result.ok).toBe(true);
+      assertListExcludesBodies(result.data, 'labels');
+    }, 30000);
+
+    /**
+     * run.list against vybestack/llxprt-code returns workflow runs.
+     *
+     * @plan PLAN-20260731-GHBROKER.P10
+     * @requirement REQ-009, REQ-013
+     */
+    it('run.list returns runs (repo: vybestack/llxprt-code)', async () => {
+      server = new CredentialProxyServer(
+        serverOptionsWithBroker(tokenStore, keyStorage),
+      );
+      const socketPath = await server.start();
+      client = new ProxySocketClient(socketPath);
+      await client.ensureConnected();
+
+      const result = await client.request('github', {
+        op: 'run.list',
+        repo: 'vybestack/llxprt-code',
+        limit: 5,
+      });
+
+      expect(result.ok).toBe(true);
+      assertListExcludesBodies(result.data, 'runs');
+    }, 30000);
   });
-
-  /**
-   * Asserts that a list result excludes bodies. Extracted so network tests
-   * can validate body exclusion without placing `expect` inside an `if`
-   * block (vitest/no-conditional-expect).
-   *
-   * @plan PLAN-20260731-GHBROKER.P10
-   * @requirement REQ-013
-   * @pseudocode 003-github-broker.md lines 120-123
-   */
-  function assertListExcludesBodies(data: unknown, key: string): void {
-    const resp = data as Record<string, unknown>;
-    expect(
-      Array.isArray(resp),
-      'collection ops must return a named object, not a bare array; the proxy client rejects array data',
-    ).toBe(false);
-    const items = resp[key] as unknown[];
-    expect(Array.isArray(items)).toBe(true);
-    items.forEach((item) => {
-      const record = item as Record<string, unknown>;
-      expect(record).not.toHaveProperty('body');
-    });
-  }
-
-  /**
-   * issue.list against vybestack/llxprt-code returns issues without bodies.
-   *
-   * @plan PLAN-20260731-GHBROKER.P10
-   * @requirement REQ-009, REQ-013
-   * @pseudocode 003-github-broker.md lines 120-123
-   */
-  it('issue.list returns issues without bodies (repo: vybestack/llxprt-code)', async () => {
-    server = new CredentialProxyServer(
-      serverOptionsWithBroker(tokenStore, keyStorage),
-    );
-    const socketPath = await server.start();
-    client = new ProxySocketClient(socketPath);
-    await client.ensureConnected();
-
-    const result = await client.request('github', {
-      op: 'issue.list',
-      repo: 'vybestack/llxprt-code',
-      limit: 5,
-    });
-
-    expect(result.ok).toBe(true);
-    assertListExcludesBodies(result.data, 'issues');
-  }, 30000);
-
-  /**
-   * pr.list against vybestack/llxprt-code returns PRs without bodies.
-   *
-   * @plan PLAN-20260731-GHBROKER.P10
-   * @requirement REQ-009, REQ-013
-   * @pseudocode 003-github-broker.md lines 120-123
-   */
-  it('pr.list returns PRs without bodies (repo: vybestack/llxprt-code)', async () => {
-    server = new CredentialProxyServer(
-      serverOptionsWithBroker(tokenStore, keyStorage),
-    );
-    const socketPath = await server.start();
-    client = new ProxySocketClient(socketPath);
-    await client.ensureConnected();
-
-    const result = await client.request('github', {
-      op: 'pr.list',
-      repo: 'vybestack/llxprt-code',
-      limit: 5,
-    });
-
-    expect(result.ok).toBe(true);
-    assertListExcludesBodies(result.data, 'prs');
-  }, 30000);
-
-  /**
-   * label.list against vybestack/llxprt-code returns labels.
-   *
-   * @plan PLAN-20260731-GHBROKER.P10
-   * @requirement REQ-009, REQ-013
-   */
-  it('label.list returns labels (repo: vybestack/llxprt-code)', async () => {
-    server = new CredentialProxyServer(
-      serverOptionsWithBroker(tokenStore, keyStorage),
-    );
-    const socketPath = await server.start();
-    client = new ProxySocketClient(socketPath);
-    await client.ensureConnected();
-
-    const result = await client.request('github', {
-      op: 'label.list',
-      repo: 'vybestack/llxprt-code',
-      limit: 5,
-    });
-
-    expect(result.ok).toBe(true);
-    assertListExcludesBodies(result.data, 'labels');
-  }, 30000);
-
-  /**
-   * run.list against vybestack/llxprt-code returns workflow runs.
-   *
-   * @plan PLAN-20260731-GHBROKER.P10
-   * @requirement REQ-009, REQ-013
-   */
-  it('run.list returns runs (repo: vybestack/llxprt-code)', async () => {
-    server = new CredentialProxyServer(
-      serverOptionsWithBroker(tokenStore, keyStorage),
-    );
-    const socketPath = await server.start();
-    client = new ProxySocketClient(socketPath);
-    await client.ensureConnected();
-
-    const result = await client.request('github', {
-      op: 'run.list',
-      repo: 'vybestack/llxprt-code',
-      limit: 5,
-    });
-
-    expect(result.ok).toBe(true);
-    assertListExcludesBodies(result.data, 'runs');
-  }, 30000);
 });

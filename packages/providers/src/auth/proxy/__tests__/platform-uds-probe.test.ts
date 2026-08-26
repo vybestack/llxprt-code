@@ -30,6 +30,53 @@ import { encodeFrame, FrameDecoder } from '@vybestack/llxprt-code-core';
 const isWindows = process.platform === 'win32';
 const isMacOS = process.platform === 'darwin';
 
+function exchangeFrames(
+  socket: net.Socket,
+  decoder: FrameDecoder,
+  requests: ReadonlyArray<Record<string, unknown>>,
+  expectedResponseCount: number,
+  timeoutMs: number,
+  timeoutMessage: string,
+): Promise<ReadonlyArray<Record<string, unknown>>> {
+  return new Promise((resolve, reject) => {
+    const responses: Array<Record<string, unknown>> = [];
+    const timeout = setTimeout(
+      () => reject(new Error(timeoutMessage)),
+      timeoutMs,
+    );
+
+    socket.on('connect', () => {
+      for (const request of requests) {
+        socket.write(encodeFrame(request));
+      }
+    });
+    socket.on('data', (chunk: Buffer) => {
+      responses.push(...decoder.feed(chunk));
+      if (responses.length >= expectedResponseCount) {
+        clearTimeout(timeout);
+        resolve(responses);
+      }
+    });
+    socket.on('error', (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+  });
+}
+
+function isTemporaryDirectoryResolutionAccessible(
+  rawTemporaryDirectory: string,
+  resolvedTemporaryDirectory: string,
+): boolean {
+  if (isMacOS && rawTemporaryDirectory.startsWith('/var')) {
+    return resolvedTemporaryDirectory.startsWith('/private/var');
+  }
+  return (
+    path.isAbsolute(resolvedTemporaryDirectory) &&
+    fs.existsSync(resolvedTemporaryDirectory)
+  );
+}
+
 // ─── Platform UDS Probe Tests ────────────────────────────────────────────────
 
 describe('Platform UDS Probe Tests (Phase 38)', () => {
@@ -60,9 +107,9 @@ describe('Platform UDS Probe Tests (Phase 38)', () => {
      * @when A client connects and sends a frame
      * @then The server receives the frame and sends a response
      */
-    it.skipIf(isWindows)(
-      'creates socket in tmpdir, client connects, frame round-trips',
-      async () => {
+
+    describe.skipIf(isWindows)(() => {
+      it('creates socket in tmpdir, client connects, frame round-trips', async () => {
         const socketPath = path.join(tmpDir, 'probe-roundtrip.sock');
 
         // Create a simple echo server using the framing protocol
@@ -96,39 +143,21 @@ describe('Platform UDS Probe Tests (Phase 38)', () => {
         const clientSocket = net.createConnection(socketPath);
         const decoder = new FrameDecoder();
 
-        const response = await new Promise<Record<string, unknown>>(
-          (resolve, reject) => {
-            const timeout = setTimeout(
-              () => reject(new Error('Timeout waiting for response')),
-              5000,
-            );
-
-            clientSocket.on('connect', () => {
-              const request = { id: 'test-1', op: 'probe', payload: {} };
-              clientSocket.write(encodeFrame(request));
-            });
-
-            clientSocket.on('data', (chunk: Buffer) => {
-              const frames = decoder.feed(chunk);
-              if (frames.length > 0) {
-                clearTimeout(timeout);
-                resolve(frames[0]);
-              }
-            });
-
-            clientSocket.on('error', (err) => {
-              clearTimeout(timeout);
-              reject(err);
-            });
-          },
+        const [response] = await exchangeFrames(
+          clientSocket,
+          decoder,
+          [{ id: 'test-1', op: 'probe', payload: {} }],
+          1,
+          5000,
+          'Timeout waiting for response',
         );
 
         expect(response.ok).toBe(true);
         expect((response.data as Record<string, unknown>).echo).toBe('probe');
 
         clientSocket.destroy();
-      },
-    );
+      });
+    });
 
     /**
      * @requirement R27.2
@@ -137,9 +166,8 @@ describe('Platform UDS Probe Tests (Phase 38)', () => {
      * @when Multiple frames are sent in sequence
      * @then All frames are received and processed correctly
      */
-    it.skipIf(isWindows)(
-      'handles multiple frames in single connection',
-      async () => {
+    describe.skipIf(isWindows)(() => {
+      it('handles multiple frames in single connection', async () => {
         const socketPath = path.join(tmpDir, 'probe-multiframe.sock');
         const receivedFrames: Array<Record<string, unknown>> = [];
 
@@ -166,41 +194,18 @@ describe('Platform UDS Probe Tests (Phase 38)', () => {
 
         const clientSocket = net.createConnection(socketPath);
         const decoder = new FrameDecoder();
-        const responses: Array<Record<string, unknown>> = [];
-
-        await new Promise<void>((resolve, reject) => {
-          const timeout = setTimeout(
-            () => reject(new Error('Timeout waiting for responses')),
-            5000,
-          );
-
-          clientSocket.on('connect', () => {
-            // Send multiple frames
-            clientSocket.write(
-              encodeFrame({ id: 'a', op: 'first', payload: {} }),
-            );
-            clientSocket.write(
-              encodeFrame({ id: 'b', op: 'second', payload: {} }),
-            );
-            clientSocket.write(
-              encodeFrame({ id: 'c', op: 'third', payload: {} }),
-            );
-          });
-
-          clientSocket.on('data', (chunk: Buffer) => {
-            const frames = decoder.feed(chunk);
-            responses.push(...frames);
-            if (responses.length >= 3) {
-              clearTimeout(timeout);
-              resolve();
-            }
-          });
-
-          clientSocket.on('error', (err) => {
-            clearTimeout(timeout);
-            reject(err);
-          });
-        });
+        const responses = await exchangeFrames(
+          clientSocket,
+          decoder,
+          [
+            { id: 'a', op: 'first', payload: {} },
+            { id: 'b', op: 'second', payload: {} },
+            { id: 'c', op: 'third', payload: {} },
+          ],
+          3,
+          5000,
+          'Timeout waiting for responses',
+        );
 
         expect(responses.length).toBe(3);
         expect(responses[0].seq).toBe(1);
@@ -208,8 +213,8 @@ describe('Platform UDS Probe Tests (Phase 38)', () => {
         expect(responses[2].seq).toBe(3);
 
         clientSocket.destroy();
-      },
-    );
+      });
+    });
   });
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -224,9 +229,8 @@ describe('Platform UDS Probe Tests (Phase 38)', () => {
      * @when A subprocess attempts to connect
      * @then The subprocess can communicate via the socket
      */
-    it.skipIf(isWindows)(
-      'subprocess can connect to socket created by parent',
-      async () => {
+    describe.skipIf(isWindows)(() => {
+      it('subprocess can connect to socket created by parent', async () => {
         const socketPath = path.join(tmpDir, 'probe-subprocess.sock');
         const messages: string[] = [];
 
@@ -290,8 +294,8 @@ describe('Platform UDS Probe Tests (Phase 38)', () => {
         expect(result.stderr).toBe('');
         expect(result.stdout).toContain('RECEIVED: ACK');
         expect(messages).toContain('HELLO_FROM_CHILD');
-      },
-    );
+      });
+    });
   });
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -306,40 +310,44 @@ describe('Platform UDS Probe Tests (Phase 38)', () => {
      * @when Socket is created using realpath
      * @then Socket is accessible via the realpath
      */
-    it.skipIf(!isMacOS)('macOS: socket at realpath is accessible', async () => {
-      // Use realpath for socket location
-      const resolvedTmpDir = fs.realpathSync(tmpDir);
-      const socketPath = path.join(resolvedTmpDir, 'probe-realpath.sock');
+    describe.skipIf(!isMacOS)(() => {
+      it('macOS: socket at realpath is accessible', async () => {
+        // Use realpath for socket location
+        const resolvedTmpDir = fs.realpathSync(tmpDir);
+        const socketPath = path.join(resolvedTmpDir, 'probe-realpath.sock');
 
-      server = net.createServer((socket) => {
-        socket.on('data', () => {
-          socket.write('REALPATH_OK\n');
+        server = net.createServer((socket) => {
+          socket.on('data', () => {
+            socket.write('REALPATH_OK\n');
+          });
         });
+
+        await new Promise<void>((resolve) =>
+          server!.listen(socketPath, resolve),
+        );
+
+        // Connect using the realpath
+        const response = await new Promise<string>((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('Timeout')), 5000);
+
+          const clientSocket = net.createConnection(socketPath, () => {
+            clientSocket.write('PING\n');
+          });
+
+          clientSocket.on('data', (data) => {
+            clearTimeout(timeout);
+            resolve(data.toString().trim());
+            clientSocket.destroy();
+          });
+
+          clientSocket.on('error', (err) => {
+            clearTimeout(timeout);
+            reject(err);
+          });
+        });
+
+        expect(response).toBe('REALPATH_OK');
       });
-
-      await new Promise<void>((resolve) => server!.listen(socketPath, resolve));
-
-      // Connect using the realpath
-      const response = await new Promise<string>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('Timeout')), 5000);
-
-        const clientSocket = net.createConnection(socketPath, () => {
-          clientSocket.write('PING\n');
-        });
-
-        clientSocket.on('data', (data) => {
-          clearTimeout(timeout);
-          resolve(data.toString().trim());
-          clientSocket.destroy();
-        });
-
-        clientSocket.on('error', (err) => {
-          clearTimeout(timeout);
-          reject(err);
-        });
-      });
-
-      expect(response).toBe('REALPATH_OK');
     });
 
     /**
@@ -349,20 +357,22 @@ describe('Platform UDS Probe Tests (Phase 38)', () => {
      * @when realpath is applied
      * @then Path is resolved and accessible
      */
-    it.skipIf(isWindows)('tmpdir realpath is resolved and accessible', () => {
-      const rawTmpdir = os.tmpdir();
-      const resolvedTmpdir = fs.realpathSync(rawTmpdir);
+    describe.skipIf(isWindows)(() => {
+      it('tmpdir realpath is resolved and accessible', () => {
+        const rawTmpdir = os.tmpdir();
+        const resolvedTmpdir = fs.realpathSync(rawTmpdir);
 
-      // Both paths should be accessible
-      expect(fs.existsSync(rawTmpdir)).toBe(true);
-      expect(fs.existsSync(resolvedTmpdir)).toBe(true);
+        // Both paths should be accessible
+        expect(fs.existsSync(rawTmpdir)).toBe(true);
+        expect(fs.existsSync(resolvedTmpdir)).toBe(true);
 
-      // On macOS, if rawTmpdir starts with /var, resolved should start with /private/var
-      const resolvedCorrectly =
-        isMacOS && rawTmpdir.startsWith('/var')
-          ? resolvedTmpdir.startsWith('/private/var')
-          : path.isAbsolute(resolvedTmpdir) && fs.existsSync(resolvedTmpdir);
-      expect(resolvedCorrectly).toBe(true);
+        // On macOS, if rawTmpdir starts with /var, resolved should start with /private/var
+        const resolvedCorrectly = isTemporaryDirectoryResolutionAccessible(
+          rawTmpdir,
+          resolvedTmpdir,
+        );
+        expect(resolvedCorrectly).toBe(true);
+      });
     });
 
     /**
@@ -372,9 +382,8 @@ describe('Platform UDS Probe Tests (Phase 38)', () => {
      * @when Creating a symlink to the socket directory
      * @then Socket is accessible via both paths
      */
-    it.skipIf(isWindows)(
-      'socket accessible via both symlink and realpath',
-      async () => {
+    describe.skipIf(isWindows)(() => {
+      it('socket accessible via both symlink and realpath', async () => {
         const realDir = path.join(tmpDir, 'real');
         const linkDir = path.join(tmpDir, 'link');
 
@@ -429,8 +438,8 @@ describe('Platform UDS Probe Tests (Phase 38)', () => {
         });
 
         expect(linkResponse).toBe('SYMLINK_OK');
-      },
-    );
+      });
+    });
   });
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -445,9 +454,8 @@ describe('Platform UDS Probe Tests (Phase 38)', () => {
      * @when Client sends properly framed requests
      * @then Server receives and decodes frames correctly
      */
-    it.skipIf(isWindows)(
-      'length-prefixed framing works correctly over UDS',
-      async () => {
+    describe.skipIf(isWindows)(() => {
+      it('length-prefixed framing works correctly over UDS', async () => {
         const socketPath = path.join(tmpDir, 'probe-framing.sock');
         const receivedPayloads: Array<Record<string, unknown>> = [];
 
@@ -475,14 +483,11 @@ describe('Platform UDS Probe Tests (Phase 38)', () => {
 
         const clientSocket = net.createConnection(socketPath);
         const clientDecoder = new FrameDecoder();
-        const responses: Array<Record<string, unknown>> = [];
-
-        await new Promise<void>((resolve, reject) => {
-          const timeout = setTimeout(() => reject(new Error('Timeout')), 5000);
-
-          clientSocket.on('connect', () => {
-            // Send a complex payload
-            const payload = {
+        const responses = await exchangeFrames(
+          clientSocket,
+          clientDecoder,
+          [
+            {
               id: 'complex-1',
               op: 'test',
               payload: {
@@ -490,24 +495,12 @@ describe('Platform UDS Probe Tests (Phase 38)', () => {
                 unicode: '日本語テスト',
                 special: '<script>alert("xss")</script>',
               },
-            };
-            clientSocket.write(encodeFrame(payload));
-          });
-
-          clientSocket.on('data', (chunk: Buffer) => {
-            const frames = clientDecoder.feed(chunk);
-            responses.push(...frames);
-            if (responses.length >= 1) {
-              clearTimeout(timeout);
-              resolve();
-            }
-          });
-
-          clientSocket.on('error', (err) => {
-            clearTimeout(timeout);
-            reject(err);
-          });
-        });
+            },
+          ],
+          1,
+          5000,
+          'Timeout',
+        );
 
         expect(responses.length).toBe(1);
         expect(responses[0].ok).toBe(true);
@@ -525,8 +518,8 @@ describe('Platform UDS Probe Tests (Phase 38)', () => {
         expect(receivedPayload.unicode).toBe('日本語テスト');
 
         clientSocket.destroy();
-      },
-    );
+      });
+    });
 
     /**
      * @requirement R27.3
@@ -535,70 +528,60 @@ describe('Platform UDS Probe Tests (Phase 38)', () => {
      * @when A large (but valid) frame is sent
      * @then Frame is transmitted correctly
      */
-    it.skipIf(isWindows)('handles larger frames over UDS', async () => {
-      const socketPath = path.join(tmpDir, 'probe-large.sock');
-      let receivedSize = 0;
+    describe.skipIf(isWindows)(() => {
+      it('handles larger frames over UDS', async () => {
+        const socketPath = path.join(tmpDir, 'probe-large.sock');
+        let receivedSize = 0;
 
-      server = net.createServer((socket) => {
-        const decoder = new FrameDecoder();
+        server = net.createServer((socket) => {
+          const decoder = new FrameDecoder();
 
-        socket.on('data', (chunk: Buffer) => {
-          const frames = decoder.feed(chunk);
-          for (const frame of frames) {
-            const payload = frame.payload as Record<string, unknown>;
-            receivedSize = (payload.largeData as string).length;
-            socket.write(
-              encodeFrame({
-                id: frame.id,
-                ok: true,
-                size: receivedSize,
-              }),
-            );
-          }
-        });
-      });
-
-      await new Promise<void>((resolve) => server!.listen(socketPath, resolve));
-
-      const clientSocket = net.createConnection(socketPath);
-      const clientDecoder = new FrameDecoder();
-
-      // Create a moderately large payload (~32KB)
-      const largeData = 'x'.repeat(32 * 1024);
-
-      const response = await new Promise<Record<string, unknown>>(
-        (resolve, reject) => {
-          const timeout = setTimeout(() => reject(new Error('Timeout')), 10000);
-
-          clientSocket.on('connect', () => {
-            clientSocket.write(
-              encodeFrame({
-                id: 'large-1',
-                op: 'large',
-                payload: { largeData },
-              }),
-            );
-          });
-
-          clientSocket.on('data', (chunk: Buffer) => {
-            const frames = clientDecoder.feed(chunk);
-            if (frames.length > 0) {
-              clearTimeout(timeout);
-              resolve(frames[0]);
+          socket.on('data', (chunk: Buffer) => {
+            const frames = decoder.feed(chunk);
+            for (const frame of frames) {
+              const payload = frame.payload as Record<string, unknown>;
+              receivedSize = (payload.largeData as string).length;
+              socket.write(
+                encodeFrame({
+                  id: frame.id,
+                  ok: true,
+                  size: receivedSize,
+                }),
+              );
             }
           });
+        });
 
-          clientSocket.on('error', (err) => {
-            clearTimeout(timeout);
-            reject(err);
-          });
-        },
-      );
+        await new Promise<void>((resolve) =>
+          server!.listen(socketPath, resolve),
+        );
 
-      expect(response.ok).toBe(true);
-      expect(response.size).toBe(32 * 1024);
+        const clientSocket = net.createConnection(socketPath);
+        const clientDecoder = new FrameDecoder();
 
-      clientSocket.destroy();
+        // Create a moderately large payload (~32KB)
+        const largeData = 'x'.repeat(32 * 1024);
+
+        const [response] = await exchangeFrames(
+          clientSocket,
+          clientDecoder,
+          [
+            {
+              id: 'large-1',
+              op: 'large',
+              payload: { largeData },
+            },
+          ],
+          1,
+          10000,
+          'Timeout',
+        );
+
+        expect(response.ok).toBe(true);
+        expect(response.size).toBe(32 * 1024);
+
+        clientSocket.destroy();
+      });
     });
   });
 });

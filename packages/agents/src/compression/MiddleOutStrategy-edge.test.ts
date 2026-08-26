@@ -171,35 +171,43 @@ describe('MiddleOutStrategy edge cases', () => {
 
   describe('last user prompt preservation', () => {
     it('preserves short last user prompt literally when it falls in toCompress', async () => {
-      const history: IContent[] = [];
-      for (let i = 0; i < 20; i++) {
-        if (i === 10) {
-          history.push(humanMsg('fix the failing auth test'));
-        } else if (i <= 10 && i % 2 === 0) {
-          history.push(humanMsg(`user message ${i}`));
-        } else {
-          history.push(aiTextMsg(`ai response ${i}`));
-        }
-      }
-
-      const ctx = buildContext({ history });
-      const strategy = new MiddleOutStrategy();
-      const result = await strategy.compress(ctx);
-
-      const bottomStart =
-        result.newHistory.length - result.metadata.bottomPreserved!;
-      const bottomMessages = result.newHistory.slice(bottomStart);
-      const bottomTexts = bottomMessages
-        .filter((m) => m.speaker === 'human')
-        .flatMap((m) =>
-          m.blocks
-            .filter(
-              (b): b is { type: 'text'; text: string } => b.type === 'text',
-            )
-            .map((b) => b.text),
-        );
+      const { bottomTexts } =
+        await observePreservesShortLastUserPromptLiterallyWhenItFallsInToCompress();
       expect(bottomTexts).toContain('fix the failing auth test');
     });
+
+    const observePreservesShortLastUserPromptLiterallyWhenItFallsInToCompress =
+      async () => {
+        const history: IContent[] = [];
+        for (let i = 0; i < 20; i++) {
+          if (i === 10) {
+            history.push(humanMsg('fix the failing auth test'));
+          } else if (i <= 10 && i % 2 === 0) {
+            history.push(humanMsg(`user message ${i}`));
+          } else {
+            history.push(aiTextMsg(`ai response ${i}`));
+          }
+        }
+
+        const ctx = buildContext({ history });
+        const strategy = new MiddleOutStrategy();
+        const result = await strategy.compress(ctx);
+
+        const bottomStart =
+          result.newHistory.length - result.metadata.bottomPreserved!;
+        const bottomMessages = result.newHistory.slice(bottomStart);
+        const bottomTexts = bottomMessages
+          .filter((m) => m.speaker === 'human')
+          .flatMap((m) =>
+            m.blocks
+              .filter(
+                (b): b is { type: 'text'; text: string } => b.type === 'text',
+              )
+              .map((b) => b.text),
+          );
+
+        return { bottomTexts };
+      };
 
     it('does not modify split when last human message is already in toKeepBottom', async () => {
       const history = generateHistory(20);
@@ -232,29 +240,47 @@ describe('MiddleOutStrategy edge cases', () => {
     });
 
     it('continuation directive includes last user prompt context when prompt is preserved', async () => {
-      const history: IContent[] = [];
-      for (let i = 0; i < 20; i++) {
-        if (i === 8) {
-          history.push(humanMsg('please fix the database connection issue'));
-        } else if (i % 2 === 0) {
-          history.push(humanMsg(`user message ${i}`));
-        } else {
-          history.push(aiTextMsg(`ai response ${i}`));
-        }
-      }
-
-      const ctx = buildContext({ history });
-      const strategy = new MiddleOutStrategy();
-      const result = await strategy.compress(ctx);
-
-      const topCount = result.metadata.topPreserved!;
-      const ackMsg = result.newHistory[topCount + 1];
+      const { ackMsg, ackText } =
+        await observeContinuationDirectiveIncludesLastUserPromptContextWhenPromptIsPreserved();
       expect(ackMsg.speaker).toBe('ai');
-      const ackText = (ackMsg.blocks[0] as { type: 'text'; text: string }).text;
       expect(ackText).toContain('most recent request');
     });
 
+    const observeContinuationDirectiveIncludesLastUserPromptContextWhenPromptIsPreserved =
+      async () => {
+        const history: IContent[] = [];
+        for (let i = 0; i < 20; i++) {
+          if (i === 8) {
+            history.push(humanMsg('please fix the database connection issue'));
+          } else if (i % 2 === 0) {
+            history.push(humanMsg(`user message ${i}`));
+          } else {
+            history.push(aiTextMsg(`ai response ${i}`));
+          }
+        }
+
+        const ctx = buildContext({ history });
+        const strategy = new MiddleOutStrategy();
+        const result = await strategy.compress(ctx);
+
+        const topCount = result.metadata.topPreserved!;
+        const ackMsg = result.newHistory[topCount + 1];
+
+        const ackText = (ackMsg.blocks[0] as { type: 'text'; text: string })
+          .text;
+
+        return { ackMsg, ackText };
+      };
+
     it('handles large last user prompt via context injection', async () => {
+      const { result, ackText } =
+        await observeHandlesLargeLastUserPromptViaContextInjection();
+      expect(result.metadata.llmCallMade).toBe(true);
+      expect(result.metadata.strategyUsed).toBe('middle-out');
+      expect(ackText).toContain('most recent request');
+    });
+
+    const observeHandlesLargeLastUserPromptViaContextInjection = async () => {
       const longText = 'x'.repeat(5000);
       const history: IContent[] = [];
       for (let i = 0; i < 20; i++) {
@@ -271,13 +297,11 @@ describe('MiddleOutStrategy edge cases', () => {
       const strategy = new MiddleOutStrategy();
       const result = await strategy.compress(ctx);
 
-      expect(result.metadata.llmCallMade).toBe(true);
-      expect(result.metadata.strategyUsed).toBe('middle-out');
-
       const topCount = result.metadata.topPreserved!;
       const ackMsg = result.newHistory[topCount + 1];
       const ackText = (ackMsg.blocks[0] as { type: 'text'; text: string }).text;
-      expect(ackText).toContain('most recent request');
-    });
+
+      return { result, ackText };
+    };
   });
 });

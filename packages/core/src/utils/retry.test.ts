@@ -36,6 +36,46 @@ const createFailingFunction = (
   });
 };
 
+// Mock that fails a fixed number of times with a freshly-built error before
+// succeeding with the given value.
+function failingUntil<T>(
+  failures: number,
+  errorFactory: () => HttpError,
+  successValue: T,
+): ReturnType<typeof vi.fn> {
+  let attempts = 0;
+  return vi.fn(async (): Promise<T> => {
+    attempts++;
+    if (attempts <= failures) {
+      throw errorFactory();
+    }
+    return successValue;
+  });
+}
+
+// Mock that throws the built error until the failover flag is flipped on by
+// the caller (via markFailover), then succeeds.
+function failureUntilFailover<T>(
+  errorFactory: () => HttpError,
+  successValue: T,
+): {
+  mock: ReturnType<typeof vi.fn>;
+  markFailover: () => void;
+} {
+  let failoverCalled = false;
+  return {
+    mock: vi.fn(async (): Promise<T> => {
+      if (!failoverCalled) {
+        throw errorFactory();
+      }
+      return successValue;
+    }),
+    markFailover: () => {
+      failoverCalled = true;
+    },
+  };
+}
+
 // Custom error for testing non-retryable conditions
 class NonRetryableError extends Error {
   constructor(message: string) {
@@ -290,16 +330,11 @@ describe('retryWithBackoff', () => {
 
   describe('network transient errors', () => {
     it('should retry on undici "terminated" error', async () => {
-      let attempts = 0;
-      const mockFn = vi.fn(async () => {
-        attempts++;
-        if (attempts === 1) {
-          // Simulate undici termination error
-          const error = new TypeError('terminated');
-          throw error;
-        }
-        return 'success';
-      });
+      const mockFn = failingUntil(
+        1,
+        () => new TypeError('terminated'),
+        'success',
+      );
 
       const promise = retryWithBackoff(mockFn, {
         maxAttempts: 3,
@@ -314,14 +349,11 @@ describe('retryWithBackoff', () => {
     });
 
     it('should retry on connection terminated error', async () => {
-      let attempts = 0;
-      const mockFn = vi.fn(async () => {
-        attempts++;
-        if (attempts === 1) {
-          throw new Error('connection terminated');
-        }
-        return 'success';
-      });
+      const mockFn = failingUntil(
+        1,
+        () => new Error('connection terminated'),
+        'success',
+      );
 
       const promise = retryWithBackoff(mockFn, {
         maxAttempts: 3,
@@ -336,17 +368,14 @@ describe('retryWithBackoff', () => {
     });
 
     it('should retry on ECONNRESET error code', async () => {
-      let attempts = 0;
-      const mockFn = vi.fn(async () => {
-        attempts++;
-        if (attempts === 1) {
-          const error = Object.assign(new Error('socket hang up'), {
+      const mockFn = failingUntil(
+        1,
+        () =>
+          Object.assign(new Error('socket hang up'), {
             code: 'ECONNRESET',
-          });
-          throw error;
-        }
-        return 'success';
-      });
+          }),
+        'success',
+      );
 
       const promise = retryWithBackoff(mockFn, {
         maxAttempts: 3,
@@ -361,14 +390,11 @@ describe('retryWithBackoff', () => {
     });
 
     it('should retry on fetch failed error (centralized transient detection)', async () => {
-      let attempts = 0;
-      const mockFn = vi.fn(async () => {
-        attempts++;
-        if (attempts === 1) {
-          throw new Error('fetch failed');
-        }
-        return 'success';
-      });
+      const mockFn = failingUntil(
+        1,
+        () => new Error('fetch failed'),
+        'success',
+      );
 
       const promise = retryWithBackoff(mockFn, {
         maxAttempts: 3,
@@ -383,14 +409,11 @@ describe('retryWithBackoff', () => {
     });
 
     it('should retry bare TypeError("fetch failed") (centralized transient detection)', async () => {
-      let attempts = 0;
-      const mockFn = vi.fn(async () => {
-        attempts++;
-        if (attempts === 1) {
-          throw new TypeError('fetch failed');
-        }
-        return 'success';
-      });
+      const mockFn = failingUntil(
+        1,
+        () => new TypeError('fetch failed'),
+        'success',
+      );
 
       const promise = retryWithBackoff(mockFn, {
         maxAttempts: 3,
@@ -405,16 +428,12 @@ describe('retryWithBackoff', () => {
     });
 
     it('should retry on "fetch failed sending request" error (centralized transient detection)', async () => {
-      let attempts = 0;
-      const mockFn = vi.fn(async () => {
-        attempts++;
-        if (attempts === 1) {
-          throw new Error(
-            'exception TypeError: fetch failed sending request body',
-          );
-        }
-        return 'success';
-      });
+      const mockFn = failingUntil(
+        1,
+        () =>
+          new Error('exception TypeError: fetch failed sending request body'),
+        'success',
+      );
 
       const promise = retryWithBackoff(mockFn, {
         maxAttempts: 3,
@@ -452,18 +471,16 @@ describe('retryWithBackoff', () => {
      */
     it('should call onPersistent429 callback on first 429 error', async () => {
       vi.useFakeTimers();
-      let attempt = 0;
       let failoverCalled = false;
-
-      const mockFn = vi.fn(async () => {
-        attempt++;
-        if (attempt <= 1) {
+      const mockFn = failingUntil(
+        1,
+        () => {
           const error: HttpError = new Error('Rate limit exceeded');
           error.status = 429;
-          throw error;
-        }
-        return 'success after bucket switch';
-      });
+          return error;
+        },
+        'success after bucket switch',
+      );
 
       const failoverCallback = vi.fn(async () => {
         failoverCalled = true;
@@ -494,12 +511,10 @@ describe('retryWithBackoff', () => {
      */
     it('should call onPersistent429 callback on Anthropic overloaded_error', async () => {
       vi.useFakeTimers();
-      let attempt = 0;
       let failoverCalled = false;
-
-      const mockFn = vi.fn(async () => {
-        attempt++;
-        if (attempt <= 1) {
+      const mockFn = failingUntil(
+        1,
+        () => {
           // Simulate Anthropic's overloaded_error response structure
           const error: HttpError & {
             error?: { type?: string; message?: string };
@@ -508,10 +523,10 @@ describe('retryWithBackoff', () => {
             type: 'overloaded_error',
             message: 'Overloaded',
           };
-          throw error;
-        }
-        return 'success after bucket switch';
-      });
+          return error;
+        },
+        'success after bucket switch',
+      );
 
       const failoverCallback = vi.fn(async () => {
         failoverCalled = true;
@@ -542,17 +557,15 @@ describe('retryWithBackoff', () => {
      */
     it('should call onPersistent429 callback on first 402 error', async () => {
       vi.useFakeTimers();
-      let attempt = 0;
-
-      const mockFn = vi.fn(async () => {
-        attempt++;
-        if (attempt === 1) {
+      const mockFn = failingUntil(
+        1,
+        () => {
           const error: HttpError = new Error('Payment Required');
           error.status = 402;
-          throw error;
-        }
-        return 'success after bucket switch';
-      });
+          return error;
+        },
+        'success after bucket switch',
+      );
 
       const failoverCallback = vi.fn(async () => true);
 
@@ -577,19 +590,14 @@ describe('retryWithBackoff', () => {
      */
     it('should retry once on 401 before bucket failover', async () => {
       vi.useFakeTimers();
-      let failoverCalled = false;
-
-      const mockFn = vi.fn(async () => {
-        if (!failoverCalled) {
-          const error: HttpError = new Error('Unauthorized');
-          error.status = 401;
-          throw error;
-        }
-        return 'success after bucket switch';
-      });
+      const { mock: mockFn, markFailover } = failureUntilFailover(() => {
+        const error: HttpError = new Error('Unauthorized');
+        error.status = 401;
+        return error;
+      }, 'success after bucket switch');
 
       const failoverCallback = vi.fn(async () => {
-        failoverCalled = true;
+        markFailover();
         return true;
       });
 
@@ -649,25 +657,20 @@ describe('retryWithBackoff', () => {
      */
     it('should track consecutive overloaded_errors for bucket failover', async () => {
       vi.useFakeTimers();
-      let failoverCalled = false;
-
-      const mockFn = vi.fn(async () => {
-        if (!failoverCalled) {
-          // Simulate Anthropic's overloaded_error response structure
-          const error: HttpError & {
-            error?: { type?: string; message?: string };
-          } = new Error('Overloaded');
-          error.error = {
-            type: 'overloaded_error',
-            message: 'Overloaded',
-          };
-          throw error;
-        }
-        return 'success after bucket switch';
-      });
+      const { mock: mockFn, markFailover } = failureUntilFailover(() => {
+        // Simulate Anthropic's overloaded_error response structure
+        const error: HttpError & {
+          error?: { type?: string; message?: string };
+        } = new Error('Overloaded');
+        error.error = {
+          type: 'overloaded_error',
+          message: 'Overloaded',
+        };
+        return error;
+      }, 'success after bucket switch');
 
       const failoverCallback = vi.fn(async () => {
-        failoverCalled = true;
+        markFailover();
         return true;
       });
 
@@ -694,12 +697,10 @@ describe('retryWithBackoff', () => {
      */
     it('should call onPersistent429 callback on Anthropic rate_limit_error in body (Variation 1)', async () => {
       vi.useFakeTimers();
-      let attempt = 0;
       let failoverCalled = false;
-
-      const mockFn = vi.fn(async () => {
-        attempt++;
-        if (attempt <= 1) {
+      const mockFn = failingUntil(
+        1,
+        () => {
           // Simulate Anthropic's rate_limit_error response structure (body only, no HTTP 429)
           const error: HttpError & {
             error?: { type?: string; message?: string };
@@ -708,10 +709,10 @@ describe('retryWithBackoff', () => {
             type: 'rate_limit_error',
             message: 'Rate limited',
           };
-          throw error;
-        }
-        return 'success after bucket switch';
-      });
+          return error;
+        },
+        'success after bucket switch',
+      );
 
       const failoverCallback = vi.fn(async () => {
         failoverCalled = true;
@@ -742,21 +743,16 @@ describe('retryWithBackoff', () => {
      */
     it('should retry once on 403 before bucket failover (OAuth token revoked)', async () => {
       vi.useFakeTimers();
-      let failoverCalled = false;
-
-      const mockFn = vi.fn(async () => {
-        if (!failoverCalled) {
-          const error: HttpError = new Error(
-            'API Error: 403 {"type":"error","error":{"type":"permission_error","message":"OAuth token has been revoked. Please obtain a new token."}}',
-          );
-          error.status = 403;
-          throw error;
-        }
-        return 'success after bucket switch';
-      });
+      const { mock: mockFn, markFailover } = failureUntilFailover(() => {
+        const error: HttpError = new Error(
+          'API Error: 403 {"type":"error","error":{"type":"permission_error","message":"OAuth token has been revoked. Please obtain a new token."}}',
+        );
+        error.status = 403;
+        return error;
+      }, 'success after bucket switch');
 
       const failoverCallback = vi.fn(async () => {
-        failoverCalled = true;
+        markFailover();
         return true;
       });
 
@@ -807,10 +803,9 @@ describe('retryWithBackoff', () => {
    * @then retryWithBackoff retries and resolves with the success value
    */
   it('should retry an Anthropic SDK-wrapped api_error with the default predicate (issue #2053)', async () => {
-    let attempt = 0;
-    const mockFn = vi.fn(async () => {
-      attempt++;
-      if (attempt <= 1) {
+    const mockFn = failingUntil(
+      1,
+      () => {
         // Anthropic SDK throws `new APIError(undefined, body, ...)` for stream
         // error events, storing the entire body on `error.error`. There is no
         // HTTP status, so retryability must be derived from the body type.
@@ -827,10 +822,10 @@ describe('retryWithBackoff', () => {
           },
           request_id: 'req_011Cc7LnNajEpxrjW4iJ67q7',
         };
-        throw error;
-      }
-      return 'success after api_error retry';
-    });
+        return error;
+      },
+      'success after api_error retry',
+    );
 
     const promise = retryWithBackoff(mockFn, {
       maxAttempts: 3,

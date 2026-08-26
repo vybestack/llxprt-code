@@ -75,6 +75,10 @@ function capturingObserver(): {
   return { observer, toolCalls };
 }
 
+function eventDuration(event: ToolCallEvent): number {
+  return (event.end_ms ?? 0) - (event.start_ms ?? 0);
+}
+
 const mockConfig = {
   getSessionId: () => 'test-session-id',
   getTargetDir: () => 'target-dir',
@@ -131,8 +135,8 @@ describe('ToolCallEvent honest boundaries (P07 contract, finding B)', () => {
     expect(event.duration_ms).toBe(100);
     expect(typeof event.start_ms).toBe('number');
     expect(typeof event.end_ms).toBe('number');
-    expect((event.end_ms ?? 0) - (event.start_ms ?? 0)).toBe(100);
-    expect(event.getPerfBoundaries()).toEqual({
+    expect(eventDuration(event)).toBe(100);
+    expect(event.getPerfBoundaries()).toStrictEqual({
       startMs: undefined,
       endMs: undefined,
     });
@@ -175,7 +179,7 @@ describe('ToolCallEvent honest boundaries (P07 contract, finding B)', () => {
       makeCompletedCall({ startMs: 500, durationMs: 100 }),
     );
     expect(event.duration_ms).toBe(100);
-    expect(event.getPerfBoundaries()).toEqual({
+    expect(event.getPerfBoundaries()).toStrictEqual({
       startMs: undefined,
       endMs: undefined,
     });
@@ -186,7 +190,7 @@ describe('ToolCallEvent honest boundaries (P07 contract, finding B)', () => {
       makeCompletedCall({ endMs: 600, durationMs: 100 }),
     );
     expect(event.duration_ms).toBe(100);
-    expect(event.getPerfBoundaries()).toEqual({
+    expect(event.getPerfBoundaries()).toStrictEqual({
       startMs: undefined,
       endMs: undefined,
     });
@@ -211,7 +215,7 @@ describe('ToolCallEvent honest boundaries (P07 contract, finding B)', () => {
 
     expect(toolCalls).toHaveLength(3);
     // Every call contributes its duration (count/sum)...
-    expect(toolCalls.map((t) => t.durationMs)).toEqual([50, 120, 200]);
+    expect(toolCalls.map((t) => t.durationMs)).toStrictEqual([50, 120, 200]);
     // ...but none carries an invented interval endpoint.
     for (const info of toolCalls) {
       expect(info.startMs).toBeUndefined();

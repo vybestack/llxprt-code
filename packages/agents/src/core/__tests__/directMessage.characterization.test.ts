@@ -358,49 +358,62 @@ describe('P12: normal completion path (characterization)', () => {
   });
 
   it('preserves thinking-block position when aggregating multi-chunk text', async () => {
-    // The last (terminal) chunk carries a thinking block BEFORE the text
-    // block. _ensureResponseText must replace the text in-place (preserving
-    // the thinking block) rather than moving all non-text blocks first
-    // or stripping the thinking block.
-    function thinkingThenTextIContent(thought: string, text: string): IContent {
-      return {
-        speaker: 'ai',
-        blocks: [
-          { type: 'thinking', thought, sourceField: 'thought' },
-          { type: 'text', text },
-        ],
-        metadata: { stopReason: 'stop' },
-      };
-    }
-    const mock = vi.fn(() =>
-      makeProviderStream([
-        textTerminalIContent('Hello'),
-        thinkingThenTextIContent('Let me think', 'world!'),
-      ]),
-    ) as Mock;
-    const harness = createDirectHarness(mock);
-
-    const result = await harness.chat.generateDirectMessage(
-      { message: 'think and greet' },
-      'prompt-p12-thinking-order',
-    );
-
-    // The aggregated text must include all chunks' text.
+    const { result, blocks, thinking } =
+      await observePreservesThinkingBlockPositionWhenAggregatingMultiChunkText();
     expect(visibleText(result)).toBe('Hello world!');
-    // The thinking block from the terminal chunk must survive — it must
-    // NOT be stripped or reordered by _ensureResponseText.
-    const blocks = (result as { content?: { blocks?: unknown[] } }).content
-      ?.blocks;
     expect(Array.isArray(blocks)).toBe(true);
-    const typedBlocks = blocks as unknown[];
-    const thinking = typedBlocks.find(
-      (b) =>
-        typeof b === 'object' &&
-        b !== null &&
-        (b as { type: string }).type === 'thinking',
-    );
     expect(thinking).toBeDefined();
   });
+
+  const observePreservesThinkingBlockPositionWhenAggregatingMultiChunkText =
+    async () => {
+      // The last (terminal) chunk carries a thinking block BEFORE the text
+      // block. _ensureResponseText must replace the text in-place (preserving
+      // the thinking block) rather than moving all non-text blocks first
+      // or stripping the thinking block.
+      function thinkingThenTextIContent(
+        thought: string,
+        text: string,
+      ): IContent {
+        return {
+          speaker: 'ai',
+          blocks: [
+            { type: 'thinking', thought, sourceField: 'thought' },
+            { type: 'text', text },
+          ],
+          metadata: { stopReason: 'stop' },
+        };
+      }
+      const mock = vi.fn(() =>
+        makeProviderStream([
+          textTerminalIContent('Hello'),
+          thinkingThenTextIContent('Let me think', 'world!'),
+        ]),
+      ) as Mock;
+      const harness = createDirectHarness(mock);
+
+      const result = await harness.chat.generateDirectMessage(
+        { message: 'think and greet' },
+        'prompt-p12-thinking-order',
+      );
+
+      // The aggregated text must include all chunks' text.
+
+      // The thinking block from the terminal chunk must survive — it must
+      // NOT be stripped or reordered by _ensureResponseText.
+      const blocks = (result as { content?: { blocks?: unknown[] } }).content
+        ?.blocks;
+
+      const typedBlocks = blocks as unknown[];
+      const thinking = typedBlocks.find(
+        (b) =>
+          typeof b === 'object' &&
+          b !== null &&
+          (b as { type: string }).type === 'thinking',
+      );
+
+      return { result, blocks, thinking };
+    };
 
   it('appends text at end when last chunk has no text blocks (tool-call only)', async () => {
     // The last chunk carries only a tool_call block — no text block.
@@ -438,9 +451,8 @@ describe('P12: normal completion path (characterization)', () => {
 
   // PROPERTY: for any visible model text, it surfaces unchanged
   it('surfaces any arbitrary model text unchanged (property)', async () => {
-    const textArb = fc
-      .string({ minLength: 1 })
-      .filter((s) => s.trim().length > 0 && !s.includes('\x00'));
+    const { textArb } =
+      await observeSurfacesAnyArbitraryModelTextUnchangedProperty();
     await fc.assert(
       fc.asyncProperty(textArb, async (modelText: string) => {
         const mock = vi.fn(() =>
@@ -455,6 +467,14 @@ describe('P12: normal completion path (characterization)', () => {
       }),
     );
   });
+
+  const observeSurfacesAnyArbitraryModelTextUnchangedProperty = async () => {
+    const textArb = fc
+      .string({ minLength: 1 })
+      .filter((s) => s.trim().length > 0 && !s.includes('\x00'));
+
+    return { textArb };
+  };
 
   // PROPERTY: usage token counts round-trip through the neutral observer
   it('neutral usage counts round-trip provider-supplied numbers (property)', async () => {
@@ -551,9 +571,8 @@ describe('P12: after-model hook filtering (characterization)', () => {
 
   // PROPERTY: for any hook-filtered text, the observable reflects the filter
   it('observable reflects any arbitrary hook-filtered text (property)', async () => {
-    const filteredTextArb = fc
-      .string({ minLength: 1 })
-      .filter((s) => s.trim().length > 0 && !s.includes('\x00'));
+    const { filteredTextArb } =
+      await observeObservableReflectsAnyArbitraryHookFilteredTextProperty();
     await fc.assert(
       fc.asyncProperty(filteredTextArb, async (filteredText: string) => {
         const mock = vi.fn(() =>
@@ -591,4 +610,13 @@ describe('P12: after-model hook filtering (characterization)', () => {
       }),
     );
   });
+
+  const observeObservableReflectsAnyArbitraryHookFilteredTextProperty =
+    async () => {
+      const filteredTextArb = fc
+        .string({ minLength: 1 })
+        .filter((s) => s.trim().length > 0 && !s.includes('\x00'));
+
+      return { filteredTextArb };
+    };
 });

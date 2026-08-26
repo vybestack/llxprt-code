@@ -90,6 +90,17 @@ describe('resolveBunEntry', () => {
       expect(result).toBe(bundlePath);
     });
 
+    function isInstalledEntryCandidate(
+      target: string,
+      installedBundlePath: string,
+    ): boolean {
+      return (
+        target === installedBundlePath ||
+        target.endsWith('index.ts') ||
+        target.endsWith('index.js')
+      );
+    }
+
     it('prefers the bundle in an installed layout even when every candidate path exists', async () => {
       const instDir = path.resolve(
         '/global/lib/node_modules/@vybestack/llxprt-code',
@@ -99,11 +110,8 @@ describe('resolveBunEntry', () => {
       // that accepts only the bundle would still pass if the bundle were
       // consulted last; making the other candidates "exist" proves the bundle
       // actually wins the precedence contest.
-      const pathChecker = vi.fn(
-        async (target: string) =>
-          target === instBundle ||
-          target.endsWith('index.ts') ||
-          target.endsWith('index.js'),
+      const pathChecker = vi.fn(async (target: string) =>
+        isInstalledEntryCandidate(target, instBundle),
       );
 
       const result = await resolveBunEntry({
@@ -371,15 +379,17 @@ describe('resolveBunEntry', () => {
         'Src',
         'Launcher',
       );
-      const expected = path.join(
+      const launcherEntryPath = path.join(
         path.dirname(path.dirname(moduleDir)),
         'index.js',
       );
-      const pathChecker = vi.fn(async (target: string) => target === expected);
+      const pathChecker = vi.fn(
+        async (target: string) => target === launcherEntryPath,
+      );
 
       const result = await resolveBunEntry({ moduleDir, pathChecker });
 
-      expect(result).toBe(expected);
+      expect(result).toBe(launcherEntryPath);
     });
   });
 });

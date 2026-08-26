@@ -129,12 +129,20 @@ describe('useGitBranchName', () => {
     expect(result.current).toBeUndefined();
   });
 
-  it('should return short commit hash if branch is HEAD (detached state)', async () => {
+  const observeDetachedHead = async (commitResult: {
+    readonly error: Error | null;
+    readonly stdout: string;
+    readonly stderr: string;
+  }): Promise<string | undefined> => {
     mockExecFn.mockImplementation((command, _options, callback) => {
       if (command === 'git rev-parse --abbrev-ref HEAD') {
         callback?.(null, 'HEAD\n', '');
       } else if (command === 'git rev-parse --short HEAD') {
-        callback?.(null, 'a1b2c3d\n', '');
+        callback?.(
+          commitResult.error,
+          commitResult.stdout,
+          commitResult.stderr,
+        );
       }
       return new EventEmitter() as ChildProcess;
     });
@@ -144,25 +152,25 @@ describe('useGitBranchName', () => {
       vi.runAllTimers();
       rerender();
     });
-    expect(result.current).toBe('a1b2c3d');
+    return result.current;
+  };
+
+  it('should return short commit hash if branch is HEAD (detached state)', async () => {
+    const branchName = await observeDetachedHead({
+      error: null,
+      stdout: 'a1b2c3d\n',
+      stderr: '',
+    });
+    expect(branchName).toBe('a1b2c3d');
   });
 
   it('should return undefined if branch is HEAD and getting commit hash fails', async () => {
-    mockExecFn.mockImplementation((command, _options, callback) => {
-      if (command === 'git rev-parse --abbrev-ref HEAD') {
-        callback?.(null, 'HEAD\n', '');
-      } else if (command === 'git rev-parse --short HEAD') {
-        callback?.(new Error('Git error'), '', 'error output');
-      }
-      return new EventEmitter() as ChildProcess;
+    const branchName = await observeDetachedHead({
+      error: new Error('Git error'),
+      stdout: '',
+      stderr: 'error output',
     });
-
-    const { result, rerender } = renderHook(() => useGitBranchName(CWD));
-    await act(async () => {
-      vi.runAllTimers();
-      rerender();
-    });
-    expect(result.current).toBeUndefined();
+    expect(branchName).toBeUndefined();
   });
 
   it('should update branch name when .git/logs/HEAD changes', async () => {
@@ -363,7 +371,12 @@ describe('useGitBranchName', () => {
   // result to overwrite the correct (latest) branch name.
   // ---------------------------------------------------------------------------
 
-  it('should ignore stale exec result when a newer fetch supersedes it', async () => {
+  const observeSupersededGitFetch = async (): Promise<{
+    readonly initialBranch: string | undefined;
+    readonly watcher: ReturnType<typeof createWatchFileCapture>['spy'];
+    readonly branchAfterNewerFetch: string | undefined;
+    readonly branchAfterStaleFetch: string | undefined;
+  }> => {
     const capture = createWatchFileCapture();
 
     // Simulate compound command: initial fetch returns 'feature-branch',
@@ -397,12 +410,13 @@ describe('useGitBranchName', () => {
       vi.runAllTimers();
       rerender();
     });
-    expect(result.current).toBe('feature-branch');
+    const initialBranch = result.current;
 
     await waitFor(() => {
-      expect(capture.spy).toHaveBeenCalled();
+      if (capture.spy.mock.calls.length === 0) {
+        throw new Error('Expected the git watcher to be registered');
+      }
     });
-
     // Fire two rapid watcher events (compound command writes reflog multiple times)
     await act(async () => {
       capture.getCallback()(
@@ -418,9 +432,7 @@ describe('useGitBranchName', () => {
       vi.advanceTimersByTime(FETCH_DEBOUNCE_MS);
       rerender();
     });
-
-    // The second fetch (callIndex 3) resolved with 'main', so we should see 'main'
-    expect(result.current).toBe('main');
+    const branchAfterNewerFetch = result.current;
 
     // Now the stale first fetch (callIndex 2) resolves with the old branch
     await act(async () => {
@@ -428,8 +440,20 @@ describe('useGitBranchName', () => {
       rerender();
     });
 
-    // The stale result should be IGNORED — branch should remain 'main'
-    expect(result.current).toBe('main');
+    return {
+      initialBranch,
+      watcher: capture.spy,
+      branchAfterNewerFetch,
+      branchAfterStaleFetch: result.current,
+    };
+  };
+
+  it('should ignore stale exec result when a newer fetch supersedes it', async () => {
+    const fetches = await observeSupersededGitFetch();
+    expect(fetches.initialBranch).toBe('feature-branch');
+    expect(fetches.watcher).toHaveBeenCalled();
+    expect(fetches.branchAfterNewerFetch).toBe('main');
+    expect(fetches.branchAfterStaleFetch).toBe('main');
   });
 
   it('should debounce rapid watcher callbacks so only one exec fires after a burst', async () => {

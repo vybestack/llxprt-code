@@ -173,7 +173,7 @@ describe('a2a executor discards abandoned tool-call requests on Retry (issue 304
     await executor.execute(createRequestContext(), eventBus);
 
     expect(scheduledRequests).toHaveLength(1);
-    expect(scheduledRequests[0].map((r) => r.callId)).toEqual(['kept']);
+    expect(scheduledRequests[0].map((r) => r.callId)).toStrictEqual(['kept']);
   });
 
   /**
@@ -219,14 +219,14 @@ describe('a2a executor discards abandoned tool-call requests on Retry (issue 304
       acceptedEvents
         .filter((event) => event.type === AgentEventType.Content)
         .map((event) => event.value),
-    ).toEqual(['replacement']);
+    ).toStrictEqual(['replacement']);
     expect(
       acceptedEvents.some((event) => event.type === AgentEventType.Retry),
     ).toBe(true);
     expect(scheduledRequests).toHaveLength(1);
-    expect(scheduledRequests[0].map((request) => request.callId)).toEqual([
-      'kept',
-    ]);
+    expect(scheduledRequests[0].map((request) => request.callId)).toStrictEqual(
+      ['kept'],
+    );
   });
 
   /**

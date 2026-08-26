@@ -24,6 +24,10 @@ function createInMemorySecureStore(): ISecureStore {
   };
 }
 
+function resolveCurrentBucket(bucket: string | undefined): string {
+  return bucket ?? 'default';
+}
+
 const testToken: OAuthToken = {
   access_token: 'codex-test-token',
   refresh_token: 'codex-test-refresh',
@@ -107,7 +111,7 @@ describe('OAuthManager same-process single-flight (issue #2819, Finding 6)', () 
         currentBucket = ctx.bucket;
       },
       initiateAuth: async () => {
-        const bucket = currentBucket ?? 'default';
+        const bucket = resolveCurrentBucket(currentBucket);
         bucketsAuthed.push(bucket);
         await new Promise((resolve) => setTimeout(resolve, 100));
         return { ...testToken, access_token: `token-${bucket}` };

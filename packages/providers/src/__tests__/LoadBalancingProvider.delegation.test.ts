@@ -41,6 +41,50 @@ async function collectResponseFromProvider(
   }
 }
 
+function resolveRecordedDelegationProvider(
+  name: string,
+  providerRequests: string[],
+  defaultProvider: IProvider,
+  openAiProvider: IProvider,
+  fallback: (providerName: string) => IProvider | undefined,
+): IProvider | undefined {
+  providerRequests.push(name);
+  if (name === 'gemini') return defaultProvider;
+  if (name === 'openai') return openAiProvider;
+  return fallback(name);
+}
+
+function resolveMixedDelegationProvider(
+  name: string,
+  defaultProvider: IProvider,
+  openAiProvider: IProvider,
+  anthropicProvider: IProvider,
+  fallback: (providerName: string) => IProvider | undefined,
+): IProvider | undefined {
+  if (name === 'gemini') return defaultProvider;
+  if (name === 'openai') return openAiProvider;
+  if (name === 'anthropic') return anthropicProvider;
+  return fallback(name);
+}
+
+function captureResolvedModel(
+  options: GenerateChatOptions,
+  capturedModels: string[],
+): void {
+  capturedModels.push(options.resolved?.model ?? 'no-model');
+}
+
+function resolveModelCaptureProvider(
+  name: string,
+  defaultProvider: IProvider,
+  openAiProvider: IProvider,
+  fallback: (providerName: string) => IProvider | undefined,
+): IProvider | undefined {
+  if (name === 'gemini') return defaultProvider;
+  if (name === 'openai') return openAiProvider;
+  return fallback(name);
+}
+
 describe('LoadBalancingProvider', () => {
   let settingsService: SettingsService;
   let config: Config;
@@ -171,12 +215,14 @@ describe('LoadBalancingProvider', () => {
 
       const originalGetProvider =
         providerManager.getProviderByName.bind(providerManager);
-      providerManager.getProviderByName = (name: string) => {
-        providerRequests.push(name);
-        if (name === 'gemini') return mockGeminiProvider as IProvider;
-        if (name === 'openai') return mockOpenAIProvider as IProvider;
-        return originalGetProvider(name);
-      };
+      providerManager.getProviderByName = (name: string) =>
+        resolveRecordedDelegationProvider(
+          name,
+          providerRequests,
+          mockGeminiProvider,
+          mockOpenAIProvider,
+          originalGetProvider,
+        );
 
       try {
         // First call should go to gemini
@@ -500,12 +546,14 @@ describe('LoadBalancingProvider', () => {
 
       const originalGetProvider =
         providerManager.getProviderByName.bind(providerManager);
-      providerManager.getProviderByName = (name: string) => {
-        if (name === 'gemini') return mockGemini as IProvider;
-        if (name === 'openai') return mockOpenAI as IProvider;
-        if (name === 'anthropic') return mockAnthropic as IProvider;
-        return originalGetProvider(name);
-      };
+      providerManager.getProviderByName = (name: string) =>
+        resolveMixedDelegationProvider(
+          name,
+          mockGemini,
+          mockOpenAI,
+          mockAnthropic,
+          originalGetProvider,
+        );
 
       try {
         // Make 3 calls to cycle through all providers
@@ -550,7 +598,7 @@ describe('LoadBalancingProvider', () => {
         async *generateChatCompletion(
           options: GenerateChatOptions,
         ): AsyncIterableIterator<IContent> {
-          capturedModels.push(options.resolved?.model ?? 'no-model');
+          captureResolvedModel(options, capturedModels);
           yield { role: 'model', parts: [{ text: 'response' }] };
         },
         getModels: async () => [],
@@ -564,7 +612,7 @@ describe('LoadBalancingProvider', () => {
         async *generateChatCompletion(
           options: GenerateChatOptions,
         ): AsyncIterableIterator<IContent> {
-          capturedModels.push(options.resolved?.model ?? 'no-model');
+          captureResolvedModel(options, capturedModels);
           yield { role: 'model', parts: [{ text: 'response' }] };
         },
         getModels: async () => [],
@@ -575,11 +623,13 @@ describe('LoadBalancingProvider', () => {
 
       const originalGetProvider =
         providerManager.getProviderByName.bind(providerManager);
-      providerManager.getProviderByName = (name: string) => {
-        if (name === 'gemini') return mockGemini as IProvider;
-        if (name === 'openai') return mockOpenAI as IProvider;
-        return originalGetProvider(name);
-      };
+      providerManager.getProviderByName = (name: string) =>
+        resolveModelCaptureProvider(
+          name,
+          mockGemini,
+          mockOpenAI,
+          originalGetProvider,
+        );
 
       try {
         // Make 2 calls to cycle through providers

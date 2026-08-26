@@ -160,7 +160,11 @@ describe('useAgentEventStream', () => {
     unmount();
   });
 
-  it('serializes overlapping runStream calls', async () => {
+  const observeOverlappingRunStreamCalls = async (): Promise<{
+    readonly routed: readonly AgentEvent[];
+    readonly executionOrder: readonly string[];
+    readonly unmount: () => void;
+  }> => {
     const events1: AgentEvent[] = [{ type: 'text', text: 'first' }];
     const events2: AgentEvent[] = [{ type: 'text', text: 'second' }];
     let callIndex = 0;
@@ -212,11 +216,17 @@ describe('useAgentEventStream', () => {
       await Promise.all([p1, p2]);
     });
 
+    return { routed, executionOrder, unmount };
+  };
+
+  it('serializes overlapping runStream calls', async () => {
+    const { routed, executionOrder, unmount } =
+      await observeOverlappingRunStreamCalls();
+
     // Both runs completed; events from both arrived in order
     expect(routed).toHaveLength(2);
     expect(routed[0]).toStrictEqual({ type: 'text', text: 'first' });
     expect(routed[1]).toStrictEqual({ type: 'text', text: 'second' });
-
     expect(executionOrder).toStrictEqual([
       'start-0',
       'end-0',

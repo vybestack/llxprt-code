@@ -56,6 +56,9 @@ const sdkConstructorCalls: Array<Record<string, unknown>> = [];
 
 const mockBetaModelsList = vi.fn();
 
+function headerIncludesOAuthBeta(header: unknown): boolean {
+  return typeof header === 'string' && header.includes('oauth-2025-04-20');
+}
 const mockMessagesCreate = vi.fn();
 
 void vi.mock('@anthropic-ai/sdk', () => ({
@@ -328,10 +331,7 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
       expect(sdkOpts.authToken).toBeUndefined();
 
       const betaHeader = sdkOpts.defaultHeaders?.['anthropic-beta'];
-      expect(
-        typeof betaHeader === 'string' &&
-          betaHeader.includes('oauth-2025-04-20'),
-      ).toBe(false);
+      expect(headerIncludesOAuthBeta(betaHeader)).toBe(false);
     });
   });
 
@@ -472,10 +472,7 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
       expect(options?.headers).toBeDefined();
       const headers = options.headers;
       const betaHeader = headers['anthropic-beta'];
-      expect(
-        typeof betaHeader === 'string' &&
-          betaHeader.includes('oauth-2025-04-20'),
-      ).toBe(true);
+      expect(headerIncludesOAuthBeta(betaHeader)).toBe(true);
     });
 
     it('does not include oauth-2025-04-20 in anthropic-beta header for API key requests', async () => {
@@ -513,9 +510,7 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
       const allOptions = call[1];
       const headers = allOptions?.headers;
       const betaHeader = headers?.['anthropic-beta'];
-      const betaIncludesOAuth =
-        typeof betaHeader === 'string' &&
-        betaHeader.includes('oauth-2025-04-20');
+      const betaIncludesOAuth = headerIncludesOAuthBeta(betaHeader);
       expect(betaIncludesOAuth).toBe(false);
     });
   });

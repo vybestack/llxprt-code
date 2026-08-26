@@ -26,7 +26,12 @@ import { DebugLogger } from '@vybestack/llxprt-code-core';
 import {
   computeUnallowedParameters,
   loadProviderAliasEntries,
+  type ProviderAliasEntry,
 } from './providerAliases.js';
+
+function configuredModelDefaults(entry: ProviderAliasEntry | undefined) {
+  return entry?.config.modelDefaults ?? [];
+}
 
 async function loadWithTempConfig(
   tmpDir: string,
@@ -103,7 +108,7 @@ describe('providerAliases unallowedParameters', () => {
       const entry = entries.find((e) => e.alias === 'bad');
       // The invalid RULE is stripped, but the alias entry itself is preserved.
       expect(entry).toBeDefined();
-      expect(entry?.config.modelDefaults ?? []).toHaveLength(0);
+      expect(configuredModelDefaults(entry)).toHaveLength(0);
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('unallowedParameters'),
       );
@@ -124,7 +129,7 @@ describe('providerAliases unallowedParameters', () => {
 
       const entry = entries.find((e) => e.alias === 'empty');
       expect(entry).toBeDefined();
-      expect(entry?.config.modelDefaults ?? []).toHaveLength(0);
+      expect(configuredModelDefaults(entry)).toHaveLength(0);
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('unallowedParameters'),
       );

@@ -17,6 +17,53 @@ async function collect(stream: AsyncIterable<IContent>): Promise<IContent[]> {
   return chunks;
 }
 
+async function* generateAbortAwareTimeoutResponse(
+  options: GenerateChatOptions,
+  attempt: number,
+  observeAbort: () => void,
+  finalizeStream: () => void,
+): AsyncGenerator<IContent> {
+  try {
+    if (attempt === 1) {
+      const signal = getRequestSignal(options);
+      if (signal === undefined) {
+        throw new Error('Retry attempt signal is required');
+      }
+      await new Promise<void>((resolve, reject) => {
+        const onAbort = () => {
+          observeAbort();
+          reject(new Error('transport aborted'));
+        };
+        signal.addEventListener('abort', onAbort, { once: true });
+        if (signal.aborted) onAbort();
+      });
+    }
+    yield {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'success' }],
+    } as IContent;
+  } finally {
+    finalizeStream();
+  }
+}
+
+async function* generatePartialThenStreamFailure(
+  attempt: number,
+  streamFailure: Error,
+): AsyncGenerator<IContent> {
+  if (attempt === 1) {
+    yield {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'partial' }],
+    };
+    throw streamFailure;
+  }
+  yield {
+    speaker: 'ai',
+    blocks: [{ type: 'text', text: 'appended retry' }],
+  };
+}
+
 describe('RetryOrchestrator timeout cleanup', () => {
   it('aborts and closes a timed-out attempt before starting the retry', async () => {
     let attempts = 0;
@@ -26,33 +73,21 @@ describe('RetryOrchestrator timeout cleanup', () => {
     let finalizedStreams = 0;
     const provider: IProvider = {
       name: 'abort-aware-timeout-provider',
-      async *generateChatCompletion(options: GenerateChatOptions) {
+      generateChatCompletion: (options: GenerateChatOptions) => {
         attempts++;
         activeStreams++;
         maximumActiveStreams = Math.max(maximumActiveStreams, activeStreams);
-        try {
-          if (attempts === 1) {
-            const signal = getRequestSignal(options);
-            if (signal === undefined) {
-              throw new Error('Retry attempt signal is required');
-            }
-            await new Promise<void>((resolve, reject) => {
-              const onAbort = () => {
-                observedAborts++;
-                reject(new Error('transport aborted'));
-              };
-              signal.addEventListener('abort', onAbort, { once: true });
-              if (signal.aborted) onAbort();
-            });
-          }
-          yield {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'success' }],
-          } as IContent;
-        } finally {
-          activeStreams--;
-          finalizedStreams++;
-        }
+        return generateAbortAwareTimeoutResponse(
+          options,
+          attempts,
+          () => {
+            observedAborts++;
+          },
+          () => {
+            activeStreams--;
+            finalizedStreams++;
+          },
+        );
       },
       async getModels(): Promise<IModel[]> {
         return [];
@@ -99,20 +134,8 @@ describe('RetryOrchestrator timeout cleanup', () => {
     });
     const provider: IProvider = {
       name: 'timeout-wrapped-streaming-provider',
-      async *generateChatCompletion() {
-        attemptCount++;
-        if (attemptCount === 1) {
-          yield {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'partial' }],
-          };
-          throw streamFailure;
-        }
-        yield {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'appended retry' }],
-        };
-      },
+      generateChatCompletion: () =>
+        generatePartialThenStreamFailure(++attemptCount, streamFailure),
       async getModels(): Promise<IModel[]> {
         return [];
       },

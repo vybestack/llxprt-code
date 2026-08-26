@@ -467,186 +467,239 @@ function hasFunctionResponse(history: IContent[]): boolean {
     .some((b) => b.type === 'tool_response');
 }
 
+type ScriptedLoopState = ReturnType<typeof createScriptedAgentClient>['state'];
+
+interface MultiTurnLoopObservation {
+  readonly state: ScriptedLoopState;
+  readonly secondTurnHasToolResponse: boolean;
+  readonly toolExecute: MockTool['executeFn'];
+  readonly toolResults: readonly AgentEvent[];
+  readonly textValues: readonly string[];
+  readonly toolResultIndex: number;
+  readonly finalTextIndex: number;
+  readonly addItem: HookHarness['addItem'];
+}
+
+interface CancellationLoopDetails {
+  readonly textValues: readonly string[];
+  readonly providerCallCount: number;
+}
+
+type CancellationLoopObservation = CancellationLoopDetails &
+  ({ readonly signalAborted: true } | { readonly signalAborted: false });
+
 describe('useAgentEventStream loop integration', () => {
-  beforeEach(() => {
-    clearAllSchedulers();
-  });
-  afterEach(() => {
-    clearAllSchedulers();
-  });
+  beforeEach(clearAllSchedulers);
+  afterEach(clearAllSchedulers);
+
+  const observeMultiTurnToolCallContinuation =
+    async (): Promise<MultiTurnLoopObservation> => {
+      const tool = new MockTool({
+        name: 'echo_tool',
+        execute: async () => ({
+          llmContent: 'echoed',
+          returnDisplay: 'echoed',
+        }),
+      });
+      const toolRegistry = createToolRegistryForTest([tool]);
+      const policyEngine = createAllowPolicyEngine();
+      const messageBus = new MessageBus(policyEngine, false);
+      const config = createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine,
+        interactive: true,
+        approvalMode: ApprovalMode.YOLO,
+      });
+
+      const { client, state } = createScriptedAgentClient([
+        [
+          toolCallRequestEvent('echo_tool', 'call-1', { text: 'hi' }),
+          finishedEvent(),
+        ],
+        [contentEvent('final answer'), finishedEvent()],
+      ]);
+
+      const agent = createRealEngineAgent({
+        agentClient: client,
+        config,
+        messageBus,
+        interactiveMode: true,
+      });
+      const harness = setupHookWithAgent(agent);
+
+      const controller = new AbortController();
+      await act(async () => {
+        await harness.result.current.runStream(
+          'user message' as AgentRequestInput,
+          controller.signal,
+          'prompt-1',
+        );
+      });
+
+      const secondTurnBlocks = agentRequestInputToBlocks(state.turnMessages[1]);
+      const toolResults = harness.routedEvents.filter(
+        (event) => event.type === 'tool-result',
+      );
+      const textValues = harness.routedEvents
+        .filter((event) => event.type === 'text')
+        .map((event) => (event as { text: string }).text);
+      const toolResultIndex = harness.routedEvents.findIndex(
+        (event) => event.type === 'tool-result',
+      );
+      const finalTextIndex = harness.routedEvents.findIndex(
+        (event) =>
+          event.type === 'text' &&
+          (event as { text: string }).text === 'final answer',
+      );
+
+      return {
+        state,
+        secondTurnHasToolResponse: secondTurnBlocks.some(
+          (block) => block.type === 'tool_response',
+        ),
+        toolExecute: tool.executeFn,
+        toolResults,
+        textValues,
+        toolResultIndex,
+        finalTextIndex,
+        addItem: harness.addItem,
+      };
+    };
 
   it('(i) multi-turn: real loop drives tool-call continuation end-to-end', async () => {
-    const tool = new MockTool({
-      name: 'echo_tool',
-      execute: async () => ({ llmContent: 'echoed', returnDisplay: 'echoed' }),
-    });
-    const toolRegistry = createToolRegistryForTest([tool]);
-    const policyEngine = createAllowPolicyEngine();
-    const messageBus = new MessageBus(policyEngine, false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine,
-      interactive: true,
-      approvalMode: ApprovalMode.YOLO,
-    });
-
-    const { client, state } = createScriptedAgentClient([
-      [
-        toolCallRequestEvent('echo_tool', 'call-1', { text: 'hi' }),
-        finishedEvent(),
-      ],
-      [contentEvent('final answer'), finishedEvent()],
-    ]);
-
-    const agent = createRealEngineAgent({
-      agentClient: client,
-      config,
-      messageBus,
-      interactiveMode: true,
-    });
-    const harness = setupHookWithAgent(agent);
-
-    const controller = new AbortController();
-    await act(async () => {
-      await harness.result.current.runStream(
-        'user message' as AgentRequestInput,
-        controller.signal,
-        'prompt-1',
-      );
-    });
+    const continuation = await observeMultiTurnToolCallContinuation();
 
     // The loop (not the CLI) drove the continuation: sendMessageStream called
     // exactly twice — once for the initial turn, once for the functionResponse
     // continuation.
-    expect(state.sendMessageStreamCalls).toHaveLength(2);
-    expect(state.turnMessages).toHaveLength(2);
-
+    expect(continuation.state.sendMessageStreamCalls).toHaveLength(2);
+    expect(continuation.state.turnMessages).toHaveLength(2);
     // The second turn's message contained a tool_response block.
-    expect(hasFunctionResponse(state.history)).toBe(true);
-    const turn2Blocks = agentRequestInputToBlocks(state.turnMessages[1]);
-    expect(turn2Blocks.some((b) => b.type === 'tool_response')).toBe(true);
-
-    expect(tool.executeFn).toHaveBeenCalledTimes(1);
-
-    const toolResults = harness.routedEvents.filter(
-      (e) => e.type === 'tool-result',
-    );
-    expect(toolResults).toHaveLength(1);
-    expect(toolResults[0]).toMatchObject({
+    expect(hasFunctionResponse(continuation.state.history)).toBe(true);
+    expect(continuation.secondTurnHasToolResponse).toBe(true);
+    expect(continuation.toolExecute).toHaveBeenCalledTimes(1);
+    expect(continuation.toolResults).toHaveLength(1);
+    expect(continuation.toolResults[0]).toMatchObject({
       type: 'tool-result',
       result: { id: 'call-1', name: 'echo_tool' },
     });
-
-    const textValues = harness.routedEvents
-      .filter((e) => e.type === 'text')
-      .map((e) => (e as { text: string }).text);
-    expect(textValues).toContain('final answer');
-    const toolResultIdx = harness.routedEvents.findIndex(
-      (e) => e.type === 'tool-result',
+    expect(continuation.textValues).toContain('final answer');
+    expect(continuation.toolResultIndex).toBeGreaterThanOrEqual(0);
+    expect(continuation.finalTextIndex).toBeGreaterThan(
+      continuation.toolResultIndex,
     );
-    const finalTextIdx = harness.routedEvents.findIndex(
-      (e) =>
-        e.type === 'text' && (e as { text: string }).text === 'final answer',
-    );
-    expect(toolResultIdx).toBeGreaterThanOrEqual(0);
-    expect(finalTextIdx).toBeGreaterThan(toolResultIdx);
-    expect(harness.addItem).toHaveBeenCalledTimes(1);
+    expect(continuation.addItem).toHaveBeenCalledTimes(1);
   });
 
-  it('(ii) cancellation mid-stream: abort settles the hook run', async () => {
-    const policyEngine = createAllowPolicyEngine();
-    const messageBus = new MessageBus(policyEngine, false);
-    const toolRegistry = createToolRegistryForTest([]);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine,
-      interactive: true,
-      approvalMode: ApprovalMode.YOLO,
-    });
+  const observeCancellationAfterPartialText =
+    async (): Promise<CancellationLoopObservation> => {
+      const policyEngine = createAllowPolicyEngine();
+      const messageBus = new MessageBus(policyEngine, false);
+      const toolRegistry = createToolRegistryForTest([]);
+      const config = createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine,
+        interactive: true,
+        approvalMode: ApprovalMode.YOLO,
+      });
 
-    let callCount = 0;
-    const hangingChat = {
-      getHistory: () => [] as IContent[],
-      setHistory: () => {},
-      clearHistory: () => {},
-      getHistoryService: () => null,
-      wasRecentlyCompressed: () => false,
-      performCompression: async () => PerformCompressionResult.COMPRESSED,
-      recordCompletedToolCalls: () => {},
-    } as unknown as ReturnType<AgentClientContract['getChat']>;
+      let callCount = 0;
+      const hangingChat = {
+        getHistory: () => [] as IContent[],
+        setHistory: () => {},
+        clearHistory: () => {},
+        getHistoryService: () => null,
+        wasRecentlyCompressed: () => false,
+        performCompression: async () => PerformCompressionResult.COMPRESSED,
+        recordCompletedToolCalls: () => {},
+      } as unknown as ReturnType<AgentClientContract['getChat']>;
 
-    const hangingClient: AgentClientContract = {
-      ...createClientBase(),
-      getChat: () => hangingChat,
-      addHistory: async () => {},
-      async *sendMessageStream(
-        _req: string | ContentBlock[] | IContent,
-        signal: AbortSignal,
-        _promptId: string,
-      ): AsyncGenerator<ServerAgentStreamEvent> {
-        callCount++;
-        yield contentEvent('partial-text');
-        await new Promise<void>((resolve) => {
+      const hangingClient: AgentClientContract = {
+        ...createClientBase(),
+        getChat: () => hangingChat,
+        addHistory: async () => {},
+        async *sendMessageStream(
+          _req: string | ContentBlock[] | IContent,
+          signal: AbortSignal,
+          _promptId: string,
+        ): AsyncGenerator<ServerAgentStreamEvent> {
+          callCount++;
+          yield contentEvent('partial-text');
+          await new Promise<void>((resolve) => {
+            if (signal.aborted) {
+              resolve();
+              return;
+            }
+            signal.addEventListener('abort', () => resolve(), { once: true });
+          });
           if (signal.aborted) {
+            yield {
+              type: AgentEventType.UserCancelled,
+              value: undefined,
+            } as ServerAgentStreamEvent;
+          }
+        },
+      };
+
+      const agent = createRealEngineAgent({
+        agentClient: hangingClient,
+        config,
+        messageBus,
+        interactiveMode: true,
+      });
+      const harness = setupHookWithAgent(agent);
+
+      const controller = new AbortController();
+      const runPromise = act(async () => {
+        await harness.result.current.runStream(
+          'go' as AgentRequestInput,
+          controller.signal,
+          'prompt-cancel',
+        );
+      });
+
+      // Abort mid-stream after the partial text is routed (deterministic).
+      await new Promise<void>((resolve) => {
+        const check = (): void => {
+          if (harness.routedEvents.some((e) => e.type === 'text')) {
             resolve();
             return;
           }
-          signal.addEventListener('abort', () => resolve(), { once: true });
-        });
-        if (signal.aborted) {
-          yield {
-            type: AgentEventType.UserCancelled,
-            value: undefined,
-          } as ServerAgentStreamEvent;
-        }
-      },
+          setTimeout(check, 5);
+        };
+        check();
+      });
+      controller.abort();
+
+      // The hook run must settle (not hang).
+      await runPromise;
+
+      const textEvents = harness.routedEvents.filter(
+        (event) => event.type === 'text',
+      );
+      const textValues = textEvents.map(
+        (event) => (event as { text: string }).text,
+      );
+
+      return {
+        signalAborted: controller.signal.aborted,
+        textValues,
+        providerCallCount: callCount,
+      };
     };
 
-    const agent = createRealEngineAgent({
-      agentClient: hangingClient,
-      config,
-      messageBus,
-      interactiveMode: true,
-    });
-    const harness = setupHookWithAgent(agent);
-
-    const controller = new AbortController();
-    const runPromise = act(async () => {
-      await harness.result.current.runStream(
-        'go' as AgentRequestInput,
-        controller.signal,
-        'prompt-cancel',
-      );
-    });
-
-    // Abort mid-stream after the partial text is routed (deterministic).
-    await new Promise<void>((resolve) => {
-      const check = (): void => {
-        if (harness.routedEvents.some((e) => e.type === 'text')) {
-          resolve();
-          return;
-        }
-        setTimeout(check, 5);
-      };
-      check();
-    });
-    controller.abort();
-
-    // The hook run must settle (not hang).
-    await runPromise;
+  it('(ii) cancellation mid-stream: abort settles the hook run', async () => {
+    const cancellation = await observeCancellationAfterPartialText();
 
     // The hook received the partial content before abort.
-    const textEvents = harness.routedEvents.filter((e) => e.type === 'text');
-    const textValues = textEvents.map((e) => (e as { text: string }).text);
-    expect(textValues).toContain('partial-text');
-
+    expect(cancellation.textValues).toContain('partial-text');
     // The hook stopped iterating after abort: only the partial text was
     // routed, no additional content chunks or tool results leaked through.
-    expect(callCount).toBe(1);
+    expect(cancellation.providerCallCount).toBe(1);
     // The signal is aborted as expected.
-    expect(controller.signal.aborted).toBe(true);
+    expect(cancellation.signalAborted).toBe(true);
   });
 
   // ─── Helpers for the production confirmation path ──────────────────────

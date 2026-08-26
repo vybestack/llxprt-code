@@ -54,6 +54,61 @@ function buildCodexOptions(overrides?: Partial<NormalizedGenerateChatOptions>) {
 
 let originalFetch: typeof globalThis.fetch;
 
+function createCallIdValidatingFetch(): typeof fetch {
+  return async (
+    _url: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    const bodyText =
+      init?.body instanceof Blob ? await init.body.text() : String(init?.body);
+    const parsed = JSON.parse(bodyText) as { input: unknown[] };
+
+    const functionCallIds = new Set(
+      parsed.input
+        .filter((item) => {
+          if (item === null || typeof item !== 'object') return false;
+          return (item as { type?: unknown }).type === 'function_call';
+        })
+        .map((item) => (item as { call_id?: unknown }).call_id)
+        .filter((id): id is string => typeof id === 'string'),
+    );
+
+    const functionCallOutputs = parsed.input.filter((item) => {
+      if (item === null || typeof item !== 'object') return false;
+      return (item as { type?: unknown }).type === 'function_call_output';
+    });
+
+    for (const output of functionCallOutputs) {
+      const callId = (output as { call_id?: unknown }).call_id;
+      if (typeof callId !== 'string') {
+        throw new Error('function_call_output call_id must be a string');
+      }
+      if (!functionCallIds.has(callId)) {
+        throw new Error(
+          `orphan function_call_output: call_id=${String(callId)}; function_calls=[${Array.from(functionCallIds).join(', ')}]`,
+        );
+      }
+    }
+
+    const encoder = new TextEncoder();
+    const sseStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
+          ),
+        );
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        controller.close();
+      },
+    });
+    return new Response(sseStream, {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    });
+  };
+}
+
 describe('OpenAIResponsesProvider Codex Mode - malformed call ids', () => {
   beforeEach(() => {
     originalFetch = globalThis.fetch;
@@ -66,58 +121,7 @@ describe('OpenAIResponsesProvider Codex Mode - malformed call ids', () => {
   it('should not emit function_call_output for malformed call ids that cannot match a function_call', async () => {
     const provider = buildProviderWithOAuth();
 
-    const encoder = new TextEncoder();
-
-    const fetchMock = vi.fn(async (_url: unknown, init?: RequestInit) => {
-      const bodyText =
-        init?.body instanceof Blob
-          ? await init.body.text()
-          : String(init?.body);
-      const parsed = JSON.parse(bodyText) as { input: unknown[] };
-
-      const functionCallIds = new Set(
-        parsed.input
-          .filter((item) => {
-            if (item === null || typeof item !== 'object') return false;
-            return (item as { type?: unknown }).type === 'function_call';
-          })
-          .map((item) => (item as { call_id?: unknown }).call_id)
-          .filter((id): id is string => typeof id === 'string'),
-      );
-
-      const functionCallOutputs = parsed.input.filter((item) => {
-        if (item === null || typeof item !== 'object') return false;
-        return (item as { type?: unknown }).type === 'function_call_output';
-      });
-
-      // Every output must reference an existing function_call call_id
-      // (this is the invariant the Codex /responses endpoint enforces).
-      for (const output of functionCallOutputs) {
-        const callId = (output as { call_id?: unknown }).call_id;
-        expect(typeof callId).toBe('string');
-        if (!functionCallIds.has(callId as string)) {
-          throw new Error(
-            `orphan function_call_output: call_id=${String(callId)}; function_calls=[${Array.from(functionCallIds).join(', ')}]`,
-          );
-        }
-      }
-
-      const sseStream = new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(
-            encoder.encode(
-              'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
-            ),
-          );
-          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-          controller.close();
-        },
-      });
-      return new Response(sseStream, {
-        status: 200,
-        headers: { 'content-type': 'text/event-stream' },
-      });
-    });
+    const fetchMock = vi.fn(createCallIdValidatingFetch());
 
     globalThis.fetch = fetchMock as typeof globalThis.fetch;
 

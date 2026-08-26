@@ -42,99 +42,90 @@ describe('sandbox-bashrc: post-consumption compatibility (AC5)', () => {
   }
 
   describe('extractSandboxBashrcChanges', () => {
-    it.skipIf(process.platform === 'win32')(
-      'captures exported environment variables from sandbox.bashrc',
+    describe.skipIf(process.platform === 'win32')(
+      'POSIX shell extraction behavior',
       () => {
-        const r = extractSandboxBashrcChanges(
-          writeBashrc('export MY_SANDBOX_EXPORT=hello-world\n'),
-          tmpDir,
-        );
-        expect(r.env.MY_SANDBOX_EXPORT).toBe('hello-world');
-      },
-    );
+        it('captures exported environment variables from sandbox.bashrc', () => {
+          const r = extractSandboxBashrcChanges(
+            writeBashrc('export MY_SANDBOX_EXPORT=hello-world\n'),
+            tmpDir,
+          );
+          expect(r.env.MY_SANDBOX_EXPORT).toBe('hello-world');
+        });
 
-    it.skipIf(process.platform === 'win32')(
-      'captures the working-directory change from sandbox.bashrc',
-      () => {
-        const subDir = path.join(tmpDir, 'subdir');
-        fs.mkdirSync(subDir);
-        const r = extractSandboxBashrcChanges(
-          writeBashrc(`cd "${subDir}"\n`),
-          tmpDir,
-        );
-        expect(r.cwd).toBeDefined();
-        expect(fs.realpathSync(r.cwd as string)).toBe(fs.realpathSync(subDir));
-      },
-    );
+        it('captures the working-directory change from sandbox.bashrc', () => {
+          const subDir = path.join(tmpDir, 'subdir');
+          fs.mkdirSync(subDir);
+          const r = extractSandboxBashrcChanges(
+            writeBashrc(`cd "${subDir}"\n`),
+            tmpDir,
+          );
+          expect(r.cwd).toBeDefined();
+          expect(fs.realpathSync(r.cwd as string)).toBe(
+            fs.realpathSync(subDir),
+          );
+        });
 
-    it.skipIf(process.platform === 'win32')(
-      'does not expose unexported (shell-local) variables',
-      () => {
-        const r = extractSandboxBashrcChanges(
-          writeBashrc('LOCAL_ONLY=secret\nexport MY_SANDBOX_EXPORT=visible\n'),
-          tmpDir,
-        );
-        expect(r.env.MY_SANDBOX_EXPORT).toBe('visible');
-        expect(r.env.LOCAL_ONLY).toBeUndefined();
-      },
-    );
+        it('does not expose unexported (shell-local) variables', () => {
+          const r = extractSandboxBashrcChanges(
+            writeBashrc(
+              'LOCAL_ONLY=secret\nexport MY_SANDBOX_EXPORT=visible\n',
+            ),
+            tmpDir,
+          );
+          expect(r.env.MY_SANDBOX_EXPORT).toBe('visible');
+          expect(r.env.LOCAL_ONLY).toBeUndefined();
+        });
 
-    it.skipIf(process.platform === 'win32')(
-      'O4: sanitizeEnv removes all LLXPRT_CAPABILITY_* keys from child env, unset list, and exfiltration',
-      () => {
-        const r = extractSandboxBashrcChanges(
-          writeBashrc(
-            'export STOLEN="$LLXPRT_CAPABILITY_TOKEN"\nunset KEEP_ME\n',
-          ),
-          tmpDir,
-          {
-            LLXPRT_CAPABILITY_TOKEN: 'a'.repeat(64),
-            LLXPRT_CAPABILITY_FD: '3',
-            LLXPRT_CAPABILITY_OTHER: 'should-be-removed',
-            KEEP_ME: 'remove-me',
-          },
-          { sanitizeEnv: true },
-        );
-        expect(r.env.STOLEN).toBe('');
-        expect(r.env).not.toHaveProperty('LLXPRT_CAPABILITY_TOKEN');
-        expect(r.env).not.toHaveProperty('LLXPRT_CAPABILITY_FD');
-        expect(r.env).not.toHaveProperty('LLXPRT_CAPABILITY_OTHER');
-        expect(r.unset).not.toContain('LLXPRT_CAPABILITY_TOKEN');
-        expect(r.unset).not.toContain('LLXPRT_CAPABILITY_FD');
-        expect(r.unset).toContain('KEEP_ME');
-      },
-    );
+        it('O4: sanitizeEnv removes all LLXPRT_CAPABILITY_* keys from child env, unset list, and exfiltration', () => {
+          const r = extractSandboxBashrcChanges(
+            writeBashrc(
+              'export STOLEN="$LLXPRT_CAPABILITY_TOKEN"\nunset KEEP_ME\n',
+            ),
+            tmpDir,
+            {
+              LLXPRT_CAPABILITY_TOKEN: 'a'.repeat(64),
+              LLXPRT_CAPABILITY_FD: '3',
+              LLXPRT_CAPABILITY_OTHER: 'should-be-removed',
+              KEEP_ME: 'remove-me',
+            },
+            { sanitizeEnv: true },
+          );
+          expect(r.env.STOLEN).toBe('');
+          expect(r.env).not.toHaveProperty('LLXPRT_CAPABILITY_TOKEN');
+          expect(r.env).not.toHaveProperty('LLXPRT_CAPABILITY_FD');
+          expect(r.env).not.toHaveProperty('LLXPRT_CAPABILITY_OTHER');
+          expect(r.unset).not.toContain('LLXPRT_CAPABILITY_TOKEN');
+          expect(r.unset).not.toContain('LLXPRT_CAPABILITY_FD');
+          expect(r.unset).toContain('KEEP_ME');
+        });
 
-    it.skipIf(process.platform === 'win32')(
-      'O4: sanitizeEnv removes a parent capability key even when bashrc unsets it; ordinary unset preserved',
-      () => {
-        const r = extractSandboxBashrcChanges(
-          writeBashrc('unset LLXPRT_CAPABILITY_TOKEN\nunset KEEP_ME\n'),
-          tmpDir,
-          { LLXPRT_CAPABILITY_TOKEN: 'a'.repeat(64), KEEP_ME: 'remove-me' },
-          { sanitizeEnv: true },
-        );
-        expect(r.env).not.toHaveProperty('LLXPRT_CAPABILITY_TOKEN');
-        expect(r.unset).not.toContain('LLXPRT_CAPABILITY_TOKEN');
-        expect(r.unset).toContain('KEEP_ME');
-      },
-    );
+        it('O4: sanitizeEnv removes a parent capability key even when bashrc unsets it; ordinary unset preserved', () => {
+          const r = extractSandboxBashrcChanges(
+            writeBashrc('unset LLXPRT_CAPABILITY_TOKEN\nunset KEEP_ME\n'),
+            tmpDir,
+            { LLXPRT_CAPABILITY_TOKEN: 'a'.repeat(64), KEEP_ME: 'remove-me' },
+            { sanitizeEnv: true },
+          );
+          expect(r.env).not.toHaveProperty('LLXPRT_CAPABILITY_TOKEN');
+          expect(r.unset).not.toContain('LLXPRT_CAPABILITY_TOKEN');
+          expect(r.unset).toContain('KEEP_ME');
+        });
 
-    it.skipIf(process.platform === 'win32')(
-      'O3: preserves PATH when unmodified; appends correctly when modified',
-      () => {
-        const r1 = extractSandboxBashrcChanges(
-          writeBashrc('export MY_SANDBOX_EXPORT=ok\n'),
-          tmpDir,
-          { PATH: '/usr/bin:/bin' },
-        );
-        expect(r1.env).not.toHaveProperty('PATH');
-        const r2 = extractSandboxBashrcChanges(
-          writeBashrc('export PATH=/opt/mybin:$PATH\n'),
-          tmpDir,
-          { PATH: '/usr/bin:/bin' },
-        );
-        expect(r2.env.PATH).toBe('/opt/mybin:/usr/bin:/bin');
+        it('O3: preserves PATH when unmodified; appends correctly when modified', () => {
+          const r1 = extractSandboxBashrcChanges(
+            writeBashrc('export MY_SANDBOX_EXPORT=ok\n'),
+            tmpDir,
+            { PATH: '/usr/bin:/bin' },
+          );
+          expect(r1.env).not.toHaveProperty('PATH');
+          const r2 = extractSandboxBashrcChanges(
+            writeBashrc('export PATH=/opt/mybin:$PATH\n'),
+            tmpDir,
+            { PATH: '/usr/bin:/bin' },
+          );
+          expect(r2.env.PATH).toBe('/opt/mybin:/usr/bin:/bin');
+        });
       },
     );
 
@@ -147,74 +138,66 @@ describe('sandbox-bashrc: post-consumption compatibility (AC5)', () => {
       expect(r.cwd).toBeUndefined();
     });
 
-    it.skipIf(process.platform === 'win32')(
-      'does not report unchanged variables as bashrc contributions',
+    describe.skipIf(process.platform === 'win32')(
+      'POSIX environment-diff behavior',
       () => {
-        const r = extractSandboxBashrcChanges(
-          writeBashrc('export MY_SANDBOX_EXPORT=ok\n'),
-          tmpDir,
-          { KEEP_ME: 'preserved' },
-          { sanitizeEnv: false },
-        );
-        expect(r.env.MY_SANDBOX_EXPORT).toBe('ok');
-        expect(r.env.KEEP_ME).toBeUndefined();
-      },
-    );
+        it('does not report unchanged variables as bashrc contributions', () => {
+          const r = extractSandboxBashrcChanges(
+            writeBashrc('export MY_SANDBOX_EXPORT=ok\n'),
+            tmpDir,
+            { KEEP_ME: 'preserved' },
+            { sanitizeEnv: false },
+          );
+          expect(r.env.MY_SANDBOX_EXPORT).toBe('ok');
+          expect(r.env.KEEP_ME).toBeUndefined();
+        });
 
-    it.skipIf(process.platform === 'win32')(
-      'reports exported variables removed by sandbox.bashrc',
-      () => {
-        const r = extractSandboxBashrcChanges(
-          writeBashrc('unset KEEP_ME\n'),
-          tmpDir,
-          { KEEP_ME: 'remove-me' },
-        );
-        expect(r.unset).toContain('KEEP_ME');
-      },
-    );
+        it('reports exported variables removed by sandbox.bashrc', () => {
+          const r = extractSandboxBashrcChanges(
+            writeBashrc('unset KEEP_ME\n'),
+            tmpDir,
+            { KEEP_ME: 'remove-me' },
+          );
+          expect(r.unset).toContain('KEEP_ME');
+        });
 
-    it.skipIf(process.platform === 'win32')(
-      'O1: the probe child runs and has a different BASHPID than the parent (separate process)',
-      () => {
-        const r = extractSandboxBashrcChanges(
-          writeBashrc('export MY_SANDBOX_EXPORT=$BASHPID\n'),
-          tmpDir,
-        );
-        const childPid = Number(r.env.MY_SANDBOX_EXPORT);
-        expect(Number.isInteger(childPid)).toBe(true);
-        expect(childPid).not.toBe(process.pid);
+        it('O1: the probe child runs and has a different BASHPID than the parent (separate process)', () => {
+          const r = extractSandboxBashrcChanges(
+            writeBashrc('export MY_SANDBOX_EXPORT=$BASHPID\n'),
+            tmpDir,
+          );
+          const childPid = Number(r.env.MY_SANDBOX_EXPORT);
+          expect(Number.isInteger(childPid)).toBe(true);
+          expect(childPid).not.toBe(process.pid);
+        });
       },
     );
   });
 
   describe('applySandboxBashrc', () => {
-    it.skipIf(process.platform === 'win32')(
-      'applies exported environment variables to the current process',
+    describe.skipIf(process.platform === 'win32')(
+      'POSIX shell application behavior',
       () => {
-        applySandboxBashrc(
-          writeBashrc('export MY_SANDBOX_EXPORT=applied\n'),
-          tmpDir,
-        );
-        expect(process.env.MY_SANDBOX_EXPORT).toBe('applied');
-      },
-    );
+        it('applies exported environment variables to the current process', () => {
+          applySandboxBashrc(
+            writeBashrc('export MY_SANDBOX_EXPORT=applied\n'),
+            tmpDir,
+          );
+          expect(process.env.MY_SANDBOX_EXPORT).toBe('applied');
+        });
 
-    it.skipIf(process.platform === 'win32')(
-      'applies the working-directory change to the current process',
-      () => {
-        const subDir = path.join(tmpDir, 'worksub');
-        fs.mkdirSync(subDir);
-        applySandboxBashrc(writeBashrc(`cd "${subDir}"\n`), tmpDir);
-        expect(fs.realpathSync(process.cwd())).toBe(fs.realpathSync(subDir));
-      },
-    );
+        it('applies the working-directory change to the current process', () => {
+          const subDir = path.join(tmpDir, 'worksub');
+          fs.mkdirSync(subDir);
+          applySandboxBashrc(writeBashrc(`cd "${subDir}"\n`), tmpDir);
+          expect(fs.realpathSync(process.cwd())).toBe(fs.realpathSync(subDir));
+        });
 
-    it.skipIf(process.platform === 'win32')(
-      'applies exported variable removals to the current process',
-      () => {
-        process.env.PATH_EXTRA_TEST = 'remove-me';
-        applySandboxBashrc(writeBashrc('unset PATH_EXTRA_TEST\n'), tmpDir);
-        expect(process.env.PATH_EXTRA_TEST).toBeUndefined();
+        it('applies exported variable removals to the current process', () => {
+          process.env.PATH_EXTRA_TEST = 'remove-me';
+          applySandboxBashrc(writeBashrc('unset PATH_EXTRA_TEST\n'), tmpDir);
+          expect(process.env.PATH_EXTRA_TEST).toBeUndefined();
+        });
       },
     );
 
@@ -230,97 +213,87 @@ describe('sandbox-bashrc: post-consumption compatibility (AC5)', () => {
       }
     });
 
-    it.skipIf(process.platform === 'win32')(
-      'does not expose the capability token to the evaluated sandbox.bashrc',
+    describe.skipIf(process.platform === 'win32')(
+      'POSIX security and protocol behavior',
       () => {
-        process.env.LLXPRT_CAPABILITY_TOKEN = 'b'.repeat(64);
-        try {
-          applySandboxBashrc(
-            writeBashrc('export STOLEN="$LLXPRT_CAPABILITY_TOKEN"\n'),
-            tmpDir,
-          );
-          expect(process.env.STOLEN).toBe('');
-        } finally {
-          delete process.env.LLXPRT_CAPABILITY_TOKEN;
-        }
-      },
-    );
-
-    it.skipIf(process.platform === 'win32')(
-      'O4: applySandboxBashrc actively removes every parent LLXPRT_CAPABILITY_* key',
-      () => {
-        process.env.LLXPRT_CAPABILITY_TOKEN = 'c'.repeat(64);
-        process.env.LLXPRT_CAPABILITY_FD = '3';
-        process.env.LLXPRT_CAPABILITY_OTHER = 'should-be-removed';
-        try {
-          applySandboxBashrc(
-            writeBashrc('export MY_SANDBOX_EXPORT=ok\n'),
-            tmpDir,
-          );
-          expect(process.env.LLXPRT_CAPABILITY_TOKEN).toBeUndefined();
-          expect(process.env.LLXPRT_CAPABILITY_FD).toBeUndefined();
-          expect(process.env.LLXPRT_CAPABILITY_OTHER).toBeUndefined();
-          expect(process.env.MY_SANDBOX_EXPORT).toBe('ok');
-        } finally {
-          delete process.env.MY_SANDBOX_EXPORT;
-          delete process.env.LLXPRT_CAPABILITY_TOKEN;
-          delete process.env.LLXPRT_CAPABILITY_FD;
-          delete process.env.LLXPRT_CAPABILITY_OTHER;
-        }
-      },
-    );
-
-    it.skipIf(process.platform === 'win32')(
-      'never returns or reapplies an LLXPRT_CAPABILITY_* export from a malicious bashrc',
-      () => {
-        const malicious = writeBashrc(
-          'export LLXPRT_CAPABILITY_TOKEN=evil-reinject\n' +
-            'export LLXPRT_CAPABILITY_FD=99\n' +
-            'export LLXPRT_CAPABILITY_BOGUS=injected\n' +
-            'export MY_SANDBOX_EXPORT=legit\n',
-        );
-        const r = extractSandboxBashrcChanges(malicious, tmpDir, {
-          MY_OTHER: 'keep',
+        it('does not expose the capability token to the evaluated sandbox.bashrc', () => {
+          process.env.LLXPRT_CAPABILITY_TOKEN = 'b'.repeat(64);
+          try {
+            applySandboxBashrc(
+              writeBashrc('export STOLEN="$LLXPRT_CAPABILITY_TOKEN"\n'),
+              tmpDir,
+            );
+            expect(process.env.STOLEN).toBe('');
+          } finally {
+            delete process.env.LLXPRT_CAPABILITY_TOKEN;
+          }
         });
-        expect(r.env).not.toHaveProperty('LLXPRT_CAPABILITY_TOKEN');
-        expect(r.env).not.toHaveProperty('LLXPRT_CAPABILITY_FD');
-        expect(r.env).not.toHaveProperty('LLXPRT_CAPABILITY_BOGUS');
-        expect(r.env.MY_SANDBOX_EXPORT).toBe('legit');
-        expect(r.unset).not.toContain('MY_OTHER');
-        try {
-          applySandboxBashrc(
-            writeBashrc(
-              'export LLXPRT_CAPABILITY_TOKEN=evil-reinject\n' +
-                'export LLXPRT_CAPABILITY_FD=99\n',
-            ),
-            tmpDir,
+
+        it('O4: applySandboxBashrc actively removes every parent LLXPRT_CAPABILITY_* key', () => {
+          process.env.LLXPRT_CAPABILITY_TOKEN = 'c'.repeat(64);
+          process.env.LLXPRT_CAPABILITY_FD = '3';
+          process.env.LLXPRT_CAPABILITY_OTHER = 'should-be-removed';
+          try {
+            applySandboxBashrc(
+              writeBashrc('export MY_SANDBOX_EXPORT=ok\n'),
+              tmpDir,
+            );
+            expect(process.env.LLXPRT_CAPABILITY_TOKEN).toBeUndefined();
+            expect(process.env.LLXPRT_CAPABILITY_FD).toBeUndefined();
+            expect(process.env.LLXPRT_CAPABILITY_OTHER).toBeUndefined();
+            expect(process.env.MY_SANDBOX_EXPORT).toBe('ok');
+          } finally {
+            delete process.env.MY_SANDBOX_EXPORT;
+            delete process.env.LLXPRT_CAPABILITY_TOKEN;
+            delete process.env.LLXPRT_CAPABILITY_FD;
+            delete process.env.LLXPRT_CAPABILITY_OTHER;
+          }
+        });
+
+        it('never returns or reapplies an LLXPRT_CAPABILITY_* export from a malicious bashrc', () => {
+          const malicious = writeBashrc(
+            'export LLXPRT_CAPABILITY_TOKEN=evil-reinject\n' +
+              'export LLXPRT_CAPABILITY_FD=99\n' +
+              'export LLXPRT_CAPABILITY_BOGUS=injected\n' +
+              'export MY_SANDBOX_EXPORT=legit\n',
           );
-          expect(process.env.LLXPRT_CAPABILITY_TOKEN).toBeUndefined();
-          expect(process.env.LLXPRT_CAPABILITY_FD).toBeUndefined();
-        } finally {
-          delete process.env.LLXPRT_CAPABILITY_TOKEN;
-          delete process.env.LLXPRT_CAPABILITY_FD;
-        }
-      },
-    );
+          const r = extractSandboxBashrcChanges(malicious, tmpDir, {
+            MY_OTHER: 'keep',
+          });
+          expect(r.env).not.toHaveProperty('LLXPRT_CAPABILITY_TOKEN');
+          expect(r.env).not.toHaveProperty('LLXPRT_CAPABILITY_FD');
+          expect(r.env).not.toHaveProperty('LLXPRT_CAPABILITY_BOGUS');
+          expect(r.env.MY_SANDBOX_EXPORT).toBe('legit');
+          expect(r.unset).not.toContain('MY_OTHER');
+          try {
+            applySandboxBashrc(
+              writeBashrc(
+                'export LLXPRT_CAPABILITY_TOKEN=evil-reinject\n' +
+                  'export LLXPRT_CAPABILITY_FD=99\n',
+              ),
+              tmpDir,
+            );
+            expect(process.env.LLXPRT_CAPABILITY_TOKEN).toBeUndefined();
+            expect(process.env.LLXPRT_CAPABILITY_FD).toBeUndefined();
+          } finally {
+            delete process.env.LLXPRT_CAPABILITY_TOKEN;
+            delete process.env.LLXPRT_CAPABILITY_FD;
+          }
+        });
 
-    it.skipIf(process.platform === 'win32')(
-      'allows a valid empty env payload (no env changes) while still requiring cwd output',
-      () => {
-        const r = extractSandboxBashrcChanges(writeBashrc('true\n'), tmpDir);
-        expect(r.env).toStrictEqual({});
-        expect(r.cwd).toBeUndefined();
-      },
-    );
+        it('allows a valid empty env payload (no env changes) while still requiring cwd output', () => {
+          const r = extractSandboxBashrcChanges(writeBashrc('true\n'), tmpDir);
+          expect(r.env).toStrictEqual({});
+          expect(r.cwd).toBeUndefined();
+        });
 
-    it.skipIf(process.platform === 'win32')(
-      'throws when the cwd payload is missing (cwd protocol required)',
-      () => {
-        // A bashrc that exits before reaching the cwd printf causes the cwd
-        // pipe to be empty, which the helper must surface as an error.
-        expect(() =>
-          extractSandboxBashrcChanges(writeBashrc('exit 0\n'), tmpDir),
-        ).toThrowError(/cwd payload|exited with status/);
+        it('throws when the cwd payload is missing (cwd protocol required)', () => {
+          // A bashrc that exits before reaching the cwd printf causes the cwd
+          // pipe to be empty, which the helper must surface as an error.
+          expect(() =>
+            extractSandboxBashrcChanges(writeBashrc('exit 0\n'), tmpDir),
+          ).toThrowError(/cwd payload|exited with status/);
+        });
       },
     );
   });

@@ -136,7 +136,7 @@ describe('Zed terminal execution', () => {
     );
   });
 
-  it('delegates shell execution to the ACP terminal exactly once', async () => {
+  async function verifyDelegatesShellExecutionToTheACPTerminalExactlyOnce() {
     const connection = new RecordingConnection();
     connection.setTerminalOutput('hello\n');
     const terminals = terminalManager(connection);
@@ -158,8 +158,19 @@ describe('Zed terminal execution', () => {
       new AbortController().signal,
     );
 
+    return {
+      connection,
+      chunks,
+      result,
+    };
+  }
+
+  it('delegates shell execution to the ACP terminal exactly once', async () => {
+    const behaviorResult =
+      await verifyDelegatesShellExecutionToTheACPTerminalExactlyOnce();
+
     const shell = getShellConfiguration();
-    expect(connection.createTerminalCalls).toStrictEqual([
+    expect(behaviorResult.connection.createTerminalCalls).toStrictEqual([
       {
         command: shell.executable,
         args: [...shell.argsPrefix, preparedEcho],
@@ -168,19 +179,22 @@ describe('Zed terminal execution', () => {
         outputByteLimit: DEFAULT_ACQUISITION_BUDGET_BYTES,
       },
     ]);
-    expect(result).toMatchObject({ output: 'hello\n', exitCode: 0 });
-    expect(chunks.join('')).toBe('hello\n');
-    expect(connection.onlySessionUpdates()).toContainEqual(
+    expect(behaviorResult.result).toMatchObject({
+      output: 'hello\n',
+      exitCode: 0,
+    });
+    expect(behaviorResult.chunks.join('')).toBe('hello\n');
+    expect(behaviorResult.connection.onlySessionUpdates()).toContainEqual(
       expect.objectContaining({
         sessionUpdate: 'tool_call_update',
         toolCallId: 'shell-1',
         content: [{ type: 'terminal', terminalId: 'terminal-1' }],
       }),
     );
-    expect(connection.releaseCalls).toBe(1);
+    expect(behaviorResult.connection.releaseCalls).toBe(1);
   });
 
-  it('retries after a transient terminal output poll failure', async () => {
+  async function verifyRetriesAfterATransientTerminalOutputPollFailure() {
     const connection = new RecordingConnection();
     connection.delayTerminalExit();
     connection.setTerminalOutput('recovered output\n');
@@ -211,9 +225,20 @@ describe('Zed terminal execution', () => {
     connection.resolveDelayedTerminalExit();
     const result = await execution;
 
-    expect(result.output).toBe('recovered output\n');
-    expect(connection.killCalls).toBe(0);
-    expect(connection.releaseCalls).toBe(1);
+    return {
+      output: result.output,
+      killCalls: connection.killCalls,
+      releaseCalls: connection.releaseCalls,
+    };
+  }
+
+  it('retries after a transient terminal output poll failure', async () => {
+    const behaviorResult =
+      await verifyRetriesAfterATransientTerminalOutputPollFailure();
+
+    expect(behaviorResult.output).toBe('recovered output\n');
+    expect(behaviorResult.killCalls).toBe(0);
+    expect(behaviorResult.releaseCalls).toBe(1);
   });
 
   it('correlates a raw command that already ends with a semicolon', async () => {
@@ -283,7 +308,7 @@ describe('Zed terminal execution', () => {
     expect(connection.onlySessionUpdates()).toHaveLength(0);
   });
 
-  it('retries terminal correlation after update delivery fails', async () => {
+  async function verifyRetriesTerminalCorrelationAfterUpdateDeliveryFails() {
     const connection = new RecordingConnection();
     connection.delayTerminalExit();
     let deliveryAttempt = 0;
@@ -304,7 +329,6 @@ describe('Zed terminal execution', () => {
       new AbortController().signal,
     );
     await connection.waitForTerminalProcessCreated();
-
     await expectRejection(
       terminals.observeToolCall({
         id: 'shell-retry',
@@ -321,7 +345,13 @@ describe('Zed terminal execution', () => {
     connection.resolveDelayedTerminalExit();
     await execution;
 
-    expect(connection.onlySessionUpdates()).toContainEqual(
+    return connection.onlySessionUpdates();
+  }
+
+  it('retries terminal correlation after update delivery fails', async () => {
+    const sessionUpdates =
+      await verifyRetriesTerminalCorrelationAfterUpdateDeliveryFails();
+    expect(sessionUpdates).toContainEqual(
       expect.objectContaining({
         sessionUpdate: 'tool_call_update',
         toolCallId: 'shell-retry',
@@ -553,7 +583,7 @@ describe('Zed terminal byte-budget enforcement (issue #3200 finding 4)', () => {
     expect(connection.releaseCalls).toBeGreaterThanOrEqual(1);
   });
 
-  it('emits truthful quantifiable metadata and one notice when the peer evicts content', async () => {
+  async function verifyEmitsTruthfulQuantifiableMetadataAndOneNoticeWhenThePeerEvictsContent() {
     // The peer first shows a large output, then evicts the head and reports a
     // small disjoint tail with truncated=true. The manager must surface the
     // quantifiable loss (observed > retained) as exact metadata and include one
@@ -597,19 +627,32 @@ describe('Zed terminal byte-budget enforcement (issue #3200 finding 4)', () => {
 
     // Quantifiable lower bound: observed (the big peak) exceeds retained (the
     // tail), but the peer may have evicted bytes before they were observed.
-    expect(result.outputTruncation).toBeDefined();
-    expect(result.outputTruncation?.truncated).toBe(true);
-    expect(result.outputTruncation?.omittedBytes).toBeGreaterThan(0);
-    expect(result.outputTruncation?.omittedBytesExact).toBe(false);
-    expect(result.outputTruncation?.budgetBytes).toBe(budget);
-    // Exactly one durable discontinuity notice is streamed and retained.
-    expect(
-      streamedChunks.join('').split(TERMINAL_DISCONTINUITY_NOTICE).length - 1,
-    ).toBe(1);
-    expect(result.output.split(TERMINAL_DISCONTINUITY_NOTICE).length - 1).toBe(
-      1,
+    return {
+      outputTruncation: result.outputTruncation,
+      streamedNoticeCount:
+        streamedChunks.join('').split(TERMINAL_DISCONTINUITY_NOTICE).length - 1,
+      retainedNoticeCount:
+        result.output.split(TERMINAL_DISCONTINUITY_NOTICE).length - 1,
+      output: result.output,
+      budget,
+    };
+  }
+
+  it('emits truthful quantifiable metadata and one notice when the peer evicts content', async () => {
+    const behaviorResult =
+      await verifyEmitsTruthfulQuantifiableMetadataAndOneNoticeWhenThePeerEvictsContent();
+
+    expect(behaviorResult.outputTruncation).toBeDefined();
+    expect(behaviorResult.outputTruncation?.truncated).toBe(true);
+    expect(behaviorResult.outputTruncation?.omittedBytes).toBeGreaterThan(0);
+    expect(behaviorResult.outputTruncation?.omittedBytesExact).toBe(false);
+    expect(behaviorResult.outputTruncation?.budgetBytes).toBe(
+      behaviorResult.budget,
     );
-    expect(result.output).toContain('TAIL_ONLY_ZZZ');
+    // Exactly one durable discontinuity notice is streamed and retained.
+    expect(behaviorResult.streamedNoticeCount).toBe(1);
+    expect(behaviorResult.retainedNoticeCount).toBe(1);
+    expect(behaviorResult.output).toContain('TAIL_ONLY_ZZZ');
   });
 
   it('does not fabricate exact metadata when the peer reports truncated but no loss is observed', async () => {

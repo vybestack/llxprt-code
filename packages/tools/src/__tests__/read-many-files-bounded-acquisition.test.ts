@@ -19,6 +19,10 @@ import { createRealToolHost as createRealHost } from './helpers/create-real-tool
 import { ReadManyFilesTool } from '../tools/read-many-files.js';
 import type { ToolResult } from '../index.js';
 
+function countMatches(value: string, pattern: RegExp): number {
+  return (value.match(pattern) ?? []).length;
+}
+
 function createTempDir(prefix = 'llxprt-rmf-bounded-'): {
   dir: string;
   cleanup: () => void;
@@ -55,6 +59,33 @@ function createHostWithSettings(
   };
 }
 
+async function observeCappedFileDiscovery(tempDir: string): Promise<{
+  readonly display: unknown;
+  readonly fileCount: number;
+}> {
+  for (let index = 0; index < 60; index++) {
+    writeFileSync(
+      join(tempDir, `f${index}.txt`),
+      `content ${index}\n`,
+      'utf-8',
+    );
+  }
+  const host = createHostWithSettings(tempDir, {
+    'tool-output-max-items': 50,
+    'tool-output-max-tokens': 1_000_000,
+    'tool-output-truncate-mode': 'truncate',
+  });
+  const result = await new ReadManyFilesTool(host).execute(
+    { paths: ['**/*.txt'] },
+    new AbortController().signal,
+  );
+  const text = stringifyLlmContent(result);
+  return {
+    display: result.returnDisplay,
+    fileCount: (text.match(/--- \S+[\\/]f\d+\.txt ---/g) ?? []).length,
+  };
+}
+
 describe('ReadManyFiles bounded file discovery (issue #3202)', () => {
   let tempDir: string;
   let cleanup: () => void;
@@ -70,29 +101,8 @@ describe('ReadManyFiles bounded file discovery (issue #3202)', () => {
   });
 
   it('bounds discovery at the file-count hard cap and reports partial (one-over)', async () => {
-    // Create 60 files — exceeds the default max-file-count of 50.
-    for (let i = 0; i < 60; i++) {
-      writeFileSync(join(tempDir, `f${i}.txt`), `content ${i}\n`, 'utf-8');
-    }
-
-    const host = createHostWithSettings(tempDir, {
-      'tool-output-max-items': 50,
-      'tool-output-max-tokens': 1_000_000,
-      'tool-output-truncate-mode': 'truncate',
-    });
-    const tool = new ReadManyFilesTool(host);
-    const result = await tool.execute(
-      { paths: ['**/*.txt'] },
-      new AbortController().signal,
-    );
-    const text = stringifyLlmContent(result);
-    const display = result.returnDisplay as string;
-
-    // Discovery was bounded — exactly 50 files retained from 60.
-    // Count separator markers to verify file count is bounded at 50.
-    const fileCount = (text.match(/--- \S+[\\/]f\d+\.txt ---/g) ?? []).length;
+    const { display, fileCount } = await observeCappedFileDiscovery(tempDir);
     expect(fileCount).toBe(50);
-    // The display message must indicate the result is partial, not exhaustive.
     expect(display).toMatch(/truncat|limited|exceed|skipped|more/i);
   });
 
@@ -117,7 +127,7 @@ describe('ReadManyFiles bounded file discovery (issue #3202)', () => {
     // truncated but unique files are within the cap.
     expect(text).not.toMatch(/limiting|File Count Limit Exceeded/i);
     // The retained files must be read and their content present.
-    const fileCount = (text.match(/content \d+/g) ?? []).length;
+    const fileCount = countMatches(text, /content \d+/g);
     expect(fileCount).toBe(50);
   });
 
@@ -302,8 +312,7 @@ describe('ReadManyFiles discovery counts ignored and duplicate records (issue #3
 
     // Each file should appear exactly once despite overlapping patterns.
     for (let i = 0; i < 5; i++) {
-      const occurrences = (text.match(new RegExp(`f${i}\\.txt`, 'g')) ?? [])
-        .length;
+      const occurrences = countMatches(text, new RegExp(`f${i}\\.txt`, 'g'));
       expect(occurrences).toBe(1);
     }
   });
@@ -648,63 +657,42 @@ describe('ReadManyFiles discovery records are bounded before filtering/dedup (is
     expect(display).toMatch(/git ignored/i);
     // Only accepted unique paths within the record budget can be read; the
     // ignored records' content must never appear in the output.
-    const readCount = (text.match(/accepted \d+/g) ?? []).length;
+    const readCount = countMatches(text, /accepted \d+/g);
     expect(readCount).toBeLessThanOrEqual(3);
     expect(text).not.toContain('ignored 54');
   });
 
+  const observeDuplicateRecordsAcrossRepeatedWorkspaceRootsConsumeTheSharedRecordCapDeduplicatedOutputAt656 =
+    async () => {
+      for (let i = 0; i < 30; i++) {
+        writeFileSync(join(tempDir, `f${i}.txt`), `unique ${i}\n`, 'utf-8');
+      }
+      const baseHost = createHostWithSettings(tempDir, {
+        'tool-output-max-items': 50,
+        'tool-output-max-tokens': 1_000_000,
+        'tool-output-truncate-mode': 'truncate',
+      });
+      const host = { ...baseHost, getWorkspaceRoots: () => [tempDir, tempDir] };
+      const tool = new ReadManyFilesTool(host);
+      const result = await tool.execute(
+        { paths: ['**/*.txt'] },
+        new AbortController().signal,
+      );
+      const text = stringifyLlmContent(result);
+      const display = result.returnDisplay as string;
+      const readCount = (text.match(/unique \d+/g) ?? []).length;
+      return { display, readCount };
+    };
+
   it('duplicate records across repeated workspace roots consume the shared record cap (deduplicated output)', async () => {
-    for (let i = 0; i < 30; i++) {
-      writeFileSync(join(tempDir, `f${i}.txt`), `unique ${i}\n`, 'utf-8');
-    }
-
-    const baseHost = createHostWithSettings(tempDir, {
-      'tool-output-max-items': 50,
-      'tool-output-max-tokens': 1_000_000,
-      'tool-output-truncate-mode': 'truncate',
-    });
-    // The same workspace root listed twice: the second pass re-emits every
-    // path as a fresh discovery record, consuming the shared invocation cap
-    // even though the accepted path set is fully deduplicated.
-    const host = { ...baseHost, getWorkspaceRoots: () => [tempDir, tempDir] };
-    const tool = new ReadManyFilesTool(host);
-    const result = await tool.execute(
-      { paths: ['**/*.txt'] },
-      new AbortController().signal,
-    );
-    const text = stringifyLlmContent(result);
-    const display = result.returnDisplay as string;
-
-    // All 30 unique files are retained and deduplicated in the output...
-    const readCount = (text.match(/unique \d+/g) ?? []).length;
+    const { display, readCount } =
+      await observeDuplicateRecordsAcrossRepeatedWorkspaceRootsConsumeTheSharedRecordCapDeduplicatedOutputAt656();
     expect(readCount).toBe(30);
-    // ...yet the shared record cap (50) was exceeded by the duplicate
-    // emissions from the repeated root: 30 + 20 = 50 stored, the 51st raw
-    // emission proves one-over partiality even though accepted output paths
-    // remain deduplicated.
     expect(display).toMatch(/discovery stopped at 51 discovery record/i);
   });
 
   it('preserves 60-unique/cap-50 behavior: retain exactly 50 and report partial', async () => {
-    for (let i = 0; i < 60; i++) {
-      writeFileSync(join(tempDir, `f${i}.txt`), `content ${i}\n`, 'utf-8');
-    }
-
-    const host = createHostWithSettings(tempDir, {
-      'tool-output-max-items': 50,
-      'tool-output-max-tokens': 1_000_000,
-      'tool-output-truncate-mode': 'truncate',
-    });
-    const tool = new ReadManyFilesTool(host);
-    const result = await tool.execute(
-      { paths: ['**/*.txt'] },
-      new AbortController().signal,
-    );
-    const text = stringifyLlmContent(result);
-    const display = result.returnDisplay as string;
-
-    // Exactly 50 files retained from 60; the 51st raw record proved partiality.
-    const fileCount = (text.match(/--- \S+[\\/]f\d+\.txt ---/g) ?? []).length;
+    const { display, fileCount } = await observeCappedFileDiscovery(tempDir);
     expect(fileCount).toBe(50);
     expect(display).toMatch(/discovery stopped at 51 discovery record/i);
   });
@@ -747,7 +735,7 @@ describe('read-many-files warn-mode discovery truncation (issue #3202)', () => {
 
     // All 10 unique files must be read — NOT an empty "limit exceeded" result.
     expect(text).not.toContain('File Count Limit Exceeded');
-    const readCount = (text.match(/unique \d+/g) ?? []).length;
+    const readCount = countMatches(text, /unique \d+/g);
     expect(readCount).toBe(10);
     // Discovery truncation should be reported truthfully.
     expect(display).toMatch(/discovery stopped at \d+ discovery record/i);

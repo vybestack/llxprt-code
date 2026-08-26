@@ -271,27 +271,20 @@ describe('Factory Detection Wiring (P33)', () => {
         capKeys: string[];
       };
 
-      function runFdConsume(
-        socketPath: string,
-        op: FactoryOp,
-      ): FdConsumePayload {
-        const result = runFactoryChild(
-          VALID_TOKEN,
-          socketPath,
-          fdConsumeScript(op),
-        );
-        expect(result.exit).toBe(0);
-        expect(result.stderr).toBe('');
-        return JSON.parse(result.stdout) as FdConsumePayload;
-      }
-
       it.each([
         ['tokenStore', 'proxy-token.sock'],
         ['keyStorage', 'proxy-keys.sock'],
       ] as const)(
         'consumes fd 3, closes it, scrubs the marker for %s',
         (_op, socketName) => {
-          const payload = runFdConsume(path.join(tmpDir, socketName), _op);
+          const result = runFactoryChild(
+            VALID_TOKEN,
+            path.join(tmpDir, socketName),
+            fdConsumeScript(_op),
+          );
+          expect(result.exit).toBe(0);
+          expect(result.stderr).toBe('');
+          const payload = JSON.parse(result.stdout) as FdConsumePayload;
           expect(payload.threw).toBeNull();
           expect(payload.markerGone).toBe(true);
           expect(payload.fdClosed).toBe(true);
@@ -321,22 +314,23 @@ describe('Factory Detection Wiring (P33)', () => {
           `Child process spawn failed for marker "${fdValue}": ${result.error.message}`,
         );
       }
-      expect(result.status, `child stderr: ${result.stderr}`).toBe(0);
-      return JSON.parse(result.stdout.trim()) as {
-        threw: string | null;
-        markerGone: boolean;
+      return {
+        status: result.status,
+        payload: JSON.parse(result.stdout.trim()) as {
+          threw: string | null;
+          markerGone: boolean;
+        },
       };
     }
 
     it('rejects every LLXPRT_CAPABILITY_FD marker except exactly "3" (incl. stdin/stdout/stderr)', () => {
       for (const marker of ['0', '1', '2', '4', '5', '-1', '3.0', '03', '3x']) {
-        const p = runMarkerOnlyChild(marker, `reject-${marker}.sock`);
-        expect(p.threw, `marker "${marker}" should be rejected`).toMatch(
+        const result = runMarkerOnlyChild(marker, `reject-${marker}.sock`);
+        expect(result.status).toBe(0);
+        expect(result.payload.threw).toMatch(
           /capability transport marker|invalid/i,
         );
-        expect(p.markerGone, `marker "${marker}" should be scrubbed`).toBe(
-          true,
-        );
+        expect(result.payload.markerGone).toBe(true);
       }
     });
   });
@@ -510,123 +504,124 @@ describe('Factory Detection Wiring (P33)', () => {
       expect(createTokenStore()).toBeDefined();
     });
 
-    it.skipIf(process.platform === 'win32')(
-      'O17: warm, reset, and no-reuse happen within one process sharing one module cache',
-      async () => {
-        const { CredentialProxyServer } = await import(
-          '../credential-proxy-server.js'
-        );
-        const inMemStore = {
-          async saveToken(): Promise<void> {},
-          async getToken(): Promise<null> {
-            return null;
-          },
-          async removeToken(): Promise<void> {},
-          async listProviders(): Promise<string[]> {
-            return [];
-          },
-          async listBuckets(): Promise<string[]> {
-            return [];
-          },
-          async getBucketStats(): Promise<null> {
-            return null;
-          },
-          async acquireRefreshLock(): Promise<boolean> {
-            return true;
-          },
-          async releaseRefreshLock(): Promise<void> {},
-          async acquireAuthLock(): Promise<boolean> {
-            return true;
-          },
-          async releaseAuthLock(): Promise<void> {},
-        };
-        const inMemKeys = {
-          async getKey(): Promise<null> {
-            return null;
-          },
-          async saveKey(): Promise<void> {},
-          async deleteKey(): Promise<boolean> {
-            return false;
-          },
-          async hasKey(): Promise<boolean> {
-            return false;
-          },
-          async listKeys(): Promise<string[]> {
-            return [];
-          },
-        };
-        const mkServer = (token: string) =>
-          new CredentialProxyServer({
-            tokenStore: inMemStore as never,
-            providerKeyStorage: inMemKeys as never,
-            socketDir: tmpDir,
-            capabilityToken: token,
-          });
-        const session1Token = 'a'.repeat(64);
-        const session2Token = 'b'.repeat(64);
-        const server1 = mkServer(session1Token);
-        const socket1 = await server1.start();
-        const server2 = mkServer(session2Token);
-        const socket2 = await server2.start();
-        try {
-          const token2File = path.join(tmpDir, 'o17-token2.txt');
-          fs.writeFileSync(token2File, session2Token + '\n');
-          const grandchildFile = path.join(tmpDir, 'o17-grandchild.ts');
-          const childFile = path.join(tmpDir, 'o17-child.ts');
-          const childSrc = [
-            `import { createTokenStore, resetFactorySingletons } from ${JSON.stringify(FACTORY_MODULE_PATH)};`,
-            'import { spawnSync } from "node:child_process";',
-            'const socket1 = process.env.S1!;',
-            'const socket2 = process.env.S2!;',
-            'const token2File = process.env.T2!;',
-            'const grandchildFile = process.env.GC!;',
-            'const runtime = process.env.RT!;',
-            'process.env.LLXPRT_CREDENTIAL_SOCKET = socket1;',
-            'let threw1: string | null = null;',
-            'try { createTokenStore(); } catch (e) { threw1 = (e as Error).message; }',
-            'const markerGone1 = process.env.LLXPRT_CAPABILITY_FD === undefined;',
-            'resetFactorySingletons();',
-            'const gb = "exec 3<" + JSON.stringify(token2File) + "\\nLLXPRT_CAPABILITY_FD=3 " + runtime + " " + JSON.stringify(grandchildFile);',
-            'const gr = spawnSync("env", ["-u","BASH_ENV","bash","--noprofile","--norc","-c", gb], { encoding: "utf8", env: { ...process.env, LLXPRT_CREDENTIAL_SOCKET: socket2 } });',
-            'let threw2: string | null = null, markerGone2 = false;',
-            'if (gr.status === 0) {',
-            '  const p = JSON.parse(gr.stdout.trim());',
-            '  threw2 = p.t2; markerGone2 = p.m2;',
-            '} else { threw2 = "grandchild exit " + gr.status + ": " + gr.stderr; }',
-            'process.stdout.write(JSON.stringify({ threw1, markerGone1, threw2, markerGone2 }));',
-          ].join('\n');
-          const grandchildSrc = [
-            `import { createTokenStore } from ${JSON.stringify(FACTORY_MODULE_PATH)};`,
-            'let t2: string | null = null;',
-            'try { createTokenStore(); } catch (e) { t2 = (e as Error).message; }',
-            'const m2 = process.env.LLXPRT_CAPABILITY_FD === undefined;',
-            'process.stdout.write(JSON.stringify({ t2, m2 }));',
-          ].join('\n');
-          fs.writeFileSync(childFile, childSrc);
-          fs.writeFileSync(grandchildFile, grandchildSrc);
-          const bashScript = [
-            `exec 3<<<"${session1Token}"`,
-            `S1=${JSON.stringify(socket1)} S2=${JSON.stringify(socket2)} T2=${JSON.stringify(token2File)} GC=${JSON.stringify(grandchildFile)} RT=${CHILD_RUNTIME} LLXPRT_CAPABILITY_FD=3 exec ${CHILD_RUNTIME} ${JSON.stringify(childFile)}`,
-          ].join('\n');
-          const result = runBashChild(bashScript);
-          expect(result.status).toBe(0);
-          expect(result.stderr).toBe('');
-          const payload = JSON.parse(result.stdout.trim()) as {
-            threw1: string | null;
-            markerGone1: boolean;
-            threw2: string | null;
-            markerGone2: boolean;
+    describe.skipIf(process.platform === 'win32')(
+      'O17 POSIX capability transport',
+      () => {
+        it('O17: warm, reset, and no-reuse happen within one process sharing one module cache', async () => {
+          const { CredentialProxyServer } = await import(
+            '../credential-proxy-server.js'
+          );
+          const inMemStore = {
+            async saveToken(): Promise<void> {},
+            async getToken(): Promise<null> {
+              return null;
+            },
+            async removeToken(): Promise<void> {},
+            async listProviders(): Promise<string[]> {
+              return [];
+            },
+            async listBuckets(): Promise<string[]> {
+              return [];
+            },
+            async getBucketStats(): Promise<null> {
+              return null;
+            },
+            async acquireRefreshLock(): Promise<boolean> {
+              return true;
+            },
+            async releaseRefreshLock(): Promise<void> {},
+            async acquireAuthLock(): Promise<boolean> {
+              return true;
+            },
+            async releaseAuthLock(): Promise<void> {},
           };
-          expect(payload.threw1).toBeNull();
-          expect(payload.markerGone1).toBe(true);
-          expect(payload.threw2).toBeNull();
-          expect(payload.markerGone2).toBe(true);
-        } finally {
-          await server1.stop();
-          await server2.stop();
-        }
+          const inMemKeys = {
+            async getKey(): Promise<null> {
+              return null;
+            },
+            async saveKey(): Promise<void> {},
+            async deleteKey(): Promise<boolean> {
+              return false;
+            },
+            async hasKey(): Promise<boolean> {
+              return false;
+            },
+            async listKeys(): Promise<string[]> {
+              return [];
+            },
+          };
+          const mkServer = (token: string) =>
+            new CredentialProxyServer({
+              tokenStore: inMemStore as never,
+              providerKeyStorage: inMemKeys as never,
+              socketDir: tmpDir,
+              capabilityToken: token,
+            });
+          const session1Token = 'a'.repeat(64);
+          const session2Token = 'b'.repeat(64);
+          const server1 = mkServer(session1Token);
+          const socket1 = await server1.start();
+          const server2 = mkServer(session2Token);
+          const socket2 = await server2.start();
+          try {
+            const token2File = path.join(tmpDir, 'o17-token2.txt');
+            fs.writeFileSync(token2File, session2Token + '\n');
+            const grandchildFile = path.join(tmpDir, 'o17-grandchild.ts');
+            const childFile = path.join(tmpDir, 'o17-child.ts');
+            const childSrc = [
+              `import { createTokenStore, resetFactorySingletons } from ${JSON.stringify(FACTORY_MODULE_PATH)};`,
+              'import { spawnSync } from "node:child_process";',
+              'const socket1 = process.env.S1!;',
+              'const socket2 = process.env.S2!;',
+              'const token2File = process.env.T2!;',
+              'const grandchildFile = process.env.GC!;',
+              'const runtime = process.env.RT!;',
+              'process.env.LLXPRT_CREDENTIAL_SOCKET = socket1;',
+              'let threw1: string | null = null;',
+              'try { createTokenStore(); } catch (e) { threw1 = (e as Error).message; }',
+              'const markerGone1 = process.env.LLXPRT_CAPABILITY_FD === undefined;',
+              'resetFactorySingletons();',
+              'const gb = "exec 3<" + JSON.stringify(token2File) + "\\nLLXPRT_CAPABILITY_FD=3 " + runtime + " " + JSON.stringify(grandchildFile);',
+              'const gr = spawnSync("env", ["-u","BASH_ENV","bash","--noprofile","--norc","-c", gb], { encoding: "utf8", env: { ...process.env, LLXPRT_CREDENTIAL_SOCKET: socket2 } });',
+              'let threw2: string | null = null, markerGone2 = false;',
+              'if (gr.status === 0) {',
+              '  const p = JSON.parse(gr.stdout.trim());',
+              '  threw2 = p.t2; markerGone2 = p.m2;',
+              '} else { threw2 = "grandchild exit " + gr.status + ": " + gr.stderr; }',
+              'process.stdout.write(JSON.stringify({ threw1, markerGone1, threw2, markerGone2 }));',
+            ].join('\n');
+            const grandchildSrc = [
+              `import { createTokenStore } from ${JSON.stringify(FACTORY_MODULE_PATH)};`,
+              'let t2: string | null = null;',
+              'try { createTokenStore(); } catch (e) { t2 = (e as Error).message; }',
+              'const m2 = process.env.LLXPRT_CAPABILITY_FD === undefined;',
+              'process.stdout.write(JSON.stringify({ t2, m2 }));',
+            ].join('\n');
+            fs.writeFileSync(childFile, childSrc);
+            fs.writeFileSync(grandchildFile, grandchildSrc);
+            const bashScript = [
+              `exec 3<<<"${session1Token}"`,
+              `S1=${JSON.stringify(socket1)} S2=${JSON.stringify(socket2)} T2=${JSON.stringify(token2File)} GC=${JSON.stringify(grandchildFile)} RT=${CHILD_RUNTIME} LLXPRT_CAPABILITY_FD=3 exec ${CHILD_RUNTIME} ${JSON.stringify(childFile)}`,
+            ].join('\n');
+            const result = runBashChild(bashScript);
+            expect(result.status).toBe(0);
+            expect(result.stderr).toBe('');
+            const payload = JSON.parse(result.stdout.trim()) as {
+              threw1: string | null;
+              markerGone1: boolean;
+              threw2: string | null;
+              markerGone2: boolean;
+            };
+            expect(payload.threw1).toBeNull();
+            expect(payload.markerGone1).toBe(true);
+            expect(payload.threw2).toBeNull();
+            expect(payload.markerGone2).toBe(true);
+          } finally {
+            await server1.stop();
+            await server2.stop();
+          }
+        }, 60000);
       },
-      60000,
     );
   });
 });

@@ -61,6 +61,22 @@ const TERMINAL_EVENTS: AgentEvent[] = [
   { type: 'idle-timeout', error: SAMPLE_ERROR },
 ];
 
+function idleTimeoutEvents(callIndex: number): AgentEvent[] {
+  return callIndex === 0 ? [{ type: 'idle-timeout', error: SAMPLE_ERROR }] : [];
+}
+
+function waitBeforeIdleTimeoutEvents(
+  callIndex: number,
+  eventGate: Deferred<void>,
+): Promise<void> | undefined {
+  return callIndex === 0 ? eventGate.promise : undefined;
+}
+
+function initialErrorEvents(callIndex: number): AgentEvent[] {
+  if (callIndex === 0) return [{ type: 'error', error: SAMPLE_ERROR }];
+  return [];
+}
+
 function createControlledAgent(
   eventsForCall: (callIndex: number) => AgentEvent[],
   beforeEventsForCall?: (callIndex: number) => Promise<void> | undefined,
@@ -358,12 +374,8 @@ describe('useAgentStreamOrchestration — terminal event bridge (issue #2954)', 
   it('drains an idle-timeout queue in FIFO order without stale cleanup duplicating work', async () => {
     const eventGate = createDeferred<void>();
     const { agent, streamCallCount, streamInputs, getDeferred } =
-      createControlledAgent(
-        (callIndex) =>
-          callIndex === 0
-            ? [{ type: 'idle-timeout', error: SAMPLE_ERROR }]
-            : [],
-        (callIndex) => (callIndex === 0 ? eventGate.promise : undefined),
+      createControlledAgent(idleTimeoutEvents, (callIndex) =>
+        waitBeforeIdleTimeoutEvents(callIndex, eventGate),
       );
 
     const state = makeOrchState();
@@ -432,10 +444,7 @@ describe('useAgentStreamOrchestration — terminal event bridge (issue #2954)', 
   });
 
   it('stale old-turn events and cleanup cannot mutate or release a newer active turn', async () => {
-    const { agent, getDeferred } = createControlledAgent((callIndex) => {
-      if (callIndex === 0) return [{ type: 'error', error: SAMPLE_ERROR }];
-      return [];
-    });
+    const { agent, getDeferred } = createControlledAgent(initialErrorEvents);
 
     const state = makeOrchState();
     const { result } = renderOrchestration(state, agent);

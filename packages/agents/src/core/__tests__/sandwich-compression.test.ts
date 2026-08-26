@@ -160,57 +160,67 @@ describe('Sandwich Compression (Issue #1011)', () => {
 
   describe('performCompression integration', () => {
     it('should produce correct top/bottom split for 20 messages with default thresholds', async () => {
-      // Add 20 messages to history (10 user + 10 AI)
-      for (let i = 0; i < 10; i++) {
-        historyService.add(createUserMessage(`User message ${i}`));
-        historyService.add(createAiTextMessage(`AI response ${i}`));
-      }
-
-      const messageCountBefore = historyService.getCurated().length;
+      const { messageCountBefore, finalHistory, hasSummary, lastMsg } =
+        await observeProduceCorrectTopBottomSplitFor20MessagesWithDefaultThresholds();
       expect(messageCountBefore).toBe(20);
-
-      const chat = new ChatSession(
-        runtimeContext,
-        mockContentGenerator,
-        {},
-        [],
-      );
-
-      const summaryText =
-        '<state_snapshot><overall_goal>Test goal</overall_goal></state_snapshot>';
-      const mockProvider = buildMockProvider(summaryText);
-      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-        mockProvider as never,
-      );
-      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
-
-      await chat.performCompression('test-prompt-id');
-
-      const finalHistory = historyService.getCurated();
-
-      // Should have: top preserved (4) + summary (1) + ack (1) + bottom preserved (6) = 12
-      // Top 20% of 20 = 4, Bottom 30% of 20 = 6, Middle 10 compressed
       expect(finalHistory.length).toBeLessThan(messageCountBefore);
-
-      // First message should be the original first user message
       expect(finalHistory[0].speaker).toBe('human');
       expect(finalHistory[0].blocks[0]).toMatchObject({
         type: 'text',
         text: 'User message 0',
       });
-
-      // Should contain the state_snapshot summary
-      const hasSummary = finalHistory.some((msg) =>
-        msg.blocks.some(
-          (b) => b.type === 'text' && b.text.includes('state_snapshot'),
-        ),
-      );
       expect(hasSummary).toBe(true);
-
-      // Last message should be from the original bottom section
-      const lastMsg = finalHistory[finalHistory.length - 1];
       expect(lastMsg.blocks[0].type).toBe('text');
     });
+
+    const observeProduceCorrectTopBottomSplitFor20MessagesWithDefaultThresholds =
+      async () => {
+        // Add 20 messages to history (10 user + 10 AI)
+        for (let i = 0; i < 10; i++) {
+          historyService.add(createUserMessage(`User message ${i}`));
+          historyService.add(createAiTextMessage(`AI response ${i}`));
+        }
+
+        const messageCountBefore = historyService.getCurated().length;
+
+        const chat = new ChatSession(
+          runtimeContext,
+          mockContentGenerator,
+          {},
+          [],
+        );
+
+        const summaryText =
+          '<state_snapshot><overall_goal>Test goal</overall_goal></state_snapshot>';
+        const mockProvider = buildMockProvider(summaryText);
+        vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
+          mockProvider as never,
+        );
+        vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(
+          true,
+        );
+
+        await chat.performCompression('test-prompt-id');
+
+        const finalHistory = historyService.getCurated();
+
+        // Should have: top preserved (4) + summary (1) + ack (1) + bottom preserved (6) = 12
+        // Top 20% of 20 = 4, Bottom 30% of 20 = 6, Middle 10 compressed
+
+        // First message should be the original first user message
+
+        // Should contain the state_snapshot summary
+        const hasSummary = finalHistory.some((msg) =>
+          msg.blocks.some(
+            (b) => b.type === 'text' && b.text.includes('state_snapshot'),
+          ),
+        );
+
+        // Last message should be from the original bottom section
+        const lastMsg = finalHistory[finalHistory.length - 1];
+
+        return { messageCountBefore, finalHistory, hasSummary, lastMsg };
+      };
 
     it('routes middle-out structural no-op to one-shot fallback (issue #2602)', async () => {
       // Add only 8 messages - with 0.2 top + 0.3 bottom thresholds,
@@ -247,6 +257,12 @@ describe('Sandwich Compression (Issue #1011)', () => {
     });
 
     it('should preserve tool call boundaries', async () => {
+      const { totalToolCalls, totalToolResponses } =
+        await observePreserveToolCallBoundaries();
+      expect(totalToolCalls).toBe(totalToolResponses);
+    });
+
+    const observePreserveToolCallBoundaries = async () => {
       historyService.add(createUserMessage('Start'));
 
       for (let i = 0; i < 10; i++) {
@@ -302,10 +318,17 @@ describe('Sandwich Compression (Issue #1011)', () => {
         0,
       );
 
-      expect(totalToolCalls).toBe(totalToolResponses);
-    });
+      return { totalToolCalls, totalToolResponses };
+    };
 
     it('should integrate all three sections correctly', async () => {
+      const { finalHistory, hasSummary } =
+        await observeIntegrateAllThreeSectionsCorrectly();
+      expect(finalHistory.length).toBeGreaterThan(0);
+      expect(hasSummary).toBe(true);
+    });
+
+    const observeIntegrateAllThreeSectionsCorrectly = async () => {
       // Add enough messages to trigger compression
       for (let i = 0; i < 20; i++) {
         historyService.add(createUserMessage(`User message ${i}`));
@@ -332,18 +355,39 @@ describe('Sandwich Compression (Issue #1011)', () => {
       const finalHistory = historyService.getCurated();
 
       // Should have summary + kept top + kept bottom
-      expect(finalHistory.length).toBeGreaterThan(0);
+
       const hasSummary = finalHistory.some((msg) =>
         msg.blocks.some(
           (b) => b.type === 'text' && b.text.includes('state_snapshot'),
         ),
       );
-      expect(hasSummary).toBe(true);
-    });
+
+      return { finalHistory, hasSummary };
+    };
   });
 
   describe('applyCompression order via performCompression', () => {
     it('should maintain proper order: top + summary + ack + bottom', async () => {
+      const { firstMessage, lastMessage, hasSummary, ackMessage } =
+        await observeMaintainProperOrderTopSummaryAckBottom();
+      expect(firstMessage.speaker).toBe('human');
+      expect(firstMessage.blocks[0]).toMatchObject({
+        type: 'text',
+        text: 'User 0',
+      });
+      expect(lastMessage.blocks[0].type).toBe('text');
+      expect(hasSummary).toBe(true);
+      expect(ackMessage.speaker).toBe('ai');
+      expect(ackMessage.blocks[0].type).toBe('text');
+      expect((ackMessage.blocks[0] as { text: string }).text).toContain(
+        'Understood.',
+      );
+      expect((ackMessage.blocks[0] as { text: string }).text).toContain(
+        'Continuing with the current task.',
+      );
+    });
+
+    const observeMaintainProperOrderTopSummaryAckBottom = async () => {
       // Add test messages
       for (let i = 0; i < 10; i++) {
         historyService.add(createUserMessage(`User ${i}`));
@@ -371,15 +415,9 @@ describe('Sandwich Compression (Issue #1011)', () => {
 
       // First message should be from original top section
       const firstMessage = finalHistory[0];
-      expect(firstMessage.speaker).toBe('human');
-      expect(firstMessage.blocks[0]).toMatchObject({
-        type: 'text',
-        text: 'User 0',
-      });
 
       // Last message should be from original bottom section
       const lastMessage = finalHistory[finalHistory.length - 1];
-      expect(lastMessage.blocks[0].type).toBe('text');
 
       // There should be a summary in between
       const hasSummary = finalHistory.some((msg) =>
@@ -387,7 +425,6 @@ describe('Sandwich Compression (Issue #1011)', () => {
           (b) => b.type === 'text' && b.text.includes('state_snapshot'),
         ),
       );
-      expect(hasSummary).toBe(true);
 
       // There should be an ack right after the summary
       const summaryIndex = finalHistory.findIndex((msg) =>
@@ -396,14 +433,8 @@ describe('Sandwich Compression (Issue #1011)', () => {
         ),
       );
       const ackMessage = finalHistory[summaryIndex + 1];
-      expect(ackMessage.speaker).toBe('ai');
-      expect(ackMessage.blocks[0].type).toBe('text');
-      expect((ackMessage.blocks[0] as { text: string }).text).toContain(
-        'Understood.',
-      );
-      expect((ackMessage.blocks[0] as { text: string }).text).toContain(
-        'Continuing with the current task.',
-      );
-    });
+
+      return { firstMessage, lastMessage, hasSummary, ackMessage };
+    };
   });
 });

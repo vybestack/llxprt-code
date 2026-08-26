@@ -48,6 +48,15 @@ import {
  * In-memory fake IToolKeyStorage for adapter round-trip tests.
  * Primary assertions verify observable state changes, not method calls.
  */
+function requireMaskFixture(
+  fixture: (typeof MASK_KEY_FIXTURES)[number] | undefined,
+): (typeof MASK_KEY_FIXTURES)[number] {
+  if (fixture === undefined) {
+    throw new Error('expected matching key-mask fixture');
+  }
+  return fixture;
+}
+
 function createInMemoryKeyStorage(): IToolKeyStorage {
   const store = new Map<string, string>();
 
@@ -98,7 +107,7 @@ describe('Tool Key Storage Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', 
     it('returns the names from the fixture', () => {
       const names = getSupportedToolNames();
       // Primary assertion: observable collection content matches fixture
-      expect(names).toEqual([...SUPPORTED_TOOL_NAMES_FIXTURE]);
+      expect(names).toStrictEqual([...SUPPORTED_TOOL_NAMES_FIXTURE]);
     });
 
     it('returns array containing exa', () => {
@@ -122,7 +131,7 @@ describe('Tool Key Storage Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', 
       it(`getToolKeyEntry("${fixture.name}") returns correct entry`, () => {
         const entry = getToolKeyEntry(fixture.name);
         // Primary assertion: observable entry content matches fixture
-        expect(entry).toEqual(fixture.entry);
+        expect(entry).toStrictEqual(fixture.entry);
       });
     }
   });
@@ -206,10 +215,8 @@ describe('Tool Key Storage Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', 
       // Also verify fixture match
       const fixtureEntry = MASK_KEY_FIXTURES.find((f) => f.input === testKey);
       expect(fixtureEntry).toBeDefined();
-      if (fixtureEntry === undefined) {
-        throw new Error(`no mask fixture for key ${testKey}`);
-      }
-      expect(storageMasked).toBe(fixtureEntry.output);
+      const expectedFixture = requireMaskFixture(fixtureEntry);
+      expect(storageMasked).toBe(expectedFixture.output);
     });
   });
 
@@ -220,7 +227,7 @@ describe('Tool Key Storage Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', 
       const pureNames = getSupportedToolNames();
 
       // Primary assertion: observable collection content match
-      expect(storageNames).toEqual(pureNames);
+      expect(storageNames).toStrictEqual(pureNames);
     });
 
     describe('ToolKeyStorageFacade validates names and delegates storage behavior', () => {
@@ -245,8 +252,12 @@ describe('Tool Key Storage Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', 
       it('uses tools-owned registry helpers for display metadata', () => {
         const facade = new ToolKeyStorageFacade(createInMemoryKeyStorage());
 
-        expect(facade.getSupportedToolNames()).toEqual(getSupportedToolNames());
-        expect(facade.getToolKeyEntry('exa')).toEqual(getToolKeyEntry('exa'));
+        expect(facade.getSupportedToolNames()).toStrictEqual(
+          getSupportedToolNames(),
+        );
+        expect(facade.getToolKeyEntry('exa')).toStrictEqual(
+          getToolKeyEntry('exa'),
+        );
         expect(facade.isValidToolKeyName('exa')).toBe(true);
         expect(facade.maskKeyForDisplay('sk-facade-secret')).toBe(
           maskKeyForDisplay('sk-facade-secret'),

@@ -72,6 +72,34 @@ function makeVideoBlock(data: string, filename = 'clip.mp4'): MediaBlock {
   };
 }
 
+async function createPurposeSpecificFile(
+  body: FileCreateBody,
+): Promise<{ id: string; bytes: number }> {
+  return {
+    id: body.purpose === 'video' ? 'video-only' : 'unexpected-pdf',
+    bytes: 10,
+  };
+}
+
+function failFirstMediaUploadThenSucceed() {
+  let callCount = 0;
+  return async (): Promise<{ id: string; bytes: number }> => {
+    callCount++;
+    if (callCount === 1) {
+      throw new Error('first fails');
+    }
+    return { id: 'file-good', bytes: 10 };
+  };
+}
+
+function createSequentialFileUploader(ids: readonly string[]) {
+  let index = 0;
+  return async (): Promise<{ id: string; bytes: number }> => ({
+    id: ids[index++] ?? 'file-x',
+    bytes: 1,
+  });
+}
+
 describe('processKimiMedia', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -217,10 +245,7 @@ describe('processKimiMedia', () => {
   });
 
   it('does not upload PDFs when only video upload is enabled', async () => {
-    const { client, filesCreate } = createMockClient(async (body) => ({
-      id: body.purpose === 'video' ? 'video-only' : 'unexpected-pdf',
-      bytes: 10,
-    }));
+    const { client, filesCreate } = createMockClient(createPurposeSpecificFile);
     const pdf = makePdfBlock('PDFDATA', 'disabled.pdf');
     const video = makeVideoBlock('VIDEODATA', 'enabled.mp4');
     const contents: IContent[] = [{ speaker: 'human', blocks: [pdf, video] }];
@@ -271,14 +296,9 @@ describe('processKimiMedia', () => {
   });
 
   it('partially succeeds: uploaded blocks replaced, failed blocks preserved', async () => {
-    let callCount = 0;
-    const { client, filesCreate } = createMockClient(async () => {
-      callCount++;
-      if (callCount === 1) {
-        throw new Error('first fails');
-      }
-      return { id: 'file-good', bytes: 10 };
-    });
+    const { client, filesCreate } = createMockClient(
+      failFirstMediaUploadThenSucceed(),
+    );
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -339,11 +359,9 @@ describe('processKimiMedia', () => {
 
   it('handles multiple PDFs across multiple content entries', async () => {
     const ids = ['file-a', 'file-b'];
-    let idx = 0;
-    const { client, filesCreate } = createMockClient(async () => ({
-      id: ids[idx++] ?? 'file-x',
-      bytes: 1,
-    }));
+    const { client, filesCreate } = createMockClient(
+      createSequentialFileUploader(ids),
+    );
     const contents: IContent[] = [
       {
         speaker: 'human',

@@ -315,9 +315,8 @@ describe('FileTokenStorage', () => {
     // Production tightens permissions with chmod only on POSIX platforms
     // (it is skipped when process.platform === 'win32'), so the chmod-failure
     // branch cannot be exercised on Windows.
-    it.skipIf(process.platform === 'win32')(
-      'should remove the file and throw when post-write chmod fails',
-      async () => {
+    describe.skipIf(process.platform === 'win32')(() => {
+      it('should remove the file and throw when post-write chmod fails', async () => {
         // The file is written, but tightening its permissions fails. Production
         // must remove the just-written file (so credentials are never left on
         // disk with loose permissions) and surface an error distinct from a
@@ -343,12 +342,11 @@ describe('FileTokenStorage', () => {
         expect(mockFs.unlink).toHaveBeenCalledWith(
           path.join(CONFIG_HOME, 'mcp-oauth-tokens-v2.json'),
         );
-      },
-    );
+      });
+    });
 
-    it.skipIf(process.platform === 'win32')(
-      'should report when cleanup unlink also fails after chmod failure',
-      async () => {
+    describe.skipIf(process.platform === 'win32')(() => {
+      it('should report when cleanup unlink also fails after chmod failure', async () => {
         // Worst case: chmod fails AND the cleanup unlink fails. The thrown error
         // must NOT falsely claim the file was removed; it must warn that
         // credentials may remain on disk with overly permissive permissions.
@@ -370,8 +368,8 @@ describe('FileTokenStorage', () => {
         await expect(storage.setCredentials(credentials)).rejects.toThrow(
           /could not be removed/,
         );
-      },
-    );
+      });
+    });
   });
 
   describe('deleteCredentials', () => {

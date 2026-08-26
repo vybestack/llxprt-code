@@ -8,6 +8,14 @@ import { describe, it, expect, beforeEach } from 'bun:test';
 import { CodexDeviceFlow } from '../flows/codex-device-flow.js';
 import { createHash } from 'crypto';
 
+function requiredSearchParam(params: URLSearchParams, name: string): string {
+  const value = params.get(name);
+  if (value === null) {
+    throw new Error(`Expected ${name} search parameter`);
+  }
+  return value;
+}
+
 describe('CodexDeviceFlow - PKCE Verifier State Management', () => {
   let deviceFlow: CodexDeviceFlow;
 
@@ -240,10 +248,8 @@ describe('CodexDeviceFlow - PKCE Verifier State Management', () => {
           state,
         );
         const params = new URL(url).searchParams;
-        const challenge = params.get('code_challenge');
-        if (challenge) {
-          challenges.add(challenge);
-        }
+        const challenge = requiredSearchParam(params, 'code_challenge');
+        challenges.add(challenge);
       });
 
       expect(challenges.size).toBe(numFlows);

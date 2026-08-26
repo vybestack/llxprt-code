@@ -88,10 +88,7 @@ describe('agents tsconfig maps providers to source (build-boundary) @plan:issue2
         '../providers/src/runtime/index.ts',
     };
     for (const [subpath, expectedTarget] of Object.entries(expectedTargets)) {
-      expect(
-        paths?.[subpath]?.[0],
-        `missing or incorrect path mapping for ${subpath}`,
-      ).toBe(expectedTarget);
+      expect(paths?.[subpath]?.[0]).toBe(expectedTarget);
     }
   });
 

@@ -83,36 +83,40 @@ describe('copyDirFiltered', () => {
     );
   });
 
-  it.skipIf(process.platform === 'win32')(
-    'clones a directory symlink without following it into a cycle',
+  describe.skipIf(process.platform === 'win32')(
+    'on non-Windows systems',
     () => {
-      // Build a directory that contains a symlink pointing at an ancestor.
-      fs.mkdirSync(path.join(src, 'loop'));
-      fs.symlinkSync(src, path.join(src, 'loop', 'back-to-root'));
+      it('clones a directory symlink without following it into a cycle', () => {
+        // Build a directory that contains a symlink pointing at an ancestor.
+        fs.mkdirSync(path.join(src, 'loop'));
+        fs.symlinkSync(src, path.join(src, 'loop', 'back-to-root'));
 
-      const errors: string[] = [];
-      // Directory symlinks return isDirectory() === false from readdir
-      // Dirent, so copyDirFiltered clones the symlink entry rather than
-      // recursing into it. The function must return promptly without
-      // infinite recursion.
-      const count = copyDirFiltered(
-        src,
-        dest,
-        src,
-        dest,
-        new Set<string>(),
-        errors,
-        logger,
-      );
+        const errors: string[] = [];
+        // Directory symlinks return isDirectory() === false from readdir
+        // Dirent, so copyDirFiltered clones the symlink entry rather than
+        // recursing into it. The function must return promptly without
+        // infinite recursion.
+        const count = copyDirFiltered(
+          src,
+          dest,
+          src,
+          dest,
+          new Set<string>(),
+          errors,
+          logger,
+        );
 
-      // The symlink entry is cloned (counted), but its target directory
-      // is not followed — so recursion terminates without infinite looping.
-      expect(count).toBe(1);
-      expect(errors).toHaveLength(0);
-      // The symlink was created at the destination.
-      expect(
-        fs.lstatSync(path.join(dest, 'loop', 'back-to-root')).isSymbolicLink(),
-      ).toBe(true);
+        // The symlink entry is cloned (counted), but its target directory
+        // is not followed — so recursion terminates without infinite looping.
+        expect(count).toBe(1);
+        expect(errors).toHaveLength(0);
+        // The symlink was created at the destination.
+        expect(
+          fs
+            .lstatSync(path.join(dest, 'loop', 'back-to-root'))
+            .isSymbolicLink(),
+        ).toBe(true);
+      });
     },
   );
 });

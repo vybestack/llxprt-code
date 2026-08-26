@@ -99,128 +99,136 @@ async function reapWindowsPid(pid: number): Promise<void> {
   }
 }
 
-describe.skipIf(isWindows)(
-  'ShellExecutionService.terminatePty pid validation (POSIX)',
-  () => {
-    afterEach(() => {
-      for (const pid of [...serviceInternals.activePtys.keys()]) {
-        removeFakeEntry(pid);
-      }
-    });
+function requiredSpawnedPid(pid: number | undefined): number {
+  if (pid === undefined)
+    throw new Error('Expected spawned process to have a pid');
+  return pid;
+}
 
-    it('pid 0 does not signal the caller process group even when registered', async () => {
-      // Registering under pid 0 is what makes this reachable: before the fix
-      // terminatePty(0) found the entry and ran process.kill(-0), which is
-      // process.kill(0) — a signal to the CALLER's own process group. A
-      // sibling sharing this process's group must survive.
-      const sibling = spawn('sleep', ['30'], { stdio: 'ignore' });
-      sibling.unref();
-      // Without an 'error' listener a failed spawn raises an uncaught exception
-      // that crashes the runner and skips the finally cleanup below.
-      sibling.on('error', () => {});
-      expect(sibling.pid).toBeGreaterThan(0);
-
-      const terminal = new Terminal({
-        allowProposedApi: true,
-        cols: 80,
-        rows: 30,
-        scrollback: 10,
-      });
-      const fakePty = { pid: 0, kill: () => undefined } as unknown as IPty;
-      serviceInternals.activePtys.set(0, {
-        ptyProcess: fakePty,
-        headlessTerminal: terminal,
-        supportsProcessGroupKill: true,
-      });
-
-      try {
-        expect(() => ShellExecutionService.terminatePty(0)).not.toThrow();
-        // Observe survival through the child handle, not a signal-0 probe: this
-        // process is the sibling's parent, so a wrongly-killed sibling lingers
-        // as a zombie for which signal 0 still succeeds, which would pass this
-        // test for exactly the wrong reason.
-        await Promise.race([
-          new Promise<never>((_, reject) => {
-            sibling.on('exit', (_code, signal) =>
-              reject(new Error(`sibling was terminated (signal ${signal})`)),
-            );
-          }),
-          new Promise((resolve) => setTimeout(resolve, 500)),
-        ]);
-        // Reaching this line also proves the test runner itself survived.
-      } finally {
-        removeFakeEntry(0);
-        try {
-          terminal.dispose();
-        } catch {
-          // May already be disposed.
+describe('ShellExecutionService.terminatePty behavior', () => {
+  describe.skipIf(isWindows)(
+    'ShellExecutionService.terminatePty pid validation (POSIX)',
+    () => {
+      afterEach(() => {
+        for (const pid of [...serviceInternals.activePtys.keys()]) {
+          removeFakeEntry(pid);
         }
-        // The sibling shares this process's group and is NOT a group leader,
-        // so it must be reaped through its own handle, not as a group.
-        sibling.kill('SIGKILL');
-      }
-    }, 20000);
-  },
-);
-
-describe.skipIf(!isWindows)(
-  'ShellExecutionService.terminatePty (Windows)',
-  () => {
-    afterEach(() => {
-      // Defensive: clear any strays without assuming a specific pid.
-      for (const pid of [...serviceInternals.activePtys.keys()]) {
-        removeFakeEntry(pid);
-      }
-    });
-
-    it('reaps a registered pty via the taskkill path, not a POSIX process-group kill', async () => {
-      // Spawn a real long-lived child and register it as an ActivePty entry.
-      // Before the fix terminatePty used process.kill(-pid) on Windows, which
-      // throws (no process groups) and leaves the tree alive. After the fix the
-      // isWindows branch uses taskkillTree and the process is reaped.
-      const child = spawn(
-        'powershell.exe',
-        ['-NoProfile', '-Command', 'Start-Sleep -Seconds 60'],
-        { windowsHide: true, stdio: 'ignore' },
-      );
-      child.on('error', () => {});
-      child.unref();
-      const childPid = child.pid ?? 0;
-      expect(childPid).toBeGreaterThan(0);
-      // Wait until the pid is observable by taskkill rather than a fixed
-      // delay, which can be too short on a loaded CI runner.
-      await waitForPidVisible(childPid, 8000);
-
-      const terminal = new Terminal({
-        allowProposedApi: true,
-        cols: 80,
-        rows: 30,
-        scrollback: 10,
       });
-      const fakePty = {
-        pid: childPid,
-        kill: () => undefined,
-      } as unknown as IPty;
-      const entry: ActivePty = {
-        ptyProcess: fakePty,
-        headlessTerminal: terminal,
-        supportsProcessGroupKill: true,
-      };
-      serviceInternals.activePtys.set(childPid, entry);
 
-      try {
-        ShellExecutionService.terminatePty(childPid);
-        await waitForPidGone(childPid, 8000);
-        expect(isPidAlive(childPid)).toBe(false);
-      } finally {
-        removeFakeEntry(childPid);
+      it('pid 0 does not signal the caller process group even when registered', async () => {
+        // Registering under pid 0 is what makes this reachable: before the fix
+        // terminatePty(0) found the entry and ran process.kill(-0), which is
+        // process.kill(0) — a signal to the CALLER's own process group. A
+        // sibling sharing this process's group must survive.
+        const sibling = spawn('sleep', ['30'], { stdio: 'ignore' });
+        sibling.unref();
+        // Without an 'error' listener a failed spawn raises an uncaught exception
+        // that crashes the runner and skips the finally cleanup below.
+        sibling.on('error', () => {});
+        expect(sibling.pid).toBeGreaterThan(0);
+
+        const terminal = new Terminal({
+          allowProposedApi: true,
+          cols: 80,
+          rows: 30,
+          scrollback: 10,
+        });
+        const fakePty = { pid: 0, kill: () => undefined } as unknown as IPty;
+        serviceInternals.activePtys.set(0, {
+          ptyProcess: fakePty,
+          headlessTerminal: terminal,
+          supportsProcessGroupKill: true,
+        });
+
         try {
-          terminal.dispose();
-        } catch {
-          // May already be disposed.
+          expect(() => ShellExecutionService.terminatePty(0)).not.toThrow();
+          // Observe survival through the child handle, not a signal-0 probe: this
+          // process is the sibling's parent, so a wrongly-killed sibling lingers
+          // as a zombie for which signal 0 still succeeds, which would pass this
+          // test for exactly the wrong reason.
+          await Promise.race([
+            new Promise<never>((_, reject) => {
+              sibling.on('exit', (_code, signal) =>
+                reject(new Error(`sibling was terminated (signal ${signal})`)),
+              );
+            }),
+            new Promise((resolve) => setTimeout(resolve, 500)),
+          ]);
+          // Reaching this line also proves the test runner itself survived.
+        } finally {
+          removeFakeEntry(0);
+          try {
+            terminal.dispose();
+          } catch {
+            // May already be disposed.
+          }
+          // The sibling shares this process's group and is NOT a group leader,
+          // so it must be reaped through its own handle, not as a group.
+          sibling.kill('SIGKILL');
         }
-        await reapWindowsPid(childPid);
-      }
-    }, 20000);
-  },
-);
+      }, 20000);
+    },
+  );
+
+  describe.skipIf(!isWindows)(
+    'ShellExecutionService.terminatePty (Windows)',
+    () => {
+      afterEach(() => {
+        // Defensive: clear any strays without assuming a specific pid.
+        for (const pid of [...serviceInternals.activePtys.keys()]) {
+          removeFakeEntry(pid);
+        }
+      });
+
+      it('reaps a registered pty via the taskkill path, not a POSIX process-group kill', async () => {
+        // Spawn a real long-lived child and register it as an ActivePty entry.
+        // Before the fix terminatePty used process.kill(-pid) on Windows, which
+        // throws (no process groups) and leaves the tree alive. After the fix the
+        // isWindows branch uses taskkillTree and the process is reaped.
+        const child = spawn(
+          'powershell.exe',
+          ['-NoProfile', '-Command', 'Start-Sleep -Seconds 60'],
+          { windowsHide: true, stdio: 'ignore' },
+        );
+        child.on('error', () => {});
+        child.unref();
+        const childPid = requiredSpawnedPid(child.pid);
+        expect(childPid).toBeGreaterThan(0);
+        // Wait until the pid is observable by taskkill rather than a fixed
+        // delay, which can be too short on a loaded CI runner.
+        await waitForPidVisible(childPid, 8000);
+
+        const terminal = new Terminal({
+          allowProposedApi: true,
+          cols: 80,
+          rows: 30,
+          scrollback: 10,
+        });
+        const fakePty = {
+          pid: childPid,
+          kill: () => undefined,
+        } as unknown as IPty;
+        const entry: ActivePty = {
+          ptyProcess: fakePty,
+          headlessTerminal: terminal,
+          supportsProcessGroupKill: true,
+        };
+        serviceInternals.activePtys.set(childPid, entry);
+
+        try {
+          ShellExecutionService.terminatePty(childPid);
+          await waitForPidGone(childPid, 8000);
+          expect(isPidAlive(childPid)).toBe(false);
+        } finally {
+          removeFakeEntry(childPid);
+          try {
+            terminal.dispose();
+          } catch {
+            // May already be disposed.
+          }
+          await reapWindowsPid(childPid);
+        }
+      }, 20000);
+    },
+  );
+});

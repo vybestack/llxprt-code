@@ -211,68 +211,67 @@ function makeCreateTask(app: express.Express, workspacePath: string) {
       .set('Content-Type', 'application/json');
 }
 
-afterEach(async () => {
-  // Close any servers that were registered but not closed by the test
-  // (e.g. when setup failed partway or the test threw before the finally block).
-  //
-  // Safe contract:
-  // - Server tracking is retained until close SUCCEEDS, so a failed server
-  //   remains tracked and retryable rather than silently leaked.
-  // - All cleanup errors are collected while continuing to process remaining
-  //   resources, so one failure does not mask others.
-  // - Workspaces belonging to a server that could not be closed are NOT
-  //   removed, because a live server may still be reading/writing them.
-  // - After cleanup, if any errors occurred, an ordered AggregateError is
-  //   thrown so leaks fail the test.
-  const errors: unknown[] = [];
+describe('Agent Server Endpoints', () => {
+  afterEach(async () => {
+    // Close any servers that were registered but not closed by the test
+    // (e.g. when setup failed partway or the test threw before the finally block).
+    //
+    // Safe contract:
+    // - Server tracking is retained until close SUCCEEDS, so a failed server
+    //   remains tracked and retryable rather than silently leaked.
+    // - All cleanup errors are collected while continuing to process remaining
+    //   resources, so one failure does not mask others.
+    // - Workspaces belonging to a server that could not be closed are NOT
+    //   removed, because a live server may still be reading/writing them.
+    // - After cleanup, if any errors occurred, an ordered AggregateError is
+    //   thrown so leaks fail the test.
+    const errors: unknown[] = [];
 
-  const liveServerCount = openServers.length;
-  for (const server of [...openServers]) {
-    const result = await trackedCloseServer(server);
-    if (!result.success) {
-      // Preserve the genuine error (cause/code/stack) for the AggregateError.
-      errors.push(
-        result.error ?? new Error('Failed to close server (still tracked)'),
-      );
-    }
-  }
-
-  // Only remove workspaces when all servers closed successfully. If any
-  // server is still live, its workspace may be in active use; removing it
-  // could corrupt in-flight operations or mask the real failure.
-  const allServersClosed = openServers.length === 0;
-  if (allServersClosed) {
-    const failedWorkspaces: string[] = [];
-    for (const dir of testWorkspaces) {
-      try {
-        fs.rmSync(dir, { recursive: true, force: true });
-      } catch (e) {
-        errors.push(e);
-        failedWorkspaces.push(dir);
+    const liveServerCount = openServers.length;
+    for (const server of [...openServers]) {
+      const result = await trackedCloseServer(server);
+      if (!result.success) {
+        // Preserve the genuine error (cause/code/stack) for the AggregateError.
+        errors.push(
+          result.error ?? new Error('Failed to close server (still tracked)'),
+        );
       }
     }
-    // Retain only the workspaces that failed to delete so a subsequent
-    // afterEach retry can attempt them again.
-    testWorkspaces.length = 0;
-    testWorkspaces.push(...failedWorkspaces);
-  } else {
-    errors.push(
-      new Error(
-        `Skipped workspace cleanup: ${openServers.length} server(s) still live ` +
-          `(of ${liveServerCount} tracked)`,
-      ),
-    );
-  }
 
-  if (errors.length > 0) {
-    throw new AggregateError(
-      errors,
-      `${errors.length} cleanup error(s) after test; ${openServers.length} server(s) still tracked`,
-    );
-  }
-});
+    // Only remove workspaces when all servers closed successfully. If any
+    // server is still live, its workspace may be in active use; removing it
+    // could corrupt in-flight operations or mask the real failure.
+    const allServersClosed = openServers.length === 0;
+    if (allServersClosed) {
+      const failedWorkspaces: string[] = [];
+      for (const dir of testWorkspaces) {
+        try {
+          fs.rmSync(dir, { recursive: true, force: true });
+        } catch (e) {
+          errors.push(e);
+          failedWorkspaces.push(dir);
+        }
+      }
+      // Retain only the workspaces that failed to delete so a subsequent
+      // afterEach retry can attempt them again.
+      testWorkspaces.length = 0;
+      testWorkspaces.push(...failedWorkspaces);
+    } else {
+      errors.push(
+        new Error(
+          `Skipped workspace cleanup: ${openServers.length} server(s) still live ` +
+            `(of ${liveServerCount} tracked)`,
+        ),
+      );
+    }
 
-describe('Agent Server Endpoints', () => {
+    if (errors.length > 0) {
+      throw new AggregateError(
+        errors,
+        `${errors.length} cleanup error(s) after test; ${openServers.length} server(s) still tracked`,
+      );
+    }
+  });
   it('removes its startup error listener after successful configuration', async () => {
     const server = await listenAndTrackServer(express(), () => {});
     try {

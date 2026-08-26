@@ -17,6 +17,10 @@ import {
   computeSandboxMemoryArgs,
 } from './bootstrap.js';
 
+function isValidMemoryRelaunchResult(result: readonly string[]): boolean {
+  return result.length === 0 || /--max-old-space-size=\d+/.test(result[0]);
+}
+
 describe('bootstrap utilities', () => {
   const originalBunDescriptor = Object.getOwnPropertyDescriptor(
     process.versions,
@@ -111,9 +115,7 @@ describe('bootstrap utilities', () => {
       delete process.env.LLXPRT_CODE_NO_RELAUNCH;
       const result = shouldRelaunchForMemory(false);
       // The result should either be empty or contain a --max-old-space-size flag
-      expect(
-        result.length === 0 || result[0].match(/--max-old-space-size=\d+/),
-      ).toBeTruthy();
+      expect(isValidMemoryRelaunchResult(result)).toBeTruthy();
     });
 
     it('should not include debug logging when debug is false', () => {

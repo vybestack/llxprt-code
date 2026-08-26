@@ -20,6 +20,10 @@
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ShellTool } from '../index.js';
+import type {
+  ToolCallConfirmationDetails,
+  ToolExecuteConfirmationDetails,
+} from '../tools/tools.js';
 import { ToolConfirmationOutcome } from '../types/tool-confirmation-types.js';
 import type {
   IShellExecutionService,
@@ -74,6 +78,15 @@ function createFakeMessageBus(
     requestConfirmation: async () => outcome,
     publishPolicyUpdate: async () => {},
   };
+}
+
+function requireExecuteConfirmation(
+  confirmation: ToolCallConfirmationDetails | false,
+): ToolExecuteConfirmationDetails {
+  if (confirmation === false || confirmation.type !== 'exec') {
+    throw new Error('expected exec confirmation');
+  }
+  return confirmation;
 }
 
 describe('Shell Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', () => {
@@ -515,14 +528,9 @@ describe('shell result contracts @plan:issue1995 @plan:issue3200', () => {
       new AbortController().signal,
     );
     expect(confirmationWith).not.toBe(false);
-    if (confirmationWith === false) return; // narrows the union for the compiler
-    expect(confirmationWith.type).toBe('exec');
-    if (confirmationWith.type !== 'exec') {
-      throw new Error(
-        `expected exec confirmation, got ${confirmationWith.type}`,
-      );
-    }
-    expect(confirmationWith.isBackground).toBe(true);
+    const executeConfirmation = requireExecuteConfirmation(confirmationWith);
+    expect(executeConfirmation.type).toBe('exec');
+    expect(executeConfirmation.isBackground).toBe(true);
   });
 
   it('Windows accepts is_background: true as a managed background job (T21)', () => {

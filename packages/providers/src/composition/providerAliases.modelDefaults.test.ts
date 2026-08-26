@@ -36,6 +36,25 @@ function expectNoImageResizeDefaults(
   expect(defaults).not.toHaveProperty('image-resize.maxPixels');
 }
 
+function isNonObjectModelDefaultsWarning(call: unknown[]): boolean {
+  return (
+    typeof call[0] === 'string' &&
+    call[0].includes('Skipping non-object modelDefaults entry')
+  );
+}
+
+function findBuiltinAliasEntry(alias: string) {
+  return loadProviderAliasEntries().find(
+    (candidate) => candidate.alias === alias && candidate.source === 'builtin',
+  );
+}
+
+function configuredModelDefaultRules(
+  entry: ReturnType<typeof loadProviderAliasEntries>[number] | undefined,
+): ModelDefaultRule[] {
+  return entry?.config.modelDefaults ?? [];
+}
+
 /**
  * Helper to load entries from a temp user alias dir via Storage mock.
  * Shared across multiple test suites to avoid sonarjs/no-identical-functions.
@@ -303,9 +322,7 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
 
       // One warning per non-object entry
       const nonObjectWarnings = warnSpy.mock.calls.filter(
-        (call) =>
-          typeof call[0] === 'string' &&
-          call[0].includes('Skipping non-object modelDefaults entry'),
+        isNonObjectModelDefaultsWarning,
       );
       expect(nonObjectWarnings).toHaveLength(3);
     });
@@ -643,12 +660,9 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
   });
 
   it('anthropic applies image-resize limits to Opus and Sonnet families only', () => {
-    const entry = loadProviderAliasEntries().find(
-      (candidate) =>
-        candidate.alias === 'anthropic' && candidate.source === 'builtin',
-    );
+    const entry = findBuiltinAliasEntry('anthropic');
     expect(entry).toBeDefined();
-    const rules = entry?.config.modelDefaults ?? [];
+    const rules = configuredModelDefaultRules(entry);
     for (const model of [
       'claude-opus-4-5-20251101',
       'claude-opus-5',
@@ -673,12 +687,9 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
   });
 
   it('claudecode applies max-image-dimension to Opus 5, Opus 4.8, and Sonnet 5 only @issue:3216', () => {
-    const entry = loadProviderAliasEntries().find(
-      (candidate) =>
-        candidate.alias === 'claudecode' && candidate.source === 'builtin',
-    );
+    const entry = findBuiltinAliasEntry('claudecode');
     expect(entry).toBeDefined();
-    const rules = entry?.config.modelDefaults ?? [];
+    const rules = configuredModelDefaultRules(entry);
     for (const model of [
       'claude-opus-5',
       'claude-opus-4-8',
@@ -728,12 +739,9 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
   it.each(['openai', 'openai-responses', 'openai-vercel', 'codex'])(
     '%s applies image limits to every gpt- family model',
     (alias) => {
-      const entry = loadProviderAliasEntries().find(
-        (candidate) =>
-          candidate.alias === alias && candidate.source === 'builtin',
-      );
+      const entry = findBuiltinAliasEntry(alias);
       expect(entry).toBeDefined();
-      const rules = entry?.config.modelDefaults ?? [];
+      const rules = configuredModelDefaultRules(entry);
       expect(computeMatchedDefaults('gpt-future-vision', rules)).toMatchObject({
         'image-resize.maxLongEdge': 2048,
         'image-resize.maxShortEdge': 2048,

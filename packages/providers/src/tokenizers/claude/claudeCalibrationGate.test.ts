@@ -178,7 +178,7 @@ describe.each(MODELS)('$name activation gate', ({ calibration, corpus }) => {
   it('covers prose, code, JSON, Unicode, emoji, combining marks and mixed Markdown', () => {
     expect(
       [...new Set(corpus.observations.map((o) => o.category))].sort(),
-    ).toEqual([
+    ).toStrictEqual([
       'code',
       'combining',
       'emoji',

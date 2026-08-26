@@ -322,89 +322,123 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
   // locate the conversation turn, and the persisted content carries the
   // matching promptId. End-to-end through a real ChatSession, not mocks.
   it('AC-12 bidirectional join: turn record keys match history content promptId', async () => {
-    const fixture = createTokenSyncTestFixture();
-    const mockContentGenerator = fixture.mockContentGenerator;
-    const historyService = fixture.historyService;
-
-    const mockProvider = {
-      name: 'anthropic',
-      generateChatCompletion: vi.fn().mockImplementation(async function* () {
-        yield {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'Hello!' }],
-        };
-        yield {
-          speaker: 'ai',
-          blocks: [],
-          metadata: {
-            usage: {
-              promptTokens: 4000,
-              completionTokens: 10,
-              totalTokens: 4010,
-            },
-          },
-          usageMetadata: {
-            promptTokenCount: 4000,
-            candidatesTokenCount: 10,
-            totalTokenCount: 4010,
-          },
-        };
-      }),
-    };
-
-    const view = buildTokenSyncView(fixture, mockProvider, 'ac12-join-session');
-
-    const chat = new ChatSession(view, mockContentGenerator, {}, []);
-
-    const realLogger = new TokenUsageLogger(true, logFile);
-    chat.setTokenUsageLoggerForTesting(realLogger);
-
-    const promptId = 'ac12-join-prompt';
-    realLogger.recordEstimate(promptId, {
-      provider: 'anthropic',
-      model: 'claude-3-5-sonnet-20241022',
-      estimatedTokens: 200,
-      estimator: 'anthropic-char',
-      tiktokenTokens: 180,
-    });
-
-    const stream = await chat.sendMessageStream(
-      { message: [{ text: 'Say hello' }] },
+    const {
+      records,
+      record,
+      fixture,
+      sentTurn,
       promptId,
-    );
-    for await (const _event of stream) {
-      // consume
-    }
-
-    await historyService.waitForTokenUpdates();
-
-    // --- Assert token-usage record carries the join keys ---
-    const records = readJsonl(logFile);
+      turnIdObservation,
+      promptIdObservation,
+    } =
+      await observeAC12BidirectionalJoinTurnRecordKeysMatchHistoryContentPromptId();
     expect(records).toHaveLength(1);
-    const record = records[0];
-
-    // AC-1 join keys must be present
     expect(record.session_id).toBe('ac12-join-session');
     expect(record.runtime_id).toBe(fixture.runtimeSetup.runtime.runtimeId);
-    // Main agent: no parent runtime, no subagent name
     expect(record.parent_runtime_id).toBeNull();
     expect(record.subagent_name).toBeNull();
-
-    // --- The join must resolve to the turn THIS send created (AC-1/AC-2) ---
-    // This is the first turn of the session: there is no earlier turn the
-    // record could accidentally name, so a stale or null turn_id fails here.
-    const allHistory = historyService.getAll();
-    const sentTurn = allHistory.find((c) => c.speaker === 'human');
     expect(sentTurn).toBeDefined();
-    if (sentTurn === undefined)
-      throw new Error('expected a human turn in history');
-    // usage record -> conversation turn
     expect(record.turn_id).not.toBeNull();
-    expect(record.turn_id).toBe(sentTurn.metadata?.turnId);
-    // conversation turn -> usage record
-    expect(sentTurn.metadata?.promptId).toBe(promptId);
+    expect(record.turn_id).toBe(turnIdObservation);
+    expect(promptIdObservation).toBe(promptId);
     expect(record.prompt_id).toBe(promptId);
   });
+
+  const observeAC12BidirectionalJoinTurnRecordKeysMatchHistoryContentPromptId =
+    async () => {
+      const fixture = createTokenSyncTestFixture();
+      const mockContentGenerator = fixture.mockContentGenerator;
+      const historyService = fixture.historyService;
+
+      const mockProvider = {
+        name: 'anthropic',
+        generateChatCompletion: vi.fn().mockImplementation(async function* () {
+          yield {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'Hello!' }],
+          };
+          yield {
+            speaker: 'ai',
+            blocks: [],
+            metadata: {
+              usage: {
+                promptTokens: 4000,
+                completionTokens: 10,
+                totalTokens: 4010,
+              },
+            },
+            usageMetadata: {
+              promptTokenCount: 4000,
+              candidatesTokenCount: 10,
+              totalTokenCount: 4010,
+            },
+          };
+        }),
+      };
+
+      const view = buildTokenSyncView(
+        fixture,
+        mockProvider,
+        'ac12-join-session',
+      );
+
+      const chat = new ChatSession(view, mockContentGenerator, {}, []);
+
+      const realLogger = new TokenUsageLogger(true, logFile);
+      chat.setTokenUsageLoggerForTesting(realLogger);
+
+      const promptId = 'ac12-join-prompt';
+      realLogger.recordEstimate(promptId, {
+        provider: 'anthropic',
+        model: 'claude-3-5-sonnet-20241022',
+        estimatedTokens: 200,
+        estimator: 'anthropic-char',
+        tiktokenTokens: 180,
+      });
+
+      const stream = await chat.sendMessageStream(
+        { message: [{ text: 'Say hello' }] },
+        promptId,
+      );
+      for await (const _event of stream) {
+        // consume
+      }
+
+      await historyService.waitForTokenUpdates();
+
+      // --- Assert token-usage record carries the join keys ---
+      const records = readJsonl(logFile);
+
+      const record = records[0];
+
+      // AC-1 join keys must be present
+
+      // Main agent: no parent runtime, no subagent name
+
+      // --- The join must resolve to the turn THIS send created (AC-1/AC-2) ---
+      // This is the first turn of the session: there is no earlier turn the
+      // record could accidentally name, so a stale or null turn_id fails here.
+      const allHistory = historyService.getAll();
+      const sentTurn = allHistory.find((c) => c.speaker === 'human');
+
+      if (sentTurn === undefined)
+        throw new Error('expected a human turn in history');
+      // usage record -> conversation turn
+
+      // conversation turn -> usage record
+
+      const turnIdObservation = sentTurn.metadata?.turnId;
+      const promptIdObservation = sentTurn.metadata?.promptId;
+      return {
+        records,
+        record,
+        fixture,
+        sentTurn,
+        promptId,
+        turnIdObservation,
+        promptIdObservation,
+      };
+    };
 
   // AC-12: Cached turn — provider reports Anthropic-style cache read+write.
   // The JSONL must carry both cache_read_tokens and cache_write_tokens, and
@@ -661,168 +695,128 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
   // generation window from a single token-bearing chunk). The retry's
   // success record must carry its own fresh timing, not attempt 1's.
   it('records partial timing on an abandoned stream attempt and fresh timing on the retry (#3257)', async () => {
-    const fixture = createTokenSyncTestFixture();
-    const mockContentGenerator = fixture.mockContentGenerator;
-    const historyService = fixture.historyService;
-
-    let attempt = 0;
-    const mockProvider = {
-      name: 'anthropic',
-      generateChatCompletion: vi.fn().mockImplementation(async function* () {
-        attempt++;
-        if (attempt === 1) {
-          yield {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'partial' }],
-            metadata: {
-              usage: {
-                promptTokens: 5000,
-                completionTokens: 5,
-                totalTokens: 5005,
-              },
-            },
-          };
-          throw new Error('Connection error.');
-        }
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'The ' }] };
-        await Bun.sleep(15);
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'answer ' }] };
-        await Bun.sleep(15);
-        yield {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'is 4.' }],
-          metadata: {
-            usage: {
-              promptTokens: 5100,
-              completionTokens: 15,
-              totalTokens: 5115,
-            },
-          },
-        };
-      }),
-    };
-
-    const view = buildTokenSyncView(
-      fixture,
-      mockProvider,
-      'abandoned-timing-session',
-    );
-
-    const chat = new ChatSession(view, mockContentGenerator, {}, []);
-
-    const realLogger = new TokenUsageLogger(true, logFile);
-    chat.setTokenUsageLoggerForTesting(realLogger);
-
-    const promptId = 'abandoned-timing-prompt';
-    realLogger.recordEstimate(promptId, {
-      provider: 'anthropic',
-      model: 'claude-3-5-sonnet-20241022',
-      estimatedTokens: 150,
-      estimator: 'anthropic-char',
-      tiktokenTokens: 140,
-    });
-
-    const stream = await chat.sendMessageStream(
-      { message: [{ text: 'What is 2+2?' }] },
-      promptId,
-    );
-    for await (const _event of stream) {
-      // consume
-    }
-
-    await historyService.waitForTokenUpdates();
-
+    const { attempt, records, abandoned, success } =
+      await observeRecordsPartialTimingOnAnAbandonedStreamAttemptAndFreshTimingOn();
     expect(attempt).toBe(2);
-    const records = readJsonl(logFile);
     expect(records).toHaveLength(2);
-
-    const abandoned = records.find((r) => r.attempt_outcome === 'abandoned');
     expect(abandoned).toBeDefined();
-    if (abandoned === undefined) throw new Error('no abandoned record');
     expect(abandoned.attempt_index).toBe(0);
     expect(typeof abandoned.ttft_ms).toBe('number');
     expect(abandoned.ttft_ms).toBeGreaterThanOrEqual(0);
     expect(typeof abandoned.provider_request_ms).toBe('number');
     expect(abandoned.provider_request_ms).toBeGreaterThanOrEqual(0);
-    // Single token-bearing chunk: the generation window is not strictly
-    // positive, so generation_ms must be omitted.
     expect('generation_ms' in abandoned).toBe(false);
     expect(abandoned.chunk_count).toBe(1);
-
-    const success = records.find((r) => r.attempt_outcome !== 'abandoned');
     expect(success).toBeDefined();
-    if (success === undefined) throw new Error('no success record');
     expect(success.attempt_index).toBe(1);
     expect(typeof success.ttft_ms).toBe('number');
     expect(success.ttft_ms).toBeGreaterThanOrEqual(0);
     expect(success.generation_ms).toBeGreaterThan(0);
     expect(typeof success.provider_request_ms).toBe('number');
     expect(success.provider_request_ms).toBeGreaterThanOrEqual(0);
-    // Fresh attempt-2 timing wins: three chunks, not attempt 1's single one.
     expect(success.chunk_count).toBe(3);
   });
+
+  const observeRecordsPartialTimingOnAnAbandonedStreamAttemptAndFreshTimingOn =
+    async () => {
+      const fixture = createTokenSyncTestFixture();
+      const mockContentGenerator = fixture.mockContentGenerator;
+      const historyService = fixture.historyService;
+
+      let attempt = 0;
+      const mockProvider = {
+        name: 'anthropic',
+        generateChatCompletion: vi.fn().mockImplementation(async function* () {
+          attempt++;
+          if (attempt === 1) {
+            yield {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: 'partial' }],
+              metadata: {
+                usage: {
+                  promptTokens: 5000,
+                  completionTokens: 5,
+                  totalTokens: 5005,
+                },
+              },
+            };
+            throw new Error('Connection error.');
+          }
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'The ' }] };
+          await Bun.sleep(15);
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'answer ' }] };
+          await Bun.sleep(15);
+          yield {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'is 4.' }],
+            metadata: {
+              usage: {
+                promptTokens: 5100,
+                completionTokens: 15,
+                totalTokens: 5115,
+              },
+            },
+          };
+        }),
+      };
+
+      const view = buildTokenSyncView(
+        fixture,
+        mockProvider,
+        'abandoned-timing-session',
+      );
+
+      const chat = new ChatSession(view, mockContentGenerator, {}, []);
+
+      const realLogger = new TokenUsageLogger(true, logFile);
+      chat.setTokenUsageLoggerForTesting(realLogger);
+
+      const promptId = 'abandoned-timing-prompt';
+      realLogger.recordEstimate(promptId, {
+        provider: 'anthropic',
+        model: 'claude-3-5-sonnet-20241022',
+        estimatedTokens: 150,
+        estimator: 'anthropic-char',
+        tiktokenTokens: 140,
+      });
+
+      const stream = await chat.sendMessageStream(
+        { message: [{ text: 'What is 2+2?' }] },
+        promptId,
+      );
+      for await (const _event of stream) {
+        // consume
+      }
+
+      await historyService.waitForTokenUpdates();
+
+      const records = readJsonl(logFile);
+
+      const abandoned = records.find((r) => r.attempt_outcome === 'abandoned');
+
+      if (abandoned === undefined) throw new Error('no abandoned record');
+
+      // Single token-bearing chunk: the generation window is not strictly
+      // positive, so generation_ms must be omitted.
+
+      const success = records.find((r) => r.attempt_outcome !== 'abandoned');
+
+      if (success === undefined) throw new Error('no success record');
+
+      // Fresh attempt-2 timing wins: three chunks, not attempt 1's single one.
+
+      return { attempt, records, abandoned, success };
+    };
 
   // #3257: EmptyStreamError is thrown outside _convertIContentStream's catch
   // (eager first-chunk pull), so partial timing must attach at that seam too.
   // The unbilled empty attempt writes no record by design; the retry's
   // success record must carry the SECOND attempt's fresh timing.
   it('retries a zero-chunk stream and records fresh timing on the retry (#3257)', async () => {
-    const fixture = createTokenSyncTestFixture();
-    const { mockContentGenerator, historyService } = fixture;
-    let attempt = 0;
-    const mockProvider = {
-      name: 'anthropic',
-      generateChatCompletion: vi.fn().mockImplementation(async function* () {
-        attempt++;
-        if (attempt === 1) {
-          return; // zero chunks: eager first-chunk pull throws EmptyStreamError
-        }
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'Hi ' }] };
-        await Bun.sleep(15);
-        yield {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'there.' }],
-          metadata: {
-            usage: {
-              promptTokens: 5100,
-              completionTokens: 15,
-              totalTokens: 5115,
-            },
-          },
-        };
-      }),
-    };
-    const view = buildTokenSyncView(
-      fixture,
-      mockProvider,
-      'empty-stream-session',
-    );
-    const chat = new ChatSession(view, mockContentGenerator, {}, []);
-    const realLogger = new TokenUsageLogger(true, logFile);
-    chat.setTokenUsageLoggerForTesting(realLogger);
-    const promptId = 'empty-stream-prompt';
-    realLogger.recordEstimate(promptId, {
-      provider: 'anthropic',
-      model: 'claude-3-5-sonnet-20241022',
-      estimatedTokens: 150,
-      estimator: 'anthropic-char',
-      tiktokenTokens: 140,
-    });
-    const stream = await chat.sendMessageStream(
-      { message: [{ text: 'Say hi' }] },
-      promptId,
-    );
-    for await (const _event of stream) {
-      // consume
-    }
-    await historyService.waitForTokenUpdates();
-
+    const { attempt, records, success } =
+      await observeRetriesAZeroChunkStreamAndRecordsFreshTimingOnTheRetry();
     expect(attempt).toBe(2);
-    const records = readJsonl(logFile);
     expect(records).toHaveLength(1);
-    const success = records[0];
-    // The retry happens inside retryWithBackoff, below turn-attempt
-    // accounting: the unbilled empty attempt is invisible here.
     expect(success.attempt_index).toBe(0);
     expect(success.attempt_outcome).toBe('success');
     expect(success.chunk_count).toBe(2);
@@ -832,4 +826,65 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     expect(typeof success.provider_request_ms).toBe('number');
     expect(success.provider_request_ms).toBeGreaterThanOrEqual(0);
   });
+
+  const observeRetriesAZeroChunkStreamAndRecordsFreshTimingOnTheRetry =
+    async () => {
+      const fixture = createTokenSyncTestFixture();
+      const { mockContentGenerator, historyService } = fixture;
+      let attempt = 0;
+      const mockProvider = {
+        name: 'anthropic',
+        generateChatCompletion: vi.fn().mockImplementation(async function* () {
+          attempt++;
+          if (attempt === 1) {
+            return; // zero chunks: eager first-chunk pull throws EmptyStreamError
+          }
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'Hi ' }] };
+          await Bun.sleep(15);
+          yield {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'there.' }],
+            metadata: {
+              usage: {
+                promptTokens: 5100,
+                completionTokens: 15,
+                totalTokens: 5115,
+              },
+            },
+          };
+        }),
+      };
+      const view = buildTokenSyncView(
+        fixture,
+        mockProvider,
+        'empty-stream-session',
+      );
+      const chat = new ChatSession(view, mockContentGenerator, {}, []);
+      const realLogger = new TokenUsageLogger(true, logFile);
+      chat.setTokenUsageLoggerForTesting(realLogger);
+      const promptId = 'empty-stream-prompt';
+      realLogger.recordEstimate(promptId, {
+        provider: 'anthropic',
+        model: 'claude-3-5-sonnet-20241022',
+        estimatedTokens: 150,
+        estimator: 'anthropic-char',
+        tiktokenTokens: 140,
+      });
+      const stream = await chat.sendMessageStream(
+        { message: [{ text: 'Say hi' }] },
+        promptId,
+      );
+      for await (const _event of stream) {
+        // consume
+      }
+      await historyService.waitForTokenUpdates();
+
+      const records = readJsonl(logFile);
+
+      const success = records[0];
+      // The retry happens inside retryWithBackoff, below turn-attempt
+      // accounting: the unbilled empty attempt is invisible here.
+
+      return { attempt, records, success };
+    };
 });

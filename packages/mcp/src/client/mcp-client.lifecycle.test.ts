@@ -55,6 +55,122 @@ function createDeferred<T>(): {
   };
 }
 
+interface McpRequestInput {
+  readonly method: string;
+}
+
+function resourceOnlyRequest(input: McpRequestInput): Promise<unknown> {
+  if (input.method === 'resources/list') {
+    return Promise.resolve({
+      resources: [
+        {
+          uri: 'file:///tmp/resource.txt',
+          name: 'resource',
+          description: 'Test Resource',
+          mimeType: 'text/plain',
+        },
+      ],
+    });
+  }
+  return Promise.resolve({ prompts: [] });
+}
+
+function createChangingResourceRequest(): (
+  input: McpRequestInput,
+) => Promise<unknown> {
+  let listCallCount = 0;
+  return (input) => {
+    if (input.method === 'resources/list') {
+      listCallCount += 1;
+      return Promise.resolve({
+        resources: [
+          {
+            uri:
+              listCallCount === 1
+                ? 'file:///tmp/one.txt'
+                : 'file:///tmp/two.txt',
+          },
+        ],
+      });
+    }
+    return Promise.resolve({ prompts: [] });
+  };
+}
+
+function createResourceReadRequest(
+  readResult: unknown,
+): (input: McpRequestInput) => Promise<unknown> {
+  return (input) => {
+    if (input.method === 'resources/read') {
+      return Promise.resolve(readResult);
+    }
+    if (input.method === 'resources/list') {
+      return Promise.resolve({ resources: [] });
+    }
+    return Promise.resolve({ prompts: [] });
+  };
+}
+
+function createDeferredResourceListRequest(
+  resources: Promise<unknown>,
+): (input: McpRequestInput) => Promise<unknown> {
+  return (input) =>
+    input.method === 'resources/list' ? resources : Promise.resolve({});
+}
+
+function staleCapabilitiesRequest(input: McpRequestInput): Promise<unknown> {
+  if (input.method === 'resources/list') {
+    return Promise.resolve({ resources: [{ uri: 'file:///resource' }] });
+  }
+  if (input.method === 'resources/read') {
+    return Promise.resolve({ contents: [] });
+  }
+  return Promise.resolve({});
+}
+
+function discoveredArtifactsRequest(input: McpRequestInput): Promise<unknown> {
+  if (input.method === 'resources/list') {
+    return Promise.resolve({
+      resources: [{ uri: 'file:///tmp/resource.txt', name: 'resource' }],
+    });
+  }
+  return Promise.resolve({});
+}
+
+function emptyResourceListRequest(input: McpRequestInput): Promise<unknown> {
+  return input.method === 'resources/list'
+    ? Promise.resolve({ resources: [] })
+    : Promise.resolve({});
+}
+
+function captureResourceListHandler(
+  schema: unknown,
+  handler: (notification: unknown) => Promise<void> | void,
+  capture: (handler: (notification: unknown) => Promise<void> | void) => void,
+): void {
+  if (schema === ResourceListChangedNotificationSchema) {
+    capture(handler);
+  }
+}
+
+function captureRefreshHandler(
+  schema: unknown,
+  handler: (notification: unknown) => Promise<void> | void,
+  captureTool: (
+    handler: (notification: unknown) => Promise<void> | void,
+  ) => void,
+  captureResource: (
+    handler: (notification: unknown) => Promise<void> | void,
+  ) => void,
+): void {
+  if (schema === ToolListChangedNotificationSchema) {
+    captureTool(handler);
+  }
+  if (schema === ResourceListChangedNotificationSchema) {
+    captureResource(handler);
+  }
+}
+
 void vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () =>
   automock(realStdioModule),
 );
@@ -180,21 +296,7 @@ describe('mcp-client', () => {
         setRequestHandler: vi.fn(),
         setNotificationHandler: vi.fn(),
         getServerCapabilities: vi.fn().mockReturnValue({ resources: {} }),
-        request: vi.fn().mockImplementation(({ method }) => {
-          if (method === 'resources/list') {
-            return Promise.resolve({
-              resources: [
-                {
-                  uri: 'file:///tmp/resource.txt',
-                  name: 'resource',
-                  description: 'Test Resource',
-                  mimeType: 'text/plain',
-                },
-              ],
-            });
-          }
-          return Promise.resolve({ prompts: [] });
-        }),
+        request: vi.fn().mockImplementation(resourceOnlyRequest),
       };
       stubSdkClient(mockedClient);
       const mockedToolRegistry = {
@@ -234,7 +336,6 @@ describe('mcp-client', () => {
     });
 
     it('refreshes registry when resource list change notification is received', async () => {
-      let listCallCount = 0;
       let resourceListHandler:
         | ((notification: unknown) => Promise<void> | void)
         | undefined;
@@ -245,36 +346,15 @@ describe('mcp-client', () => {
         getStatus: vi.fn(),
         registerCapabilities: vi.fn(),
         setRequestHandler: vi.fn(),
-        setNotificationHandler: vi.fn((schema, handler) => {
-          if (schema === ResourceListChangedNotificationSchema) {
-            resourceListHandler = handler;
-          }
-        }),
+        setNotificationHandler: vi.fn((schema, handler) =>
+          captureResourceListHandler(schema, handler, (captured) => {
+            resourceListHandler = captured;
+          }),
+        ),
         getServerCapabilities: vi
           .fn()
           .mockReturnValue({ resources: { listChanged: true } }),
-        request: vi.fn().mockImplementation(({ method }) => {
-          if (method === 'resources/list') {
-            listCallCount += 1;
-            if (listCallCount === 1) {
-              return Promise.resolve({
-                resources: [
-                  {
-                    uri: 'file:///tmp/one.txt',
-                  },
-                ],
-              });
-            }
-            return Promise.resolve({
-              resources: [
-                {
-                  uri: 'file:///tmp/two.txt',
-                },
-              ],
-            });
-          }
-          return Promise.resolve({ prompts: [] });
-        }),
+        request: vi.fn().mockImplementation(createChangingResourceRequest()),
       };
       stubSdkClient(mockedClient);
       const mockedToolRegistry = {
@@ -332,15 +412,9 @@ describe('mcp-client', () => {
         setRequestHandler: vi.fn(),
         setNotificationHandler: vi.fn(),
         getServerCapabilities: vi.fn().mockReturnValue({ resources: {} }),
-        request: vi.fn().mockImplementation(({ method }) => {
-          if (method === 'resources/read') {
-            return Promise.resolve(readResult);
-          }
-          if (method === 'resources/list') {
-            return Promise.resolve({ resources: [] });
-          }
-          return Promise.resolve({ prompts: [] });
-        }),
+        request: vi
+          .fn()
+          .mockImplementation(createResourceReadRequest(readResult)),
       };
       stubSdkClient(mockedClient);
       const mockedToolRegistry = {
@@ -421,14 +495,12 @@ describe('mcp-client', () => {
 
     it('rejects delayed tool and resource refreshes across rapid revoke→gain', async () => {
       let trusted = true;
-      let resolveTools:
-        | ((value: {
-            tools: Array<{ name: string; inputSchema: object }>;
-          }) => void)
-        | undefined;
-      let resolveResources:
-        | ((value: { resources: Array<{ uri: string }> }) => void)
-        | undefined;
+      const tools = createDeferred<{
+        tools: Array<{ name: string; inputSchema: object }>;
+      }>();
+      const resources = createDeferred<{
+        resources: Array<{ uri: string }>;
+      }>();
       let toolListHandler:
         | ((notification: unknown) => Promise<void> | void)
         | undefined;
@@ -440,31 +512,28 @@ describe('mcp-client', () => {
         close: vi.fn(),
         registerCapabilities: vi.fn(),
         setRequestHandler: vi.fn(),
-        setNotificationHandler: vi.fn((schema, handler) => {
-          if (schema === ToolListChangedNotificationSchema) {
-            toolListHandler = handler;
-          }
-          if (schema === ResourceListChangedNotificationSchema) {
-            resourceListHandler = handler;
-          }
-        }),
+        setNotificationHandler: vi.fn((schema, handler) =>
+          captureRefreshHandler(
+            schema,
+            handler,
+            (captured) => {
+              toolListHandler = captured;
+            },
+            (captured) => {
+              resourceListHandler = captured;
+            },
+          ),
+        ),
         getServerCapabilities: vi.fn().mockReturnValue({
           tools: { listChanged: true },
           resources: { listChanged: true },
         }),
-        listTools: vi.fn().mockReturnValue(
-          new Promise((resolve) => {
-            resolveTools = resolve;
-          }),
-        ),
-        request: vi.fn().mockImplementation(({ method }) => {
-          if (method === 'resources/list') {
-            return new Promise((resolve) => {
-              resolveResources = resolve;
-            });
-          }
-          return Promise.resolve({});
-        }),
+        listTools: vi.fn().mockReturnValue(tools.promise),
+        request: vi
+          .fn()
+          .mockImplementation(
+            createDeferredResourceListRequest(resources.promise),
+          ),
       };
       stubSdkClient(mockedClient);
       const toolRegistry = {
@@ -500,10 +569,10 @@ describe('mcp-client', () => {
       trusted = false;
       client.invalidateCapabilities();
       trusted = true;
-      resolveTools?.({
+      tools.resolve({
         tools: [{ name: 'stale-tool', inputSchema: { type: 'object' } }],
       });
-      resolveResources?.({ resources: [{ uri: 'file:///stale' }] });
+      resources.resolve({ resources: [{ uri: 'file:///stale' }] });
       await Promise.all([refreshTools, refreshResources]);
 
       expect(toolRegistry.removeMcpToolsByServer).not.toHaveBeenCalled();
@@ -541,17 +610,7 @@ describe('mcp-client', () => {
         }),
         getPrompt: vi.fn().mockResolvedValue({ messages: [] }),
         callTool: vi.fn().mockResolvedValue({ content: [] }),
-        request: vi.fn().mockImplementation(({ method }) => {
-          if (method === 'resources/list') {
-            return Promise.resolve({
-              resources: [{ uri: 'file:///resource' }],
-            });
-          }
-          if (method === 'resources/read') {
-            return Promise.resolve({ contents: [] });
-          }
-          return Promise.resolve({});
-        }),
+        request: vi.fn().mockImplementation(staleCapabilitiesRequest),
       };
       stubSdkClient(mockedClient);
       const client = buildClient(
@@ -620,16 +679,7 @@ describe('mcp-client', () => {
         listPrompts: vi.fn().mockResolvedValue({
           prompts: [{ id: 'prompt1', text: 'a prompt' }],
         }),
-        request: vi.fn().mockImplementation(({ method }) => {
-          if (method === 'resources/list') {
-            return Promise.resolve({
-              resources: [
-                { uri: 'file:///tmp/resource.txt', name: 'resource' },
-              ],
-            });
-          }
-          return Promise.resolve({});
-        }),
+        request: vi.fn().mockImplementation(discoveredArtifactsRequest),
         listTools: vi.fn().mockResolvedValue({
           tools: [
             {
@@ -699,12 +749,7 @@ describe('mcp-client', () => {
           ],
         }),
         listPrompts: vi.fn().mockResolvedValue({ prompts: [] }),
-        request: vi.fn().mockImplementation(({ method }) => {
-          if (method === 'resources/list') {
-            return Promise.resolve({ resources: [] });
-          }
-          return Promise.resolve({});
-        }),
+        request: vi.fn().mockImplementation(emptyResourceListRequest),
         onerror: vi.fn(() => {
           throw new Error('original handler failed');
         }) as ((error: Error) => void) | undefined,

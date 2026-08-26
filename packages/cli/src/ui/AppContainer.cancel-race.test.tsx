@@ -17,6 +17,53 @@ import { describe, it, expect } from 'bun:test';
  * This is a simplified unit test that verifies the race condition logic without
  * full component rendering.
  */
+
+function createImmediateCancelSubmit(
+  cancelHandler: (shouldRestore: boolean) => void,
+): (shouldRestore: boolean) => void {
+  return (shouldRestore) => {
+    if (shouldRestore) {
+      cancelHandler(true);
+    }
+  };
+}
+
+function createDeferredCancelSubmit(
+  cancelHandler: (shouldRestore: boolean) => void,
+  setPendingRestorePrompt: (pending: boolean) => void,
+): (shouldRestore: boolean) => void {
+  return (shouldRestore) => {
+    if (shouldRestore) {
+      setPendingRestorePrompt(true);
+    } else {
+      cancelHandler(false);
+    }
+  };
+}
+
+function createPendingPromptRestorer(
+  cancelHandler: (shouldRestore: boolean) => void,
+  isPendingRestorePrompt: () => boolean,
+  setPendingRestorePrompt: (pending: boolean) => void,
+): () => void {
+  return () => {
+    if (isPendingRestorePrompt()) {
+      cancelHandler(true);
+      setPendingRestorePrompt(false);
+    }
+  };
+}
+
+function createImmediateFalseCancelSubmit(
+  cancelHandler: () => void,
+  setPendingRestorePrompt: (pending: boolean) => void,
+): (shouldRestore: boolean) => void {
+  return (shouldRestore) => {
+    if (shouldRestore) setPendingRestorePrompt(true);
+    else cancelHandler();
+  };
+}
+
 describe('AppContainer - Cancel/Restore Prompt Race Condition (b1258dd5)', () => {
   // Shared cancelHandler implementation for testing race condition scenarios
   const createCancelHandler =
@@ -47,11 +94,7 @@ describe('AppContainer - Cancel/Restore Prompt Race Condition (b1258dd5)', () =>
     );
 
     // Simulate onCancelSubmit calling cancelHandler immediately
-    const onCancelSubmit = (shouldRestore: boolean) => {
-      if (shouldRestore) {
-        cancelHandler(true); // IMMEDIATE call - reads stale state
-      }
-    };
+    const onCancelSubmit = createImmediateCancelSubmit(cancelHandler);
 
     // User submits new prompt - state updates asynchronously in real React
     // But onCancelSubmit is called BEFORE state updates
@@ -81,21 +124,21 @@ describe('AppContainer - Cancel/Restore Prompt Race Condition (b1258dd5)', () =>
     );
 
     // Simulate onCancelSubmit with FIX: defer restoration
-    const onCancelSubmit = (shouldRestore: boolean) => {
-      if (shouldRestore) {
-        pendingRestorePrompt = true; // DEFER instead of immediate call
-      } else {
-        cancelHandler(false);
-      }
-    };
+    const onCancelSubmit = createDeferredCancelSubmit(
+      cancelHandler,
+      (pending) => {
+        pendingRestorePrompt = pending;
+      },
+    );
 
     // Simulate useEffect that monitors pendingRestorePrompt
-    const checkAndRestore = () => {
-      if (pendingRestorePrompt) {
-        cancelHandler(true); // Now reads CURRENT state
-        pendingRestorePrompt = false;
-      }
-    };
+    const checkAndRestore = createPendingPromptRestorer(
+      cancelHandler,
+      () => pendingRestorePrompt,
+      (pending) => {
+        pendingRestorePrompt = pending;
+      },
+    );
 
     // User submits new prompt
     onCancelSubmit(true);
@@ -123,13 +166,12 @@ describe('AppContainer - Cancel/Restore Prompt Race Condition (b1258dd5)', () =>
       cancelCalled = true;
     };
 
-    const onCancelSubmit = (shouldRestore: boolean) => {
-      if (shouldRestore) {
-        pendingRestorePrompt = true;
-      } else {
-        cancelHandler(); // Immediate call for false
-      }
-    };
+    const onCancelSubmit = createImmediateFalseCancelSubmit(
+      cancelHandler,
+      (pending) => {
+        pendingRestorePrompt = pending;
+      },
+    );
 
     onCancelSubmit(false);
 

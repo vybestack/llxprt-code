@@ -18,6 +18,32 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 
+async function* generateVariableLatencyResponse(
+  recordCall: () => number,
+  advanceClock: (milliseconds: number) => void,
+): AsyncGenerator<IContent> {
+  const callCount = recordCall();
+  advanceClock(callCount === 1 ? 50 : 100);
+  yield {
+    role: 'assistant',
+    parts: [{ text: 'response' }],
+  } as IContent;
+}
+
+async function* generateBackendMetricsResponse(
+  recordCall: () => number,
+): AsyncGenerator<IContent> {
+  if (recordCall() === 1) throw new Error('Backend1 fails first time');
+  yield {
+    role: 'assistant',
+    parts: [{ text: 'success' }],
+    usageMetadata: {
+      promptTokenCount: 50,
+      candidatesTokenCount: 50,
+    },
+  } as unknown as IContent;
+}
+
 describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
   let providerManager: ProviderManager;
   let config: LoadBalancingProviderConfig;
@@ -295,14 +321,13 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
       let callCount = 0;
       const mockProvider = {
         name: 'test-provider-1',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          callCount++;
-          now += callCount === 1 ? 50 : 100;
-          yield {
-            role: 'assistant',
-            parts: [{ text: 'response' }],
-          } as IContent;
-        },
+        generateChatCompletion: () =>
+          generateVariableLatencyResponse(
+            () => ++callCount,
+            (milliseconds) => {
+              now += milliseconds;
+            },
+          ),
         getServerTools: () => [],
       };
       providerManager.registerProvider(mockProvider);
@@ -456,21 +481,8 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
       let backend1Calls = 0;
       const mockProvider1 = {
         name: 'test-provider-1',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          backend1Calls++;
-          if (backend1Calls === 1) {
-            throw new Error('Backend1 fails first time');
-            yield; // Never reached
-          }
-          yield {
-            role: 'assistant',
-            parts: [{ text: 'success' }],
-            usageMetadata: {
-              promptTokenCount: 50,
-              candidatesTokenCount: 50,
-            },
-          } as unknown as IContent;
-        },
+        generateChatCompletion: () =>
+          generateBackendMetricsResponse(() => ++backend1Calls),
         getServerTools: () => [],
       };
       const mockProvider2 = {

@@ -582,9 +582,7 @@ describe('PromptCache', () => {
 
       // Rapidly change access patterns
       for (let i = 0; i < 10; i++) {
-        if (i % 3 === 0) cache.get(context1);
-        else if (i % 3 === 1) cache.get(context2);
-        else cache.get(context3);
+        cache.get(byIndex(context1, context2, context3, i));
       }
 
       const stats = cache.getStats();
@@ -629,3 +627,10 @@ describe('PromptCache', () => {
     });
   });
 });
+
+function byIndex<T>(a: T, b: T, c: T, index: number): T {
+  const mod = index % 3;
+  if (mod === 0) return a;
+  if (mod === 1) return b;
+  return c;
+}

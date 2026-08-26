@@ -32,6 +32,10 @@ import { executeToolForBehavioralAssertion } from './red-test-helpers.js';
  * Fake ITodoService with controllable todo state.
  * Infrastructure fake — returns real todo items for observable assertions.
  */
+function textOrEmpty(value: string | null | undefined): string {
+  return value ?? '';
+}
+
 function createFakeTodoService(initialTodos: Todo[] = []): ITodoService {
   let todos = [...initialTodos];
 
@@ -148,7 +152,9 @@ describe('Todo Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', (
       const reasonSchema = schema.parametersJsonSchema?.properties?.reason;
       expect(reasonSchema).toBeDefined();
       expect(reasonSchema?.maxLength).toBe(500);
-      const reasonDescription = (reasonSchema?.description ?? '').toLowerCase();
+      const reasonDescription = textOrEmpty(
+        reasonSchema?.description,
+      ).toLowerCase();
       expect(reasonDescription).toContain('500');
       // The model must be told to stream any longer explanation as normal
       // response text, not stuff it into the tool argument.
@@ -190,62 +196,66 @@ describe('Todo Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', (
   });
 
   describe('ITodoService ToolContext propagation', () => {
+    const observePassesSessionAndAgentContextToStoreAndTrackerServicesAt193 =
+      async () => {
+        const contexts: ToolContext[] = [];
+        const activeTodoRef: { value: string | null } = { value: null };
+        let todos: Todo[] = [];
+        const store: TodoStore = {
+          getTodos: () => todos,
+          setTodos: (newTodos) => {
+            todos = [...newTodos];
+          },
+        };
+        const service: ITodoService = {
+          getTodoStore: (context) => {
+            if (context) {
+              contexts.push(context);
+            }
+            return store;
+          },
+          getReminderService: () => ({
+            shouldGenerateReminder: () => false,
+          }),
+          getContextTracker: (context) => {
+            if (context) {
+              contexts.push(context);
+            }
+            return {
+              setActiveTodo: (id) => {
+                activeTodoRef.value = id;
+              },
+            };
+          },
+          getDefaultAgentId: () => 'default-agent',
+        };
+        const context: ToolContext = {
+          sessionId: 'session-42',
+          agentId: 'agent-7',
+          interactiveMode: true,
+        };
+        const writeTool = new TodoWriteTool(service);
+        writeTool.context = context;
+        const readTool = new TodoReadTool(service);
+        readTool.context = context;
+        const pauseTool = new TodoPauseTool(service);
+        pauseTool.context = context;
+        await executeToolForBehavioralAssertion(writeTool, {
+          todos: [
+            { id: 'active', content: 'Scoped work', status: 'in_progress' },
+          ],
+        });
+        await executeToolForBehavioralAssertion(readTool, {});
+        await executeToolForBehavioralAssertion(pauseTool, {
+          reason: 'scope check',
+        });
+        return { contexts, activeTodoRef };
+      };
+
     it('passes session and agent context to store and tracker services', async () => {
-      const contexts: ToolContext[] = [];
-      const activeTodoRef: { value: string | null } = { value: null };
-      let todos: Todo[] = [];
-      const store: TodoStore = {
-        getTodos: () => todos,
-        setTodos: (newTodos) => {
-          todos = [...newTodos];
-        },
-      };
-      const service: ITodoService = {
-        getTodoStore: (context) => {
-          if (context) {
-            contexts.push(context);
-          }
-          return store;
-        },
-        getReminderService: () => ({
-          shouldGenerateReminder: () => false,
-        }),
-        getContextTracker: (context) => {
-          if (context) {
-            contexts.push(context);
-          }
-          return {
-            setActiveTodo: (id) => {
-              activeTodoRef.value = id;
-            },
-          };
-        },
-        getDefaultAgentId: () => 'default-agent',
-      };
-      const context: ToolContext = {
-        sessionId: 'session-42',
-        agentId: 'agent-7',
-        interactiveMode: true,
-      };
-
-      const writeTool = new TodoWriteTool(service);
-      writeTool.context = context;
-      const readTool = new TodoReadTool(service);
-      readTool.context = context;
-      const pauseTool = new TodoPauseTool(service);
-      pauseTool.context = context;
-
-      await executeToolForBehavioralAssertion(writeTool, {
-        todos: [
-          { id: 'active', content: 'Scoped work', status: 'in_progress' },
-        ],
-      });
-      await executeToolForBehavioralAssertion(readTool, {});
-      await executeToolForBehavioralAssertion(pauseTool, {
-        reason: 'scope check',
-      });
-
-      expect(contexts).toEqual(
+      const { contexts, activeTodoRef } =
+        await observePassesSessionAndAgentContextToStoreAndTrackerServicesAt193();
+      expect(contexts).toStrictEqual(
         expect.arrayContaining([
           expect.objectContaining({
             sessionId: 'session-42',

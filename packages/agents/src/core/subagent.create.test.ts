@@ -373,59 +373,77 @@ describe('subagent.ts', () => {
     });
 
     it('builds tool declarations from runtime tool view metadata', async () => {
-      const { config } = await createMockConfig({
-        getFunctionDeclarationsFiltered: vi.fn().mockReturnValue([
-          {
-            name: 'stateless.tool',
-            description: 'Foreground registry description',
-            parameters: { type: 'object', properties: {} },
-          },
-        ]),
-      });
-
-      const runtimeToolsView: ToolRegistryView = {
-        listToolNames: vi.fn(() => ['stateless.tool']),
-        getToolMetadata: vi.fn(() => ({
-          name: 'stateless.tool',
-          description: 'Runtime metadata description',
-          parameterSchema: {
-            type: 'object',
-            properties: {
-              sample: { type: 'string' },
-            },
-          },
-        })),
-      };
-
-      const runtimeBundle = createStatelessRuntimeBundle({
-        toolsView: runtimeToolsView,
-      });
-
-      mockSendMessageStream.mockImplementation(createMockStream(['stop']));
-
-      const scope = await SubAgentScope.create(
-        'stateless-agent',
-        config,
-        { systemPrompt: 'Use runtime tools' },
-        defaultModelConfig,
-        defaultRunConfig,
-        undefined,
-        undefined,
-        createRuntimeOverrides({ runtimeBundle }).overrides,
-      );
-
-      await scope.runNonInteractive(new ContextState());
-
-      const [messageParams] = mockSendMessageStream.mock.calls[0] ?? [];
+      const {
+        messageParams,
+        toolGroups,
+        functionDeclarations,
+        descriptionObservation,
+      } = await observeBuildsToolDeclarationsFromRuntimeToolViewMetadata();
       expect(messageParams).toBeDefined();
-      const toolGroups = messageParams?.config?.tools ?? [];
       expect(toolGroups).toHaveLength(1);
-      const functionDeclarations = toolGroups[0]?.functionDeclarations ?? [];
       expect(functionDeclarations).toHaveLength(1);
-      expect(functionDeclarations[0]?.description).toBe(
-        'Runtime metadata description',
-      );
+      expect(descriptionObservation).toBe('Runtime metadata description');
     });
+
+    const observeBuildsToolDeclarationsFromRuntimeToolViewMetadata =
+      async () => {
+        const { config } = await createMockConfig({
+          getFunctionDeclarationsFiltered: vi.fn().mockReturnValue([
+            {
+              name: 'stateless.tool',
+              description: 'Foreground registry description',
+              parameters: { type: 'object', properties: {} },
+            },
+          ]),
+        });
+
+        const runtimeToolsView: ToolRegistryView = {
+          listToolNames: vi.fn(() => ['stateless.tool']),
+          getToolMetadata: vi.fn(() => ({
+            name: 'stateless.tool',
+            description: 'Runtime metadata description',
+            parameterSchema: {
+              type: 'object',
+              properties: {
+                sample: { type: 'string' },
+              },
+            },
+          })),
+        };
+
+        const runtimeBundle = createStatelessRuntimeBundle({
+          toolsView: runtimeToolsView,
+        });
+
+        mockSendMessageStream.mockImplementation(createMockStream(['stop']));
+
+        const scope = await SubAgentScope.create(
+          'stateless-agent',
+          config,
+          { systemPrompt: 'Use runtime tools' },
+          defaultModelConfig,
+          defaultRunConfig,
+          undefined,
+          undefined,
+          createRuntimeOverrides({ runtimeBundle }).overrides,
+        );
+
+        await scope.runNonInteractive(new ContextState());
+
+        const [messageParams] = mockSendMessageStream.mock.calls[0] ?? [];
+
+        const toolGroups = messageParams?.config?.tools ?? [];
+
+        const functionDeclarations = toolGroups[0]?.functionDeclarations ?? [];
+
+        const descriptionObservation = functionDeclarations[0]?.description;
+        return {
+          messageParams,
+          toolGroups,
+          functionDeclarations,
+          descriptionObservation,
+        };
+      };
 
     it('prefers injected environment context loader over foreground Config', async () => {
       const { config } = await createMockConfig();
@@ -472,81 +490,89 @@ describe('subagent.ts', () => {
     });
 
     it('propagates tool whitelist into tool executor ephemerals', async () => {
-      const { config, toolRegistry } = await createMockConfig({
-        getTool: vi.fn().mockImplementation((name: string) => {
-          if (name === 'read_file') {
-            return {
-              name: 'read_file',
-              displayName: 'Read File',
-              schema: {
-                name: 'read_file',
-                parameters: { type: 'object', properties: {} },
-              },
-              build: vi.fn(),
-            };
-          }
-          return undefined;
-        }),
-      });
-      const toolConfig: ToolConfig = { tools: ['read_file'] };
-
-      mockSendMessageStream.mockImplementation(
-        createMockStream([
-          [
-            {
-              id: 'call1',
-              name: 'read_file',
-              args: { file_path: 'README.md' },
-            },
-          ],
-          'stop',
-        ]),
-      );
-
-      (executeToolCall as Mock<typeof executeToolCall>).mockResolvedValue({
-        ...createCompletedToolCallResponse({
-          callId: 'call1',
-          responseParts: [{ text: 'file content' }],
-          resultDisplay: 'ok',
-          agentId: 'subagent-1',
-        }),
-      } as Awaited<ReturnType<typeof executeToolCall>>);
-
-      const runtimeBundle = createStatelessRuntimeBundle({
-        toolRegistry,
-        toolsView: {
-          listToolNames: () => ['read_file'],
-          getToolMetadata: () => ({
-            name: 'read_file',
-            description: 'Reads a file',
-            parameterSchema: { type: 'object', properties: {} },
-          }),
-        },
-      });
-      const { overrides } = createRuntimeOverrides({
-        runtimeBundle,
-        toolRegistry,
-      });
-
-      const scope = await SubAgentScope.create(
-        'stateless-agent',
-        config,
-        { systemPrompt: 'Tool whitelist' },
-        defaultModelConfig,
-        defaultRunConfig,
-        toolConfig,
-        undefined,
-        overrides,
-      );
-
-      await scope.runNonInteractive(new ContextState());
-
-      const [toolExecutorConfig] = (
-        executeToolCall as Mock<typeof executeToolCall>
-      ).mock.calls[0];
-      const ephemerals = toolExecutorConfig.getEphemeralSettings();
+      const { ephemerals } =
+        await observePropagatesToolWhitelistIntoToolExecutorEphemerals();
       expect(ephemerals['tools.allowed']).toStrictEqual(['read_file']);
     });
+
+    const observePropagatesToolWhitelistIntoToolExecutorEphemerals =
+      async () => {
+        const { config, toolRegistry } = await createMockConfig({
+          getTool: vi.fn().mockImplementation((name: string) => {
+            if (name === 'read_file') {
+              return {
+                name: 'read_file',
+                displayName: 'Read File',
+                schema: {
+                  name: 'read_file',
+                  parameters: { type: 'object', properties: {} },
+                },
+                build: vi.fn(),
+              };
+            }
+            return undefined;
+          }),
+        });
+        const toolConfig: ToolConfig = { tools: ['read_file'] };
+
+        mockSendMessageStream.mockImplementation(
+          createMockStream([
+            [
+              {
+                id: 'call1',
+                name: 'read_file',
+                args: { file_path: 'README.md' },
+              },
+            ],
+            'stop',
+          ]),
+        );
+
+        (executeToolCall as Mock<typeof executeToolCall>).mockResolvedValue({
+          ...createCompletedToolCallResponse({
+            callId: 'call1',
+            responseParts: [{ text: 'file content' }],
+            resultDisplay: 'ok',
+            agentId: 'subagent-1',
+          }),
+        } as Awaited<ReturnType<typeof executeToolCall>>);
+
+        const runtimeBundle = createStatelessRuntimeBundle({
+          toolRegistry,
+          toolsView: {
+            listToolNames: () => ['read_file'],
+            getToolMetadata: () => ({
+              name: 'read_file',
+              description: 'Reads a file',
+              parameterSchema: { type: 'object', properties: {} },
+            }),
+          },
+        });
+        const { overrides } = createRuntimeOverrides({
+          runtimeBundle,
+          toolRegistry,
+        });
+
+        const scope = await SubAgentScope.create(
+          'stateless-agent',
+          config,
+          { systemPrompt: 'Tool whitelist' },
+          defaultModelConfig,
+          defaultRunConfig,
+          toolConfig,
+          undefined,
+          overrides,
+        );
+
+        await scope.runNonInteractive(new ContextState());
+
+        const [toolExecutorConfig] = (
+          executeToolCall as Mock<typeof executeToolCall>
+        ).mock.calls[0];
+        const ephemerals = toolExecutorConfig.getEphemeralSettings();
+
+        return { ephemerals };
+      };
 
     it('never passes foreground Config into executeToolCall', async () => {
       const { config } = await createMockConfig();

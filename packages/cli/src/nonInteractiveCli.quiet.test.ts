@@ -55,6 +55,16 @@ function parseJsonStdoutEvents(
     });
 }
 
+function onlyAssistantMessageContent(
+  messages: readonly ParsedStreamEvent[],
+): string | undefined {
+  const message = messages.at(0);
+  if (message === undefined) {
+    throw new Error('Expected one assistant message');
+  }
+  return message.content;
+}
+
 function createMockConfig(overrides?: {
   sessionId?: string;
   includeInResponse?: boolean;
@@ -334,7 +344,7 @@ describe('processAgentStream — quiet mode', () => {
     expect(String(parsed.response)).not.toContain('Intermediate text');
   });
 
-  it('suppresses tool_use and tool_result events in stream-json mode', async () => {
+  async function verifySuppressesToolUseAndToolResultEventsInStreamJsonMode() {
     const streamFormatter = new StreamJsonFormatter();
     const events: AgentEvent[] = [
       {
@@ -361,31 +371,59 @@ describe('processAgentStream — quiet mode', () => {
       () => uiTelemetryService.getMetrics(),
     );
 
-    const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
-    const toolUseEvents = jsonEvents.filter(
+    return parseJsonStdoutEvents(processStdoutSpy.mock.calls);
+  }
+
+  function toolUseEventsInStream(
+    events: readonly ParsedStreamEvent[],
+  ): ParsedStreamEvent[] {
+    return events.filter(
       (event) => event.type === JsonStreamEventType.TOOL_USE,
     );
-    const toolResultEvents = jsonEvents.filter(
+  }
+
+  function toolResultEventsInStream(
+    events: readonly ParsedStreamEvent[],
+  ): ParsedStreamEvent[] {
+    return events.filter(
       (event) => event.type === JsonStreamEventType.TOOL_RESULT,
     );
-    expect(toolUseEvents).toHaveLength(0);
-    expect(toolResultEvents).toHaveLength(0);
+  }
 
-    const messages = jsonEvents.filter(
+  function assistantMessagesInStream(
+    events: readonly ParsedStreamEvent[],
+  ): ParsedStreamEvent[] {
+    return events.filter(
       (event) =>
         event.type === JsonStreamEventType.MESSAGE &&
         event.role === 'assistant',
     );
-    expect(messages).toHaveLength(1);
-    expect(messages[0].content).toBe('Final message');
+  }
 
-    const result = jsonEvents.find(
-      (event) => event.type === JsonStreamEventType.RESULT,
-    );
+  function terminalResultInStream(
+    events: readonly ParsedStreamEvent[],
+  ): ParsedStreamEvent | undefined {
+    return events.find((event) => event.type === JsonStreamEventType.RESULT);
+  }
+
+  it('suppresses tool_use and tool_result events in stream-json mode', async () => {
+    const jsonEvents =
+      await verifySuppressesToolUseAndToolResultEventsInStreamJsonMode();
+
+    const toolUseEvents = toolUseEventsInStream(jsonEvents);
+    const toolResultEvents = toolResultEventsInStream(jsonEvents);
+    expect(toolUseEvents).toHaveLength(0);
+    expect(toolResultEvents).toHaveLength(0);
+
+    const messages = assistantMessagesInStream(jsonEvents);
+    expect(messages).toHaveLength(1);
+    expect(onlyAssistantMessageContent(messages)).toBe('Final message');
+
+    const result = terminalResultInStream(jsonEvents);
     expect(result).toBeDefined();
   });
 
-  it('always emits a MESSAGE event before RESULT in stream-json even when text is empty', async () => {
+  async function verifyAlwaysEmitsAMESSAGEEventBeforeRESULTInStreamJsonEvenWhenTextIsEmpty() {
     const streamFormatter = new StreamJsonFormatter();
     const events: AgentEvent[] = [
       {
@@ -420,9 +458,17 @@ describe('processAgentStream — quiet mode', () => {
     const resultIdx = jsonEvents.findIndex(
       (event) => event.type === JsonStreamEventType.RESULT,
     );
-    expect(messages).toHaveLength(1);
-    expect(resultIdx).toBeGreaterThan(-1);
-    expect(messages[0].content).toBe('');
+
+    return { messages, resultIdx };
+  }
+
+  it('always emits a MESSAGE event before RESULT in stream-json even when text is empty', async () => {
+    const behaviorResult =
+      await verifyAlwaysEmitsAMESSAGEEventBeforeRESULTInStreamJsonEvenWhenTextIsEmpty();
+
+    expect(behaviorResult.messages).toHaveLength(1);
+    expect(behaviorResult.resultIdx).toBeGreaterThan(-1);
+    expect(onlyAssistantMessageContent(behaviorResult.messages)).toBe('');
   });
 
   it('keeps only the final turn when multiple tool calls span turns', async () => {

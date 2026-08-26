@@ -460,7 +460,7 @@ describe('oauth_poll handler', () => {
       const token = poll.data?.token as Record<string, unknown> | undefined;
       expect(token?.access_token).toBe('access_value');
       expect(token?.refresh_token).toBeUndefined();
-      expect(token !== undefined && 'refresh_token' in token).toBe(false);
+      expect(token).not.toHaveProperty('refresh_token');
     });
 
     it('backing store DOES contain refresh_token', async () => {

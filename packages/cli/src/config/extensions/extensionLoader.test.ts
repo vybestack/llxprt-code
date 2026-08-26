@@ -65,6 +65,19 @@ function makeContext(dir: string): LoadExtensionContext {
   return { extensionDir: dir, workspaceDir: dir };
 }
 
+function readAfterPrimaryMetadataDisappears(
+  filePath: string,
+  encoding: 'utf-8',
+  primaryPath: string,
+): string {
+  if (filePath === primaryPath) {
+    const error = new Error('metadata disappeared');
+    Object.defineProperty(error, 'code', { value: 'ENOENT' });
+    throw error;
+  }
+  return fs.readFileSync(filePath, encoding);
+}
+
 describe('extensionLoader manifest precedence and fallback', () => {
   let tempRoot: string;
 
@@ -418,14 +431,8 @@ describe('extensionLoader manifest precedence and fallback', () => {
         type: 'git',
       });
       const primaryPath = path.join(extDir, PRIMARY_METADATA);
-      const readTextFile = (filePath: string, encoding: 'utf-8'): string => {
-        if (filePath === primaryPath) {
-          const error = new Error('metadata disappeared');
-          Object.defineProperty(error, 'code', { value: 'ENOENT' });
-          throw error;
-        }
-        return fs.readFileSync(filePath, encoding);
-      };
+      const readTextFile = (filePath: string, encoding: 'utf-8'): string =>
+        readAfterPrimaryMetadataDisappears(filePath, encoding, primaryPath);
 
       const result = loadInstallMetadataFromDir(
         extDir,

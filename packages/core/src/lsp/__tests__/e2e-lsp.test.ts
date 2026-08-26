@@ -21,6 +21,8 @@ import type { Diagnostic } from '@vybestack/llxprt-code-ide-integration';
 import * as lspServiceClientModule from '@vybestack/llxprt-code-ide-integration';
 import { LspServiceClient } from '@vybestack/llxprt-code-ide-integration';
 
+const bunIt = it;
+
 const __actual = { ...(await import('@vybestack/llxprt-code-tools')) };
 void vi.mock('@vybestack/llxprt-code-tools', () => {
   const actual = __actual as typeof import('@vybestack/llxprt-code-tools');
@@ -329,8 +331,8 @@ describe('LSP E2E integration (P36)', () => {
     };
     const checkFileSpy = vi
       .spyOn(lspServiceClientModule.LspServiceClient.prototype, 'checkFile')
-      .mockImplementation(
-        async (filePath: string) => mockByFile[filePath] ?? [],
+      .mockImplementation((filePath: string) =>
+        lookupDiagnosticsForFile(mockByFile, filePath),
       );
     const getAllDiagnosticsSpy = vi
       .spyOn(
@@ -375,6 +377,13 @@ describe('LSP E2E integration (P36)', () => {
       isAliveSpy.mockRestore();
     }
   });
+
+  function lookupDiagnosticsForFile(
+    byFile: Record<string, Diagnostic[]>,
+    filePath: string,
+  ): Promise<Diagnostic[]> {
+    return Promise.resolve(byFile[filePath] ?? []);
+  }
 
   // --- 4. Apply-Patch → Diagnostics ---
   it('apply-patch source contains LSP diagnostic integration call sites', () => {
@@ -477,13 +486,21 @@ describe('LSP E2E integration (P36)', () => {
     };
 
     expect(status.serverId).toBe('tsserver');
-    expect(
-      typeof status.healthy === 'boolean' ||
-        status.state === 'ok' ||
-        status.state === 'broken' ||
-        status.state === 'starting',
-    ).toBe(true);
+    expect(stateStatusPicks(status)).toBe(true);
   });
+
+  function stateStatusPicks(status: {
+    serverId: string;
+    healthy?: boolean;
+    state?: 'ok' | 'broken' | 'starting';
+  }): boolean {
+    return (
+      typeof status.healthy === 'boolean' ||
+      status.state === 'ok' ||
+      status.state === 'broken' ||
+      status.state === 'starting'
+    );
+  }
 
   // --- 10. Status Unavailable ---
   it('LspServiceClient.getUnavailableReason() returns message when not alive', async () => {
@@ -637,9 +654,9 @@ describe('LSP E2E integration (P36)', () => {
   });
 
   // --- 15. MCP Transport Streams ---
-  it.skipIf(isWindows)(
-    'getMcpTransportStreams returns PassThrough streams when alive',
-    async () => {
+  {
+    const it = isWindows ? bunIt.skip : bunIt;
+    it('getMcpTransportStreams returns PassThrough streams when alive', async () => {
       const client = new LspServiceClient({ servers: [] }, targetDir);
       try {
         await client.start();
@@ -663,8 +680,8 @@ describe('LSP E2E integration (P36)', () => {
         // spawn failures in later tests.
         await client.shutdown();
       }
-    },
-  );
+    });
+  }
 
   // --- 16. MCP Transport Null When Not Alive ---
   it('getMcpTransportStreams returns null when not alive', () => {
@@ -699,19 +716,41 @@ describe('LSP E2E integration (P36)', () => {
   });
 
   // --- 18. Shutdown then checkFile is safe ---
-  it.skipIf(isWindows)('checkFile returns empty after shutdown', async () => {
-    const client = new LspServiceClient({ servers: [] }, targetDir);
-    await client.start();
-    expect(client.isAlive()).toBe(true);
-
-    await client.checkFile('/tmp/before-shutdown.ts');
-    await client.shutdown();
-
-    expect(client.isAlive()).toBe(false);
-    const diagnostics = await client.checkFile('/tmp/after-shutdown.ts');
-    expect(diagnostics).toStrictEqual([]);
-
-    const all = await client.getAllDiagnostics();
-    expect(all).toStrictEqual({});
-  });
+  {
+    const it = isWindows ? bunIt.skip : bunIt;
+    it('checkFile returns empty after shutdown', async () => {
+      const observation = await observeCheckFileAfterShutdown(targetDir);
+      expect(observation.aliveAfterStart).toBe(true);
+      expect(observation.aliveAfterShutdown).toBe(false);
+      expect(observation.diagnosticsAfterShutdown).toStrictEqual([]);
+      expect(observation.allDiagnostics).toStrictEqual({});
+    });
+  }
 });
+
+interface CheckFileAfterShutdownObservation {
+  readonly aliveAfterStart: boolean;
+  readonly aliveAfterShutdown: boolean;
+  readonly diagnosticsAfterShutdown: readonly Diagnostic[];
+  readonly allDiagnostics: Readonly<Record<string, Diagnostic[]>>;
+}
+
+async function observeCheckFileAfterShutdown(
+  targetDirectory: string,
+): Promise<CheckFileAfterShutdownObservation> {
+  const client = new LspServiceClient({ servers: [] }, targetDirectory);
+  await client.start();
+  const aliveAfterStart = client.isAlive();
+  await client.checkFile('/tmp/before-shutdown.ts');
+  await client.shutdown();
+  const aliveAfterShutdown = client.isAlive();
+  const diagnosticsAfterShutdown = await client.checkFile(
+    '/tmp/after-shutdown.ts',
+  );
+  return {
+    aliveAfterStart,
+    aliveAfterShutdown,
+    diagnosticsAfterShutdown,
+    allDiagnostics: await client.getAllDiagnostics(),
+  };
+}

@@ -20,6 +20,10 @@ type Snapshot = {
   authToken?: string;
 };
 
+function authTokenOrEmpty(snapshot: Snapshot): string {
+  return snapshot.authToken ?? '';
+}
+
 type SettingsOverrides = {
   model?: string;
   baseUrl?: string;
@@ -358,7 +362,7 @@ describe('BaseProvider stateless contract', () => {
     expect(baselineSnapshots).not.toHaveLength(0);
 
     const baselineTokens = Array.from(
-      new Set(baselineSnapshots.map((snapshot) => snapshot.authToken ?? '')),
+      new Set(baselineSnapshots.map(authTokenOrEmpty)),
     ).sort();
 
     expect(baselineTokens).toStrictEqual(['']);

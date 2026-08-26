@@ -13,6 +13,14 @@ import { GrepTool } from '../index.js';
 import type { ToolResult } from '../index.js';
 import type { GrepToolParams } from '../tools/grep/types.js';
 
+function stringContent(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+function countMatches(value: string, pattern: RegExp): number {
+  return (value.match(pattern) ?? []).length;
+}
+
 function createTempDir(prefix = 'llxprt-eph-'): {
   dir: string;
   cleanup: () => void;
@@ -99,20 +107,27 @@ describe('GrepTool ephemeral max-results precedence', () => {
     cleanup();
   });
 
+  const observeEphemeralFallbackNoExplicitMaxResultsUsesToolOutputMaxItemsAt102 =
+    async () => {
+      const host = createToolHost(tempDir, 3);
+      const result = await executeGrep(host, {
+        pattern: 'ephmatch',
+        max_per_file: 1,
+      });
+      const text =
+        typeof result.llmContent === 'string' ? result.llmContent : '';
+      const matchCount = (text.match(/ephmatch_/g) ?? []).length;
+      return { text, matchCount };
+    };
+
   it('ephemeral fallback: no explicit max_results uses tool-output-max-items', async () => {
-    const host = createToolHost(tempDir, 3);
-    const result = await executeGrep(host, {
-      pattern: 'ephmatch',
-      max_per_file: 1,
-    });
-    const text = typeof result.llmContent === 'string' ? result.llmContent : '';
-    // Should be limited to 3 results from ephemeral setting
-    const matchCount = (text.match(/ephmatch_/g) ?? []).length;
+    const { text, matchCount } =
+      await observeEphemeralFallbackNoExplicitMaxResultsUsesToolOutputMaxItemsAt102();
     expect(matchCount).toBe(3);
     expect(text).toMatch(/showing/i);
   });
 
-  it('explicit override: max_results wins over ephemeral', async () => {
+  const observeExplicitOverrideMaxResultsWinsOverEphemeralAt115 = async () => {
     const host = createToolHost(tempDir, 3);
     const result = await executeGrep(host, {
       pattern: 'ephmatch',
@@ -121,30 +136,47 @@ describe('GrepTool ephemeral max-results precedence', () => {
     });
     const text = typeof result.llmContent === 'string' ? result.llmContent : '';
     const matchCount = (text.match(/ephmatch_/g) ?? []).length;
-    // Explicit 5 should win over ephemeral 3
+    return { matchCount };
+  };
+
+  it('explicit override: max_results wins over ephemeral', async () => {
+    const { matchCount } =
+      await observeExplicitOverrideMaxResultsWinsOverEphemeralAt115();
     expect(matchCount).toBe(5);
   });
 
+  const observeAbsentDefaultNoExplicitNoEphemeralDefaultsTo1000At128 =
+    async () => {
+      const host = createToolHost(tempDir, undefined);
+      const result = await executeGrep(host, {
+        pattern: 'ephmatch',
+      });
+      const text =
+        typeof result.llmContent === 'string' ? result.llmContent : '';
+      const matchCount = (text.match(/ephmatch_/g) ?? []).length;
+      return { text, matchCount };
+    };
+
   it('absent default: no explicit, no ephemeral => defaults to 1000', async () => {
-    const host = createToolHost(tempDir, undefined);
-    const result = await executeGrep(host, {
-      pattern: 'ephmatch',
-    });
-    const text = typeof result.llmContent === 'string' ? result.llmContent : '';
-    // Default 1000 > 10 files, so all 10 should be found
-    const matchCount = (text.match(/ephmatch_/g) ?? []).length;
+    const { text, matchCount } =
+      await observeAbsentDefaultNoExplicitNoEphemeralDefaultsTo1000At128();
     expect(matchCount).toBe(10);
     expect(text).not.toMatch(/showing|incomplete/i);
   });
 
-  it('invalid ephemeral: falls back to default 1000', async () => {
+  const observeInvalidEphemeralFallsBackToDefault1000At140 = async () => {
     const host = createToolHost(tempDir, -1);
     const result = await executeGrep(host, {
       pattern: 'ephmatch',
     });
     const text = typeof result.llmContent === 'string' ? result.llmContent : '';
-    // Invalid ephemeral (-1) should fall back to 1000 > 10
     const matchCount = (text.match(/ephmatch_/g) ?? []).length;
+    return { text, matchCount };
+  };
+
+  it('invalid ephemeral: falls back to default 1000', async () => {
+    const { text, matchCount } =
+      await observeInvalidEphemeralFallsBackToDefault1000At140();
     expect(matchCount).toBe(10);
     expect(text).not.toMatch(/showing|incomplete/i);
   });
@@ -155,9 +187,9 @@ describe('GrepTool ephemeral max-results precedence', () => {
       pattern: 'ephmatch',
     });
     expect(result.error).toBeUndefined();
-    const text = typeof result.llmContent === 'string' ? result.llmContent : '';
+    const text = stringContent(result.llmContent);
     // 500k would be capped to 100k (MAX_RESULTS_HARD_CAP), still > 10 files
-    const matchCount = (text.match(/ephmatch_/g) ?? []).length;
+    const matchCount = countMatches(text, /ephmatch_/g);
     expect(matchCount).toBe(10);
   });
 });

@@ -52,6 +52,10 @@ import { AnthropicProvider } from '../anthropic/AnthropicProvider.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-auth';
 import type { ProviderAliasEntry } from './providerAliases.js';
 
+function configuredStaticModelIds(entry: ProviderAliasEntry): string[] {
+  return (entry.config.staticModels ?? []).map((model) => model.id);
+}
+
 // Literal accepted ordered static-model catalog from claudecode.config. Every
 // entry's id, contextWindow, and maxOutputTokens is asserted so any catalog
 // drift (retired models, geometry changes) is caught here.
@@ -136,7 +140,7 @@ describe('claudecode alias static models (@issue:2274)', () => {
 
     const models = await provider!.getModels();
 
-    const staticIds = (entry.config.staticModels ?? []).map((m) => m.id);
+    const staticIds = configuredStaticModelIds(entry);
     expect(models.map((m) => m.id)).toStrictEqual(staticIds);
   });
 

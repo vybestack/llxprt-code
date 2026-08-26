@@ -22,6 +22,12 @@
  * the OBSERVED argument is neutral ContentBlock[].
  */
 
+/**
+ * Returns the text of a text block or an empty string for other block types.
+ */
+function blockText(b: ContentBlock): string {
+  return b.type === 'text' ? b.text : '';
+}
 import { describe, it, expect } from 'bun:test';
 import { buildLlmPartsFromToolCalls } from './task-runtime-helpers.js';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core';
@@ -134,7 +140,7 @@ describe('buildLlmPartsFromToolCalls — neutral ContentBlock[] output', () => {
 
     const result = buildLlmPartsFromToolCalls(completed);
     expect(result).toHaveLength(3);
-    expect(result.map((b) => (b.type === 'text' ? b.text : ''))).toStrictEqual([
+    expect(result.map(blockText)).toStrictEqual([
       'result-a',
       'extra',
       'result-b',

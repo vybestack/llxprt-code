@@ -28,6 +28,14 @@ import {
   SessionBrowserTestState,
 } from './sessionBrowserE2E.helpers.js';
 
+type ResumeLockHandle = SessionBrowserTestState['lockHandles'][number];
+
+function resumeLockHandlesForCleanup(
+  lockHandle: ResumeLockHandle | null,
+): readonly ResumeLockHandle[] {
+  return lockHandle === null ? [] : [lockHandle];
+}
+
 describe('Edge cases #1', () => {
   let state: SessionBrowserTestState;
 
@@ -64,6 +72,6 @@ describe('Edge cases #1', () => {
     expect(result.metadata.sessionId).toBe(contentSessionId);
 
     const newLock = context.recordingCallbacks.getCurrentLockHandle();
-    state.lockHandles.push(...(newLock === null ? [] : [newLock]));
+    state.lockHandles.push(...resumeLockHandlesForCleanup(newLock));
   });
 });

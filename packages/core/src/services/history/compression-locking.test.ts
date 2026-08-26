@@ -4,6 +4,7 @@
 
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
+import type { IContent } from './IContent.js';
 
 describe('Compression locking', () => {
   let historyService: HistoryService;
@@ -11,6 +12,15 @@ describe('Compression locking', () => {
   beforeEach(() => {
     historyService = new HistoryService();
   });
+
+  function compressionMessageCount(allHistory: IContent[]): number {
+    return allHistory.filter((h) =>
+      h.blocks.some(
+        (b) =>
+          b.type === 'text' && 'text' in b && b.text.startsWith('Compression'),
+      ),
+    ).length;
+  }
 
   it('should queue adds during compression', async () => {
     // Add initial content
@@ -236,14 +246,7 @@ describe('Compression locking', () => {
 
     // Check that all compressions completed
     const allHistory = historyService.getAll();
-    const compressionMessages = allHistory.filter((h) =>
-      h.blocks.some(
-        (b) =>
-          b.type === 'text' && 'text' in b && b.text.startsWith('Compression'),
-      ),
-    );
-
-    expect(compressionMessages.length).toBe(3);
+    expect(compressionMessageCount(allHistory)).toBe(3);
   });
 
   describe('compressionLockReleased event', () => {

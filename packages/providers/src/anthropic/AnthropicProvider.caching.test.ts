@@ -18,6 +18,24 @@ import {
   type AnthropicTestSetup,
 } from './test-utils/anthropicProviderTestSetup.js';
 
+const hasNoCacheControl = (system: unknown): boolean =>
+  !Array.isArray(system) ||
+  system.every(
+    (block: { cache_control?: unknown }) => block.cache_control === undefined,
+  );
+
+const excludesExtendedCacheTtl = (header: string | undefined): boolean =>
+  !(header?.includes('extended-cache-ttl-2025-04-11') ?? false);
+
+function messageCacheControls(messages: AnthropicMessage[]): unknown[] {
+  return messages.flatMap((message) => {
+    if (!Array.isArray(message.content)) {
+      return [];
+    }
+    return message.content.map((block) => block.cache_control);
+  });
+}
+
 // Shared mock instance for messages.create - using vi.hoisted so it's
 // available when vi.mock factories run.
 const mockMessagesCreate = vi.fn();
@@ -270,14 +288,9 @@ describe('AnthropicProvider', () => {
         // When caching is off, system can be a string (no cache_control possible)
         // or an array (cache_control should be undefined on all blocks)
         // We test that if it's an array, no blocks have cache_control
-        const isArray = Array.isArray(request.system);
-        const hasNoCacheControl = isArray
-          ? (request.system as Array<{ cache_control?: unknown }>).every(
-              (block) => block.cache_control === undefined,
-            )
-          : true; // String has no cache_control, which is correct
+        const requestHasNoCacheControl = hasNoCacheControl(request.system);
 
-        expect(hasNoCacheControl).toBe(true);
+        expect(requestHasNoCacheControl).toBe(true);
       });
 
       it('should add cache_control with 5m TTL when prompt-caching is 5m', async () => {
@@ -429,10 +442,7 @@ describe('AnthropicProvider', () => {
           | string
           | undefined;
         // Either undefined or doesn't contain the extended TTL
-        const isValidHeader = !(
-          betaHeader?.includes('extended-cache-ttl-2025-04-11') ?? false
-        );
-        expect(isValidHeader).toBe(true);
+        expect(excludesExtendedCacheTtl(betaHeader)).toBe(true);
       });
 
       it('should add cache_control to last message in multi-turn history when prompt-caching is 5m', async () => {
@@ -606,14 +616,7 @@ describe('AnthropicProvider', () => {
         const anthropicMessages = request.messages as AnthropicMessage[];
 
         // All message blocks should not have cache_control
-        const allCacheControls = anthropicMessages.flatMap((message) => {
-          if (Array.isArray(message.content)) {
-            const contentBlocks = message.content;
-            return contentBlocks.map((block) => block.cache_control);
-          }
-          // String content has no cache_control, which is correct
-          return [];
-        });
+        const allCacheControls = messageCacheControls(anthropicMessages);
 
         // All cache_controls that exist should be undefined
         expect(allCacheControls.every((cc) => cc === undefined)).toBe(true);

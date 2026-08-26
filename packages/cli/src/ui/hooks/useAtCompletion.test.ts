@@ -264,18 +264,22 @@ describe('useAtCompletion', () => {
       vi.useRealTimers();
     });
 
-    it('should abort the previous search when a new one starts', async () => {
+    const observeSupersededSearch = async (): Promise<{
+      readonly search: ReturnType<typeof vi.fn>;
+      readonly abort: ReturnType<typeof vi.spyOn>;
+    }> => {
       testRootDir = await createTmpDir({});
 
       const abortSpy = vi.spyOn(AbortController.prototype, 'abort');
+      const search = vi.fn().mockImplementation((pattern: string) => {
+        const delay = pattern === 'a' ? 500 : 50;
+        return new Promise((resolve) => {
+          setTimeout(() => resolve([pattern]), delay);
+        });
+      });
       const mockFileSearch: FileSearch = {
         initialize: vi.fn().mockResolvedValue(undefined),
-        search: vi.fn().mockImplementation((pattern: string) => {
-          const delay = pattern === 'a' ? 500 : 50;
-          return new Promise((resolve) => {
-            setTimeout(() => resolve([pattern]), delay);
-          });
-        }),
+        search,
       };
       vi.spyOn(FileSearchFactory, 'create').mockReturnValue(mockFileSearch);
 
@@ -286,10 +290,9 @@ describe('useAtCompletion', () => {
       );
 
       await waitFor(() => {
-        expect(mockFileSearch.search).toHaveBeenCalledWith(
-          'a',
-          expect.any(Object),
-        );
+        if (search.mock.calls.length === 0) {
+          throw new Error('Expected the initial file search to start');
+        }
       });
 
       vi.useFakeTimers();
@@ -298,7 +301,16 @@ describe('useAtCompletion', () => {
         vi.advanceTimersByTime(150);
       });
 
-      expect(abortSpy).toHaveBeenCalled();
+      return { search, abort: abortSpy };
+    };
+
+    it('should abort the previous search when a new one starts', async () => {
+      const supersededSearch = await observeSupersededSearch();
+      expect(supersededSearch.search).toHaveBeenCalledWith(
+        'a',
+        expect.any(Object),
+      );
+      expect(supersededSearch.abort).toHaveBeenCalled();
     });
   });
 

@@ -285,9 +285,8 @@ describe('FileTokenStorage — v:2 envelope behavior', () => {
     );
   });
 
-  it.skipIf(process.platform === 'win32')(
-    'tightens permissions to 0o600 when overwriting a pre-existing loose-mode file',
-    async () => {
+  describe.skipIf(process.platform === 'win32')(() => {
+    it('tightens permissions to 0o600 when overwriting a pre-existing loose-mode file', async () => {
       const storage = new FileTokenStorage(SERVICE_NAME, {
         tokenFilePath,
         machineSecretLoader: secretLoaderA(),
@@ -307,8 +306,8 @@ describe('FileTokenStorage — v:2 envelope behavior', () => {
 
       const stat = await fs.stat(tokenFilePath);
       expect(stat.mode & 0o777).toBe(0o600);
-    },
-  );
+    });
+  });
 
   it('preserves CRUD API behavior (set/get/delete/list/clear) with v:2 envelopes', async () => {
     const storage = new FileTokenStorage(SERVICE_NAME, {

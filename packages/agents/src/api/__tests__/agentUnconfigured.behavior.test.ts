@@ -251,18 +251,34 @@ describe('AgentImpl: fail-closed when unconfigured (#2481)', () => {
   });
 
   it('stream yields error + done with actionable /setup message', async () => {
+    const {
+      errorEvent,
+      doneEvent,
+      errorIdx,
+      doneIdx,
+      doneTyped,
+      streamYieldsErrorDoneWithActionableSetupMessageObservation1,
+      streamYieldsErrorDoneWithActionableSetupMessageObservation2,
+    } = await observeStreamYieldsErrorDoneWithActionableSetupMessage();
+    expect(errorEvent).toBeDefined();
+    expect(doneEvent).toBeDefined();
+    expect(
+      streamYieldsErrorDoneWithActionableSetupMessageObservation1,
+    ).toContain('/setup');
+    expect(streamYieldsErrorDoneWithActionableSetupMessageObservation2).toBe(
+      'error',
+    );
+    expect(errorIdx).toBeLessThan(doneIdx);
+    expect(doneTyped.finished).toBeUndefined();
+  });
+
+  const observeStreamYieldsErrorDoneWithActionableSetupMessage = async () => {
     const events: AgentEvent[] = [];
     for await (const event of agent.stream('hello')) {
       events.push(event);
     }
     const errorEvent = events.find((e) => e.type === 'error');
     const doneEvent = events.find((e) => e.type === 'done');
-    expect(errorEvent).toBeDefined();
-    expect(doneEvent).toBeDefined();
-    expect(errorEvent?.type === 'error' && errorEvent.error.message).toContain(
-      '/setup',
-    );
-    expect(doneEvent?.type === 'done' && doneEvent.reason).toBe('error');
 
     // Event contract: the error event precedes the done event, and the done
     // event carries reason 'error' without a finished payload (the error
@@ -270,14 +286,27 @@ describe('AgentImpl: fail-closed when unconfigured (#2481)', () => {
     // `finished` field).
     const errorIdx = events.findIndex((e) => e.type === 'error');
     const doneIdx = events.findIndex((e) => e.type === 'done');
-    expect(errorIdx).toBeLessThan(doneIdx);
+
     // doneEvent is guaranteed to be the 'done' variant by the assertion above.
     const doneTyped = doneEvent as Extract<
       (typeof events)[number],
       { type: 'done' }
     >;
-    expect(doneTyped.finished).toBeUndefined();
-  });
+
+    const streamYieldsErrorDoneWithActionableSetupMessageObservation1 =
+      errorEvent?.type === 'error' && errorEvent.error.message;
+    const streamYieldsErrorDoneWithActionableSetupMessageObservation2 =
+      doneEvent?.type === 'done' && doneEvent.reason;
+    return {
+      errorEvent,
+      doneEvent,
+      errorIdx,
+      doneIdx,
+      doneTyped,
+      streamYieldsErrorDoneWithActionableSetupMessageObservation1,
+      streamYieldsErrorDoneWithActionableSetupMessageObservation2,
+    };
+  };
 
   it('stream makes ZERO generation calls to the client', async () => {
     for await (const _event of agent.stream('hello')) {
@@ -344,21 +373,29 @@ describe('AgentImpl: fail-closed when unconfigured (#2481)', () => {
   });
 
   it('setProvider from unconfigured returns previousProvider null, not sentinel (#2481)', async () => {
-    // Under the fake seam, switchActiveProvider throws (no registered runtime)
-    // but the error is swallowed — the sentinel must NOT leak as previousProvider.
-    const prevFake = process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = '/tmp/fake-unconfigured-test.jsonl';
-    try {
-      const result = await agent.setProvider('openai');
-      expect(result.previousProvider).toBeNull();
-    } finally {
-      if (prevFake === undefined) {
-        delete process.env.LLXPRT_FAKE_RESPONSES;
-      } else {
-        process.env.LLXPRT_FAKE_RESPONSES = prevFake;
-      }
-    }
+    const { result } =
+      await observeSetProviderFromUnconfiguredReturnsPreviousProviderNullNotSentinel2481();
+    expect(result.previousProvider).toBeNull();
   });
+
+  const observeSetProviderFromUnconfiguredReturnsPreviousProviderNullNotSentinel2481 =
+    async () => {
+      // Under the fake seam, switchActiveProvider throws (no registered runtime)
+      // but the error is swallowed — the sentinel must NOT leak as previousProvider.
+      const prevFake = process.env.LLXPRT_FAKE_RESPONSES;
+      process.env.LLXPRT_FAKE_RESPONSES = '/tmp/fake-unconfigured-test.jsonl';
+      try {
+        const result = await agent.setProvider('openai');
+
+        return { result };
+      } finally {
+        if (prevFake === undefined) {
+          delete process.env.LLXPRT_FAKE_RESPONSES;
+        } else {
+          process.env.LLXPRT_FAKE_RESPONSES = prevFake;
+        }
+      }
+    };
 });
 
 describe('fromConfig real orchestration: configured vs unconfigured (#2481)', () => {

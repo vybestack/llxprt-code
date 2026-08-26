@@ -25,6 +25,32 @@ const reassertTerminalModes = (): void => {
   process.stdout.emit('resize');
 };
 
+class MockResizeStream {
+  private listeners: Array<() => void> = [];
+
+  on(event: string, handler: () => void): void {
+    if (event === 'resize') {
+      this.listeners.push(handler);
+    }
+  }
+
+  emit(event: string): void {
+    if (event === 'resize') {
+      for (const handler of this.listeners) {
+        handler();
+      }
+    }
+  }
+
+  removeListener(event: string, handler: () => void): void {
+    if (event === 'resize') {
+      this.listeners = this.listeners.filter(
+        (listener) => listener !== handler,
+      );
+    }
+  }
+}
+
 describe('SIGCONT handler behavior', () => {
   let mockStdoutWrite: ReturnType<typeof vi.fn>;
   let mockStdoutEmit: ReturnType<typeof vi.fn>;
@@ -62,26 +88,7 @@ describe('SIGCONT handler behavior', () => {
     // cause useTerminalSize hook to re-measure and trigger a re-render
     // Note: We use a mock here because process.stdout.emit may be spied in beforeEach
 
-    const mockStream = {
-      listeners: [] as Array<() => void>,
-      on(event: string, handler: () => void) {
-        if (event === 'resize') {
-          this.listeners.push(handler);
-        }
-      },
-      emit(event: string) {
-        if (event === 'resize') {
-          for (const handler of this.listeners) {
-            handler();
-          }
-        }
-      },
-      removeListener(event: string, handler: () => void) {
-        if (event === 'resize') {
-          this.listeners = this.listeners.filter((h) => h !== handler);
-        }
-      },
-    };
+    const mockStream = new MockResizeStream();
 
     const resizeHandler = vi.fn();
     mockStream.on('resize', resizeHandler);

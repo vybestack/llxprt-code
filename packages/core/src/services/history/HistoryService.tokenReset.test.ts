@@ -297,23 +297,7 @@ describe('HistoryService - Token Accounting Reset (provider switch)', () => {
     it('surfaces asynchronous add failures without poisoning later updates', async () => {
       const failure = new Error('exact tokenizer unavailable');
       let shouldFail = true;
-      service.setTokenizerFactory({
-        getTokenizer: () => ({
-          fallbackPolicy: 'deny',
-          countTokens: () =>
-            shouldFail ? Promise.reject(failure) : Promise.resolve(7),
-        }),
-        async estimatePrompt(request) {
-          return {
-            count: await request.legacyEstimate(),
-            method: 'calibrated',
-            family: 'legacy-unregistered',
-            estimatorVersion: 'core-estimate-tokens-v1',
-            assetRevision: 'none',
-            projectionRevision: request.projectionRevision,
-          };
-        },
-      });
+      service.setTokenizerFactory(countingTokenizer(() => shouldFail, failure));
 
       service.add(createUserMessage('history entry'), 'gpt-5.6-sol');
       await expect(service.waitForTokenUpdates()).rejects.toBe(failure);
@@ -323,6 +307,26 @@ describe('HistoryService - Token Accounting Reset (provider switch)', () => {
       expect(service.getTotalTokens()).toBe(7);
       await expect(service.waitForTokenUpdates()).resolves.toBeUndefined();
     });
+
+    function countingTokenizer(shouldFail: () => boolean, failure: Error) {
+      return {
+        getTokenizer: () => ({
+          fallbackPolicy: 'deny',
+          countTokens: () =>
+            shouldFail() ? Promise.reject(failure) : Promise.resolve(7),
+        }),
+        async estimatePrompt(request: { legacyEstimate(): Promise<number> }) {
+          return {
+            count: await request.legacyEstimate(),
+            method: 'calibrated',
+            family: 'legacy-unregistered',
+            estimatorVersion: 'core-estimate-tokens-v1',
+            assetRevision: 'none',
+            projectionRevision: request.projectionRevision,
+          };
+        },
+      };
+    }
 
     it('rejects raw-text errors when the active tokenizer denies fallback', async () => {
       const failure = new Error('exact tokenizer unavailable');

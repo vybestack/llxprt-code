@@ -371,24 +371,9 @@ describe('Server Config (config.ts)', () => {
 
       // Reset mock after construction to isolate test
       vi.clearAllMocks();
-      mockSettingsService.get.mockImplementation((key: string) => {
-        switch (key) {
-          case 'stringValue':
-            return 'test string';
-          case 'numberValue':
-            return 42;
-          case 'booleanValue':
-            return true;
-          case 'objectValue':
-            return { nested: 'object' };
-          case 'arrayValue':
-            return [1, 2, 3];
-          case 'undefinedValue':
-            return undefined;
-          default:
-            return null;
-        }
-      });
+      mockSettingsService.get.mockImplementation((key: string) =>
+        defaultGetResponseForKey(key),
+      );
 
       expect(config.getEphemeralSetting('stringValue')).toBe('test string');
       expect(config.getEphemeralSetting('numberValue')).toBe(42);
@@ -406,12 +391,9 @@ describe('Server Config (config.ts)', () => {
       const config = new Config(baseParams);
 
       vi.clearAllMocks();
-      mockSettingsService.get.mockImplementation((key: string) => {
-        if (key === 'context-limit') {
-          return '190000';
-        }
-        return undefined;
-      });
+      mockSettingsService.get.mockImplementation((key: string) =>
+        contextLimitOrUndefined(key),
+      );
 
       expect(config.getEphemeralSetting('context-limit')).toBe(190000);
       expect(mockSettingsService.get).toHaveBeenCalledWith('context-limit');
@@ -694,3 +676,26 @@ describe('Server Config (config.ts)', () => {
     });
   });
 });
+
+function defaultGetResponseForKey(key: string): unknown {
+  switch (key) {
+    case 'stringValue':
+      return 'test string';
+    case 'numberValue':
+      return 42;
+    case 'booleanValue':
+      return true;
+    case 'objectValue':
+      return { nested: 'object' };
+    case 'arrayValue':
+      return [1, 2, 3];
+    case 'undefinedValue':
+      return undefined;
+    default:
+      return null;
+  }
+}
+
+function contextLimitOrUndefined(key: string): string | undefined {
+  return key === 'context-limit' ? '190000' : undefined;
+}

@@ -41,6 +41,13 @@ function getConfig(
   return context.services.config;
 }
 
+function findSkill(
+  skills: readonly SkillDefinition[],
+  name: string,
+): SkillDefinition | null {
+  return skills.find((skill) => skill.name === name) ?? null;
+}
+
 describe('skillsCommand', () => {
   let context: CommandContext;
 
@@ -492,9 +499,7 @@ describe('skillsCommand', () => {
       ).mockReturnValue(mockSkills);
       (
         skillManager.getSkill as Mock<typeof skillManager.getSkill>
-      ).mockImplementation(
-        (name: string) => mockSkills.find((s) => s.name === name) ?? null,
-      );
+      ).mockImplementation((name: string) => findSkill(mockSkills, name));
 
       const completions = await disableCmd.completion!(context, 'sk');
       expect(completions).toStrictEqual(['skill1']);
@@ -526,9 +531,7 @@ describe('skillsCommand', () => {
       ).mockReturnValue(mockSkills);
       (
         skillManager.getSkill as Mock<typeof skillManager.getSkill>
-      ).mockImplementation(
-        (name: string) => mockSkills.find((s) => s.name === name) ?? null,
-      );
+      ).mockImplementation((name: string) => findSkill(mockSkills, name));
 
       const completions = await enableCmd.completion!(context, 'sk');
       expect(completions).toStrictEqual(['skill2']);

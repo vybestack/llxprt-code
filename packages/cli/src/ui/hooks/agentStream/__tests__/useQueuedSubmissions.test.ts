@@ -54,7 +54,11 @@ describe('useQueuedSubmissions', () => {
       expect(result.current.queuedSubmissions[0]).toMatchObject(sub);
     });
 
-    it('assigns a unique stable identity to each queued occurrence', () => {
+    const observeRepeatedSubmissionQueueIdentities = (): {
+      readonly firstQueueId: QueuedSubmission['queueId'];
+      readonly secondQueueId: QueuedSubmission['queueId'];
+      readonly requeuedQueueId: QueuedSubmission['queueId'];
+    } => {
       const { result } = renderHook(() => useQueuedSubmissions());
       const repeatedSubmission = makeSubmission('same message');
 
@@ -64,9 +68,6 @@ describe('useQueuedSubmissions', () => {
       });
 
       const [first, second] = result.current.queuedSubmissions;
-      expect(first.queueId).toBeDefined();
-      expect(second.queueId).not.toBe(first.queueId);
-
       let dequeued: QueuedSubmission | undefined;
       act(() => {
         dequeued = result.current.dequeueSubmission();
@@ -75,7 +76,23 @@ describe('useQueuedSubmissions', () => {
         }
       });
 
-      expect(result.current.queuedSubmissions[0].queueId).toBe(first.queueId);
+      return {
+        firstQueueId: first.queueId,
+        secondQueueId: second.queueId,
+        requeuedQueueId: result.current.queuedSubmissions[0].queueId,
+      };
+    };
+
+    it('assigns a unique stable identity to each queued occurrence', () => {
+      const queueIdentities = observeRepeatedSubmissionQueueIdentities();
+
+      expect(queueIdentities.firstQueueId).toBeDefined();
+      expect(queueIdentities.secondQueueId).not.toBe(
+        queueIdentities.firstQueueId,
+      );
+      expect(queueIdentities.requeuedQueueId).toBe(
+        queueIdentities.firstQueueId,
+      );
     });
 
     it('appends in FIFO order when enqueuing multiple submissions', () => {
@@ -219,7 +236,10 @@ describe('useQueuedSubmissions', () => {
       expect(result.current.queuedSubmissionsRef.current).toHaveLength(0);
     });
 
-    it('drains to empty in FIFO order', () => {
+    const drainThreeSubmissions = (): {
+      readonly dequeueOrder: readonly string[];
+      readonly remainingSubmissions: readonly QueuedSubmission[];
+    } => {
       const { result } = renderHook(() => useQueuedSubmissions());
 
       act(() => {
@@ -228,20 +248,29 @@ describe('useQueuedSubmissions', () => {
         result.current.enqueueSubmission(makeSubmission('c'));
       });
 
-      const order: string[] = [];
+      const dequeueOrder: string[] = [];
       act(() => {
         let item = result.current.dequeueSubmission();
         while (item) {
           const text = firstText(item);
           if (text !== undefined) {
-            order.push(text);
+            dequeueOrder.push(text);
           }
           item = result.current.dequeueSubmission();
         }
       });
 
-      expect(order).toStrictEqual(['a', 'b', 'c']);
-      expect(result.current.queuedSubmissions).toHaveLength(0);
+      return {
+        dequeueOrder,
+        remainingSubmissions: result.current.queuedSubmissions,
+      };
+    };
+
+    it('drains to empty in FIFO order', () => {
+      const drainResult = drainThreeSubmissions();
+
+      expect(drainResult.dequeueOrder).toStrictEqual(['a', 'b', 'c']);
+      expect(drainResult.remainingSubmissions).toHaveLength(0);
     });
   });
 

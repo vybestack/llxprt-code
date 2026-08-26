@@ -205,141 +205,170 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
     });
 
     it('starts a second real ChatSession send after timeout while the first provider iterator remains blocked', async () => {
-      vi.useFakeTimers();
-      const timeoutMs = 30_000;
-      localSettingsService = new SettingsService();
-      localConfig = new Config(createConfigParams(localSettingsService));
-      localConfig.setEphemeralSetting('stream-idle-timeout-ms', timeoutMs);
-      localProviderRuntime = createProviderRuntimeContext({
-        settingsService: localSettingsService,
-        config: localConfig,
-        runtimeId: 'test.runtime.deadlock',
-        metadata: { source: 'deadlock-test' },
-      });
-      localManager = new TestRuntimeProviderManager(localProviderRuntime);
-      localManager.setConfig(localConfig);
-      localConfig.setProviderManager(localManager);
-      localConfig.setTokenizerFactory({
-        getTokenizer: () => undefined,
-        async estimatePrompt(request) {
-          return {
-            count: await request.legacyEstimate(),
-            method: 'calibrated',
-            family: 'legacy-unregistered',
-            estimatorVersion: 'core-estimate-tokens-v1',
-            assetRevision: 'none',
-            projectionRevision: request.projectionRevision,
-          };
-        },
-      });
-      let transports = 0;
-      let pendingReads = 0;
-      let firstTransportSignal: AbortSignal | undefined;
-      const preparedRequests = new WeakMap<object, string>();
-      const provider: IProvider = {
-        name: 'stub',
-        isDefault: true,
-        getModels: vi.fn(async () => []),
-        getDefaultModel: () => 'stub-model',
-        generateChatCompletion: vi.fn(
-          (options: GenerateChatOptions): AsyncIterableIterator<IContent> => {
-            transports++;
-            const transportToken = options.promptEnvelopeTransportToken;
-            if (
-              transportToken === undefined ||
-              preparedRequests.get(transportToken) === undefined
-            ) {
-              throw new Error('transport did not consume the prepared request');
-            }
-            if (transports === 1) {
-              firstTransportSignal = options.invocation?.signal;
-              if (firstTransportSignal === undefined) {
-                throw new Error('transport did not receive an abort signal');
-              }
-              return createNoncooperativeStream(() => {
-                pendingReads++;
-              });
-            }
-            return (async function* () {
-              yield {
-                speaker: 'ai',
-                blocks: [{ type: 'text', text: 'OK' }],
-              };
-              yield {
-                speaker: 'ai',
-                blocks: [],
-                metadata: { finishReason: 'stop' },
-              };
-            })();
-          },
-        ),
-        projectPromptEnvelope: async (options) => {
-          const transportToken = Object.freeze({});
-          preparedRequests.set(
-            transportToken,
-            JSON.stringify(options.contents),
-          );
-          return {
-            model: 'stub-model',
-            protocol: 'openai-chat',
-            method: 'chat/completions/v1',
-            projectionRevision: 2,
-            unsupportedMedia: [],
-            transportToken,
-            finalizedProjection: Object.freeze({}),
-            legacyEstimate: () => Promise.resolve(10),
-          };
-        },
-        getServerTools: () => [],
-        invokeServerTool: vi.fn(),
-      };
-      localManager.registerProvider(provider);
-      localManager.setActiveProvider('stub');
-      const chat = new ChatSession(
-        createAgentRuntimeContext({
-          state: createAgentRuntimeState({
-            runtimeId: 'test.runtime.deadlock',
-            provider: 'stub',
-            model: 'stub-model',
-            sessionId: localConfig.getSessionId(),
-          }),
-          history: new HistoryService(),
-          settings: { compressionThreshold: 0.8 },
-          provider: createProviderAdapterFromManager(localManager),
-          telemetry: createTelemetryAdapterFromConfig(localConfig),
-          tools: createToolRegistryViewFromRegistry(
-            localConfig.getToolRegistry(),
-          ),
-          providerRuntime: localProviderRuntime,
-        }),
-        createContentGeneratorStub(),
-        {},
-        [],
-      );
-      const firstSend = chat
-        .sendMessage({ message: [{ text: 'first request' }] }, 'first-prompt')
-        .catch((error: unknown) => error);
-
-      // Wait for the provider stream to be entered so pendingReads has
-      // incremented before advancing fake timers.
-      expect(await waitForCondition(() => pendingReads >= 1)).toBe(true);
+      const {
+        pendingReads,
+        pendingReadObserved,
+        firstError,
+        transports,
+        secondResponse,
+        abortedObservation,
+      } =
+        await observeStartsASecondRealChatSessionSendAfterTimeoutWhileTheFirstProvider();
+      expect(pendingReadObserved).toBe(true);
       expect(pendingReads).toBeGreaterThanOrEqual(1);
-      await advanceTimersByTimeAsync(timeoutMs + 1);
-      const firstError = await firstSend;
-      expect(firstTransportSignal?.aborted).toBe(true);
+      expect(abortedObservation).toBe(true);
       expect(firstError).toBeInstanceOf(Error);
       expect(firstError).toMatchObject({ name: 'StreamIdleTimeoutError' });
-
-      const secondResponse = await chat.sendMessage(
-        { message: [{ text: 'second request' }] },
-        'second-prompt',
-      );
       expect(transports).toBe(2);
       expect(secondResponse.content.blocks).toContainEqual({
         type: 'text',
         text: 'OK',
       });
     });
+
+    const observeStartsASecondRealChatSessionSendAfterTimeoutWhileTheFirstProvider =
+      async () => {
+        vi.useFakeTimers();
+        const timeoutMs = 30_000;
+        localSettingsService = new SettingsService();
+        localConfig = new Config(createConfigParams(localSettingsService));
+        localConfig.setEphemeralSetting('stream-idle-timeout-ms', timeoutMs);
+        localProviderRuntime = createProviderRuntimeContext({
+          settingsService: localSettingsService,
+          config: localConfig,
+          runtimeId: 'test.runtime.deadlock',
+          metadata: { source: 'deadlock-test' },
+        });
+        localManager = new TestRuntimeProviderManager(localProviderRuntime);
+        localManager.setConfig(localConfig);
+        localConfig.setProviderManager(localManager);
+        localConfig.setTokenizerFactory({
+          getTokenizer: () => undefined,
+          async estimatePrompt(request) {
+            return {
+              count: await request.legacyEstimate(),
+              method: 'calibrated',
+              family: 'legacy-unregistered',
+              estimatorVersion: 'core-estimate-tokens-v1',
+              assetRevision: 'none',
+              projectionRevision: request.projectionRevision,
+            };
+          },
+        });
+        let transports = 0;
+        let pendingReads = 0;
+        let firstTransportSignal: AbortSignal | undefined;
+        const preparedRequests = new WeakMap<object, string>();
+        const provider: IProvider = {
+          name: 'stub',
+          isDefault: true,
+          getModels: vi.fn(async () => []),
+          getDefaultModel: () => 'stub-model',
+          generateChatCompletion: vi.fn(
+            (options: GenerateChatOptions): AsyncIterableIterator<IContent> => {
+              transports++;
+              const transportToken = options.promptEnvelopeTransportToken;
+              if (
+                transportToken === undefined ||
+                preparedRequests.get(transportToken) === undefined
+              ) {
+                throw new Error(
+                  'transport did not consume the prepared request',
+                );
+              }
+              if (transports === 1) {
+                firstTransportSignal = options.invocation?.signal;
+                if (firstTransportSignal === undefined) {
+                  throw new Error('transport did not receive an abort signal');
+                }
+                return createNoncooperativeStream(() => {
+                  pendingReads++;
+                });
+              }
+              return (async function* () {
+                yield {
+                  speaker: 'ai',
+                  blocks: [{ type: 'text', text: 'OK' }],
+                };
+                yield {
+                  speaker: 'ai',
+                  blocks: [],
+                  metadata: { finishReason: 'stop' },
+                };
+              })();
+            },
+          ),
+          projectPromptEnvelope: async (options) => {
+            const transportToken = Object.freeze({});
+            preparedRequests.set(
+              transportToken,
+              JSON.stringify(options.contents),
+            );
+            return {
+              model: 'stub-model',
+              protocol: 'openai-chat',
+              method: 'chat/completions/v1',
+              projectionRevision: 2,
+              unsupportedMedia: [],
+              transportToken,
+              finalizedProjection: Object.freeze({}),
+              legacyEstimate: () => Promise.resolve(10),
+            };
+          },
+          getServerTools: () => [],
+          invokeServerTool: vi.fn(),
+        };
+        localManager.registerProvider(provider);
+        localManager.setActiveProvider('stub');
+        const chat = new ChatSession(
+          createAgentRuntimeContext({
+            state: createAgentRuntimeState({
+              runtimeId: 'test.runtime.deadlock',
+              provider: 'stub',
+              model: 'stub-model',
+              sessionId: localConfig.getSessionId(),
+            }),
+            history: new HistoryService(),
+            settings: { compressionThreshold: 0.8 },
+            provider: createProviderAdapterFromManager(localManager),
+            telemetry: createTelemetryAdapterFromConfig(localConfig),
+            tools: createToolRegistryViewFromRegistry(
+              localConfig.getToolRegistry(),
+            ),
+            providerRuntime: localProviderRuntime,
+          }),
+          createContentGeneratorStub(),
+          {},
+          [],
+        );
+        const firstSend = chat
+          .sendMessage({ message: [{ text: 'first request' }] }, 'first-prompt')
+          .catch((error: unknown) => error);
+
+        // Wait for the provider stream to be entered so pendingReads has
+        // incremented before advancing fake timers.
+        const pendingReadObserved = await waitForCondition(
+          () => pendingReads >= 1,
+        );
+
+        await advanceTimersByTimeAsync(timeoutMs + 1);
+        const firstError = await firstSend;
+
+        const secondResponse = await chat.sendMessage(
+          { message: [{ text: 'second request' }] },
+          'second-prompt',
+        );
+
+        const abortedObservation = firstTransportSignal?.aborted;
+        return {
+          pendingReads,
+          pendingReadObserved,
+          firstError,
+          transports,
+          secondResponse,
+          abortedObservation,
+        };
+      };
 
     it('env var precedence: env var overrides config setting', async () => {
       const envTimeoutMs = 15_000;
@@ -358,124 +387,147 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
     });
 
     it('concurrent: two simultaneous sends timeout independently without signal leakage', async () => {
-      vi.useFakeTimers();
-      const timeoutMs = 30_000;
-      localSettingsService = new SettingsService();
-      localConfig = new Config(createConfigParams(localSettingsService));
-      localConfig.setEphemeralSetting('stream-idle-timeout-ms', timeoutMs);
-      localProviderRuntime = createProviderRuntimeContext({
-        settingsService: localSettingsService,
-        config: localConfig,
-        runtimeId: 'test.runtime.concurrent',
-        metadata: { source: 'concurrent-test' },
-      });
-      localManager = new TestRuntimeProviderManager(localProviderRuntime);
-      localManager.setConfig(localConfig);
-      localConfig.setProviderManager(localManager);
-      localConfig.setTokenizerFactory({
-        getTokenizer: () => undefined,
-        async estimatePrompt(request) {
-          return {
-            count: await request.legacyEstimate(),
-            method: 'calibrated',
-            family: 'legacy-unregistered',
-            estimatorVersion: 'core-estimate-tokens-v1',
-            assetRevision: 'none',
-            projectionRevision: request.projectionRevision,
-          };
-        },
-      });
-
-      const capturedSignals: AbortSignal[] = [];
-      const pendingReadsBySession: Record<string, number> = {};
-      const provider: IProvider = {
-        name: 'stub',
-        isDefault: true,
-        getModels: vi.fn(async () => []),
-        getDefaultModel: () => 'stub-model',
-        generateChatCompletion: vi.fn(
-          (options: GenerateChatOptions): AsyncIterableIterator<IContent> => {
-            capturedSignals.push(options.invocation?.signal as AbortSignal);
-            return createNoncooperativeStream(() => {
-              const rid = options.runtime?.runtimeId ?? 'unknown';
-              pendingReadsBySession[rid] =
-                (pendingReadsBySession[rid] ?? 0) + 1;
-            });
-          },
-        ),
-        projectPromptEnvelope: async () => {
-          const transportToken = Object.freeze({});
-          return {
-            model: 'stub-model',
-            protocol: 'openai-chat',
-            method: 'chat/completions/v1',
-            projectionRevision: 2,
-            unsupportedMedia: [],
-            transportToken,
-            finalizedProjection: Object.freeze({}),
-            legacyEstimate: () => Promise.resolve(10),
-          };
-        },
-        getServerTools: () => [],
-        invokeServerTool: vi.fn(),
-      };
-      localManager.registerProvider(provider);
-      localManager.setActiveProvider('stub');
-
-      const chat = new ChatSession(
-        createAgentRuntimeContext({
-          state: createAgentRuntimeState({
-            runtimeId: 'test.runtime.concurrent',
-            provider: 'stub',
-            model: 'stub-model',
-            sessionId: localConfig.getSessionId(),
-          }),
-          history: new HistoryService(),
-          settings: { compressionThreshold: 0.8 },
-          provider: createProviderAdapterFromManager(localManager),
-          telemetry: createTelemetryAdapterFromConfig(localConfig),
-          tools: createToolRegistryViewFromRegistry(
-            localConfig.getToolRegistry(),
-          ),
-          providerRuntime: localProviderRuntime,
-        }),
-        createContentGeneratorStub(),
-        {},
-        [],
-      );
-
-      // Launch both sends concurrently.
-      const sendA = chat
-        .sendMessage({ message: [{ text: 'A' }] }, 'prompt-a')
-        .catch((error: unknown) => error);
-      const sendB = chat
-        .sendMessage({ message: [{ text: 'B' }] }, 'prompt-b')
-        .catch((error: unknown) => error);
-
-      // Wait for BOTH sends to reach the blocked read before advancing time.
-      // Reaching the second provider call crosses a macrotask boundary, so a
-      // microtask-only drain would spin forever.
-      expect(await waitForCondition(() => capturedSignals.length >= 2)).toBe(
-        true,
-      );
-
-      // Advance past timeout for BOTH concurrent streams.
-      await advanceTimersByTimeAsync(timeoutMs + 1);
-
-      const [resultA, resultB] = await Promise.all([sendA, sendB]);
-
-      // Both must timeout — no sibling cancellation or signal leakage.
+      const {
+        capturedSignals,
+        capturedSignalsObserved,
+        resultA,
+        resultB,
+        unAbortedSignals,
+      } =
+        await observeConcurrentTwoSimultaneousSendsTimeoutIndependentlyWithoutSignalLeakage();
+      expect(unAbortedSignals).toStrictEqual([]);
+      expect(capturedSignalsObserved).toBe(true);
       expect(resultA).toBeInstanceOf(Error);
       expect(resultA).toMatchObject({ name: 'StreamIdleTimeoutError' });
       expect(resultB).toBeInstanceOf(Error);
       expect(resultB).toMatchObject({ name: 'StreamIdleTimeoutError' });
-
-      // Each stream's signal must be independently aborted.
       expect(capturedSignals.length).toBeGreaterThanOrEqual(2);
-      for (const signal of capturedSignals) {
-        expect(signal.aborted).toBe(true);
-      }
     });
+
+    const observeConcurrentTwoSimultaneousSendsTimeoutIndependentlyWithoutSignalLeakage =
+      async () => {
+        vi.useFakeTimers();
+        const timeoutMs = 30_000;
+        localSettingsService = new SettingsService();
+        localConfig = new Config(createConfigParams(localSettingsService));
+        localConfig.setEphemeralSetting('stream-idle-timeout-ms', timeoutMs);
+        localProviderRuntime = createProviderRuntimeContext({
+          settingsService: localSettingsService,
+          config: localConfig,
+          runtimeId: 'test.runtime.concurrent',
+          metadata: { source: 'concurrent-test' },
+        });
+        localManager = new TestRuntimeProviderManager(localProviderRuntime);
+        localManager.setConfig(localConfig);
+        localConfig.setProviderManager(localManager);
+        localConfig.setTokenizerFactory({
+          getTokenizer: () => undefined,
+          async estimatePrompt(request) {
+            return {
+              count: await request.legacyEstimate(),
+              method: 'calibrated',
+              family: 'legacy-unregistered',
+              estimatorVersion: 'core-estimate-tokens-v1',
+              assetRevision: 'none',
+              projectionRevision: request.projectionRevision,
+            };
+          },
+        });
+
+        const capturedSignals: AbortSignal[] = [];
+        const pendingReadsBySession: Record<string, number> = {};
+        const provider: IProvider = {
+          name: 'stub',
+          isDefault: true,
+          getModels: vi.fn(async () => []),
+          getDefaultModel: () => 'stub-model',
+          generateChatCompletion: vi.fn(
+            (options: GenerateChatOptions): AsyncIterableIterator<IContent> => {
+              capturedSignals.push(options.invocation?.signal as AbortSignal);
+              return createNoncooperativeStream(() => {
+                const rid = options.runtime?.runtimeId ?? 'unknown';
+                pendingReadsBySession[rid] =
+                  (pendingReadsBySession[rid] ?? 0) + 1;
+              });
+            },
+          ),
+          projectPromptEnvelope: async () => {
+            const transportToken = Object.freeze({});
+            return {
+              model: 'stub-model',
+              protocol: 'openai-chat',
+              method: 'chat/completions/v1',
+              projectionRevision: 2,
+              unsupportedMedia: [],
+              transportToken,
+              finalizedProjection: Object.freeze({}),
+              legacyEstimate: () => Promise.resolve(10),
+            };
+          },
+          getServerTools: () => [],
+          invokeServerTool: vi.fn(),
+        };
+        localManager.registerProvider(provider);
+        localManager.setActiveProvider('stub');
+
+        const chat = new ChatSession(
+          createAgentRuntimeContext({
+            state: createAgentRuntimeState({
+              runtimeId: 'test.runtime.concurrent',
+              provider: 'stub',
+              model: 'stub-model',
+              sessionId: localConfig.getSessionId(),
+            }),
+            history: new HistoryService(),
+            settings: { compressionThreshold: 0.8 },
+            provider: createProviderAdapterFromManager(localManager),
+            telemetry: createTelemetryAdapterFromConfig(localConfig),
+            tools: createToolRegistryViewFromRegistry(
+              localConfig.getToolRegistry(),
+            ),
+            providerRuntime: localProviderRuntime,
+          }),
+          createContentGeneratorStub(),
+          {},
+          [],
+        );
+
+        // Launch both sends concurrently.
+        const sendA = chat
+          .sendMessage({ message: [{ text: 'A' }] }, 'prompt-a')
+          .catch((error: unknown) => error);
+        const sendB = chat
+          .sendMessage({ message: [{ text: 'B' }] }, 'prompt-b')
+          .catch((error: unknown) => error);
+
+        // Wait for BOTH sends to reach the blocked read before advancing time.
+        // Reaching the second provider call crosses a macrotask boundary, so a
+        // microtask-only drain would spin forever.
+        const capturedSignalsObserved = await waitForCondition(
+          () => capturedSignals.length >= 2,
+        );
+
+        // Advance past timeout for BOTH concurrent streams.
+        await advanceTimersByTimeAsync(timeoutMs + 1);
+
+        const [resultA, resultB] = await Promise.all([sendA, sendB]);
+
+        // Both must timeout — no sibling cancellation or signal leakage.
+
+        // Each stream's signal must be independently aborted.
+
+        const unAbortedSignals = capturedSignals.filter(
+          (signal) => !signal.aborted,
+        );
+
+        return {
+          capturedSignals,
+          capturedSignalsObserved,
+          resultA,
+          resultB,
+          unAbortedSignals,
+        };
+      };
   });
 
   describe('DirectMessageProcessor (via generateDirectMessage)', () => {

@@ -135,6 +135,67 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Create sessionCount sessions, spacing creations apart so each subsequent
+ * file has a strictly later mtime than the one before it.
+ */
+async function createSpacedSessions(
+  chatsDir: string,
+  sessionCount: number,
+  spacingMs: number,
+): Promise<void> {
+  for (let i = 0; i < sessionCount; i++) {
+    await createTestSession(chatsDir);
+    if (i < sessionCount - 1) await delay(spacingMs);
+  }
+}
+
+/**
+ * Create sessionCount sessions sharing one project hash, spacing creations
+ * apart so each subsequent file has a strictly later mtime.
+ */
+async function createSpacedSessionsWithHash(
+  chatsDir: string,
+  sessionCount: number,
+  projectHash: string,
+  spacingMs: number,
+): Promise<void> {
+  for (let i = 0; i < sessionCount; i++) {
+    await createTestSession(chatsDir, { projectHash });
+    if (i < sessionCount - 1) await delay(spacingMs);
+  }
+}
+
+/**
+ * Create sessionCount sessions (recording each created path in order) with
+ * inter-creation spacing so mtimes are distinct.
+ */
+async function createSpacedSessionsCollecting(
+  chatsDir: string,
+  sessionCount: number,
+  spacingMs: number,
+  collected: Array<{ sessionId: string; filePath: string }>,
+): Promise<void> {
+  for (let i = 0; i < sessionCount; i++) {
+    collected.push(await createTestSession(chatsDir));
+    if (i < sessionCount - 1) await delay(spacingMs);
+  }
+}
+
+/**
+ * Create a stale fake lock at the canonical lock path for the session.
+ */
+async function writeStaleLockIfNeeded(
+  chatsDir: string,
+  sessionId: string,
+  hasLock: boolean,
+): Promise<void> {
+  if (hasLock) {
+    const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
+    await writeFakeLock(lockPath, DEAD_PID, sessionId);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Test suite
 // ---------------------------------------------------------------------------
@@ -608,10 +669,12 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
 
             try {
               const hash = crypto.randomUUID();
-              for (let i = 0; i < sessionCount; i++) {
-                await createTestSession(localChatsDir, { projectHash: hash });
-                if (i < sessionCount - 1) await delay(20);
-              }
+              await createSpacedSessionsWithHash(
+                localChatsDir,
+                sessionCount,
+                hash,
+                20,
+              );
 
               const result = await listSessions(localChatsDir, hash);
               expect(result.sessions).toHaveLength(sessionCount);
@@ -650,10 +713,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
               localChatsDir,
               sessionId,
             );
-            if (hasLock) {
-              // Stale lock so deletion proceeds
-              await writeFakeLock(lockPath, DEAD_PID, sessionId);
-            }
+            await writeStaleLockIfNeeded(localChatsDir, sessionId, hasLock);
 
             const result = await deleteSession(
               sessionId,
@@ -690,10 +750,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
             await fs.mkdir(localChatsDir, { recursive: true });
 
             try {
-              for (let i = 0; i < sessionCount; i++) {
-                await createTestSession(localChatsDir);
-                if (i < sessionCount - 1) await delay(50);
-              }
+              await createSpacedSessions(localChatsDir, sessionCount, 50);
 
               const result = await listSessions(localChatsDir, PROJECT_HASH);
               expect(result.sessions).toHaveLength(sessionCount);
@@ -735,11 +792,12 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
                 sessionId: string;
                 filePath: string;
               }> = [];
-              for (let i = 0; i < sessionCount; i++) {
-                const session = await createTestSession(localChatsDir);
-                createdSessions.push(session);
-                if (i < sessionCount - 1) await delay(50);
-              }
+              await createSpacedSessionsCollecting(
+                localChatsDir,
+                sessionCount,
+                50,
+                createdSessions,
+              );
 
               // List to get sorted order
               const listed = await listSessions(localChatsDir, PROJECT_HASH);
@@ -831,10 +889,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
             await fs.mkdir(localChatsDir, { recursive: true });
 
             try {
-              for (let i = 0; i < sessionCount; i++) {
-                await createTestSession(localChatsDir);
-                if (i < sessionCount - 1) await delay(20);
-              }
+              await createSpacedSessions(localChatsDir, sessionCount, 20);
 
               const result = await listSessions(localChatsDir, PROJECT_HASH);
               expect(result.sessions).toHaveLength(sessionCount);

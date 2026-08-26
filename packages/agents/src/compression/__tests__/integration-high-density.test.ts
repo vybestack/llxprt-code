@@ -114,17 +114,25 @@ describe('Integration: Density + Compression Pipeline', () => {
   });
 
   it('compress returns valid CompressionResult for populated history', async () => {
-    const history: IContent[] = Array.from({ length: 10 }, (_, i) => ({
-      speaker: i % 2 === 0 ? 'human' : 'ai',
-      blocks: [{ type: 'text' as const, text: `Message ${i}` }],
-    }));
-    const strategy = new HighDensityStrategy();
-    const context = makeMinimalContext(history);
-    const result = await strategy.compress(context);
+    const { result } =
+      await observeCompressReturnsValidCompressionResultForPopulatedHistory();
     expect(result.newHistory.length).toBeGreaterThan(0);
     expect(result.metadata.originalMessageCount).toBe(10);
     expect(result.metadata.llmCallMade).toBe(false);
   });
+
+  const observeCompressReturnsValidCompressionResultForPopulatedHistory =
+    async () => {
+      const history: IContent[] = Array.from({ length: 10 }, (_, i) => ({
+        speaker: i % 2 === 0 ? 'human' : 'ai',
+        blocks: [{ type: 'text' as const, text: `Message ${i}` }],
+      }));
+      const strategy = new HighDensityStrategy();
+      const context = makeMinimalContext(history);
+      const result = await strategy.compress(context);
+
+      return { result };
+    };
 
   it('existing strategies still work after high-density additions', async () => {
     for (const name of [

@@ -245,7 +245,7 @@ describe('ShellProcessor', () => {
     expect(mockShellExecute).not.toHaveBeenCalled();
   });
 
-  it('should throw ConfirmationRequiredError with multiple commands if multiple are disallowed', async () => {
+  function observeMultipleDisallowedCommandResult() {
     const processor = new ShellProcessor('test-command');
     const prompt = '!{cmd1} and !{cmd2}';
     mockCheckCommandPermissions.mockImplementation((cmd) => {
@@ -258,13 +258,23 @@ describe('ShellProcessor', () => {
       return { allAllowed: true, disallowedCommands: [] };
     });
 
-    const promise = processor.process(prompt, context);
-    await expect(promise).rejects.toBeInstanceOf(ConfirmationRequiredError);
-    const error = await promise.catch((e) => e);
+    return {
+      processDisallowedCommands: () => processor.process(prompt, context),
+    };
+  }
+
+  it('should throw ConfirmationRequiredError with multiple commands if multiple are disallowed', async () => {
+    const scenario = observeMultipleDisallowedCommandResult();
+    const processResult = scenario.processDisallowedCommands();
+
+    await expect(processResult).rejects.toBeInstanceOf(
+      ConfirmationRequiredError,
+    );
+    const error = await processResult.catch((caughtError) => caughtError);
     expect(error.commandsToConfirm).toStrictEqual(['cmd1', 'cmd2']);
   });
 
-  it('should not execute any commands if at least one requires confirmation', async () => {
+  function observeMixedCommandExecutionResult() {
     const processor = new ShellProcessor('test-command');
     const prompt = 'First: !{echo "hello"}, Second: !{rm -rf /}';
 
@@ -275,15 +285,22 @@ describe('ShellProcessor', () => {
       return { allAllowed: true, disallowedCommands: [] };
     });
 
-    await expect(processor.process(prompt, context)).rejects.toThrow(
+    return {
+      processMixedCommands: () => processor.process(prompt, context),
+    };
+  }
+
+  it('should not execute any commands if at least one requires confirmation', async () => {
+    const scenario = observeMixedCommandExecutionResult();
+
+    await expect(scenario.processMixedCommands()).rejects.toThrow(
       ConfirmationRequiredError,
     );
-
     // Ensure no commands were executed because the pipeline was halted.
     expect(mockShellExecute).not.toHaveBeenCalled();
   });
 
-  it('should only request confirmation for disallowed commands in a mixed prompt', async () => {
+  function observeDisallowedMixedCommandResult() {
     const processor = new ShellProcessor('test-command');
     const prompt = 'Allowed: !{ls -l}, Disallowed: !{rm -rf /}';
 
@@ -292,9 +309,19 @@ describe('ShellProcessor', () => {
       disallowedCommands: cmd.includes('rm') ? [cmd] : [],
     }));
 
-    const promise = processor.process(prompt, context);
-    await expect(promise).rejects.toBeInstanceOf(ConfirmationRequiredError);
-    const error = await promise.catch((e) => e);
+    return {
+      processDisallowedMixedCommands: () => processor.process(prompt, context),
+    };
+  }
+
+  it('should only request confirmation for disallowed commands in a mixed prompt', async () => {
+    const scenario = observeDisallowedMixedCommandResult();
+    const processResult = scenario.processDisallowedMixedCommands();
+
+    await expect(processResult).rejects.toBeInstanceOf(
+      ConfirmationRequiredError,
+    );
+    const error = await processResult.catch((caughtError) => caughtError);
     expect(error.commandsToConfirm).toStrictEqual(['rm -rf /']);
   });
 

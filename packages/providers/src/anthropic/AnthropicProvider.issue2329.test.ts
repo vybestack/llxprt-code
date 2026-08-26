@@ -19,6 +19,13 @@ import {
   type AnthropicTestSetup,
 } from './test-utils/anthropicProviderTestSetup.js';
 
+function isRefusalTextChunk(content: IContent): boolean {
+  return (
+    content.blocks.length > 0 &&
+    content.blocks[0].type === 'text' &&
+    (content.blocks[0] as { text: string }).text === 'I cannot help with that.'
+  );
+}
 const mockMessagesCreate = vi.fn();
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -116,12 +123,7 @@ describe('AnthropicProvider issue #2329 – streaming refusal propagation', () =
     }
 
     // The visible text content must be yielded from the content_block_delta.
-    const textChunk = chunks.find(
-      (c) =>
-        c.blocks.length > 0 &&
-        c.blocks[0].type === 'text' &&
-        (c.blocks[0] as { text: string }).text === 'I cannot help with that.',
-    );
+    const textChunk = chunks.find(isRefusalTextChunk);
     expect(textChunk).toBeDefined();
 
     // The terminal metadata (stop_reason === 'refusal') must be propagated.

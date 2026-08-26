@@ -19,6 +19,14 @@ import type { OAuthToken } from '../../types.js';
 
 const PROVIDER = 'test-provider';
 
+function restoreCredentialSocket(saved: string | undefined): void {
+  if (saved !== undefined) {
+    process.env.LLXPRT_CREDENTIAL_SOCKET = saved;
+  } else {
+    delete process.env.LLXPRT_CREDENTIAL_SOCKET;
+  }
+}
+
 describe('Proactive renewal behavioral scenarios', () => {
   let manager: ProactiveRenewalManager;
   let tokenStore: MemoryTokenStore;
@@ -179,11 +187,7 @@ describe('Proactive renewal behavioral scenarios', () => {
 
       expect(acquireLockSpy).not.toHaveBeenCalled();
     } finally {
-      if (saved !== undefined) {
-        process.env.LLXPRT_CREDENTIAL_SOCKET = saved;
-      } else {
-        delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-      }
+      restoreCredentialSocket(saved);
     }
   });
 

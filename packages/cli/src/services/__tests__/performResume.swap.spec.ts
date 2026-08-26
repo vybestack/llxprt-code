@@ -303,7 +303,7 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
       collectLock(lockHandles, newLock);
     });
 
-    it('restores exact prior history when a replacement listener throws', async () => {
+    async function verifyRestoresExactPriorHistoryWhenAReplacementListenerThrows() {
       const targetId = 'target-for-listener-failure';
       await createTestSession(chatsDir, {
         sessionId: targetId,
@@ -330,12 +330,23 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
 
       const result = await performResume(targetId, context);
 
-      expect(result).toStrictEqual({
+      return { result, historyService, previousHistory, targetId };
+    }
+
+    it('restores exact prior history when a replacement listener throws', async () => {
+      const behaviorResult =
+        await verifyRestoresExactPriorHistoryWhenAReplacementListenerThrows();
+
+      expect(behaviorResult.result).toStrictEqual({
         ok: false,
         error: 'Failed to commit session transition: history listener failed',
       });
-      expect(historyService.getAll()).toStrictEqual(previousHistory);
-      expect(await SessionLockManager.isLocked(chatsDir, targetId)).toBe(false);
+      expect(behaviorResult.historyService.getAll()).toStrictEqual(
+        behaviorResult.previousHistory,
+      );
+      expect(
+        await SessionLockManager.isLocked(chatsDir, behaviorResult.targetId),
+      ).toBe(false);
     });
 
     it('continues rollback when prepared disposal and session ID restoration fail', async () => {
@@ -392,7 +403,7 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
       }
     });
 
-    it('cleans the prepared recording when rollback history restoration throws', async () => {
+    async function verifyCleansThePreparedRecordingWhenRollbackHistoryRestorationThrows() {
       const targetId = 'target-for-rollback-cleanup';
       await createTestSession(chatsDir, {
         sessionId: targetId,
@@ -415,7 +426,15 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
       };
 
       const result = await performResume(targetId, context);
-      expect(result).toStrictEqual({
+
+      return { result, historyService, targetId };
+    }
+
+    it('cleans the prepared recording when rollback history restoration throws', async () => {
+      const behaviorResult =
+        await verifyCleansThePreparedRecordingWhenRollbackHistoryRestorationThrows();
+
+      expect(behaviorResult.result).toStrictEqual({
         ok: false,
         error:
           'Failed to commit session transition: commit failed; failed to restore prior history: rollback restore failed',
@@ -424,11 +443,13 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
       // carries a client-side chronology marker (#1721) that this assertion
       // is not about.
       expect(
-        historyService
+        behaviorResult.historyService
           .getAll()
           .map(({ speaker, blocks }) => ({ speaker, blocks })),
       ).toStrictEqual([makeContent('replacement history')]);
-      expect(await SessionLockManager.isLocked(chatsDir, targetId)).toBe(false);
+      expect(
+        await SessionLockManager.isLocked(chatsDir, behaviorResult.targetId),
+      ).toBe(false);
     });
   });
 

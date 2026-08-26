@@ -82,6 +82,13 @@ function todoIdsOf(raw: unknown): string[] {
   return raw.todos.filter(isRecord).map((todo) => String(todo['id']));
 }
 
+function isCompleteTodoState(
+  observedIds: readonly string[] | undefined,
+): boolean {
+  const joined = observedIds?.join(',');
+  return joined === 'seed' || joined === 'fresh';
+}
+
 describe('TodoStore read atomicity and cross-path parallelism', () => {
   let root = '';
 
@@ -95,82 +102,85 @@ describe('TodoStore read atomicity and cross-path parallelism', () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  it('never lets a concurrent read observe a truncated todo file', async () => {
-    const dataDir = path.join(root, 'data');
-    const seedingStore = new TodoStore('session-atomic', { dataDir });
-    await seedingStore.writeTodos([
-      { id: 'seed', content: 'seed todo', status: 'pending' },
-    ]);
-
-    const truncated = deferred<void>();
-    const release = deferred<void>();
-    writePlan = {
-      mode: 'hold',
-      onTruncate: () => truncated.resolve(),
-      releaseSignal: release.promise,
+  const observeNeverLetsAConcurrentReadObserveATruncatedTodoFileAt98 =
+    async () => {
+      const dataDir = path.join(root, 'data');
+      const seedingStore = new TodoStore('session-atomic', { dataDir });
+      await seedingStore.writeTodos([
+        { id: 'seed', content: 'seed todo', status: 'pending' },
+      ]);
+      const truncated = deferred<void>();
+      const release = deferred<void>();
+      writePlan = {
+        mode: 'hold',
+        onTruncate: () => truncated.resolve(),
+        releaseSignal: release.promise,
+      };
+      const writer = new TodoStore('session-atomic', { dataDir }).writeTodos([
+        { id: 'fresh', content: 'fresh todo', status: 'pending' },
+      ]);
+      await truncated.promise;
+      const reader = new TodoStore('session-atomic', { dataDir }).readTodos();
+      release.resolve();
+      let observedIds: string[] | undefined;
+      let readError: Error | undefined;
+      try {
+        observedIds = (await reader).map((todo) => String(todo.id));
+      } catch (error) {
+        readError = error instanceof Error ? error : new Error(String(error));
+      }
+      await writer;
+      return { observedIds, readError };
     };
 
-    const writer = new TodoStore('session-atomic', { dataDir }).writeTodos([
-      { id: 'fresh', content: 'fresh todo', status: 'pending' },
-    ]);
-    await truncated.promise;
-
-    const reader = new TodoStore('session-atomic', { dataDir }).readTodos();
-    release.resolve();
-
-    let observedIds: string[] | undefined;
-    let readError: Error | undefined;
-    try {
-      observedIds = (await reader).map((todo) => String(todo.id));
-    } catch (error) {
-      readError = error instanceof Error ? error : new Error(String(error));
-    }
-    await writer;
-
+  it('never lets a concurrent read observe a truncated todo file', async () => {
+    const { observedIds, readError } =
+      await observeNeverLetsAConcurrentReadObserveATruncatedTodoFileAt98();
     expect(readError).toBeUndefined();
-    const observedCompleteState =
-      observedIds?.join(',') === 'seed' || observedIds?.join(',') === 'fresh';
+    const observedCompleteState = isCompleteTodoState(observedIds);
     expect(observedCompleteState).toBe(true);
   });
 
-  it('runs operations for different todo files in parallel', async () => {
-    const dataDir = path.join(root, 'data');
-    const release = deferred<void>();
-    const truncatedPaths = new Set<string>();
-    const expectedFiles = [
-      path.join(dataDir, 'todos', 'todo-session-a.json'),
-      path.join(dataDir, 'todos', 'todo-session-b.json'),
-    ];
-    writePlan = {
-      mode: 'hold',
-      onTruncate: (filePath) => {
-        truncatedPaths.add(filePath);
-        if (expectedFiles.every((expected) => truncatedPaths.has(expected))) {
-          release.resolve();
-        }
-      },
-      releaseSignal: release.promise,
+  const observeRunsOperationsForDifferentTodoFilesInParallelAt136 =
+    async () => {
+      const dataDir = path.join(root, 'data');
+      const release = deferred<void>();
+      const truncatedPaths = new Set<string>();
+      const expectedFiles = [
+        path.join(dataDir, 'todos', 'todo-session-a.json'),
+        path.join(dataDir, 'todos', 'todo-session-b.json'),
+      ];
+      writePlan = {
+        mode: 'hold',
+        onTruncate: (filePath) => {
+          truncatedPaths.add(filePath);
+          if (expectedFiles.every((expected) => truncatedPaths.has(expected))) {
+            release.resolve();
+          }
+        },
+        releaseSignal: release.promise,
+      };
+      await Promise.all([
+        new TodoStore('session-a', { dataDir }).writeTodos([
+          { id: 'a1', content: 'session a todo', status: 'pending' },
+        ]),
+        new TodoStore('session-b', { dataDir }).writeTodos([
+          { id: 'b1', content: 'session b todo', status: 'pending' },
+        ]),
+      ]);
+      const fileA: unknown = JSON.parse(
+        fs.readFileSync(expectedFiles[0], 'utf-8'),
+      );
+      const fileB: unknown = JSON.parse(
+        fs.readFileSync(expectedFiles[1], 'utf-8'),
+      );
+      return { fileA, fileB };
     };
 
-    // Both writes must reach their truncation point before either may
-    // proceed. If same-path coordination wrongly serialized different files,
-    // the first write would wait forever for the second truncation.
-    await Promise.all([
-      new TodoStore('session-a', { dataDir }).writeTodos([
-        { id: 'a1', content: 'session a todo', status: 'pending' },
-      ]),
-      new TodoStore('session-b', { dataDir }).writeTodos([
-        { id: 'b1', content: 'session b todo', status: 'pending' },
-      ]),
-    ]);
-
-    const fileA: unknown = JSON.parse(
-      fs.readFileSync(expectedFiles[0], 'utf-8'),
-    );
-    const fileB: unknown = JSON.parse(
-      fs.readFileSync(expectedFiles[1], 'utf-8'),
-    );
-    expect(todoIdsOf(fileA)).toEqual(['a1']);
-    expect(todoIdsOf(fileB)).toEqual(['b1']);
+  it('runs operations for different todo files in parallel', async () => {
+    const { fileA, fileB } =
+      await observeRunsOperationsForDifferentTodoFilesInParallelAt136();
+    expect(todoIdsOf(fileA)).toStrictEqual(['a1']);
+    expect(todoIdsOf(fileB)).toStrictEqual(['b1']);
   });
 });

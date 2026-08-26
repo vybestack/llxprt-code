@@ -242,89 +242,106 @@ describe('AgentClient (client.ts)', () => {
     });
 
     it('should auto-continue when model generates thinking-only output', async () => {
-      const forwardedRequests: IContent[][] = [];
-      let callCount = 0;
-      mockTurnRunFn.mockReset();
-      mockTurnRunFn.mockImplementation((req: AgentMessageInput) => {
-        forwardedRequests.push(req as IContent[]);
-        callCount++;
-        if (callCount === 1) {
+      const {
+        forwardedRequests,
+        continuationPart,
+        events,
+        autoContinueWhenModelGeneratesThinkingOnlyOutputObservation1,
+      } = await observeAutoContinueWhenModelGeneratesThinkingOnlyOutput();
+      expect(mockTurnRunFn).toHaveBeenCalledTimes(2);
+      expect(forwardedRequests.length).toBe(2);
+      expect(continuationPart).toBeDefined();
+      expect(events.some((e) => e.type === AgentEventType.Thought)).toBe(true);
+      expect(autoContinueWhenModelGeneratesThinkingOnlyOutputObservation1).toBe(
+        true,
+      );
+    });
+
+    const observeAutoContinueWhenModelGeneratesThinkingOnlyOutput =
+      async () => {
+        const forwardedRequests: IContent[][] = [];
+        let callCount = 0;
+        mockTurnRunFn.mockReset();
+        mockTurnRunFn.mockImplementation((req: AgentMessageInput) => {
+          forwardedRequests.push(req as IContent[]);
+          callCount++;
+          if (callCount === 1) {
+            return (async function* () {
+              yield {
+                type: AgentEventType.Thought,
+                value: {
+                  subject: 'Planning',
+                  description: 'I will do something',
+                },
+              };
+              yield {
+                type: AgentEventType.Finished,
+                value: { reason: 'STOP' },
+              };
+            })();
+          }
           return (async function* () {
             yield {
-              type: AgentEventType.Thought,
-              value: {
-                subject: 'Planning',
-                description: 'I will do something',
-              },
+              type: AgentEventType.Content,
+              value: 'Here is the result',
             };
             yield {
               type: AgentEventType.Finished,
               value: { reason: 'STOP' },
             };
           })();
-        }
-        return (async function* () {
-          yield {
-            type: AgentEventType.Content,
-            value: 'Here is the result',
-          };
-          yield {
-            type: AgentEventType.Finished,
-            value: { reason: 'STOP' },
-          };
-        })();
-      });
-
-      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
-
-      const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
-        getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
-        getContextLimit: vi.fn().mockReturnValue(1000000),
-      };
-      client['chat'] = mockChat as ChatSession;
-
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
-
-      todoStoreReadMock.mockResolvedValue([]);
-
-      const stream = client.sendMessageStream(
-        [{ type: 'text', text: 'Do something' }],
-        new AbortController().signal,
-        'prompt-thinking-only',
-      );
-      const events = await fromAsync(stream);
-
-      expect(mockTurnRunFn).toHaveBeenCalledTimes(2);
-      expect(forwardedRequests.length).toBe(2);
-
-      const secondRequest = forwardedRequests[1];
-      const continuationPart = secondRequest
-        .flatMap((content) => ('blocks' in content ? content.blocks : []))
-        .find((block) => {
-          if (block.type !== 'text') {
-            return false;
-          }
-          return block.text.includes(
-            'Continue and take the next concrete action now',
-          );
         });
-      expect(continuationPart).toBeDefined();
 
-      expect(events.some((e) => e.type === AgentEventType.Thought)).toBe(true);
-      expect(
-        events.some(
-          (e) =>
-            e.type === AgentEventType.Content &&
-            e.value === 'Here is the result',
-        ),
-      ).toBe(true);
-    });
+        vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+
+        const mockChat: Partial<ChatSession> = {
+          addHistory: vi.fn(),
+          getHistory: vi.fn().mockReturnValue([]),
+          getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+          getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
+          getContextLimit: vi.fn().mockReturnValue(1000000),
+        };
+        client['chat'] = mockChat as ChatSession;
+
+        const mockGenerator: Partial<ContentGenerator> = {
+          countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+        };
+        client['contentGenerator'] = mockGenerator as ContentGenerator;
+
+        todoStoreReadMock.mockResolvedValue([]);
+
+        const stream = client.sendMessageStream(
+          [{ type: 'text', text: 'Do something' }],
+          new AbortController().signal,
+          'prompt-thinking-only',
+        );
+        const events = await fromAsync(stream);
+
+        const secondRequest = forwardedRequests[1];
+        const continuationPart = secondRequest
+          .flatMap((content) => ('blocks' in content ? content.blocks : []))
+          .find((block) => {
+            if (block.type !== 'text') {
+              return false;
+            }
+            return block.text.includes(
+              'Continue and take the next concrete action now',
+            );
+          });
+
+        const autoContinueWhenModelGeneratesThinkingOnlyOutputObservation1 =
+          events.some(
+            (e) =>
+              e.type === AgentEventType.Content &&
+              e.value === 'Here is the result',
+          );
+        return {
+          forwardedRequests,
+          continuationPart,
+          events,
+          autoContinueWhenModelGeneratesThinkingOnlyOutputObservation1,
+        };
+      };
 
     it('should not auto-continue when model generates thinking plus content', async () => {
       mockTurnRunFn.mockReset();

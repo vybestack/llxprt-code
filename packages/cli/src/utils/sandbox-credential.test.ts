@@ -65,6 +65,17 @@ function setNetworkEnvironment(
   if (legacy !== undefined) process.env.SANDBOX_NETWORK = legacy;
 }
 
+function credentialSocketForPlatform(
+  socket: string | undefined,
+  tmpDir: string,
+): string {
+  return socket ?? path.join(tmpDir, HOST_SOCKET_NAME);
+}
+
+function argumentOrEmpty(args: readonly string[], index: number): string {
+  return args[index] ?? '';
+}
+
 function capabilityArtifacts(home: string): string[] {
   return fs
     .readdirSync(home)
@@ -268,11 +279,11 @@ describe('#1456 credential proxy network policy', () => {
       try {
         const result = await invocation.promise;
         cleanup = result.credentialProxyBridgeCleanup;
-        const envFile = invocation.args[3] ?? '';
-        const expectedSocket = socket ?? path.join(tmpDir, HOST_SOCKET_NAME);
+        const envFile = argumentOrEmpty(invocation.args, 3);
+        const platformSocket = credentialSocketForPlatform(socket, tmpDir);
         expect(invocation.args).toStrictEqual([
           '--env',
-          `LLXPRT_CREDENTIAL_SOCKET=${expectedSocket}`,
+          `LLXPRT_CREDENTIAL_SOCKET=${platformSocket}`,
           '--env-file',
           envFile,
         ]);

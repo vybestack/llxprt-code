@@ -19,6 +19,10 @@ const REAUTH_FAILED = 'reauth-failed' as const;
 const QUOTA_EXHAUSTED = 'quota-exhausted' as const;
 const REFRESHED_TOKEN = 'refreshed-by-a';
 
+function resolveReauthenticatedBucket(bucket: string | undefined): string {
+  return bucket ?? 'bucket-a';
+}
+
 describe('Multi-bucket behavioral scenarios', () => {
   let tokenStore: MemoryTokenStore;
 
@@ -195,7 +199,7 @@ describe('Multi-bucket behavioral scenarios', () => {
         await tokenStore.saveToken(
           PROVIDER,
           makeToken('reauth-token'),
-          bucket ?? 'bucket-a',
+          resolveReauthenticatedBucket(bucket),
         );
       },
     );
@@ -242,7 +246,7 @@ describe('Multi-bucket behavioral scenarios', () => {
         await tokenStore.saveToken(
           PROVIDER,
           makeToken('reauth-token'),
-          bucket ?? 'bucket-a',
+          resolveReauthenticatedBucket(bucket),
         );
       },
     );
@@ -416,7 +420,7 @@ describe('Multi-bucket behavioral scenarios', () => {
         await tokenStore.saveToken(
           PROVIDER,
           makeToken('pass3-token'),
-          bucket ?? 'bucket-a',
+          resolveReauthenticatedBucket(bucket),
         );
       },
     );

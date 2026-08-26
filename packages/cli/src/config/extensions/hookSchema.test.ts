@@ -73,7 +73,7 @@ describe('extension hookSchema validation', () => {
       };
       const result: Hooks = validateHooks(hooks);
       expect(result).toBeDefined();
-      expect(Object.keys(result ?? {})).toHaveLength(11);
+      expect(Object.keys(result!)).toHaveLength(11);
     });
 
     it('accepts undefined hooks (optional)', () => {

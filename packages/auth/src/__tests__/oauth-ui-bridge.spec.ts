@@ -28,6 +28,40 @@ function makeWarningEvent(text: string): OAuthUIEvent {
   return { type: 'warning', text };
 }
 
+function timestampOrMissing(timestamp: number | undefined): number {
+  return timestamp ?? -1;
+}
+
+function emitAfterFirstBufferedEvent(text: string): void {
+  if (text === 'buffered-1') {
+    oauthUIBridge.emit(makeInfoEvent('reentrant'), 150);
+  }
+}
+
+function makeThrowingDelivery(delivered: number[]): OAuthUICallback {
+  let callCount = 0;
+  return (_event, ts) => {
+    callCount++;
+    if (callCount === 2) {
+      throw new Error('callback error on event 2');
+    }
+    delivered.push(ts ?? -1);
+    return callCount;
+  };
+}
+
+function makeReentrantCallback(
+  recordDelivery: (text: string) => void,
+  emitReentrantly: (text: string) => void,
+  deliveryCount: () => number,
+): OAuthUICallback {
+  return (event) => {
+    recordDelivery(event.text);
+    emitReentrantly(event.text);
+    return deliveryCount();
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Helpers for discriminated-union narrowing (kept outside test bodies so the
 // vitest no-conditional-in-test / no-conditional-expect rules are satisfied).
@@ -178,7 +212,7 @@ describe('OAuthUIBridge buffering', () => {
 
     const received: number[] = [];
     oauthUIBridge.setCallback(((_event: OAuthUIEvent, ts?: number) => {
-      received.push(ts ?? -1);
+      received.push(timestampOrMissing(ts));
       return received.length;
     }) satisfies OAuthUICallback);
 
@@ -196,7 +230,7 @@ describe('OAuthUIBridge buffering', () => {
 
     const received: number[] = [];
     oauthUIBridge.setCallback(((_event: OAuthUIEvent, ts?: number) => {
-      received.push(ts ?? -1);
+      received.push(timestampOrMissing(ts));
       return received.length;
     }) satisfies OAuthUICallback);
 
@@ -213,15 +247,7 @@ describe('OAuthUIBridge buffering', () => {
     oauthUIBridge.emit(makeInfoEvent('event-3'), 300);
 
     const delivered: number[] = [];
-    let callCount = 0;
-    oauthUIBridge.setCallback(((_event: OAuthUIEvent, ts?: number) => {
-      callCount++;
-      if (callCount === 2) {
-        throw new Error('callback error on event 2');
-      }
-      delivered.push(ts ?? -1);
-      return callCount;
-    }) satisfies OAuthUICallback);
+    oauthUIBridge.setCallback(makeThrowingDelivery(delivered));
 
     // Events 1 and 3 were delivered; event 2 threw
     expect(delivered).toStrictEqual([100, 300]);
@@ -235,17 +261,15 @@ describe('OAuthUIBridge buffering', () => {
 
     const deliveryOrder: string[] = [];
     let callCount = 0;
-    oauthUIBridge.setCallback(((event: OAuthUIEvent, _ts?: number) => {
-      callCount++;
-      const text = event.text;
-      deliveryOrder.push(text);
-
-      // During flush of buffered-1, emit a reentrant event
-      if (text === 'buffered-1') {
-        oauthUIBridge.emit(makeInfoEvent('reentrant'), 150);
-      }
-      return callCount;
-    }) satisfies OAuthUICallback);
+    const callback = makeReentrantCallback(
+      (text) => {
+        callCount++;
+        deliveryOrder.push(text);
+      },
+      emitAfterFirstBufferedEvent,
+      () => callCount,
+    );
+    oauthUIBridge.setCallback(callback);
 
     // Reentrant event is interleaved: buffered-1, reentrant, buffered-2
     expect(deliveryOrder).toStrictEqual([
@@ -310,7 +334,7 @@ describe('OAuthUIBridge buffering', () => {
 
     const received: number[] = [];
     oauthUIBridge.setCallback(((_event: OAuthUIEvent, ts?: number) => {
-      received.push(ts ?? -1);
+      received.push(timestampOrMissing(ts));
       return received.length;
     }) satisfies OAuthUICallback);
 

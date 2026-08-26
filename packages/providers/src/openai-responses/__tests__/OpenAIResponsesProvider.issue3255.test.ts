@@ -161,6 +161,38 @@ function reasoningTranslationKeys(
   return result;
 }
 
+interface CodexAliasFixture {
+  readonly model: string;
+  readonly baseUrl: string;
+  readonly modelBehavior: Readonly<Record<string, unknown>>;
+}
+
+function builtInCodexAliasFixture(): CodexAliasFixture {
+  const aliasEntry = loadProviderAliasEntries().find(
+    (candidate) =>
+      candidate.source === 'builtin' && candidate.alias === 'codex',
+  );
+  if (!aliasEntry) {
+    throw new Error('Builtin codex alias entry not found');
+  }
+  const model = aliasEntry.config.defaultModel;
+  if (typeof model !== 'string' || model === '') {
+    throw new Error('Builtin codex alias entry must declare a default model');
+  }
+  const baseUrl = aliasEntry.config['base-url'];
+  if (typeof baseUrl !== 'string') {
+    throw new Error('Builtin codex alias entry must declare a base URL');
+  }
+  return {
+    model,
+    baseUrl,
+    modelBehavior: {
+      ...aliasEntry.config.ephemeralSettings,
+      ...computeModelDefaults(model, aliasEntry.config.modelDefaults ?? []),
+    },
+  };
+}
+
 describe('OpenAI Responses reasoning wire translation (issue #3255)', () => {
   it.each(['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
     'emits nested effort for %s through the Responses adapter',
@@ -495,25 +527,7 @@ describe('OpenAI Responses reasoning wire translation (issue #3255)', () => {
   );
 
   it('sends the built-in codex alias defaults as nested Responses reasoning', async () => {
-    const aliasEntry = loadProviderAliasEntries().find(
-      (candidate) =>
-        candidate.source === 'builtin' && candidate.alias === 'codex',
-    );
-    if (!aliasEntry) {
-      throw new Error('Builtin codex alias entry not found');
-    }
-    const model = aliasEntry.config.defaultModel;
-    if (typeof model !== 'string' || model === '') {
-      throw new Error('Builtin codex alias entry must declare a default model');
-    }
-    const baseUrl = aliasEntry.config['base-url'];
-    if (typeof baseUrl !== 'string') {
-      throw new Error('Builtin codex alias entry must declare a base URL');
-    }
-    const modelBehavior: Record<string, unknown> = {
-      ...aliasEntry.config.ephemeralSettings,
-      ...computeModelDefaults(model, aliasEntry.config.modelDefaults ?? []),
-    };
+    const { model, baseUrl, modelBehavior } = builtInCodexAliasFixture();
 
     const { request, logger } = await build({
       model,

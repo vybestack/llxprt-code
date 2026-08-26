@@ -27,6 +27,16 @@ import type { TelemetryConfig } from '../internal/interfaces.js';
 const SENTINEL = 'SENTINEL-PROMPT-CONTENT-3315';
 const directories: string[] = [];
 
+function isNonEmpty(line: string): boolean {
+  return line.length > 0;
+}
+
+function parseNonEmptyJsonLines(content: string): void {
+  for (const line of content.trim().split('\n').filter(isNonEmpty)) {
+    JSON.parse(line);
+  }
+}
+
 function makeConfig(
   outfile: string,
   overrides?: Partial<TelemetryConfig>,
@@ -128,9 +138,7 @@ describe('telemetry outfile boundary (REQ-3315.7)', () => {
       totalBytes += size;
       const content = readFileSync(file, 'utf-8');
       expect(content).not.toContain(SENTINEL);
-      for (const line of content.trim().split('\n')) {
-        if (line.length > 0) JSON.parse(line);
-      }
+      expect(() => parseNonEmptyJsonLines(content)).not.toThrow();
     }
     // 100 redacted records plus SDK overhead must stay far below the cap
     // times-two mark; the previous loose bound (cap * 5 + 201 KiB) could hide
@@ -195,9 +203,7 @@ describe('telemetry outfile boundary (REQ-3315.7)', () => {
       expect(statSync(file).size).toBeLessThanOrEqual(cap + 4096);
       const content = readFileSync(file, 'utf-8');
       expect(content).not.toContain(SENTINEL);
-      for (const line of content.trim().split('\n')) {
-        if (line.length > 0) JSON.parse(line);
-      }
+      expect(() => parseNonEmptyJsonLines(content)).not.toThrow();
     }
   });
 });

@@ -161,7 +161,7 @@ describe('Runtime Provider Switching Integration', () => {
     expect(getActiveModelParams()).toStrictEqual({});
   });
 
-  it('does not clear server tools provider state when switching active provider', async () => {
+  async function verifyDoesNotClearServerToolsProviderStateWhenSwitchingActiveProvider() {
     const geminiProvider = createMockProvider('gemini');
     geminiProvider.getServerTools = () => ['web-search'];
     const otherProvider = createMockProvider('other');
@@ -180,9 +180,19 @@ describe('Runtime Provider Switching Integration', () => {
       .setProviderSetting('gemini', 'base-url', 'https://gemini.server-tools');
 
     await switchActiveProvider('other');
-    expect(
-      config.getSettingsService().getProviderSettings('gemini')['base-url'],
-    ).toBe('https://gemini.server-tools');
+
+    return {
+      retainedBaseUrl: config
+        .getSettingsService()
+        .getProviderSettings('gemini')['base-url'],
+    };
+  }
+
+  it('does not clear server tools provider state when switching active provider', async () => {
+    const behaviorResult =
+      await verifyDoesNotClearServerToolsProviderStateWhenSwitchingActiveProvider();
+
+    expect(behaviorResult.retainedBaseUrl).toBe('https://gemini.server-tools');
 
     await switchActiveProvider('gemini');
     expect(

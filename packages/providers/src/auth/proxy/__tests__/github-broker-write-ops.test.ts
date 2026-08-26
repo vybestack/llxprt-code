@@ -66,6 +66,13 @@ const SINGLE_CALL_WRITE_OPS = WRITE_OPS.filter(
   (name) => name !== 'issue.edit' && name !== 'pr.resolve-thread',
 );
 
+function hasNoRequiredParams([, descriptor]: [
+  string,
+  (typeof OP_REGISTRY)[string],
+]): boolean {
+  return (descriptor.requiredParams ?? []).length === 0;
+}
+
 describe('P11a write operations', () => {
   describe('registry', () => {
     for (const name of WRITE_OPS) {
@@ -88,8 +95,8 @@ describe('P11a write operations', () => {
         ([name]) => !(WRITE_OPS as readonly string[]).includes(name),
       );
       expect(reads.length).toBeGreaterThan(0);
-      for (const [name, descriptor] of reads) {
-        expect(descriptor.mutating, `${name} must not be mutating`).toBe(false);
+      for (const [, descriptor] of reads) {
+        expect(descriptor.mutating).toBe(false);
       }
     });
   });
@@ -131,9 +138,9 @@ describe('P11a write operations', () => {
         ['pr.ready', buildPrReadyArgv({ number: 1, repo: 'o/n' })],
         ['label.create', buildLabelCreateArgv({ name: 'bug', repo: 'o/n' })],
       ];
-      for (const [name, argv] of cases) {
+      for (const [, argv] of cases) {
         const idx = argv.indexOf('--repo');
-        expect(idx, `${name} must accept --repo`).toBeGreaterThan(-1);
+        expect(idx).toBeGreaterThan(-1);
         expect(argv[idx + 1]).toBe('o/n');
       }
     });
@@ -202,7 +209,7 @@ describe('P11a write operations', () => {
     it('no single-call write op shape returns an array', () => {
       for (const name of SINGLE_CALL_WRITE_OPS) {
         const shaped = OP_REGISTRY[name].shape('', { number: 1, name: 'x' });
-        expect(Array.isArray(shaped), `${name} returned an array`).toBe(false);
+        expect(Array.isArray(shaped)).toBe(false);
         expect(typeof shaped).toBe('object');
       }
     });
@@ -288,10 +295,7 @@ describe('required parameters', () => {
         params,
         descriptor.requiredParams,
       );
-      expect(
-        error,
-        `${name} must reject missing required params`,
-      ).not.toBeNull();
+      expect(error).not.toBeNull();
       expect(error?.message).toContain('Missing required parameter');
     }
   });
@@ -321,12 +325,9 @@ describe('required parameters', () => {
   it('declares required params for every op that interpolates one', () => {
     const undeclared = Object.entries(OP_REGISTRY)
       .filter(([, d]) => d.buildArgv({}).includes('undefined'))
-      .filter(([, d]) => (d.requiredParams ?? []).length === 0)
+      .filter(hasNoRequiredParams)
       .map(([name]) => name);
-    expect(
-      undeclared,
-      'ops interpolate a positional but declare no requiredParams',
-    ).toStrictEqual([]);
+    expect(undeclared).toStrictEqual([]);
   });
 });
 
@@ -380,10 +381,7 @@ describe('parameter edge cases from review', () => {
   it('accepts both 3- and 6-digit hex colours', () => {
     const spec = OP_REGISTRY['label.create'].params;
     for (const color of ['#FFF', 'FFF', '#ff00aa', 'ff00aa']) {
-      expect(
-        validateParams(spec, { name: 'bug', color }),
-        `${color} should be accepted`,
-      ).toBeNull();
+      expect(validateParams(spec, { name: 'bug', color })).toBeNull();
     }
     expect(
       validateParams(spec, { name: 'bug', color: 'nothex' }),

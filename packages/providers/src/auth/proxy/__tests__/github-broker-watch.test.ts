@@ -37,6 +37,21 @@ function row(name: string, bucket: string) {
  * Drives watchChecks with a virtual clock: each simulated sleep advances
  * time instantly, so the schedule is asserted without real delays.
  */
+interface AbortingRunState {
+  calls: number;
+  readonly controller: AbortController;
+  readonly run: (argv: readonly string[]) => Promise<unknown>;
+}
+
+async function abortOnSecondRun(
+  state: AbortingRunState,
+  argv: readonly string[],
+): Promise<unknown> {
+  state.calls += 1;
+  if (state.calls === 2) state.controller.abort();
+  return state.run(argv);
+}
+
 function harness(responses: unknown[]) {
   let clock = 0;
   const slept: number[] = [];
@@ -174,19 +189,23 @@ describe('cancellation', () => {
   it('stops without another poll once aborted', async () => {
     const controller = new AbortController();
     const h = harness([[row('a', 'pending')]]);
-    let calls = 0;
-    const run = async (argv: readonly string[]) => {
-      calls += 1;
-      if (calls === 2) controller.abort();
-      return h.run(argv);
+    const runState: AbortingRunState = {
+      calls: 0,
+      controller,
+      run: h.run,
     };
-    const out = await watchChecks(['pr', 'checks'], run, controller.signal, {
-      now: h.now,
-      sleep: h.sleep,
-    });
+    const out = await watchChecks(
+      ['pr', 'checks'],
+      abortOnSecondRun.bind(undefined, runState),
+      controller.signal,
+      {
+        now: h.now,
+        sleep: h.sleep,
+      },
+    );
     expect(out.cancelled).toBe(true);
     expect(out.concluded).toBe(false);
-    expect(calls).toBe(2);
+    expect(runState.calls).toBe(2);
   });
 
   /**

@@ -171,160 +171,228 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
   }
 
   it('restarts the turn after a connection error that followed visible content', async () => {
-    let attempt = 0;
-    const generateChatCompletionMock = vi.fn(async function* (
-      _options: GenerateChatOptions,
-    ) {
-      attempt++;
-      if (attempt === 1) {
-        // First attempt: stream begins (first chunk lands inside the
-        // first-chunk retry boundary) then a transient connection error is
-        // thrown mid-stream.
-        yield {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'partial' }],
-        };
-        throw createConnectionError();
-      }
-      // Second attempt: the turn is restarted from scratch and completes.
-      yield {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'recovered response' }],
-      };
-    });
-    registerProvider(generateChatCompletionMock);
-
-    const chat = buildChatSession();
-
-    const stream = await chat.sendMessageStream(
-      { message: 'trigger mid-stream connection error' },
-      'prompt-issue-2150-midstream',
-    );
-
-    const events = await collectEvents(stream);
+    const {
+      attempt,
+      generateChatCompletionMock,
+      retryIndex,
+      replacementTexts,
+    } =
+      await observeRestartsTheTurnAfterAConnectionErrorThatFollowedVisibleContent();
     expect(attempt).toBe(2);
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(2);
-    const retryIndex = events.findIndex((event) => event.type === 'retry');
     expect(retryIndex).toBeGreaterThanOrEqual(0);
-    const replacementTexts = events
-      .slice(retryIndex + 1)
-      .flatMap((event) =>
-        event.type === 'chunk'
-          ? event.value.content.blocks.flatMap((block) =>
-              block.type === 'text' ? [block.text] : [],
-            )
-          : [],
-      );
     expect(replacementTexts).toContain('recovered response');
     expect(replacementTexts).not.toContain('partial');
   });
 
-  it('restarts the turn after a connection error that followed a tool call', async () => {
-    let attempt = 0;
-    const generateChatCompletionMock = vi.fn(async function* (
-      _options: GenerateChatOptions,
-    ) {
-      attempt++;
-      if (attempt === 1) {
+  const observeRestartsTheTurnAfterAConnectionErrorThatFollowedVisibleContent =
+    async () => {
+      let attempt = 0;
+      const generateChatCompletionMock = vi.fn(async function* (
+        _options: GenerateChatOptions,
+      ) {
+        attempt++;
+        if (attempt === 1) {
+          // First attempt: stream begins (first chunk lands inside the
+          // first-chunk retry boundary) then a transient connection error is
+          // thrown mid-stream.
+          yield {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'partial' }],
+          };
+          throw createConnectionError();
+        }
+        // Second attempt: the turn is restarted from scratch and completes.
         yield {
           speaker: 'ai',
-          blocks: [
-            {
-              type: 'tool_call',
-              id: 'call-1',
-              name: 'read_file',
-              parameters: { file_path: 'README.md' },
-            },
-          ],
+          blocks: [{ type: 'text', text: 'recovered response' }],
         };
-        throw createConnectionError();
-      }
-      yield {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'recovered response' }],
-      };
-    });
-    registerProvider(generateChatCompletionMock);
+      });
+      registerProvider(generateChatCompletionMock);
 
-    const chat = buildChatSession();
-    const stream = await chat.sendMessageStream(
-      { message: 'trigger a tool call before a connection error' },
-      'prompt-issue-2150-tool-call',
-    );
+      const chat = buildChatSession();
 
-    const events = await collectEvents(stream);
-    expect(attempt).toBe(2);
-    const retryIndex = events.findIndex((event) => event.type === 'retry');
-    expect(retryIndex).toBeGreaterThanOrEqual(0);
-    const replacementBlocks = events
-      .slice(retryIndex + 1)
-      .flatMap((event) =>
-        event.type === 'chunk' ? event.value.content.blocks : [],
+      const stream = await chat.sendMessageStream(
+        { message: 'trigger mid-stream connection error' },
+        'prompt-issue-2150-midstream',
       );
+
+      const events = await collectEvents(stream);
+
+      const retryIndex = events.findIndex((event) => event.type === 'retry');
+
+      const replacementTexts = events
+        .slice(retryIndex + 1)
+        .flatMap((event) =>
+          event.type === 'chunk'
+            ? event.value.content.blocks.flatMap((block) =>
+                block.type === 'text' ? [block.text] : [],
+              )
+            : [],
+        );
+
+      return {
+        attempt,
+        generateChatCompletionMock,
+        retryIndex,
+        replacementTexts,
+      };
+    };
+
+  it('restarts the turn after a connection error that followed a tool call', async () => {
+    const {
+      attempt,
+      retryIndex,
+      replacementBlocks,
+      restartsTheTurnAfterAConnectionErrorThatFollowedAToolCallObservation1,
+    } =
+      await observeRestartsTheTurnAfterAConnectionErrorThatFollowedAToolCall();
+    expect(attempt).toBe(2);
+    expect(retryIndex).toBeGreaterThanOrEqual(0);
     expect(
-      replacementBlocks.some(
-        (block) => block.type === 'text' && block.text === 'recovered response',
-      ),
+      restartsTheTurnAfterAConnectionErrorThatFollowedAToolCallObservation1,
     ).toBe(true);
     expect(replacementBlocks.some((block) => block.type === 'tool_call')).toBe(
       false,
     );
   });
 
-  it('restarts the turn after a connection error that followed hidden thinking metadata', async () => {
-    let attempt = 0;
-    const generateChatCompletionMock = vi.fn(async function* (
-      _options: GenerateChatOptions,
-    ) {
-      attempt++;
-      if (attempt === 1) {
+  const observeRestartsTheTurnAfterAConnectionErrorThatFollowedAToolCall =
+    async () => {
+      let attempt = 0;
+      const generateChatCompletionMock = vi.fn(async function* (
+        _options: GenerateChatOptions,
+      ) {
+        attempt++;
+        if (attempt === 1) {
+          yield {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'tool_call',
+                id: 'call-1',
+                name: 'read_file',
+                parameters: { file_path: 'README.md' },
+              },
+            ],
+          };
+          throw createConnectionError();
+        }
         yield {
           speaker: 'ai',
-          blocks: [
-            {
-              type: 'thinking',
-              thought: '',
-              sourceField: 'thinking',
-              signature: 'state-token',
-              streamId: 'reasoning-1',
-              streamStatus: 'complete',
-              isHidden: true,
-            },
-          ],
+          blocks: [{ type: 'text', text: 'recovered response' }],
         };
-        throw createConnectionError();
-      }
-      yield {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'recovered response' }],
-      };
-    });
-    registerProvider(generateChatCompletionMock);
+      });
+      registerProvider(generateChatCompletionMock);
 
-    const chat = buildChatSession();
-    const stream = await chat.sendMessageStream(
-      { message: 'trigger hidden thinking metadata before a connection error' },
-      'prompt-issue-2150-thinking-metadata',
-    );
-
-    const events = await collectEvents(stream);
-    expect(attempt).toBe(2);
-    const retryIndex = events.findIndex((event) => event.type === 'retry');
-    expect(retryIndex).toBeGreaterThanOrEqual(0);
-    const replacementBlocks = events
-      .slice(retryIndex + 1)
-      .flatMap((event) =>
-        event.type === 'chunk' ? event.value.content.blocks : [],
+      const chat = buildChatSession();
+      const stream = await chat.sendMessageStream(
+        { message: 'trigger a tool call before a connection error' },
+        'prompt-issue-2150-tool-call',
       );
+
+      const events = await collectEvents(stream);
+
+      const retryIndex = events.findIndex((event) => event.type === 'retry');
+
+      const replacementBlocks = events
+        .slice(retryIndex + 1)
+        .flatMap((event) =>
+          event.type === 'chunk' ? event.value.content.blocks : [],
+        );
+
+      const restartsTheTurnAfterAConnectionErrorThatFollowedAToolCallObservation1 =
+        replacementBlocks.some(
+          (block) =>
+            block.type === 'text' && block.text === 'recovered response',
+        );
+      return {
+        attempt,
+        retryIndex,
+        replacementBlocks,
+        restartsTheTurnAfterAConnectionErrorThatFollowedAToolCallObservation1,
+      };
+    };
+
+  it('restarts the turn after a connection error that followed hidden thinking metadata', async () => {
+    const {
+      attempt,
+      retryIndex,
+      replacementBlocks,
+      restartsTheTurnAfterAConnectionErrorThatFollowedHiddenThinkingMetadataObservation1,
+    } =
+      await observeRestartsTheTurnAfterAConnectionErrorThatFollowedHiddenThinkingMetadata();
+    expect(attempt).toBe(2);
+    expect(retryIndex).toBeGreaterThanOrEqual(0);
     expect(
-      replacementBlocks.some(
-        (block) => block.type === 'text' && block.text === 'recovered response',
-      ),
+      restartsTheTurnAfterAConnectionErrorThatFollowedHiddenThinkingMetadataObservation1,
     ).toBe(true);
     expect(replacementBlocks.some((block) => block.type === 'thinking')).toBe(
       false,
     );
   });
+
+  const observeRestartsTheTurnAfterAConnectionErrorThatFollowedHiddenThinkingMetadata =
+    async () => {
+      let attempt = 0;
+      const generateChatCompletionMock = vi.fn(async function* (
+        _options: GenerateChatOptions,
+      ) {
+        attempt++;
+        if (attempt === 1) {
+          yield {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'thinking',
+                thought: '',
+                sourceField: 'thinking',
+                signature: 'state-token',
+                streamId: 'reasoning-1',
+                streamStatus: 'complete',
+                isHidden: true,
+              },
+            ],
+          };
+          throw createConnectionError();
+        }
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'recovered response' }],
+        };
+      });
+      registerProvider(generateChatCompletionMock);
+
+      const chat = buildChatSession();
+      const stream = await chat.sendMessageStream(
+        {
+          message: 'trigger hidden thinking metadata before a connection error',
+        },
+        'prompt-issue-2150-thinking-metadata',
+      );
+
+      const events = await collectEvents(stream);
+
+      const retryIndex = events.findIndex((event) => event.type === 'retry');
+
+      const replacementBlocks = events
+        .slice(retryIndex + 1)
+        .flatMap((event) =>
+          event.type === 'chunk' ? event.value.content.blocks : [],
+        );
+
+      const restartsTheTurnAfterAConnectionErrorThatFollowedHiddenThinkingMetadataObservation1 =
+        replacementBlocks.some(
+          (block) =>
+            block.type === 'text' && block.text === 'recovered response',
+        );
+      return {
+        attempt,
+        retryIndex,
+        replacementBlocks,
+        restartsTheTurnAfterAConnectionErrorThatFollowedHiddenThinkingMetadataObservation1,
+      };
+    };
 
   it('does NOT retry a non-transient error thrown mid-stream and stops the loop', async () => {
     let attempt = 0;
@@ -493,113 +561,136 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
   });
 
   it('records only the successful attempt in history after a discard-and-restart', async () => {
-    const history = new HistoryService();
-    let attempt = 0;
-    const generateChatCompletionMock = vi.fn(async function* (
-      _options: GenerateChatOptions,
-    ) {
-      attempt++;
-      if (attempt === 1) {
-        yield {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'partial' }],
-        };
-        throw createConnectionError();
-      }
-      yield {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'recovered response' }],
-      };
-    });
-    registerProvider(generateChatCompletionMock);
-
-    const chat = buildChatSession(history);
-
-    const stream = await chat.sendMessageStream(
-      { message: 'history-safety trigger' },
-      'prompt-issue-2150-history-safety',
-    );
-
-    const events = await collectEvents(stream);
+    const { attempt, events, ai, aiText } =
+      await observeRecordsOnlyTheSuccessfulAttemptInHistoryAfterADiscardAndRestart();
     expect(attempt).toBe(2);
     expect(events.some((event) => event.type === 'retry')).toBe(true);
-
-    await chat.waitForIdle();
-
-    const ai = history.getAll().filter((content) => content.speaker === 'ai');
     expect(ai).toHaveLength(1);
-    const aiText = ai[0].blocks
-      .filter((block) => block.type === 'text')
-      .map((block) => (block as { text: string }).text)
-      .join('');
     expect(aiText).toBe('recovered response');
     expect(aiText).not.toContain('partial');
   });
 
-  it('does not retry InvalidStreamError after a chunk was already emitted', async () => {
-    let attempt = 0;
-    const generateChatCompletionMock = vi.fn(async function* (
-      _options: GenerateChatOptions,
-    ) {
-      attempt++;
-      if (attempt === 1) {
+  const observeRecordsOnlyTheSuccessfulAttemptInHistoryAfterADiscardAndRestart =
+    async () => {
+      const history = new HistoryService();
+      let attempt = 0;
+      const generateChatCompletionMock = vi.fn(async function* (
+        _options: GenerateChatOptions,
+      ) {
+        attempt++;
+        if (attempt === 1) {
+          yield {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'partial' }],
+          };
+          throw createConnectionError();
+        }
         yield {
           speaker: 'ai',
-          blocks: [{ type: 'text', text: 'partial' }],
+          blocks: [{ type: 'text', text: 'recovered response' }],
         };
-        throw new InvalidStreamError(
-          'stream produced no usable text',
-          'NO_RESPONSE_TEXT',
-        );
-      }
-      yield {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'recovered response' }],
-      };
-    });
-    registerProvider(generateChatCompletionMock);
+      });
+      registerProvider(generateChatCompletionMock);
 
-    const chat = buildChatSession();
+      const chat = buildChatSession(history);
 
-    const stream = await chat.sendMessageStream(
-      { message: 'trigger InvalidStreamError mid-stream' },
-      'prompt-issue-2150-invalid-stream',
-    );
+      const stream = await chat.sendMessageStream(
+        { message: 'history-safety trigger' },
+        'prompt-issue-2150-history-safety',
+      );
 
+      const events = await collectEvents(stream);
+
+      await chat.waitForIdle();
+
+      const ai = history.getAll().filter((content) => content.speaker === 'ai');
+
+      const aiText = ai[0].blocks
+        .filter((block) => block.type === 'text')
+        .map((block) => (block as { text: string }).text)
+        .join('');
+
+      return { attempt, events, ai, aiText };
+    };
+
+  it('does not retry InvalidStreamError after a chunk was already emitted', async () => {
+    const { stream, observation } =
+      await observeDoesNotRetryInvalidStreamErrorAfterAChunkWasAlreadyEmitted();
     await expect(collectEvents(stream)).rejects.toThrow(InvalidStreamError);
-    expect(attempt).toBe(1);
+    expect(observation.attempt).toBe(1);
   });
+
+  const observeDoesNotRetryInvalidStreamErrorAfterAChunkWasAlreadyEmitted =
+    async () => {
+      const observation = { attempt: 0 };
+      const generateChatCompletionMock = vi.fn(async function* (
+        _options: GenerateChatOptions,
+      ) {
+        observation.attempt++;
+        if (observation.attempt === 1) {
+          yield {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'partial' }],
+          };
+          throw new InvalidStreamError(
+            'stream produced no usable text',
+            'NO_RESPONSE_TEXT',
+          );
+        }
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'recovered response' }],
+        };
+      });
+      registerProvider(generateChatCompletionMock);
+
+      const chat = buildChatSession();
+
+      const stream = await chat.sendMessageStream(
+        { message: 'trigger InvalidStreamError mid-stream' },
+        'prompt-issue-2150-invalid-stream',
+      );
+
+      return { stream, observation };
+    };
 
   it('does not retry EmptyStreamError after a chunk was already emitted', async () => {
-    let attempt = 0;
-    const generateChatCompletionMock = vi.fn(async function* (
-      _options: GenerateChatOptions,
-    ) {
-      attempt++;
-      if (attempt === 1) {
+    const { stream, observation } =
+      await observeDoesNotRetryEmptyStreamErrorAfterAChunkWasAlreadyEmitted();
+    await expect(collectEvents(stream)).rejects.toThrow(EmptyStreamError);
+    expect(observation.attempt).toBe(1);
+  });
+
+  const observeDoesNotRetryEmptyStreamErrorAfterAChunkWasAlreadyEmitted =
+    async () => {
+      const observation = { attempt: 0 };
+      const generateChatCompletionMock = vi.fn(async function* (
+        _options: GenerateChatOptions,
+      ) {
+        observation.attempt++;
+        if (observation.attempt === 1) {
+          yield {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'partial' }],
+          };
+          throw new EmptyStreamError('stream produced no content');
+        }
         yield {
           speaker: 'ai',
-          blocks: [{ type: 'text', text: 'partial' }],
+          blocks: [{ type: 'text', text: 'recovered response' }],
         };
-        throw new EmptyStreamError('stream produced no content');
-      }
-      yield {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'recovered response' }],
-      };
-    });
-    registerProvider(generateChatCompletionMock);
+      });
+      registerProvider(generateChatCompletionMock);
 
-    const chat = buildChatSession();
+      const chat = buildChatSession();
 
-    const stream = await chat.sendMessageStream(
-      { message: 'trigger EmptyStreamError mid-stream' },
-      'prompt-issue-2150-empty-stream',
-    );
+      const stream = await chat.sendMessageStream(
+        { message: 'trigger EmptyStreamError mid-stream' },
+        'prompt-issue-2150-empty-stream',
+      );
 
-    await expect(collectEvents(stream)).rejects.toThrow(EmptyStreamError);
-    expect(attempt).toBe(1);
-  });
+      return { stream, observation };
+    };
 
   it('shares one transport budget across agent empty-stream retries', async () => {
     settingsService.set('retries', 1);

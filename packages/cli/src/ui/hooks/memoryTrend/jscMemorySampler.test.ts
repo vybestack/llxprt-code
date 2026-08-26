@@ -74,9 +74,8 @@ describe('sampleMemoryUsage', () => {
 });
 
 describe('heapUsed correctness', () => {
-  it.skipIf(!jscAvailable)(
-    'replaces the base heapUsed with the real JSC heap size',
-    () => {
+  describe.skipIf(!jscAvailable)('when the JSC heap API is available', () => {
+    it('replaces the base heapUsed with the real JSC heap size', () => {
       const sample = sampleMemoryUsage(base);
       // The whole point: the incoming heapUsed must NOT survive.
       expect(sample.heapUsed).not.toBe(BASE.heapUsed);
@@ -85,12 +84,9 @@ describe('heapUsed correctness', () => {
       expect(
         Math.abs(sample.heapUsed - (truth as number)) / (truth as number),
       ).toBeLessThan(0.05);
-    },
-  );
+    });
 
-  it.skipIf(!jscAvailable)(
-    'does not add extraMemorySize, which double-counts string backing stores',
-    () => {
+    it('does not add extraMemorySize, which double-counts string backing stores', () => {
       const jsc = (
         globalThis as {
           process: { getBuiltinModule: (id: string) => unknown };
@@ -128,30 +124,30 @@ describe('heapUsed correctness', () => {
       // the sampler must not sum them.
       expect(summedDelta).toBeGreaterThan(logicalBytes * 1.7);
       expect(retained).toHaveLength(1500);
-    },
-  );
+    });
 
-  it.skipIf(!jscAvailable)('tracks a large retained allocation', () => {
-    const jsc = (
-      globalThis as { process: { getBuiltinModule: (id: string) => unknown } }
-    ).process.getBuiltinModule('bun:jsc') as { gcAndSweep: () => void };
+    it('tracks a large retained allocation', () => {
+      const jsc = (
+        globalThis as { process: { getBuiltinModule: (id: string) => unknown } }
+      ).process.getBuiltinModule('bun:jsc') as { gcAndSweep: () => void };
 
-    jsc.gcAndSweep();
-    const before = sampleMemoryUsage(base).heapUsed;
+      jsc.gcAndSweep();
+      const before = sampleMemoryUsage(base).heapUsed;
 
-    // Touched so they flatten rather than remaining lazy ropes.
-    const retained: string[] = [];
-    for (let i = 0; i < 3000; i++) {
-      const s = `payload-${i}-`.repeat(2000);
-      s.charCodeAt(s.length - 1);
-      retained.push(s);
-    }
-    const logicalBytes = retained.reduce((n, s) => n + s.length, 0);
+      // Touched so they flatten rather than remaining lazy ropes.
+      const retained: string[] = [];
+      for (let i = 0; i < 3000; i++) {
+        const s = `payload-${i}-`.repeat(2000);
+        s.charCodeAt(s.length - 1);
+        retained.push(s);
+      }
+      const logicalBytes = retained.reduce((n, s) => n + s.length, 0);
 
-    jsc.gcAndSweep();
-    const growth = sampleMemoryUsage(base).heapUsed - before;
+      jsc.gcAndSweep();
+      const growth = sampleMemoryUsage(base).heapUsed - before;
 
-    expect(growth).toBeGreaterThan(logicalBytes * 0.5);
-    expect(retained).toHaveLength(3000);
+      expect(growth).toBeGreaterThan(logicalBytes * 0.5);
+      expect(retained).toHaveLength(3000);
+    });
   });
 });

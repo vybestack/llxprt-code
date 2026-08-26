@@ -27,6 +27,12 @@ function createEmptySettingsService(): ISettingsService {
  * OAuth manager double whose token is DERIVED from the provider it is asked
  * for, recording each request so tests can assert exact fetch sequences.
  */
+function isDeviceCodeOAuthEnabled(
+  persistedEnablement: Record<string, boolean | undefined>,
+): boolean {
+  return persistedEnablement['device-code-test'] === true;
+}
+
 function createRecordingOAuthManager(tokenRequests: string[]): OAuthManager {
   return {
     getToken: async (provider: string) => {
@@ -183,7 +189,7 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
           {
             providerId: 'device-code-test',
             envKeyNames: ['OPENAI_API_KEY'],
-            isOAuthEnabled: persistedEnablement['device-code-test'] ?? false,
+            isOAuthEnabled: isDeviceCodeOAuthEnabled(persistedEnablement),
             supportsOAuth: true,
             oauthProvider: 'device-code-test',
           },
@@ -496,7 +502,7 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
         {
           providerId: 'device-code-test',
           envKeyNames: ['OPENAI_API_KEY'],
-          isOAuthEnabled: persistedEnablement['device-code-test'] ?? false,
+          isOAuthEnabled: isDeviceCodeOAuthEnabled(persistedEnablement),
           supportsOAuth: true,
           oauthProvider: 'device-code-test',
         },

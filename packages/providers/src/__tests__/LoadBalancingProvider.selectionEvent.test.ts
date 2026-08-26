@@ -20,6 +20,25 @@ import {
   type LoadBalancingProviderConfig,
 } from '../LoadBalancingProvider.js';
 
+function resolveSelectionDelegate(
+  name: string,
+  targetName: string,
+  delegate: IProvider,
+  fallback: (providerName: string) => IProvider | undefined,
+): IProvider | undefined {
+  if (name === targetName) return delegate;
+  return fallback(name);
+}
+
+async function* generateSelectionFailoverResponse(
+  options: GenerateChatOptions,
+): AsyncGenerator<IContent> {
+  if (options.resolved?.model === 'claude-opus-4-8') {
+    throw new Error('primary backend down');
+  }
+  yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+}
+
 /**
  * The footer only re-renders the load-balancer identity when a core event
  * fires. The provider therefore MUST emit a dedicated
@@ -86,10 +105,13 @@ describe('LoadBalancingProvider selection emits a dedicated selection event', ()
 
     const originalGetProvider =
       providerManager.getProviderByName.bind(providerManager);
-    providerManager.getProviderByName = (name: string) => {
-      if (name === 'gemini') return createMockDelegate('gemini');
-      return originalGetProvider(name);
-    };
+    providerManager.getProviderByName = (name: string) =>
+      resolveSelectionDelegate(
+        name,
+        'gemini',
+        createMockDelegate('gemini'),
+        originalGetProvider,
+      );
 
     let modelChangedCount = 0;
     coreEvents.on(CoreEvent.ModelChanged, () => {
@@ -132,10 +154,13 @@ describe('LoadBalancingProvider selection emits a dedicated selection event', ()
 
     const originalGetProvider =
       providerManager.getProviderByName.bind(providerManager);
-    providerManager.getProviderByName = (name: string) => {
-      if (name === 'gemini') return createMockDelegate('gemini');
-      return originalGetProvider(name);
-    };
+    providerManager.getProviderByName = (name: string) =>
+      resolveSelectionDelegate(
+        name,
+        'gemini',
+        createMockDelegate('gemini'),
+        originalGetProvider,
+      );
 
     const selections: Array<string | null | undefined> = [];
     coreEvents.on(CoreEvent.LoadBalancerSelectionChanged, (payload) => {
@@ -183,14 +208,7 @@ describe('LoadBalancingProvider selection emits a dedicated selection event', ()
 
     const mockProvider: IProvider = {
       name: 'test-provider',
-      async *generateChatCompletion(
-        options: GenerateChatOptions,
-      ): AsyncGenerator<IContent> {
-        if (options.resolved?.model === 'claude-opus-4-8') {
-          throw new Error('primary backend down');
-        }
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
-      },
+      generateChatCompletion: generateSelectionFailoverResponse,
       getModels: async () => [],
       getDefaultModel: () => 'gpt-5.5',
       getServerTools: () => [],
@@ -199,10 +217,13 @@ describe('LoadBalancingProvider selection emits a dedicated selection event', ()
 
     const originalGetProvider =
       providerManager.getProviderByName.bind(providerManager);
-    providerManager.getProviderByName = (name: string) => {
-      if (name === 'test-provider') return mockProvider;
-      return originalGetProvider(name);
-    };
+    providerManager.getProviderByName = (name: string) =>
+      resolveSelectionDelegate(
+        name,
+        'test-provider',
+        mockProvider,
+        originalGetProvider,
+      );
 
     const selections: LoadBalancerSelectionPayload[] = [];
     coreEvents.on(CoreEvent.LoadBalancerSelectionChanged, (payload) => {

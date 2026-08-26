@@ -72,6 +72,52 @@ void vi.mock('../runtimeSettings.js', () => ({
 
 const { applyProfileWithGuards } = await import('../profileApplication.js');
 
+interface ProviderSwitchOptions {
+  preserveEphemerals?: string[];
+  autoOAuth?: boolean;
+}
+
+function preservedEphemerals(
+  options: ProviderSwitchOptions | undefined,
+): string[] {
+  return options?.preserveEphemerals ?? [];
+}
+
+function configuredState(value: string | null | undefined): 'set' | 'null' {
+  return value !== null && value !== undefined && value !== '' ? 'set' : 'null';
+}
+
+function undefinedWhenNull(
+  value: string | null | undefined,
+): string | undefined {
+  return value ?? undefined;
+}
+
+function recordNonAuthEphemeral(callOrder: string[], key: string): void {
+  if (key !== 'auth-key' && key !== 'auth-keyfile' && key !== 'base-url') {
+    callOrder.push(`setEphemeralSetting:${key}`);
+  }
+}
+
+function autoOAuthEnabled(options: ProviderSwitchOptions | undefined): boolean {
+  return (
+    options !== undefined &&
+    'autoOAuth' in options &&
+    options.autoOAuth === true
+  );
+}
+
+async function loadNamedProfile(
+  profiles: ReadonlyMap<string, Profile>,
+  name: string,
+): Promise<Profile> {
+  const profile = profiles.get(name);
+  if (profile === undefined) {
+    throw new Error(`Profile ${name} not found`);
+  }
+  return profile;
+}
+
 describe('Profile application basics', () => {
   let savedGcpProject: string | undefined;
   let savedGcpLocation: string | undefined;
@@ -93,7 +139,7 @@ describe('Profile application basics', () => {
     switchActiveProviderMock.mockImplementation(
       async (providerName, options) => {
         providerManagerStub.activeProviderName = providerName;
-        capturedPreserveEphemerals = options?.preserveEphemerals ?? [];
+        capturedPreserveEphemerals = preservedEphemerals(options);
         return {
           infoMessages: [],
           changed: true,
@@ -172,7 +218,7 @@ describe('Profile application basics', () => {
     });
 
     updateActiveProviderApiKeyMock.mockImplementation(async (apiKey) => {
-      callOrder.push(`updateActiveProviderApiKey:${apiKey ? 'set' : 'null'}`);
+      callOrder.push(`updateActiveProviderApiKey:${configuredState(apiKey)}`);
       return { message: 'API key set' };
     });
 
@@ -224,19 +270,17 @@ describe('Profile application basics', () => {
     });
 
     updateActiveProviderApiKeyMock.mockImplementation(async (apiKey) => {
-      callOrder.push(`updateActiveProviderApiKey:${apiKey ? 'set' : 'null'}`);
+      callOrder.push(`updateActiveProviderApiKey:${configuredState(apiKey)}`);
       return { message: 'API key set' };
     });
 
     updateActiveProviderBaseUrlMock.mockImplementation(async (baseUrl) => {
-      callOrder.push(`updateActiveProviderBaseUrl:${baseUrl ? 'set' : 'null'}`);
-      return { message: 'Base URL set', baseUrl: baseUrl ?? undefined };
+      callOrder.push(`updateActiveProviderBaseUrl:${configuredState(baseUrl)}`);
+      return { message: 'Base URL set', baseUrl: undefinedWhenNull(baseUrl) };
     });
 
     setEphemeralSettingMock.mockImplementation((key, value) => {
-      if (key !== 'auth-key' && key !== 'auth-keyfile' && key !== 'base-url') {
-        callOrder.push(`setEphemeralSetting:${key}`);
-      }
+      recordNonAuthEphemeral(callOrder, key);
       configStub.setEphemeralSetting(key, value);
     });
 
@@ -291,9 +335,7 @@ describe('Profile application basics', () => {
         providerName: string,
         options?: { preserveEphemerals?: string[]; autoOAuth?: boolean },
       ) => {
-        if (options && 'autoOAuth' in options) {
-          switchWasCalledWithAutoOAuth = options.autoOAuth === true;
-        }
+        switchWasCalledWithAutoOAuth = autoOAuthEnabled(options);
         providerManagerStub.activeProviderName = providerName;
         return {
           infoMessages: [],
@@ -371,12 +413,12 @@ describe('LoadBalancer profile integration', () => {
       ephemeralSettings: {},
     };
 
-    mockProfileManager.loadProfile.mockImplementation(
-      async (name: string): Promise<Profile> => {
-        if (name === 'profile1') return standardProfile1;
-        if (name === 'profile2') return standardProfile2;
-        throw new Error(`Profile ${name} not found`);
-      },
+    const profiles = new Map([
+      ['profile1', standardProfile1],
+      ['profile2', standardProfile2],
+    ]);
+    mockProfileManager.loadProfile.mockImplementation((name: string) =>
+      loadNamedProfile(profiles, name),
     );
 
     setActiveModelMock.mockImplementation(async (model: string) => ({

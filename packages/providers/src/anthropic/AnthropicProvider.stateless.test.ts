@@ -19,6 +19,10 @@ import {
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
+function isOptionalObject(value: unknown): boolean {
+  return value === undefined || typeof value === 'object';
+}
+
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),
 }));
@@ -299,7 +303,7 @@ describe('Anthropic provider stateless contract tests', () => {
     const provider = new TestAnthropicProvider();
     // Should return params from SettingsService or undefined, but not throw
     const params = provider.getModelParams();
-    expect(params === undefined || typeof params === 'object').toBe(true);
+    expect(isOptionalObject(params)).toBe(true);
   });
 
   it('reads request overrides from invocation ephemerals when config is inert', async () => {

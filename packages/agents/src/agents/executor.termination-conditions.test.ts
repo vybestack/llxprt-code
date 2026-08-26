@@ -154,81 +154,90 @@ describe('AgentExecutor run (Termination Conditions)', () => {
   });
 
   it('should actively abort a stalled response stream before the overall timeout expires', async () => {
-    const testTimeoutMs = 30_000;
-    fixture.mockConfig.setEphemeralSetting(
-      'stream-idle-timeout-ms',
-      testTimeoutMs,
-    );
-
-    const definition = createTestDefinition([LSTool.Name], {
-      max_time_minutes: 5,
-    });
-    const executor = await AgentExecutor.create(
-      definition,
-      fixture.mockConfig,
-      getTestRuntimeMessageBus(fixture.mockConfig),
-    );
-
-    let capturedSignal: AbortSignal | undefined;
-    mockSendMessageStream.mockImplementationOnce(
-      async ({ config: messageConfig }) => {
-        const config = messageConfig as
-          | { abortSignal?: AbortSignal }
-          | undefined;
-        capturedSignal = config?.abortSignal;
-        return (async function* () {
-          yield {
-            type: StreamEventType.CHUNK,
-            value: createMockResponseChunk([{ text: 'partial output' }]),
-          } as StreamEvent;
-
-          if (!capturedSignal) {
-            throw new Error('Abort signal was not provided');
-          }
-          const signal = capturedSignal;
-          // The already-aborted case must be handled before subscribing:
-          // adding an `abort` listener to a signal that has already aborted
-          // never fires, so waiting on the event alone would hang whenever the
-          // idle-timeout wins the race to abort before this line runs.
-          if (!signal.aborted) {
-            await new Promise<void>((resolve) => {
-              signal.addEventListener('abort', () => resolve(), { once: true });
-            });
-          }
-          throw createAbortError();
-        })();
-      },
-    );
-
-    const runPromise = executor.run({ goal: 'Stall test' }, fixture.signal);
-    const runRejection = runPromise.then(
-      () => {
-        throw new Error('Expected stalled executor run to abort');
-      },
-      (error) => {
-        expect(error).toMatchObject({
-          name: 'AbortError',
-        });
-      },
-    );
-
-    // Drain microtasks so the executor's async setup chain settles and
-    // captures the abort signal.  With the prompts module mocked there is
-    // no real disk I/O in the chain, so `advanceTimersByTimeAsync(0)` —
-    // which flushes microtasks without advancing the clock — is sufficient
-    // on every platform.  The loop walks the full promise chain from
-    // `run()` → `createChatObject()` → `buildRuntimeBundle()` →
-    // `runAgentLoop()` → `sendMessageStream()` (mock) → `capturedSignal`.
-    for (let i = 0; i < 200 && capturedSignal === undefined; i++) {
-      await advanceTimersByTimeAsync(0);
-    }
+    const { capturedSignal, abortedObservation, abortError } =
+      await observeActivelyAbortAStalledResponseStreamBeforeTheOverallTimeoutExpires();
     expect(capturedSignal).toBeDefined();
-    await advanceTimersByTimeAsync(testTimeoutMs + 1_000);
-
-    await runRejection;
-    expect(capturedSignal?.aborted).toBe(true);
+    expect(abortedObservation).toBe(true);
+    expect(abortError).toMatchObject({ name: 'AbortError' });
     expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
   });
+
+  const observeActivelyAbortAStalledResponseStreamBeforeTheOverallTimeoutExpires =
+    async () => {
+      const testTimeoutMs = 30_000;
+      fixture.mockConfig.setEphemeralSetting(
+        'stream-idle-timeout-ms',
+        testTimeoutMs,
+      );
+
+      const definition = createTestDefinition([LSTool.Name], {
+        max_time_minutes: 5,
+      });
+      const executor = await AgentExecutor.create(
+        definition,
+        fixture.mockConfig,
+        getTestRuntimeMessageBus(fixture.mockConfig),
+      );
+
+      let capturedSignal: AbortSignal | undefined;
+      mockSendMessageStream.mockImplementationOnce(
+        async ({ config: messageConfig }) => {
+          const config = messageConfig as
+            | { abortSignal?: AbortSignal }
+            | undefined;
+          capturedSignal = config?.abortSignal;
+          return (async function* () {
+            yield {
+              type: StreamEventType.CHUNK,
+              value: createMockResponseChunk([{ text: 'partial output' }]),
+            } as StreamEvent;
+
+            if (!capturedSignal) {
+              throw new Error('Abort signal was not provided');
+            }
+            const signal = capturedSignal;
+            // The already-aborted case must be handled before subscribing:
+            // adding an `abort` listener to a signal that has already aborted
+            // never fires, so waiting on the event alone would hang whenever the
+            // idle-timeout wins the race to abort before this line runs.
+            if (!signal.aborted) {
+              await new Promise<void>((resolve) => {
+                signal.addEventListener('abort', () => resolve(), {
+                  once: true,
+                });
+              });
+            }
+            throw createAbortError();
+          })();
+        },
+      );
+
+      const runPromise = executor.run({ goal: 'Stall test' }, fixture.signal);
+      const runRejection = runPromise.then(
+        () => {
+          throw new Error('Expected stalled executor run to abort');
+        },
+        (error: unknown) => error,
+      );
+
+      // Drain microtasks so the executor's async setup chain settles and
+      // captures the abort signal.  With the prompts module mocked there is
+      // no real disk I/O in the chain, so `advanceTimersByTimeAsync(0)` —
+      // which flushes microtasks without advancing the clock — is sufficient
+      // on every platform.  The loop walks the full promise chain from
+      // `run()` → `createChatObject()` → `buildRuntimeBundle()` →
+      // `runAgentLoop()` → `sendMessageStream()` (mock) → `capturedSignal`.
+      for (let i = 0; i < 200 && capturedSignal === undefined; i++) {
+        await advanceTimersByTimeAsync(0);
+      }
+
+      await advanceTimersByTimeAsync(testTimeoutMs + 1_000);
+
+      const abortError = await runRejection;
+
+      const abortedObservation = capturedSignal?.aborted;
+      return { capturedSignal, abortedObservation, abortError };
+    };
 
   it('should terminate when AbortSignal is triggered', async () => {
     const definition = createTestDefinition();

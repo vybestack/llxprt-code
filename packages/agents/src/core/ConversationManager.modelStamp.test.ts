@@ -148,6 +148,21 @@ describe('ConversationManager stamps model origin at recording boundary (issue #
   });
 
   it('stamps metadata.model on an AI turn that carries a signed thinking block', () => {
+    const {
+      modelObservation,
+      providerBaseURLObservation,
+      modelObservation2,
+      stampsMetadataModelOnAnAITurnThatCarriesASignedThinkingObservation4,
+    } = observeStampsMetadataModelOnAnAITurnThatCarriesASignedThinking();
+    expect(modelObservation).toBe(GENERATING_MODEL);
+    expect(providerBaseURLObservation).toBe(GENERATING_BASE_URL);
+    expect(modelObservation2).toBeUndefined();
+    expect(
+      stampsMetadataModelOnAnAITurnThatCarriesASignedThinkingObservation4,
+    ).toBe(true);
+  });
+
+  const observeStampsMetadataModelOnAnAITurnThatCarriesASignedThinking = () => {
     const userInput: IContent = {
       speaker: 'human',
       blocks: [{ type: 'text', text: 'Think and answer' }],
@@ -173,15 +188,20 @@ describe('ConversationManager stamps model origin at recording boundary (issue #
     const ai = all.find((c) => c.speaker === 'ai');
     const human = all.find((c) => c.speaker === 'human');
 
-    expect(ai?.metadata?.model).toBe(GENERATING_MODEL);
-    expect(ai?.metadata?.providerBaseURL).toBe(GENERATING_BASE_URL);
-    expect(human?.metadata?.model).toBeUndefined();
-
     // The signed thinking block must still be present (stamping does not strip).
-    expect(
-      ai?.blocks.some((b) => b.type === 'thinking' && b.signature === 'sig-A'),
-    ).toBe(true);
-  });
+
+    const modelObservation = ai?.metadata?.model;
+    const providerBaseURLObservation = ai?.metadata?.providerBaseURL;
+    const modelObservation2 = human?.metadata?.model;
+    const stampsMetadataModelOnAnAITurnThatCarriesASignedThinkingObservation4 =
+      ai?.blocks.some((b) => b.type === 'thinking' && b.signature === 'sig-A');
+    return {
+      modelObservation,
+      providerBaseURLObservation,
+      modelObservation2,
+      stampsMetadataModelOnAnAITurnThatCarriesASignedThinkingObservation4,
+    };
+  };
 
   it('stamps metadata.model on AI turns mixed into automaticFunctionCallingHistory but not user turns', () => {
     const userInput: IContent = {

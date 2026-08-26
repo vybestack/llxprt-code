@@ -16,11 +16,35 @@
 
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
-import type { IContent } from './IContent.js';
+import type { IContent, ToolResponseBlock } from './IContent.js';
 import { createUserMessage as createUserMessageFromIContent } from './IContent.js';
 import { ContentConverters } from './ContentConverters.js';
 
 const createUserMessage = createUserMessageFromIContent;
+
+function toolCallIndexIn(curated: IContent[], id: string): number {
+  return curated.findIndex(
+    (c) =>
+      c.speaker === 'ai' &&
+      c.blocks.some((b) => b.type === 'tool_call' && b.id === id),
+  );
+}
+
+function isToolResponseFor(c: IContent | undefined, callId: string): boolean {
+  return (
+    c?.blocks.some((b) => b.type === 'tool_response' && b.callId === callId) ??
+    false
+  );
+}
+
+function toolResponseCount(curated: IContent[], callId: string): number {
+  return curated
+    .flatMap((c) => c.blocks)
+    .filter(
+      (b): b is ToolResponseBlock =>
+        b.type === 'tool_response' && b.callId === callId,
+    ).length;
+}
 
 describe('HistoryService - Behavioral Tests', () => {
   let service: HistoryService;
@@ -263,20 +287,11 @@ describe('HistoryService - Behavioral Tests', () => {
         const curated = service.getCuratedForProvider();
         expect(curated).toHaveLength(3);
 
-        const toolCallIndex = curated.findIndex(
-          (c) =>
-            c.speaker === 'ai' &&
-            c.blocks.some(
-              (b) => b.type === 'tool_call' && b.id === 'hist_tool_orphan1',
-            ),
-        );
+        const toolCallIndex = toolCallIndexIn(curated, 'hist_tool_orphan1');
         expect(toolCallIndex).toBeGreaterThanOrEqual(0);
         expect(curated[toolCallIndex + 1]?.speaker).toBe('tool');
         expect(
-          curated[toolCallIndex + 1]?.blocks.some(
-            (b) =>
-              b.type === 'tool_response' && b.callId === 'hist_tool_orphan1',
-          ),
+          isToolResponseFor(curated[toolCallIndex + 1], 'hist_tool_orphan1'),
         ).toBe(true);
       });
 
@@ -340,13 +355,7 @@ describe('HistoryService - Behavioral Tests', () => {
         expect(curated).toHaveLength(3);
 
         // Count tool responses for this call ID
-        const toolResponses = curated.flatMap((c) =>
-          c.blocks.filter(
-            (b) =>
-              b.type === 'tool_response' && b.callId === 'hist_tool_responded',
-          ),
-        );
-        expect(toolResponses).toHaveLength(1);
+        expect(toolResponseCount(curated, 'hist_tool_responded')).toBe(1);
       });
 
       it('should preserve MediaBlocks alongside tool_response in getCuratedForProvider', () => {
@@ -385,13 +394,7 @@ describe('HistoryService - Behavioral Tests', () => {
         const curated = service.getCuratedForProvider();
 
         // Find the tool result message after the tool_call
-        const toolCallIndex = curated.findIndex(
-          (c) =>
-            c.speaker === 'ai' &&
-            c.blocks.some(
-              (b) => b.type === 'tool_call' && b.id === 'call_screenshot',
-            ),
-        );
+        const toolCallIndex = toolCallIndexIn(curated, 'call_screenshot');
         expect(toolCallIndex).toBeGreaterThanOrEqual(0);
 
         const toolResultMessage = curated[toolCallIndex + 1];
@@ -458,13 +461,7 @@ describe('HistoryService - Behavioral Tests', () => {
 
         const curated = service.getCuratedForProvider();
 
-        const toolCallIndex = curated.findIndex(
-          (c) =>
-            c.speaker === 'ai' &&
-            c.blocks.some(
-              (b) => b.type === 'tool_call' && b.id === 'call_report',
-            ),
-        );
+        const toolCallIndex = toolCallIndexIn(curated, 'call_report');
         const toolResultMessage = curated[toolCallIndex + 1];
 
         // Assert both media blocks are present

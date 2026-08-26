@@ -10,6 +10,10 @@ import {
   type OAuthRuntimeAccessors,
 } from './runtime-accessor-bridge.js';
 
+function getNoBrowserSetting(key: string): true | undefined {
+  return key === 'auth.noBrowser' ? true : undefined;
+}
+
 describe('oauthRuntimeBridge', () => {
   afterEach(() => {
     // Always clean up so tests don't leak accessor state.
@@ -54,8 +58,7 @@ describe('oauthRuntimeBridge', () => {
   describe('delegation when accessors are registered', () => {
     it('getEphemeralSetting delegates to the registered accessor', () => {
       const accessors: OAuthRuntimeAccessors = {
-        getEphemeralSetting: (key: string) =>
-          key === 'auth.noBrowser' ? true : undefined,
+        getEphemeralSetting: getNoBrowserSetting,
         getProviderManager: () => undefined,
         getRuntimeContext: () => undefined,
         getCurrentProfileName: () => null,

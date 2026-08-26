@@ -98,6 +98,12 @@ function KeypressTestWrapper({ children }: React.PropsWithChildren) {
   return <KeypressProvider>{children}</KeypressProvider>;
 }
 
+function reserveDrain(state: React.MutableRefObject<boolean>): boolean {
+  if (state.current) return false;
+  state.current = true;
+  return true;
+}
+
 interface DoubleCancelDeps {
   setIsRespondingCalls: boolean[];
   setIsResponding: Dispatch<SetStateAction<boolean>>;
@@ -438,7 +444,10 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     }
   });
 
-  it('drops a permanently failing queued submission and continues draining', async () => {
+  const observePermanentlyFailingQueueDrain = async (): Promise<{
+    readonly queuedSubmissions: readonly QueuedSubmission[];
+    readonly processedQueries: readonly string[];
+  }> => {
     vi.useFakeTimers();
     const queuedSubmissionsRef: React.MutableRefObject<QueuedSubmission[]> = {
       current: [],
@@ -488,13 +497,22 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
       await act(async () => {
         await advanceTimersByTimeAsync(1);
       });
-
-      expect(queuedSubmissionsRef.current).toStrictEqual([]);
-      expect(processedQueries).toStrictEqual(['next submission']);
     } finally {
       rendered.unmount();
       vi.useRealTimers();
     }
+    return {
+      queuedSubmissions: queuedSubmissionsRef.current,
+      processedQueries,
+    };
+  };
+
+  it('drops a permanently failing queued submission and continues draining', async () => {
+    const { queuedSubmissions, processedQueries } =
+      await observePermanentlyFailingQueueDrain();
+
+    expect(queuedSubmissions).toStrictEqual([]);
+    expect(processedQueries).toStrictEqual(['next submission']);
   });
 
   it('rejects the public submission when query preparation fails', async () => {
@@ -539,19 +557,15 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     };
     const queueOperations = createQueueOperations(queuedSubmissionsRef);
     const addItem = vi.fn().mockReturnValue(1);
-    let drainReserved = false;
+    const drainReserved = { current: false };
     const { result, unmount } = renderUseSubmitQuery(deps, {
       runtime,
       queuedSubmissionsRef,
       queueOperations,
       addItem,
-      tryReserveDrain: () => {
-        if (drainReserved) return false;
-        drainReserved = true;
-        return true;
-      },
+      tryReserveDrain: () => reserveDrain(drainReserved),
       releaseDrain: () => {
-        drainReserved = false;
+        drainReserved.current = false;
       },
     });
 
@@ -580,19 +594,15 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     const queuedSubmission: QueuedSubmission = { query: 'survive unmount' };
     const queuedSubmissionsRef = { current: [queuedSubmission] };
     const queueOperations = createQueueOperations(queuedSubmissionsRef);
-    let drainReserved = false;
+    const drainReserved = { current: false };
     let releases = 0;
     const { unmount } = renderUseSubmitQuery(deps, {
       queuedSubmissionsRef,
       queueOperations,
-      tryReserveDrain: () => {
-        if (drainReserved) return false;
-        drainReserved = true;
-        return true;
-      },
+      tryReserveDrain: () => reserveDrain(drainReserved),
       releaseDrain: () => {
         releases += 1;
-        drainReserved = false;
+        drainReserved.current = false;
       },
     });
 
@@ -839,14 +849,10 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     };
 
     // Real drain reservation implementation (mirrors useQueuedSubmissions)
-    let drainReserved = false;
-    const tryReserveDrain = vi.fn(() => {
-      if (drainReserved) return false;
-      drainReserved = true;
-      return true;
-    });
+    const drainReserved = { current: false };
+    const tryReserveDrain = vi.fn(() => reserveDrain(drainReserved));
     const releaseDrain = vi.fn(() => {
-      drainReserved = false;
+      drainReserved.current = false;
     });
     const queueOperations = createQueueOperations(queuedSubmissionsRef);
 

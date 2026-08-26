@@ -48,6 +48,19 @@ import {
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 
+async function collectReplayText(provider: FakeProvider): Promise<string> {
+  const textChunks: string[] = [];
+  for await (const chunk of provider.generateChatCompletion([])) {
+    const textBlock = chunk.blocks.find(
+      (block: { type: string }) => block.type === 'text',
+    );
+    if (textBlock != null && 'text' in textBlock) {
+      textChunks.push((textBlock as { text: string }).text);
+    }
+  }
+  return textChunks.join('');
+}
+
 /**
  * @plan:PLAN-20260603-ISSUE1584.P10
  * @requirement:REQ-TEST-001
@@ -249,15 +262,8 @@ describe('FakeProvider behavioral tests', () => {
     );
 
     const provider = new FakeProvider(filePath);
-    const chunks: string[] = [];
-    for await (const chunk of provider.generateChatCompletion([])) {
-      const textBlock = chunk.blocks.find(
-        (b: { type: string }) => b.type === 'text',
-      );
-      if (textBlock != null && 'text' in textBlock)
-        chunks.push((textBlock as { text: string }).text);
-    }
-    expect(chunks.join('')).toBe('hello');
+    const text = await collectReplayText(provider);
+    expect(text).toBe('hello');
   });
 
   /**
@@ -288,26 +294,12 @@ describe('FakeProvider behavioral tests', () => {
     const provider = new FakeProvider(filePath);
 
     // First call
-    const firstTurn: string[] = [];
-    for await (const chunk of provider.generateChatCompletion([])) {
-      const textBlock = chunk.blocks.find(
-        (b: { type: string }) => b.type === 'text',
-      );
-      if (textBlock != null && 'text' in textBlock)
-        firstTurn.push((textBlock as { text: string }).text);
-    }
-    expect(firstTurn.join('')).toBe('first');
+    const firstTurn = await collectReplayText(provider);
+    expect(firstTurn).toBe('first');
 
     // Second call
-    const secondTurn: string[] = [];
-    for await (const chunk of provider.generateChatCompletion([])) {
-      const textBlock = chunk.blocks.find(
-        (b: { type: string }) => b.type === 'text',
-      );
-      if (textBlock != null && 'text' in textBlock)
-        secondTurn.push((textBlock as { text: string }).text);
-    }
-    expect(secondTurn.join('')).toBe('second');
+    const secondTurn = await collectReplayText(provider);
+    expect(secondTurn).toBe('second');
   });
 
   /**

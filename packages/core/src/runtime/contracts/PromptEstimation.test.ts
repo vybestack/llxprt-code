@@ -54,6 +54,22 @@ function estimatePromptEnvelope(
   );
 }
 
+function createConfiguredEstimatorFactory(
+  incrementalProjection: object,
+): RuntimeTokenizerFactory {
+  return {
+    getTokenizer: () => undefined,
+    estimatePrompt: async (request) => ({
+      count: request.finalizedProjection === incrementalProjection ? 11 : 29,
+      method: 'exact',
+      family: 'configured-estimator',
+      estimatorVersion: 'authority-v1',
+      assetRevision: 'authority-fixture',
+      projectionRevision: request.projectionRevision,
+    }),
+  };
+}
+
 describe('PromptEnvelopeProjection contract (issue #2817)', () => {
   it('describes its protocol, method, model, projection revision, and unsupported media', () => {
     const projection: PromptEnvelopeProjection = {
@@ -179,10 +195,7 @@ describe('PromptEnvelopeEstimate result contract (issue #2817)', () => {
       'rawPrompt',
     ];
     for (const key of forbidden) {
-      expect(
-        keys,
-        `result must not expose raw prompt field "${key}"`,
-      ).not.toContain(key as keyof PromptEnvelopeEstimate);
+      expect(keys).not.toContain(key as keyof PromptEnvelopeEstimate);
     }
   });
 
@@ -264,17 +277,9 @@ describe('PromptEnvelopeEstimate result contract (issue #2817)', () => {
         },
       },
     };
-    const configuredFactory: RuntimeTokenizerFactory = {
-      getTokenizer: () => undefined,
-      estimatePrompt: async (request) => ({
-        count: request.finalizedProjection === incrementalProjection ? 11 : 29,
-        method: 'exact',
-        family: 'configured-estimator',
-        estimatorVersion: 'authority-v1',
-        assetRevision: 'authority-fixture',
-        projectionRevision: request.projectionRevision,
-      }),
-    };
+    const configuredFactory = createConfiguredEstimatorFactory(
+      incrementalProjection,
+    );
 
     const estimate = await estimatePromptEnvelopeImpl(
       'test-provider',

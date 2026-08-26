@@ -422,7 +422,7 @@ describe('Agent Client (client.ts)', () => {
       );
     });
 
-    it.each([
+    const compressionEscalationCases = [
       {
         label: 'SKIPPED_EMPTY',
         result: PerformCompressionResult.SKIPPED_EMPTY,
@@ -434,50 +434,19 @@ describe('Agent Client (client.ts)', () => {
       { label: 'NOOP', result: PerformCompressionResult.NOOP },
       { label: 'FAILED', result: PerformCompressionResult.FAILED },
       { label: 'rejected', result: undefined },
-    ])(
+    ] as const;
+
+    it.each(compressionEscalationCases)(
       'escalates to context-window enforcement when compression is $label on a context-size 413',
-      async ({ label, result }) => {
-        vi.spyOn(
-          client['config'],
-          'getContinueOnFailedApiCall',
-        ).mockReturnValue(true);
-        const mockStream1 = (async function* () {
-          yield {
-            type: AgentEventType.Error,
-            value: {
-              error: { message: 'Payload too large', status: 413 },
-            },
-          };
-        })();
-        const mockStream2 = (async function* () {
-          yield { type: AgentEventType.Content, value: 'Retried content' };
-        })();
-
-        mockTurnRunFn
-          .mockReturnValueOnce(mockStream1)
-          .mockReturnValueOnce(mockStream2);
-
-        const promptId = `prompt-id-413-escalate-${label}`;
-        const mockChat = makeMockChat({
-          performCompression:
-            result === undefined
-              ? vi.fn().mockRejectedValue(new Error('compression blew up'))
-              : vi.fn().mockResolvedValue(result),
-          enforceContextWindow: vi.fn().mockResolvedValue(undefined),
-          estimatePendingTokens: vi.fn().mockResolvedValue(4242),
-        });
-        client['chat'] = mockChat as ChatSession;
-
-        const initialRequest = [{ type: 'text', text: 'Hi' }];
-        // A rejected compression must not crash the stream; the retry still runs.
-        const events = await fromAsync(
-          client.sendMessageStream(
-            initialRequest,
-            new AbortController().signal,
-            promptId,
-          ),
-        );
-
+      async ({
+        label,
+        result,
+      }: (typeof compressionEscalationCases)[number]) => {
+        const { mockChat, promptId, events } =
+          await observeEscalatesToContextWindowEnforcement({
+            label,
+            result,
+          });
         expect(mockChat.enforceContextWindow).toHaveBeenCalledTimes(1);
         expect(mockChat.enforceContextWindow).toHaveBeenCalledWith(
           4242,
@@ -495,6 +464,53 @@ describe('Agent Client (client.ts)', () => {
         });
       },
     );
+
+    const observeEscalatesToContextWindowEnforcement = async ({
+      label,
+      result,
+    }: (typeof compressionEscalationCases)[number]) => {
+      vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
+        true,
+      );
+      const mockStream1 = (async function* () {
+        yield {
+          type: AgentEventType.Error,
+          value: {
+            error: { message: 'Payload too large', status: 413 },
+          },
+        };
+      })();
+      const mockStream2 = (async function* () {
+        yield { type: AgentEventType.Content, value: 'Retried content' };
+      })();
+
+      mockTurnRunFn
+        .mockReturnValueOnce(mockStream1)
+        .mockReturnValueOnce(mockStream2);
+
+      const promptId = `prompt-id-413-escalate-${label}`;
+      const mockChat = makeMockChat({
+        performCompression:
+          result === undefined
+            ? vi.fn().mockRejectedValue(new Error('compression blew up'))
+            : vi.fn().mockResolvedValue(result),
+        enforceContextWindow: vi.fn().mockResolvedValue(undefined),
+        estimatePendingTokens: vi.fn().mockResolvedValue(4242),
+      });
+      client['chat'] = mockChat as ChatSession;
+
+      const initialRequest = [{ type: 'text', text: 'Hi' }];
+      // A rejected compression must not crash the stream; the retry still runs.
+      const events = await fromAsync(
+        client.sendMessageStream(
+          initialRequest,
+          new AbortController().signal,
+          promptId,
+        ),
+      );
+
+      return { mockChat, promptId, events };
+    };
 
     it('ends the iteration gracefully when context-window enforcement fails on a context-size 413', async () => {
       vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
@@ -807,56 +823,83 @@ describe('Agent Client (client.ts)', () => {
     });
 
     it('should stop recursing after one retry when 413 errors are repeatedly received', async () => {
-      vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
-        true,
-      );
-      // Arrange: always return a 413 error
-      mockTurnRunFn.mockImplementation(() =>
-        (async function* () {
-          yield {
-            type: AgentEventType.Error,
-            value: {
-              error: { message: 'Payload too large', status: 413 },
-            },
-          };
-        })(),
-      );
-
-      const mockChat = makeMockChat({
-        performCompression: vi
-          .fn()
-          .mockResolvedValue(PerformCompressionResult.COMPRESSED),
-        enforceContextWindow: vi.fn().mockResolvedValue(undefined),
-        estimatePendingTokens: vi.fn().mockResolvedValue(0),
-      });
-      client['chat'] = mockChat as ChatSession;
-
-      const initialRequest = [{ type: 'text', text: 'Hi' }];
-      const promptId = 'prompt-id-413-infinite';
-      const signal = new AbortController().signal;
-
-      // Act
-      const stream = client.sendMessageStream(initialRequest, signal, promptId);
-      const events = await fromAsync(stream);
-
-      // Assert: 1 ModelInfo + exactly 2 Error events (original + 1 retry), no infinite loop
+      const {
+        events,
+        mockChat,
+        typeObservation,
+        stopRecursingAfterOneRetryWhen413ErrorsAreRepeatedlyReceivedObservation2,
+      } =
+        await observeStopRecursingAfterOneRetryWhen413ErrorsAreRepeatedlyReceived();
       expect(events.length).toBe(3);
-      expect(events[0]?.type).toBe(AgentEventType.ModelInfo);
+      expect(typeObservation).toBe(AgentEventType.ModelInfo);
       expect(
-        events
-          .slice(1)
-          .every(
-            (e) =>
-              e.type === AgentEventType.Error &&
-              (e.value as { error: { status?: number } }).error.status === 413,
-          ),
+        stopRecursingAfterOneRetryWhen413ErrorsAreRepeatedlyReceivedObservation2,
       ).toBe(true);
-
-      // turn.run should be called exactly twice
       expect(mockTurnRunFn).toHaveBeenCalledTimes(2);
-
-      // The guarded retry must not compress a second time (REQ-3251-3)
       expect(mockChat.performCompression).toHaveBeenCalledTimes(1);
     });
+
+    const observeStopRecursingAfterOneRetryWhen413ErrorsAreRepeatedlyReceived =
+      async () => {
+        vi.spyOn(
+          client['config'],
+          'getContinueOnFailedApiCall',
+        ).mockReturnValue(true);
+        // Arrange: always return a 413 error
+        mockTurnRunFn.mockImplementation(() =>
+          (async function* () {
+            yield {
+              type: AgentEventType.Error,
+              value: {
+                error: { message: 'Payload too large', status: 413 },
+              },
+            };
+          })(),
+        );
+
+        const mockChat = makeMockChat({
+          performCompression: vi
+            .fn()
+            .mockResolvedValue(PerformCompressionResult.COMPRESSED),
+          enforceContextWindow: vi.fn().mockResolvedValue(undefined),
+          estimatePendingTokens: vi.fn().mockResolvedValue(0),
+        });
+        client['chat'] = mockChat as ChatSession;
+
+        const initialRequest = [{ type: 'text', text: 'Hi' }];
+        const promptId = 'prompt-id-413-infinite';
+        const signal = new AbortController().signal;
+
+        // Act
+        const stream = client.sendMessageStream(
+          initialRequest,
+          signal,
+          promptId,
+        );
+        const events = await fromAsync(stream);
+
+        // Assert: 1 ModelInfo + exactly 2 Error events (original + 1 retry), no infinite loop
+
+        // turn.run should be called exactly twice
+
+        // The guarded retry must not compress a second time (REQ-3251-3)
+
+        const typeObservation = events[0]?.type;
+        const stopRecursingAfterOneRetryWhen413ErrorsAreRepeatedlyReceivedObservation2 =
+          events
+            .slice(1)
+            .every(
+              (e) =>
+                e.type === AgentEventType.Error &&
+                (e.value as { error: { status?: number } }).error.status ===
+                  413,
+            );
+        return {
+          events,
+          mockChat,
+          typeObservation,
+          stopRecursingAfterOneRetryWhen413ErrorsAreRepeatedlyReceivedObservation2,
+        };
+      };
   });
 });

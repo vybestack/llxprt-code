@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { beforeEach, describe, it, expect, vi } from 'bun:test';
 import * as os from 'node:os';
 import {
   _resetProcessStartTimeForTests,
@@ -18,6 +18,10 @@ import {
 } from '../lock-owner.js';
 
 describe('LockOwnerMetadata startTimeSource quality (issue #2819)', () => {
+  beforeEach(() => {
+    _resetProcessStartTimeForTests();
+  });
+
   it('records canonical startTimeSource when OS-observed start time is available', async () => {
     const owner = await buildCurrentProcessOwnerMetadata();
     expect(owner.startTimeSource).toBeDefined();
@@ -27,13 +31,9 @@ describe('LockOwnerMetadata startTimeSource quality (issue #2819)', () => {
   });
 
   it('re-probes after an approximate result and caches only a canonical result', async () => {
-    _resetProcessStartTimeForTests();
+    const probeSource = { count: 0 };
     const canonicalStartTime = 1_725_000_000_000;
-    let probeCount = 0;
-    const readProcessStartTime = async (): Promise<number | null> => {
-      probeCount += 1;
-      return probeCount === 1 ? null : canonicalStartTime;
-    };
+    const readProcessStartTime = nullOnceProbe(probeSource, canonicalStartTime);
 
     const first = await buildCurrentProcessOwnerMetadata(
       250,
@@ -57,7 +57,7 @@ describe('LockOwnerMetadata startTimeSource quality (issue #2819)', () => {
       startTimeMs: canonicalStartTime,
       startTimeSource: 'canonical',
     });
-    expect(probeCount).toBe(2);
+    expect(probeSource.count).toBe(2);
   });
 
   it('marks owner as dead only when startTimeSource is canonical and start-time mismatch proves PID reuse', async () => {
@@ -170,3 +170,18 @@ describe('LockOwnerMetadata startTimeSource quality (issue #2819)', () => {
     expect(parsed?.startTimeSource).toBe('approximate');
   });
 });
+
+/*
+ * Returns a reader that returns null once and the canonical value on
+ * subsequent calls (uses a shared counter object so the test can
+ * observe the exact probe count).
+ */
+function nullOnceProbe(
+  probe: { count: number },
+  value: number,
+): () => Promise<number | null> {
+  return async () => {
+    probe.count += 1;
+    return probe.count === 1 ? null : value;
+  };
+}

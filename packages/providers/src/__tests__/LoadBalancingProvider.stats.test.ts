@@ -17,6 +17,14 @@ import {
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
+function isNullableString(value: string | null): boolean {
+  return value === null || typeof value === 'string';
+}
+
+function areCountsZeroOrEmpty(counts: readonly number[]): boolean {
+  return counts.length === 0 || counts.every((count) => count === 0);
+}
+
 describe('LoadBalancingProvider', () => {
   let settingsService: SettingsService;
   let config: Config;
@@ -118,9 +126,7 @@ describe('LoadBalancingProvider', () => {
 
       expect(stats).toHaveProperty('lastSelected');
       // Can be null or string
-      expect(
-        stats.lastSelected === null || typeof stats.lastSelected === 'string',
-      ).toBe(true);
+      expect(isNullableString(stats.lastSelected)).toBe(true);
     });
 
     it('should return stats with profileCounts field', () => {
@@ -207,8 +213,7 @@ describe('LoadBalancingProvider', () => {
 
       // ProfileCounts should be empty object or have all zeros
       const counts = Object.values(stats.profileCounts);
-      const allZeroOrEmpty =
-        counts.length === 0 || counts.every((c) => c === 0);
+      const allZeroOrEmpty = areCountsZeroOrEmpty(counts);
       expect(allZeroOrEmpty).toBe(true);
     });
   });

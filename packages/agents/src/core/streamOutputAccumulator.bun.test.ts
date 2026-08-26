@@ -149,7 +149,7 @@ describe('StreamOutputAccumulator thinking-block coalescing (issue #3111)', () =
 
     const result = accumulator.materialize();
     // Order: start, thinking-a, thinking-b, end  (each span keeps its first position).
-    expect(result.content.blocks.map((b) => b.type)).toEqual([
+    expect(result.content.blocks.map((b) => b.type)).toStrictEqual([
       'text',
       'thinking',
       'thinking',

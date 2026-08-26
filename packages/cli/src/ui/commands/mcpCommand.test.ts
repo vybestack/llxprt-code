@@ -40,6 +40,13 @@ void vi.mock('@vybestack/llxprt-code-mcp', () => ({
   },
 }));
 
+function createServerStatusResolver(
+  statuses: Readonly<Record<string, MCPServerStatus>>,
+): (serverName: string) => MCPServerStatus {
+  return (serverName: string): MCPServerStatus =>
+    statuses[serverName] ?? MCPServerStatus.DISCONNECTED;
+}
+
 function assertMessageAction(
   result: unknown,
 ): asserts result is MessageActionReturn {
@@ -259,11 +266,12 @@ describe('mcpCommand', () => {
     it('should display configured MCP servers with status indicators and their tools', async () => {
       (
         getMCPServerStatus as Mock<typeof getMCPServerStatus>
-      ).mockImplementation((serverName) => {
-        if (serverName === 'server1') return MCPServerStatus.CONNECTED;
-        if (serverName === 'server2') return MCPServerStatus.CONNECTED;
-        return MCPServerStatus.DISCONNECTED;
-      });
+      ).mockImplementation(
+        createServerStatusResolver({
+          server1: MCPServerStatus.CONNECTED,
+          server2: MCPServerStatus.CONNECTED,
+        }),
+      );
 
       const allTools = [
         createMockMCPTool('server1_tool1', 'server1'),
@@ -307,11 +315,12 @@ describe('mcpCommand', () => {
     it('should include resource counts and resource names in MCP status output', async () => {
       (
         getMCPServerStatus as Mock<typeof getMCPServerStatus>
-      ).mockImplementation((serverName) => {
-        if (serverName === 'server1') return MCPServerStatus.CONNECTED;
-        if (serverName === 'server2') return MCPServerStatus.CONNECTED;
-        return MCPServerStatus.DISCONNECTED;
-      });
+      ).mockImplementation(
+        createServerStatusResolver({
+          server1: MCPServerStatus.CONNECTED,
+          server2: MCPServerStatus.CONNECTED,
+        }),
+      );
 
       const tools = [createMockMCPTool('server1_tool1', 'server1')];
       const resources = [
@@ -421,10 +430,9 @@ describe('mcpCommand', () => {
 
       (
         getMCPServerStatus as Mock<typeof getMCPServerStatus>
-      ).mockImplementation((serverName) => {
-        if (serverName === 'server1') return MCPServerStatus.CONNECTED;
-        return MCPServerStatus.DISCONNECTED;
-      });
+      ).mockImplementation(
+        createServerStatusResolver({ server1: MCPServerStatus.CONNECTED }),
+      );
 
       const tools = [createMockMCPTool('server1_tool1', 'server1')];
 
@@ -455,11 +463,12 @@ describe('mcpCommand', () => {
 
       (
         getMCPServerStatus as Mock<typeof getMCPServerStatus>
-      ).mockImplementation((serverName) => {
-        if (serverName === 'server1') return MCPServerStatus.CONNECTED;
-        if (serverName === 'server2') return MCPServerStatus.CONNECTING;
-        return MCPServerStatus.DISCONNECTED;
-      });
+      ).mockImplementation(
+        createServerStatusResolver({
+          server1: MCPServerStatus.CONNECTED,
+          server2: MCPServerStatus.CONNECTING,
+        }),
+      );
 
       const tools = [
         createMockMCPTool('server1_tool1', 'server1'),
@@ -557,10 +566,9 @@ describe('mcpCommand', () => {
     it('degrades gracefully when agent.mcp.details() rejects, showing servers and a warning', async () => {
       (
         getMCPServerStatus as Mock<typeof getMCPServerStatus>
-      ).mockImplementation((serverName) => {
-        if (serverName === 'server1') return MCPServerStatus.CONNECTED;
-        return MCPServerStatus.DISCONNECTED;
-      });
+      ).mockImplementation(
+        createServerStatusResolver({ server1: MCPServerStatus.CONNECTED }),
+      );
 
       // Create an agent whose mcp.details() rejects.
       const failingAgent = createMockAgent({

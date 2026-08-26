@@ -36,10 +36,9 @@ describe('withParsedTree tree lifetime', () => {
     resetParser();
   });
 
-  /** @plan PLAN-20260825-SHELLMEM.P02 @requirement REQ-3329-08 */
-  it.skipIf(!parserInitialized)(
-    'deletes the tree after the consumer returns',
-    () => {
+  describe.skipIf(!parserInitialized)(() => {
+    /** @plan PLAN-20260825-SHELLMEM.P02 @requirement REQ-3329-08 */
+    it('deletes the tree after the consumer returns', () => {
       const captured: Tree[] = [];
       let liveHandle = -1;
 
@@ -53,13 +52,10 @@ describe('withParsedTree tree lifetime', () => {
       expect(captured).toHaveLength(1);
       expect(liveHandle).toBeGreaterThan(0);
       expect(treeHandle(captured[0])).toBe(0);
-    },
-  );
+    });
 
-  /** @plan PLAN-20260825-SHELLMEM.P02 @requirement REQ-3329-08 */
-  it.skipIf(!parserInitialized)(
-    'deletes the tree and propagates an error when the consumer throws',
-    () => {
+    /** @plan PLAN-20260825-SHELLMEM.P02 @requirement REQ-3329-08 */
+    it('deletes the tree and propagates an error when the consumer throws', () => {
       const captured: Tree[] = [];
       let liveHandle = -1;
 
@@ -73,6 +69,6 @@ describe('withParsedTree tree lifetime', () => {
       expect(captured).toHaveLength(1);
       expect(liveHandle).toBeGreaterThan(0);
       expect(treeHandle(captured[0])).toBe(0);
-    },
-  );
+    });
+  });
 });

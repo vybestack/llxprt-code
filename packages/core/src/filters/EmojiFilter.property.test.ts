@@ -36,9 +36,7 @@ describe('EmojiFilter Property-Based Tests', () => {
             expect(typeof result.blocked).toBe('boolean');
 
             // Filtered content must be either string or null
-            expect(
-              typeof result.filtered === 'string' || result.filtered === null,
-            ).toBe(true);
+            expect(isStringOrNull(result.filtered)).toBe(true);
           },
         ),
         { numRuns: 100 },
@@ -174,11 +172,7 @@ describe('EmojiFilter Property-Based Tests', () => {
             expect(typeof result.filtered).toBe('string');
 
             // If emojis detected, should provide feedback
-            expect(
-              result.emojiDetected !== true ||
-                (result.systemFeedback !== undefined &&
-                  result.systemFeedback.includes('avoid using emojis')),
-            ).toBe(true);
+            expect(hasFeedbackWhenEmojiDetected(result)).toBe(true);
           },
         ),
         { numRuns: 50 },
@@ -237,9 +231,7 @@ describe('EmojiFilter Property-Based Tests', () => {
             let streamOutput = '';
             for (const chunk of chunks) {
               const chunkResult = filter2.filterStreamChunk(chunk);
-              if (typeof chunkResult.filtered === 'string') {
-                streamOutput += chunkResult.filtered;
-              }
+              streamOutput = appendString(streamOutput, chunkResult.filtered);
             }
             const flushed = filter2.flushBuffer();
             streamOutput += flushed;
@@ -250,7 +242,7 @@ describe('EmojiFilter Property-Based Tests', () => {
             expect(typeof singleResult.filtered).toBe('string');
             // Both should have similar emoji detection behavior
             expect(singleResult.emojiDetected).toBe(
-              streamOutput !== text || singleResult.filtered !== text,
+              streamDiffers(streamOutput, text, singleResult.filtered),
             );
           },
         ),
@@ -273,21 +265,9 @@ describe('EmojiFilter Property-Based Tests', () => {
 
             const filter = new EmojiFilter({ mode: 'warn' });
 
-            let pos = 0;
             let totalOutput = '';
-
             // Process all chunks
-            const allChunks: string[] = [];
-            for (const size of chunkSizes) {
-              if (pos >= text.length) break;
-              allChunks.push(text.slice(pos, pos + size));
-              pos += size;
-            }
-
-            // Add remaining text as final chunk if any
-            if (pos < text.length) {
-              allChunks.push(text.slice(pos));
-            }
+            const allChunks: string[] = sliceRemainingChunks(text, chunkSizes);
 
             // Process all chunks and verify each result
             allChunks.forEach((chunk) => {
@@ -325,13 +305,19 @@ describe('EmojiFilter Property-Based Tests', () => {
             for (let i = 0; i < textWithEmoji.length; i += chunkSize) {
               const chunk = textWithEmoji.slice(i, i + chunkSize);
               const result = filter2.filterStreamChunk(chunk);
-              streamDetected = streamDetected || result.emojiDetected;
+              streamDetected = detectedEither(
+                streamDetected,
+                result.emojiDetected,
+              );
             }
 
             // Final flush might also detect emojis
             const flushed = filter2.flushBuffer();
             const flushResult = filter2.filterText(flushed);
-            streamDetected = streamDetected || flushResult.emojiDetected;
+            streamDetected = detectedEither(
+              streamDetected,
+              flushResult.emojiDetected,
+            );
 
             // Both should detect emojis if present
             expect(singleResult.emojiDetected).toBe(true);
@@ -625,10 +611,9 @@ describe('EmojiFilter Property-Based Tests', () => {
 
             // If system feedback exists, it should contain the tool name
             // Verify the invariant without conditional expects
-            const feedbackValid =
-              result.systemFeedback === undefined ||
-              result.systemFeedback.includes(toolName);
-            expect(feedbackValid).toBe(true);
+            expect(feedbackCoversTool(result.systemFeedback, toolName)).toBe(
+              true,
+            );
           },
         ),
         { numRuns: 30 },
@@ -713,14 +698,7 @@ describe('EmojiFilter Property-Based Tests', () => {
     it('should handle malformed objects gracefully', () => {
       fc.assert(
         fc.property(
-          fc.anything().filter(
-            (obj) =>
-              // Filter out functions, symbols, and undefined that can't be JSON serialized
-              obj !== null &&
-              obj !== undefined &&
-              typeof obj !== 'function' &&
-              typeof obj !== 'symbol',
-          ),
+          fc.anything().filter(isJsonSerializable),
           fc.oneof(fc.constant('auto' as const), fc.constant('warn' as const)),
           (obj: Record<string, unknown>, mode: FilterConfiguration['mode']) => {
             const filter = new EmojiFilter({ mode });
@@ -931,19 +909,8 @@ describe('EmojiFilter Property-Based Tests', () => {
             expect(typeof result.blocked).toBe('boolean');
 
             // Mode-specific invariants - build boolean checks to avoid conditional expects
-            const allowedValid =
-              mode !== 'allowed' ||
-              (result.filtered === text &&
-                result.emojiDetected === false &&
-                result.blocked === false);
-            const autoValid =
-              mode !== 'auto' ||
-              (result.systemFeedback === undefined && result.blocked === false);
-            const warnValid =
-              mode !== 'warn' ||
-              (result.blocked === false && typeof result.filtered === 'string');
-            const errorValid =
-              mode !== 'error' || typeof result.blocked === 'boolean';
+            const [allowedValid, autoValid, warnValid, errorValid] =
+              modeInvariantResults(mode, result, text);
 
             expect(allowedValid).toBe(true);
             expect(autoValid).toBe(true);
@@ -956,3 +923,71 @@ describe('EmojiFilter Property-Based Tests', () => {
     });
   });
 });
+
+function isStringOrNull(value: unknown): boolean {
+  return typeof value === 'string' || value === null;
+}
+
+function hasFeedbackWhenEmojiDetected(
+  result: ReturnType<EmojiFilter['filterText']>,
+): boolean {
+  return (
+    result.emojiDetected !== true ||
+    result.systemFeedback?.includes('avoid using emojis') === true
+  );
+}
+
+function appendString(accumulator: string, value: unknown): string {
+  return typeof value === 'string' ? accumulator + value : accumulator;
+}
+
+function streamDiffers(stream: string, text: string, single: unknown): boolean {
+  return stream !== text || single !== text;
+}
+
+function detectedEither(previous: boolean, current: unknown): boolean {
+  return previous || current === true;
+}
+
+function feedbackCoversTool(feedback: unknown, toolName: string): boolean {
+  return typeof feedback !== 'string' || feedback.includes(toolName);
+}
+
+function modeInvariantResults(
+  mode: FilterConfiguration['mode'],
+  result: ReturnType<EmojiFilter['filterText']>,
+  text: string,
+): readonly [boolean, boolean, boolean, boolean] {
+  return [
+    mode !== 'allowed' ||
+      (result.filtered === text &&
+        result.emojiDetected === false &&
+        result.blocked === false),
+    mode !== 'auto' ||
+      (result.systemFeedback === undefined && result.blocked === false),
+    mode !== 'warn' ||
+      (result.blocked === false && typeof result.filtered === 'string'),
+    mode !== 'error' || typeof result.blocked === 'boolean',
+  ];
+}
+
+function sliceRemainingChunks(text: string, chunkSizes: number[]): string[] {
+  const chunks: string[] = [];
+  let pos = 0;
+  for (const size of chunkSizes) {
+    if (pos >= text.length) break;
+    chunks.push(text.slice(pos, pos + size));
+    pos += size;
+  }
+  if (pos < text.length) chunks.push(text.slice(pos));
+  return chunks;
+}
+
+function isJsonSerializable(obj: unknown): boolean {
+  return (
+    obj !== null &&
+    obj !== undefined &&
+    typeof obj !== 'function' &&
+    typeof obj !== 'symbol'
+  );
+}

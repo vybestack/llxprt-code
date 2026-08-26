@@ -110,6 +110,20 @@ function scanFileForForbiddenImports(
   return findForbiddenAuthImports(content, relPath);
 }
 
+function isOutsideTestsDirectory(filePath: string): boolean {
+  return !filePath.includes('__tests__');
+}
+
+function isProviderTestFile(filePath: string): boolean {
+  return filePath.endsWith('.test.ts') || filePath.endsWith('.spec.ts');
+}
+
+function packageDependencies(
+  pkg: Record<string, unknown>,
+): Record<string, string> {
+  return (pkg.dependencies ?? {}) as Record<string, string>;
+}
+
 // ─────────────────────────────────────────────────────────────────
 // 1. Providers production source has no old core/auth imports
 // ─────────────────────────────────────────────────────────────────
@@ -117,7 +131,7 @@ function scanFileForForbiddenImports(
 describe('Providers auth migration: no old core/auth imports', () => {
   it('providers production source has zero imports from core/auth subpath', () => {
     const prodFiles = collectTsFiles(PROVIDERS_SRC_DIR, true).filter(
-      (f) => !f.includes('__tests__'),
+      isOutsideTestsDirectory,
     );
 
     const violations: string[] = [];
@@ -127,15 +141,12 @@ describe('Providers auth migration: no old core/auth imports', () => {
       );
     }
 
-    expect(
-      violations,
-      `Forbidden core/auth imports in providers source:\n${violations.join('\n')}`,
-    ).toStrictEqual([]);
+    expect(violations).toStrictEqual([]);
   });
 
   it('providers test files have zero imports from core/auth subpath', () => {
     const testFiles = collectTsFiles(PROVIDERS_SRC_DIR, false).filter(
-      (f) => f.endsWith('.test.ts') || f.endsWith('.spec.ts'),
+      isProviderTestFile,
     );
 
     const violations: string[] = [];
@@ -145,10 +156,7 @@ describe('Providers auth migration: no old core/auth imports', () => {
       );
     }
 
-    expect(
-      violations,
-      `Forbidden core/auth imports in providers tests:\n${violations.join('\n')}`,
-    ).toStrictEqual([]);
+    expect(violations).toStrictEqual([]);
   });
 });
 
@@ -170,7 +178,7 @@ describe('Providers imports AuthPrecedenceResolver from auth package', () => {
       string,
       unknown
     >;
-    const deps = (pkg.dependencies ?? {}) as Record<string, string>;
+    const deps = packageDependencies(pkg);
     expect(deps['@vybestack/llxprt-code-auth']).toBeDefined();
   });
 });

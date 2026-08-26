@@ -56,6 +56,30 @@ function singleToolResponse(content: IContent): ToolResponseBlock {
   return block;
 }
 
+function responseBlocksByToolName(blocks: readonly ToolResponseBlock[]): {
+  readonly failed: ToolResponseBlock;
+  readonly succeeded: ToolResponseBlock;
+} {
+  const failed = blocks.find((block) => block.toolName === 'failingTool');
+  const succeeded = blocks.find((block) => block.toolName === 'okTool');
+  if (!failed || !succeeded) {
+    throw new Error('expected both a failed and a succeeded block');
+  }
+  return { failed, succeeded };
+}
+
+function responseBlocksByCallId(blocks: readonly ToolResponseBlock[]): {
+  readonly failed: ToolResponseBlock;
+  readonly succeeded: ToolResponseBlock;
+} {
+  const failed = blocks.find((block) => block.callId === 'hist_tool_fail5');
+  const succeeded = blocks.find((block) => block.callId === 'hist_tool_ok4');
+  if (!failed || !succeeded) {
+    throw new Error('expected both a failed and a succeeded block');
+  }
+  return { failed, succeeded };
+}
+
 describe('ContentConverters tool-failure round trip (issue #3076)', () => {
   describe('toGeminiContent — outbound', () => {
     it('AC2.1 — a failed tool_response produces a functionResponse with status:error and the error string', () => {
@@ -84,7 +108,10 @@ describe('ContentConverters tool-failure round trip (issue #3076)', () => {
         }),
       );
       const fr = functionResponseOf(converted);
-      expect(fr.response?.result).toEqual({ output: 'partial data', extra: 7 });
+      expect(fr.response?.result).toStrictEqual({
+        output: 'partial data',
+        extra: 7,
+      });
     });
 
     it('AC2.3 — a successful tool_response is unchanged (raw result, no status, no error)', () => {
@@ -97,7 +124,7 @@ describe('ContentConverters tool-failure round trip (issue #3076)', () => {
         }),
       );
       const fr = functionResponseOf(converted);
-      expect(fr.response).toEqual({ found: true });
+      expect(fr.response).toStrictEqual({ found: true });
       expect(fr.response).not.toHaveProperty('status');
       expect(fr.response).not.toHaveProperty('error');
     });
@@ -132,7 +159,7 @@ describe('ContentConverters tool-failure round trip (issue #3076)', () => {
         ),
       );
       expect(block.error).toBe('boom');
-      expect(block.result).toEqual({ output: 'partial data' });
+      expect(block.result).toStrictEqual({ output: 'partial data' });
     });
 
     it('AC2.5 — an ordinary functionResponse is unchanged (existing string/JSON coercion still applies)', () => {
@@ -156,7 +183,7 @@ describe('ContentConverters tool-failure round trip (issue #3076)', () => {
         ),
       );
       expect(objectBlock.error).toBeUndefined();
-      expect(objectBlock.result).toEqual({ output: 'all good' });
+      expect(objectBlock.result).toStrictEqual({ output: 'all good' });
 
       // A JSON-string response is still coerced via the existing path.
       const stringBlock = singleToolResponse(
@@ -179,7 +206,7 @@ describe('ContentConverters tool-failure round trip (issue #3076)', () => {
         ),
       );
       expect(stringBlock.error).toBeUndefined();
-      expect(stringBlock.result).toEqual({ output: 'parsed' });
+      expect(stringBlock.result).toStrictEqual({ output: 'parsed' });
     });
   });
 
@@ -207,18 +234,14 @@ describe('ContentConverters tool-failure round trip (issue #3076)', () => {
       const back = ContentConverters.toIContents(converted);
       const blocks = back.flatMap((c) => c.blocks) as ToolResponseBlock[];
 
-      const failed = blocks.find((b) => b.toolName === 'failingTool');
-      const succeeded = blocks.find((b) => b.toolName === 'okTool');
-      if (!failed || !succeeded) {
-        throw new Error('expected both a failed and a succeeded block');
-      }
+      const { failed, succeeded } = responseBlocksByToolName(blocks);
 
       expect(failed.error).toBe('boom');
-      expect(failed.result).toEqual({ output: 'partial data' });
+      expect(failed.result).toStrictEqual({ output: 'partial data' });
       expect(failed.callId).toBe('hist_tool_fail1');
       expect(failed.toolName).toBe('failingTool');
       expect(succeeded.error).toBeUndefined();
-      expect(succeeded.result).toEqual({ found: true });
+      expect(succeeded.result).toStrictEqual({ found: true });
       expect(succeeded.toolName).toBe('okTool');
     });
 
@@ -239,7 +262,7 @@ describe('ContentConverters tool-failure round trip (issue #3076)', () => {
       const back = ContentConverters.toIContents(converted);
       const block = singleToolResponse(back[0]);
       expect(block.error).toBe('no result at all');
-      expect(block.result).toEqual({});
+      expect(block.result).toStrictEqual({});
       expect(block.callId).toBe('hist_tool_fail2');
     });
 
@@ -285,7 +308,7 @@ describe('ContentConverters tool-failure round trip (issue #3076)', () => {
       const back = ContentConverters.toIContents(converted);
       const block = singleToolResponse(back[0]);
       expect(block.error).toBeUndefined();
-      expect(block.result).toEqual(original);
+      expect(block.result).toStrictEqual(original);
     });
 
     it('AC2.10 — a failed block with a non-object result round-trips the result verbatim', () => {
@@ -304,7 +327,7 @@ describe('ContentConverters tool-failure round trip (issue #3076)', () => {
         const back = ContentConverters.toIContents(converted);
         const block = singleToolResponse(back[0]);
         expect(block.error).toBe('boom');
-        expect(block.result).toEqual(result);
+        expect(block.result).toStrictEqual(result);
       }
     });
 
@@ -333,15 +356,11 @@ describe('ContentConverters tool-failure round trip (issue #3076)', () => {
       const back = ContentConverters.toIContents(converted);
       const blocks = back.flatMap((c) => c.blocks) as ToolResponseBlock[];
 
-      const failed = blocks.find((b) => b.callId === 'hist_tool_fail5');
-      const succeeded = blocks.find((b) => b.callId === 'hist_tool_ok4');
-      if (!failed || !succeeded) {
-        throw new Error('expected both a failed and a succeeded block');
-      }
+      const { failed, succeeded } = responseBlocksByCallId(blocks);
       expect(failed.error).toBe('boom');
-      expect(failed.result).toEqual({ output: 'partial data' });
+      expect(failed.result).toStrictEqual({ output: 'partial data' });
       expect(succeeded.error).toBeUndefined();
-      expect(succeeded.result).toEqual({ found: true });
+      expect(succeeded.result).toStrictEqual({ found: true });
     });
   });
 });

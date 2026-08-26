@@ -55,6 +55,28 @@ function requireCheckpointTarget(
 }
 const PROJECT_HASH = 'rec-meta-project-hash';
 
+/**
+ * Last seq from the parsed events, or 0 when the file is empty.
+ */
+function lastSeqOf(events: SessionRecordLine[]): number {
+  return events.at(-1)?.seq ?? 0;
+}
+
+/**
+ * Next seq after the last event in the file.
+ */
+function nextSeqOf(events: SessionRecordLine[]): number {
+  return lastSeqOf(events) + 1;
+}
+
+/**
+ * Text content of a history block; empty string for non-text blocks (history
+ * in this suite is always text content).
+ */
+function textOf(block: IContent['blocks'][number]): string {
+  return block.type === 'text' ? block.text : '';
+}
+
 function requireReplaySuccess(
   result: Awaited<ReturnType<typeof replaySession>>,
 ): asserts result is Extract<
@@ -267,9 +289,7 @@ describe('recording metadata events and replay @plan:2026-07-28-issue-2625', () 
       requireReplaySuccess(result);
       expect(checkpoint.sequence).toBe(5);
       expect(result.history).toHaveLength(3);
-      const texts = result.history.map((h) =>
-        h.blocks[0].type === 'text' ? h.blocks[0].text : '',
-      );
+      const texts = result.history.map((h) => textOf(h.blocks[0]));
       expect(texts).toStrictEqual(['A', 'B', 'C']);
     });
 
@@ -439,7 +459,7 @@ describe('recording metadata events and replay @plan:2026-07-28-issue-2625', () 
       await svc.dispose();
       const filePath = svc.getFilePath()!;
       const events = await readJsonlFile(filePath);
-      const lastSeq = events.at(-1)?.seq ?? 0;
+      const lastSeq = lastSeqOf(events);
       await fs.appendFile(
         filePath,
         `${JSON.stringify({
@@ -467,7 +487,7 @@ describe('recording metadata events and replay @plan:2026-07-28-issue-2625', () 
       await svc.dispose();
       const filePath = svc.getFilePath()!;
       const events = await readJsonlFile(filePath);
-      const lastSeq = events.at(-1)?.seq ?? 0;
+      const lastSeq = lastSeqOf(events);
       await fs.appendFile(
         filePath,
         `${JSON.stringify({
@@ -500,7 +520,7 @@ describe('recording metadata events and replay @plan:2026-07-28-issue-2625', () 
       await svc.dispose();
       const filePath = svc.getFilePath()!;
       const events = await readJsonlFile(filePath);
-      const lastSeq = events.at(-1)?.seq ?? 0;
+      const lastSeq = lastSeqOf(events);
       await fs.appendFile(
         filePath,
         `${JSON.stringify({
@@ -532,7 +552,7 @@ describe('recording metadata events and replay @plan:2026-07-28-issue-2625', () 
         filePath,
         `${JSON.stringify({
           v: 1,
-          seq: (events.at(-1)?.seq ?? 0) + 1,
+          seq: nextSeqOf(events),
           ts: '2026-01-01T00:00:00.000Z',
           type: 'checkpoint_renamed',
           payload: { checkpointId: checkpoint.checkpointId, name: '   ' },
@@ -636,7 +656,7 @@ describe('recording metadata events and replay @plan:2026-07-28-issue-2625', () 
         filePath,
         `${JSON.stringify({
           v: 1,
-          seq: (events.at(-1)?.seq ?? 0) + 1,
+          seq: nextSeqOf(events),
           ts: '2026-01-01T00:00:00.000Z',
           type: 'session_forked',
           payload: {

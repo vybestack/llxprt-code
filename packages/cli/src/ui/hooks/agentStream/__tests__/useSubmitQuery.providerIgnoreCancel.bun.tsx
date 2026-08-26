@@ -734,6 +734,35 @@ function stopDoneCount(events: AgentEvent[]): number {
   ).length;
 }
 
+interface FlushGateState {
+  entered: boolean;
+  mode: 'turnA' | 'immediate';
+}
+
+async function flushAtTurnBoundary(
+  state: FlushGateState,
+  gate: Promise<void>,
+): Promise<void> {
+  state.entered = true;
+  if (state.mode === 'turnA') await gate;
+}
+
+function capturePromptAContent(
+  text: string,
+  buffer: string,
+  latch: { readonly resolve: () => void },
+): string {
+  if (text === PROMPT_A_CONTENT) latch.resolve();
+  return buffer + text;
+}
+
+async function settleTurn(turnPromise: Promise<void> | null): Promise<void> {
+  if (turnPromise === null) return;
+  await act(async () => {
+    await turnPromise;
+  });
+}
+
 // ─── Test ───────────────────────────────────────────────────────────────────
 
 describe('useSubmitQuery — cancelled turn whose provider read never settles (issue #3236)', () => {
@@ -773,13 +802,13 @@ describe('useSubmitQuery — cancelled turn whose provider read never settles (i
       // so the post-done/pre-release ownership window is deterministic. The
       // latch proves A's runStream settled while the provider read is parked.
       const flushGateA = createDeferred<void>();
-      let flushEntered = false;
-      let flushMode: 'turnA' | 'immediate' = 'turnA';
+      const flushState: FlushGateState = {
+        entered: false,
+        mode: 'turnA',
+      };
       const recordingIntegration = {
-        flushAtTurnBoundary: async (): Promise<void> => {
-          flushEntered = true;
-          if (flushMode === 'turnA') await flushGateA.promise;
-        },
+        flushAtTurnBoundary: async (): Promise<void> =>
+          flushAtTurnBoundary(flushState, flushGateA.promise),
       } as unknown as RecordingIntegration;
 
       const { result, rerender, unmount } = renderHarness({
@@ -802,10 +831,8 @@ describe('useSubmitQuery — cancelled turn whose provider read never settles (i
       // fast at the test runner's per-test deadline instead).
       const contentEventALatch = createDeferred<void>();
       handleContentEventMock.mockImplementation(
-        (text: string, buffer: string) => {
-          if (text === PROMPT_A_CONTENT) contentEventALatch.resolve();
-          return buffer + text;
-        },
+        (text: string, buffer: string) =>
+          capturePromptAContent(text, buffer, contentEventALatch),
       );
       await contentEventALatch.promise;
       // ESC must land AFTER the second read parks: the seam's abort listener
@@ -836,7 +863,9 @@ describe('useSubmitQuery — cancelled turn whose provider read never settles (i
       //    (and ignored) the abort. iterateAgentStream drops the aborted
       //    turn's final done event (break-on-abort), so the CLI-observable
       //    proof is A's lifecycle reaching its real turn-boundary flush.
-      await waitFor(() => expect(flushEntered).toBe(true), { timeout: 5000 });
+      await waitFor(() => expect(flushState.entered).toBe(true), {
+        timeout: 5000,
+      });
       expect(env.chat.abortObservedByProvider()).toBe(true);
       expect(env.chat.providerReadSettled()).toBe(false);
       // A's CLI lifecycle is still inside its deferred turn-boundary flush,
@@ -864,7 +893,7 @@ describe('useSubmitQuery — cancelled turn whose provider read never settles (i
       //    snapshots are not asserted here; order, exactly-once, and
       //    serialization are proven from the final state below.
       env.chat.mode = 'clean';
-      flushMode = 'immediate';
+      flushState.mode = 'immediate';
       await act(async () => {
         flushGateA.resolve();
       });
@@ -899,12 +928,7 @@ describe('useSubmitQuery — cancelled turn whose provider read never settles (i
       expect(env.chat.cleanRequests).toBeGreaterThanOrEqual(2);
       expect(env.chat.providerReadSettled()).toBe(false);
 
-      const turnAPromise = turnAPromiseRef.current;
-      if (turnAPromise !== null) {
-        await act(async () => {
-          await turnAPromise;
-        });
-      }
+      await settleTurn(turnAPromiseRef.current);
       await act(async () => {
         unmount();
       });

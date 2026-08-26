@@ -59,6 +59,36 @@ describe('Task-list Continuation Integration Tests', () => {
     status,
   });
 
+  const activeTodosForContinuation = (todos: readonly Todo[]): Todo[] =>
+    todos.filter(
+      (todo) => todo.status === 'in_progress' || todo.status === 'pending',
+    );
+
+  const prioritizedTodoForContinuation = (
+    activeTodos: readonly Todo[],
+  ): Todo => {
+    const inProgressTodos = activeTodos.filter(
+      (todo) => todo.status === 'in_progress',
+    );
+    const pendingTodos = activeTodos.filter(
+      (todo) => todo.status === 'pending',
+    );
+    const prioritizedTodo =
+      inProgressTodos.length > 0 ? inProgressTodos.at(0) : pendingTodos.at(0);
+    if (prioritizedTodo === undefined) {
+      throw new Error('Expected an active todo for continuation');
+    }
+    return prioritizedTodo;
+  };
+
+  const continuationPromptFor = (
+    todo: Todo,
+    approvalMode: ApprovalMode,
+  ): string =>
+    approvalMode === ApprovalMode.YOLO
+      ? `Continue to proceed with the active task without waiting for confirmation: "${todo.content}"`
+      : `Please continue working on the following task: "${todo.content}"`;
+
   beforeEach(async () => {
     originalHome = process.env.HOME;
     tempDir = await createTempDirectory();
@@ -259,7 +289,7 @@ describe('Task-list Continuation Integration Tests', () => {
       expect(typeof agentClient.sendMessageStream).toBe('function');
     });
 
-    it('@requirement REQ-002 should support ephemeral messaging interface', async () => {
+    async function verifyRequirementREQ002ShouldSupportEphemeralMessagingInterface() {
       // Given: Mock the sendMessageStream to capture calls
       let capturedMessage = '';
       let capturedOptions: unknown = null;
@@ -301,8 +331,15 @@ describe('Task-list Continuation Integration Tests', () => {
       await generator.next();
 
       // Then: Should capture message and options
-      expect(capturedMessage).toBe('Test continuation prompt');
-      expect(capturedOptions).toStrictEqual({
+      return { capturedMessage, capturedOptions, originalSendMessageStream };
+    }
+
+    it('@requirement REQ-002 should support ephemeral messaging interface', async () => {
+      const behaviorResult =
+        await verifyRequirementREQ002ShouldSupportEphemeralMessagingInterface();
+
+      expect(behaviorResult.capturedMessage).toBe('Test continuation prompt');
+      expect(behaviorResult.capturedOptions).toStrictEqual({
         signal: expect.any(AbortSignal),
         prompt_id: 'test-prompt-id',
         turns: undefined,
@@ -311,7 +348,7 @@ describe('Task-list Continuation Integration Tests', () => {
       });
 
       // Restore original method
-      agentClient.sendMessageStream = originalSendMessageStream;
+      agentClient.sendMessageStream = behaviorResult.originalSendMessageStream;
     });
 
     it('@requirement REQ-002 should handle YOLO vs DEFAULT approval modes', async () => {
@@ -444,10 +481,15 @@ describe('Task-list Continuation Integration Tests', () => {
   });
 
   describe('Real Component Data Flow', () => {
-    it('@requirement REQ-001, REQ-002, REQ-003, REQ-004 should demonstrate end-to-end data flow', async () => {
-      // Given: Enable task-list continuation
+    function enableTodoContinuationForEndToEndDataFlow(): unknown {
       config.setEphemeralSetting('todo-continuation', true);
-      expect(config.getEphemeralSetting('todo-continuation')).toBe(true);
+      return config.getEphemeralSetting('todo-continuation');
+    }
+
+    it('@requirement REQ-001, REQ-002, REQ-003, REQ-004 should demonstrate end-to-end data flow', async () => {
+      const todoContinuationEnabled =
+        enableTodoContinuationForEndToEndDataFlow();
+      expect(todoContinuationEnabled).toBe(true);
 
       // Create active todos through real TodoStore
       const todos = [
@@ -463,30 +505,19 @@ describe('Task-list Continuation Integration Tests', () => {
       expect(storedTodos).toHaveLength(3);
 
       // Filter for active todos (simulating continuation logic)
-      const activeTodos = storedTodos.filter(
-        (todo) => todo.status === 'in_progress' || todo.status === 'pending',
-      );
+      const activeTodos = activeTodosForContinuation(storedTodos);
       expect(activeTodos).toHaveLength(2);
 
       // Prioritize in_progress todos (simulating continuation prioritization)
-      const inProgressTodos = activeTodos.filter(
-        (todo) => todo.status === 'in_progress',
-      );
-      const pendingTodos = activeTodos.filter(
-        (todo) => todo.status === 'pending',
-      );
-
-      const prioritizedTodo =
-        inProgressTodos.length > 0 ? inProgressTodos[0] : pendingTodos[0];
+      const prioritizedTodo = prioritizedTodoForContinuation(activeTodos);
       expect(prioritizedTodo.content).toBe('Implement authentication');
       expect(prioritizedTodo.status).toBe('in_progress');
 
       // Simulate continuation prompt generation
-      const isYoloMode = config.getApprovalMode() === ApprovalMode.YOLO;
-      const continuationPrompt = isYoloMode
-        ? `Continue to proceed with the active task without waiting for confirmation: "${prioritizedTodo.content}"`
-        : `Please continue working on the following task: "${prioritizedTodo.content}"`;
-
+      const continuationPrompt = continuationPromptFor(
+        prioritizedTodo,
+        config.getApprovalMode(),
+      );
       expect(continuationPrompt).toContain('Implement authentication');
       expect(continuationPrompt).toMatch(
         testRegex('please continue working', 'i'),
@@ -494,11 +525,10 @@ describe('Task-list Continuation Integration Tests', () => {
 
       // Test YOLO mode prompt
       config.setApprovalMode(ApprovalMode.YOLO);
-      const yoloPrompt =
-        config.getApprovalMode() === ApprovalMode.YOLO
-          ? `Continue to proceed with the active task without waiting for confirmation: "${prioritizedTodo.content}"`
-          : `Please continue working on the following task: "${prioritizedTodo.content}"`;
-
+      const yoloPrompt = continuationPromptFor(
+        prioritizedTodo,
+        config.getApprovalMode(),
+      );
       expect(yoloPrompt).toMatch(
         testRegex('(continue|proceed).*without.*confirmation', 'i'),
       );

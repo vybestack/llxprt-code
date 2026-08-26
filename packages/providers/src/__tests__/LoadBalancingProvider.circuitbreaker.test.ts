@@ -19,6 +19,30 @@ import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
+interface CircuitBreakerTestProvider {
+  readonly name: string;
+  generateChatCompletion(): AsyncGenerator<IContent>;
+  getServerTools(): readonly [];
+}
+
+function createRecoveringCircuitBreakerProvider(): CircuitBreakerTestProvider {
+  let calls = 0;
+  return {
+    name: 'test-provider-1',
+    async *generateChatCompletion(): AsyncGenerator<IContent> {
+      calls++;
+      if (calls <= 2) {
+        throw new Error('Backend failure');
+      }
+      yield {
+        role: 'assistant',
+        parts: [{ text: 'recovered' }],
+      } as IContent;
+    },
+    getServerTools: () => [],
+  };
+}
+
 describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
   let settingsService: SettingsService;
   let runtimeConfig: Config;
@@ -247,21 +271,7 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
         providerManager,
       );
 
-      let backend1Calls = 0;
-      const mockProvider1 = {
-        name: 'test-provider-1',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          backend1Calls++;
-          if (backend1Calls <= 2) {
-            throw new Error('Backend failure');
-          }
-          yield {
-            role: 'assistant',
-            parts: [{ text: 'recovered' }],
-          } as IContent;
-        },
-        getServerTools: () => [],
-      };
+      const mockProvider1 = createRecoveringCircuitBreakerProvider();
       const mockProvider2 = {
         name: 'test-provider-2',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
@@ -320,21 +330,7 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
         providerManager,
       );
 
-      let backend1Calls = 0;
-      const mockProvider1 = {
-        name: 'test-provider-1',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          backend1Calls++;
-          if (backend1Calls <= 2) {
-            throw new Error('Backend failure');
-          }
-          yield {
-            role: 'assistant',
-            parts: [{ text: 'recovered' }],
-          } as IContent;
-        },
-        getServerTools: () => [],
-      };
+      const mockProvider1 = createRecoveringCircuitBreakerProvider();
       const mockProvider2 = {
         name: 'test-provider-2',
         async *generateChatCompletion(): AsyncGenerator<IContent> {

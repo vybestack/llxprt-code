@@ -45,7 +45,10 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
 
   // A production-shaped load-balancer profile: provider/model are EMPTY on the
   // load-balancer profile itself (the concrete values live on the members).
-  const loadBalancerProfile: Profile = {
+  const loadBalancerProfile: Extract<
+    Profile,
+    { readonly type: 'loadbalancer' }
+  > = {
     version: 1,
     type: 'loadbalancer',
     policy: 'failover',
@@ -232,52 +235,68 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
   });
 
   it('still rejects a load-balancer profile that references a nested load balancer', async () => {
-    const nestedSubagent: SubagentConfig = {
-      ...loadBalancerSubagent,
-      name: 'nested-lb',
-      profile: 'outer-lb',
-    };
-    const outerProfile: Profile = {
-      version: 1,
-      type: 'loadbalancer',
-      policy: 'roundrobin',
-      profiles: ['inner-lb'],
-      provider: '',
-      model: '',
-      modelParams: {},
-      ephemeralSettings: {},
-    };
-    const innerProfile: Profile = {
-      version: 1,
-      type: 'loadbalancer',
-      policy: 'roundrobin',
-      profiles: ['zai'],
-      provider: '',
-      model: '',
-      modelParams: {},
-      ephemeralSettings: {},
-    };
-    const loadProfile = vi.fn(async (profileName: string) => {
-      if (profileName === 'outer-lb') {
-        return outerProfile;
-      }
-      if (profileName === 'inner-lb') {
-        return innerProfile;
-      }
-      throw new Error(`unexpected profile ${profileName}`);
-    });
-    const { orchestrator, runtimeLoader } = createValidationOrchestrator(
-      nestedSubagent,
-      loadProfile,
-    );
-
+    const { orchestrator, nestedSubagent, runtimeLoader } =
+      await observeStillRejectsALoadBalancerProfileThatReferencesANestedLoadBalancer();
     await expect(
       orchestrator.launch({ name: nestedSubagent.name }),
     ).rejects.toThrow(/cannot use nested load balancer profile 'inner-lb'/);
     expect(runtimeLoader).not.toHaveBeenCalled();
   });
 
+  const observeStillRejectsALoadBalancerProfileThatReferencesANestedLoadBalancer =
+    async () => {
+      const nestedSubagent: SubagentConfig = {
+        ...loadBalancerSubagent,
+        name: 'nested-lb',
+        profile: 'outer-lb',
+      };
+      const outerProfile: Profile = {
+        version: 1,
+        type: 'loadbalancer',
+        policy: 'roundrobin',
+        profiles: ['inner-lb'],
+        provider: '',
+        model: '',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+      const innerProfile: Profile = {
+        version: 1,
+        type: 'loadbalancer',
+        policy: 'roundrobin',
+        profiles: ['zai'],
+        provider: '',
+        model: '',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+      const loadProfile = vi.fn(async (profileName: string) => {
+        if (profileName === 'outer-lb') {
+          return outerProfile;
+        }
+        if (profileName === 'inner-lb') {
+          return innerProfile;
+        }
+        throw new Error(`unexpected profile ${profileName}`);
+      });
+      const { orchestrator, runtimeLoader } = createValidationOrchestrator(
+        nestedSubagent,
+        loadProfile,
+      );
+
+      return { orchestrator, nestedSubagent, runtimeLoader };
+    };
+
   it('rejects a load-balancer member with an empty provider', async () => {
+    const { orchestrator, invalidSubagent, runtimeLoader } =
+      await observeRejectsALoadBalancerMemberWithAnEmptyProvider();
+    await expect(
+      orchestrator.launch({ name: invalidSubagent.name }),
+    ).rejects.toThrow(/must define a non-empty provider/);
+    expect(runtimeLoader).not.toHaveBeenCalled();
+  });
+
+  const observeRejectsALoadBalancerMemberWithAnEmptyProvider = async () => {
     const invalidSubagent: SubagentConfig = {
       ...loadBalancerSubagent,
       name: 'invalid-provider-lb',
@@ -308,13 +327,19 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
       loadProfile,
     );
 
+    return { orchestrator, invalidSubagent, runtimeLoader };
+  };
+
+  it('rejects a load-balancer member with an empty model', async () => {
+    const { orchestrator, invalidSubagent, runtimeLoader } =
+      await observeRejectsALoadBalancerMemberWithAnEmptyModel();
     await expect(
       orchestrator.launch({ name: invalidSubagent.name }),
-    ).rejects.toThrow(/must define a non-empty provider/);
+    ).rejects.toThrow(/must define a non-empty model/);
     expect(runtimeLoader).not.toHaveBeenCalled();
   });
 
-  it('rejects a load-balancer member with an empty model', async () => {
+  const observeRejectsALoadBalancerMemberWithAnEmptyModel = async () => {
     const invalidSubagent: SubagentConfig = {
       ...loadBalancerSubagent,
       name: 'invalid-model-lb',
@@ -345,11 +370,8 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
       loadProfile,
     );
 
-    await expect(
-      orchestrator.launch({ name: invalidSubagent.name }),
-    ).rejects.toThrow(/must define a non-empty model/);
-    expect(runtimeLoader).not.toHaveBeenCalled();
-  });
+    return { orchestrator, invalidSubagent, runtimeLoader };
+  };
 
   // ---------------------------------------------------------------------------
   // Load-balancer max-turns resolution (Issue #2541).
@@ -362,99 +384,115 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
   // ---------------------------------------------------------------------------
 
   it('defaults max_turns to 1000 for a load-balancer profile with no maxTurnsPerPrompt', async () => {
-    const memberProfile: Profile = {
-      version: 1,
-      provider: 'openai',
-      model: 'gpt-4o',
-      modelParams: {},
-      ephemeralSettings: {},
-    };
-
-    const lbProfile: Profile = {
-      version: 1,
-      type: 'loadbalancer',
-      policy: 'roundrobin',
-      profiles: ['member'],
-      provider: '',
-      model: '',
-      modelParams: {},
-      ephemeralSettings: {},
-    };
-
-    const { orchestrator, factory } = createOrchestratorForTurns({
-      subagentName: 'lb-default-turns-helper',
-      profileName: 'lb',
-      profile: lbProfile,
-      loadProfile: vi.fn(async (name: string) => {
-        if (name === 'lb') {
-          return lbProfile;
-        }
-        if (name === 'member') {
-          return memberProfile;
-        }
-        throw new Error(`unexpected profile ${name}`);
-      }),
-    });
-
-    await orchestrator.launch({ name: 'lb-default-turns-helper' });
-
-    const runConfigArg = extractRunConfig(factory);
+    const { runConfigArg } =
+      await observeDefaultsMaxTurnsTo1000ForALoadBalancerProfileWithNo();
     expect(runConfigArg.max_turns).toBe(1000);
   });
 
+  const observeDefaultsMaxTurnsTo1000ForALoadBalancerProfileWithNo =
+    async () => {
+      const memberProfile: Profile = {
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4o',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+
+      const lbProfile: Profile = {
+        version: 1,
+        type: 'loadbalancer',
+        policy: 'roundrobin',
+        profiles: ['member'],
+        provider: '',
+        model: '',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+
+      const { orchestrator, factory } = createOrchestratorForTurns({
+        subagentName: 'lb-default-turns-helper',
+        profileName: 'lb',
+        profile: lbProfile,
+        loadProfile: vi.fn(async (name: string) => {
+          if (name === 'lb') {
+            return lbProfile;
+          }
+          if (name === 'member') {
+            return memberProfile;
+          }
+          throw new Error(`unexpected profile ${name}`);
+        }),
+      });
+
+      await orchestrator.launch({ name: 'lb-default-turns-helper' });
+
+      const runConfigArg = extractRunConfig(factory);
+
+      return { runConfigArg };
+    };
+
   it('uses the load-balancer profile maxTurnsPerPrompt and outranks a foreground value, ignoring the member profile setting', async () => {
-    // The member profile carries a DISTINCT maxTurnsPerPrompt so the assertion
-    // proves the LB profile — not the member — is the source of the value.
-    const memberProfile: Profile = {
-      version: 1,
-      provider: 'openai',
-      model: 'gpt-4o',
-      modelParams: {},
-      ephemeralSettings: {
-        maxTurnsPerPrompt: 7,
-      },
-    };
-
-    const lbProfile: Profile = {
-      version: 1,
-      type: 'loadbalancer',
-      policy: 'roundrobin',
-      profiles: ['member'],
-      provider: '',
-      model: '',
-      modelParams: {},
-      ephemeralSettings: {
-        maxTurnsPerPrompt: 400,
-      },
-    };
-
-    const configWithForegroundCap = {
-      ...makeForegroundConfig(),
-      getEphemeralSetting: (key: string) =>
-        key === 'maxTurnsPerPrompt' ? 55 : undefined,
-    } as unknown as Config;
-
-    const { orchestrator, factory } = createOrchestratorForTurns({
-      subagentName: 'lb-profile-turns-helper',
-      profileName: 'lb',
-      profile: lbProfile,
-      foregroundConfig: configWithForegroundCap,
-      loadProfile: vi.fn(async (name: string) => {
-        if (name === 'lb') {
-          return lbProfile;
-        }
-        if (name === 'member') {
-          return memberProfile;
-        }
-        throw new Error(`unexpected profile ${name}`);
-      }),
-    });
-
-    await orchestrator.launch({ name: 'lb-profile-turns-helper' });
-
-    const runConfigArg = extractRunConfig(factory);
-    // 400 from the LB profile wins — not 7 from the member, not 55 from the
-    // foreground, and not the 1000 fallback.
+    const { runConfigArg } =
+      await observeUsesTheLoadBalancerProfileMaxTurnsPerPromptAndOutranksAForegroundValueIgnoring();
     expect(runConfigArg.max_turns).toBe(400);
   });
+
+  const observeUsesTheLoadBalancerProfileMaxTurnsPerPromptAndOutranksAForegroundValueIgnoring =
+    async () => {
+      // The member profile carries a DISTINCT maxTurnsPerPrompt so the assertion
+      // proves the LB profile — not the member — is the source of the value.
+      const memberProfile: Profile = {
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4o',
+        modelParams: {},
+        ephemeralSettings: {
+          maxTurnsPerPrompt: 7,
+        },
+      };
+
+      const lbProfile: Profile = {
+        version: 1,
+        type: 'loadbalancer',
+        policy: 'roundrobin',
+        profiles: ['member'],
+        provider: '',
+        model: '',
+        modelParams: {},
+        ephemeralSettings: {
+          maxTurnsPerPrompt: 400,
+        },
+      };
+
+      const configWithForegroundCap = {
+        ...makeForegroundConfig(),
+        getEphemeralSetting: (key: string) =>
+          key === 'maxTurnsPerPrompt' ? 55 : undefined,
+      } as unknown as Config;
+
+      const { orchestrator, factory } = createOrchestratorForTurns({
+        subagentName: 'lb-profile-turns-helper',
+        profileName: 'lb',
+        profile: lbProfile,
+        foregroundConfig: configWithForegroundCap,
+        loadProfile: vi.fn(async (name: string) => {
+          if (name === 'lb') {
+            return lbProfile;
+          }
+          if (name === 'member') {
+            return memberProfile;
+          }
+          throw new Error(`unexpected profile ${name}`);
+        }),
+      });
+
+      await orchestrator.launch({ name: 'lb-profile-turns-helper' });
+
+      const runConfigArg = extractRunConfig(factory);
+      // 400 from the LB profile wins — not 7 from the member, not 55 from the
+      // foreground, and not the 1000 fallback.
+
+      return { runConfigArg };
+    };
 });

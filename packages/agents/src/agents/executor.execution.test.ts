@@ -365,33 +365,10 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
   });
 
   it('should handle multiple calls to complete_task in the same turn (accept first, block rest)', async () => {
-    const definition = createTestDefinition([], {}, 'none');
-    const executor = await AgentExecutor.create(
-      definition,
-      fixture.mockConfig,
-      getTestRuntimeMessageBus(fixture.mockConfig),
-      fixture.onActivity,
-    );
-
-    mockModelResponse(mockSendMessageStream, [
-      { name: TASK_COMPLETE_TOOL_NAME, args: {}, id: 'call1' },
-      { name: TASK_COMPLETE_TOOL_NAME, args: {}, id: 'call2' },
-    ]);
-
-    const output = await executor.run({ goal: 'Dup test' }, fixture.signal);
-
+    const { output, completions, errors } =
+      await observeHandleMultipleCallsToCompleteTaskInTheSameTurnAcceptFirst();
     expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
     expect(output.terminate_reason).toBe(AgentTerminateMode.GOAL);
-
-    const completions = fixture.activities.filter(
-      (a) =>
-        a.type === 'TOOL_CALL_END' &&
-        a.data['name'] === TASK_COMPLETE_TOOL_NAME,
-    );
-    const errors = fixture.activities.filter(
-      (a) => a.type === 'ERROR' && a.data['name'] === TASK_COMPLETE_TOOL_NAME,
-    );
-
     expect(completions).toHaveLength(1);
     expect(errors).toHaveLength(1);
     expect(errors[0].data['error']).toContain(
@@ -399,7 +376,57 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
     );
   });
 
+  const observeHandleMultipleCallsToCompleteTaskInTheSameTurnAcceptFirst =
+    async () => {
+      const definition = createTestDefinition([], {}, 'none');
+      const executor = await AgentExecutor.create(
+        definition,
+        fixture.mockConfig,
+        getTestRuntimeMessageBus(fixture.mockConfig),
+        fixture.onActivity,
+      );
+
+      mockModelResponse(mockSendMessageStream, [
+        { name: TASK_COMPLETE_TOOL_NAME, args: {}, id: 'call1' },
+        { name: TASK_COMPLETE_TOOL_NAME, args: {}, id: 'call2' },
+      ]);
+
+      const output = await executor.run({ goal: 'Dup test' }, fixture.signal);
+
+      const completions = fixture.activities.filter(
+        (a) =>
+          a.type === 'TOOL_CALL_END' &&
+          a.data['name'] === TASK_COMPLETE_TOOL_NAME,
+      );
+      const errors = fixture.activities.filter(
+        (a) => a.type === 'ERROR' && a.data['name'] === TASK_COMPLETE_TOOL_NAME,
+      );
+
+      return { output, completions, errors };
+    };
+
   it('should execute parallel tool calls and then complete', async () => {
+    const { output, turn2Message } =
+      await observeExecuteParallelToolCallsAndThenComplete();
+    expect(mockExecuteToolCall).toHaveBeenCalledTimes(2);
+    expect(output.terminate_reason).toBe(AgentTerminateMode.GOAL);
+    expect(turn2Message).toBeDefined();
+    expect(turn2Message.blocks).toHaveLength(2);
+    expect(turn2Message.blocks).toStrictEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'tool_response',
+          callId: 'c1',
+        }),
+        expect.objectContaining({
+          type: 'tool_response',
+          callId: 'c2',
+        }),
+      ]),
+    );
+  });
+
+  const observeExecuteParallelToolCallsAndThenComplete = async () => {
     const definition = createTestDefinition([LSTool.Name]);
     const executor = await AgentExecutor.create(
       definition,
@@ -465,26 +492,11 @@ describe('AgentExecutor run (Execution Loop and Logic)', () => {
 
     const output = await runPromise;
 
-    expect(mockExecuteToolCall).toHaveBeenCalledTimes(2);
-    expect(output.terminate_reason).toBe(AgentTerminateMode.GOAL);
-
     const turn2Params = getMockMessageParams(mockSendMessageStream, 1);
     const turn2Message = turn2Params.message;
-    expect(turn2Message).toBeDefined();
-    expect(turn2Message.blocks).toHaveLength(2);
-    expect(turn2Message.blocks).toStrictEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: 'tool_response',
-          callId: 'c1',
-        }),
-        expect.objectContaining({
-          type: 'tool_response',
-          callId: 'c2',
-        }),
-      ]),
-    );
-  });
+
+    return { output, turn2Message };
+  };
 
   it('SECURITY: should block unauthorized tools and provide explicit failure to model', async () => {
     const definition = createTestDefinition([LSTool.Name]);

@@ -36,35 +36,46 @@ function waitForExit(child: ChildProcess): Promise<void> {
   });
 }
 
+function hasExited(child: ChildProcess): boolean {
+  return child.exitCode !== null || child.signalCode !== null;
+}
+
 describe('terminateProcessTree - graceful exit', () => {
-  it.skipIf(process.platform === 'win32')(
-    'signals a running process and it exits gracefully',
-    async () => {
-      const child = spawnSleeper(30);
-      expect(child.pid).toBeDefined();
+  describe.skipIf(process.platform === 'win32')(
+    'POSIX graceful process termination',
+    () => {
+      it(
+        'signals a running process and it exits gracefully',
+        async () => {
+          const child = spawnSleeper(30);
+          expect(child.pid).toBeDefined();
 
-      await new Promise((r) => setTimeout(r, 100));
+          await new Promise((r) => setTimeout(r, 100));
 
-      const result = await terminateProcessTree(child, {
-        gracePeriodMs: 2000,
-        ownsProcessGroup: true,
-      });
-      expect(result.outcome).toBe('graceful');
+          const result = await terminateProcessTree(child, {
+            gracePeriodMs: 2000,
+            ownsProcessGroup: true,
+          });
+          expect(result.outcome).toBe('graceful');
 
-      await waitForExit(child);
-      expect(child.exitCode !== null || child.signalCode !== null).toBe(true);
+          await waitForExit(child);
+          expect(hasExited(child)).toBe(true);
+        },
+        { timeout: 10000 },
+      );
     },
-    { timeout: 10000 },
   );
 
-  it.skipIf(process.platform === 'win32')(
-    'returns no_target for an already-exited process',
-    async () => {
-      const child = spawnSleeper(0);
-      await waitForExit(child);
+  describe.skipIf(process.platform === 'win32')(
+    'POSIX already-exited process termination',
+    () => {
+      it('returns no_target for an already-exited process', async () => {
+        const child = spawnSleeper(0);
+        await waitForExit(child);
 
-      const result = await terminateProcessTree(child);
-      expect(result.outcome).toBe('no_target');
+        const result = await terminateProcessTree(child);
+        expect(result.outcome).toBe('no_target');
+      });
     },
   );
 
@@ -81,245 +92,292 @@ describe('terminateProcessTree - graceful exit', () => {
 });
 
 describe('terminateProcessTree - SIGTERM ignoring process escalates to SIGKILL', () => {
-  it.skipIf(process.platform === 'win32')(
-    'escalates to SIGKILL when SIGTERM is ignored',
-    async () => {
-      const child = spawnSleeper(60, true);
-      expect(child.pid).toBeDefined();
+  describe.skipIf(process.platform === 'win32')(
+    'POSIX SIGKILL escalation',
+    () => {
+      it(
+        'escalates to SIGKILL when SIGTERM is ignored',
+        async () => {
+          const child = spawnSleeper(60, true);
+          expect(child.pid).toBeDefined();
 
-      await new Promise((r) => setTimeout(r, 300));
+          await new Promise((r) => setTimeout(r, 300));
 
-      const result = await terminateProcessTree(child, {
-        gracePeriodMs: 500,
-        ownsProcessGroup: true,
-      });
-      expect(result.outcome).toBe('escalated');
+          const result = await terminateProcessTree(child, {
+            gracePeriodMs: 500,
+            ownsProcessGroup: true,
+          });
+          expect(result.outcome).toBe('escalated');
 
-      await waitForExit(child);
-      expect(child.signalCode).toBe('SIGKILL');
-    },
-    { timeout: 10000 },
-  );
-
-  it.skipIf(process.platform === 'win32')(
-    'escalated process group has no survivors (descendant is dead)',
-    async () => {
-      const child = spawn('sh', ['-c', 'sleep 60 & sleep 60 & sleep 60'], {
-        stdio: 'ignore',
-        detached: true,
-        windowsHide: true,
-      });
-      expect(child.pid).toBeDefined();
-      const pgid = child.pid!;
-
-      await new Promise((r) => setTimeout(r, 300));
-
-      const result = await terminateProcessTree(child, {
-        gracePeriodMs: 500,
-        ownsProcessGroup: true,
-      });
-      expect(result.outcome).toBe('graceful');
-
-      await waitForExit(child);
-
-      await new Promise((r) => setTimeout(r, 200));
-
-      expect(() => process.kill(-pgid, 0)).toThrow('ESRCH');
-    },
-    { timeout: 10000 },
-  );
-
-  it.skipIf(process.platform === 'win32')(
-    'leader exits but descendant ignores SIGTERM — escalation kills the group',
-    async () => {
-      const child = spawn('sh', ['-c', "trap '' TERM &\nwait\nsleep 60"], {
-        stdio: 'ignore',
-        detached: true,
-        windowsHide: true,
-      });
-      expect(child.pid).toBeDefined();
-      const pgid = child.pid!;
-
-      await new Promise((r) => setTimeout(r, 300));
-
-      const result = await terminateProcessTree(child, {
-        gracePeriodMs: 500,
-        ownsProcessGroup: true,
-      });
-      expect(['escalated', 'graceful']).toContain(result.outcome);
-
-      await new Promise((r) => setTimeout(r, 200));
-      expect(() => process.kill(-pgid, 0)).toThrow('ESRCH');
-    },
-    { timeout: 10000 },
-  );
-
-  it.skipIf(process.platform === 'win32')(
-    'leader definitely exited, descendant alive ignoring TERM — group escalation kills it',
-    async () => {
-      // Leader spawns a TERM-ignoring descendant then exits immediately.
-      // The descendant keeps the process group alive.
-      const child = spawn(
-        'sh',
-        ['-c', "(trap '' TERM; exec sleep 60) &\nexit 0"],
-        {
-          stdio: 'ignore',
-          detached: true,
-          windowsHide: true,
+          await waitForExit(child);
+          expect(child.signalCode).toBe('SIGKILL');
         },
+        { timeout: 10000 },
       );
-      expect(child.pid).toBeDefined();
-      const pgid = child.pid!;
-
-      // Wait for the leader to DEFINITELY exit.
-      await waitForExit(child);
-      expect(child.exitCode).toBe(0);
-
-      // The descendant must still be alive in the owned group.
-      expect(() => process.kill(-pgid, 0)).not.toThrow();
-
-      const result = await terminateProcessTree(child, {
-        gracePeriodMs: 500,
-        ownsProcessGroup: true,
-      });
-      expect(['escalated', 'graceful']).toContain(result.outcome);
-
-      // Group must be completely gone.
-      await new Promise((r) => setTimeout(r, 200));
-      expect(() => process.kill(-pgid, 0)).toThrow('ESRCH');
     },
-    { timeout: 15000 },
   );
 
-  it.skipIf(process.platform === 'win32')(
-    'group-owning termination never falls back to positive-PID signal',
-    async () => {
-      const child = spawnSleeper(60, true);
-      expect(child.pid).toBeDefined();
-      const pid = child.pid!;
+  describe.skipIf(process.platform === 'win32')(
+    'POSIX process-group survivor cleanup',
+    () => {
+      it(
+        'escalated process group has no survivors (descendant is dead)',
+        async () => {
+          const child = spawn('sh', ['-c', 'sleep 60 & sleep 60 & sleep 60'], {
+            stdio: 'ignore',
+            detached: true,
+            windowsHide: true,
+          });
+          expect(child.pid).toBeDefined();
+          const pgid = child.pid!;
 
-      await new Promise((r) => setTimeout(r, 300));
+          await new Promise((r) => setTimeout(r, 300));
 
-      const result = await terminateProcessTree(child, {
-        gracePeriodMs: 500,
-        ownsProcessGroup: true,
-      });
-      expect(result.outcome).toBe('escalated');
+          const result = await terminateProcessTree(child, {
+            gracePeriodMs: 500,
+            ownsProcessGroup: true,
+          });
+          expect(result.outcome).toBe('graceful');
 
-      await waitForExit(child);
+          await waitForExit(child);
 
-      // The original PID must be dead (no reused PID was signaled).
-      expect(() => process.kill(pid, 0)).toThrow('ESRCH');
+          await new Promise((r) => setTimeout(r, 200));
+
+          expect(() => process.kill(-pgid, 0)).toThrow('ESRCH');
+        },
+        { timeout: 10000 },
+      );
     },
-    { timeout: 10000 },
+  );
+
+  describe.skipIf(process.platform === 'win32')(
+    'POSIX descendant process-group escalation',
+    () => {
+      it(
+        'leader exits but descendant ignores SIGTERM — escalation kills the group',
+        async () => {
+          const child = spawn('sh', ['-c', "trap '' TERM &\nwait\nsleep 60"], {
+            stdio: 'ignore',
+            detached: true,
+            windowsHide: true,
+          });
+          expect(child.pid).toBeDefined();
+          const pgid = child.pid!;
+
+          await new Promise((r) => setTimeout(r, 300));
+
+          const result = await terminateProcessTree(child, {
+            gracePeriodMs: 500,
+            ownsProcessGroup: true,
+          });
+          expect(['escalated', 'graceful']).toContain(result.outcome);
+
+          await new Promise((r) => setTimeout(r, 200));
+          expect(() => process.kill(-pgid, 0)).toThrow('ESRCH');
+        },
+        { timeout: 10000 },
+      );
+    },
+  );
+
+  describe.skipIf(process.platform === 'win32')(
+    'POSIX exited-leader process-group escalation',
+    () => {
+      it(
+        'leader definitely exited, descendant alive ignoring TERM — group escalation kills it',
+        async () => {
+          // Leader spawns a TERM-ignoring descendant then exits immediately.
+          // The descendant keeps the process group alive.
+          const child = spawn(
+            'sh',
+            ['-c', "(trap '' TERM; exec sleep 60) &\nexit 0"],
+            {
+              stdio: 'ignore',
+              detached: true,
+              windowsHide: true,
+            },
+          );
+          expect(child.pid).toBeDefined();
+          const pgid = child.pid!;
+
+          // Wait for the leader to DEFINITELY exit.
+          await waitForExit(child);
+          expect(child.exitCode).toBe(0);
+
+          // The descendant must still be alive in the owned group.
+          expect(() => process.kill(-pgid, 0)).not.toThrow();
+
+          const result = await terminateProcessTree(child, {
+            gracePeriodMs: 500,
+            ownsProcessGroup: true,
+          });
+          expect(['escalated', 'graceful']).toContain(result.outcome);
+
+          // Group must be completely gone.
+          await new Promise((r) => setTimeout(r, 200));
+          expect(() => process.kill(-pgid, 0)).toThrow('ESRCH');
+        },
+        { timeout: 15000 },
+      );
+    },
+  );
+
+  describe.skipIf(process.platform === 'win32')(
+    'POSIX process-group signal targeting',
+    () => {
+      it(
+        'group-owning termination never falls back to positive-PID signal',
+        async () => {
+          const child = spawnSleeper(60, true);
+          expect(child.pid).toBeDefined();
+          const pid = child.pid!;
+
+          await new Promise((r) => setTimeout(r, 300));
+
+          const result = await terminateProcessTree(child, {
+            gracePeriodMs: 500,
+            ownsProcessGroup: true,
+          });
+          expect(result.outcome).toBe('escalated');
+
+          await waitForExit(child);
+
+          // The original PID must be dead (no reused PID was signaled).
+          expect(() => process.kill(pid, 0)).toThrow('ESRCH');
+        },
+        { timeout: 10000 },
+      );
+    },
   );
 });
 
 describe('terminateProcessTree - direct child (no process group)', () => {
-  it.skipIf(process.platform === 'win32')(
-    'terminates a direct child via positive PID signal',
-    async () => {
-      const child = spawnSleeper(30);
-      expect(child.pid).toBeDefined();
+  describe.skipIf(process.platform === 'win32')(
+    'POSIX direct-child termination',
+    () => {
+      it(
+        'terminates a direct child via positive PID signal',
+        async () => {
+          const child = spawnSleeper(30);
+          expect(child.pid).toBeDefined();
 
-      await new Promise((r) => setTimeout(r, 100));
+          await new Promise((r) => setTimeout(r, 100));
 
-      const result = await terminateProcessTree(child, {
-        gracePeriodMs: 2000,
-        ownsProcessGroup: false,
-      });
-      expect(result.outcome).toBe('graceful');
+          const result = await terminateProcessTree(child, {
+            gracePeriodMs: 2000,
+            ownsProcessGroup: false,
+          });
+          expect(result.outcome).toBe('graceful');
 
-      await waitForExit(child);
+          await waitForExit(child);
+        },
+        { timeout: 10000 },
+      );
     },
-    { timeout: 10000 },
   );
 
-  it.skipIf(process.platform === 'win32')(
-    'escalates direct child to SIGKILL when SIGTERM is ignored',
-    async () => {
-      const child = spawnSleeper(60, true);
+  describe.skipIf(process.platform === 'win32')(
+    'POSIX direct-child escalation',
+    () => {
+      it(
+        'escalates direct child to SIGKILL when SIGTERM is ignored',
+        async () => {
+          const child = spawnSleeper(60, true);
 
-      await new Promise((r) => setTimeout(r, 300));
+          await new Promise((r) => setTimeout(r, 300));
 
-      const result = await terminateProcessTree(child, {
-        gracePeriodMs: 500,
-        ownsProcessGroup: false,
-      });
-      expect(result.outcome).toBe('escalated');
+          const result = await terminateProcessTree(child, {
+            gracePeriodMs: 500,
+            ownsProcessGroup: false,
+          });
+          expect(result.outcome).toBe('escalated');
 
-      await waitForExit(child);
-      expect(child.signalCode).toBe('SIGKILL');
+          await waitForExit(child);
+          expect(child.signalCode).toBe('SIGKILL');
+        },
+        { timeout: 10000 },
+      );
     },
-    { timeout: 10000 },
   );
 });
 
 describe('terminateProcessTree - coalescing by ChildProcess identity', () => {
-  it.skipIf(process.platform === 'win32')(
-    'coalesces concurrent calls for the same child',
-    async () => {
-      const child = spawnSleeper(30);
-      await new Promise((r) => setTimeout(r, 100));
+  describe.skipIf(process.platform === 'win32')(
+    'POSIX concurrent termination coalescing',
+    () => {
+      it(
+        'coalesces concurrent calls for the same child',
+        async () => {
+          const child = spawnSleeper(30);
+          await new Promise((r) => setTimeout(r, 100));
 
-      const [result1, result2] = await Promise.all([
-        terminateProcessTree(child, {
-          gracePeriodMs: 2000,
-          ownsProcessGroup: true,
-        }),
-        terminateProcessTree(child, {
-          gracePeriodMs: 2000,
-          ownsProcessGroup: true,
-        }),
-      ]);
+          const [result1, result2] = await Promise.all([
+            terminateProcessTree(child, {
+              gracePeriodMs: 2000,
+              ownsProcessGroup: true,
+            }),
+            terminateProcessTree(child, {
+              gracePeriodMs: 2000,
+              ownsProcessGroup: true,
+            }),
+          ]);
 
-      expect(result1.outcome).toBe('graceful');
-      expect(result2.outcome).toBe('graceful');
+          expect(result1.outcome).toBe('graceful');
+          expect(result2.outcome).toBe('graceful');
 
-      await waitForExit(child);
-    },
-    { timeout: 10000 },
-  );
-
-  it.skipIf(process.platform === 'win32')(
-    'coalesces many concurrent calls for the same child',
-    async () => {
-      const child = spawnSleeper(30);
-      await new Promise((r) => setTimeout(r, 100));
-
-      const results = await Promise.all(
-        Array.from({ length: 5 }, () =>
-          terminateProcessTree(child, {
-            gracePeriodMs: 2000,
-            ownsProcessGroup: true,
-          }),
-        ),
+          await waitForExit(child);
+        },
+        { timeout: 10000 },
       );
-
-      for (const r of results) {
-        expect(r.outcome).toBe('graceful');
-      }
-
-      await waitForExit(child);
     },
-    { timeout: 10000 },
   );
 
-  it.skipIf(process.platform === 'win32')(
-    'returns no_target for a sequential call after first completion',
-    async () => {
-      const child = spawnSleeper(2);
-      await new Promise((r) => setTimeout(r, 100));
+  describe.skipIf(process.platform === 'win32')(
+    'POSIX many-call termination coalescing',
+    () => {
+      it(
+        'coalesces many concurrent calls for the same child',
+        async () => {
+          const child = spawnSleeper(30);
+          await new Promise((r) => setTimeout(r, 100));
 
-      const result1 = await terminateProcessTree(child, {
-        gracePeriodMs: 3000,
-        ownsProcessGroup: true,
+          const results = await Promise.all(
+            Array.from({ length: 5 }, () =>
+              terminateProcessTree(child, {
+                gracePeriodMs: 2000,
+                ownsProcessGroup: true,
+              }),
+            ),
+          );
+
+          for (const r of results) {
+            expect(r.outcome).toBe('graceful');
+          }
+
+          await waitForExit(child);
+        },
+        { timeout: 10000 },
+      );
+    },
+  );
+
+  describe.skipIf(process.platform === 'win32')(
+    'POSIX sequential termination calls',
+    () => {
+      it('returns no_target for a sequential call after first completion', async () => {
+        const child = spawnSleeper(2);
+        await new Promise((r) => setTimeout(r, 100));
+
+        const result1 = await terminateProcessTree(child, {
+          gracePeriodMs: 3000,
+          ownsProcessGroup: true,
+        });
+        await waitForExit(child);
+
+        const result2 = await terminateProcessTree(child);
+        expect(result1.outcome).toBe('graceful');
+        expect(result2.outcome).toBe('no_target');
       });
-      await waitForExit(child);
-
-      const result2 = await terminateProcessTree(child);
-      expect(result1.outcome).toBe('graceful');
-      expect(result2.outcome).toBe('no_target');
     },
   );
 });
@@ -474,9 +532,8 @@ describe('terminateWindowsTree - platform-independent outcome tests', () => {
 // taskkill instead. The rest of this file already guards its POSIX cases the
 // same way; this block was the one that missed it, which is what turned the
 // nightly Windows `rest` shard red.
-describe.skipIf(process.platform === 'win32')(
-  'terminateProcessTree - EPERM vs ESRCH signal semantics',
-  () => {
+describe('terminateProcessTree - EPERM vs ESRCH signal semantics', () => {
+  describe.skipIf(process.platform === 'win32')('POSIX signal handling', () => {
     const fakeChild = {
       pid: 99999,
       exitCode: null,
@@ -525,5 +582,5 @@ describe.skipIf(process.platform === 'win32')(
       });
       expect(result.outcome).toBe('failure');
     });
-  },
-);
+  });
+});

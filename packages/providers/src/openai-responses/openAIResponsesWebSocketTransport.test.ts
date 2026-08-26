@@ -26,6 +26,26 @@ import {
   textContent,
 } from './openAIResponsesWebSocketTransport.test-helpers.js';
 
+function concurrentCompletionScript(
+  firstRequestSent: () => void,
+): ConstructorParameters<typeof SocketHarness>[0][number] {
+  let requestCount = 0;
+  return (socket) => {
+    socket.open();
+    socket.onSend = () => {
+      requestCount += 1;
+      if (requestCount === 1) firstRequestSent();
+      else complete(socket);
+    };
+  };
+}
+
+const errorName = (error: unknown): string =>
+  error instanceof Error ? error.name : 'unknown';
+
+const caughtError = (error: unknown): Error | undefined =>
+  error instanceof Error ? error : undefined;
+
 describe('Codex Responses WebSocket transport', () => {
   it('sends a flat response.create request and converts the endpoint URL', async () => {
     const harness = new SocketHarness([completingScript()]);
@@ -112,20 +132,12 @@ describe('Codex Responses WebSocket transport', () => {
   });
 
   it('serializes concurrent requests until response.completed', async () => {
-    let requestCount = 0;
     let firstRequestSent = (): void => undefined;
     const firstSend = new Promise<void>((resolve) => {
       firstRequestSent = resolve;
     });
     const harness = new SocketHarness([
-      (socket) => {
-        socket.open();
-        socket.onSend = () => {
-          requestCount += 1;
-          if (requestCount === 1) firstRequestSent();
-          else complete(socket);
-        };
-      },
+      concurrentCompletionScript(() => firstRequestSent()),
     ]);
     const transport = createCodexResponsesWebSocketTransport({
       openSocket: harness.openSocket,
@@ -168,10 +180,7 @@ describe('Codex Responses WebSocket transport', () => {
 
     controller.abort();
 
-    const result = second.then(
-      () => 'completed',
-      (error: unknown) => (error instanceof Error ? error.name : 'unknown'),
-    );
+    const result = second.then(() => 'completed', errorName);
     expect(await result).toBe('AbortError');
     expect(harness.sockets[0].sent).toHaveLength(1);
     complete(harness.sockets[0]);
@@ -227,10 +236,7 @@ describe('Codex Responses WebSocket transport', () => {
       handshakeTimeoutMs: 50,
     });
     const result = drain(transport.streamResponse(request(), options()));
-    const assertion = result.then(
-      () => 'completed',
-      (error: unknown) => (error instanceof Error ? error.name : 'unknown'),
-    );
+    const assertion = result.then(() => 'completed', errorName);
     // Wait for the injected handshake timeout to fire.
     await new Promise((resolve) => setTimeout(resolve, 120));
     expect(await assertion).toBe('StreamInterruptionError');
@@ -661,10 +667,7 @@ describe('Codex Responses WebSocket transport', () => {
 
     const error = await drain(
       transport.streamResponse(request(), options()),
-    ).then(
-      () => undefined,
-      (caught: unknown) => (caught instanceof Error ? caught : undefined),
-    );
+    ).then(() => undefined, caughtError);
 
     expect(error).toBeInstanceOf(Error);
     expect(error).toMatchObject({

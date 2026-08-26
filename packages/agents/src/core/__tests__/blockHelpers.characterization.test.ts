@@ -320,7 +320,28 @@ describe('blockHelpers characterization — property-based', () => {
   });
 
   it('getResponseTextFromBlocks never includes thinking content', () => {
-    fc.assert(
+    const {
+      getResponseTextFromBlocksNeverIncludesThinkingContentProperty,
+      observations,
+    } = observeGetResponseTextFromBlocksNeverIncludesThinkingContent();
+    fc.assert(getResponseTextFromBlocksNeverIncludesThinkingContentProperty);
+    expect(observations.map(({ actualText }) => actualText)).toStrictEqual(
+      observations.map(({ expectedText }) => expectedText),
+    );
+    expect(
+      observations.map(
+        ({ allThinkingTextsAreStrings }) => allThinkingTextsAreStrings,
+      ),
+    ).toStrictEqual(observations.map(() => true));
+  });
+
+  const observeGetResponseTextFromBlocksNeverIncludesThinkingContent = () => {
+    const observations: Array<{
+      actualText: string | undefined;
+      expectedText: string | undefined;
+      allThinkingTextsAreStrings: boolean;
+    }> = [];
+    const getResponseTextFromBlocksNeverIncludesThinkingContentProperty =
       fc.property(fc.array(blockArb, { maxLength: 20 }), (blocks) => {
         const text = getResponseTextFromBlocks(blocks);
 
@@ -332,27 +353,58 @@ describe('blockHelpers characterization — property-based', () => {
 
         const expected =
           textBlockTexts.length > 0 ? textBlockTexts.join('') : undefined;
-        expect(text).toBe(expected);
 
         const allThinkingTexts = blocks
           .filter((b): b is ThinkingBlock => b.type === 'thinking')
           .map((b) => b.thought);
+        const allThinkingTextsAreStrings = allThinkingTexts.every(
+          (thought) => typeof thought === 'string',
+        );
+        observations.push({
+          actualText: text,
+          expectedText: expected,
+          allThinkingTextsAreStrings,
+        });
 
-        expect(allThinkingTexts.every((t) => typeof t === 'string')).toBe(true);
-      }),
-    );
-  });
+        return text === expected && allThinkingTextsAreStrings;
+      });
+    return {
+      getResponseTextFromBlocksNeverIncludesThinkingContentProperty,
+      observations,
+    };
+  };
 
   it('analyzeResponseOutcome isActionable == hasVisibleText || hasToolCalls', () => {
+    const {
+      analyzeResponseOutcomeIsActionableHasVisibleTextHasToolCallsProperty,
+      observations,
+    } = observeAnalyzeResponseOutcomeIsActionableHasVisibleTextHasToolCalls();
     fc.assert(
-      fc.property(fc.array(blockArb, { maxLength: 20 }), (blocks) => {
-        const outcome = analyzeResponseOutcome(blocks);
-        expect(outcome.isActionable).toBe(
-          outcome.hasVisibleText || outcome.hasToolCalls,
-        );
-      }),
+      analyzeResponseOutcomeIsActionableHasVisibleTextHasToolCallsProperty,
+    );
+    expect(observations.map(({ actual }) => actual)).toStrictEqual(
+      observations.map(({ expected }) => expected),
     );
   });
+
+  const observeAnalyzeResponseOutcomeIsActionableHasVisibleTextHasToolCalls =
+    () => {
+      const observations: Array<{
+        actual: boolean;
+        expected: boolean;
+      }> = [];
+      const analyzeResponseOutcomeIsActionableHasVisibleTextHasToolCallsProperty =
+        fc.property(fc.array(blockArb, { maxLength: 20 }), (blocks) => {
+          const outcome = analyzeResponseOutcome(blocks);
+          const expected = outcome.hasVisibleText || outcome.hasToolCalls;
+          observations.push({ actual: outcome.isActionable, expected });
+          return outcome.isActionable === expected;
+        });
+      return {
+        analyzeResponseOutcomeIsActionableHasVisibleTextHasToolCallsProperty,
+        observations,
+      };
+    };
 
   it('analyzeResponseOutcome hasThinking reflects presence of thinking blocks', () => {
     fc.assert(

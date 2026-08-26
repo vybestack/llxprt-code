@@ -31,6 +31,18 @@ import {
 
 const isWindows = process.platform === 'win32';
 
+function resolvedExitCode(code: number | null): number {
+  return code ?? -1;
+}
+
+function hasRefreshToken(value: object | null): boolean {
+  return 'refresh_token' in (value ?? {});
+}
+
+function isNullOrObject(value: unknown): boolean {
+  return value === null || typeof value === 'object';
+}
+
 /** @plan:PLAN-20250214-CREDPROXY.P31 */
 
 class InMemoryTokenStore implements TokenStore {
@@ -188,17 +200,6 @@ describe('proxy integration (phase 31)', () => {
     return { server, socketPath, tokenStore, keyStorage };
   }
 
-  async function withServer(
-    run: (started: StartedServer) => Promise<void>,
-  ): Promise<void> {
-    const started = await startServer();
-    try {
-      await run(started);
-    } finally {
-      await started.server.stop();
-    }
-  }
-
   it('selects ProxyTokenStore when credential socket env var is present', () => {
     // @requirement R2.1
     // @scenario Factory should detect sandbox mode and return proxy token store.
@@ -272,9 +273,8 @@ describe('proxy integration (phase 31)', () => {
     await stopProxy();
   });
 
-  it.skipIf(isWindows)(
-    'consumes fd capability for both factories and reauthenticates after reconnect',
-    async () => {
+  describe.skipIf(isWindows)('POSIX factory capability transport', () => {
+    it('consumes fd capability for both factories and reauthenticates after reconnect', async () => {
       const capabilityToken = 'c'.repeat(64);
       const started = await startServer(capabilityToken);
       try {
@@ -337,25 +337,25 @@ describe('proxy integration (phase 31)', () => {
           });
           child.on('close', (code) => {
             clearTimeout(timer);
-            resolve(code ?? -1);
+            resolve(resolvedExitCode(code));
           });
         });
-        expect(exitCode, `child stderr: ${childStderr}`).toBe(0);
+        expect(exitCode).toBe(0);
         const payload = JSON.parse(childStdout.trim()) as {
           token?: string;
           key?: string;
           isProxy?: boolean;
           error?: string;
         };
-        expect(payload.error, `child error: ${payload.error}`).toBeUndefined();
+        expect(payload.error).toBeUndefined();
         expect(payload.token).toBe('factory-token');
         expect(payload.key).toBe('factory-key');
         expect(payload.isProxy).toBe(true);
       } finally {
         await started.server.stop();
       }
-    },
-  );
+    });
+  });
 
   it('clears capability token after proxy stop', async () => {
     // @scenario Lifecycle should clear the capability token on stop.
@@ -367,9 +367,8 @@ describe('proxy integration (phase 31)', () => {
     expect(getProxyCapabilityToken()).toBeUndefined();
   });
 
-  it.skipIf(isWindows)(
-    'clears capability token when start() fails',
-    async () => {
+  describe.skipIf(isWindows)('Unix socket lifecycle', () => {
+    it('clears capability token when start() fails', async () => {
       // @scenario If serverInstance.start() throws (e.g. socket path under a
       // regular file), the capability token must be cleared to prevent a stale
       // token from being reused by a subsequent proxy session.
@@ -381,43 +380,46 @@ describe('proxy integration (phase 31)', () => {
         }),
       ).rejects.toThrow(/ENOTDIR|ENOENT|EACCES|EADDRINUSE|EINVAL/i);
       expect(getProxyCapabilityToken()).toBeUndefined();
-    },
-  );
+    });
 
-  it.skipIf(isWindows)(
-    'creates socket file on server start and removes it on server stop',
-    async () => {
+    it('creates socket file on server start and removes it on server stop', async () => {
       // @requirement R25.1
       // @scenario Real server lifecycle should materialize then clean up Unix socket file.
       let socketPath = '';
-      await withServer(async (started) => {
+      const started = await startServer();
+      try {
         socketPath = started.socketPath;
         expect(fs.existsSync(started.socketPath)).toBe(true);
-      });
+      } finally {
+        await started.server.stop();
+      }
       expect(fs.existsSync(socketPath)).toBe(false);
-    },
-  );
+    });
 
-  it.skipIf(isWindows)(
-    'builds socket path using pid+nonce naming convention',
-    async () => {
+    it('builds socket path using pid+nonce naming convention', async () => {
       // @requirement R25.2
       // @scenario Generated socket path should include process id and random nonce suffix.
-      await withServer(async ({ socketPath }) => {
+      const started = await startServer();
+      try {
+        const { socketPath } = started;
         const socketFile = path.basename(socketPath);
         // Socket filename format: {pid}-{base64url nonce}.sock
         // base64url uses [A-Za-z0-9_-], 128 bits = 22 chars
         expect(socketFile).toMatch(
           new RegExp(`^${process.pid}-[A-Za-z0-9_-]{22}\\.sock$`),
         );
-      });
-    },
-  );
+      } finally {
+        await started.server.stop();
+      }
+    });
+  });
 
   it('returns sanitized token over proxy getToken when host token has refresh_token', async () => {
     // @requirement R10.1
     // @scenario Host-stored refresh token must be stripped before sandbox receives token payload.
-    await withServer(async ({ socketPath, tokenStore }) => {
+    const started = await startServer();
+    try {
+      const { socketPath, tokenStore } = started;
       await tokenStore.saveToken(
         'anthropic',
         {
@@ -433,14 +435,18 @@ describe('proxy integration (phase 31)', () => {
       const token = await proxyStore.getToken('anthropic', 'default');
 
       expect(token?.access_token).toBe('acc-read');
-      expect('refresh_token' in (token ?? {})).toBe(false);
-    });
+      expect(hasRefreshToken(token)).toBe(false);
+    } finally {
+      await started.server.stop();
+    }
   });
 
   it('persists token via saveToken round-trip and preserves host refresh_token', async () => {
     // @requirement R8.1
     // @scenario Sandbox saveToken should strip sandbox refresh_token while preserving an existing host refresh_token.
-    await withServer(async ({ socketPath, tokenStore }) => {
+    const started = await startServer();
+    try {
+      const { socketPath, tokenStore } = started;
       await tokenStore.saveToken(
         'anthropic',
         {
@@ -467,13 +473,17 @@ describe('proxy integration (phase 31)', () => {
       const hostToken = await tokenStore.getToken('anthropic', 'primary');
       expect(hostToken?.access_token).toBe('acc-save');
       expect(hostToken?.refresh_token).toBe('ref-host');
-    });
+    } finally {
+      await started.server.stop();
+    }
   });
 
   it('removes stored token via removeToken round-trip', async () => {
     // @requirement R8.3
     // @scenario Sandbox removeToken should delete host token entry through proxy path.
-    await withServer(async ({ socketPath, tokenStore }) => {
+    const started = await startServer();
+    try {
+      const { socketPath, tokenStore } = started;
       await tokenStore.saveToken(
         'anthropic',
         {
@@ -489,13 +499,17 @@ describe('proxy integration (phase 31)', () => {
 
       const hostToken = await tokenStore.getToken('anthropic', 'delete-me');
       expect(hostToken).toBeNull();
-    });
+    } finally {
+      await started.server.stop();
+    }
   });
 
   it('returns provider list from host token store via proxy', async () => {
     // @requirement R8.4
     // @scenario listProviders should return host provider names across socket boundary.
-    await withServer(async ({ socketPath, tokenStore }) => {
+    const started = await startServer();
+    try {
+      const { socketPath, tokenStore } = started;
       await tokenStore.saveToken(
         'anthropic',
         {
@@ -520,13 +534,17 @@ describe('proxy integration (phase 31)', () => {
 
       expect(providers).toContain('anthropic');
       expect(providers).toContain('openai');
-    });
+    } finally {
+      await started.server.stop();
+    }
   });
 
   it('returns bucket list for provider from host token store via proxy', async () => {
     // @requirement R8.5
     // @scenario listBuckets should surface provider buckets maintained on host side.
-    await withServer(async ({ socketPath, tokenStore }) => {
+    const started = await startServer();
+    try {
+      const { socketPath, tokenStore } = started;
       await tokenStore.saveToken(
         'anthropic',
         {
@@ -551,23 +569,31 @@ describe('proxy integration (phase 31)', () => {
 
       expect(buckets).toContain('bucket-1');
       expect(buckets).toContain('bucket-2');
-    });
+    } finally {
+      await started.server.stop();
+    }
   });
 
   it('returns bucket stats payload through proxy for provider+bucket pair', async () => {
     // @requirement R8.6
     // @scenario getBucketStats should round-trip and return stats or null contractually.
-    await withServer(async ({ socketPath }) => {
+    const started = await startServer();
+    try {
+      const { socketPath } = started;
       const proxyStore = new ProxyTokenStore(socketPath);
       const stats = await proxyStore.getBucketStats('anthropic', 'default');
-      expect(stats === null || typeof stats === 'object').toBe(true);
-    });
+      expect(isNullOrObject(stats)).toBe(true);
+    } finally {
+      await started.server.stop();
+    }
   });
 
   it('reads API key over proxy from host-side provider key storage', async () => {
     // @requirement R9.1
     // @scenario getKey should round-trip through proxy and return host-side key value.
-    await withServer(async ({ socketPath, keyStorage }) => {
+    const started = await startServer();
+    try {
+      const { socketPath, keyStorage } = started;
       await keyStorage.saveKey('anthropic', 'api-key-anthropic');
       const proxyKeys = new ProxyProviderKeyStorage(
         new ProxySocketClient(socketPath),
@@ -575,13 +601,17 @@ describe('proxy integration (phase 31)', () => {
 
       const key = await proxyKeys.getKey('anthropic');
       expect(key).toBe('api-key-anthropic');
-    });
+    } finally {
+      await started.server.stop();
+    }
   });
 
   it('lists API keys over proxy from host-side provider key storage', async () => {
     // @requirement R9.2
     // @scenario listKeys should return host key names through real socket channel.
-    await withServer(async ({ socketPath, keyStorage }) => {
+    const started = await startServer();
+    try {
+      const { socketPath, keyStorage } = started;
       await keyStorage.saveKey('anthropic', 'api-key-anthropic');
       await keyStorage.saveKey('openai', 'api-key-openai');
       const proxyKeys = new ProxyProviderKeyStorage(
@@ -591,13 +621,17 @@ describe('proxy integration (phase 31)', () => {
       const keys = await proxyKeys.listKeys();
       expect(keys).toContain('anthropic');
       expect(keys).toContain('openai');
-    });
+    } finally {
+      await started.server.stop();
+    }
   });
 
   it('checks key existence over proxy using host-side provider key storage', async () => {
     // @requirement R9.3
     // @scenario hasKey should reflect host-side key presence through proxy transport.
-    await withServer(async ({ socketPath, keyStorage }) => {
+    const started = await startServer();
+    try {
+      const { socketPath, keyStorage } = started;
       await keyStorage.saveKey('anthropic', 'api-key-anthropic');
       const proxyKeys = new ProxyProviderKeyStorage(
         new ProxySocketClient(socketPath),
@@ -605,37 +639,49 @@ describe('proxy integration (phase 31)', () => {
 
       const exists = await proxyKeys.hasKey('anthropic');
       expect(exists).toBe(true);
-    });
+    } finally {
+      await started.server.stop();
+    }
   });
 
   it('blocks saveKey in sandbox mode with explicit unsupported-operation message', async () => {
     // @requirement R9.4
     // @scenario saveKey should reject in sandbox mode to enforce read-only key policy.
-    await withServer(async ({ socketPath }) => {
+    const started = await startServer();
+    try {
+      const { socketPath } = started;
       const proxyKeys = new ProxyProviderKeyStorage(
         new ProxySocketClient(socketPath),
       );
       await expect(proxyKeys.saveKey('anthropic', 'forbidden')).rejects.toThrow(
         'API key management is not available in sandbox mode',
       );
-    });
+    } finally {
+      await started.server.stop();
+    }
   });
 
   it('blocks deleteKey in sandbox mode with explicit unsupported-operation message', async () => {
     // @requirement R9.4
     // @scenario deleteKey should reject in sandbox mode to enforce read-only key policy.
-    await withServer(async ({ socketPath }) => {
+    const started = await startServer();
+    try {
+      const { socketPath } = started;
       const proxyKeys = new ProxyProviderKeyStorage(
         new ProxySocketClient(socketPath),
       );
       await expect(proxyKeys.deleteKey('anthropic')).rejects.toThrow(
         'API key management is not available in sandbox mode',
       );
-    });
+    } finally {
+      await started.server.stop();
+    }
   });
 
   it('allows access to all providers without restrictions', async () => {
-    await withServer(async ({ socketPath, tokenStore }) => {
+    const started = await startServer();
+    try {
+      const { socketPath, tokenStore } = started;
       await tokenStore.saveToken(
         'openai',
         {
@@ -663,7 +709,9 @@ describe('proxy integration (phase 31)', () => {
       const anthropicToken = await proxyStore.getToken('anthropic', 'default');
       expect(anthropicToken).not.toBeNull();
       expect(anthropicToken!.access_token).toBe('anthropic-token');
-    });
+    } finally {
+      await started.server.stop();
+    }
   });
 
   it('surfaces hard error to client when proxy connection is lost', async () => {

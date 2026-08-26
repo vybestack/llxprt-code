@@ -13,6 +13,22 @@ import {
   type OAuthLogger,
 } from '../oauth-errors.js';
 
+function createRetryOnceOperation(): () => Promise<string> {
+  let attempt = 0;
+  return async () => {
+    attempt++;
+    if (attempt < 2) {
+      throw new OAuthError(
+        OAuthErrorType.NETWORK_ERROR,
+        'test-provider',
+        'Network failed',
+        { retryAfterMs: 250 },
+      );
+    }
+    return 'success';
+  };
+}
+
 /**
  * Security-focused behavioral tests for clear-text logging remediation.
  *
@@ -217,20 +233,7 @@ describe('RetryHandler sanitized delay logging', () => {
       fakeLogger,
     );
 
-    let attempt = 0;
-    const operation = async (): Promise<string> => {
-      attempt++;
-      if (attempt < 2) {
-        // retryAfterMs comes from untrusted provider input (tainted source)
-        throw new OAuthError(
-          OAuthErrorType.NETWORK_ERROR,
-          'test-provider',
-          'Network failed',
-          { retryAfterMs: 250 },
-        );
-      }
-      return 'success';
-    };
+    const operation = createRetryOnceOperation();
 
     const result = await handler.executeWithRetry(operation, 'test-provider');
 

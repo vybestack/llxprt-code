@@ -37,6 +37,33 @@ import {
 } from './SessionPersistenceService.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 
+interface PersistedTimestamps {
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null;
+}
+
+function persistedTimestamps(content: unknown): PersistedTimestamps {
+  if (typeof content !== 'string') {
+    throw new Error('Expected session persistence to write UTF-8 text');
+  }
+  const parsed: unknown = JSON.parse(content);
+  if (!isRecord(parsed)) {
+    throw new Error('Persisted session must be an object');
+  }
+  const { createdAt, updatedAt } = parsed;
+  if (typeof createdAt !== 'string') {
+    throw new Error('Persisted session is missing createdAt');
+  }
+  if (typeof updatedAt !== 'string') {
+    throw new Error('Persisted session is missing updatedAt');
+  }
+  return { createdAt, updatedAt };
+}
+
 describe('SessionPersistenceService', () => {
   const mockProjectRoot = '/test/project';
   const mockSessionId = 'test-session-123';
@@ -155,16 +182,13 @@ describe('SessionPersistenceService', () => {
       let firstCreatedAt: string | null = null;
       let secondCreatedAt: string | null = null;
 
-      (
-        fs.promises.writeFile as Mock<typeof fs.promises.writeFile>
-      ).mockImplementation(async (_path, content) => {
-        const parsed = JSON.parse(content as string) as PersistedSession;
-        if (!firstCreatedAt) {
-          firstCreatedAt = parsed.createdAt;
-        } else {
-          secondCreatedAt = parsed.createdAt;
-        }
-      });
+      (fs.promises.writeFile as Mock<typeof fs.promises.writeFile>)
+        .mockImplementationOnce(async (_path, content) => {
+          firstCreatedAt = persistedTimestamps(content).createdAt;
+        })
+        .mockImplementationOnce(async (_path, content) => {
+          secondCreatedAt = persistedTimestamps(content).createdAt;
+        });
 
       await service.save([], undefined, []);
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -177,16 +201,13 @@ describe('SessionPersistenceService', () => {
       let firstUpdatedAt: string | null = null;
       let secondUpdatedAt: string | null = null;
 
-      (
-        fs.promises.writeFile as Mock<typeof fs.promises.writeFile>
-      ).mockImplementation(async (_path, content) => {
-        const parsed = JSON.parse(content as string) as PersistedSession;
-        if (!firstUpdatedAt) {
-          firstUpdatedAt = parsed.updatedAt;
-        } else {
-          secondUpdatedAt = parsed.updatedAt;
-        }
-      });
+      (fs.promises.writeFile as Mock<typeof fs.promises.writeFile>)
+        .mockImplementationOnce(async (_path, content) => {
+          firstUpdatedAt = persistedTimestamps(content).updatedAt;
+        })
+        .mockImplementationOnce(async (_path, content) => {
+          secondUpdatedAt = persistedTimestamps(content).updatedAt;
+        });
 
       await service.save([], undefined, []);
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -547,7 +568,7 @@ describe('SessionPersistenceService', () => {
       ).mockResolvedValue();
 
       const largeHistory = Array.from({ length: 1000 }, (_, i) => ({
-        speaker: i % 2 === 0 ? 'human' : 'model',
+        speaker: speakerForIndex(i),
         blocks: [{ type: 'text', text: `Message ${i}` }],
       }));
 
@@ -577,3 +598,7 @@ describe('SessionPersistenceService', () => {
     });
   });
 });
+
+function speakerForIndex(i: number): string {
+  return i % 2 === 0 ? 'human' : 'model';
+}

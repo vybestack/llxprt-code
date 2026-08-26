@@ -66,6 +66,17 @@ function makeVideoBlock(data: string, filename = 'clip.mp4'): MediaBlock {
   };
 }
 
+function failFirstUploadThenSucceed() {
+  let callCount = 0;
+  return async (): Promise<{ id: string; bytes: number }> => {
+    callCount++;
+    if (callCount === 1) {
+      throw new Error('transient');
+    }
+    return { id: 'file-ok', bytes: 5 };
+  };
+}
+
 describe('uploadKimiFiles', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -204,14 +215,9 @@ describe('uploadKimiFiles', () => {
   });
 
   it('continues uploading remaining blocks after a failure', async () => {
-    let callCount = 0;
-    const { client, filesCreate } = createMockClient(async () => {
-      callCount++;
-      if (callCount === 1) {
-        throw new Error('transient');
-      }
-      return { id: 'file-ok', bytes: 5 };
-    });
+    const { client, filesCreate } = createMockClient(
+      failFirstUploadThenSucceed(),
+    );
 
     const results = await uploadKimiFiles(client, [
       makePdfBlock('FAIL'),

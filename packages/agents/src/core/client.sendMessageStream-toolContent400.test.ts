@@ -253,50 +253,8 @@ describe('Agent Client (client.ts)', () => {
     });
 
     it('AC1/AC4: injects an advice message and re-issues after a tool-content 400', async () => {
-      vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
-        true,
-      );
-      const mockStream1 = (async function* () {
-        yield {
-          type: AgentEventType.Error,
-          value: {
-            error: { message: REJECTION_400_MESSAGE, status: 400 },
-          },
-        };
-      })();
-      const mockStream2 = (async function* () {
-        yield { type: AgentEventType.Content, value: 'Retried content' };
-      })();
-
-      mockTurnRunFn
-        .mockReturnValueOnce(mockStream1)
-        .mockReturnValueOnce(mockStream2);
-
-      client['chat'] = makeChatMock() as ChatSession;
-
-      const initialRequest = [
-        { type: 'text', text: 'Show me the shader file' },
-        {
-          type: 'tool_response',
-          callId: 'read_file',
-          toolName: 'read_file',
-          result: { content: 'binary blob' },
-        },
-        {
-          type: 'media',
-          mimeType: 'image/png',
-          data: 'AAA',
-          encoding: 'base64',
-          filename: 'shader.fh',
-        },
-      ];
-      const signal = new AbortController().signal;
-
-      const events = await fromAsync(
-        client.sendMessageStream(initialRequest, signal, 'prompt-id-400-retry'),
-      );
-
-      // The error event is still emitted before recovery.
+      const { events, secondRequest, adviceText } =
+        await observeAC1AC4InjectsAnAdviceMessageAndReIssuesAfterATool();
       expect(events).toStrictEqual([
         {
           type: AgentEventType.ModelInfo,
@@ -315,25 +273,13 @@ describe('Agent Client (client.ts)', () => {
         },
         { type: AgentEventType.Content, value: 'Retried content' },
       ]);
-
-      // turn.run is called twice: the failing attempt then the recovery.
       expect(mockTurnRunFn).toHaveBeenCalledTimes(2);
-
-      const secondCallArgs = mockTurnRunFn.mock.calls[1];
-      const secondRequest = secondCallArgs[0];
       expect(secondRequest).toStrictEqual([
         {
           speaker: 'human',
           blocks: [{ type: 'text', text: expect.any(String) }],
         },
       ]);
-      const adviceText =
-        (
-          secondRequest as unknown as Array<{
-            blocks: Array<{ text: string }>;
-          }>
-        )[0]?.blocks[0]?.text ?? '';
-      // The advice names the tool, the rejected media, and the alternative.
       expect(adviceText).toContain('HTTP 400');
       expect(adviceText).toContain('The tools involved were: read_file.');
       expect(adviceText).toContain(
@@ -341,6 +287,74 @@ describe('Agent Client (client.ts)', () => {
       );
       expect(adviceText).toContain('read it as text');
     });
+
+    const observeAC1AC4InjectsAnAdviceMessageAndReIssuesAfterATool =
+      async () => {
+        vi.spyOn(
+          client['config'],
+          'getContinueOnFailedApiCall',
+        ).mockReturnValue(true);
+        const mockStream1 = (async function* () {
+          yield {
+            type: AgentEventType.Error,
+            value: {
+              error: { message: REJECTION_400_MESSAGE, status: 400 },
+            },
+          };
+        })();
+        const mockStream2 = (async function* () {
+          yield { type: AgentEventType.Content, value: 'Retried content' };
+        })();
+
+        mockTurnRunFn
+          .mockReturnValueOnce(mockStream1)
+          .mockReturnValueOnce(mockStream2);
+
+        client['chat'] = makeChatMock() as ChatSession;
+
+        const initialRequest = [
+          { type: 'text', text: 'Show me the shader file' },
+          {
+            type: 'tool_response',
+            callId: 'read_file',
+            toolName: 'read_file',
+            result: { content: 'binary blob' },
+          },
+          {
+            type: 'media',
+            mimeType: 'image/png',
+            data: 'AAA',
+            encoding: 'base64',
+            filename: 'shader.fh',
+          },
+        ];
+        const signal = new AbortController().signal;
+
+        const events = await fromAsync(
+          client.sendMessageStream(
+            initialRequest,
+            signal,
+            'prompt-id-400-retry',
+          ),
+        );
+
+        // The error event is still emitted before recovery.
+
+        // turn.run is called twice: the failing attempt then the recovery.
+
+        const secondCallArgs = mockTurnRunFn.mock.calls[1];
+        const secondRequest = secondCallArgs[0];
+
+        const adviceText =
+          (
+            secondRequest as unknown as Array<{
+              blocks: Array<{ text: string }>;
+            }>
+          )[0]?.blocks[0]?.text ?? '';
+        // The advice names the tool, the rejected media, and the alternative.
+
+        return { events, secondRequest, adviceText };
+      };
 
     it('AC2: a non-content 400 is not recovered (turn.run called once)', async () => {
       vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
@@ -392,52 +406,72 @@ describe('Agent Client (client.ts)', () => {
     });
 
     it('AC5: stops after one recovery when the tool-content 400 repeats', async () => {
-      vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
-        true,
-      );
-      mockTurnRunFn.mockImplementation(() =>
-        (async function* () {
-          yield {
-            type: AgentEventType.Error,
-            value: {
-              error: { message: REJECTION_400_MESSAGE, status: 400 },
-            },
-          };
-        })(),
-      );
-      client['chat'] = makeChatMock() as ChatSession;
-
-      // The request must carry tool evidence so the recovery gate fires.
-      const events = await fromAsync(
-        client.sendMessageStream(
-          [
-            { type: 'text', text: 'Hi' },
-            {
-              type: 'tool_response',
-              callId: 'read_file',
-              toolName: 'read_file',
-              result: { content: 'x' },
-            },
-          ],
-          new AbortController().signal,
-          'prompt-id-400-infinite',
-        ),
-      );
-
-      // 1 ModelInfo + exactly 2 Error events (original + 1 recovery), no loop.
+      const {
+        events,
+        typeObservation,
+        aC5StopsAfterOneRecoveryWhenTheToolContent400RepeatsObservation2,
+      } = await observeAC5StopsAfterOneRecoveryWhenTheToolContent400Repeats();
       expect(events.length).toBe(3);
-      expect(events[0]?.type).toBe(AgentEventType.ModelInfo);
+      expect(typeObservation).toBe(AgentEventType.ModelInfo);
       expect(
-        events
-          .slice(1)
-          .every(
-            (e) =>
-              e.type === AgentEventType.Error &&
-              (e.value as { error: { status?: number } }).error.status === 400,
-          ),
+        aC5StopsAfterOneRecoveryWhenTheToolContent400RepeatsObservation2,
       ).toBe(true);
       expect(mockTurnRunFn).toHaveBeenCalledTimes(2);
     });
+
+    const observeAC5StopsAfterOneRecoveryWhenTheToolContent400Repeats =
+      async () => {
+        vi.spyOn(
+          client['config'],
+          'getContinueOnFailedApiCall',
+        ).mockReturnValue(true);
+        mockTurnRunFn.mockImplementation(() =>
+          (async function* () {
+            yield {
+              type: AgentEventType.Error,
+              value: {
+                error: { message: REJECTION_400_MESSAGE, status: 400 },
+              },
+            };
+          })(),
+        );
+        client['chat'] = makeChatMock() as ChatSession;
+
+        // The request must carry tool evidence so the recovery gate fires.
+        const events = await fromAsync(
+          client.sendMessageStream(
+            [
+              { type: 'text', text: 'Hi' },
+              {
+                type: 'tool_response',
+                callId: 'read_file',
+                toolName: 'read_file',
+                result: { content: 'x' },
+              },
+            ],
+            new AbortController().signal,
+            'prompt-id-400-infinite',
+          ),
+        );
+
+        // 1 ModelInfo + exactly 2 Error events (original + 1 recovery), no loop.
+
+        const typeObservation = events[0]?.type;
+        const aC5StopsAfterOneRecoveryWhenTheToolContent400RepeatsObservation2 =
+          events
+            .slice(1)
+            .every(
+              (e) =>
+                e.type === AgentEventType.Error &&
+                (e.value as { error: { status?: number } }).error.status ===
+                  400,
+            );
+        return {
+          events,
+          typeObservation,
+          aC5StopsAfterOneRecoveryWhenTheToolContent400RepeatsObservation2,
+        };
+      };
 
     it('AC1 gate: a content-rejection 400 whose request carried no tool evidence is not recovered', async () => {
       vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
@@ -563,57 +597,80 @@ describe('Agent Client (client.ts)', () => {
  */
 describe('tool-content 400 recovery — history assumption (issue #2722)', () => {
   it('orphaned tool calls are closed before the provider sees the recovery request (issue #2722)', () => {
-    const history = new HistoryService();
-    // Seed: an AI turn issued a tool_call whose response was rejected by the
-    // provider (HTTP 400), so no tool_response was ever recorded for it.
-    const aiTurn: IContent = {
-      speaker: 'ai',
-      blocks: [
-        {
-          type: 'tool_call',
-          id: 'call-1',
-          name: 'read_file',
-          parameters: { path: 'shader.fh' },
-        },
-      ],
-    };
-    history.add(aiTurn);
-
-    // The recovery re-issues a bare text (advice) message as tail content.
-    const tailContents: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'text',
-            text: 'System: The provider rejected the previous request with HTTP 400.',
-          },
-        ],
-      },
-    ];
-
-    const curated = history.getCuratedForProvider(tailContents);
-
-    const aiIndex = curated.findIndex(
-      (c) =>
-        c.speaker === 'ai' &&
-        c.blocks.some((b) => b.type === 'tool_call' && b.id === 'call-1'),
-    );
+    const {
+      aiIndex,
+      humanIndex,
+      history,
+      speakerObservation,
+      orphanedToolCallsAreClosedBeforeTheProviderSeesTheRecoveryRequestObservation2,
+    } =
+      observeOrphanedToolCallsAreClosedBeforeTheProviderSeesTheRecoveryRequest();
     expect(aiIndex).toBeGreaterThanOrEqual(0);
-
-    // A synthetic tool response is inserted immediately after the AI turn...
-    expect(curated[aiIndex + 1]?.speaker).toBe('tool');
+    expect(speakerObservation).toBe('tool');
     expect(
-      curated[aiIndex + 1]?.blocks.some(
-        (b) => b.type === 'tool_response' && b.callId === 'call-1',
-      ),
+      orphanedToolCallsAreClosedBeforeTheProviderSeesTheRecoveryRequestObservation2,
     ).toBe(true);
-
-    // ...and BEFORE the human advice content reaches the provider.
-    const humanIndex = curated.findIndex((c) => c.speaker === 'human');
     expect(humanIndex).toBeGreaterThan(aiIndex + 1);
-
-    // Stored history is left untouched (the offending media was never added).
     expect(history.getAll()).toHaveLength(1);
   });
+
+  const observeOrphanedToolCallsAreClosedBeforeTheProviderSeesTheRecoveryRequest =
+    () => {
+      const history = new HistoryService();
+      // Seed: an AI turn issued a tool_call whose response was rejected by the
+      // provider (HTTP 400), so no tool_response was ever recorded for it.
+      const aiTurn: IContent = {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'call-1',
+            name: 'read_file',
+            parameters: { path: 'shader.fh' },
+          },
+        ],
+      };
+      history.add(aiTurn);
+
+      // The recovery re-issues a bare text (advice) message as tail content.
+      const tailContents: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'text',
+              text: 'System: The provider rejected the previous request with HTTP 400.',
+            },
+          ],
+        },
+      ];
+
+      const curated = history.getCuratedForProvider(tailContents);
+
+      const aiIndex = curated.findIndex(
+        (c) =>
+          c.speaker === 'ai' &&
+          c.blocks.some((b) => b.type === 'tool_call' && b.id === 'call-1'),
+      );
+
+      // A synthetic tool response is inserted immediately after the AI turn...
+
+      // ...and BEFORE the human advice content reaches the provider.
+      const humanIndex = curated.findIndex((c) => c.speaker === 'human');
+
+      // Stored history is left untouched (the offending media was never added).
+
+      const speakerObservation = curated[aiIndex + 1]?.speaker;
+      const orphanedToolCallsAreClosedBeforeTheProviderSeesTheRecoveryRequestObservation2 =
+        curated[aiIndex + 1]?.blocks.some(
+          (b) => b.type === 'tool_response' && b.callId === 'call-1',
+        );
+      return {
+        aiIndex,
+        humanIndex,
+        history,
+        speakerObservation,
+        orphanedToolCallsAreClosedBeforeTheProviderSeesTheRecoveryRequestObservation2,
+      };
+    };
 });

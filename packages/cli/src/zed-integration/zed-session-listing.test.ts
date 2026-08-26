@@ -17,6 +17,28 @@ import { listRecordedSessions } from './zed-session-listing.js';
 
 const roots: string[] = [];
 
+function recordedSessionUpdatedAtIsInvalid(
+  updatedAt: string | null | undefined,
+): boolean {
+  return Number.isNaN(Date.parse(updatedAt ?? ''));
+}
+
+function normalizeRecordedSessionUpdatedAt(
+  updatedAt: string | null | undefined,
+): string {
+  return updatedAt ?? '';
+}
+
+function firstRecordedSessionUpdatedAt(
+  sessions: Awaited<ReturnType<typeof listRecordedSessions>>['sessions'],
+): string | null | undefined {
+  const session = sessions.at(0);
+  if (session === undefined) {
+    throw new Error('Expected one recorded session');
+  }
+  return session.updatedAt;
+}
+
 describe('recorded ACP session listing', () => {
   afterEach(async () => {
     await Promise.allSettled(
@@ -63,7 +85,7 @@ describe('recorded ACP session listing', () => {
       expect(result.sessions[0].updatedAt).toStrictEqual(expect.any(String));
     });
 
-    it('uses the fallback cwd and omits title for legacy non-human sessions', async () => {
+    async function verifyUsesTheFallbackCwdAndOmitsTitleForLegacyNonHumanSessions() {
       const root = await mkdtemp(join(tmpdir(), 'zed-session-list-'));
       roots.push(root);
       const chatsDir = join(root, 'chats');
@@ -89,12 +111,18 @@ describe('recorded ACP session listing', () => {
         '/fallback',
         {},
       );
+      const session = result.sessions[0];
 
-      expect(result.sessions[0].cwd).toBe('/fallback');
-      expect(result.sessions[0]).not.toHaveProperty('title');
-      expect(Number.isNaN(Date.parse(result.sessions[0].updatedAt ?? ''))).toBe(
-        false,
-      );
+      return session;
+    }
+
+    it('uses the fallback cwd and omits title for legacy non-human sessions', async () => {
+      const session =
+        await verifyUsesTheFallbackCwdAndOmitsTitleForLegacyNonHumanSessions();
+
+      expect(session.cwd).toBe('/fallback');
+      expect(session).not.toHaveProperty('title');
+      expect(recordedSessionUpdatedAtIsInvalid(session.updatedAt)).toBe(false);
     });
 
     it('surfaces a live session title and updatedAt when no durable recording exists yet (issue #1609 feed)', async () => {
@@ -424,7 +452,7 @@ describe('recorded ACP session listing', () => {
       expect(result.sessions[0]).not.toHaveProperty('title');
     });
 
-    it('exposes the creation timestamp as updatedAt for an untouched durable session', async () => {
+    async function verifyExposesTheCreationTimestampAsUpdatedAtForAnUntouchedDurableSession() {
       const root = await mkdtemp(join(tmpdir(), 'zed-session-list-'));
       roots.push(root);
       const chatsDir = join(root, 'chats');
@@ -449,11 +477,23 @@ describe('recorded ACP session listing', () => {
         '/fallback',
         {},
       );
+      return {
+        sessions: result.sessions,
+        startedAt,
+      };
+    }
 
-      expect(result.sessions).toHaveLength(1);
-      const updatedAt = result.sessions[0].updatedAt;
+    it('exposes the creation timestamp as updatedAt for an untouched durable session', async () => {
+      const behaviorResult =
+        await verifyExposesTheCreationTimestampAsUpdatedAtForAnUntouchedDurableSession();
+
+      expect(behaviorResult.sessions).toHaveLength(1);
+      const updatedAt = firstRecordedSessionUpdatedAt(behaviorResult.sessions);
       expect(updatedAt).toBeDefined();
-      expect(new Date(updatedAt ?? '').toISOString()).toBe(updatedAt ?? '');
+      const normalizedUpdatedAt = normalizeRecordedSessionUpdatedAt(updatedAt);
+      expect(new Date(normalizedUpdatedAt).toISOString()).toBe(
+        normalizedUpdatedAt,
+      );
       // The assertion under test is that updatedAt is the session's creation
       // time, not that two clock reads agree to the millisecond. The default
       // Windows system timer ticks about every 15.6ms, so `startedAt` and the
@@ -461,12 +501,11 @@ describe('recorded ACP session listing', () => {
       // tick in either direction; a 1ms allowance was too tight and flaked on
       // the Windows runner with "expected T to be >= T+1".
       const CLOCK_GRANULARITY_MS = 32;
-      expect(new Date(updatedAt ?? '').getTime()).toBeGreaterThanOrEqual(
-        startedAt - CLOCK_GRANULARITY_MS,
+      const updatedAtTime = new Date(normalizedUpdatedAt).getTime();
+      expect(updatedAtTime).toBeGreaterThanOrEqual(
+        behaviorResult.startedAt - CLOCK_GRANULARITY_MS,
       );
-      expect(new Date(updatedAt ?? '').getTime()).toBeLessThanOrEqual(
-        Date.now(),
-      );
+      expect(updatedAtTime).toBeLessThanOrEqual(Date.now());
     });
   });
 });

@@ -118,6 +118,13 @@ describe('Turn run - abort and idle timeout', () => {
   });
 
   it('should call return() on stream iterator when aborted', async () => {
+    const { returnSpy, events } =
+      await observeCallReturnOnStreamIteratorWhenAborted();
+    expect(returnSpy).toHaveBeenCalled();
+    expect(events).toContainEqual({ type: AgentEventType.UserCancelled });
+  });
+
+  const observeCallReturnOnStreamIteratorWhenAborted = async () => {
     vi.useFakeTimers();
     try {
       const abortController = new AbortController();
@@ -193,14 +200,25 @@ describe('Turn run - abort and idle timeout', () => {
       await advanceTimersByTimeAsync(100);
       await runPromise;
 
-      expect(returnSpy).toHaveBeenCalled();
-      expect(events).toContainEqual({ type: AgentEventType.UserCancelled });
+      return { returnSpy, events };
     } finally {
       vi.useRealTimers();
     }
-  });
+  };
 
   it('should allow subsequent calls after abort (sendPromise resolved)', async () => {
+    const { events1, callCountAfterAbort, finalCallCount, events2 } =
+      await observeAllowSubsequentCallsAfterAbortSendPromiseResolved();
+    expect(events1).toContainEqual({ type: AgentEventType.UserCancelled });
+    expect(callCountAfterAbort).toBe(1);
+    expect(finalCallCount).toBe(2);
+    expect(events2).toContainEqual({
+      type: AgentEventType.Content,
+      value: 'Second call success',
+    });
+  });
+
+  const observeAllowSubsequentCallsAfterAbortSendPromiseResolved = async () => {
     const abortController = new AbortController();
     let callCount = 0;
 
@@ -238,9 +256,7 @@ describe('Turn run - abort and idle timeout', () => {
       events1.push(event);
     }
 
-    expect(events1).toContainEqual({ type: AgentEventType.UserCancelled });
-    expect(callCount).toBe(1);
-
+    const callCountAfterAbort = callCount;
     const freshController = new AbortController();
     const events2: ServerAgentStreamEvent[] = [];
 
@@ -267,12 +283,9 @@ describe('Turn run - abort and idle timeout', () => {
       if (timeoutId) clearTimeout(timeoutId);
     }
 
-    expect(callCount).toBe(2);
-    expect(events2).toContainEqual({
-      type: AgentEventType.Content,
-      value: 'Second call success',
-    });
-  });
+    const finalCallCount = callCount;
+    return { events1, callCountAfterAbort, finalCallCount, events2 };
+  };
 
   it('should not crash when cancelled request has malformed error', async () => {
     const abortController = new AbortController();
@@ -303,90 +316,98 @@ describe('Turn run - abort and idle timeout', () => {
   });
 
   it('should yield StreamIdleTimeout when the stream goes idle after partial output with explicit timeout config', async () => {
-    vi.useFakeTimers();
-    try {
-      const testTimeoutMs = 30_000;
-      const abortSignals: AbortSignal[] = [];
-
-      mockChatInstance = {
-        sendMessageStream: mockSendMessageStream,
-        getHistory: mockGetHistory,
-        getConfig: () => ({
-          getEphemeralSetting: (key: string) => {
-            if (key === 'stream-idle-timeout-ms') {
-              return testTimeoutMs;
-            }
-            return undefined;
-          },
-        }),
-      };
-      turn = new Turn(
-        mockChatInstance as unknown as ChatSession,
-        'prompt-id-1',
-        DEFAULT_AGENT_ID,
-        'test',
-      );
-
-      mockSendMessageStream.mockImplementation(async (params) => {
-        const config = params as {
-          config?: { abortSignal?: AbortSignal };
-        };
-        const providerSignal = config.config?.abortSignal;
-        if (providerSignal === undefined) {
-          throw new Error('Provider abort signal is required');
-        }
-        abortSignals.push(providerSignal);
-        return (async function* () {
-          yield {
-            type: StreamEventType.CHUNK,
-            value: mockChunk({ text: 'First part' }),
-          };
-          await rejectWhenAborted(providerSignal);
-        })();
-      });
-
-      const eventsPromise = (async () => {
-        const events: ServerAgentStreamEvent[] = [];
-        for await (const event of turn.run(
-          [{ text: 'Test idle timeout' }],
-          new AbortController().signal,
-        )) {
-          events.push(event);
-        }
-        return events;
-      })();
-
-      // Drain the event loop so the async consumer processes the first chunk
-      // and the provider signal is captured. waitForCondition cannot be used
-      // here because the provider signal is pushed inside the mock's async
-      // generator body, which requires a macrotask yield to enter.
-      await flushEventLoop();
-      await advanceTimersByTimeAsync(testTimeoutMs + 1);
-      const events = await eventsPromise;
-
-      expect(events).toStrictEqual([
-        {
-          type: AgentEventType.Content,
-          value: 'First part',
-          traceId: undefined,
-        },
-        {
-          type: AgentEventType.StreamIdleTimeout,
-          value: {
-            error: {
-              message:
-                'Inter-chunk stream-idle timeout: no response received within the allowed time (threshold 30000ms) from stream-idle-timeout-ms.',
-              status: undefined,
-            },
+    const { events, abortSignals, abortedObservation } =
+      await observeYieldStreamIdleTimeoutWhenTheStreamGoesIdleAfterPartialOutputWithExplicit();
+    expect(events).toStrictEqual([
+      {
+        type: AgentEventType.Content,
+        value: 'First part',
+        traceId: undefined,
+      },
+      {
+        type: AgentEventType.StreamIdleTimeout,
+        value: {
+          error: {
+            message:
+              'Inter-chunk stream-idle timeout: no response received within the allowed time (threshold 30000ms) from stream-idle-timeout-ms.',
+            status: undefined,
           },
         },
-      ]);
-      expect(abortSignals).toHaveLength(1);
-      expect(abortSignals[0]?.aborted).toBe(true);
-    } finally {
-      vi.useRealTimers();
-    }
+      },
+    ]);
+    expect(abortSignals).toHaveLength(1);
+    expect(abortedObservation).toBe(true);
   });
+
+  const observeYieldStreamIdleTimeoutWhenTheStreamGoesIdleAfterPartialOutputWithExplicit =
+    async () => {
+      vi.useFakeTimers();
+      try {
+        const testTimeoutMs = 30_000;
+        const abortSignals: AbortSignal[] = [];
+
+        mockChatInstance = {
+          sendMessageStream: mockSendMessageStream,
+          getHistory: mockGetHistory,
+          getConfig: () => ({
+            getEphemeralSetting: (key: string) => {
+              if (key === 'stream-idle-timeout-ms') {
+                return testTimeoutMs;
+              }
+              return undefined;
+            },
+          }),
+        };
+        turn = new Turn(
+          mockChatInstance as unknown as ChatSession,
+          'prompt-id-1',
+          DEFAULT_AGENT_ID,
+          'test',
+        );
+
+        mockSendMessageStream.mockImplementation(async (params) => {
+          const config = params as {
+            config?: { abortSignal?: AbortSignal };
+          };
+          const providerSignal = config.config?.abortSignal;
+          if (providerSignal === undefined) {
+            throw new Error('Provider abort signal is required');
+          }
+          abortSignals.push(providerSignal);
+          return (async function* () {
+            yield {
+              type: StreamEventType.CHUNK,
+              value: mockChunk({ text: 'First part' }),
+            };
+            await rejectWhenAborted(providerSignal);
+          })();
+        });
+
+        const eventsPromise = (async () => {
+          const events: ServerAgentStreamEvent[] = [];
+          for await (const event of turn.run(
+            [{ text: 'Test idle timeout' }],
+            new AbortController().signal,
+          )) {
+            events.push(event);
+          }
+          return events;
+        })();
+
+        // Drain the event loop so the async consumer processes the first chunk
+        // and the provider signal is captured. waitForCondition cannot be used
+        // here because the provider signal is pushed inside the mock's async
+        // generator body, which requires a macrotask yield to enter.
+        await flushEventLoop();
+        await advanceTimersByTimeAsync(testTimeoutMs + 1);
+        const events = await eventsPromise;
+
+        const abortedObservation = abortSignals[0]?.aborted;
+        return { events, abortSignals, abortedObservation };
+      } finally {
+        vi.useRealTimers();
+      }
+    };
 });
 
 // ─── Issue #3236: abort settles provider reads that ignore the signal ──────
@@ -637,24 +658,8 @@ describe('Turn run — abort settles provider reads that ignore the abort signal
   });
 
   it('abort wins the watchdog-active read without waiting for the inter-chunk guard to fire', async () => {
-    turn = makeTurnWithConfig((key) =>
-      key === 'stream-idle-timeout-ms' ? 30_000 : undefined,
-    );
-
-    const abortController = new AbortController();
-    const stalled = createStallingStream(1);
-    mockSendMessageStream.mockResolvedValue(stalled.stream);
-
-    const { events, done } = runTurnCollecting(turn, abortController.signal);
-
-    await stalled.stallEntered;
-    // Real timers, deliberately NOT advanced: with the 30s inter-chunk guard
-    // armed, completion can only come from the abort racing the pending
-    // read. Had the watchdog fired instead, the terminal event would be
-    // StreamIdleTimeout, not UserCancelled.
-    abortController.abort();
-    await done;
-
+    const { events } =
+      await observeAbortWinsTheWatchdogActiveReadWithoutWaitingForTheInterChunk();
     expect(events).toStrictEqual([
       { type: AgentEventType.Content, value: 'part 1', traceId: undefined },
       { type: AgentEventType.UserCancelled },
@@ -662,34 +667,67 @@ describe('Turn run — abort settles provider reads that ignore the abort signal
     expect(singleCancelledEventCount(events)).toBe(1);
   });
 
-  it('aborts the first unbounded read when the watchdog is fully disabled', async () => {
-    const failures = captureProcessFailures();
-    try {
+  const observeAbortWinsTheWatchdogActiveReadWithoutWaitingForTheInterChunk =
+    async () => {
       turn = makeTurnWithConfig((key) =>
-        key === 'stream-first-response-timeout-ms' ? 0 : undefined,
+        key === 'stream-idle-timeout-ms' ? 30_000 : undefined,
       );
 
       const abortController = new AbortController();
-      const stalled = createStallingStream(0);
+      const stalled = createStallingStream(1);
       mockSendMessageStream.mockResolvedValue(stalled.stream);
 
       const { events, done } = runTurnCollecting(turn, abortController.signal);
 
       await stalled.stallEntered;
-      // First-response and inter-chunk guards are both disabled, so the very
-      // first read is unbounded unless the turn races it against abort.
+      // Real timers, deliberately NOT advanced: with the 30s inter-chunk guard
+      // armed, completion can only come from the abort racing the pending
+      // read. Had the watchdog fired instead, the terminal event would be
+      // StreamIdleTimeout, not UserCancelled.
       abortController.abort();
       await done;
 
-      expect(events).toStrictEqual([{ type: AgentEventType.UserCancelled }]);
+      return { events };
+    };
 
-      stalled.rejectStalledRead(new DOMException('Aborted', 'AbortError'));
-      await flushEventLoop();
-      expect(failures.captured).toHaveLength(0);
-    } finally {
-      failures.stop();
-    }
+  it('aborts the first unbounded read when the watchdog is fully disabled', async () => {
+    const { events, failures } =
+      await observeAbortsTheFirstUnboundedReadWhenTheWatchdogIsFullyDisabled();
+    expect(events).toStrictEqual([{ type: AgentEventType.UserCancelled }]);
+    expect(failures.captured).toHaveLength(0);
   });
+
+  const observeAbortsTheFirstUnboundedReadWhenTheWatchdogIsFullyDisabled =
+    async () => {
+      const failures = captureProcessFailures();
+      try {
+        turn = makeTurnWithConfig((key) =>
+          key === 'stream-first-response-timeout-ms' ? 0 : undefined,
+        );
+
+        const abortController = new AbortController();
+        const stalled = createStallingStream(0);
+        mockSendMessageStream.mockResolvedValue(stalled.stream);
+
+        const { events, done } = runTurnCollecting(
+          turn,
+          abortController.signal,
+        );
+
+        await stalled.stallEntered;
+        // First-response and inter-chunk guards are both disabled, so the very
+        // first read is unbounded unless the turn races it against abort.
+        abortController.abort();
+        await done;
+
+        stalled.rejectStalledRead(new DOMException('Aborted', 'AbortError'));
+        await flushEventLoop();
+
+        return { events, failures };
+      } finally {
+        failures.stop();
+      }
+    };
 
   it('aborts the default-config watchdog-active FIRST read with exactly one UserCancelled', async () => {
     const failures = captureProcessFailures();

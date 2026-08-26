@@ -147,7 +147,7 @@ describe('parseArguments selector and non-selector parsing', () => {
       hasConflictMessage: `${result.stdout}${result.stderr}`.includes(
         'Cannot use both --profile and --profile-load',
       ),
-    }).toEqual({ status: 1, hasConflictMessage: true });
+    }).toStrictEqual({ status: 1, hasConflictMessage: true });
   });
 
   it('rejects --profile when --profile-load is repeated', () => {
@@ -164,6 +164,6 @@ describe('parseArguments selector and non-selector parsing', () => {
       hasConflictMessage: `${result.stdout}${result.stderr}`.includes(
         'Cannot use both --profile and --profile-load',
       ),
-    }).toEqual({ status: 1, hasConflictMessage: true });
+    }).toStrictEqual({ status: 1, hasConflictMessage: true });
   });
 });

@@ -63,6 +63,31 @@ async function createTempFallbackDir(): Promise<string> {
   return tmpDir;
 }
 
+function createTransientProbeAdapter(
+  probeStore: Map<string, string>,
+  shouldFail: () => boolean,
+): KeyringAdapter {
+  const failWhenUnavailable = (): void => {
+    if (shouldFail()) {
+      throw new Error('timed out');
+    }
+  };
+  return {
+    getPassword: async (_service, account) => {
+      failWhenUnavailable();
+      return probeStore.get(account) ?? null;
+    },
+    setPassword: async (_service, account, password) => {
+      failWhenUnavailable();
+      probeStore.set(account, password);
+    },
+    deletePassword: async (_service, account) => {
+      failWhenUnavailable();
+      return probeStore.delete(account);
+    },
+  };
+}
+
 // ─── Keyring Access (R1) ─────────────────────────────────────────────────────
 
 describe('SecureStore — Keyring Access', () => {
@@ -230,20 +255,7 @@ describe('SecureStore — Availability Probe', () => {
   it('transient error invalidates the cache', async () => {
     let shouldFail = false;
     const probeStore = new Map<string, string>();
-    const adapter: KeyringAdapter = {
-      getPassword: async (_svc: string, acct: string) => {
-        if (shouldFail) throw new Error('timed out');
-        return probeStore.get(acct) ?? null;
-      },
-      setPassword: async (_svc: string, acct: string, pw: string) => {
-        if (shouldFail) throw new Error('timed out');
-        probeStore.set(acct, pw);
-      },
-      deletePassword: async (_svc: string, acct: string) => {
-        if (shouldFail) throw new Error('timed out');
-        return probeStore.delete(acct);
-      },
-    };
+    const adapter = createTransientProbeAdapter(probeStore, () => shouldFail);
     const store = new SecureStore('test-service', {
       keyringLoader: async () => adapter,
       fallbackDir: tempDir,

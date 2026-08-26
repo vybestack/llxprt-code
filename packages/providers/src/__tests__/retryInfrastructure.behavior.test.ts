@@ -47,6 +47,14 @@ function optionsWithEphemerals(
   };
 }
 
+function normalizeCapturedError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+function isTerminalExhaustion(failure: Error): boolean {
+  return failure instanceof RetriesExhaustedError && !failure.isRetryable;
+}
+
 describe('request-scoped retry infrastructure', () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -203,7 +211,7 @@ describe('request-scoped retry infrastructure', () => {
       try {
         requireTransportAttempt(options);
       } catch (error) {
-        return error instanceof Error ? error : new Error(String(error));
+        return normalizeCapturedError(error);
       }
       throw new Error('Expected transport budget exhaustion');
     };
@@ -211,8 +219,7 @@ describe('request-scoped retry infrastructure', () => {
 
     expect({
       json: new JsonFormatter().formatError(failure),
-      terminal:
-        failure instanceof RetriesExhaustedError && !failure.isRetryable,
+      terminal: isTerminalExhaustion(failure),
       failoverEligible: permitsBucketFailover(failure),
     }).toStrictEqual({
       json: JSON.stringify(

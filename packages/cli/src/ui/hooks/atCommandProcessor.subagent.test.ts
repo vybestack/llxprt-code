@@ -182,7 +182,10 @@ describe('handleAtCommand (subagent @mentions)', () => {
     expect(nudge.text).toContain('a, b');
   });
 
-  it('does not duplicate a subagent in the nudge when mentioned twice', async () => {
+  const observeRepeatedSubagentMention = async (): Promise<{
+    readonly processedQuery: unknown;
+    readonly nudgeMentionCount: number;
+  }> => {
     const subagentManager = {
       listSubagents: vi.fn().mockResolvedValue(['typescriptexpert']),
     };
@@ -198,15 +201,23 @@ describe('handleAtCommand (subagent @mentions)', () => {
       subagentManager,
     });
 
-    expect(result.processedQuery).not.toBeNull();
-    const parts = result.processedQuery as Array<{
-      type: string;
-      text: string;
-    }>;
-    const nudge = parts[0];
+    const firstPart = Array.isArray(result.processedQuery)
+      ? result.processedQuery[0]
+      : undefined;
+    const nudgeText =
+      firstPart !== undefined && 'text' in firstPart ? firstPart.text : '';
     // The subagent should appear exactly once in the nudge list.
-    const matches = nudge.text.match(/typescriptexpert/g) ?? [];
-    expect(matches.length).toBe(1);
+    const matches = nudgeText.match(/typescriptexpert/g) ?? [];
+    return {
+      processedQuery: result.processedQuery,
+      nudgeMentionCount: matches.length,
+    };
+  };
+
+  it('does not duplicate a subagent in the nudge when mentioned twice', async () => {
+    const mention = await observeRepeatedSubagentMention();
+    expect(mention.processedQuery).not.toBeNull();
+    expect(mention.nudgeMentionCount).toBe(1);
   });
 
   it('reads a real file and nudges a matched subagent in the same query', async () => {

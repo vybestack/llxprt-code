@@ -18,6 +18,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
+import type { IProvider } from '../IProvider.js';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 import {
   resetSettingsService,
@@ -29,6 +30,12 @@ import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+
+function isOpenAIVercelProvider(provider: IProvider): boolean {
+  return (
+    provider instanceof OpenAIVercelProvider || provider.name === 'openaivercel'
+  );
+}
 
 // Mock the 'ai' module to avoid import errors
 void vi.mock('ai', () => ({
@@ -103,10 +110,7 @@ describe('OpenAIVercelProvider Registry Integration', () => {
       expect(provider).toBeDefined();
 
       // Check for either direct instance or wrapper
-      const isCorrectProvider =
-        provider instanceof OpenAIVercelProvider ||
-        provider!.name === 'openaivercel';
-      expect(isCorrectProvider).toBe(true);
+      expect(isOpenAIVercelProvider(provider!)).toBe(true);
     });
   });
 

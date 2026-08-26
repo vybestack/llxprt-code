@@ -34,6 +34,36 @@ const ENV_REGRESSIONS: ReadonlyArray<[string, boolean]> = [
   ['env -S "echo hi"', false],
 ];
 
+const LOGICAL_AND_FORK_BOMB_CASES = FORK_BOMB_REGRESSIONS.filter(
+  ([command]) =>
+    command === ':(){ :|:& };:' ||
+    command === 'f(){ f|f& }; f' ||
+    command === 'bomb(){ bomb|bomb & }; bomb' ||
+    command === 'function b { b|b& }; b',
+);
+
+const WRAPPED_ENV_CASES = ENV_REGRESSIONS.filter(
+  ([command]) =>
+    command === 'env --split-string="rm -rf /"' ||
+    command === 'env -Srm -rf /' ||
+    command === 'env --split-string="ls -la"',
+);
+
+const BACKGROUND_OPERATOR_FORK_BOMB_CASES = FORK_BOMB_REGRESSIONS.filter(
+  ([command]) =>
+    command === ':(){ :|:& };:' ||
+    command === 'f(){ f|f& }; f' ||
+    command === 'bomb(){ bomb|bomb & }; bomb',
+);
+
+const SEPARATOR_FORK_BOMB_CASES = FORK_BOMB_REGRESSIONS.filter(
+  ([command]) =>
+    command === ':(){ :|:& };:' ||
+    command === ':(){ { :|:& }; };:' ||
+    command === 'foo(){ echo bar | baz & }; foo' ||
+    command === 'echo ":(){ :|:& };:"',
+);
+
 describe('>&FILE credential redirect (false negative)', () => {
   it.each<[string, boolean]>([
     ['echo x >&~/.ssh/authorized_keys', true],
@@ -157,13 +187,7 @@ describe('logical && in body is not a background & (false positive)', () => {
   it.each<[string, boolean]>([
     ['f(){ f | cat && echo done }; f', false],
     ['deploy(){ deploy | log && ok }; deploy', false],
-    ...FORK_BOMB_REGRESSIONS.filter(
-      ([cmd]) =>
-        cmd === ':(){ :|:& };:' ||
-        cmd === 'f(){ f|f& }; f' ||
-        cmd === 'bomb(){ bomb|bomb & }; bomb' ||
-        cmd === 'function b { b|b& }; b',
-    ),
+    ...LOGICAL_AND_FORK_BOMB_CASES,
   ])('"%s" -> %s', (command, expected) => {
     expect(isDestructiveCommand(command)).toBe(expected);
   });
@@ -178,12 +202,7 @@ describe('Fix 3: wrapper-aware env --split-string (false negative)', () => {
     ['sudo env -S rm -rf /', true],
     ['sudo env --split-string="ls -la"', false],
     ['sudo ls', false],
-    ...ENV_REGRESSIONS.filter(
-      ([cmd]) =>
-        cmd === 'env --split-string="rm -rf /"' ||
-        cmd === 'env -Srm -rf /' ||
-        cmd === 'env --split-string="ls -la"',
-    ),
+    ...WRAPPED_ENV_CASES,
   ])('"%s" -> %s', (command, expected) => {
     expect(isDestructiveCommand(command)).toBe(expected);
   });
@@ -240,12 +259,7 @@ describe('standalone background operator excludes &&, >&, <&, &>', () => {
     ['f(){ f|f&>logfile }; f', false],
     ['f(){ f|f&>>logfile }; f', false],
     // Real bombs must still be detected.
-    ...FORK_BOMB_REGRESSIONS.filter(
-      ([cmd]) =>
-        cmd === ':(){ :|:& };:' ||
-        cmd === 'f(){ f|f& }; f' ||
-        cmd === 'bomb(){ bomb|bomb & }; bomb',
-    ),
+    ...BACKGROUND_OPERATOR_FORK_BOMB_CASES,
   ])('"%s" -> %s', (command, expected) => {
     expect(isDestructiveCommand(command)).toBe(expected);
   });
@@ -285,13 +299,7 @@ describe('Fix 1 separator: fork-bomb invocation separated by &&, ||, &, newline 
     // MUST STAY FALSE (guards).
     ['function deploy { build && push; }; deploy', false],
     ['f(){ f | cat && echo done }; f', false],
-    ...FORK_BOMB_REGRESSIONS.filter(
-      ([cmd]) =>
-        cmd === ':(){ :|:& };:' ||
-        cmd === ':(){ { :|:& }; };:' ||
-        cmd === 'foo(){ echo bar | baz & }; foo' ||
-        cmd === 'echo ":(){ :|:& };:"',
-    ),
+    ...SEPARATOR_FORK_BOMB_CASES,
   ])('"%s" -> %s', (command, expected) => {
     expect(isDestructiveCommand(command)).toBe(expected);
   });

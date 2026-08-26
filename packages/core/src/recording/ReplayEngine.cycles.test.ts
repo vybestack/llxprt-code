@@ -111,6 +111,26 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
 
   describe('Malformed Event Summary @requirement:REQ-RPL-005 @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
     /**
+     * Alternating human/ai speaker for index-based content generation.
+     */
+    function alternatingSpeaker(i: number): 'human' | 'ai' {
+      return i % 2 === 0 ? 'human' : 'ai';
+    }
+
+    /**
+     * Build N content lines [2..N+1] with alternating speakers.
+     */
+    function contentLinesFrom(start: number, end: number): string[] {
+      const lines: string[] = [];
+      for (let i = start; i <= end; i++) {
+        lines.push(
+          contentLine(i, makeContent(`msg ${i}`, alternatingSpeaker(i))),
+        );
+      }
+      return lines;
+    }
+
+    /**
      * Test 41: Replay malformed event summary.
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-005
@@ -148,12 +168,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      */
     it('file where >5% events are malformed produces threshold warning', async () => {
       // 20 total events, 2 malformed = 10% > 5%
-      const lines: string[] = [sessionStartLine(1)];
-      for (let i = 2; i <= 19; i++) {
-        lines.push(
-          contentLine(i, makeContent(`msg ${i}`, i % 2 === 0 ? 'human' : 'ai')),
-        );
-      }
+      const lines: string[] = [sessionStartLine(1), ...contentLinesFrom(2, 19)];
       // Replace 2 mid-file content lines with malformed ones
       lines[3] = 'NOT JSON';
       lines[7] = '{"broken": true';
@@ -165,10 +180,15 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
       const result = await replaySession(filePath, PROJECT_HASH);
 
       assertReplayOk(result);
-      // Should have a threshold warning
-      expect(
-        result.warnings.some((w) => w.includes('5%') || w.includes('WARNING')),
-      ).toBe(true);
+      // Should have a threshold warning.
+      expect(result.warnings.some(containsThresholdWarning)).toBe(true);
     });
+
+    /**
+     * True when the warning mentions the malformed-share threshold.
+     */
+    function containsThresholdWarning(w: string): boolean {
+      return w.includes('5%') || w.includes('WARNING');
+    }
   });
 });

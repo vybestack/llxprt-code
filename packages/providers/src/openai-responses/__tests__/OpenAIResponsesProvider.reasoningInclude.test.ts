@@ -35,6 +35,36 @@ import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-util
 const originalFetch = global.fetch;
 const mockFetch = vi.fn();
 
+function completedResponse(): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(
+        encoder.encode(
+          'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
+        ),
+      );
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+      controller.close();
+    },
+  });
+  return new Response(stream, {
+    status: 200,
+    headers: { 'content-type': 'text/event-stream' },
+  });
+}
+
+function createRequestBodyCapturingFetch(
+  capture: (body: string) => void,
+): (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> {
+  return async (_input, init): Promise<Response> => {
+    if (init?.body instanceof Blob) {
+      capture(await init.body.text());
+    }
+    return completedResponse();
+  };
+}
+
 describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-20260117-CODEX-REASONING', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -73,32 +103,9 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
       let capturedBody: string | undefined;
 
       mockFetch.mockImplementation(
-        async (
-          _input: RequestInfo | URL,
-          init?: RequestInit,
-        ): Promise<Response> => {
-          if (init?.body instanceof Blob) {
-            capturedBody = await init.body.text();
-          }
-
-          const encoder = new TextEncoder();
-          const stream = new ReadableStream({
-            start(controller) {
-              controller.enqueue(
-                encoder.encode(
-                  'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
-                ),
-              );
-              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-              controller.close();
-            },
-          });
-
-          return new Response(stream, {
-            status: 200,
-            headers: { 'content-type': 'text/event-stream' },
-          });
-        },
+        createRequestBodyCapturingFetch((body) => {
+          capturedBody = body;
+        }),
       );
 
       const options = createProviderCallOptions({
@@ -141,32 +148,9 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
       let capturedBody: string | undefined;
 
       mockFetch.mockImplementation(
-        async (
-          _input: RequestInfo | URL,
-          init?: RequestInit,
-        ): Promise<Response> => {
-          if (init?.body instanceof Blob) {
-            capturedBody = await init.body.text();
-          }
-
-          const encoder = new TextEncoder();
-          const stream = new ReadableStream({
-            start(controller) {
-              controller.enqueue(
-                encoder.encode(
-                  'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
-                ),
-              );
-              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-              controller.close();
-            },
-          });
-
-          return new Response(stream, {
-            status: 200,
-            headers: { 'content-type': 'text/event-stream' },
-          });
-        },
+        createRequestBodyCapturingFetch((body) => {
+          capturedBody = body;
+        }),
       );
 
       const options = createProviderCallOptions({
@@ -210,32 +194,9 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
       let capturedBody: string | undefined;
 
       mockFetch.mockImplementation(
-        async (
-          _input: RequestInfo | URL,
-          init?: RequestInit,
-        ): Promise<Response> => {
-          if (init?.body instanceof Blob) {
-            capturedBody = await init.body.text();
-          }
-
-          const encoder = new TextEncoder();
-          const stream = new ReadableStream({
-            start(controller) {
-              controller.enqueue(
-                encoder.encode(
-                  'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
-                ),
-              );
-              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-              controller.close();
-            },
-          });
-
-          return new Response(stream, {
-            status: 200,
-            headers: { 'content-type': 'text/event-stream' },
-          });
-        },
+        createRequestBodyCapturingFetch((body) => {
+          capturedBody = body;
+        }),
       );
 
       const options = createProviderCallOptions({
@@ -281,32 +242,9 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
       let capturedBody: string | undefined;
 
       mockFetch.mockImplementation(
-        async (
-          _input: RequestInfo | URL,
-          init?: RequestInit,
-        ): Promise<Response> => {
-          if (init?.body instanceof Blob) {
-            capturedBody = await init.body.text();
-          }
-
-          const encoder = new TextEncoder();
-          const stream = new ReadableStream({
-            start(controller) {
-              controller.enqueue(
-                encoder.encode(
-                  'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
-                ),
-              );
-              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-              controller.close();
-            },
-          });
-
-          return new Response(stream, {
-            status: 200,
-            headers: { 'content-type': 'text/event-stream' },
-          });
-        },
+        createRequestBodyCapturingFetch((body) => {
+          capturedBody = body;
+        }),
       );
 
       const options = createProviderCallOptions({
@@ -513,32 +451,9 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
       let capturedBody: string | undefined;
 
       mockFetch.mockImplementation(
-        async (
-          _input: RequestInfo | URL,
-          init?: RequestInit,
-        ): Promise<Response> => {
-          if (init?.body instanceof Blob) {
-            capturedBody = await init.body.text();
-          }
-
-          const encoder = new TextEncoder();
-          const stream = new ReadableStream({
-            start(controller) {
-              controller.enqueue(
-                encoder.encode(
-                  'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
-                ),
-              );
-              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-              controller.close();
-            },
-          });
-
-          return new Response(stream, {
-            status: 200,
-            headers: { 'content-type': 'text/event-stream' },
-          });
-        },
+        createRequestBodyCapturingFetch((body) => {
+          capturedBody = body;
+        }),
       );
 
       const options = createProviderCallOptions({
@@ -613,32 +528,9 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
       let capturedBody: string | undefined;
 
       mockFetch.mockImplementation(
-        async (
-          _input: RequestInfo | URL,
-          init?: RequestInit,
-        ): Promise<Response> => {
-          if (init?.body instanceof Blob) {
-            capturedBody = await init.body.text();
-          }
-
-          const encoder = new TextEncoder();
-          const stream = new ReadableStream({
-            start(controller) {
-              controller.enqueue(
-                encoder.encode(
-                  'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
-                ),
-              );
-              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-              controller.close();
-            },
-          });
-
-          return new Response(stream, {
-            status: 200,
-            headers: { 'content-type': 'text/event-stream' },
-          });
-        },
+        createRequestBodyCapturingFetch((body) => {
+          capturedBody = body;
+        }),
       );
 
       const options = createProviderCallOptions({

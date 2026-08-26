@@ -41,6 +41,10 @@ const spyOnGetter = vi.spyOn as unknown as <
   accessType: 'get',
 ) => Mock<() => T[K]>;
 
+function matchCount(content: string, pattern: RegExp): number {
+  return content.match(pattern)?.length ?? 0;
+}
+
 const realChildProcessModule = { ...(await import('child_process')) };
 
 void vi.mock('child_process', () => automock(realChildProcessModule));
@@ -331,7 +335,7 @@ describe('updateGitignore', () => {
     expect(content).toBe('.llxprt/\nsome-other-file\n\ngha-creds-*.json\n');
     expect(content).toContain('gha-creds-*.json');
     // Should not duplicate .llxprt/ entry
-    expect((content.match(/\.llxprt\//g) ?? []).length).toBe(1);
+    expect(matchCount(content, /\.llxprt\//g)).toBe(1);
   });
 
   it('does not get confused by entries in comments or as substrings', async () => {

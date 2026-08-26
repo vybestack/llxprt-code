@@ -42,6 +42,13 @@ import {
   createProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
+async function readStoredProviderKey(
+  storedKeys: ReadonlyMap<string, string>,
+  name: string,
+): Promise<string | null> {
+  return storedKeys.get(name) ?? null;
+}
+
 // Mock OAuth manager for testing
 const mockOAuthManager: OAuthManager = {
   getToken: vi.fn<
@@ -320,7 +327,7 @@ describe('BaseProvider', () => {
         ['chutesminimax', 'named-key-secret-value'],
       ]);
       const providerKeyStorage: IProviderKeyStorage = {
-        getKey: async (name: string) => storedKeys.get(name) ?? null,
+        getKey: (name: string) => readStoredProviderKey(storedKeys, name),
         listKeys: async () => [...storedKeys.keys()],
         hasKey: async (name: string) => storedKeys.has(name),
       };

@@ -117,6 +117,20 @@ describe('consolidateTextBlocks identity-aware thinking consolidation', () => {
   });
 
   it('consolidates non-adjacent interleaved updates by stream id', () => {
+    const {
+      result,
+      consolidatesNonAdjacentInterleavedUpdatesByStreamIdObservation1,
+    } = observeConsolidatesNonAdjacentInterleavedUpdatesByStreamId();
+    expect(
+      consolidatesNonAdjacentInterleavedUpdatesByStreamIdObservation1,
+    ).toStrictEqual(['First complete', 'Answer ', 'Second', 'text']);
+    expect(thinkingSignatures(result)).toStrictEqual([
+      'sig-first-final',
+      'sig-second',
+    ]);
+  });
+
+  const observeConsolidatesNonAdjacentInterleavedUpdatesByStreamId = () => {
     const blocks: ContentBlock[] = [
       thinkingBlock({
         thought: 'First',
@@ -147,7 +161,7 @@ describe('consolidateTextBlocks identity-aware thinking consolidation', () => {
 
     const result = consolidateTextBlocks(blocks);
 
-    expect(
+    const consolidatesNonAdjacentInterleavedUpdatesByStreamIdObservation1 =
       result.map((block) => {
         if (block.type === 'thinking') {
           return block.thought;
@@ -156,13 +170,12 @@ describe('consolidateTextBlocks identity-aware thinking consolidation', () => {
           return block.text;
         }
         return block.type;
-      }),
-    ).toStrictEqual(['First complete', 'Answer ', 'Second', 'text']);
-    expect(thinkingSignatures(result)).toStrictEqual([
-      'sig-first-final',
-      'sig-second',
-    ]);
-  });
+      });
+    return {
+      result,
+      consolidatesNonAdjacentInterleavedUpdatesByStreamIdObservation1,
+    };
+  };
 
   it('preserves prior metadata when a same-stream update omits it', () => {
     const blocks: ContentBlock[] = [

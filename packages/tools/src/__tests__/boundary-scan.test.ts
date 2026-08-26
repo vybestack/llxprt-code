@@ -23,6 +23,10 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 
 // toolsRoot points to the packages/tools root (2 levels up from __tests__)
+function objectKeys(value: object | undefined): string[] {
+  return Object.keys(value ?? {});
+}
+
 const toolsRoot = resolve(import.meta.dirname, '..', '..');
 
 const FORBIDDEN_PACKAGE_IDS = [
@@ -81,24 +85,36 @@ describe('Boundary Scan Tests @plan:PLAN-20260608-ISSUE1585.P10', () => {
   });
 
   describe('package.json dependency constraints', () => {
-    it('has no core/providers/cli dependencies', () => {
+    const observeHasNoCoreProvidersCliDependenciesAt84 = () => {
       const pkgPath = join(toolsRoot, 'package.json');
       const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
       const deps = Object.keys(pkg.dependencies ?? {});
+      return { deps };
+    };
+
+    it('has no core/providers/cli dependencies', () => {
+      const { deps } = observeHasNoCoreProvidersCliDependenciesAt84();
       for (const forbidden of FORBIDDEN_PACKAGE_IDS) {
         expect(deps).not.toContain(forbidden);
       }
     });
 
+    const observeDevDependenciesMayOnlyContainVybestackLlxprtCodeTestUtilsFromMonorepoAt93 =
+      () => {
+        const pkgPath = join(toolsRoot, 'package.json');
+        const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+        const devDeps = Object.keys(pkg.devDependencies ?? {});
+        const forbiddenInDev = [
+          '@vybestack/llxprt-code-core',
+          '@vybestack/llxprt-code-providers',
+          '@vybestack/llxprt-code-cli',
+        ];
+        return { devDeps, forbiddenInDev };
+      };
+
     it('devDependencies may only contain @vybestack/llxprt-code-test-utils from monorepo', () => {
-      const pkgPath = join(toolsRoot, 'package.json');
-      const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-      const devDeps = Object.keys(pkg.devDependencies ?? {});
-      const forbiddenInDev = [
-        '@vybestack/llxprt-code-core',
-        '@vybestack/llxprt-code-providers',
-        '@vybestack/llxprt-code-cli',
-      ];
+      const { devDeps, forbiddenInDev } =
+        observeDevDependenciesMayOnlyContainVybestackLlxprtCodeTestUtilsFromMonorepoAt93();
       for (const f of forbiddenInDev) {
         expect(devDeps).not.toContain(f);
       }
@@ -128,13 +144,19 @@ describe('Boundary Scan Tests @plan:PLAN-20260608-ISSUE1585.P10', () => {
   });
 
   describe('test-utils is devDependency-only', () => {
-    it('@vybestack/llxprt-code-test-utils appears only in devDependencies', () => {
-      const pkgPath = join(toolsRoot, 'package.json');
-      const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-      const deps = Object.keys(pkg.dependencies ?? {});
-      expect(deps).not.toContain('@vybestack/llxprt-code-test-utils');
+    const observeVybestackLlxprtCodeTestUtilsAppearsOnlyInDevDependenciesAt131 =
+      () => {
+        const pkgPath = join(toolsRoot, 'package.json');
+        const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+        const deps = Object.keys(pkg.dependencies ?? {});
+        return { pkg, deps };
+      };
 
-      const devDeps = Object.keys(pkg.devDependencies ?? {});
+    it('@vybestack/llxprt-code-test-utils appears only in devDependencies', () => {
+      const { pkg, deps } =
+        observeVybestackLlxprtCodeTestUtilsAppearsOnlyInDevDependenciesAt131();
+      expect(deps).not.toContain('@vybestack/llxprt-code-test-utils');
+      const devDeps = objectKeys(pkg.devDependencies);
       expect(devDeps).toContain('@vybestack/llxprt-code-test-utils');
     });
   });

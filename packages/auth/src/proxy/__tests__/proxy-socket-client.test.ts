@@ -301,6 +301,125 @@ function createHandshakeCapturingServer(
   });
 }
 
+function captureHandshake(
+  socket: net.Socket,
+  resolve: (frame: Record<string, unknown>) => void,
+): void {
+  const decoder = new FrameDecoder();
+  socket.on('data', (chunk) => {
+    for (const frame of decoder.feed(chunk)) {
+      if (frame.op === 'handshake') {
+        resolve(frame);
+        socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
+      }
+    }
+  });
+}
+
+function collectRequestIds(socket: net.Socket, ids: Set<string>): void {
+  const decoder = new FrameDecoder();
+  socket.on('data', (chunk) => {
+    for (const frame of decoder.feed(chunk)) {
+      if (frame.op === 'handshake') {
+        socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
+      } else {
+        ids.add(frame.id as string);
+        socket.write(encodeFrame({ ok: true, id: frame.id, data: {} }));
+      }
+    }
+  });
+}
+
+function acceptHandshakeOnly(socket: net.Socket): void {
+  const decoder = new FrameDecoder();
+  socket.on('data', (chunk) => {
+    for (const frame of decoder.feed(chunk)) {
+      if (frame.op === 'handshake') {
+        socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
+      }
+    }
+  });
+}
+
+function disconnectAfterHandshake(socket: net.Socket): void {
+  const decoder = new FrameDecoder();
+  socket.on('data', (chunk) => {
+    for (const frame of decoder.feed(chunk)) {
+      if (frame.op === 'handshake') {
+        socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
+      } else {
+        socket.destroy();
+      }
+    }
+  });
+}
+
+function writeCorrelatedResponses(
+  socket: net.Socket,
+  pendingResponses: ReadonlyArray<{ readonly id: string; readonly op: string }>,
+): void {
+  if (pendingResponses.length === 3) {
+    for (const pending of pendingResponses.toReversed()) {
+      socket.write(
+        encodeFrame({
+          ok: true,
+          id: pending.id,
+          data: { echo: pending.op },
+        }),
+      );
+    }
+  }
+}
+
+function serveCorrelatedResponses(socket: net.Socket): void {
+  const decoder = new FrameDecoder();
+  const pendingResponses: Array<{ id: string; op: string }> = [];
+  socket.on('data', (chunk) => {
+    for (const frame of decoder.feed(chunk)) {
+      if (frame.op === 'handshake') {
+        socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
+      } else {
+        pendingResponses.push({
+          id: frame.id as string,
+          op: frame.op as string,
+        });
+        writeCorrelatedResponses(socket, pendingResponses);
+      }
+    }
+  });
+}
+
+function countHandshakes(socket: net.Socket, observed: () => void): void {
+  const decoder = new FrameDecoder();
+  socket.on('data', (chunk) => {
+    for (const frame of decoder.feed(chunk)) {
+      if (frame.op === 'handshake') {
+        observed();
+        socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
+      } else {
+        socket.write(encodeFrame({ ok: true, id: frame.id, data: {} }));
+      }
+    }
+  });
+}
+
+function disconnectAfterThreeRequests(socket: net.Socket): void {
+  const decoder = new FrameDecoder();
+  let requestCount = 0;
+  socket.on('data', (chunk) => {
+    for (const frame of decoder.feed(chunk)) {
+      if (frame.op === 'handshake') {
+        socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
+      } else {
+        requestCount++;
+        if (requestCount >= 3) {
+          socket.destroy();
+        }
+      }
+    }
+  });
+}
+
 describe('ProxySocketClient', () => {
   let socketPath: string;
   let server: net.Server | undefined;
@@ -347,18 +466,7 @@ describe('ProxySocketClient', () => {
     const handshakeReceived = new Promise<Record<string, unknown>>(
       (resolve) => {
         server = net.createServer((socket) => {
-          const decoder = new FrameDecoder();
-          socket.on('data', (chunk) => {
-            const frames = decoder.feed(chunk);
-            for (const frame of frames) {
-              const msg = frame;
-              if (msg.op === 'handshake') {
-                resolve(msg);
-                // Reply so the handshake completes
-                socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
-              }
-            }
-          });
+          captureHandshake(socket, resolve);
         });
       },
     );
@@ -442,19 +550,7 @@ describe('ProxySocketClient', () => {
 
     server = net.createServer((socket) => {
       trackServerSockets(initialized(server, 'server'));
-      const decoder = new FrameDecoder();
-      socket.on('data', (chunk) => {
-        const frames = decoder.feed(chunk);
-        for (const frame of frames) {
-          const msg = frame;
-          if (msg.op === 'handshake') {
-            socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
-          } else {
-            receivedIds.add(msg.id as string);
-            socket.write(encodeFrame({ ok: true, id: msg.id, data: {} }));
-          }
-        }
-      });
+      collectRequestIds(socket, receivedIds);
     });
 
     await new Promise<void>((resolve) =>
@@ -483,17 +579,7 @@ describe('ProxySocketClient', () => {
   it('rejects request after 30s timeout', async () => {
     server = net.createServer((socket) => {
       trackServerSockets(initialized(server, 'server'));
-      const decoder = new FrameDecoder();
-      socket.on('data', (chunk) => {
-        const frames = decoder.feed(chunk);
-        for (const frame of frames) {
-          const msg = frame;
-          if (msg.op === 'handshake') {
-            socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
-          }
-          // Deliberately do NOT respond to other requests (simulates timeout)
-        }
-      });
+      acceptHandshakeOnly(socket);
     });
 
     await new Promise<void>((resolve) =>
@@ -551,18 +637,7 @@ describe('ProxySocketClient', () => {
   it('surfaces "Credential proxy connection lost" on connection error', async () => {
     server = net.createServer((socket) => {
       trackServerSockets(initialized(server, 'server'));
-      const decoder = new FrameDecoder();
-      socket.on('data', (chunk) => {
-        const frames = decoder.feed(chunk);
-        for (const frame of frames) {
-          const msg = frame;
-          if (msg.op === 'handshake') {
-            socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
-          } else {
-            socket.destroy();
-          }
-        }
-      });
+      disconnectAfterHandshake(socket);
     });
 
     await new Promise<void>((resolve) =>
@@ -589,46 +664,9 @@ describe('ProxySocketClient', () => {
    * @scenario Multiple concurrent requests correlate responses by ID
    */
   it('correlates concurrent responses by request ID', async () => {
-    const handleServerFrame = (
-      msg: Record<string, unknown>,
-      socket: net.Socket,
-      pendingResponses: Array<{ id: string; op: string }>,
-    ): void => {
-      if (msg.op === 'handshake') {
-        socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
-        return;
-      }
-      pendingResponses.push({
-        id: msg.id as string,
-        op: msg.op as string,
-      });
-
-      // Respond in reverse order to test correlation
-      if (pendingResponses.length === 3) {
-        const reversed = pendingResponses.toReversed();
-        for (const pending of reversed) {
-          socket.write(
-            encodeFrame({
-              ok: true,
-              id: pending.id,
-              data: { echo: pending.op },
-            }),
-          );
-        }
-      }
-    };
-
     server = net.createServer((socket) => {
       trackServerSockets(initialized(server, 'server'));
-      const decoder = new FrameDecoder();
-      const pendingResponses: Array<{ id: string; op: string }> = [];
-
-      socket.on('data', (chunk) => {
-        const frames = decoder.feed(chunk);
-        for (const frame of frames) {
-          handleServerFrame(frame, socket, pendingResponses);
-        }
-      });
+      serveCorrelatedResponses(socket);
     });
 
     await new Promise<void>((resolve) =>
@@ -658,19 +696,7 @@ describe('ProxySocketClient', () => {
 
     server = net.createServer((socket) => {
       trackServerSockets(initialized(server, 'server'));
-      const decoder = new FrameDecoder();
-      socket.on('data', (chunk) => {
-        const frames = decoder.feed(chunk);
-        for (const frame of frames) {
-          const msg = frame;
-          if (msg.op === 'handshake') {
-            handshakeCount++;
-            socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
-          } else {
-            socket.write(encodeFrame({ ok: true, id: msg.id, data: {} }));
-          }
-        }
-      });
+      countHandshakes(socket, () => handshakeCount++);
     });
 
     await new Promise<void>((resolve) =>
@@ -701,17 +727,7 @@ describe('ProxySocketClient', () => {
   it('rejects pending requests when close() is called', async () => {
     server = net.createServer((socket) => {
       trackServerSockets(initialized(server, 'server'));
-      const decoder = new FrameDecoder();
-      socket.on('data', (chunk) => {
-        const frames = decoder.feed(chunk);
-        for (const frame of frames) {
-          const msg = frame;
-          if (msg.op === 'handshake') {
-            socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
-          }
-          // Don't respond to other requests — they'll pend
-        }
-      });
+      acceptHandshakeOnly(socket);
     });
 
     await new Promise<void>((resolve) =>
@@ -826,22 +842,7 @@ describe('ProxySocketClient', () => {
   it('rejects all concurrently pending requests promptly on transport loss, then reconnects', async () => {
     server = net.createServer((socket) => {
       trackServerSockets(initialized(server, 'server'));
-      const decoder = new FrameDecoder();
-      let requestCount = 0;
-      socket.on('data', (chunk) => {
-        const frames = decoder.feed(chunk);
-        for (const frame of frames) {
-          const msg = frame;
-          if (msg.op === 'handshake') {
-            socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
-          } else {
-            requestCount++;
-            if (requestCount >= 3) {
-              socket.destroy();
-            }
-          }
-        }
-      });
+      disconnectAfterThreeRequests(socket);
     });
 
     await new Promise<void>((resolve) =>

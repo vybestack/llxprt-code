@@ -5,6 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
+
+const bunIt = it;
 import { spawn } from 'child_process';
 
 const mockPlatform = vi.fn(() => 'win32');
@@ -60,9 +62,9 @@ describe('ShellExecutionService (Windows behavior)', () => {
     mockPlatform.mockReturnValue('win32');
   });
 
-  it.skipIf(!isWindows)(
-    'uses PowerShell without shell: true on Windows',
-    async () => {
+  {
+    const it = !isWindows ? bunIt.skip : bunIt;
+    it('uses PowerShell without shell: true on Windows', async () => {
       await ShellExecutionService.execute(
         'echo a & echo b',
         '.',
@@ -78,12 +80,12 @@ describe('ShellExecutionService (Windows behavior)', () => {
           windowsVerbatimArguments: false,
         }),
       );
-    },
-  );
+    });
+  }
 
-  it.skipIf(!isWindows)(
-    'uses PowerShell without shell: true on Windows for simple commands',
-    async () => {
+  {
+    const it = !isWindows ? bunIt.skip : bunIt;
+    it('uses PowerShell without shell: true on Windows for simple commands', async () => {
       await ShellExecutionService.execute(
         'node -v',
         '.',
@@ -99,6 +101,6 @@ describe('ShellExecutionService (Windows behavior)', () => {
           windowsVerbatimArguments: false,
         }),
       );
-    },
-  );
+    });
+  }
 });

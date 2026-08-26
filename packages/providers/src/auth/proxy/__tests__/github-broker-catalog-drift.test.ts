@@ -38,6 +38,10 @@ function asBrokerError(value: unknown): BrokerErrorException {
   return value;
 }
 
+function requiredParamsOrEmpty(requiredParams: readonly string[] | undefined) {
+  return requiredParams ?? [];
+}
+
 describe('broker registry consumes the shared catalog', () => {
   /**
    * Each descriptor's `params` must be reference-equal to the catalog's
@@ -50,23 +54,16 @@ describe('broker registry consumes the shared catalog', () => {
   it('every descriptor params is reference-equal to the catalog and required matches', () => {
     for (const [name, descriptor] of Object.entries(OP_REGISTRY)) {
       const spec = GITHUB_OP_SPECS[name];
-      expect(spec, `${name} must exist in the catalog`).toBeDefined();
+      expect(spec).toBeDefined();
       // Reference equality: the descriptor must source params FROM the
       // catalog, not copy them.
-      expect(
-        descriptor.params,
-        `${name} params must reference the catalog params`,
-      ).toBe(spec.params);
-      expect(
-        descriptor.requiredParams ?? [],
-        `${name} requiredParams must match the catalog`,
-      ).toStrictEqual(spec.required);
+      expect(descriptor.params).toBe(spec.params);
+      expect(requiredParamsOrEmpty(descriptor.requiredParams)).toStrictEqual(
+        spec.required,
+      );
       // mutating must be sourced from the catalog, not hardcoded, so the
       // broker cannot drift from the single source of truth.
-      expect(
-        descriptor.mutating,
-        `${name} mutating must match the catalog`,
-      ).toBe(spec.mutating);
+      expect(descriptor.mutating).toBe(spec.mutating);
     }
   });
 
@@ -102,9 +99,7 @@ describe('broker registry consumes the shared catalog', () => {
     } catch (err) {
       caught = err;
     }
-    expect(caught, 'executeGitHubOp must reject').toBeInstanceOf(
-      BrokerErrorException,
-    );
+    expect(caught).toBeInstanceOf(BrokerErrorException);
     const msg = asBrokerError(caught).brokerError.message;
     expect(msg).toBe(
       'Missing required parameter: body. Accepted parameters: number, body, repo. Required: number, body.',
@@ -122,7 +117,7 @@ describe('broker registry consumes the shared catalog', () => {
     for (const name of Object.keys(OP_REGISTRY)) {
       const line = describeGithubOpParams(name);
       for (const param of Object.keys(GITHUB_OP_SPECS[name].params)) {
-        expect(line, `${name} must list ${param}`).toContain(param);
+        expect(line).toContain(param);
       }
     }
   });

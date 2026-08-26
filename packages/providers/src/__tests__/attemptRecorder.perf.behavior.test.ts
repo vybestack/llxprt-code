@@ -43,6 +43,13 @@ function createRecorder(wrapperOwned = true): AttemptRecorder {
   });
 }
 
+function requireAttemptId(attemptId: string | undefined): string {
+  if (attemptId === undefined) {
+    throw new Error('expected an active attempt before recording usage');
+  }
+  return attemptId;
+}
+
 function capturingObserver(): {
   observer: PerfPhaseObserver;
   starts: PerfProviderAttemptStartInfo[];
@@ -394,10 +401,7 @@ describe('AttemptRecorder perf phase observer (P07)', () => {
     };
     const recorder = createRecorder(true);
     recorder.ensureAttemptStarted();
-    const attemptId = recorder.getCurrentAttemptId();
-    if (attemptId === undefined) {
-      throw new Error('expected an active attempt before recording usage');
-    }
+    const attemptId = requireAttemptId(recorder.getCurrentAttemptId());
     recorder.recordMetadataUsage(attemptId, usage);
     recorder.finalizeAttempt('success', 'test-model');
 
@@ -477,10 +481,7 @@ describe('AttemptRecorder perf phase observer (P07)', () => {
     };
     const recorder = createRecorder(true);
     recorder.ensureAttemptStarted();
-    const attemptId = recorder.getCurrentAttemptId();
-    if (attemptId === undefined) {
-      throw new Error('expected an active attempt before recording usage');
-    }
+    const attemptId = requireAttemptId(recorder.getCurrentAttemptId());
     recorder.recordMetadataUsage(attemptId, malformedUsage);
 
     expect(() =>

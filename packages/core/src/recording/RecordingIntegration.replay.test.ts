@@ -276,8 +276,9 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
         PROJECT_HASH,
       );
       assertReplayOk(replay);
-      const lastSeq = events[events.length - 1]?.seq ?? 0;
-      expect(replay.lastSeq).toBe(lastSeq);
+      // At least one content event was recorded, so the last event's seq is
+      // the expected final seq.
+      expect(replay.lastSeq).toBe(events[events.length - 1].seq);
     });
   });
 

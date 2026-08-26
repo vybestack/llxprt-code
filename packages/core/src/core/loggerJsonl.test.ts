@@ -128,10 +128,7 @@ describe('Logger JSONL format', () => {
     expect(hasMalformedBackup(dirContents)).toBe(true);
 
     // Verify the backup contains the original corrupted data.
-    const backupName = dirContents.find(
-      (f) =>
-        f.startsWith(LOG_FILE_NAME + '.malformed_line') && f.endsWith('.bak'),
-    );
+    const backupName = dirContents.find(isMalformedBackup);
     expect(backupName).toBeDefined();
     const backupContent = await fs.readFile(
       path.join(TEST_LLXPRT_DIR, backupName!),
@@ -209,21 +206,11 @@ describe('Logger JSONL format', () => {
     // A partial_corruption backup should exist so corrupted lines are
     // recoverable; no malformed_line backup (that's for total corruption).
     const dirContents = await fs.readdir(TEST_LLXPRT_DIR);
-    expect(
-      dirContents.some(
-        (f) =>
-          f.startsWith(LOG_FILE_NAME + '.partial_corruption') &&
-          f.endsWith('.bak'),
-      ),
-    ).toBe(true);
+    expect(dirContents.some(isPartialCorruptionBackup)).toBe(true);
     expect(hasMalformedBackup(dirContents)).toBe(false);
 
     // Verify the backup contains the original corrupted data.
-    const backupName = dirContents.find(
-      (f) =>
-        f.startsWith(LOG_FILE_NAME + '.partial_corruption') &&
-        f.endsWith('.bak'),
-    );
+    const backupName = dirContents.find(isPartialCorruptionBackup);
     expect(backupName).toBeDefined();
     const backupContent = await fs.readFile(
       path.join(TEST_LLXPRT_DIR, backupName!),
@@ -459,3 +446,13 @@ describe('Logger JSONL format', () => {
     debugSpy.mockRestore();
   });
 });
+
+function isMalformedBackup(f: string): boolean {
+  return f.startsWith(LOG_FILE_NAME + '.malformed_line') && f.endsWith('.bak');
+}
+
+function isPartialCorruptionBackup(f: string): boolean {
+  return (
+    f.startsWith(LOG_FILE_NAME + '.partial_corruption') && f.endsWith('.bak')
+  );
+}

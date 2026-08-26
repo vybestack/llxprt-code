@@ -28,7 +28,7 @@ describe('ast_edit Python import extraction', () => {
 
     expect(imports).toHaveLength(1);
     expect(imports[0].module).toBe('os');
-    expect(imports[0].items).toEqual([]);
+    expect(imports[0].items).toStrictEqual([]);
     expect(imports[0].line).toBe(1);
   });
 
@@ -38,7 +38,7 @@ describe('ast_edit Python import extraction', () => {
 
     expect(imports).toHaveLength(1);
     expect(imports[0].module).toBe('pathlib');
-    expect(imports[0].items).toEqual(['Path']);
+    expect(imports[0].items).toStrictEqual(['Path']);
   });
 
   it('extracts from-import with multiple items', () => {
@@ -47,7 +47,7 @@ describe('ast_edit Python import extraction', () => {
 
     expect(imports).toHaveLength(1);
     expect(imports[0].module).toBe('typing');
-    expect(imports[0].items).toEqual(['List', 'Dict']);
+    expect(imports[0].items).toStrictEqual(['List', 'Dict']);
   });
 
   it('extracts dotted module names from from-imports', () => {
@@ -56,7 +56,7 @@ describe('ast_edit Python import extraction', () => {
 
     expect(imports).toHaveLength(1);
     expect(imports[0].module).toBe('os.path');
-    expect(imports[0].items).toEqual(['join', 'exists']);
+    expect(imports[0].items).toStrictEqual(['join', 'exists']);
   });
 
   it('extracts dotted module names from bare imports', () => {
@@ -65,7 +65,7 @@ describe('ast_edit Python import extraction', () => {
 
     expect(imports).toHaveLength(1);
     expect(imports[0].module).toBe('os.path');
-    expect(imports[0].items).toEqual([]);
+    expect(imports[0].items).toStrictEqual([]);
   });
 
   it('strips aliases from bare imports', () => {
@@ -74,7 +74,7 @@ describe('ast_edit Python import extraction', () => {
 
     expect(imports).toHaveLength(1);
     expect(imports[0].module).toBe('numpy');
-    expect(imports[0].items).toEqual([]);
+    expect(imports[0].items).toStrictEqual([]);
   });
 
   it('strips aliases from from-import items', () => {
@@ -83,7 +83,7 @@ describe('ast_edit Python import extraction', () => {
 
     expect(imports).toHaveLength(1);
     expect(imports[0].module).toBe('typing');
-    expect(imports[0].items).toEqual(['List', 'Dict']);
+    expect(imports[0].items).toStrictEqual(['List', 'Dict']);
   });
 
   it('records correct line numbers for multiple imports', () => {
@@ -119,7 +119,7 @@ describe('ast_edit Go import extraction', () => {
 
     expect(imports).toHaveLength(1);
     expect(imports[0].module).toBe('fmt');
-    expect(imports[0].items).toEqual([]);
+    expect(imports[0].items).toStrictEqual([]);
     expect(imports[0].line).toBe(1);
   });
 
@@ -129,7 +129,7 @@ describe('ast_edit Go import extraction', () => {
 
     expect(imports).toHaveLength(1);
     expect(imports[0].module).toBe('fmt');
-    expect(imports[0].items).toEqual([]);
+    expect(imports[0].items).toStrictEqual([]);
   });
 
   it('extracts a single-line dot import', () => {
@@ -240,7 +240,7 @@ describe('ast_edit Ruby import extraction', () => {
 
     expect(imports).toHaveLength(1);
     expect(imports[0].module).toBe('json');
-    expect(imports[0].items).toEqual([]);
+    expect(imports[0].items).toStrictEqual([]);
     expect(imports[0].line).toBe(1);
   });
 

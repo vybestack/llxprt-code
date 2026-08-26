@@ -150,20 +150,25 @@ describe('CodeSearchTool', () => {
   });
 
   describe('body size limits', () => {
+    const observeReturnsSEARCHERRORWhenTheSuccessBodyExceedsTheBudgetAt153 =
+      async () => {
+        const successBody = mockBody('x'.repeat(100));
+        mockedFetch.mockResolvedValue({
+          ok: true,
+          headers: {
+            get: (key: string) => (key === 'content-length' ? '9999999' : null),
+          },
+          body: successBody,
+        });
+        const result = await tool
+          .build({ query: 'overflow' })
+          .execute(new AbortController().signal);
+        return { successBody, result };
+      };
+
     it('returns SEARCH_ERROR when the success body exceeds the budget', async () => {
-      const successBody = mockBody('x'.repeat(100));
-      mockedFetch.mockResolvedValue({
-        ok: true,
-        headers: {
-          get: (key: string) => (key === 'content-length' ? '9999999' : null),
-        },
-        body: successBody,
-      });
-
-      const result = await tool
-        .build({ query: 'overflow' })
-        .execute(new AbortController().signal);
-
+      const { successBody, result } =
+        await observeReturnsSEARCHERRORWhenTheSuccessBodyExceedsTheBudgetAt153();
       expect(result.error?.type).toBe(ToolErrorType.SEARCH_ERROR);
       expect(result.error?.message).toMatch(/exceeds/i);
       const fetchSignal = getFetchSignal(mockedFetch.mock.calls[0][1]);
@@ -171,21 +176,26 @@ describe('CodeSearchTool', () => {
       expect(successBody.destroyed).toBe(true);
     });
 
+    const observeReturnsSEARCHERRORWhenTheErrorBodyExceedsTheBudgetAt174 =
+      async () => {
+        const errorBodyStream = mockBody('x'.repeat(100));
+        mockedFetch.mockResolvedValue({
+          ok: false,
+          status: 500,
+          headers: {
+            get: (key: string) => (key === 'content-length' ? '9999999' : null),
+          },
+          body: errorBodyStream,
+        });
+        const result = await tool
+          .build({ query: 'overflow-error' })
+          .execute(new AbortController().signal);
+        return { errorBodyStream, result };
+      };
+
     it('returns SEARCH_ERROR when the error body exceeds the budget', async () => {
-      const errorBodyStream = mockBody('x'.repeat(100));
-      mockedFetch.mockResolvedValue({
-        ok: false,
-        status: 500,
-        headers: {
-          get: (key: string) => (key === 'content-length' ? '9999999' : null),
-        },
-        body: errorBodyStream,
-      });
-
-      const result = await tool
-        .build({ query: 'overflow-error' })
-        .execute(new AbortController().signal);
-
+      const { errorBodyStream, result } =
+        await observeReturnsSEARCHERRORWhenTheErrorBodyExceedsTheBudgetAt174();
       expect(result.error?.type).toBe(ToolErrorType.SEARCH_ERROR);
       expect(result.error?.message).toMatch(/exceeds/i);
       expect(result.error?.message).toContain('500');

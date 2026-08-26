@@ -198,54 +198,139 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
   });
 
   it('PROP completed/failed optional-field projection: a terminated task carries completedAt, a failed task carries its error, and a never-terminated control task omits BOTH @requirement:REQ-003 @scenario:property-terminal-projection @given:a discriminator in {complete, fail} and a unique id, with a real manager seeded with a terminal task (per discriminator) plus a never-terminated control task @when:agent.tasks.get() is called for the terminal id and the control id @then:the terminal view has completedAt:number>0; if fail, error===the seed; the control view OMITS both completedAt and error keys', async () => {
+    const {
+      pROPCompletedFailedOptionalFieldProjectionATerminatedTaskCarriesCompletedAtAProperty,
+      observations,
+    } =
+      await observePROPCompletedFailedOptionalFieldProjectionATerminatedTaskCarriesCompletedAtA();
     await fc.assert(
-      fc.asyncProperty(
-        fc.constantFrom('complete', 'fail'),
-        fc
-          .string({ minLength: 1 })
-          .filter((s) => !s.includes(' ') && !s.includes('-')),
-        async (kind, suffix) => {
-          const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-          try {
-            const mgr = internalConfig(agent).getAsyncTaskManager()!;
-            const termId = `prop-term-${suffix}`;
-            const controlId = `prop-ctrl-${suffix}`;
-            for (const id of [termId, controlId]) {
-              mgr.registerTask({
-                id,
-                subagentName: 's',
-                goalPrompt: 'g',
-                abortController: new AbortController(),
-              });
-            }
-            const expectedError = kind === 'fail' ? `err-${suffix}` : undefined;
-            const ok =
-              kind === 'complete'
-                ? mgr.completeTask(termId, { result: 'ok' } as never)
-                : mgr.failTask(termId, `err-${suffix}`);
-            expect(ok).toBe(true);
-            // MIN-2 distinct cases: complete + fail both exercised.
-            const termView = agent.tasks.get(termId)!;
-            expect(typeof termView.completedAt).toBe('number');
-            expect(termView.completedAt).toBeGreaterThan(0);
-            expect('completedAt' in termView).toBe(true);
-            // error-presence is kind-discriminated; assert via a computed
-            // expectation rather than a conditional branch (no-conditional-expect).
-            expect('error' in termView).toBe(expectedError !== undefined);
-            expect(termView.error ?? undefined).toBe(expectedError);
-            // Never-terminated control: BOTH optional keys absent.
-            const controlView = agent.tasks.get(controlId)!;
-            expect('completedAt' in controlView).toBe(false);
-            expect('error' in controlView).toBe(false);
-            expect(Object.keys(controlView)).not.toContain('completedAt');
-            expect(Object.keys(controlView)).not.toContain('error');
-          } finally {
-            await cleanup();
-          }
-        },
-      ),
+      pROPCompletedFailedOptionalFieldProjectionATerminatedTaskCarriesCompletedAtAProperty,
     );
+    expect(observations.map(({ ok }) => ok)).toStrictEqual(
+      observations.map(() => true),
+    );
+    expect(
+      observations.map(({ completedAtType }) => completedAtType),
+    ).toStrictEqual(observations.map(() => 'number'));
+    expect(
+      observations.map(({ completedAtIsPositive }) => completedAtIsPositive),
+    ).toStrictEqual(observations.map(() => true));
+    expect(
+      observations.map(({ hasCompletedAt }) => hasCompletedAt),
+    ).toStrictEqual(observations.map(() => true));
+    expect(observations.map(({ hasError }) => hasError)).toStrictEqual(
+      observations.map(({ expectedHasError }) => expectedHasError),
+    );
+    expect(observations.map(({ actualError }) => actualError)).toStrictEqual(
+      observations.map(({ expectedError }) => expectedError),
+    );
+    expect(
+      observations.map(({ controlHasCompletedAt }) => controlHasCompletedAt),
+    ).toStrictEqual(observations.map(() => false));
+    expect(
+      observations.map(({ controlHasError }) => controlHasError),
+    ).toStrictEqual(observations.map(() => false));
+    expect(
+      observations.filter(({ controlKeys }) =>
+        controlKeys.includes('completedAt'),
+      ),
+    ).toStrictEqual([]);
+    expect(
+      observations.filter(({ controlKeys }) => controlKeys.includes('error')),
+    ).toStrictEqual([]);
   });
+
+  const observePROPCompletedFailedOptionalFieldProjectionATerminatedTaskCarriesCompletedAtA =
+    async () => {
+      const observations: Array<{
+        ok: boolean;
+        completedAtType: string;
+        completedAt: number | undefined;
+        completedAtIsPositive: boolean;
+        hasCompletedAt: boolean;
+        hasError: boolean;
+        expectedHasError: boolean;
+        actualError: string | undefined;
+        expectedError: string | undefined;
+        controlHasCompletedAt: boolean;
+        controlHasError: boolean;
+        controlKeys: string[];
+      }> = [];
+      const pROPCompletedFailedOptionalFieldProjectionATerminatedTaskCarriesCompletedAtAProperty =
+        fc.asyncProperty(
+          fc.constantFrom('complete', 'fail'),
+          fc
+            .string({ minLength: 1 })
+            .filter((s) => !s.includes(' ') && !s.includes('-')),
+          async (kind, suffix) => {
+            const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+            try {
+              const mgr = internalConfig(agent).getAsyncTaskManager()!;
+              const termId = `prop-term-${suffix}`;
+              const controlId = `prop-ctrl-${suffix}`;
+              for (const id of [termId, controlId]) {
+                mgr.registerTask({
+                  id,
+                  subagentName: 's',
+                  goalPrompt: 'g',
+                  abortController: new AbortController(),
+                });
+              }
+              const expectedError =
+                kind === 'fail' ? `err-${suffix}` : undefined;
+              const ok =
+                kind === 'complete'
+                  ? mgr.completeTask(termId, { result: 'ok' } as never)
+                  : mgr.failTask(termId, `err-${suffix}`);
+              // MIN-2 distinct cases: complete + fail both exercised.
+              const termView = agent.tasks.get(termId)!;
+              // Never-terminated control: BOTH optional keys absent.
+              const controlView = agent.tasks.get(controlId)!;
+              observations.push({
+                ok,
+                completedAtType: typeof termView.completedAt,
+                completedAt: termView.completedAt,
+                completedAtIsPositive:
+                  typeof termView.completedAt === 'number' &&
+                  termView.completedAt > 0,
+                hasCompletedAt: 'completedAt' in termView,
+                hasError: 'error' in termView,
+                expectedHasError: expectedError !== undefined,
+                actualError: termView.error,
+                expectedError,
+                controlHasCompletedAt: 'completedAt' in controlView,
+                controlHasError: 'error' in controlView,
+                controlKeys: Object.keys(controlView),
+              });
+              const terminatedFieldsAreValid =
+                ok &&
+                typeof termView.completedAt === 'number' &&
+                termView.completedAt > 0 &&
+                'completedAt' in termView;
+              const errorFieldsAreValid =
+                'error' in termView === (expectedError !== undefined) &&
+                termView.error === expectedError;
+              const controlFieldsAreAbsent =
+                !('completedAt' in controlView) && !('error' in controlView);
+              const controlKeysAreAbsent =
+                !Object.keys(controlView).includes('completedAt') &&
+                !Object.keys(controlView).includes('error');
+              return (
+                terminatedFieldsAreValid &&
+                errorFieldsAreValid &&
+                controlFieldsAreAbsent &&
+                controlKeysAreAbsent
+              );
+            } finally {
+              await cleanup();
+            }
+          },
+        );
+      return {
+        pROPCompletedFailedOptionalFieldProjectionATerminatedTaskCarriesCompletedAtAProperty,
+        observations,
+      };
+    };
 
   it('PROP projection fidelity: for a generated list of N (1..5) running tasks, list() length === N, the id set matches, and NO view has an abortController key @requirement:REQ-003 @scenario:property-projection-fidelity @given:a generated list of N running tasks with random ids and goalPrompts seeded on the real manager @when:agent.tasks.list() @then:list() length === N; the set of view ids === the set of seeded ids; and no returned view has an abortController key', async () => {
     await fc.assert(

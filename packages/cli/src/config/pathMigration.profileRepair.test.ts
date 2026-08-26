@@ -292,7 +292,8 @@ describe('repairProfiles — corrupt profile repair (#2477)', () => {
     expect(
       fs
         .readdirSync(profilesDir)
-        .filter((f) => f.includes('myprof') && f.endsWith('.bak')),
+        .filter((fileName) => fileName.includes('myprof'))
+        .filter((fileName) => fileName.endsWith('.bak')),
     ).toHaveLength(0);
   });
 
@@ -707,7 +708,7 @@ describe('runStartupMigrationWithPath — logging', () => {
     setupRepairCase(env, corruptCanonicalProfile(), validLegacyProfile());
     const writes: string[] = [];
     const captureWrite = (chunk: string | Uint8Array): boolean => {
-      writes.push(typeof chunk === 'string' ? chunk : String(chunk));
+      writes.push(String(chunk));
       return true;
     };
     const spy = vi

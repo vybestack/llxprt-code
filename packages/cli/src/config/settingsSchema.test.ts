@@ -75,6 +75,127 @@ function getGeneratedSchema(): GeneratedSettingsSchema {
 
 const parsedGeneratedSchema = getGeneratedSchema();
 
+function collectSettingCategories(): Set<unknown> {
+  const categories = new Set<unknown>();
+  Object.values(SETTINGS_SCHEMA).forEach((definition) => {
+    categories.add(definition.category);
+    const definitionWithProperties = definition as typeof definition & {
+      properties?: Record<string, unknown>;
+    };
+    if (definitionWithProperties.properties) {
+      Object.values(definitionWithProperties.properties).forEach(
+        (nestedDefinition: unknown) => {
+          const categorizedDefinition = nestedDefinition as {
+            category?: string;
+          };
+          if (categorizedDefinition.category) {
+            categories.add(categorizedDefinition.category);
+          }
+        },
+      );
+    }
+  });
+  return categories;
+}
+
+type BooleanDefaultDefinition = {
+  readonly type?: string;
+  readonly default?: unknown;
+  readonly properties?: Record<string, unknown>;
+};
+
+function collectBooleanDefaultDefinitions(
+  schema: Record<string, unknown>,
+): BooleanDefaultDefinition[] {
+  return Object.values(schema).flatMap((definition) => {
+    const typedDefinition = definition as BooleanDefaultDefinition;
+    if (typedDefinition.properties) {
+      return [
+        typedDefinition,
+        ...collectBooleanDefaultDefinitions(typedDefinition.properties),
+      ];
+    }
+    return [typedDefinition];
+  });
+}
+
+function hasConsistentBooleanDefault(
+  definition: BooleanDefaultDefinition,
+): boolean {
+  return (
+    definition.type !== 'boolean' ||
+    ['boolean', 'undefined'].includes(typeof definition.default)
+  );
+}
+
+function isNonEmptyString(value: unknown): boolean {
+  return typeof value === 'string' && value.length > 0;
+}
+
+type SchemaReferenceGaps = {
+  readonly missing: readonly string[];
+  readonly unreferenced: readonly string[];
+};
+
+function findSchemaReferenceGaps(
+  schema: Readonly<Record<string, SettingDefinition>>,
+): SchemaReferenceGaps {
+  const referenced = new Set<string>();
+  const missing: string[] = [];
+
+  const recordReference = (ref: string): void => {
+    referenced.add(ref);
+    if (!(ref in SETTINGS_SCHEMA_DEFINITIONS)) {
+      missing.push(ref);
+    }
+  };
+
+  const visitRefs = (refs: readonly string[] | undefined): void => {
+    for (const ref of refs ?? []) {
+      recordReference(ref);
+    }
+  };
+
+  const visitDefinition = (definition: SettingDefinition): void => {
+    if (definition.ref) {
+      recordReference(definition.ref);
+    }
+    visitRefs(definition.refs);
+
+    if (definition.properties) {
+      Object.values(definition.properties).forEach(visitDefinition);
+    }
+    if (definition.items) {
+      visitCollection(definition.items);
+    }
+    if (definition.additionalProperties !== undefined) {
+      const additionalProperties = definition.additionalProperties;
+      if (additionalProperties !== false) {
+        visitCollection(additionalProperties);
+      }
+    }
+  };
+
+  const visitCollection = (collection: SettingCollectionDefinition): void => {
+    if (collection.ref) {
+      recordReference(collection.ref);
+    }
+    visitRefs(collection.refs);
+
+    if (collection.properties) {
+      Object.values(collection.properties).forEach(visitDefinition);
+    }
+  };
+
+  Object.values(schema).forEach(visitDefinition);
+  return {
+    missing,
+    unreferenced: Object.keys(SETTINGS_SCHEMA_DEFINITIONS).filter(
+      (key) => !referenced.has(key),
+    ),
+  };
+}
+
 describe('SettingsSchema', () => {
   describe('SETTINGS_SCHEMA', () => {
     it('should contain all expected top-level settings', () => {
@@ -185,26 +306,7 @@ describe('SettingsSchema', () => {
     });
 
     it('should have unique categories', () => {
-      const categories = new Set();
-
-      // Collect categories from top-level settings
-      Object.values(SETTINGS_SCHEMA).forEach((definition) => {
-        categories.add(definition.category);
-        // Also collect from nested properties
-        const defWithProps = definition as typeof definition & {
-          properties?: Record<string, unknown>;
-        };
-        if (defWithProps.properties) {
-          Object.values(defWithProps.properties).forEach(
-            (nestedDef: unknown) => {
-              const nestedDefTyped = nestedDef as { category?: string };
-              if (nestedDefTyped.category) {
-                categories.add(nestedDefTyped.category);
-              }
-            },
-          );
-        }
-      });
+      const categories = collectSettingCategories();
 
       expect(categories.size).toBeGreaterThan(0);
       expect(categories).toContain('General');
@@ -217,27 +319,13 @@ describe('SettingsSchema', () => {
     });
 
     it('should have consistent default values for boolean settings', () => {
-      const checkBooleanDefaults = (schema: Record<string, unknown>) => {
-        Object.entries(schema).forEach(
-          ([_key, definition]: [string, unknown]) => {
-            const def = definition as {
-              type?: string;
-              default?: unknown;
-              properties?: Record<string, unknown>;
-            };
-            // Boolean settings can have boolean or undefined defaults (for optional settings)
-            expect(
-              def.type !== 'boolean' ||
-                ['boolean', 'undefined'].includes(typeof def.default),
-            ).toBe(true);
-            if (def.properties) {
-              checkBooleanDefaults(def.properties);
-            }
-          },
-        );
-      };
+      const definitions = collectBooleanDefaultDefinitions(
+        SETTINGS_SCHEMA as Record<string, unknown>,
+      );
 
-      checkBooleanDefaults(SETTINGS_SCHEMA as Record<string, unknown>);
+      definitions.forEach((definition) => {
+        expect(hasConsistentBooleanDefault(definition)).toBe(true);
+      });
     });
 
     it('should have showInDialog property configured', () => {
@@ -344,9 +432,7 @@ describe('SettingsSchema', () => {
         const description =
           SETTINGS_SCHEMA.ui.properties.maxHeapSizeMB.description;
         expect(typeof description).toBe('string');
-        expect(typeof description === 'string' && description.length > 0).toBe(
-          true,
-        );
+        expect(isNonEmptyString(description)).toBe(true);
       });
 
       it('should have multipleOf 1 (integer constraint)', () => {
@@ -665,66 +751,13 @@ describe('SettingsSchema', () => {
     });
 
     it('has JSON schema definitions for every referenced ref', () => {
-      const schema = getSettingsSchema();
-      const referenced = new Set<string>();
-      const missing: string[] = [];
-
-      const recordReference = (ref: string): void => {
-        referenced.add(ref);
-        if (!(ref in SETTINGS_SCHEMA_DEFINITIONS)) {
-          missing.push(ref);
-        }
-      };
-
-      const visitRefs = (refs: readonly string[] | undefined): void => {
-        for (const ref of refs ?? []) {
-          recordReference(ref);
-        }
-      };
-
-      const visitDefinition = (definition: SettingDefinition): void => {
-        if (definition.ref) {
-          recordReference(definition.ref);
-        }
-        visitRefs(definition.refs);
-
-        if (definition.properties) {
-          Object.values(definition.properties).forEach(visitDefinition);
-        }
-        if (definition.items) {
-          visitCollection(definition.items);
-        }
-        if (definition.additionalProperties !== undefined) {
-          const additionalProperties = definition.additionalProperties;
-          if (additionalProperties !== false) {
-            visitCollection(additionalProperties);
-          }
-        }
-      };
-
-      const visitCollection = (
-        collection: SettingCollectionDefinition,
-      ): void => {
-        if (collection.ref) {
-          recordReference(collection.ref);
-        }
-        visitRefs(collection.refs);
-
-        if (collection.properties) {
-          Object.values(collection.properties).forEach(visitDefinition);
-        }
-      };
-
-      Object.values(schema).forEach(visitDefinition);
+      const gaps = findSchemaReferenceGaps(getSettingsSchema());
 
       // Check all referenced definitions exist
-      expect(missing).toStrictEqual([]);
+      expect(gaps.missing).toStrictEqual([]);
 
       // Ensure definitions map doesn't accumulate stale entries.
-      const unreferenced = Object.keys(SETTINGS_SCHEMA_DEFINITIONS).filter(
-        (key) => !referenced.has(key),
-      );
-      expect(unreferenced).toStrictEqual([]);
+      expect(gaps.unreferenced).toStrictEqual([]);
     });
   });
 });

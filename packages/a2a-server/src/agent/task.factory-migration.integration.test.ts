@@ -181,6 +181,16 @@ function statusUpdates(eventBus: {
 }): StatusUpdateEvent[] {
   return eventBus.publishedEvents.filter(isStatusUpdate);
 }
+/**
+ * True when an event was published by the real task lifecycle (either a
+ * tool artifact-update or a status-update).
+ */
+function isTaskLifecycleEvent(e: unknown): boolean {
+  if (typeof e !== 'object' || e === null || !('kind' in e)) {
+    return false;
+  }
+  return e.kind === 'artifact-update' || e.kind === 'status-update';
+}
 
 describe('Task factory migration — Task.create produces a task with a real agentClient dispatch surface', () => {
   // Clear the scheduler singleton between tests so each Task.create builds a
@@ -318,13 +328,8 @@ describe('Task factory migration — Task.create produces a task with a real age
     // Observable behavior: the real scheduling path produced task-lifecycle
     // events on the bus (the 'working' status-update), proving the scheduling
     // path executed end-to-end through the real scheduler wiring.
-    const hasToolLifecycleEvent = eventBus.publishedEvents.some((e) => {
-      if (typeof e !== 'object' || e === null || !('kind' in e)) {
-        return false;
-      }
-      const kind = (e as { kind: string }).kind;
-      return kind === 'artifact-update' || kind === 'status-update';
-    });
+    const hasToolLifecycleEvent =
+      eventBus.publishedEvents.some(isTaskLifecycleEvent);
     expect(hasToolLifecycleEvent).toBe(true);
   });
 });

@@ -60,6 +60,13 @@ function createMockProvider(name: string): OAuthProvider {
 /**
  * Create a mock TokenStore with spy methods
  */
+async function getConfiguredToken(
+  tokens: ReadonlyMap<string, OAuthToken>,
+  key: string | undefined,
+): Promise<OAuthToken | null> {
+  return tokens.get(key ?? '') ?? null;
+}
+
 function createMockTokenStore(): TokenStore {
   return {
     getToken: vi.fn().mockResolvedValue(null),
@@ -343,13 +350,15 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     const tokenBucket2 = createMockToken(nowSec + 600);
 
     // Mock getToken to return tokens for different buckets
+    const bucketTokens = new Map([
+      ['bucket1', tokenBucket1],
+      ['bucket2', tokenBucket2],
+    ]);
     (
       tokenStore.getToken as Mock<typeof tokenStore.getToken>
-    ).mockImplementation(async (providerName, bucket) => {
-      if (bucket === 'bucket1') return tokenBucket1;
-      if (bucket === 'bucket2') return tokenBucket2;
-      return null;
-    });
+    ).mockImplementation((_providerName, bucket) =>
+      getConfiguredToken(bucketTokens, bucket),
+    );
 
     // Configure proactive renewals for profile with multiple buckets
     await manager.configureProactiveRenewalsForProfile({
@@ -429,13 +438,15 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
     const token1 = createMockToken(nowSec + 600);
     const token2 = createMockToken(nowSec + 600);
 
+    const providerTokens = new Map([
+      ['provider1', token1],
+      ['provider2', token2],
+    ]);
     (
       tokenStore.getToken as Mock<typeof tokenStore.getToken>
-    ).mockImplementation(async (providerName, _bucket) => {
-      if (providerName === 'provider1') return token1;
-      if (providerName === 'provider2') return token2;
-      return null;
-    });
+    ).mockImplementation((providerName) =>
+      getConfiguredToken(providerTokens, providerName),
+    );
 
     // Configure first profile
     await manager.configureProactiveRenewalsForProfile({

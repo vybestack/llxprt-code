@@ -166,10 +166,10 @@ describe('SessionLockManager — owner tokens and atomic publication (Item 3)', 
     // The only .lock file should be the real lock path.
     const entries = await fs.readdir(chatsDir);
     const lockFiles = entries.filter((f) => f.endsWith('.lock'));
-    expect(lockFiles).toEqual(['artifact-test.lock']);
+    expect(lockFiles).toStrictEqual(['artifact-test.lock']);
     // No .locktmp temp files should remain.
     const tempFiles = entries.filter((f) => f.endsWith('.locktmp'));
-    expect(tempFiles).toEqual([]);
+    expect(tempFiles).toStrictEqual([]);
     await handle.release();
   });
 
@@ -736,8 +736,8 @@ describe('SessionLockManager — genuine transition race (subprocess, Item 3)', 
     const entries = await fs.readdir(chatsDir);
     const guardFiles = entries.filter((f) => f.endsWith('.tguard'));
     const tmpFiles = entries.filter((f) => f.endsWith('.locktmp'));
-    expect(guardFiles).toEqual([]);
-    expect(tmpFiles).toEqual([]);
+    expect(guardFiles).toStrictEqual([]);
+    expect(tmpFiles).toStrictEqual([]);
   }, 30000);
 });
 
@@ -1009,13 +1009,13 @@ describe('SessionLockManager — transition guard identity (Issue #3277)', () =>
     // Fresh publication competes only through exclusive creation and never
     // installs a transition guard, so no guard or temp files exist while held.
     let entries = await fs.readdir(chatsDir);
-    expect(entries.filter((f) => f.endsWith('.tguard'))).toEqual([]);
-    expect(entries.filter((f) => f.endsWith('.locktmp'))).toEqual([]);
+    expect(entries.filter((f) => f.endsWith('.tguard'))).toStrictEqual([]);
+    expect(entries.filter((f) => f.endsWith('.locktmp'))).toStrictEqual([]);
 
     await handle.release();
 
     entries = await fs.readdir(chatsDir);
-    expect(entries.filter((f) => f.endsWith('.tguard'))).toEqual([]);
-    expect(entries.filter((f) => f.endsWith('.locktmp'))).toEqual([]);
+    expect(entries.filter((f) => f.endsWith('.tguard'))).toStrictEqual([]);
+    expect(entries.filter((f) => f.endsWith('.locktmp'))).toStrictEqual([]);
   });
 });

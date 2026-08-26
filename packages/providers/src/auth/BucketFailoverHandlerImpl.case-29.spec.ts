@@ -11,6 +11,19 @@ import {
   makeToken,
 } from './BucketFailoverHandlerImpl.test-helpers.js';
 
+type BucketFixture = ReturnType<typeof createBucketFailoverFixture>;
+
+function failBucketBOAuthRead(
+  originalGetToken: BucketFixture['oauthManager']['getOAuthToken'],
+): BucketFixture['oauthManager']['getOAuthToken'] {
+  return async (provider, bucket) => {
+    if (bucket === 'bucket-b') {
+      throw new Error('Token store error');
+    }
+    return originalGetToken(provider, bucket);
+  };
+}
+
 describe('BucketFailoverHandlerImpl #29', () => {
   /**
    * @requirement REQ-1598-FL03
@@ -31,12 +44,7 @@ describe('BucketFailoverHandlerImpl #29', () => {
     // Mock getOAuthToken to throw for bucket-b
     // This exercises the catch at lines 277-283 in Pass 2
     const originalGetToken = oauthManager.getOAuthToken.bind(oauthManager);
-    oauthManager.getOAuthToken = vi.fn(async (provider, bucket) => {
-      if (bucket === 'bucket-b') {
-        throw new Error('Token store error');
-      }
-      return originalGetToken(provider, bucket);
-    });
+    oauthManager.getOAuthToken = vi.fn(failBucketBOAuthRead(originalGetToken));
 
     const handler = new BucketFailoverHandlerImpl(
       ['bucket-a', 'bucket-b', 'bucket-c'],

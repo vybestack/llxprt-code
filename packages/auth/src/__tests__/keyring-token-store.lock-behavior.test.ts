@@ -424,57 +424,70 @@ describe('KeyringTokenStore advisory lock behavior', () => {
       // Node.js, causing the lock-owner child's readiness signal to be missed
       // or the lock file to be released before the parent attempts acquisition.
       // These tests verify Node.js-specific process semantics.
-      it.skipIf('bun' in process.versions).each([
-        {
-          lockType: 'auth',
-          acquire: (store: KeyringTokenStore, waitMs: number) =>
-            store.acquireAuthLock('subprocess', { waitMs }),
-          release: (store: KeyringTokenStore) =>
-            store.releaseAuthLock('subprocess'),
-        },
-        {
-          lockType: 'refresh',
-          acquire: (store: KeyringTokenStore, waitMs: number) =>
-            store.acquireRefreshLock('subprocess', { waitMs }),
-          release: (store: KeyringTokenStore) =>
-            store.releaseRefreshLock('subprocess'),
-        },
-      ])(
-        'defers to a real live subprocess $lockType owner and recovers after it exits',
-        async ({ lockType, acquire, release }) => {
-          const lockFile = path.join(lockDir, `subprocess-${lockType}.lock`);
-          await fs.mkdir(lockDir, { recursive: true });
-          const child = spawn(
-            process.execPath,
-            [
-              '-e',
+      describe.skipIf('bun' in process.versions)(() => {
+        it.each([
+          {
+            lockType: 'auth',
+            acquire: (store: KeyringTokenStore, waitMs: number) =>
+              store.acquireAuthLock('subprocess', { waitMs }),
+            release: (store: KeyringTokenStore) =>
+              store.releaseAuthLock('subprocess'),
+          },
+          {
+            lockType: 'refresh',
+            acquire: (store: KeyringTokenStore, waitMs: number) =>
+              store.acquireRefreshLock('subprocess', { waitMs }),
+            release: (store: KeyringTokenStore) =>
+              store.releaseRefreshLock('subprocess'),
+          },
+        ])(
+          'defers to a real live subprocess $lockType owner and recovers after it exits',
+          async ({
+            lockType,
+            acquire,
+            release,
+          }: {
+            readonly lockType: string;
+            readonly acquire: (
+              store: KeyringTokenStore,
+              waitMs: number,
+            ) => Promise<boolean>;
+            readonly release: (store: KeyringTokenStore) => Promise<void>;
+          }) => {
+            const lockFile = path.join(lockDir, `subprocess-${lockType}.lock`);
+            await fs.mkdir(lockDir, { recursive: true });
+            const child = spawn(
+              process.execPath,
               [
-                "const fs=require('node:fs')",
-                "const os=require('node:os')",
-                "const cp=require('node:child_process')",
-                "const started=Date.parse(cp.execFileSync('ps',['-o','lstart=','-p',String(process.pid)],{encoding:'utf8'}).trim())",
-                "fs.writeFileSync(process.argv[1],JSON.stringify({version:1,ownerToken:'child-owner',pid:process.pid,hostname:os.hostname(),startTimeMs:started,startTimeSource:'canonical'}),{mode:0o600})",
-                "process.stdout.write('ready\\n')",
-                'setInterval(()=>{},1000)',
-              ].join(';'),
-              lockFile,
-            ],
-            {
-              env: { ...process.env, LC_ALL: 'C' },
-            },
-          );
-          const store = createStore();
+                '-e',
+                [
+                  "const fs=require('node:fs')",
+                  "const os=require('node:os')",
+                  "const cp=require('node:child_process')",
+                  "const started=Date.parse(cp.execFileSync('ps',['-o','lstart=','-p',String(process.pid)],{encoding:'utf8'}).trim())",
+                  "fs.writeFileSync(process.argv[1],JSON.stringify({version:1,ownerToken:'child-owner',pid:process.pid,hostname:os.hostname(),startTimeMs:started,startTimeSource:'canonical'}),{mode:0o600})",
+                  "process.stdout.write('ready\\n')",
+                  'setInterval(()=>{},1000)',
+                ].join(';'),
+                lockFile,
+              ],
+              {
+                env: { ...process.env, LC_ALL: 'C' },
+              },
+            );
+            const store = createStore();
 
-          try {
-            await waitForChildReady(child);
-            expect(await acquire(store, 150)).toBe(false);
-          } finally {
-            await stopChild(child);
-          }
-          expect(await acquire(store, 1_000)).toBe(true);
-          await release(store);
-        },
-      );
+            try {
+              await waitForChildReady(child);
+              expect(await acquire(store, 150)).toBe(false);
+            } finally {
+              await stopChild(child);
+            }
+            expect(await acquire(store, 1_000)).toBe(true);
+            await release(store);
+          },
+        );
+      });
     },
   );
 });

@@ -15,14 +15,14 @@ import type { TelemetrySettings } from './configTypes.js';
 describe('resolvePerfSettings', () => {
   describe('default-off (absent settings)', () => {
     it('resolves undefined to fully disabled', () => {
-      expect(resolvePerfSettings(undefined)).toEqual({
+      expect(resolvePerfSettings(undefined)).toStrictEqual({
         enabled: false,
         memory: false,
       });
     });
 
     it('resolves an empty object to fully disabled', () => {
-      expect(resolvePerfSettings({})).toEqual({
+      expect(resolvePerfSettings({})).toStrictEqual({
         enabled: false,
         memory: false,
       });
@@ -30,7 +30,7 @@ describe('resolvePerfSettings', () => {
 
     it('resolves a telemetry object with no perf key to fully disabled', () => {
       const settings: TelemetrySettings = { enabled: true };
-      expect(resolvePerfSettings(settings)).toEqual({
+      expect(resolvePerfSettings(settings)).toStrictEqual({
         enabled: false,
         memory: false,
       });
@@ -38,7 +38,7 @@ describe('resolvePerfSettings', () => {
 
     it('resolves a telemetry object with an empty perf object to fully disabled', () => {
       const settings: TelemetrySettings = { perf: {} };
-      expect(resolvePerfSettings(settings)).toEqual({
+      expect(resolvePerfSettings(settings)).toStrictEqual({
         enabled: false,
         memory: false,
       });
@@ -48,7 +48,7 @@ describe('resolvePerfSettings', () => {
   describe('enabled only (master on, memory omitted)', () => {
     it('resolves enabled:true, memory absent to { enabled: true, memory: false }', () => {
       const settings: TelemetrySettings = { perf: { enabled: true } };
-      expect(resolvePerfSettings(settings)).toEqual({
+      expect(resolvePerfSettings(settings)).toStrictEqual({
         enabled: true,
         memory: false,
       });
@@ -60,7 +60,7 @@ describe('resolvePerfSettings', () => {
       const settings: TelemetrySettings = {
         perf: { enabled: false, memory: true },
       };
-      expect(resolvePerfSettings(settings)).toEqual({
+      expect(resolvePerfSettings(settings)).toStrictEqual({
         enabled: false,
         memory: false,
       });
@@ -68,7 +68,7 @@ describe('resolvePerfSettings', () => {
 
     it('resolves enabled absent, memory:true to fully disabled (master gates memory)', () => {
       const settings: TelemetrySettings = { perf: { memory: true } };
-      expect(resolvePerfSettings(settings)).toEqual({
+      expect(resolvePerfSettings(settings)).toStrictEqual({
         enabled: false,
         memory: false,
       });
@@ -80,7 +80,7 @@ describe('resolvePerfSettings', () => {
       const settings: TelemetrySettings = {
         perf: { enabled: true, memory: true },
       };
-      expect(resolvePerfSettings(settings)).toEqual({
+      expect(resolvePerfSettings(settings)).toStrictEqual({
         enabled: true,
         memory: true,
       });
@@ -92,7 +92,7 @@ describe('resolvePerfSettings', () => {
       const settings: TelemetrySettings = {
         perf: { enabled: false, memory: false },
       };
-      expect(resolvePerfSettings(settings)).toEqual({
+      expect(resolvePerfSettings(settings)).toStrictEqual({
         enabled: false,
         memory: false,
       });
@@ -102,7 +102,7 @@ describe('resolvePerfSettings', () => {
       const settings: TelemetrySettings = {
         perf: { enabled: true, memory: false },
       };
-      expect(resolvePerfSettings(settings)).toEqual({
+      expect(resolvePerfSettings(settings)).toStrictEqual({
         enabled: true,
         memory: false,
       });
@@ -116,14 +116,14 @@ describe('resolvePerfSettings', () => {
       };
       const snapshot = JSON.parse(JSON.stringify(settings));
       resolvePerfSettings(settings);
-      expect(settings).toEqual(snapshot);
+      expect(settings).toStrictEqual(snapshot);
     });
 
     it('does not mutate the perf sub-object', () => {
       const perf = { enabled: true, memory: true };
       const settings: TelemetrySettings = { perf };
       resolvePerfSettings(settings);
-      expect(perf).toEqual({ enabled: true, memory: true });
+      expect(perf).toStrictEqual({ enabled: true, memory: true });
     });
 
     it('does not mutate a settings object with enabled:false, memory:true', () => {
@@ -132,7 +132,7 @@ describe('resolvePerfSettings', () => {
       };
       const snapshot = JSON.parse(JSON.stringify(settings));
       resolvePerfSettings(settings);
-      expect(settings).toEqual(snapshot);
+      expect(settings).toStrictEqual(snapshot);
     });
   });
 
@@ -145,7 +145,7 @@ describe('resolvePerfSettings', () => {
       result1.enabled = false;
       result1.memory = false;
       const result2 = resolvePerfSettings(settings);
-      expect(result2).toEqual({ enabled: true, memory: true });
+      expect(result2).toStrictEqual({ enabled: true, memory: true });
     });
 
     it('returns primitive booleans (no shared reference to input perf)', () => {

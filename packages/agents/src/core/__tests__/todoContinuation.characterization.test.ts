@@ -200,7 +200,13 @@ describe('TodoContinuationService classifyPostTurnAction (characterization)', ()
     });
 
     it('never returns RetryWithReminder when retryCount >= maxRetries', () => {
-      fc.assert(
+      const { neverReturnsRetryWithReminderWhenRetryCountMaxRetriesProperty } =
+        observeNeverReturnsRetryWithReminderWhenRetryCountMaxRetries();
+      fc.assert(neverReturnsRetryWithReminderWhenRetryCountMaxRetriesProperty);
+    });
+
+    const observeNeverReturnsRetryWithReminderWhenRetryCountMaxRetries = () => {
+      const neverReturnsRetryWithReminderWhenRetryCountMaxRetriesProperty =
         fc.property(
           fc.integer({ min: 0, max: 20 }),
           fc.integer({ min: 1, max: 20 }),
@@ -218,8 +224,8 @@ describe('TodoContinuationService classifyPostTurnAction (characterization)', ()
             );
             return action !== PostTurnAction.RetryWithReminder;
           },
-        ),
-      );
-    });
+        );
+      return { neverReturnsRetryWithReminderWhenRetryCountMaxRetriesProperty };
+    };
   });
 });

@@ -26,6 +26,18 @@ import {
 import type { ToolResult } from '../tools.js';
 
 /** Fake host that exposes a configurable `tool-output-max-items` setting. */
+function numberOrZero(value: number | undefined): number {
+  return value ?? 0;
+}
+
+function requireStructuralMetadata(
+  metadata: ToolResult['metadata'],
+): asserts metadata is NonNullable<ToolResult['metadata']> {
+  if (metadata === undefined) {
+    throw new Error('metadata should be defined');
+  }
+}
+
 function createBudgetToolHost(targetDir: string, maxItems: number): IToolHost {
   return {
     getTargetDir: () => targetDir,
@@ -286,32 +298,33 @@ describe('structural_analysis bounded acquisition (issue #3205)', () => {
       }
     });
 
+    const observeBoundsForwardReverseRecordsUnderOneAccountingPolicyAt289 =
+      async () => {
+        const host = createBudgetToolHost(revDir, 5);
+        const result = await runTool(host, {
+          mode: 'dependencies',
+          language: 'typescript',
+          target: join(revDir, 'shared.ts'),
+          reverse: true,
+        });
+        const payload = parsePayload(result);
+        const imports = readImportRecords(payload.results);
+        const reverseRaw = readField(payload.results, 'reverseImports');
+        const reverseImports = Array.isArray(reverseRaw) ? reverseRaw : [];
+        const total = imports.length + reverseImports.length;
+        return { payload, total };
+      };
+
     it('bounds forward+reverse records under one accounting policy', async () => {
-      const host = createBudgetToolHost(revDir, 5);
-      const result = await runTool(host, {
-        mode: 'dependencies',
-        language: 'typescript',
-        target: join(revDir, 'shared.ts'),
-        reverse: true,
-      });
-      const payload = parsePayload(result);
-      const imports = readImportRecords(payload.results);
-      const reverseRaw = readField(payload.results, 'reverseImports');
-      const reverseImports = Array.isArray(reverseRaw) ? reverseRaw : [];
-      const total = imports.length + reverseImports.length;
-      // The record budget (5) is provably the binding constraint: retained
-      // output exactly fills it, and the partial reason is record-budget.
+      const { payload, total } =
+        await observeBoundsForwardReverseRecordsUnderOneAccountingPolicyAt289();
       expect(payload.recordBudget).toBe(5);
       expect(total).toBe(5);
       expect(payload.truncated).toBe(true);
       expect(payload.partialReason).toBe('record-budget');
       expect(payload.recordsRetained).toBe(total);
-      // The file budget (20) was never reached: only 7 files exist and the
-      // record budget stopped traversal first.
       expect(payload.fileBudget).toBe(20);
       expect(payload.filesVisited).toBeLessThan(20);
-      // recordsObserved is a lower bound: at least retained + the one-over
-      // sentinel that proved partiality (6 >= 5 + 1).
       expect(payload.recordsObserved).toBeGreaterThanOrEqual(total + 1);
     });
   });
@@ -332,21 +345,28 @@ describe('structural_analysis bounded acquisition (issue #3205)', () => {
       );
     });
 
+    const observeBoundsReferencesAcrossAllCategoriesUnderOneGlobalCapAt335 =
+      async () => {
+        const host = createBudgetToolHost(tempDir, 5);
+        const result = await runTool(host, {
+          mode: 'references',
+          language: 'typescript',
+          symbol: 'unicorn',
+          target: join(tempDir, 'refs-over.ts'),
+        });
+        const payload = parsePayload(result);
+        const categoriesRaw = readField(payload.results, 'categories');
+        const categories = isRecord(categoriesRaw) ? categoriesRaw : {};
+        const total = Object.values(categories).reduce<number>(
+          (sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0),
+          0,
+        );
+        return { payload, total };
+      };
+
     it('bounds references across all categories under one global cap', async () => {
-      const host = createBudgetToolHost(tempDir, 5);
-      const result = await runTool(host, {
-        mode: 'references',
-        language: 'typescript',
-        symbol: 'unicorn',
-        target: join(tempDir, 'refs-over.ts'),
-      });
-      const payload = parsePayload(result);
-      const categoriesRaw = readField(payload.results, 'categories');
-      const categories = isRecord(categoriesRaw) ? categoriesRaw : {};
-      const total = Object.values(categories).reduce<number>(
-        (sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0),
-        0,
-      );
+      const { payload, total } =
+        await observeBoundsReferencesAcrossAllCategoriesUnderOneGlobalCapAt335();
       expect(total).toBeLessThanOrEqual(5);
       expect(payload.truncated).toBe(true);
       expect(payload.partialReason).toBe('record-budget');
@@ -498,9 +518,7 @@ describe('structural_analysis bounded acquisition (issue #3205)', () => {
       });
       const metadata = result.metadata;
       expect(metadata).toBeDefined();
-      if (metadata === undefined) {
-        throw new Error('metadata should be defined');
-      }
+      requireStructuralMetadata(metadata);
       expect(Object.prototype.hasOwnProperty.call(metadata, 'results')).toBe(
         false,
       );
@@ -562,7 +580,7 @@ describe('structural_analysis bounded acquisition (issue #3205)', () => {
       const payload = parsePayload(result);
       expect(payload.truncated).toBe(true);
       expect(payload.recordsObserved).toBeGreaterThanOrEqual(
-        (payload.recordsRetained ?? 0) + 1,
+        numberOrZero(payload.recordsRetained) + 1,
       );
     });
   });

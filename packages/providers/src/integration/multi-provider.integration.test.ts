@@ -21,12 +21,148 @@ import { resetSettingsService } from '@vybestack/llxprt-code-settings';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type {
+  IContent,
+  ToolCallBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 const resolveDefaultModel = (): string =>
   process.env.LLXPRT_DEFAULT_MODEL ?? 'gpt-4o';
 
 function log(message: string): void {
   process.stdout.write(message + '\n');
+}
+
+function getProviderDisplayName(baseURL: string | undefined): string {
+  return baseURL?.includes('openrouter') === true ? 'OpenRouter' : 'OpenAI';
+}
+
+function getEffectiveBaseURL(baseURL: string | undefined): string {
+  return baseURL ?? '';
+}
+
+function selectTestModel(
+  models: ReadonlyArray<{ readonly id: string }>,
+  fallbackModel: string,
+): string {
+  if (models.length > 0) {
+    return models[0].id;
+  }
+  return fallbackModel;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function assertToolCallBlocks(
+  toolCallBlocks: readonly ToolCallBlock[],
+  toolCallPreviouslyReceived: boolean,
+): boolean {
+  if (toolCallBlocks.length === 0) {
+    return toolCallPreviouslyReceived;
+  }
+
+  expect(toolCallBlocks.length).toBeGreaterThan(0);
+  const toolCall = toolCallBlocks[0];
+
+  log(`\n[OK] Tool call received: ${toolCall.name}`);
+  log(`   Arguments: ${JSON.stringify(toolCall.parameters)}`);
+
+  expect(toolCall.name).toBe('get_weather');
+  const args = toolCall.parameters as { location: string };
+  expect(args).toBeTruthy();
+  expect(typeof args).toBe('object');
+  expect('location' in args).toBe(true);
+  const location = (args as Record<string, unknown>).location;
+  expect(typeof location).toBe('string');
+  expect((location as string).toLowerCase()).toContain('san francisco');
+  return true;
+}
+
+async function inspectWeatherToolCalls(
+  stream: AsyncIterable<IContent>,
+): Promise<boolean> {
+  let toolCallReceived = false;
+  for await (const message of stream) {
+    const toolCallBlocks = message.blocks.filter(
+      (block): block is ToolCallBlock => block.type === 'tool_call',
+    );
+    toolCallReceived = assertToolCallBlocks(toolCallBlocks, toolCallReceived);
+  }
+  return toolCallReceived;
+}
+
+function handleToolCallError(error: unknown): void {
+  const errorMessage = getErrorMessage(error);
+  if (
+    errorMessage.includes('tool calling') ||
+    errorMessage.includes('not supported')
+  ) {
+    log(
+      `\nWARNING:  Skipping tool call test: Model doesn't support tool calling`,
+    );
+    return;
+  }
+  throw error;
+}
+
+interface InvalidModelOutcome {
+  readonly completed: boolean;
+  readonly errorHasMessage: boolean;
+}
+
+function getInvalidModelOutcome(
+  errorThrown: boolean,
+  successReceived: boolean,
+  errorMessage: string,
+): InvalidModelOutcome {
+  return {
+    completed: errorThrown || successReceived,
+    errorHasMessage: !errorThrown || errorMessage.length > 0,
+  };
+}
+
+interface SavedApiKeys {
+  readonly openAI: string | undefined;
+  readonly defaultProvider: string | undefined;
+  readonly google: string | undefined;
+}
+
+function restoreApiKeys(savedApiKeys: SavedApiKeys): void {
+  if (savedApiKeys.openAI) {
+    process.env.OPENAI_API_KEY = savedApiKeys.openAI;
+  }
+  if (savedApiKeys.defaultProvider) {
+    process.env.GEMINI_API_KEY = savedApiKeys.defaultProvider;
+  }
+  if (savedApiKeys.google) {
+    process.env.GOOGLE_API_KEY = savedApiKeys.google;
+  }
+}
+
+function missingApiKeyAttemptCompleted(
+  testErrorThrown: boolean,
+  modelsReturned: boolean,
+): boolean {
+  return testErrorThrown || modelsReturned;
+}
+
+function missingApiKeyErrorIsTyped(
+  testErrorThrown: boolean,
+  testError: unknown,
+): boolean {
+  return !testErrorThrown || testError instanceof Error;
+}
+
+function missingApiKeyErrorExplainsAuthentication(
+  testErrorThrown: boolean,
+  testError: unknown,
+): boolean {
+  return (
+    !testErrorThrown ||
+    /authentication|API key/i.test(getErrorMessage(testError))
+  );
 }
 
 const runningInCI = process.env.CI === 'true';
@@ -101,30 +237,27 @@ describe('Multi-Provider Integration Tests', () => {
     return provider;
   };
 
-  describe('Provider Management', () => {
-    it.skipIf(skipTests)(
-      'should initialize and register OpenAI provider',
-      () => {
-        // Initially no providers
-        expect(manager.listProviders()).toStrictEqual([]);
-        expect(manager.hasActiveProvider()).toBe(false);
+  describe.skipIf(skipTests)('Provider Management', () => {
+    it('should initialize and register OpenAI provider', () => {
+      // Initially no providers
+      expect(manager.listProviders()).toStrictEqual([]);
+      expect(manager.hasActiveProvider()).toBe(false);
 
-        // Register OpenAI provider
-        const openaiProvider = createOpenAIProvider();
-        manager.registerProvider(openaiProvider);
+      // Register OpenAI provider
+      const openaiProvider = createOpenAIProvider();
+      manager.registerProvider(openaiProvider);
 
-        // Verify registration
-        expect(manager.listProviders()).toStrictEqual(['openai']);
-        expect(manager.hasActiveProvider()).toBe(false); // Not active yet
+      // Verify registration
+      expect(manager.listProviders()).toStrictEqual(['openai']);
+      expect(manager.hasActiveProvider()).toBe(false); // Not active yet
 
-        // Activate provider
-        manager.setActiveProvider('openai');
-        expect(manager.hasActiveProvider()).toBe(true);
-        expect(manager.getActiveProviderName()).toBe('openai');
-      },
-    );
+      // Activate provider
+      manager.setActiveProvider('openai');
+      expect(manager.hasActiveProvider()).toBe(true);
+      expect(manager.getActiveProviderName()).toBe('openai');
+    });
 
-    it.skipIf(skipTests)('should switch between providers and Gemini', () => {
+    it('should switch between providers and Gemini', () => {
       // Register OpenAI
       const openaiProvider = createOpenAIProvider();
       manager.registerProvider(openaiProvider);
@@ -143,7 +276,7 @@ describe('Multi-Provider Integration Tests', () => {
       expect(manager.getActiveProviderName()).toBe('');
     });
 
-    it.skipIf(skipTests)('should handle errors for invalid provider', () => {
+    it('should handle errors for invalid provider', () => {
       // Try to set non-existent provider
       expect(() => manager.setActiveProvider('invalid-provider')).toThrow(
         /Provider .* not found/,
@@ -151,189 +284,174 @@ describe('Multi-Provider Integration Tests', () => {
     });
   });
 
-  describe('Model Management', () => {
-    it.skipIf(skipTests)(
-      'should list available models from OpenAI',
-      async () => {
-        const openaiProvider = createOpenAIProvider();
-        manager.registerProvider(openaiProvider);
-        manager.setActiveProvider('openai');
+  describe.skipIf(skipTests)('Model Management', () => {
+    it('should list available models from OpenAI', async () => {
+      const openaiProvider = createOpenAIProvider();
+      manager.registerProvider(openaiProvider);
+      manager.setActiveProvider('openai');
 
-        const models = await manager.getAvailableModels();
+      const models = await manager.getAvailableModels();
 
-        // Should have at least one model
-        expect(models.length).toBeGreaterThan(0);
+      // Should have at least one model
+      expect(models.length).toBeGreaterThan(0);
 
-        // Verify models have expected structure
-        const modelIds = models.map((m) => m.id);
-        expect(modelIds.every((id) => typeof id === 'string')).toBe(true);
-        expect(modelIds.every((id) => id.length > 0)).toBe(true);
+      // Verify models have expected structure
+      const modelIds = models.map((m) => m.id);
+      expect(modelIds.every((id) => typeof id === 'string')).toBe(true);
+      expect(modelIds.every((id) => id.length > 0)).toBe(true);
 
-        log(`\n[OK] Found ${models.length} models`);
-        log(`   Sample models: ${modelIds.slice(0, 5).join(', ')}...`);
-      },
-    );
+      log(`\n[OK] Found ${models.length} models`);
+      log(`   Sample models: ${modelIds.slice(0, 5).join(', ')}...`);
+    });
 
-    it.skipIf(skipTests)(
-      'should switch between models within provider',
-      async () => {
-        resetSettingsService();
-        const runtime = initializeTestProviderRuntime({
-          runtimeId: `multi-provider.integration.model-switch.${Math.random()
-            .toString(36)
-            .slice(2, 10)}`,
-          metadata: {
-            suite: 'multi-provider.integration.test',
-            test: 'model-switch',
-          },
-          configOverrides: {
-            getProvider: () => 'openai',
-            getModel: resolveDefaultModel,
-            getEphemeralSettings: () => ({
-              model: resolveDefaultModel(),
-              'base-url': baseURL,
-            }),
-          },
-        });
+    it('should switch between models within provider', async () => {
+      resetSettingsService();
+      const runtime = initializeTestProviderRuntime({
+        runtimeId: `multi-provider.integration.model-switch.${Math.random()
+          .toString(36)
+          .slice(2, 10)}`,
+        metadata: {
+          suite: 'multi-provider.integration.test',
+          test: 'model-switch',
+        },
+        configOverrides: {
+          getProvider: () => 'openai',
+          getModel: resolveDefaultModel,
+          getEphemeralSettings: () => ({
+            model: resolveDefaultModel(),
+            'base-url': baseURL,
+          }),
+        },
+      });
 
-        const openaiProvider = new OpenAIProvider(apiKey, baseURL);
-        openaiProvider.setRuntimeSettingsService(runtime.settingsService);
-        openaiProvider.setConfig?.(runtime.config);
+      const openaiProvider = new OpenAIProvider(apiKey, baseURL);
+      openaiProvider.setRuntimeSettingsService(runtime.settingsService);
+      openaiProvider.setConfig?.(runtime.config);
 
-        const localSettings = runtime.settingsService;
-        localSettings.set('activeProvider', openaiProvider.name);
+      const localSettings = runtime.settingsService;
+      localSettings.set('activeProvider', openaiProvider.name);
 
-        // Get initial model and available models
-        const initialModel = openaiProvider.getCurrentModel();
-        const models = await openaiProvider.getModels();
+      // Get initial model and available models
+      const initialModel = openaiProvider.getCurrentModel();
+      const models = await openaiProvider.getModels();
 
-        // Should have models available
-        expect(models.length).toBeGreaterThan(0);
+      // Should have models available
+      expect(models.length).toBeGreaterThan(0);
 
-        // Test switching to a different model (pick first different model from list)
-        const differentModel = models.find((m) => m.id !== initialModel);
-        expect(differentModel).toBeTruthy();
+      // Test switching to a different model (pick first different model from list)
+      const differentModel = models.find((m) => m.id !== initialModel);
+      expect(differentModel).toBeTruthy();
 
-        localSettings.set('model', differentModel!.id);
-        localSettings.setProviderSetting(
-          openaiProvider.name,
-          'model',
-          differentModel!.id,
-        );
-        // Model might be different if defaults changed
-        const currentModel = openaiProvider.getCurrentModel();
-        expect(currentModel).toBeTruthy();
+      localSettings.set('model', differentModel!.id);
+      localSettings.setProviderSetting(
+        openaiProvider.name,
+        'model',
+        differentModel!.id,
+      );
+      // Model might be different if defaults changed
+      const currentModel = openaiProvider.getCurrentModel();
+      expect(currentModel).toBeTruthy();
 
-        // Switch back to initial model
-        localSettings.set('model', initialModel);
-        localSettings.setProviderSetting(
-          openaiProvider.name,
-          'model',
-          initialModel,
-        );
-        expect(openaiProvider.getCurrentModel()).toBe(initialModel);
-      },
-    );
+      // Switch back to initial model
+      localSettings.set('model', initialModel);
+      localSettings.setProviderSetting(
+        openaiProvider.name,
+        'model',
+        initialModel,
+      );
+      expect(openaiProvider.getCurrentModel()).toBe(initialModel);
+    });
   });
 
-  describe('Chat Completion with Real API', () => {
-    it.skipIf(skipTests)(
-      'should generate chat completion with default model',
-      async () => {
-        const openaiProvider = createOpenAIProvider();
-        manager.registerProvider(openaiProvider);
-        manager.setActiveProvider('openai');
+  describe.skipIf(skipTests)('Chat Completion with Real API', () => {
+    it('should generate chat completion with default model', async () => {
+      const openaiProvider = createOpenAIProvider();
+      manager.registerProvider(openaiProvider);
+      manager.setActiveProvider('openai');
 
-        const messages = [
-          {
-            speaker: 'human',
-            blocks: [
-              {
-                type: 'text',
-                text: 'Say "Hello from OpenAI integration test" and nothing else.',
-              },
-            ],
-          },
-        ];
+      const messages = [
+        {
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'text',
+              text: 'Say "Hello from OpenAI integration test" and nothing else.',
+            },
+          ],
+        },
+      ];
 
-        // Collect the streaming response
-        const chunks: string[] = [];
-        const stream = openaiProvider.generateChatCompletion(messages);
+      // Collect the streaming response
+      const chunks: string[] = [];
+      const stream = openaiProvider.generateChatCompletion(messages);
 
-        for await (const message of stream) {
-          const textBlocks = message.blocks.filter((b) => b.type === 'text');
-          for (const block of textBlocks) {
-            chunks.push((block as { type: 'text'; text: string }).text);
-          }
+      for await (const message of stream) {
+        const textBlocks = message.blocks.filter((b) => b.type === 'text');
+        for (const block of textBlocks) {
+          chunks.push((block as { type: 'text'; text: string }).text);
         }
+      }
 
-        const fullResponse = chunks.join('');
-        const providerName =
-          baseURL != null && baseURL.includes('openrouter') === true
-            ? 'OpenRouter'
-            : 'OpenAI';
-        log(`\n[OK] ${providerName} response: "${fullResponse}"`);
+      const fullResponse = chunks.join('');
+      const providerName = getProviderDisplayName(baseURL);
+      log(`\n[OK] ${providerName} response: "${fullResponse}"`);
 
-        expect(fullResponse.toLowerCase()).toContain(
-          'hello from openai integration test',
-        );
-      },
-    );
+      expect(fullResponse.toLowerCase()).toContain(
+        'hello from openai integration test',
+      );
+    });
 
-    it.skipIf(skipTests)(
-      'should generate chat completion via options signature',
-      async () => {
-        const openaiProvider = createOpenAIProvider();
-        manager.registerProvider(openaiProvider);
-        manager.setActiveProvider('openai');
+    it('should generate chat completion via options signature', async () => {
+      const openaiProvider = createOpenAIProvider();
+      manager.registerProvider(openaiProvider);
+      manager.setActiveProvider('openai');
 
-        const messages = [
-          {
-            speaker: 'human',
-            blocks: [
-              {
-                type: 'text',
-                text: 'Respond with "Options signature OK".',
-              },
-            ],
-          },
-        ];
+      const messages = [
+        {
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'text',
+              text: 'Respond with "Options signature OK".',
+            },
+          ],
+        },
+      ];
 
-        settingsService.set('call-id', 'integration-call');
-        settingsService.setProviderSetting(
-          'openai',
-          'model',
-          openaiProvider.getDefaultModel(),
-        );
-        const effectiveBaseURL = baseURL ?? '';
-        settingsService.set('base-url', effectiveBaseURL);
-        settingsService.setProviderSetting(
-          'openai',
-          'base-url',
-          effectiveBaseURL,
-        );
+      settingsService.set('call-id', 'integration-call');
+      settingsService.setProviderSetting(
+        'openai',
+        'model',
+        openaiProvider.getDefaultModel(),
+      );
+      const effectiveBaseURL = getEffectiveBaseURL(baseURL);
+      settingsService.set('base-url', effectiveBaseURL);
+      settingsService.setProviderSetting(
+        'openai',
+        'base-url',
+        effectiveBaseURL,
+      );
 
-        const stream = openaiProvider.generateChatCompletion(
-          createProviderCallOptions({
-            providerName: openaiProvider.name,
-            contents: messages,
-            settings: settingsService,
-          }),
-        );
+      const stream = openaiProvider.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: openaiProvider.name,
+          contents: messages,
+          settings: settingsService,
+        }),
+      );
 
-        const chunks: string[] = [];
-        for await (const message of stream) {
-          const textBlocks = message.blocks.filter((b) => b.type === 'text');
-          for (const block of textBlocks) {
-            chunks.push((block as { type: 'text'; text: string }).text);
-          }
+      const chunks: string[] = [];
+      for await (const message of stream) {
+        const textBlocks = message.blocks.filter((b) => b.type === 'text');
+        for (const block of textBlocks) {
+          chunks.push((block as { type: 'text'; text: string }).text);
         }
+      }
 
-        expect(chunks.join('').toLowerCase()).toContain('options signature ok');
-      },
-    );
+      expect(chunks.join('').toLowerCase()).toContain('options signature ok');
+    });
 
-    it.skipIf(skipTests)('should handle streaming correctly', async () => {
+    it('should handle streaming correctly', async () => {
       const runtime = initializeTestProviderRuntime({
         runtimeId: `multi-provider.integration.streaming.${Math.random()
           .toString(36)
@@ -395,7 +513,7 @@ describe('Multi-Provider Integration Tests', () => {
       expect(fullResponse).toMatch(/5/);
     });
 
-    it.skipIf(skipTests)('should work with a specific model', async () => {
+    it('should work with a specific model', async () => {
       resetSettingsService();
       const runtime = initializeTestProviderRuntime({
         runtimeId: `multi-provider.integration.model-specific.${Math.random()
@@ -424,8 +542,10 @@ describe('Multi-Provider Integration Tests', () => {
 
       // Get available models and pick the first one (or use default)
       const models = await openaiProvider.getModels();
-      const testModel =
-        models.length > 0 ? models[0].id : openaiProvider.getCurrentModel();
+      const testModel = selectTestModel(
+        models,
+        openaiProvider.getCurrentModel(),
+      );
       localSettings.set('model', testModel);
       localSettings.setProviderSetting(openaiProvider.name, 'model', testModel);
 
@@ -457,135 +577,20 @@ describe('Multi-Provider Integration Tests', () => {
       expect(fullResponse).toContain('4');
     });
 
-    it.skipIf(skipTests)(
-      'should handle tool calls',
-      async () => {
-        const runtime = initializeTestProviderRuntime({
-          runtimeId: `multi-provider.integration.tool-calls.${Math.random()
-            .toString(36)
-            .slice(2, 10)}`,
-          metadata: {
-            suite: 'multi-provider.integration.test',
-            test: 'tool-calls',
-          },
-          configOverrides: {
-            getProvider: () => 'openai',
-            getModel: resolveDefaultModel,
-            getEphemeralSettings: () => ({
-              model: resolveDefaultModel(),
-              'base-url': baseURL,
-            }),
-          },
-        });
-
-        const openaiProvider = new OpenAIProvider(apiKey, baseURL);
-        openaiProvider.setRuntimeSettingsService(runtime.settingsService);
-        openaiProvider.setConfig?.(runtime.config);
-
-        const messages = [
-          {
-            speaker: 'human',
-            blocks: [
-              {
-                type: 'text',
-                text: 'What is the weather in San Francisco? Use the get_weather function.',
-              },
-            ],
-          },
-        ];
-
-        const tools = [
-          {
-            functionDeclarations: [
-              {
-                name: 'get_weather',
-                description: 'Get the weather for a location',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    location: {
-                      type: 'string',
-                      description: 'The city name',
-                    },
-                  },
-                  required: ['location'],
-                },
-              },
-            ],
-          },
-        ];
-
-        try {
-          let toolCallReceived = false;
-          const stream = openaiProvider.generateChatCompletion(messages, tools);
-
-          for await (const message of stream) {
-            const toolCallBlocks = message.blocks.filter(
-              (b) => b.type === 'tool_call',
-            );
-            if (toolCallBlocks.length === 0) continue;
-
-            expect(toolCallBlocks.length).toBeGreaterThan(0);
-            toolCallReceived = true;
-            const toolCall = toolCallBlocks[0] as {
-              type: 'tool_call';
-              name: string;
-              parameters: { location: string };
-            };
-            log(`\n[OK] Tool call received: ${toolCall.name}`);
-            log(`   Arguments: ${JSON.stringify(toolCall.parameters)}`);
-
-            expect(toolCall.name).toBe('get_weather');
-            const args = toolCall.parameters;
-            // Check if args exists and has location property
-            expect(args).toBeTruthy();
-            expect(typeof args).toBe('object');
-            expect('location' in args).toBe(true);
-            const location = (args as Record<string, unknown>).location;
-            expect(typeof location).toBe('string');
-            expect((location as string).toLowerCase()).toContain(
-              'san francisco',
-            );
-          }
-
-          expect(toolCallReceived).toBe(true);
-        } catch (error) {
-          // If the model doesn't support tool calling, skip the test
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-          if (
-            errorMessage.includes('tool calling') ||
-            errorMessage.includes('not supported')
-          ) {
-            log(
-              `\nWARNING:  Skipping tool call test: Model doesn't support tool calling`,
-            );
-            return; // Skip test gracefully
-          }
-          // Re-throw if it's a different error
-          throw error;
-        }
-      },
-      10000,
-    );
-  });
-
-  describe('Error Handling', () => {
-    it.skipIf(skipTests)('should handle invalid model gracefully', async () => {
-      resetSettingsService();
+    it('should handle tool calls', async () => {
       const runtime = initializeTestProviderRuntime({
-        runtimeId: `multi-provider.integration.invalid-model.${Math.random()
+        runtimeId: `multi-provider.integration.tool-calls.${Math.random()
           .toString(36)
           .slice(2, 10)}`,
         metadata: {
           suite: 'multi-provider.integration.test',
-          test: 'invalid-model',
+          test: 'tool-calls',
         },
         configOverrides: {
           getProvider: () => 'openai',
-          getModel: () => 'invalid-model-xyz',
+          getModel: resolveDefaultModel,
           getEphemeralSettings: () => ({
-            model: 'invalid-model-xyz',
+            model: resolveDefaultModel(),
             'base-url': baseURL,
           }),
         },
@@ -595,44 +600,121 @@ describe('Multi-Provider Integration Tests', () => {
       openaiProvider.setRuntimeSettingsService(runtime.settingsService);
       openaiProvider.setConfig?.(runtime.config);
 
-      const localSettings = runtime.settingsService;
-      localSettings.set('activeProvider', openaiProvider.name);
-      localSettings.set('model', 'invalid-model-xyz');
-      localSettings.setProviderSetting(
-        openaiProvider.name,
-        'model',
-        'invalid-model-xyz',
-      );
-
       const messages = [
         {
           speaker: 'human',
-          blocks: [{ type: 'text', text: 'Hello' }],
+          blocks: [
+            {
+              type: 'text',
+              text: 'What is the weather in San Francisco? Use the get_weather function.',
+            },
+          ],
         },
       ];
 
-      let errorThrown = false;
-      let errorMessage = '';
-      let successReceived = false;
+      const tools = [
+        {
+          functionDeclarations: [
+            {
+              name: 'get_weather',
+              description: 'Get the weather for a location',
+              parameters: {
+                type: 'object',
+                properties: {
+                  location: {
+                    type: 'string',
+                    description: 'The city name',
+                  },
+                },
+                required: ['location'],
+              },
+            },
+          ],
+        },
+      ];
 
       try {
-        const stream = openaiProvider.generateChatCompletion(messages);
-        // Try to consume the stream
-        for await (const _message of stream) {
-          // Model might handle gracefully and return a response
-          successReceived = true;
-          break;
-        }
+        const stream = openaiProvider.generateChatCompletion(messages, tools);
+        const toolCallReceived = await inspectWeatherToolCalls(stream);
+        expect(toolCallReceived).toBe(true);
       } catch (error) {
-        errorThrown = true;
-        errorMessage = error instanceof Error ? error.message : String(error);
-        log(`\n[OK] Correctly caught error for invalid model: ${errorMessage}`);
+        handleToolCallError(error);
       }
+    }, 10000);
+  });
 
-      // Either success or error is acceptable for invalid models
-      expect(errorThrown || successReceived).toBe(true);
-      // If error was thrown, verify it has a message
-      expect(!errorThrown || errorMessage.length > 0).toBe(true);
+  describe('Error Handling', () => {
+    describe.skipIf(skipTests)('configured provider behavior', () => {
+      it('should handle invalid model gracefully', async () => {
+        resetSettingsService();
+        const runtime = initializeTestProviderRuntime({
+          runtimeId: `multi-provider.integration.invalid-model.${Math.random()
+            .toString(36)
+            .slice(2, 10)}`,
+          metadata: {
+            suite: 'multi-provider.integration.test',
+            test: 'invalid-model',
+          },
+          configOverrides: {
+            getProvider: () => 'openai',
+            getModel: () => 'invalid-model-xyz',
+            getEphemeralSettings: () => ({
+              model: 'invalid-model-xyz',
+              'base-url': baseURL,
+            }),
+          },
+        });
+
+        const openaiProvider = new OpenAIProvider(apiKey, baseURL);
+        openaiProvider.setRuntimeSettingsService(runtime.settingsService);
+        openaiProvider.setConfig?.(runtime.config);
+
+        const localSettings = runtime.settingsService;
+        localSettings.set('activeProvider', openaiProvider.name);
+        localSettings.set('model', 'invalid-model-xyz');
+        localSettings.setProviderSetting(
+          openaiProvider.name,
+          'model',
+          'invalid-model-xyz',
+        );
+
+        const messages = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        let errorThrown = false;
+        let errorMessage = '';
+        let successReceived = false;
+
+        try {
+          const stream = openaiProvider.generateChatCompletion(messages);
+          // Try to consume the stream
+          for await (const _message of stream) {
+            // Model might handle gracefully and return a response
+            successReceived = true;
+            break;
+          }
+        } catch (error) {
+          errorThrown = true;
+          errorMessage = getErrorMessage(error);
+          log(
+            `\n[OK] Correctly caught error for invalid model: ${errorMessage}`,
+          );
+        }
+
+        // Either success or error is acceptable for invalid models. If an error
+        // was thrown, it must include a message.
+        const outcome = getInvalidModelOutcome(
+          errorThrown,
+          successReceived,
+          errorMessage,
+        );
+        expect(outcome.completed).toBe(true);
+        expect(outcome.errorHasMessage).toBe(true);
+      });
     });
 
     it('should handle missing API key', async () => {
@@ -673,25 +755,21 @@ describe('Multi-Provider Integration Tests', () => {
         }
       } finally {
         // Restore the original API keys if they existed
-        if (savedApiKey) {
-          process.env.OPENAI_API_KEY = savedApiKey;
-        }
-        if (savedGeminiKey) {
-          process.env.GEMINI_API_KEY = savedGeminiKey;
-        }
-        if (savedGoogleKey) {
-          process.env.GOOGLE_API_KEY = savedGoogleKey;
-        }
+        restoreApiKeys({
+          openAI: savedApiKey,
+          defaultProvider: savedGeminiKey,
+          google: savedGoogleKey,
+        });
       }
 
-      // Verify either models were returned OR an error was thrown
-      expect(testErrorThrown || modelsReturned).toBe(true);
-      // If error was thrown, verify it's the right type and has expected message
-      const errorMessage =
-        testError instanceof Error ? testError.message : String(testError);
-      expect(!testErrorThrown || testError instanceof Error).toBe(true);
+      // Verify either models were returned OR an error was thrown. If an error
+      // was thrown, verify its type and authentication message.
       expect(
-        !testErrorThrown || /authentication|API key/i.test(errorMessage),
+        missingApiKeyAttemptCompleted(testErrorThrown, modelsReturned),
+      ).toBe(true);
+      expect(missingApiKeyErrorIsTyped(testErrorThrown, testError)).toBe(true);
+      expect(
+        missingApiKeyErrorExplainsAuthentication(testErrorThrown, testError),
       ).toBe(true);
     });
   });

@@ -124,47 +124,75 @@ describe('Profiles/auth-winner @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-
   });
 
   it('T19a create stores baseUrl/authKeyName and OMITS absent optional keys; modelParams are deep-copied (no external-mutation leak) @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-009', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-    try {
-      const params: Record<string, unknown> = { temperature: 0.7 };
-      await agent.profiles.create('with-optionals', {
-        name: 'with-optionals',
-        provider: 'openai',
-        model: 'gpt-4o',
-        baseUrl: 'https://proxy.example/v1',
-        authKeyName: 'prod-key',
-        modelParams: params,
-      });
-      // mutate the source object AFTER create — stored copy must be unaffected
-      params.temperature = 999;
-      params['injected'] = 'leak';
-
-      const detail = agent.profiles.get('with-optionals');
-      expect(detail).toBeDefined();
-      expect(detail?.baseUrl).toBe('https://proxy.example/v1');
-      expect(detail?.authKeyName).toBe('prod-key');
-      // deep-copy isolation: original value preserved, no leaked key
-      expect(detail?.modelParams?.temperature).toBe(0.7);
-      expect(
-        detail?.modelParams !== undefined && 'injected' in detail.modelParams,
-      ).toBe(false);
-
-      // a minimal create omits absent optional keys entirely
-      await agent.profiles.create('minimal', {
-        name: 'minimal',
-        provider: 'openai',
-        model: 'gpt-4o',
-      });
-      const min = agent.profiles.get('minimal');
-      expect(min).toBeDefined();
-      expect('baseUrl' in (min as object)).toBe(false);
-      expect('authKeyName' in (min as object)).toBe(false);
-      expect('authKeyFile' in (min as object)).toBe(false);
-      expect('modelParams' in (min as object)).toBe(false);
-    } finally {
-      await cleanup();
-    }
+    const {
+      detail,
+      min,
+      baseUrlObservation,
+      authKeyNameObservation,
+      temperatureObservation,
+      t19aCreateStoresBaseUrlAuthKeyNameAndOMITSAbsentOptionalKeysModelParamsAreObservation4,
+    } =
+      await observeT19aCreateStoresBaseUrlAuthKeyNameAndOMITSAbsentOptionalKeysModelParamsAre();
+    expect(detail).toBeDefined();
+    expect(baseUrlObservation).toBe('https://proxy.example/v1');
+    expect(authKeyNameObservation).toBe('prod-key');
+    expect(temperatureObservation).toBe(0.7);
+    expect(
+      t19aCreateStoresBaseUrlAuthKeyNameAndOMITSAbsentOptionalKeysModelParamsAreObservation4,
+    ).toBe(false);
+    expect(min).toBeDefined();
+    expect('baseUrl' in (min as object)).toBe(false);
+    expect('authKeyName' in (min as object)).toBe(false);
+    expect('authKeyFile' in (min as object)).toBe(false);
+    expect('modelParams' in (min as object)).toBe(false);
   });
+
+  const observeT19aCreateStoresBaseUrlAuthKeyNameAndOMITSAbsentOptionalKeysModelParamsAre =
+    async () => {
+      const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+      try {
+        const params: Record<string, unknown> = { temperature: 0.7 };
+        await agent.profiles.create('with-optionals', {
+          name: 'with-optionals',
+          provider: 'openai',
+          model: 'gpt-4o',
+          baseUrl: 'https://proxy.example/v1',
+          authKeyName: 'prod-key',
+          modelParams: params,
+        });
+        // mutate the source object AFTER create — stored copy must be unaffected
+        params.temperature = 999;
+        params['injected'] = 'leak';
+
+        const detail = agent.profiles.get('with-optionals');
+
+        // deep-copy isolation: original value preserved, no leaked key
+
+        // a minimal create omits absent optional keys entirely
+        await agent.profiles.create('minimal', {
+          name: 'minimal',
+          provider: 'openai',
+          model: 'gpt-4o',
+        });
+        const min = agent.profiles.get('minimal');
+
+        const baseUrlObservation = detail?.baseUrl;
+        const authKeyNameObservation = detail?.authKeyName;
+        const temperatureObservation = detail?.modelParams?.temperature;
+        const t19aCreateStoresBaseUrlAuthKeyNameAndOMITSAbsentOptionalKeysModelParamsAreObservation4 =
+          detail?.modelParams !== undefined && 'injected' in detail.modelParams;
+        return {
+          detail,
+          min,
+          baseUrlObservation,
+          authKeyNameObservation,
+          temperatureObservation,
+          t19aCreateStoresBaseUrlAuthKeyNameAndOMITSAbsentOptionalKeysModelParamsAreObservation4,
+        };
+      } finally {
+        await cleanup();
+      }
+    };
 
   it('T19a apply resolves a dir-scan LB profile and rebinds provider+model+keyName onto the live agent @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-009 @requirement:REQ-005', async () => {
     const { agent, cleanup } = await buildAgent(
@@ -305,35 +333,42 @@ describe('Profiles/auth-winner @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-
   });
 
   it('T19a list() returns a DETERMINISTIC dir-scan order (sorted, stable across repeated calls) @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-009', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-    try {
-      // The dir-scan sorts entries by filename and de-duplicates by name, so the
-      // relative order of dir-scan profiles must not depend on filesystem
-      // enumeration order and must be identical across repeated list() calls.
-      const firstNames = agent.profiles.list().map((s) => s.name);
-      const secondNames = agent.profiles.list().map((s) => s.name);
-      expect(secondNames).toStrictEqual(firstNames);
-
-      // The two well-formed dir-scan fixtures appear exactly once each and in a
-      // stable relative order (their names are unique across the scanned dirs).
-      const dirScanNames = firstNames.filter(
-        (n) => n === 'lb-anthropic-openai' || n === 'standard-openai',
-      );
-      expect(dirScanNames.filter((n) => n === 'standard-openai')).toHaveLength(
-        1,
-      );
-      expect(
-        dirScanNames.filter((n) => n === 'lb-anthropic-openai'),
-      ).toHaveLength(1);
-      // Deterministic relative order is reproduced on a second independent call.
-      const dirScanNames2 = secondNames.filter(
-        (n) => n === 'lb-anthropic-openai' || n === 'standard-openai',
-      );
-      expect(dirScanNames2).toStrictEqual(dirScanNames);
-    } finally {
-      await cleanup();
-    }
+    const { secondNames, firstNames, dirScanNames, dirScanNames2 } =
+      await observeT19aListReturnsADETERMINISTICDirScanOrderSortedStableAcrossRepeated();
+    expect(secondNames).toStrictEqual(firstNames);
+    expect(dirScanNames.filter((n) => n === 'standard-openai')).toHaveLength(1);
+    expect(
+      dirScanNames.filter((n) => n === 'lb-anthropic-openai'),
+    ).toHaveLength(1);
+    expect(dirScanNames2).toStrictEqual(dirScanNames);
   });
+
+  const observeT19aListReturnsADETERMINISTICDirScanOrderSortedStableAcrossRepeated =
+    async () => {
+      const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+      try {
+        // The dir-scan sorts entries by filename and de-duplicates by name, so the
+        // relative order of dir-scan profiles must not depend on filesystem
+        // enumeration order and must be identical across repeated list() calls.
+        const firstNames = agent.profiles.list().map((s) => s.name);
+        const secondNames = agent.profiles.list().map((s) => s.name);
+
+        // The two well-formed dir-scan fixtures appear exactly once each and in a
+        // stable relative order (their names are unique across the scanned dirs).
+        const dirScanNames = firstNames.filter(
+          (n) => n === 'lb-anthropic-openai' || n === 'standard-openai',
+        );
+
+        // Deterministic relative order is reproduced on a second independent call.
+        const dirScanNames2 = secondNames.filter(
+          (n) => n === 'lb-anthropic-openai' || n === 'standard-openai',
+        );
+
+        return { secondNames, firstNames, dirScanNames, dirScanNames2 };
+      } finally {
+        await cleanup();
+      }
+    };
 
   it('T19a getDefault surfaces isLoadBalancer for a dir-scan LB default profile @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-009', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
@@ -524,126 +559,177 @@ describe('Profiles/auth-winner @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-
   // ─── Property-based: REQ-008 auth precedence winner ──────────────────────
 
   it('T18p property: computeAuthWinner ALWAYS returns the highest-precedence PRESENT source over the full raw>keyName>inline>keyfile>oauth>none chain, for every generated combination of present sources @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-008', () => {
-    const PROVIDER = 'openai';
-
-    // Independent reference implementation of the REQ-008 precedence chain. It
-    // mirrors the DOCUMENTED ordering (raw>keyName>inline>keyfile>oauth>none),
-    // computed straight from the generated presence booleans — NOT from the
-    // production code under test. If a production line in computeAuthWinner
-    // reordered the chain (e.g. checked inline before keyName, or dropped the
-    // keyfile tier), this oracle would disagree for some generated combination
-    // and the property fails. This is a real, falsifiable precedence invariant.
-    function expectedWinner(p: {
-      raw: boolean;
-      keyName: boolean;
-      inline: boolean;
-      keyfile: boolean;
-      oauth: boolean;
-    }): AuthWinner {
-      if (p.raw) return 'raw';
-      if (p.keyName) return 'keyName';
-      if (p.inline) return 'inline';
-      if (p.keyfile) return 'keyfile';
-      if (p.oauth) return 'oauth';
-      return 'none';
-    }
-
+    const {
+      t18pPropertyComputeAuthWinnerALWAYSReturnsTheHighestPrecedencePRESENTSourceOverTheProperty,
+      observations,
+    } =
+      observeT18pPropertyComputeAuthWinnerALWAYSReturnsTheHighestPrecedencePRESENTSourceOverThe();
     fc.assert(
-      fc.property(
-        fc.record({
-          raw: fc.boolean(),
-          keyName: fc.boolean(),
-          inline: fc.boolean(),
-          keyfile: fc.boolean(),
-          oauth: fc.boolean(),
-        }),
-        (present) => {
-          // Build a REAL AgentAuthState and seed exactly the generated sources.
-          const state = createAgentAuthState();
-          state.rawKeyPresent = present.raw;
-          state.inlineKeyPresent = present.inline;
-          state.keyFile = present.keyfile ? '/tmp/some-keyfile.txt' : undefined;
-          if (present.oauth) {
-            state.oauthAuthenticated.add(PROVIDER);
-          }
-          // keyName lives on providerState (passed as the second arg) — model
-          // its presence via a concrete reference string vs. undefined.
-          const keyName = present.keyName ? 'a-named-key' : undefined;
-
-          // Drive the REAL production precedence resolver.
-          const winner = computeAuthWinner(state, keyName, PROVIDER);
-
-          // INVARIANT: production winner equals the documented-chain oracle for
-          // EVERY combination of present sources (2^5 = 32 cases covered).
-          expect(winner).toBe(expectedWinner(present));
-        },
-      ),
+      t18pPropertyComputeAuthWinnerALWAYSReturnsTheHighestPrecedencePRESENTSourceOverTheProperty,
+    );
+    expect(observations.map(({ actual }) => actual)).toStrictEqual(
+      observations.map(({ expected }) => expected),
     );
   });
+
+  const observeT18pPropertyComputeAuthWinnerALWAYSReturnsTheHighestPrecedencePRESENTSourceOverThe =
+    () => {
+      const PROVIDER = 'openai';
+      const observations: Array<{
+        actual: AuthWinner;
+        expected: AuthWinner;
+      }> = [];
+
+      // Independent reference implementation of the REQ-008 precedence chain. It
+      // mirrors the DOCUMENTED ordering (raw>keyName>inline>keyfile>oauth>none),
+      // computed straight from the generated presence booleans — NOT from the
+      // production code under test. If a production line in computeAuthWinner
+      // reordered the chain (e.g. checked inline before keyName, or dropped the
+      // keyfile tier), this oracle would disagree for some generated combination
+      // and the property fails. This is a real, falsifiable precedence invariant.
+      function expectedWinner(p: {
+        raw: boolean;
+        keyName: boolean;
+        inline: boolean;
+        keyfile: boolean;
+        oauth: boolean;
+      }): AuthWinner {
+        if (p.raw) return 'raw';
+        if (p.keyName) return 'keyName';
+        if (p.inline) return 'inline';
+        if (p.keyfile) return 'keyfile';
+        if (p.oauth) return 'oauth';
+        return 'none';
+      }
+
+      const t18pPropertyComputeAuthWinnerALWAYSReturnsTheHighestPrecedencePRESENTSourceOverTheProperty =
+        fc.property(
+          fc.record({
+            raw: fc.boolean(),
+            keyName: fc.boolean(),
+            inline: fc.boolean(),
+            keyfile: fc.boolean(),
+            oauth: fc.boolean(),
+          }),
+          (present) => {
+            // Build a REAL AgentAuthState and seed exactly the generated sources.
+            const state = createAgentAuthState();
+            state.rawKeyPresent = present.raw;
+            state.inlineKeyPresent = present.inline;
+            state.keyFile = present.keyfile
+              ? '/tmp/some-keyfile.txt'
+              : undefined;
+            if (present.oauth) {
+              state.oauthAuthenticated.add(PROVIDER);
+            }
+            // keyName lives on providerState (passed as the second arg) — model
+            // its presence via a concrete reference string vs. undefined.
+            const keyName = present.keyName ? 'a-named-key' : undefined;
+
+            // Drive the REAL production precedence resolver.
+            const winner = computeAuthWinner(state, keyName, PROVIDER);
+            const expected = expectedWinner(present);
+            observations.push({ actual: winner, expected });
+
+            // INVARIANT: production winner equals the documented-chain oracle for
+            // EVERY combination of present sources (2^5 = 32 cases covered).
+            return winner === expected;
+          },
+        );
+      return {
+        t18pPropertyComputeAuthWinnerALWAYSReturnsTheHighestPrecedencePRESENTSourceOverTheProperty,
+        observations,
+      };
+    };
 
   it('T18pb property: a higher-precedence source ALWAYS masks every lower one — adding only-lower sources never changes the winner once a higher source is present @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-008', () => {
-    const PROVIDER = 'openai';
-    // Ordered highest→lowest. The winner is fully determined by the FIRST
-    // present tier; toggling any strictly-lower tier must be invisible.
-    const TIERS: readonly AuthWinner[] = [
-      'raw',
-      'keyName',
-      'inline',
-      'keyfile',
-      'oauth',
-    ];
-
-    function build(present: {
-      raw: boolean;
-      keyName: boolean;
-      inline: boolean;
-      keyfile: boolean;
-      oauth: boolean;
-    }): AuthWinner {
-      const state = createAgentAuthState();
-      state.rawKeyPresent = present.raw;
-      state.inlineKeyPresent = present.inline;
-      state.keyFile = present.keyfile ? '/tmp/kf.txt' : undefined;
-      if (present.oauth) {
-        state.oauthAuthenticated.add(PROVIDER);
-      }
-      const keyName = present.keyName ? 'named' : undefined;
-      return computeAuthWinner(state, keyName, PROVIDER);
-    }
-
+    const {
+      t18pbPropertyAHigherPrecedenceSourceALWAYSMasksEveryLowerOneAddingProperty,
+      observations,
+    } =
+      observeT18pbPropertyAHigherPrecedenceSourceALWAYSMasksEveryLowerOneAdding();
     fc.assert(
-      fc.property(
-        // pick which single tier is the highest present one…
-        fc.integer({ min: 0, max: TIERS.length - 1 }),
-        // …and arbitrary booleans for every strictly-lower tier
-        fc.array(fc.boolean(), { minLength: 5, maxLength: 5 }),
-        (highestIdx, lowerBits) => {
-          const flags = {
-            raw: false,
-            keyName: false,
-            inline: false,
-            keyfile: false,
-            oauth: false,
-          };
-          // The highest present tier is ON; all strictly-higher tiers are OFF;
-          // strictly-lower tiers take arbitrary generated values.
-          (Object.keys(flags) as Array<keyof typeof flags>).forEach(
-            (key, idx) => {
-              if (idx < highestIdx) {
-                flags[key] = false; // strictly higher → must be absent
-              } else if (idx === highestIdx) {
-                flags[key] = true; // the highest present tier
-              } else {
-                flags[key] = lowerBits[idx]; // strictly lower → arbitrary
-              }
-            },
-          );
-          // The winner is ALWAYS the highest present tier, regardless of the
-          // lower-tier noise. If masking were broken (a lower tier leaked
-          // through), this fails for some generated lowerBits.
-          expect(build(flags)).toBe(TIERS[highestIdx]);
-        },
-      ),
+      t18pbPropertyAHigherPrecedenceSourceALWAYSMasksEveryLowerOneAddingProperty,
+    );
+    expect(observations.map(({ expected }) => expected)).toStrictEqual(
+      observations.map(({ actual }) => actual),
     );
   });
+
+  const observeT18pbPropertyAHigherPrecedenceSourceALWAYSMasksEveryLowerOneAdding =
+    () => {
+      const PROVIDER = 'openai';
+      // Ordered highest→lowest. The winner is fully determined by the FIRST
+      // present tier; toggling any strictly-lower tier must be invisible.
+      const TIERS: readonly AuthWinner[] = [
+        'raw',
+        'keyName',
+        'inline',
+        'keyfile',
+        'oauth',
+      ];
+      const observations: Array<{
+        actual: AuthWinner;
+        expected: AuthWinner | undefined;
+      }> = [];
+
+      function build(present: {
+        raw: boolean;
+        keyName: boolean;
+        inline: boolean;
+        keyfile: boolean;
+        oauth: boolean;
+      }): AuthWinner {
+        const state = createAgentAuthState();
+        state.rawKeyPresent = present.raw;
+        state.inlineKeyPresent = present.inline;
+        state.keyFile = present.keyfile ? '/tmp/kf.txt' : undefined;
+        if (present.oauth) {
+          state.oauthAuthenticated.add(PROVIDER);
+        }
+        const keyName = present.keyName ? 'named' : undefined;
+        return computeAuthWinner(state, keyName, PROVIDER);
+      }
+
+      const t18pbPropertyAHigherPrecedenceSourceALWAYSMasksEveryLowerOneAddingProperty =
+        fc.property(
+          // pick which single tier is the highest present one…
+          fc.integer({ min: 0, max: TIERS.length - 1 }),
+          // …and arbitrary booleans for every strictly-lower tier
+          fc.array(fc.boolean(), { minLength: 5, maxLength: 5 }),
+          (highestIdx, lowerBits) => {
+            const flags = {
+              raw: false,
+              keyName: false,
+              inline: false,
+              keyfile: false,
+              oauth: false,
+            };
+            // The highest present tier is ON; all strictly-higher tiers are OFF;
+            // strictly-lower tiers take arbitrary generated values.
+            (Object.keys(flags) as Array<keyof typeof flags>).forEach(
+              (key, idx) => {
+                if (idx < highestIdx) {
+                  flags[key] = false; // strictly higher → must be absent
+                } else if (idx === highestIdx) {
+                  flags[key] = true; // the highest present tier
+                } else {
+                  flags[key] = lowerBits[idx]; // strictly lower → arbitrary
+                }
+              },
+            );
+            // The winner is ALWAYS the highest present tier, regardless of the
+            // lower-tier noise. If masking were broken (a lower tier leaked
+            // through), this fails for some generated lowerBits.
+            const actual = build(flags);
+            const expected = TIERS[highestIdx];
+            observations.push({ actual, expected });
+            return actual === expected;
+          },
+        );
+      return {
+        t18pbPropertyAHigherPrecedenceSourceALWAYSMasksEveryLowerOneAddingProperty,
+        observations,
+      };
+    };
 });

@@ -66,6 +66,26 @@ const streamToSSEEvents = (
       return JSON.parse(dataLine.substring(6));
     });
 
+function contextCheckCommand(toolName: string): Command {
+  return {
+    name: toolName,
+    description: 'checks context',
+    execute: async (context: CommandContext) => {
+      if (!context.agentExecutor) {
+        throw new Error('agentExecutor missing');
+      }
+      return { name: toolName, data: 'success' };
+    },
+  };
+}
+
+function getToolByLookup(
+  name: string,
+  lookup: ReadonlyMap<string, unknown>,
+): unknown {
+  return lookup.get(name);
+}
+
 function streamToSSEEventsForCommand(
   data: string,
 ): Array<{ result: AgentExecutionEvent }> {
@@ -329,11 +349,15 @@ describe('E2E Tests', () => {
     getToolRegistrySpy.mockReturnValue({
       getAllTools: vi.fn().mockReturnValue([mockTool1, mockTool2]),
       getToolsByServer: vi.fn().mockReturnValue([]),
-      getTool: vi.fn().mockImplementation((name: string) => {
-        if (name === 'test-tool-1') return mockTool1;
-        if (name === 'test-tool-2') return mockTool2;
-        return undefined;
-      }),
+      getTool: vi.fn().mockImplementation((name: string) =>
+        getToolByLookup(
+          name,
+          new Map([
+            ['test-tool-1', mockTool1],
+            ['test-tool-2', mockTool2],
+          ]),
+        ),
+      ),
     });
 
     const agent = request.agent(app);
@@ -828,16 +852,7 @@ describe('E2E Tests', () => {
     });
 
     it('should include agentExecutor in context', async () => {
-      const mockCommand = {
-        name: 'context-check-command',
-        description: 'checks context',
-        execute: vi.fn(async (context: CommandContext) => {
-          if (!context.agentExecutor) {
-            throw new Error('agentExecutor missing');
-          }
-          return { name: 'context-check-command', data: 'success' };
-        }),
-      };
+      const mockCommand = contextCheckCommand('context-check-command');
       mockCommandLookup(mockCommand);
 
       const agent = request.agent(app);

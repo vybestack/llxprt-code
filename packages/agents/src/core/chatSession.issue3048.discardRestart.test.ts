@@ -174,54 +174,74 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
    * @and exactly one RETRY event precedes every attempt-2 chunk
    */
   it('restarts the turn after a transient transport failure that followed partial output', async () => {
-    let attempt = 0;
-    const generateChatCompletionMock = vi.fn(async function* (
-      _options: GenerateChatOptions,
-    ) {
-      attempt++;
-      if (attempt === 1) {
-        yield {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'partial' }],
-        };
-        throw createConnectionError();
-      }
-      yield {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'recovered response' }],
-      };
-    });
-    registerProvider(generateChatCompletionMock);
-
-    const chat = buildChatSession();
-    const stream = await chat.sendMessageStream(
-      { message: 'trigger mid-stream connection error' },
-      'prompt-issue-3048-partial',
-    );
-
-    const events = await collectEvents(stream);
-
+    const {
+      attempt,
+      generateChatCompletionMock,
+      retryIndices,
+      postRetryTexts,
+      preRetryTexts,
+    } =
+      await observeRestartsTheTurnAfterATransientTransportFailureThatFollowedPartialOutput();
     expect(attempt).toBe(2);
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(2);
-
-    const retryIndices = events
-      .map((event, index) =>
-        event.type === StreamEventType.RETRY ? index : -1,
-      )
-      .filter((index) => index >= 0);
     expect(retryIndices).toHaveLength(1);
-    const retryIndex = retryIndices[0];
-
-    // No chunk after the RETRY carries abandoned text; only recovered text.
-    const postRetryTexts = collectChunkText(events.slice(retryIndex + 1));
     expect(postRetryTexts).not.toContain('partial');
     expect(postRetryTexts).toContain('recovered response');
-
-    // No chunk before the RETRY carries the recovered text.
-    const preRetryTexts = collectChunkText(events.slice(0, retryIndex));
     expect(preRetryTexts).toContain('partial');
     expect(preRetryTexts).not.toContain('recovered response');
   });
+
+  const observeRestartsTheTurnAfterATransientTransportFailureThatFollowedPartialOutput =
+    async () => {
+      let attempt = 0;
+      const generateChatCompletionMock = vi.fn(async function* (
+        _options: GenerateChatOptions,
+      ) {
+        attempt++;
+        if (attempt === 1) {
+          yield {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'partial' }],
+          };
+          throw createConnectionError();
+        }
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'recovered response' }],
+        };
+      });
+      registerProvider(generateChatCompletionMock);
+
+      const chat = buildChatSession();
+      const stream = await chat.sendMessageStream(
+        { message: 'trigger mid-stream connection error' },
+        'prompt-issue-3048-partial',
+      );
+
+      const events = await collectEvents(stream);
+
+      const retryIndices = events
+        .map((event, index) =>
+          event.type === StreamEventType.RETRY ? index : -1,
+        )
+        .filter((index) => index >= 0);
+
+      const retryIndex = retryIndices[0];
+
+      // No chunk after the RETRY carries abandoned text; only recovered text.
+      const postRetryTexts = collectChunkText(events.slice(retryIndex + 1));
+
+      // No chunk before the RETRY carries the recovered text.
+      const preRetryTexts = collectChunkText(events.slice(0, retryIndex));
+
+      return {
+        attempt,
+        generateChatCompletionMock,
+        retryIndices,
+        postRetryTexts,
+        preRetryTexts,
+      };
+    };
 
   /**
    * @plan PLAN-20260806-ISSUE3048.P02
@@ -229,6 +249,26 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
    * @scenario Transient transport failure after an abandoned tool_call block
    */
   it('restarts after an abandoned tool_call block', async () => {
+    const {
+      attempt,
+      retryIndex,
+      abandonedToolCallIds,
+      replacementBlocks,
+      restartsAfterAnAbandonedToolCallBlockObservation1,
+    } = await observeRestartsAfterAnAbandonedToolCallBlock();
+    expect(attempt).toBe(2);
+    expect(retryIndex).toBeGreaterThanOrEqual(0);
+    expect(abandonedToolCallIds).toStrictEqual([
+      'abandoned-call-1',
+      'abandoned-call-2',
+    ]);
+    expect(restartsAfterAnAbandonedToolCallBlockObservation1).toBe(true);
+    expect(replacementBlocks.some((block) => block.type === 'tool_call')).toBe(
+      false,
+    );
+  });
+
+  const observeRestartsAfterAnAbandonedToolCallBlock = async () => {
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
@@ -269,11 +309,10 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
 
     const events = await collectEvents(stream);
 
-    expect(attempt).toBe(2);
     const retryIndex = events.findIndex(
       (event) => event.type === StreamEventType.RETRY,
     );
-    expect(retryIndex).toBeGreaterThanOrEqual(0);
+
     const abandonedToolCallIds = events
       .slice(0, retryIndex)
       .flatMap((event) =>
@@ -283,24 +322,25 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
             )
           : [],
       );
-    expect(abandonedToolCallIds).toEqual([
-      'abandoned-call-1',
-      'abandoned-call-2',
-    ]);
+
     const replacementBlocks = events
       .slice(retryIndex + 1)
       .flatMap((event) =>
         event.type === StreamEventType.CHUNK ? event.value.content.blocks : [],
       );
-    expect(
+
+    const restartsAfterAnAbandonedToolCallBlockObservation1 =
       replacementBlocks.some(
         (block) => block.type === 'text' && block.text === 'recovered response',
-      ),
-    ).toBe(true);
-    expect(replacementBlocks.some((block) => block.type === 'tool_call')).toBe(
-      false,
-    );
-  });
+      );
+    return {
+      attempt,
+      retryIndex,
+      abandonedToolCallIds,
+      replacementBlocks,
+      restartsAfterAnAbandonedToolCallBlockObservation1,
+    };
+  };
 
   /**
    * @plan PLAN-20260806-ISSUE3048.P02
@@ -308,6 +348,15 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
    * @scenario Transient transport failure after abandoned hidden thinking
    */
   it('restarts after abandoned hidden thinking metadata', async () => {
+    const { attempt, events } =
+      await observeRestartsAfterAbandonedHiddenThinkingMetadata();
+    expect(attempt).toBe(2);
+    expect(events.some((event) => event.type === StreamEventType.RETRY)).toBe(
+      true,
+    );
+  });
+
+  const observeRestartsAfterAbandonedHiddenThinkingMetadata = async () => {
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
       _options: GenerateChatOptions,
@@ -345,11 +394,8 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
 
     const events = await collectEvents(stream);
 
-    expect(attempt).toBe(2);
-    expect(events.some((event) => event.type === StreamEventType.RETRY)).toBe(
-      true,
-    );
-  });
+    return { attempt, events };
+  };
 
   /**
    * @plan PLAN-20260806-ISSUE3048.P02
@@ -357,6 +403,15 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
    * @scenario Durable history is the successful attempt alone
    */
   it('records only the successful attempt in history', async () => {
+    const { ai, aiText, human } =
+      await observeRecordsOnlyTheSuccessfulAttemptInHistory();
+    expect(ai).toHaveLength(1);
+    expect(aiText).toBe('recovered response');
+    expect(aiText).not.toContain('partial');
+    expect(human).toHaveLength(1);
+  });
+
+  const observeRecordsOnlyTheSuccessfulAttemptInHistory = async () => {
     const history = new HistoryService();
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
@@ -387,19 +442,18 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
     await chat.waitForIdle();
 
     const ai = history.getAll().filter((content) => content.speaker === 'ai');
-    expect(ai).toHaveLength(1);
+
     const aiText = ai[0].blocks
       .filter((block) => block.type === 'text')
       .map((block) => (block as { text: string }).text)
       .join('');
-    expect(aiText).toBe('recovered response');
-    expect(aiText).not.toContain('partial');
 
     const human = history
       .getAll()
       .filter((content) => content.speaker === 'human');
-    expect(human).toHaveLength(1);
-  });
+
+    return { ai, aiText, human };
+  };
 
   /**
    * @plan PLAN-20260806-ISSUE3048.P02
@@ -468,38 +522,45 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
    * @scenario Content-validity verdict after output is not a transport failure
    */
   it('does not restart an InvalidStreamError raised after output', async () => {
-    let attempt = 0;
-    const generateChatCompletionMock = vi.fn(async function* (
-      _options: GenerateChatOptions,
-    ) {
-      attempt++;
-      if (attempt === 1) {
-        yield {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'partial' }],
-        };
-        throw new InvalidStreamError(
-          'stream produced no usable text',
-          'NO_RESPONSE_TEXT',
-        );
-      }
-      yield {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'recovered response' }],
-      };
-    });
-    registerProvider(generateChatCompletionMock);
-
-    const chat = buildChatSession();
-    const stream = await chat.sendMessageStream(
-      { message: 'trigger InvalidStreamError after output' },
-      'prompt-issue-3048-invalid-stream',
-    );
-
+    const { stream, observation, generateChatCompletionMock } =
+      await observeDoesNotRestartAnInvalidStreamErrorRaisedAfterOutput();
     await expect(collectEvents(stream)).rejects.toThrow(InvalidStreamError);
-    expect(attempt).toBe(1);
+    expect(observation.attempt).toBe(1);
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
   });
+
+  const observeDoesNotRestartAnInvalidStreamErrorRaisedAfterOutput =
+    async () => {
+      const observation = { attempt: 0 };
+      const generateChatCompletionMock = vi.fn(async function* (
+        _options: GenerateChatOptions,
+      ) {
+        observation.attempt++;
+        if (observation.attempt === 1) {
+          yield {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'partial' }],
+          };
+          throw new InvalidStreamError(
+            'stream produced no usable text',
+            'NO_RESPONSE_TEXT',
+          );
+        }
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'recovered response' }],
+        };
+      });
+      registerProvider(generateChatCompletionMock);
+
+      const chat = buildChatSession();
+      const stream = await chat.sendMessageStream(
+        { message: 'trigger InvalidStreamError after output' },
+        'prompt-issue-3048-invalid-stream',
+      );
+
+      return { stream, observation, generateChatCompletionMock };
+    };
 
   /**
    * @plan PLAN-20260806-ISSUE3048.P02
@@ -602,6 +663,13 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
    *       callId (not a duplicate from the successful attempt)
    */
   it('keeps eagerly recorded tool-response ids across a discard', async () => {
+    const { attempt, toolResponseCount } =
+      await observeKeepsEagerlyRecordedToolResponseIdsAcrossADiscard();
+    expect(attempt).toBe(2);
+    expect(toolResponseCount).toBe(1);
+  });
+
+  const observeKeepsEagerlyRecordedToolResponseIdsAcrossADiscard = async () => {
     const history = new HistoryService();
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
@@ -678,7 +746,6 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
     await collectEvents(stream);
 
     await chat.waitForIdle();
-    expect(attempt).toBe(2);
 
     const toolResponseCount = history
       .getAll()
@@ -692,6 +759,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
           ).length,
         0,
       );
-    expect(toolResponseCount).toBe(1);
-  });
+
+    return { attempt, toolResponseCount };
+  };
 });

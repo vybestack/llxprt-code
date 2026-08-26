@@ -11,6 +11,11 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { IModel } from '../IModel.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import {
+  generateAbortAwareResponse,
+  generatePartialThenInterruptedResponse,
+  generateTimeoutThenSuccess,
+} from './retryOrchestratorBasicTestHelpers.test.js';
 
 /**
  * Test helper: Creates a fake provider that behaves according to provided scenarios
@@ -606,24 +611,8 @@ describe('RetryOrchestrator', () => {
 
       const provider: IProvider = {
         name: 'streaming-test-provider',
-        async *generateChatCompletion(_options: GenerateChatOptions) {
-          attemptCount++;
-
-          if (attemptCount === 1) {
-            // First attempt - yield one chunk then error
-            yield {
-              speaker: 'ai',
-              blocks: [{ type: 'text', text: 'partial' }],
-            } as IContent;
-            throw createNetworkError('STREAM_INTERRUPTED');
-          } else {
-            // Second attempt - should never be reached
-            yield {
-              speaker: 'ai',
-              blocks: [{ type: 'text', text: 'complete' }],
-            } as IContent;
-          }
-        },
+        generateChatCompletion: (_options: GenerateChatOptions) =>
+          generatePartialThenInterruptedResponse(() => ++attemptCount),
         async getModels(): Promise<IModel[]> {
           return [];
         },
@@ -718,24 +707,8 @@ describe('RetryOrchestrator', () => {
 
       const provider: IProvider = {
         name: 'timeout-failover-provider',
-        async *generateChatCompletion(_options: GenerateChatOptions) {
-          attemptCount++;
-
-          if (attemptCount === 1) {
-            // First attempt times out (slow)
-            await delay(200);
-            yield {
-              speaker: 'ai',
-              blocks: [{ type: 'text', text: 'too slow' }],
-            } as IContent;
-          } else {
-            // Second attempt succeeds quickly
-            yield {
-              speaker: 'ai',
-              blocks: [{ type: 'text', text: 'success' }],
-            } as IContent;
-          }
-        },
+        generateChatCompletion: (_options: GenerateChatOptions) =>
+          generateTimeoutThenSuccess(() => ++attemptCount),
         async getModels(): Promise<IModel[]> {
           return [];
         },
@@ -908,22 +881,16 @@ describe('RetryOrchestrator', () => {
 
       const provider: IProvider = {
         name: 'abort-test-provider',
-        async *generateChatCompletion(options: GenerateChatOptions) {
-          providerCalls++;
-          providerReceivedOptions = options;
-
-          // Simulate provider checking signal
-          await delay(50);
-
-          if (options.invocation?.signal?.aborted === true) {
-            throw new DOMException('Aborted', 'AbortError');
-          }
-
-          yield {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'test' }],
-          } as IContent;
-        },
+        generateChatCompletion: (options: GenerateChatOptions) =>
+          generateAbortAwareResponse(
+            options,
+            () => {
+              providerCalls++;
+            },
+            (receivedOptions) => {
+              providerReceivedOptions = receivedOptions;
+            },
+          ),
         async getModels(): Promise<IModel[]> {
           return [];
         },

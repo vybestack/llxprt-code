@@ -374,7 +374,9 @@ describe('buildPdfDisabledNotice @issue:2608', () => {
       filename: 'doc.pdf',
     };
     const notice = buildPdfDisabledNotice(media).toLowerCase();
-    expect(notice.includes('extract') || notice.includes('render')).toBe(true);
+    expect(['extract', 'render'].some((term) => notice.includes(term))).toBe(
+      true,
+    );
   });
 
   it('falls back to document.pdf when filename is absent', () => {

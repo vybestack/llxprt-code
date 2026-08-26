@@ -169,12 +169,12 @@ async function recordResumableSession(
 }
 
 /** Runs `fn` against a fresh isolated project-root temp dir, always cleaned up. */
-async function withProjectRoot(
-  fn: (projectRoot: string) => Promise<void>,
-): Promise<void> {
+async function withProjectRoot<T>(
+  fn: (projectRoot: string) => Promise<T>,
+): Promise<T> {
   const projectRoot = mkdtempSync(join(tmpdir(), 'llxprt-sc-conc-'));
   try {
-    await fn(projectRoot);
+    return await fn(projectRoot);
   } finally {
     rmSync(projectRoot, { recursive: true, force: true });
   }
@@ -311,145 +311,225 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
   });
 
   it('A2: a post-restore subscribe failure rejects resume, leaves Config NOT pointing at the resumed service, and releases the adopted lock file @requirement:REQ-010', async () => {
-    await withProjectRoot(async (projectRoot) => {
-      const sessionId = 'atomic-resume-session';
-      await recordResumableSession(
-        projectRoot,
-        sessionId,
-        humanText('recorded turn beta'),
-      );
-
-      const config = buildFakeConfig(projectRoot);
-      const liveHistory = [humanText('live turn')];
-      const client = buildFakeClient(liveHistory);
-
-      // A HistoryService whose 'on' throws so the post-restore integration
-      // subscribe fails DURING resume (after the resumed recording + lock were
-      // acquired). This models a real subscribe failure, not a mocked outcome.
-      const throwingHistory = new HistoryService();
-      const originalOn = throwingHistory.on.bind(throwingHistory);
-      throwingHistory.on = ((
-        event: string,
-        listener: (...a: never[]) => void,
-      ) => {
-        if (event === 'contentAdded') {
-          throw new Error('subscribe boom');
-        }
-        return originalOn(
-          event as Parameters<typeof originalOn>[0],
-          listener as Parameters<typeof originalOn>[1],
-        );
-      }) as HistoryService['on'];
-      client.setHistoryService(throwingHistory);
-
-      const control = new SessionControl(
-        buildDeps(config, client.contract, sessionId),
-      );
-
-      // resume MUST reject with the subscribe failure (not silently half-enable).
-      await expect(control.resume('latest')).rejects.toThrow('subscribe boom');
-
-      expect(config.getSessionRecordingService()).toBeUndefined();
-      expect(control.getRecording().enabled).toBe(false);
-      expect(await client.contract.getHistory()).toStrictEqual(liveHistory);
-
-      // The adopted session lock was released: NO lock file remains on disk.
-      expect(remainingLockFiles(projectRoot)).toStrictEqual([]);
-
-      // Dispose is a clean no-op (nothing to release) — does not throw.
-      await expect(control.dispose()).resolves.toBeUndefined();
-    });
+    const observation =
+      await observeA2APostRestoreSubscribeFailureRejectsResumeLeavesConfigNOTPointing();
+    expect(observation.resumeErrorMessage).toBe('subscribe boom');
+    expect(observation.recordingService).toBeUndefined();
+    expect(observation.recordingEnabled).toBe(false);
+    expect(observation.restoredHistory).toStrictEqual(observation.liveHistory);
+    expect(observation.remainingLocks).toStrictEqual([]);
+    expect(observation.disposeError).toBeUndefined();
   });
+
+  const observeA2APostRestoreSubscribeFailureRejectsResumeLeavesConfigNOTPointing =
+    async () =>
+      withProjectRoot(async (projectRoot) => {
+        const sessionId = 'atomic-resume-session';
+        await recordResumableSession(
+          projectRoot,
+          sessionId,
+          humanText('recorded turn beta'),
+        );
+
+        const config = buildFakeConfig(projectRoot);
+        const liveHistory = [humanText('live turn')];
+        const client = buildFakeClient(liveHistory);
+
+        // A HistoryService whose 'on' throws so the post-restore integration
+        // subscribe fails DURING resume (after the resumed recording + lock were
+        // acquired). This models a real subscribe failure, not a mocked outcome.
+        const throwingHistory = new HistoryService();
+        const originalOn = throwingHistory.on.bind(throwingHistory);
+        throwingHistory.on = ((
+          event: string,
+          listener: (...a: never[]) => void,
+        ) => {
+          if (event === 'contentAdded') {
+            throw new Error('subscribe boom');
+          }
+          return originalOn(
+            event as Parameters<typeof originalOn>[0],
+            listener as Parameters<typeof originalOn>[1],
+          );
+        }) as HistoryService['on'];
+        client.setHistoryService(throwingHistory);
+
+        const control = new SessionControl(
+          buildDeps(config, client.contract, sessionId),
+        );
+
+        // resume MUST reject with the subscribe failure (not silently half-enable).
+        let resumeError: unknown;
+        try {
+          await control.resume('latest');
+        } catch (error: unknown) {
+          resumeError = error;
+        }
+        const resumeErrorMessage =
+          resumeError instanceof Error ? resumeError.message : '';
+        const recordingService = config.getSessionRecordingService();
+        const recordingEnabled = control.getRecording().enabled;
+        const restoredHistory = await client.contract.getHistory();
+
+        // The adopted session lock was released: NO lock file remains on disk.
+        const remainingLocks = remainingLockFiles(projectRoot);
+
+        // Dispose is a clean no-op (nothing to release) — does not throw.
+        let disposeError: unknown;
+        try {
+          await control.dispose();
+        } catch (error: unknown) {
+          disposeError = error;
+        }
+
+        return {
+          resumeErrorMessage,
+          recordingService,
+          recordingEnabled,
+          restoredHistory,
+          liveHistory,
+          remainingLocks,
+          disposeError,
+        };
+      });
 
   it('reports both a live clear failure and recording resubscription failure', async () => {
-    await withProjectRoot(async (projectRoot) => {
-      const sessionId = 'clear-dual-failure';
-      const config = buildFakeConfig(projectRoot);
-      const client = buildFakeClient([
-        humanText('initial turn'),
-        { speaker: 'ai', blocks: [{ type: 'text', text: 'response' }] },
-      ]);
-      const liveHistory = new HistoryService();
-      client.setHistoryService(liveHistory);
-      const control = new SessionControl(
-        buildDeps(config, client.contract, sessionId),
-      );
-      await control.setRecording({ enabled: true });
-
-      client.contract.resetChat = async () => {
-        throw new Error('clear failed');
-      };
-      const originalOn = liveHistory.on.bind(liveHistory);
-      liveHistory.on = ((
-        event: string,
-        listener: (...args: never[]) => void,
-      ) => {
-        if (event === 'contentAdded') {
-          throw new Error('resubscribe failed');
-        }
-        return originalOn(
-          event as Parameters<typeof originalOn>[0],
-          listener as Parameters<typeof originalOn>[1],
-        );
-      }) as HistoryService['on'];
-
-      let thrown: unknown;
-      try {
-        await control.clearHistory();
-      } catch (error: unknown) {
-        thrown = error;
-      }
-
-      expect(thrown).toBeInstanceOf(AggregateError);
-      expect(
-        (thrown as AggregateError).errors.map((error) =>
-          error instanceof Error ? error.message : String(error),
-        ),
-      ).toStrictEqual(['clear failed', 'resubscribe failed']);
-      await control.dispose();
-    });
+    const { thrown, errorMessages } =
+      await observeReportsBothALiveClearFailureAndRecordingResubscriptionFailure();
+    expect(thrown).toBeInstanceOf(AggregateError);
+    expect(errorMessages).toStrictEqual(['clear failed', 'resubscribe failed']);
   });
+
+  const observeReportsBothALiveClearFailureAndRecordingResubscriptionFailure =
+    async () =>
+      withProjectRoot(async (projectRoot) => {
+        const sessionId = 'clear-dual-failure';
+        const config = buildFakeConfig(projectRoot);
+        const client = buildFakeClient([
+          humanText('initial turn'),
+          { speaker: 'ai', blocks: [{ type: 'text', text: 'response' }] },
+        ]);
+        const liveHistory = new HistoryService();
+        client.setHistoryService(liveHistory);
+        const control = new SessionControl(
+          buildDeps(config, client.contract, sessionId),
+        );
+        await control.setRecording({ enabled: true });
+
+        client.contract.resetChat = async () => {
+          throw new Error('clear failed');
+        };
+        const originalOn = liveHistory.on.bind(liveHistory);
+        liveHistory.on = ((
+          event: string,
+          listener: (...args: never[]) => void,
+        ) => {
+          if (event === 'contentAdded') {
+            throw new Error('resubscribe failed');
+          }
+          return originalOn(
+            event as Parameters<typeof originalOn>[0],
+            listener as Parameters<typeof originalOn>[1],
+          );
+        }) as HistoryService['on'];
+
+        let thrown: unknown;
+        try {
+          await control.clearHistory();
+        } catch (error: unknown) {
+          thrown = error;
+        }
+
+        await control.dispose();
+
+        const errorMessages =
+          thrown instanceof AggregateError
+            ? thrown.errors.map((error) =>
+                error instanceof Error ? error.message : String(error),
+              )
+            : [];
+        return { thrown, errorMessages };
+      });
 
   it('restores the original history when the cleared-history restore fails', async () => {
-    await withProjectRoot(async (projectRoot) => {
-      const sessionId = 'clear-restore-rollback';
-      const originalHistory = [
-        humanText('initial turn'),
-        { speaker: 'ai', blocks: [{ type: 'text', text: 'response' }] },
-        humanText('later turn'),
-      ];
-      const config = buildFakeConfig(projectRoot);
-      const client = buildFakeClient(originalHistory);
-      const control = new SessionControl(
-        buildDeps(config, client.contract, sessionId),
-      );
-      await control.setRecording({ enabled: true });
-      const recordingPath = control.getRecording().path;
-      expect(recordingPath).toBeDefined();
-      const restoreHistory = client.contract.restoreHistory.bind(
-        client.contract,
-      );
-      let restoreAttempt = 0;
-      client.contract.restoreHistory = async (history) => {
-        restoreAttempt += 1;
-        if (restoreAttempt === 1) throw new Error('remaining restore failed');
-        await restoreHistory(history);
-      };
-
-      await expect(control.clearHistory()).rejects.toThrow(
-        'remaining restore failed',
-      );
-      expect(await client.contract.getHistory()).toStrictEqual(originalHistory);
-      expect(restoreAttempt).toBe(1);
-      expect(client.replacementCount()).toBe(1);
-      const replay = await replaySession(recordingPath!, basename(projectRoot));
-      if (!replay.ok) {
-        throw new Error(`Expected replay success: ${replay.error}`);
-      }
-      expect(replay.history).toStrictEqual(originalHistory);
-      await control.dispose();
-    });
+    const {
+      recordingPath,
+      clearErrorMessage,
+      restoredHistory,
+      originalHistory,
+      restoreAttempt,
+      replacementCount,
+      replay,
+    } =
+      await observeRestoresTheOriginalHistoryWhenTheClearedHistoryRestoreFails();
+    expect(recordingPath).toBeDefined();
+    expect(clearErrorMessage).toBe('remaining restore failed');
+    expect(restoredHistory).toStrictEqual(originalHistory);
+    expect(restoreAttempt).toBe(1);
+    expect(replacementCount).toBe(1);
+    expect(replay.history).toStrictEqual(originalHistory);
   });
+
+  const observeRestoresTheOriginalHistoryWhenTheClearedHistoryRestoreFails =
+    async () =>
+      withProjectRoot(async (projectRoot) => {
+        const sessionId = 'clear-restore-rollback';
+        const originalHistory = [
+          humanText('initial turn'),
+          { speaker: 'ai', blocks: [{ type: 'text', text: 'response' }] },
+          humanText('later turn'),
+        ];
+        const config = buildFakeConfig(projectRoot);
+        const client = buildFakeClient(originalHistory);
+        const control = new SessionControl(
+          buildDeps(config, client.contract, sessionId),
+        );
+        await control.setRecording({ enabled: true });
+        const recordingPath = control.getRecording().path;
+
+        const restoreHistory = client.contract.restoreHistory.bind(
+          client.contract,
+        );
+        let restoreAttempt = 0;
+        client.contract.restoreHistory = async (history) => {
+          restoreAttempt += 1;
+          if (restoreAttempt === 1) throw new Error('remaining restore failed');
+          await restoreHistory(history);
+        };
+
+        let clearError: unknown;
+        try {
+          await control.clearHistory();
+        } catch (error: unknown) {
+          clearError = error;
+        }
+        const clearErrorMessage =
+          clearError instanceof Error ? clearError.message : '';
+        const restoredHistory = await client.contract.getHistory();
+        const replacementCount = client.replacementCount();
+        if (recordingPath === undefined) {
+          throw new Error('Expected recording path');
+        }
+        const replay = await replaySession(
+          recordingPath,
+          basename(projectRoot),
+        );
+        if (!replay.ok) {
+          throw new Error(`Expected replay success: ${replay.error}`);
+        }
+
+        await control.dispose();
+
+        return {
+          recordingPath,
+          clearErrorMessage,
+          restoredHistory,
+          originalHistory,
+          restoreAttempt,
+          replacementCount,
+          replay,
+        };
+      });
 
   it('A3: an integration left unsubscribed (HistoryService unavailable at enable) is re-attached by the next operation, so later content events reach the recording @requirement:REQ-010', async () => {
     await withProjectRoot(async (projectRoot) => {

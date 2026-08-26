@@ -31,6 +31,30 @@ void vi.mock('node:child_process', () => ({
   spawnSync: vi.fn(() => ({ error: null, status: 0 })),
 }));
 
+function closeHandlerReturning(exitCode: number) {
+  return vi.fn((event: string, cb: (code: number) => void) => {
+    if (event === 'close') {
+      cb(exitCode);
+    }
+  });
+}
+
+function errorHandlerFor(mockError: Error) {
+  return vi.fn((event: string, cb: (error: Error) => void) => {
+    if (event === 'error') {
+      cb(mockError);
+    }
+  });
+}
+
+function spawnShellEnabledFor(platform: string): boolean {
+  return platform === 'win32';
+}
+
+function shellOptionFor(platform: string): { stdio: string; shell: boolean } {
+  return { stdio: 'inherit', shell: spawnShellEnabledFor(platform) };
+}
+
 const originalPlatform = process.platform;
 
 describe('editor utils', () => {
@@ -354,11 +378,7 @@ describe('editor utils', () => {
 
     for (const editor of guiEditors) {
       it(`should call spawn for ${editor}`, async () => {
-        const mockSpawnOn = vi.fn((event, cb) => {
-          if (event === 'close') {
-            cb(0);
-          }
-        });
+        const mockSpawnOn = closeHandlerReturning(0);
         (spawn as Mock<(...args: never[]) => unknown>).mockReturnValue({
           on: mockSpawnOn,
         });
@@ -368,10 +388,7 @@ describe('editor utils', () => {
         expect(spawn).toHaveBeenCalledWith(
           diffCommand.command,
           diffCommand.args,
-          {
-            stdio: 'inherit',
-            shell: process.platform === 'win32',
-          },
+          shellOptionFor(process.platform),
         );
         expect(mockSpawnOn).toHaveBeenCalledWith('close', expect.any(Function));
         expect(mockSpawnOn).toHaveBeenCalledWith('error', expect.any(Function));
@@ -379,11 +396,7 @@ describe('editor utils', () => {
 
       it(`should reject if spawn for ${editor} fails`, async () => {
         const mockError = new Error('spawn error');
-        const mockSpawnOn = vi.fn((event, cb) => {
-          if (event === 'error') {
-            cb(mockError);
-          }
-        });
+        const mockSpawnOn = errorHandlerFor(mockError);
         (spawn as Mock<(...args: never[]) => unknown>).mockReturnValue({
           on: mockSpawnOn,
         });
@@ -394,11 +407,7 @@ describe('editor utils', () => {
       });
 
       it(`should reject if ${editor} exits with non-zero code`, async () => {
-        const mockSpawnOn = vi.fn((event, cb) => {
-          if (event === 'close') {
-            cb(1);
-          }
-        });
+        const mockSpawnOn = closeHandlerReturning(1);
         (spawn as Mock<(...args: never[]) => unknown>).mockReturnValue({
           on: mockSpawnOn,
         });

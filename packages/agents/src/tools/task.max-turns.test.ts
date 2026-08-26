@@ -425,14 +425,21 @@ describe('TaskTool', () => {
   });
 
   it('does not invent separators at word-token fragment boundaries', async () => {
-    const deltas = await streamSubagentDeltas((emit) => {
-      for (const token of 'Hello World'.match(/(\w+|\s)/g) ?? []) {
-        emit(token);
-      }
-    });
-
+    const { deltas } =
+      await observeDoesNotInventSeparatorsAtWordTokenFragmentBoundaries();
     expect(deltas.join('')).toBe('Hello World');
   });
+
+  const observeDoesNotInventSeparatorsAtWordTokenFragmentBoundaries =
+    async () => {
+      const deltas = await streamSubagentDeltas((emit) => {
+        for (const token of 'Hello World'.match(/(\w+|\s)/g) ?? []) {
+          emit(token);
+        }
+      });
+
+      return { deltas };
+    };
 
   it('filters out only truly empty messages when streaming', async () => {
     const deltas = await streamSubagentDeltas((emit) => {

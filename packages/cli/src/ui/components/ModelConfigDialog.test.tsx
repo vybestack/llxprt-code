@@ -24,6 +24,10 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
 // Use the real parseValue from setCommand (source-resolved, no broken deps)
 import { ModelConfigDialog } from './ModelConfigDialog.js';
 
+function isModelFieldLine(line: string): boolean {
+  return line.includes('○') || line.includes('●');
+}
+
 /**
  * Stateful fake runtime. Instead of vi.fn() spies returning fixed values,
  * this mutable object reflects writes immediately so re-renders observe
@@ -177,7 +181,7 @@ describe('<ModelConfigDialog />', () => {
     const output = lastFrame();
     expect(output).toBeDefined();
     const lines = output!.split('\n');
-    const fieldLines = lines.filter((l) => l.includes('○') || l.includes('●'));
+    const fieldLines = lines.filter(isModelFieldLine);
     expect(fieldLines[0]).toContain('context-limit');
     expect(fieldLines[1]).toContain('max_tokens');
   });

@@ -149,7 +149,7 @@ describe('reportUnconfiguredProviderError: output-format-aware reporting', () =>
 });
 
 describe('reportUnconfiguredProviderError: single emission', () => {
-  it('does NOT double-emit via debugLogger after writing to stderr (TEXT)', () => {
+  function verifyDoesNOTDoubleEmitViaDebugLoggerAfterWritingToStderrTEXT() {
     const stderrCalls: string[] = [];
     vi.spyOn(process.stderr, 'write').mockImplementation(
       (chunk: string | Uint8Array) => {
@@ -169,14 +169,22 @@ describe('reportUnconfiguredProviderError: single emission', () => {
     const combined = stderrCalls.join('');
     const occurrences = (combined.match(/No provider is configured/g) ?? [])
       .length;
-    expect(occurrences).toBe(1);
+
+    return { occurrences, debugErrorSpy };
+  }
+
+  it('does NOT double-emit via debugLogger after writing to stderr (TEXT)', () => {
+    const behaviorResult =
+      verifyDoesNOTDoubleEmitViaDebugLoggerAfterWritingToStderrTEXT();
+
+    expect(behaviorResult.occurrences).toBe(1);
     // debugLogger.error must NOT be called after the stderr write.
-    expect(debugErrorSpy).not.toHaveBeenCalled();
+    expect(behaviorResult.debugErrorSpy).not.toHaveBeenCalled();
 
     vi.restoreAllMocks();
   });
 
-  it('does NOT double-emit via debugLogger after writing to stderr (JSON)', () => {
+  function verifyDoesNOTDoubleEmitViaDebugLoggerAfterWritingToStderrJSON() {
     const stderrCalls: string[] = [];
     vi.spyOn(process.stderr, 'write').mockImplementation(
       (chunk: string | Uint8Array) => {
@@ -195,8 +203,16 @@ describe('reportUnconfiguredProviderError: single emission', () => {
     const combined = stderrCalls.join('');
     const occurrences = (combined.match(/No provider is configured/g) ?? [])
       .length;
-    expect(occurrences).toBe(1);
-    expect(debugErrorSpy).not.toHaveBeenCalled();
+
+    return { occurrences, debugErrorSpy };
+  }
+
+  it('does NOT double-emit via debugLogger after writing to stderr (JSON)', () => {
+    const behaviorResult =
+      verifyDoesNOTDoubleEmitViaDebugLoggerAfterWritingToStderrJSON();
+
+    expect(behaviorResult.occurrences).toBe(1);
+    expect(behaviorResult.debugErrorSpy).not.toHaveBeenCalled();
 
     vi.restoreAllMocks();
   });
@@ -331,7 +347,7 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
     expect(cleanupFn).toHaveBeenCalledTimes(1);
   });
 
-  it('logs cleanup failure via debugLogger (not stderr) and still exits 52', async () => {
+  async function verifyLogsCleanupFailureViaDebugLoggerNotStderrAndStillExits52() {
     const config = {
       getProviderManager: () => ({
         hasActiveProvider: () => false,
@@ -352,21 +368,39 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
       throw new Error(`process.exit(${code}) called`);
     });
 
-    await expect(
-      guardUnconfiguredProvider(config, () =>
-        Promise.reject(new Error('cleanup failed')),
-      ),
-    ).rejects.toThrow('process.exit(52) called');
-    expect(exitSpy).toHaveBeenCalledWith(52);
+    return {
+      runGuardWithFailingCleanup: () =>
+        guardUnconfiguredProvider(config, () =>
+          Promise.reject(new Error('cleanup failed')),
+        ),
+      exitSpy,
+      debugErrorSpy,
+      stderrCalls,
+    };
+  }
+
+  function countUnconfiguredProviderMessages(
+    stderrCalls: readonly string[],
+  ): number {
+    return (stderrCalls.join('').match(/No provider is configured/g) ?? [])
+      .length;
+  }
+
+  it('logs cleanup failure via debugLogger (not stderr) and still exits 52', async () => {
+    const scenario =
+      await verifyLogsCleanupFailureViaDebugLoggerNotStderrAndStillExits52();
+
+    await expect(scenario.runGuardWithFailingCleanup()).rejects.toThrow(
+      'process.exit(52) called',
+    );
+    expect(scenario.exitSpy).toHaveBeenCalledWith(52);
 
     // Cleanup failure is reported once via debugLogger (debug-only, does not
     // corrupt JSON/stream-JSON structured output).
-    expect(debugErrorSpy).toHaveBeenCalledTimes(1);
+    expect(scenario.debugErrorSpy).toHaveBeenCalledTimes(1);
     // The stderr output must still contain exactly one occurrence of the
     // unconfigured-provider message (not duplicated by cleanup logging).
-    const combined = stderrCalls.join('');
-    const occurrences = (combined.match(/No provider is configured/g) ?? [])
-      .length;
+    const occurrences = countUnconfiguredProviderMessages(scenario.stderrCalls);
     expect(occurrences).toBe(1);
   });
 });

@@ -40,6 +40,12 @@ interface MockDebugLogger {
   logRecords: Array<{ channel: string; record: unknown }>;
 }
 
+interface BatchSummaryRecord {
+  hookCount: number;
+  successCount: number;
+  failureCount: number;
+}
+
 /**
  * Build an AggregatedHookResult from an array of partial HookOutput values.
  * Used to construct test fixtures for processCommonHookOutputFields.
@@ -117,6 +123,48 @@ function createMockDebugLogger(): MockDebugLogger {
     warn: vi.fn(),
     logRecords,
   };
+}
+
+function optionalString(include: boolean, value: string): string | undefined {
+  if (include) {
+    return value;
+  }
+  return undefined;
+}
+
+function stopReasonIsTrimmedOrAbsent(reason: string | undefined): boolean {
+  return reason === undefined || reason === reason.trim();
+}
+
+function isBatchSummaryRecord(record: unknown): record is BatchSummaryRecord {
+  if (typeof record !== 'object' || record === null) {
+    return false;
+  }
+  if (!('hookCount' in record) || typeof record.hookCount !== 'number') {
+    return false;
+  }
+  if (!('successCount' in record) || typeof record.successCount !== 'number') {
+    return false;
+  }
+  if (!('failureCount' in record) || typeof record.failureCount !== 'number') {
+    return false;
+  }
+  return true;
+}
+
+function reportCountInvariantOrEmpty(
+  summaryLogs: MockDebugLogger['logRecords'],
+): boolean {
+  if (summaryLogs.length === 0) {
+    return true;
+  }
+
+  const summary = summaryLogs[0]?.record;
+  if (!isBatchSummaryRecord(summary)) {
+    return false;
+  }
+
+  return summary.successCount + summary.failureCount === summary.hookCount;
 }
 
 // -----------------------------------------------------------------------------
@@ -611,7 +659,7 @@ describe('Property-based tests @plan:PLAN-20250218-HOOKSYSTEM.P13', () => {
         ),
         (outputShapes) => {
           const outputs = outputShapes.map((s) => ({
-            stopReason: s.hasStopReason ? s.stopReason : undefined,
+            stopReason: optionalString(s.hasStopReason, s.stopReason),
             continue: !s.continueIsFalse,
           }));
 
@@ -662,10 +710,7 @@ describe('Property-based tests @plan:PLAN-20250218-HOOKSYSTEM.P13', () => {
           const result: ProcessedHookResult = processMethod(aggregated);
 
           // Invariant: if stopReason is present, it should already be trimmed
-          expect(
-            result.stopReason === undefined ||
-              result.stopReason === result.stopReason.trim(),
-          ).toBe(true);
+          expect(stopReasonIsTrimmedOrAbsent(result.stopReason)).toBe(true);
         },
       ),
     ));
@@ -781,20 +826,7 @@ describe('Property-based tests @plan:PLAN-20250218-HOOKSYSTEM.P13', () => {
 
           // Stub is no-op - but when implemented:
           // Invariant: successCount + failureCount === hookCount
-          expect(
-            summaryLogs.length === 0 ||
-              (() => {
-                const summary = summaryLogs[0].record as {
-                  hookCount: number;
-                  successCount: number;
-                  failureCount: number;
-                };
-                return (
-                  summary.successCount + summary.failureCount ===
-                  summary.hookCount
-                );
-              })(),
-          ).toBe(true);
+          expect(reportCountInvariantOrEmpty(summaryLogs)).toBe(true);
         },
       ),
     ));
@@ -818,7 +850,7 @@ describe('Property-based tests @plan:PLAN-20250218-HOOKSYSTEM.P13', () => {
         ),
         (outputShapes) => {
           const outputs = outputShapes.map((s) => ({
-            systemMessage: s.hasSystemMessage ? s.systemMessage : undefined,
+            systemMessage: optionalString(s.hasSystemMessage, s.systemMessage),
           }));
 
           const aggregated = buildAggregated(outputs);

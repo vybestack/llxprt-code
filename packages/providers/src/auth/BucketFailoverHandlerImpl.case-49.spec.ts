@@ -12,6 +12,15 @@ import {
   MemoryTokenStore,
 } from './BucketFailoverHandlerImpl.test-helpers.js';
 
+async function authenticateBucketB(
+  tokenStore: MemoryTokenStore,
+  bucket: string | undefined,
+): Promise<void> {
+  if (bucket === 'bucket-b') {
+    await tokenStore.saveToken('anthropic', makeToken('reauth-b'), bucket);
+  }
+}
+
 describe('BucketFailoverHandlerImpl #49', () => {
   it('eagerly authenticates remaining buckets after successful pass-3 foreground reauth', async () => {
     // Arrange
@@ -24,15 +33,9 @@ describe('BucketFailoverHandlerImpl #49', () => {
       getTokenStore: vi.fn(() => tokenStore),
       setSessionBucket: vi.fn(),
       getSessionBucket: vi.fn(() => 'bucket-a'),
-      authenticate: vi.fn(async (_p: string, bucket?: string) => {
-        if (bucket === 'bucket-b') {
-          await tokenStore.saveToken(
-            'anthropic',
-            makeToken('reauth-b'),
-            bucket,
-          );
-        }
-      }),
+      authenticate: vi.fn((_p: string, bucket?: string) =>
+        authenticateBucketB(tokenStore, bucket),
+      ),
       authenticateMultipleBuckets: vi.fn(async () => {}),
     };
 
@@ -67,15 +70,9 @@ describe('BucketFailoverHandlerImpl #49', () => {
       getTokenStore: vi.fn(() => tokenStore),
       setSessionBucket: vi.fn(),
       getSessionBucket: vi.fn(() => 'bucket-a'),
-      authenticate: vi.fn(async (_p: string, bucket?: string) => {
-        if (bucket === 'bucket-b') {
-          await tokenStore.saveToken(
-            'anthropic',
-            makeToken('reauth-b'),
-            bucket,
-          );
-        }
-      }),
+      authenticate: vi.fn((_p: string, bucket?: string) =>
+        authenticateBucketB(tokenStore, bucket),
+      ),
       authenticateMultipleBuckets: vi.fn(async () => {
         throw new Error('eager auth failed');
       }),
@@ -110,15 +107,9 @@ describe('BucketFailoverHandlerImpl #49', () => {
         sessionBucket = bucket;
       }),
       getSessionBucket: vi.fn(() => sessionBucket),
-      authenticate: vi.fn(async (_p: string, bucket?: string) => {
-        if (bucket === 'bucket-b') {
-          await tokenStore.saveToken(
-            'anthropic',
-            makeToken('reauth-b'),
-            bucket,
-          );
-        }
-      }),
+      authenticate: vi.fn((_p: string, bucket?: string) =>
+        authenticateBucketB(tokenStore, bucket),
+      ),
       // Eager auth authenticates the remaining unauthenticated buckets.
       authenticateMultipleBuckets: vi.fn(async () => {
         await tokenStore.saveToken(

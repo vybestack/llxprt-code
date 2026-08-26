@@ -19,6 +19,20 @@ const virtualModuleDir = join(
   'launcher',
 );
 
+function matchesCandidatePath(
+  target: string,
+  candidates: readonly string[],
+): boolean {
+  return candidates.includes(target);
+}
+
+function windowsWhereCommand(): string {
+  const systemRoot = process.env['SystemRoot'];
+  return systemRoot !== undefined && win32.isAbsolute(systemRoot)
+    ? win32.join(systemRoot, 'System32', 'where.exe')
+    : 'where.exe';
+}
+
 describe('resolveBunPath', () => {
   it('prefers a direct native Bun executable over a local bun.cmd wrapper on Windows', async () => {
     const wrapper = join(virtualRoot, 'node_modules', '.bin', 'bun.cmd');
@@ -27,7 +41,8 @@ describe('resolveBunPath', () => {
     const result = await resolveBunPath({
       platform: 'win32',
       moduleDir: virtualModuleDir,
-      pathChecker: async (target) => target === wrapper || target === native,
+      pathChecker: async (target) =>
+        matchesCandidatePath(target, [wrapper, native]),
       pathCommand: async () => null,
     });
 
@@ -41,7 +56,8 @@ describe('resolveBunPath', () => {
     const result = await resolveBunPath({
       platform: 'win32',
       moduleDir: virtualModuleDir,
-      pathChecker: async (target) => target === wrapper || target === native,
+      pathChecker: async (target) =>
+        matchesCandidatePath(target, [wrapper, native]),
       pathCommand: async () => native,
     });
 
@@ -142,16 +158,9 @@ describe('resolveBunPath', () => {
     const pathChecker = vi.fn(
       async (target: string) => target === 'C:/Program Files/bun/bun.exe',
     );
-    const systemRoot = process.env['SystemRoot'];
-    const expectedTool =
-      systemRoot !== undefined && win32.isAbsolute(systemRoot)
-        ? win32.join(systemRoot, 'System32', 'where.exe')
-        : 'where.exe';
-    const pathCommand = vi.fn(async (tool: string, args: string[]) => {
-      expect(tool).toBe(expectedTool);
-      expect(args).toStrictEqual(['bun']);
-      return 'C:/Program Files/bun/bun.exe';
-    });
+    const pathCommand = vi.fn(
+      async (_tool: string, _args: string[]) => 'C:/Program Files/bun/bun.exe',
+    );
 
     const result = await resolveBunPath({
       platform: 'win32',
@@ -160,15 +169,16 @@ describe('resolveBunPath', () => {
       pathCommand,
     });
 
+    expect(pathCommand.mock.calls[0]?.[0]).toBe(windowsWhereCommand());
+    expect(pathCommand.mock.calls[0]?.[1]).toStrictEqual(['bun']);
     expect(result).toBe('C:/Program Files/bun/bun.exe');
   });
 
   it('ignores unsupported Windows PATH wrappers before executable validation', async () => {
     const batchWrapper = 'C:\\tools\\bun.bat';
     const commandWrapper = 'C:\\tools\\bun.cmd';
-    const pathChecker = vi.fn(
-      async (target: string) =>
-        target === batchWrapper || target === commandWrapper,
+    const pathChecker = vi.fn(async (target: string) =>
+      matchesCandidatePath(target, [batchWrapper, commandWrapper]),
     );
 
     const result = await resolveBunPath({
@@ -452,8 +462,8 @@ describe('resolveBunPath', () => {
         'bun.exe',
       );
       const native = join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun');
-      const pathChecker = vi.fn(
-        async (target: string) => target === executable || target === native,
+      const pathChecker = vi.fn(async (target: string) =>
+        matchesCandidatePath(target, [executable, native]),
       );
       const pathCommand = vi.fn(async () => '/usr/local/bin/bun');
 
@@ -468,10 +478,11 @@ describe('resolveBunPath', () => {
     });
 
     it('POSIX: .bin still wins over direct dependency and PATH', async () => {
-      const pathChecker = vi.fn(
-        async (target: string) =>
-          target === join(virtualRoot, 'node_modules', '.bin', 'bun') ||
-          target === join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
+      const pathChecker = vi.fn(async (target: string) =>
+        matchesCandidatePath(target, [
+          join(virtualRoot, 'node_modules', '.bin', 'bun'),
+          join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
+        ]),
       );
       const pathCommand = vi.fn(async () => '/usr/local/bin/bun');
 
@@ -543,10 +554,11 @@ describe('resolveBunPath', () => {
     });
 
     it('Windows: .bin bun.exe wins over direct dependency executable', async () => {
-      const pathChecker = vi.fn(
-        async (target: string) =>
-          target === join(virtualRoot, 'node_modules', '.bin', 'bun.exe') ||
-          target === join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
+      const pathChecker = vi.fn(async (target: string) =>
+        matchesCandidatePath(target, [
+          join(virtualRoot, 'node_modules', '.bin', 'bun.exe'),
+          join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
+        ]),
       );
 
       const result = await resolveBunPath({
@@ -560,10 +572,11 @@ describe('resolveBunPath', () => {
     });
 
     it('Windows: direct native Bun wins over a .bin bun.cmd wrapper', async () => {
-      const pathChecker = vi.fn(
-        async (target: string) =>
-          target === join(virtualRoot, 'node_modules', '.bin', 'bun.cmd') ||
-          target === join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
+      const pathChecker = vi.fn(async (target: string) =>
+        matchesCandidatePath(target, [
+          join(virtualRoot, 'node_modules', '.bin', 'bun.cmd'),
+          join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
+        ]),
       );
 
       const result = await resolveBunPath({
@@ -665,10 +678,11 @@ describe('resolveBunPath', () => {
 
   describe('Windows direct-executable (.exe) preference', () => {
     it('prefers bun.exe over bun.cmd when both exist in the same .bin dir', async () => {
-      const pathChecker = vi.fn(
-        async (target: string) =>
-          target === join(virtualRoot, 'node_modules', '.bin', 'bun.exe') ||
-          target === join(virtualRoot, 'node_modules', '.bin', 'bun.cmd'),
+      const pathChecker = vi.fn(async (target: string) =>
+        matchesCandidatePath(target, [
+          join(virtualRoot, 'node_modules', '.bin', 'bun.exe'),
+          join(virtualRoot, 'node_modules', '.bin', 'bun.cmd'),
+        ]),
       );
 
       const result = await resolveBunPath({

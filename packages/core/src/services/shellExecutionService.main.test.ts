@@ -141,6 +141,23 @@ describe('ShellExecutionService', () => {
     return { result, handle, abortController };
   };
 
+  const waitForSigkill = (): Promise<void> =>
+    new Promise<void>((resolve) => {
+      mockProcessKill.mockImplementation((pid, signal) => {
+        if (signal === 'SIGKILL' && pid === -mockPtyProcess.pid) resolve();
+        return true;
+      });
+    });
+
+  const killCallIndex = (signal: NodeJS.Signals): number =>
+    mockProcessKill.mock.calls.findIndex(
+      (call) => call[0] === -mockPtyProcess.pid && call[1] === signal,
+    );
+
+  const emitOutputWhenReady = (): void => {
+    mockPtyProcess.onData.mock.calls[0][0]('output\n');
+  };
+
   describe('Successful Execution', () => {
     it('should execute a command and capture output', async () => {
       const { result, handle } = await simulateExecution(
@@ -386,14 +403,7 @@ describe('ShellExecutionService', () => {
     });
 
     it('should send SIGTERM and then SIGKILL on abort', async () => {
-      const sigkillPromise = new Promise<void>((resolve) => {
-        mockProcessKill.mockImplementation((pid, signal) => {
-          if (signal === 'SIGKILL' && pid === -mockPtyProcess.pid) {
-            resolve();
-          }
-          return true;
-        });
-      });
+      const sigkillPromise = waitForSigkill();
 
       const { result } = await simulateExecution(
         'long-running-process',
@@ -407,13 +417,8 @@ describe('ShellExecutionService', () => {
       expect(result.aborted).toBe(true);
 
       // Verify the calls were made in the correct order.
-      const killCalls = mockProcessKill.mock.calls;
-      const sigtermCallIndex = killCalls.findIndex(
-        (call) => call[0] === -mockPtyProcess.pid && call[1] === 'SIGTERM',
-      );
-      const sigkillCallIndex = killCalls.findIndex(
-        (call) => call[0] === -mockPtyProcess.pid && call[1] === 'SIGKILL',
-      );
+      const sigtermCallIndex = killCallIndex('SIGTERM');
+      const sigkillCallIndex = killCallIndex('SIGKILL');
 
       expect(sigtermCallIndex).toBe(0);
       expect(sigkillCallIndex).toBe(1);
@@ -461,11 +466,7 @@ describe('ShellExecutionService', () => {
       await new Promise((resolve) => setImmediate(resolve));
 
       // Emit output every 50ms (within the 100ms inactivity window)
-      const outputInterval = setInterval(() => {
-        if (mockPtyProcess.onData.mock.calls.length > 0) {
-          mockPtyProcess.onData.mock.calls[0][0]('output\n');
-        }
-      }, 50);
+      const outputInterval = setInterval(emitOutputWhenReady, 50);
 
       // Wait 250ms (should reset timer multiple times)
       await new Promise((resolve) => setTimeout(resolve, 250));

@@ -360,77 +360,88 @@ describe('subagent.ts', () => {
      *       Including functionCall in user-role tool results causes Anthropic invalid_request_error.
      */
     it('should produce functionResponse-only parts for error tool calls (Anthropic boundary)', async () => {
-      const { config } = await createMockConfig();
-      const { overrides } = createRuntimeOverrides();
-      const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
-
-      mockSendMessageStream.mockImplementation(createMockStream(['stop']));
-
-      const scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        promptConfig,
-        defaultModelConfig,
-        defaultRunConfig,
-        undefined,
-        undefined,
-        overrides,
-      );
-
-      // Simulate error completed calls with tool_call in responseParts
-      // (this is what coreToolScheduler's createErrorResponse produces)
-      const completedCalls = [
-        {
-          status: 'error' as const,
-          request: {
-            callId: 'call-err',
-            name: 'failing_tool',
-            args: { path: '/test' },
-          },
-          response: {
-            callId: 'call-err',
-            responseParts: [
-              {
-                type: 'tool_call',
-                callId: 'call-err',
-                toolName: 'failing_tool',
-                args: { path: '/test' },
-              },
-              {
-                type: 'tool_response',
-                callId: 'call-err',
-                toolName: 'failing_tool',
-                result: { error: 'Tool execution failed' },
-              },
-            ],
-            resultDisplay: 'Tool execution failed',
-            error: new Error('Tool execution failed'),
-          },
-        },
-      ];
-
-      const parts = buildPartsFromCompletedCalls(
-        completedCalls as Parameters<typeof buildPartsFromCompletedCalls>[0],
-        {
-          onMessage: scope.onMessage,
-          subagentId: scope.getAgentId(),
-          logger: new DebugLogger('llxprt:subagent'),
-        },
-      );
-
-      // CRITICAL: No part should be a tool_call - only tool_response
-      // tool_call in user-role message causes Anthropic invalid_request_error
-      for (const part of parts) {
-        expect(part).not.toHaveProperty('type', 'tool_call');
-      }
-      // Should still have a tool_response
-      const hasToolResponse = parts.some(
-        (p: ContentBlock) =>
-          'type' in p &&
-          (p as Record<string, unknown>).type === 'tool_response',
-      );
-      expect(hasToolResponse).toBe(true);
+      const responsePartShape =
+        await observeProduceFunctionResponseOnlyPartsForErrorToolCallsAnthropicBoundary();
+      expect(responsePartShape).toStrictEqual({
+        hasToolResponse: true,
+        toolCallParts: [],
+      });
     });
+
+    const observeProduceFunctionResponseOnlyPartsForErrorToolCallsAnthropicBoundary =
+      async () => {
+        const { config } = await createMockConfig();
+        const { overrides } = createRuntimeOverrides();
+        const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
+
+        mockSendMessageStream.mockImplementation(createMockStream(['stop']));
+
+        const scope = await SubAgentScope.create(
+          'test-agent',
+          config,
+          promptConfig,
+          defaultModelConfig,
+          defaultRunConfig,
+          undefined,
+          undefined,
+          overrides,
+        );
+
+        // Simulate error completed calls with tool_call in responseParts
+        // (this is what coreToolScheduler's createErrorResponse produces)
+        const completedCalls = [
+          {
+            status: 'error' as const,
+            request: {
+              callId: 'call-err',
+              name: 'failing_tool',
+              args: { path: '/test' },
+            },
+            response: {
+              callId: 'call-err',
+              responseParts: [
+                {
+                  type: 'tool_call',
+                  callId: 'call-err',
+                  toolName: 'failing_tool',
+                  args: { path: '/test' },
+                },
+                {
+                  type: 'tool_response',
+                  callId: 'call-err',
+                  toolName: 'failing_tool',
+                  result: { error: 'Tool execution failed' },
+                },
+              ],
+              resultDisplay: 'Tool execution failed',
+              error: new Error('Tool execution failed'),
+            },
+          },
+        ];
+
+        const parts = buildPartsFromCompletedCalls(
+          completedCalls as Parameters<typeof buildPartsFromCompletedCalls>[0],
+          {
+            onMessage: scope.onMessage,
+            subagentId: scope.getAgentId(),
+            logger: new DebugLogger('llxprt:subagent'),
+          },
+        );
+
+        // CRITICAL: No part should be a tool_call - only tool_response
+        // tool_call in user-role message causes Anthropic invalid_request_error
+        const toolCallParts = parts.filter(
+          (part) => 'type' in part && part.type === 'tool_call',
+        );
+        // Should still have a tool_response
+        const hasToolResponse = parts.some(
+          (p: ContentBlock) =>
+            'type' in p &&
+            (p as Record<string, unknown>).type === 'tool_response',
+        );
+
+        return { hasToolResponse, toolCallParts };
+      };
 
     /**
      * @scenario Mixed success+error tool calls in same turn produce valid continuation
@@ -440,96 +451,110 @@ describe('subagent.ts', () => {
      *       and each tool_use from the model has exactly one matching tool_result
      */
     it('should produce valid paired parts for mixed success+error calls (Anthropic boundary)', async () => {
-      const { config } = await createMockConfig();
-      const { overrides } = createRuntimeOverrides();
-      const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
-
-      mockSendMessageStream.mockImplementation(createMockStream(['stop']));
-
-      const scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        promptConfig,
-        defaultModelConfig,
-        defaultRunConfig,
-        undefined,
-        undefined,
-        overrides,
-      );
-
-      const completedCalls = [
-        {
-          status: 'success' as const,
-          request: {
-            callId: 'call-ok',
-            name: 'read_file',
-            args: { path: '/test.txt' },
-          },
-          tool: { canUpdateOutput: false },
-          response: {
-            callId: 'call-ok',
-            responseParts: [
-              {
-                type: 'tool_response',
-                callId: 'call-ok',
-                toolName: 'read_file',
-                result: { output: 'file contents' },
-              },
-            ],
-            resultDisplay: 'file contents',
-          },
-        },
-        {
-          status: 'error' as const,
-          request: {
-            callId: 'call-err',
-            name: 'write_file',
-            args: { path: '/out.txt', content: 'data' },
-          },
-          response: {
-            callId: 'call-err',
-            responseParts: [
-              {
-                type: 'tool_call',
-                callId: 'call-err',
-                toolName: 'write_file',
-                args: { path: '/out.txt', content: 'data' },
-              },
-              {
-                type: 'tool_response',
-                callId: 'call-err',
-                toolName: 'write_file',
-                result: { error: 'Permission denied' },
-              },
-            ],
-            resultDisplay: 'Permission denied',
-            error: new Error('Permission denied'),
-          },
-        },
-      ];
-
-      const parts = buildPartsFromCompletedCalls(
-        completedCalls as Parameters<typeof buildPartsFromCompletedCalls>[0],
-        {
-          onMessage: scope.onMessage,
-          subagentId: scope.getAgentId(),
-          logger: new DebugLogger('llxprt:subagent'),
-        },
-      );
-
-      // No part should be a tool_call
-      for (const part of parts) {
-        expect(part).not.toHaveProperty('type', 'tool_call');
-      }
-
-      // Should have tool_response for both tool calls
-      const toolResponses = parts.filter(
-        (p: ContentBlock) =>
-          'type' in p &&
-          (p as Record<string, unknown>).type === 'tool_response',
-      );
-      expect(toolResponses.length).toBe(2);
+      const responsePartShape =
+        await observeProduceValidPairedPartsForMixedSuccessErrorCallsAnthropicBoundary();
+      expect({
+        toolCallParts: responsePartShape.toolCallParts,
+        toolResponseCount: responsePartShape.toolResponses.length,
+      }).toStrictEqual({
+        toolCallParts: [],
+        toolResponseCount: 2,
+      });
     });
+
+    const observeProduceValidPairedPartsForMixedSuccessErrorCallsAnthropicBoundary =
+      async () => {
+        const { config } = await createMockConfig();
+        const { overrides } = createRuntimeOverrides();
+        const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
+
+        mockSendMessageStream.mockImplementation(createMockStream(['stop']));
+
+        const scope = await SubAgentScope.create(
+          'test-agent',
+          config,
+          promptConfig,
+          defaultModelConfig,
+          defaultRunConfig,
+          undefined,
+          undefined,
+          overrides,
+        );
+
+        const completedCalls = [
+          {
+            status: 'success' as const,
+            request: {
+              callId: 'call-ok',
+              name: 'read_file',
+              args: { path: '/test.txt' },
+            },
+            tool: { canUpdateOutput: false },
+            response: {
+              callId: 'call-ok',
+              responseParts: [
+                {
+                  type: 'tool_response',
+                  callId: 'call-ok',
+                  toolName: 'read_file',
+                  result: { output: 'file contents' },
+                },
+              ],
+              resultDisplay: 'file contents',
+            },
+          },
+          {
+            status: 'error' as const,
+            request: {
+              callId: 'call-err',
+              name: 'write_file',
+              args: { path: '/out.txt', content: 'data' },
+            },
+            response: {
+              callId: 'call-err',
+              responseParts: [
+                {
+                  type: 'tool_call',
+                  callId: 'call-err',
+                  toolName: 'write_file',
+                  args: { path: '/out.txt', content: 'data' },
+                },
+                {
+                  type: 'tool_response',
+                  callId: 'call-err',
+                  toolName: 'write_file',
+                  result: { error: 'Permission denied' },
+                },
+              ],
+              resultDisplay: 'Permission denied',
+              error: new Error('Permission denied'),
+            },
+          },
+        ];
+
+        const parts = buildPartsFromCompletedCalls(
+          completedCalls as Parameters<typeof buildPartsFromCompletedCalls>[0],
+          {
+            onMessage: scope.onMessage,
+            subagentId: scope.getAgentId(),
+            logger: new DebugLogger('llxprt:subagent'),
+          },
+        );
+
+        // No part should be a tool_call
+        const toolCallParts = parts.filter(
+          (part) => 'type' in part && part.type === 'tool_call',
+        );
+
+        // Should have tool_response for both tool calls
+        const toolResponses = parts.filter(
+          (p: ContentBlock) =>
+            'type' in p &&
+            (p as Record<string, unknown>).type === 'tool_response',
+        );
+
+        return { toolResponses, toolCallParts };
+      };
 
     it('should handle calls where tool is undefined gracefully', async () => {
       const { config } = await createMockConfig();
@@ -603,6 +628,27 @@ describe('subagent.ts', () => {
      * getWorkingDir, and getTargetDir methods.
      */
     it('should trigger BeforeTool hook when subagent executes a tool', async () => {
+      const {
+        toolExecutorConfig,
+        mockHookSystem,
+        triggerBeforeToolHookWhenSubagentExecutesAToolObservation1,
+        triggerBeforeToolHookWhenSubagentExecutesAToolObservation2,
+      } = await observeTriggerBeforeToolHookWhenSubagentExecutesATool();
+      expect(executeToolCall).toHaveBeenCalled();
+      expect(typeof toolExecutorConfig.getEnableHooks).toBe('function');
+      expect(typeof toolExecutorConfig.getHooks).toBe('function');
+      expect(typeof toolExecutorConfig.getHookSystem).toBe('function');
+      expect(typeof toolExecutorConfig.getWorkingDir).toBe('function');
+      expect(typeof toolExecutorConfig.getTargetDir).toBe('function');
+      expect(triggerBeforeToolHookWhenSubagentExecutesAToolObservation1).toBe(
+        true,
+      );
+      expect(triggerBeforeToolHookWhenSubagentExecutesAToolObservation2).toBe(
+        mockHookSystem,
+      );
+    });
+
+    const observeTriggerBeforeToolHookWhenSubagentExecutesATool = async () => {
       // Create a mock HookSystem that tracks when BeforeTool is triggered
       const mockHookSystem = {
         initialize: vi.fn().mockResolvedValue(undefined),
@@ -704,7 +750,6 @@ describe('subagent.ts', () => {
       await scope.runNonInteractive(new ContextState());
 
       // Verify the tool was called
-      expect(executeToolCall).toHaveBeenCalled();
 
       // Verify the config passed to executeToolCall has hook methods
       // The bug is that createSchedulerConfig() doesn't delegate these
@@ -714,15 +759,19 @@ describe('subagent.ts', () => {
 
       // These assertions will FAIL until the bug is fixed:
       // createSchedulerConfig() must delegate hook methods to this.config
-      expect(typeof toolExecutorConfig.getEnableHooks).toBe('function');
-      expect(typeof toolExecutorConfig.getHooks).toBe('function');
-      expect(typeof toolExecutorConfig.getHookSystem).toBe('function');
-      expect(typeof toolExecutorConfig.getWorkingDir).toBe('function');
-      expect(typeof toolExecutorConfig.getTargetDir).toBe('function');
 
       // When hook methods are properly delegated, they should return the parent config values
-      expect(toolExecutorConfig.getEnableHooks?.()).toBe(true);
-      expect(toolExecutorConfig.getHookSystem?.()).toBe(mockHookSystem);
-    });
+
+      const triggerBeforeToolHookWhenSubagentExecutesAToolObservation1 =
+        toolExecutorConfig.getEnableHooks?.();
+      const triggerBeforeToolHookWhenSubagentExecutesAToolObservation2 =
+        toolExecutorConfig.getHookSystem?.();
+      return {
+        toolExecutorConfig,
+        mockHookSystem,
+        triggerBeforeToolHookWhenSubagentExecutesAToolObservation1,
+        triggerBeforeToolHookWhenSubagentExecutesAToolObservation2,
+      };
+    };
   });
 });

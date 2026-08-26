@@ -15,6 +15,16 @@ import {
   tailOutputWindows,
 } from './shellJobTail.js';
 
+function isSubsequence(keep: string, output: string): boolean {
+  let outputIndex = 0;
+  for (const character of keep) {
+    const found = output.indexOf(character, outputIndex);
+    if (found === -1) return false;
+    outputIndex = found + 1;
+  }
+  return true;
+}
+
 describe('decodeClixmlStderr', () => {
   it('decodes a single Error record with _x000D__x000A_ line ending', () => {
     const input =
@@ -413,16 +423,6 @@ describe('decodeClixmlStderr — strict no-loss rule (H1)', () => {
   it('preserves every non-wrapper character across a corpus (no data loss)', () => {
     // For each corpus input, assert the "kept" characters (record contents and
     // all verbatim text) appear in order in the output — a subsequence check.
-    const isSubsequence = (keep: string, out: string): boolean => {
-      let oi = 0;
-      for (const ch of keep) {
-        const found = out.indexOf(ch, oi);
-        if (found === -1) return false;
-        oi = found + 1;
-      }
-      return true;
-    };
-
     const cases: Array<{ input: string; keep: string }> = [
       { input: '<S S="Error">hello</S>', keep: 'hello' },
       {

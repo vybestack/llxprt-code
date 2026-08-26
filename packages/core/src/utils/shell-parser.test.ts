@@ -29,6 +29,8 @@ import {
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { resolvePwshTestPolicyFromEnv } from '../test-utils/pwsh-test-policy.js';
 
+const bunIt = it;
+
 let parserInitialized = await initializeParser();
 const pwshPolicy = resolvePwshTestPolicyFromEnv(
   isParserAvailable('powershell'),
@@ -51,6 +53,15 @@ if (pwshPolicy.skipReason !== null) {
  * the parser available so these tests exercise real parsing behavior.
  */
 describe('shell-parser', () => {
+  const TIMEOUT_COMMAND =
+    'a=$(b); c=$(d); e=$(f); g=$(h); i=$(j); k=$(l); ls -la';
+
+  function setupTimeoutMock(): void {
+    vi.spyOn(performance, 'now')
+      .mockReturnValueOnce(0)
+      .mockReturnValue(Number.MAX_SAFE_INTEGER);
+  }
+
   beforeAll(async () => {
     // Refresh initialization state in case another test reset the parser.
     parserInitialized = await initializeParser();
@@ -67,7 +78,6 @@ describe('shell-parser', () => {
     // and a real re-initialization must restore availability.
     afterAll(async () => {
       await initializeParser();
-      expect(isParserAvailable('powershell')).toBe(true);
     });
 
     it('fails closed after resetParser and recovers after initializeParser', async () => {
@@ -84,19 +94,24 @@ describe('shell-parser', () => {
         parseShellCommandForLanguage('Get-ChildItem', 'powershell'),
       ).not.toBeNull();
     });
+
+    it('keeps the PowerShell parser available after recovery', async () => {
+      await initializeParser();
+      expect(isParserAvailable('powershell')).toBe(true);
+    });
   });
 
   describe('initializeParser', () => {
-    it.skipIf(!parserInitialized)(
-      'should successfully initialize the parser under the current runtime',
-      async () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should successfully initialize the parser under the current runtime', async () => {
         resetParser();
         const result = await initializeParser();
         expect(result).toBe(true);
         expect(isParserAvailable()).toBe(true);
         expect(getInitializationError()).toBeNull();
-      },
-    );
+      });
+    }
 
     it('should attempt initialization and return consistent result', async () => {
       const result = await initializeParser();
@@ -110,9 +125,9 @@ describe('shell-parser', () => {
       expect(result1).toBe(result2);
     });
 
-    it.skipIf(!parserInitialized)(
-      'should share initialization across concurrent calls',
-      async () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should share initialization across concurrent calls', async () => {
         resetParser();
 
         const firstInitialization = initializeParser();
@@ -127,18 +142,18 @@ describe('shell-parser', () => {
 
         expect(results).toStrictEqual([true, true]);
         expect(isParserAvailable()).toBe(true);
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should have no initialization error when parser is available',
-      async () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should have no initialization error when parser is available', async () => {
         await initializeParser();
         const error = getInitializationError();
         // After successful initialization there should be no error
         expect(error).toBeNull();
-      },
-    );
+      });
+    }
 
     it('should record initialization errors when tree-sitter exports are missing', async () => {
       // Under Bun, vi.resetModules() is unsupported (modules are cached
@@ -158,22 +173,22 @@ describe('shell-parser', () => {
   });
 
   describe('parseShellCommand', () => {
-    it.skipIf(!parserInitialized)(
-      'should parse a simple command when parser is available',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should parse a simple command when parser is available', () => {
         const tree = parseShellCommand('ls -la');
         expect(tree).not.toBeNull();
         expect(tree?.rootNode.type).toBe('program');
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should parse complex pipelines when parser is available',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should parse complex pipelines when parser is available', () => {
         const tree = parseShellCommand('cat file.txt | grep pattern | wc -l');
         expect(tree).not.toBeNull();
-      },
-    );
+      });
+    }
 
     it('should return null if parser not available', () => {
       resetParser();
@@ -185,22 +200,13 @@ describe('shell-parser', () => {
   });
 
   describe('timeout handling', () => {
-    const TIMEOUT_COMMAND =
-      'a=$(b); c=$(d); e=$(f); g=$(h); i=$(j); k=$(l); ls -la';
-
-    function setupTimeoutMock(): void {
-      vi.spyOn(performance, 'now')
-        .mockReturnValueOnce(0)
-        .mockReturnValue(Number.MAX_SAFE_INTEGER);
-    }
-
     afterEach(() => {
       vi.restoreAllMocks();
     });
 
-    it.skipIf(!isParserAvailable())(
-      'should handle bash parser timeouts in parseShellCommand',
-      async () => {
+    {
+      const it = !isParserAvailable() ? bunIt.skip : bunIt;
+      it('should handle bash parser timeouts in parseShellCommand', async () => {
         await initializeParser();
 
         const errorSpy = vi
@@ -214,12 +220,12 @@ describe('shell-parser', () => {
           'Bash command parsing timed out for command:',
           TIMEOUT_COMMAND,
         );
-      },
-    );
+      });
+    }
 
-    it.skipIf(!isParserAvailable())(
-      'should handle bash parser timeouts in parseCommandDetails',
-      async () => {
+    {
+      const it = !isParserAvailable() ? bunIt.skip : bunIt;
+      it('should handle bash parser timeouts in parseCommandDetails', async () => {
         await initializeParser();
 
         vi.spyOn(DebugLogger.prototype, 'error').mockImplementation(() => {});
@@ -228,8 +234,8 @@ describe('shell-parser', () => {
         const result = parseCommandDetails(TIMEOUT_COMMAND);
         // When parseShellCommand times out, parseCommandDetails returns hasError: true
         expect(result).toStrictEqual({ details: [], hasError: true });
-      },
-    );
+      });
+    }
   });
 
   describe('extractCommandNames', () => {
@@ -237,65 +243,65 @@ describe('shell-parser', () => {
       await initializeParser();
     });
 
-    it.skipIf(!parserInitialized)(
-      'should extract simple command when parser available',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should extract simple command when parser available', () => {
         const tree = parseShellCommand('ls -la');
         expect(tree).not.toBeNull();
         const names = extractCommandNames(tree!);
         expect(names).toContain('ls');
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should extract commands from pipeline when parser available',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should extract commands from pipeline when parser available', () => {
         const tree = parseShellCommand('cat file.txt | grep pattern | wc -l');
         expect(tree).not.toBeNull();
         const names = extractCommandNames(tree!);
         expect(names).toStrictEqual(['cat', 'grep', 'wc']);
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should extract commands from && chain when parser available',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should extract commands from && chain when parser available', () => {
         const tree = parseShellCommand('npm install && npm test && npm build');
         expect(tree).not.toBeNull();
         const names = extractCommandNames(tree!);
         expect(names).toStrictEqual(['npm', 'npm', 'npm']);
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should extract commands from || chain when parser available',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should extract commands from || chain when parser available', () => {
         const tree = parseShellCommand('test -f file || touch file');
         expect(tree).not.toBeNull();
         const names = extractCommandNames(tree!);
         expect(names).toStrictEqual(['test', 'touch']);
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should handle commands with paths when parser available',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should handle commands with paths when parser available', () => {
         const tree = parseShellCommand('/usr/bin/python script.py');
         expect(tree).not.toBeNull();
         const names = extractCommandNames(tree!);
         expect(names).toContain('python');
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should handle quoted commands when parser available',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should handle quoted commands when parser available', () => {
         const tree = parseShellCommand('"my command" arg1 arg2');
         expect(tree).not.toBeNull();
         const names = extractCommandNames(tree!);
         expect(names.length).toBeGreaterThan(0);
-      },
-    );
+      });
+    }
   });
 
   describe('hasCommandSubstitution', () => {
@@ -303,78 +309,78 @@ describe('shell-parser', () => {
       await initializeParser();
     });
 
-    it.skipIf(!parserInitialized)(
-      'should detect $() substitution when parser available',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should detect $() substitution when parser available', () => {
         const tree = parseShellCommand('echo $(whoami)');
         expect(tree).not.toBeNull();
         expect(hasCommandSubstitution(tree!)).toBe(true);
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should detect backtick substitution when parser available',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should detect backtick substitution when parser available', () => {
         const tree = parseShellCommand('echo `date`');
         expect(tree).not.toBeNull();
         expect(hasCommandSubstitution(tree!)).toBe(true);
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should detect process substitution <() when parser available',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should detect process substitution <() when parser available', () => {
         const tree = parseShellCommand('diff <(ls dir1) <(ls dir2)');
         expect(tree).not.toBeNull();
         expect(hasCommandSubstitution(tree!)).toBe(true);
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should detect process substitution >() when parser available',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should detect process substitution >() when parser available', () => {
         const tree = parseShellCommand('tee >(cat > file.txt)');
         expect(tree).not.toBeNull();
         expect(hasCommandSubstitution(tree!)).toBe(true);
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should not detect substitution in single quotes when parser available',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should not detect substitution in single quotes when parser available', () => {
         const tree = parseShellCommand("echo 'hello $(world)'");
         expect(tree).not.toBeNull();
         // Single quotes prevent substitution in bash - tree-sitter sees string literal
         expect(hasCommandSubstitution(tree!)).toBe(false);
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should return false for simple commands when parser available',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should return false for simple commands when parser available', () => {
         const tree = parseShellCommand('ls -la /tmp');
         expect(tree).not.toBeNull();
         expect(hasCommandSubstitution(tree!)).toBe(false);
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should return false for pipes (not substitution) when parser available',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should return false for pipes (not substitution) when parser available', () => {
         const tree = parseShellCommand('cat file | grep pattern');
         expect(tree).not.toBeNull();
         expect(hasCommandSubstitution(tree!)).toBe(false);
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should detect nested substitution when parser available',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should detect nested substitution when parser available', () => {
         const tree = parseShellCommand('echo $(cat $(ls))');
         expect(tree).not.toBeNull();
         expect(hasCommandSubstitution(tree!)).toBe(true);
-      },
-    );
+      });
+    }
   });
 
   describe('splitCommandsWithTree', () => {
@@ -382,76 +388,76 @@ describe('shell-parser', () => {
       await initializeParser();
     });
 
-    it.skipIf(!parserInitialized)(
-      'should split && commands when parser available',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should split && commands when parser available', () => {
         const tree = parseShellCommand('cd /tmp && ls');
         expect(tree).not.toBeNull();
         const commands = splitCommandsWithTree(tree!);
         expect(commands.length).toBe(2);
         expect(commands[0]).toContain('cd');
         expect(commands[1]).toContain('ls');
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should split || commands when parser available',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should split || commands when parser available', () => {
         const tree = parseShellCommand('test -f file || touch file');
         expect(tree).not.toBeNull();
         const commands = splitCommandsWithTree(tree!);
         expect(commands.length).toBe(2);
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should handle semicolon separation when parser available',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should handle semicolon separation when parser available', () => {
         const tree = parseShellCommand('echo a; echo b; echo c');
         expect(tree).not.toBeNull();
         const commands = splitCommandsWithTree(tree!);
         expect(commands.length).toBe(3);
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should handle pipeline as single command unit when parser available',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should handle pipeline as single command unit when parser available', () => {
         const tree = parseShellCommand('cat file | grep pattern');
         expect(tree).not.toBeNull();
         const commands = splitCommandsWithTree(tree!);
         // Pipeline is treated as one logical unit
         expect(commands.length).toBeGreaterThanOrEqual(1);
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should handle mixed operators when parser available',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should handle mixed operators when parser available', () => {
         const tree = parseShellCommand('cmd1 && cmd2 || cmd3; cmd4');
         expect(tree).not.toBeNull();
         const commands = splitCommandsWithTree(tree!);
         expect(commands.length).toBe(4);
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should handle empty input gracefully',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should handle empty input gracefully', () => {
         const tree = parseShellCommand('');
         expect(tree).toBeNull();
-      },
-    );
+      });
+    }
 
-    it.skipIf(!parserInitialized)(
-      'should handle subshells when parser available',
-      () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should handle subshells when parser available', () => {
         const tree = parseShellCommand('(cd /tmp && ls)');
         expect(tree).not.toBeNull();
         const commands = splitCommandsWithTree(tree!);
         expect(commands.length).toBeGreaterThanOrEqual(1);
-      },
-    );
+      });
+    }
   });
 
   describe('collectCommandDetails', () => {
@@ -459,42 +465,42 @@ describe('shell-parser', () => {
       await initializeParser();
     });
 
-    it.skipIf(!isParserAvailable())(
-      'should extract commands from simple command',
-      () => {
+    {
+      const it = !isParserAvailable() ? bunIt.skip : bunIt;
+      it('should extract commands from simple command', () => {
         const tree = parseShellCommand('echo hello');
         expect(tree).not.toBeNull();
         const details = collectCommandDetails(tree!, 'echo hello');
         expect(details).toHaveLength(1);
         expect(details[0].name).toBe('echo');
-      },
-    );
+      });
+    }
 
-    it.skipIf(!isParserAvailable())(
-      'should extract commands from command substitution $()',
-      () => {
+    {
+      const it = !isParserAvailable() ? bunIt.skip : bunIt;
+      it('should extract commands from command substitution $()', () => {
         const tree = parseShellCommand('echo $(curl google.com)');
         expect(tree).not.toBeNull();
         const details = collectCommandDetails(tree!, 'echo $(curl google.com)');
         expect(details.map((d) => d.name)).toContain('echo');
         expect(details.map((d) => d.name)).toContain('curl');
-      },
-    );
+      });
+    }
 
-    it.skipIf(!isParserAvailable())(
-      'should extract commands from backtick substitution',
-      () => {
+    {
+      const it = !isParserAvailable() ? bunIt.skip : bunIt;
+      it('should extract commands from backtick substitution', () => {
         const tree = parseShellCommand('echo `rm -rf /`');
         expect(tree).not.toBeNull();
         const details = collectCommandDetails(tree!, 'echo `rm -rf /`');
         expect(details.map((d) => d.name)).toContain('echo');
         expect(details.map((d) => d.name)).toContain('rm');
-      },
-    );
+      });
+    }
 
-    it.skipIf(!isParserAvailable())(
-      'should extract commands from process substitution <()',
-      () => {
+    {
+      const it = !isParserAvailable() ? bunIt.skip : bunIt;
+      it('should extract commands from process substitution <()', () => {
         const tree = parseShellCommand('diff <(curl a) <(echo b)');
         expect(tree).not.toBeNull();
         const details = collectCommandDetails(
@@ -504,12 +510,12 @@ describe('shell-parser', () => {
         expect(details.map((d) => d.name)).toContain('diff');
         expect(details.map((d) => d.name)).toContain('curl');
         expect(details.map((d) => d.name)).toContain('echo');
-      },
-    );
+      });
+    }
 
-    it.skipIf(!isParserAvailable())(
-      'should extract commands from function definitions',
-      () => {
+    {
+      const it = !isParserAvailable() ? bunIt.skip : bunIt;
+      it('should extract commands from function definitions', () => {
         const tree = parseShellCommand(
           'echo () (curl google.com) ; echo Hello',
         );
@@ -520,16 +526,20 @@ describe('shell-parser', () => {
         );
         expect(details.map((d) => d.name)).toContain('curl');
         expect(details.map((d) => d.name)).toContain('echo');
-      },
-    );
+      });
+    }
   });
-  describe('resetParser', () => {
-    it.skipIf(!parserInitialized)('should reset parser state', async () => {
-      resetParser();
-      expect(isParserAvailable()).toBe(false);
 
-      const reinitialized = await initializeParser();
-      expect(isParserAvailable()).toBe(reinitialized);
-    });
+  describe('resetParser', () => {
+    {
+      const it = !parserInitialized ? bunIt.skip : bunIt;
+      it('should reset parser state', async () => {
+        resetParser();
+        expect(isParserAvailable()).toBe(false);
+
+        const reinitialized = await initializeParser();
+        expect(isParserAvailable()).toBe(reinitialized);
+      });
+    }
   });
 });

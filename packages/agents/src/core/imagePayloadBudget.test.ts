@@ -214,21 +214,33 @@ describe('enforceImageBudget', () => {
   });
 
   it('preserves block ordering for retained images and non-image blocks', () => {
-    const blocks = [
-      toolResponseBlock('read_file', 'a'),
-      mediaBlock('image/png', 1000),
-      toolResponseBlock('grep', 'b'),
-      textBlock('found it'),
-    ];
-
-    const result = enforceImageBudget(blocks, 100_000);
-
+    const {
+      preservesBlockOrderingForRetainedImagesAndNonImageBlocksObservation1,
+    } = observePreservesBlockOrderingForRetainedImagesAndNonImageBlocks();
     expect(
-      result.blocks.map((b) =>
-        b.type === 'tool_response' ? b.toolName : undefined,
-      ),
+      preservesBlockOrderingForRetainedImagesAndNonImageBlocksObservation1,
     ).toStrictEqual(['read_file', undefined, 'grep', undefined]);
   });
+
+  const observePreservesBlockOrderingForRetainedImagesAndNonImageBlocks =
+    () => {
+      const blocks = [
+        toolResponseBlock('read_file', 'a'),
+        mediaBlock('image/png', 1000),
+        toolResponseBlock('grep', 'b'),
+        textBlock('found it'),
+      ];
+
+      const result = enforceImageBudget(blocks, 100_000);
+
+      const preservesBlockOrderingForRetainedImagesAndNonImageBlocksObservation1 =
+        result.blocks.map((b) =>
+          b.type === 'tool_response' ? b.toolName : undefined,
+        );
+      return {
+        preservesBlockOrderingForRetainedImagesAndNonImageBlocksObservation1,
+      };
+    };
 
   it('handles empty blocks array', () => {
     const result = enforceImageBudget([], 1000);

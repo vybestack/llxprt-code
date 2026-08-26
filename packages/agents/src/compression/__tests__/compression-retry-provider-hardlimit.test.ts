@@ -86,6 +86,14 @@ function buildEnforcerHarness(
   };
 }
 
+function createSequencedEstimator(
+  estimates: readonly number[],
+  fallback: number,
+): () => Promise<number> {
+  let index = 0;
+  return async () => estimates[index++] ?? fallback;
+}
+
 describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => {
   let historyService: HistoryService;
   let runtimeContext: AgentRuntimeContext;
@@ -189,64 +197,72 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
   // -----------------------------------------------------------------------
   describe('one-retry-before-truncation: ineffective first compression', () => {
     it('makes exactly one additional full compression attempt when first compression is ineffective (<5%) and second fits', async () => {
-      runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: STANDARD_CONTEXT_LIMIT,
-        compressionThreshold: COMPRESSION_THRESHOLD,
-      });
-
-      historyService.add(makeUserMessage('established history'));
-      const pending = makeUserMessage('pending request');
-      const contents = historyService.getCuratedForProvider([pending]);
-
-      const harness = buildEnforcerHarness(historyService, runtimeContext);
-      // marginAdjustedLimit with 0.5% cushion:
-      //   safetyAdjusted = 199000
-      //   cushion = floor(199000 * 0.005) = 995
-      //   marginAdjusted = min(200000, 199995) = 199995
-      // First estimate: 150000 + 65536 = 215536 > 199995
-      // After 1st compression: 148000 + 65536 = 213536 (reduction <5%, ineffective)
-      // After 2nd compression: 100000 + 65536 = 165536 < 199995 → fits!
-      const estimateSpy = vi
-        .spyOn(historyService, 'estimateTokensForContents')
-        .mockResolvedValue(150_000);
-
-      let compressionCallCount = 0;
-      harness.deps.performCompression.mockImplementation(async () => {
-        compressionCallCount++;
-        historyService.clear();
-        if (compressionCallCount === 1) {
-          historyService.add(makeUserMessage('first compressed summary'));
-          estimateSpy.mockResolvedValue(148_000); // <5% reduction, still over
-        } else {
-          historyService.add(makeUserMessage('second compressed summary'));
-          estimateSpy.mockResolvedValue(100_000); // fits now
-        }
-        return PerformCompressionResult.COMPRESSED;
-      });
-
-      const result = await harness.enforcer.enforce(
-        { contents, pendingContents: [pending] },
-        'test-prompt',
-      );
-
-      // Two full compression attempts were made (not truncation)
+      const { compressionCallCount, allText, result, pending, harness } =
+        await observeMakesExactlyOneAdditionalFullCompressionAttemptWhenFirstCompressionIsIneffective();
       expect(compressionCallCount).toBe(2);
-
-      // Result contains the SECOND summary, not the first, and not a fallback
-      const allText = result
-        .flatMap((c) => c.blocks)
-        .filter((b) => b.type === 'text')
-        .map((b) => (b as { text: string }).text)
-        .join(' ');
       expect(allText).toContain('second compressed summary');
       expect(allText).not.toContain('first compressed summary');
-
-      // Pending is preserved
       expect(result).toContainEqual(pending);
-
-      // Truncation was NOT invoked
       expect(harness.deps.performFallbackCompression).not.toHaveBeenCalled();
     });
+
+    const observeMakesExactlyOneAdditionalFullCompressionAttemptWhenFirstCompressionIsIneffective =
+      async () => {
+        runtimeContext = buildRuntimeContext(historyService, {
+          contextLimit: STANDARD_CONTEXT_LIMIT,
+          compressionThreshold: COMPRESSION_THRESHOLD,
+        });
+
+        historyService.add(makeUserMessage('established history'));
+        const pending = makeUserMessage('pending request');
+        const contents = historyService.getCuratedForProvider([pending]);
+
+        const harness = buildEnforcerHarness(historyService, runtimeContext);
+        // marginAdjustedLimit with 0.5% cushion:
+        //   safetyAdjusted = 199000
+        //   cushion = floor(199000 * 0.005) = 995
+        //   marginAdjusted = min(200000, 199995) = 199995
+        // First estimate: 150000 + 65536 = 215536 > 199995
+        // After 1st compression: 148000 + 65536 = 213536 (reduction <5%, ineffective)
+        // After 2nd compression: 100000 + 65536 = 165536 < 199995 → fits!
+        const estimateSpy = vi
+          .spyOn(historyService, 'estimateTokensForContents')
+          .mockResolvedValue(150_000);
+
+        let compressionCallCount = 0;
+        harness.deps.performCompression.mockImplementation(async () => {
+          compressionCallCount++;
+          historyService.clear();
+          if (compressionCallCount === 1) {
+            historyService.add(makeUserMessage('first compressed summary'));
+            estimateSpy.mockResolvedValue(148_000); // <5% reduction, still over
+          } else {
+            historyService.add(makeUserMessage('second compressed summary'));
+            estimateSpy.mockResolvedValue(100_000); // fits now
+          }
+          return PerformCompressionResult.COMPRESSED;
+        });
+
+        const result = await harness.enforcer.enforce(
+          { contents, pendingContents: [pending] },
+          'test-prompt',
+        );
+
+        // Two full compression attempts were made (not truncation)
+
+        // Result contains the SECOND summary, not the first, and not a fallback
+        const allText = result
+          .flatMap((c) => c.blocks)
+          .filter((b) => b.type === 'text')
+          .map((b) => (b as { text: string }).text)
+          .join(' ');
+
+        // Pending is preserved
+
+        // Truncation was NOT invoked
+
+        return { compressionCallCount, allText, result, pending, harness };
+      };
   });
 
   // -----------------------------------------------------------------------
@@ -406,53 +422,11 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
     });
 
     it('proceeds to truncation when the retry compression attempt fails, and includes compression failure diagnostics', async () => {
-      runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: STANDARD_CONTEXT_LIMIT,
-        compressionThreshold: COMPRESSION_THRESHOLD,
-      });
-
-      historyService.add(makeUserMessage('established history'));
-      const pending = makeUserMessage('pending request');
-      const contents = historyService.getCuratedForProvider([pending]);
-
-      const harness = buildEnforcerHarness(historyService, runtimeContext);
-      const estimateSpy = vi
-        .spyOn(historyService, 'estimateTokensForContents')
-        .mockResolvedValue(150_000);
-
-      let compressionCallCount = 0;
-      harness.deps.performCompression.mockImplementation(async () => {
-        compressionCallCount++;
-        historyService.clear();
-        if (compressionCallCount === 1) {
-          // First compression succeeds but is ineffective
-          historyService.add(makeUserMessage('ineffective compression'));
-          estimateSpy.mockResolvedValue(148_000);
-          return PerformCompressionResult.COMPRESSED;
-        }
-        // Second (retry) compression fails
-        throw new Error('retry compression failed');
-      });
-
-      // Truncation also fails
-      harness.deps.performFallbackCompression.mockResolvedValue(false);
-
-      let thrownError: Error | undefined;
-      try {
-        await harness.enforcer.enforce(
-          { contents, pendingContents: [pending] },
-          'test-prompt',
-        );
-      } catch (error) {
-        thrownError = error as Error;
-      }
-
-      // Two compression attempts (first succeeded, retry failed)
+      const { compressionCallCount, harness, thrownError } =
+        await observeProceedsToTruncationWhenTheRetryCompressionAttemptFailsAndIncludesCompression();
       expect(compressionCallCount).toBe(2);
       expect(harness.deps.performFallbackCompression).toHaveBeenCalled();
-
       expect(thrownError).toBeInstanceOf(Error);
-      // Compression failure diagnostics surfaced
       expect(thrownError!.message).toContain(
         'Automatic compression failed before fallback',
       );
@@ -460,6 +434,56 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
         'Additional hard-limit compression attempt failed',
       );
     });
+
+    const observeProceedsToTruncationWhenTheRetryCompressionAttemptFailsAndIncludesCompression =
+      async () => {
+        runtimeContext = buildRuntimeContext(historyService, {
+          contextLimit: STANDARD_CONTEXT_LIMIT,
+          compressionThreshold: COMPRESSION_THRESHOLD,
+        });
+
+        historyService.add(makeUserMessage('established history'));
+        const pending = makeUserMessage('pending request');
+        const contents = historyService.getCuratedForProvider([pending]);
+
+        const harness = buildEnforcerHarness(historyService, runtimeContext);
+        const estimateSpy = vi
+          .spyOn(historyService, 'estimateTokensForContents')
+          .mockResolvedValue(150_000);
+
+        let compressionCallCount = 0;
+        harness.deps.performCompression.mockImplementation(async () => {
+          compressionCallCount++;
+          historyService.clear();
+          if (compressionCallCount === 1) {
+            // First compression succeeds but is ineffective
+            historyService.add(makeUserMessage('ineffective compression'));
+            estimateSpy.mockResolvedValue(148_000);
+            return PerformCompressionResult.COMPRESSED;
+          }
+          // Second (retry) compression fails
+          throw new Error('retry compression failed');
+        });
+
+        // Truncation also fails
+        harness.deps.performFallbackCompression.mockResolvedValue(false);
+
+        let thrownError: Error | undefined;
+        try {
+          await harness.enforcer.enforce(
+            { contents, pendingContents: [pending] },
+            'test-prompt',
+          );
+        } catch (error) {
+          thrownError = error as Error;
+        }
+
+        // Two compression attempts (first succeeded, retry failed)
+
+        // Compression failure diagnostics surfaced
+
+        return { compressionCallCount, harness, thrownError };
+      };
 
     it('includes truncation failure details when truncation also fails', async () => {
       runtimeContext = buildRuntimeContext(historyService, {
@@ -694,52 +718,60 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
   // -----------------------------------------------------------------------
   describe('retry-failure cause preservation', () => {
     it('preserves the underlying retry error message in final diagnostics (not just generic message)', async () => {
-      runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: STANDARD_CONTEXT_LIMIT,
-        compressionThreshold: COMPRESSION_THRESHOLD,
-      });
-
-      historyService.add(makeUserMessage('established history'));
-      const pending = makeUserMessage('pending request');
-      const contents = historyService.getCuratedForProvider([pending]);
-
-      const harness = buildEnforcerHarness(historyService, runtimeContext);
-      const estimateSpy = vi
-        .spyOn(historyService, 'estimateTokensForContents')
-        .mockResolvedValue(150_000);
-
-      let compressionCallCount = 0;
-      harness.deps.performCompression.mockImplementation(async () => {
-        compressionCallCount++;
-        historyService.clear();
-        if (compressionCallCount === 1) {
-          historyService.add(makeUserMessage('ineffective compression'));
-          estimateSpy.mockResolvedValue(148_000);
-          return PerformCompressionResult.COMPRESSED;
-        }
-        // Second (retry) compression throws a specific underlying error.
-        throw new Error('underlying retry cause: network timeout');
-      });
-
-      harness.deps.performFallbackCompression.mockResolvedValue(false);
-
-      let thrownError: Error | undefined;
-      try {
-        await harness.enforcer.enforce(
-          { contents, pendingContents: [pending] },
-          'test-prompt',
-        );
-      } catch (error) {
-        thrownError = error as Error;
-      }
-
+      const { compressionCallCount, thrownError } =
+        await observePreservesTheUnderlyingRetryErrorMessageInFinalDiagnosticsNotJustGeneric();
       expect(compressionCallCount).toBe(2);
       expect(thrownError).toBeInstanceOf(Error);
-      // The underlying cause must be preserved in actionable diagnostics.
       expect(thrownError!.message).toContain(
         'underlying retry cause: network timeout',
       );
     });
+
+    const observePreservesTheUnderlyingRetryErrorMessageInFinalDiagnosticsNotJustGeneric =
+      async () => {
+        runtimeContext = buildRuntimeContext(historyService, {
+          contextLimit: STANDARD_CONTEXT_LIMIT,
+          compressionThreshold: COMPRESSION_THRESHOLD,
+        });
+
+        historyService.add(makeUserMessage('established history'));
+        const pending = makeUserMessage('pending request');
+        const contents = historyService.getCuratedForProvider([pending]);
+
+        const harness = buildEnforcerHarness(historyService, runtimeContext);
+        const estimateSpy = vi
+          .spyOn(historyService, 'estimateTokensForContents')
+          .mockResolvedValue(150_000);
+
+        let compressionCallCount = 0;
+        harness.deps.performCompression.mockImplementation(async () => {
+          compressionCallCount++;
+          historyService.clear();
+          if (compressionCallCount === 1) {
+            historyService.add(makeUserMessage('ineffective compression'));
+            estimateSpy.mockResolvedValue(148_000);
+            return PerformCompressionResult.COMPRESSED;
+          }
+          // Second (retry) compression throws a specific underlying error.
+          throw new Error('underlying retry cause: network timeout');
+        });
+
+        harness.deps.performFallbackCompression.mockResolvedValue(false);
+
+        let thrownError: Error | undefined;
+        try {
+          await harness.enforcer.enforce(
+            { contents, pendingContents: [pending] },
+            'test-prompt',
+          );
+        } catch (error) {
+          thrownError = error as Error;
+        }
+
+        // The underlying cause must be preserved in actionable diagnostics.
+
+        return { compressionCallCount, thrownError };
+      };
   });
 
   // -----------------------------------------------------------------------
@@ -862,10 +894,11 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       const contents = historyService.getCuratedForProvider([pending]);
 
       const finalizedEstimates = [150_000, 150_000, 135_000, 50_000];
-      let estimateIndex = 0;
       const harness = buildEnforcerHarness(historyService, runtimeContext, {
-        estimateFinalizedPromptTokens: async () =>
-          finalizedEstimates[estimateIndex++] ?? 50_000,
+        estimateFinalizedPromptTokens: createSequencedEstimator(
+          finalizedEstimates,
+          50_000,
+        ),
       });
 
       harness.deps.performCompression.mockImplementation(async () => {

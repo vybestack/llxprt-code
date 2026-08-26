@@ -40,6 +40,71 @@ function base64ish(): fc.Arbitrary<string> {
     });
 }
 
+function expectOmittedFunctionCallArgsNormalization(
+  id: string,
+  name: string,
+): void {
+  const part: Part = { functionCall: { id, name } };
+  const result = roundTrip(part);
+  // args is absent on input but normalized to {} on output — this is
+  // a spec'd normalization, not a round-trip violation.
+  expect(result.functionCall).toBeDefined();
+  if (!result.functionCall) return;
+  expect(result.functionCall.name).toBe(name);
+  expect(result.functionCall.args).toStrictEqual({});
+}
+
+function expectOmittedFunctionResponseNormalization(
+  id: string,
+  name: string,
+): void {
+  const part: Part = { functionResponse: { id, name } };
+  const result = roundTrip(part);
+  // response is absent on input but normalized to {} on output.
+  expect(result.functionResponse).toBeDefined();
+  if (!result.functionResponse) return;
+  expect(result.functionResponse.name).toBe(name);
+  expect(result.functionResponse.response).toStrictEqual({});
+}
+
+function expectFunctionCallWithoutId(name: string): void {
+  const part: Part = { functionCall: { name, args: {} } };
+  const result = roundTrip(part);
+  // No id on input → no id on output (lossless, G3 fix).
+  expect(result.functionCall).toBeDefined();
+  if (!result.functionCall) return;
+  expect(result.functionCall.id).toBeUndefined();
+  expect(result.functionCall.name).toBe(name);
+}
+
+function expectFunctionResponseWithoutId(name: string): void {
+  const part: Part = { functionResponse: { name, response: {} } };
+  const result = roundTrip(part);
+  expect(result.functionResponse).toBeDefined();
+  if (!result.functionResponse) return;
+  expect(result.functionResponse.id).toBeUndefined();
+  expect(result.functionResponse.name).toBe(name);
+}
+
+function expectExecutableCodeWithoutLanguage(code: string): void {
+  const part: Part = { executableCode: { code } };
+  const result = roundTrip(part);
+  expect(result.executableCode).toBeDefined();
+  if (!result.executableCode) return;
+  expect(result.executableCode.code).toBe(code);
+  expect(result.executableCode.language).toBeUndefined();
+}
+
+function expectCodeExecutionResultWithoutOutput(outcome: Outcome): void {
+  const part: Part = { codeExecutionResult: { outcome } };
+  const result = roundTrip(part);
+  expect(result.codeExecutionResult).toBeDefined();
+  if (!result.codeExecutionResult) return;
+  expect(result.codeExecutionResult.outcome).toBe(outcome);
+  // output is absent on input but normalized to "" on output.
+  expect(result.codeExecutionResult.output).toBe('');
+}
+
 describe('property-based round-trips (REQ-010.2)', () => {
   it('arbitrary text strings survive round-trip', () => {
     fc.assert(
@@ -498,11 +563,11 @@ describe('property-based — usage metadata mapping (REQ-010.3)', () => {
             candidatesTokenCount,
             totalTokenCount,
           });
-          return (
-            result.promptTokens === promptTokenCount &&
-            result.completionTokens === candidatesTokenCount &&
-            result.totalTokens === totalTokenCount
-          );
+          return [
+            result.promptTokens === promptTokenCount,
+            result.completionTokens === candidatesTokenCount,
+            result.totalTokens === totalTokenCount,
+          ].every(Boolean);
         },
       ),
       { numRuns: 200 },
@@ -534,11 +599,11 @@ describe('property-based — usage metadata mapping (REQ-010.3)', () => {
             thoughtsTokenCount,
             toolUsePromptTokenCount,
           });
-          return (
-            result.cachedTokens === cachedContentTokenCount &&
-            result.reasoningTokens === thoughtsTokenCount &&
-            result.toolTokens === toolUsePromptTokenCount
-          );
+          return [
+            result.cachedTokens === cachedContentTokenCount,
+            result.reasoningTokens === thoughtsTokenCount,
+            result.toolTokens === toolUsePromptTokenCount,
+          ].every(Boolean);
         },
       ),
       { numRuns: 200 },
@@ -553,11 +618,11 @@ describe('property-based — usage metadata mapping (REQ-010.3)', () => {
           candidatesTokenCount: c,
           totalTokenCount: t,
         });
-        return (
-          result.cachedTokens === undefined &&
-          result.reasoningTokens === undefined &&
-          result.toolTokens === undefined
-        );
+        return [
+          result.cachedTokens === undefined,
+          result.reasoningTokens === undefined,
+          result.toolTokens === undefined,
+        ].every(Boolean);
       }),
       { numRuns: 200 },
     );
@@ -572,11 +637,11 @@ describe('property-based — usage metadata mapping (REQ-010.3)', () => {
           totalTokenCount: t,
           cachedContentTokenCount: cached,
         });
-        return (
-          result.cachedTokens === cached &&
-          result.reasoningTokens === undefined &&
-          result.toolTokens === undefined
-        );
+        return [
+          result.cachedTokens === cached,
+          result.reasoningTokens === undefined,
+          result.toolTokens === undefined,
+        ].every(Boolean);
       }),
       { numRuns: 200 },
     );
@@ -596,11 +661,11 @@ describe('property-based — usage metadata mapping (REQ-010.3)', () => {
             totalTokenCount: t,
             thoughtsTokenCount: thoughts,
           });
-          return (
-            result.reasoningTokens === thoughts &&
-            result.cachedTokens === undefined &&
-            result.toolTokens === undefined
-          );
+          return [
+            result.reasoningTokens === thoughts,
+            result.cachedTokens === undefined,
+            result.toolTokens === undefined,
+          ].every(Boolean);
         },
       ),
       { numRuns: 200 },
@@ -614,16 +679,7 @@ describe('property-based — omitted-field edge cases (REQ-010.2)', () => {
       fc.property(
         fc.string({ minLength: 1 }),
         fc.string({ minLength: 1 }),
-        (id, name) => {
-          const part: Part = { functionCall: { id, name } };
-          const result = roundTrip(part);
-          // args is absent on input but normalized to {} on output — this is
-          // a spec'd normalization, not a round-trip violation.
-          expect(result.functionCall).toBeDefined();
-          if (!result.functionCall) return;
-          expect(result.functionCall.name).toBe(name);
-          expect(result.functionCall.args).toStrictEqual({});
-        },
+        expectOmittedFunctionCallArgsNormalization,
       ),
       { numRuns: 200 },
     );
@@ -634,15 +690,7 @@ describe('property-based — omitted-field edge cases (REQ-010.2)', () => {
       fc.property(
         fc.string({ minLength: 1 }),
         fc.string({ minLength: 1 }),
-        (id, name) => {
-          const part: Part = { functionResponse: { id, name } };
-          const result = roundTrip(part);
-          // response is absent on input but normalized to {} on output.
-          expect(result.functionResponse).toBeDefined();
-          if (!result.functionResponse) return;
-          expect(result.functionResponse.name).toBe(name);
-          expect(result.functionResponse.response).toStrictEqual({});
-        },
+        expectOmittedFunctionResponseNormalization,
       ),
       { numRuns: 200 },
     );
@@ -650,58 +698,34 @@ describe('property-based — omitted-field edge cases (REQ-010.2)', () => {
 
   it('functionCall without id round-trips losslessly (id-absent preserved)', () => {
     fc.assert(
-      fc.property(fc.string({ minLength: 1 }), (name) => {
-        const part: Part = { functionCall: { name, args: {} } };
-        const result = roundTrip(part);
-        // No id on input → no id on output (lossless, G3 fix).
-        expect(result.functionCall).toBeDefined();
-        if (!result.functionCall) return;
-        expect(result.functionCall.id).toBeUndefined();
-        expect(result.functionCall.name).toBe(name);
-      }),
+      fc.property(fc.string({ minLength: 1 }), expectFunctionCallWithoutId),
       { numRuns: 200 },
     );
   });
 
   it('functionResponse without id round-trips losslessly (id-absent preserved)', () => {
     fc.assert(
-      fc.property(fc.string({ minLength: 1 }), (name) => {
-        const part: Part = { functionResponse: { name, response: {} } };
-        const result = roundTrip(part);
-        expect(result.functionResponse).toBeDefined();
-        if (!result.functionResponse) return;
-        expect(result.functionResponse.id).toBeUndefined();
-        expect(result.functionResponse.name).toBe(name);
-      }),
+      fc.property(fc.string({ minLength: 1 }), expectFunctionResponseWithoutId),
       { numRuns: 200 },
     );
   });
 
   it('executableCode with omitted language round-trips losslessly', () => {
     fc.assert(
-      fc.property(fc.string({ minLength: 1 }), (code) => {
-        const part: Part = { executableCode: { code } };
-        const result = roundTrip(part);
-        expect(result.executableCode).toBeDefined();
-        if (!result.executableCode) return;
-        expect(result.executableCode.code).toBe(code);
-        expect(result.executableCode.language).toBeUndefined();
-      }),
+      fc.property(
+        fc.string({ minLength: 1 }),
+        expectExecutableCodeWithoutLanguage,
+      ),
       { numRuns: 200 },
     );
   });
 
   it('codeExecutionResult with omitted output round-trips gaining output:"" (documented normalization)', () => {
     fc.assert(
-      fc.property(fc.constant(Outcome.OUTCOME_OK), (outcome) => {
-        const part: Part = { codeExecutionResult: { outcome } };
-        const result = roundTrip(part);
-        expect(result.codeExecutionResult).toBeDefined();
-        if (!result.codeExecutionResult) return;
-        expect(result.codeExecutionResult.outcome).toBe(outcome);
-        // output is absent on input but normalized to "" on output.
-        expect(result.codeExecutionResult.output).toBe('');
-      }),
+      fc.property(
+        fc.constant(Outcome.OUTCOME_OK),
+        expectCodeExecutionResultWithoutOutput,
+      ),
       { numRuns: 200 },
     );
   });

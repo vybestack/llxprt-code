@@ -40,14 +40,69 @@ void vi.mock('@ai-sdk/openai', () => ({
 /**
  * Helper function to check if a block contains a thinking block.
  */
-function hasThinkingBlock(b: unknown): boolean {
+type ContentWithThinkingBlocks = {
+  blocks: Array<{ type: string; thought?: string }>;
+};
+
+type AssistantMessage = {
+  role: 'assistant';
+  reasoning_content?: string;
+};
+
+function hasThinkingBlock(b: unknown): b is ContentWithThinkingBlocks {
   if (typeof b !== 'object' || b === null) return false;
   if (!('blocks' in b)) return false;
-  const blocks = (b as { blocks: unknown[] }).blocks;
+  const blocks = (b as { blocks: unknown }).blocks;
   if (!Array.isArray(blocks)) return false;
-  return (blocks as Array<{ type: string }>).some(
-    (inner) => inner.type === 'thinking',
+  return blocks.some(
+    (inner: unknown) =>
+      typeof inner === 'object' &&
+      inner !== null &&
+      'type' in inner &&
+      inner.type === 'thinking',
   );
+}
+
+function isDirectThinkingBlock(block: unknown): boolean {
+  return (
+    typeof block === 'object' &&
+    block !== null &&
+    'type' in block &&
+    block.type === 'thinking'
+  );
+}
+
+function isNonEmptyThinkingBlock(
+  block: ContentWithThinkingBlocks['blocks'][number],
+): block is { type: string; thought: string } {
+  return (
+    block.type === 'thinking' && block.thought != null && block.thought !== ''
+  );
+}
+
+function extractThinkingThoughts(
+  contents: readonly ContentWithThinkingBlocks[],
+): string[] {
+  return contents.flatMap((content) =>
+    content.blocks
+      .filter(isNonEmptyThinkingBlock)
+      .map((block) => block.thought),
+  );
+}
+
+function isAssistantMessage(message: unknown): message is AssistantMessage {
+  return (
+    typeof message === 'object' &&
+    message !== null &&
+    'role' in message &&
+    message.role === 'assistant'
+  );
+}
+
+function getAssistantMessages(
+  messages: readonly unknown[] | undefined,
+): AssistantMessage[] {
+  return (messages ?? []).filter(isAssistantMessage);
 }
 
 describe('OpenAIVercelProvider reasoning support @issue:722', () => {
@@ -176,13 +231,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       }
 
       // Should NOT contain any thinking blocks when includeInResponse=false
-      const hasThinkingBlock = blocks.some(
-        (b) =>
-          typeof b === 'object' &&
-          b !== null &&
-          'type' in b &&
-          b.type === 'thinking',
-      );
+      const hasThinkingBlock = blocks.some(isDirectThinkingBlock);
       expect(hasThinkingBlock).toBe(false);
     });
 
@@ -225,13 +274,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
         blocks.push(block);
       }
 
-      const hasThinkingBlock = blocks.some(
-        (b) =>
-          typeof b === 'object' &&
-          b !== null &&
-          'type' in b &&
-          b.type === 'thinking',
-      );
+      const hasThinkingBlock = blocks.some(isDirectThinkingBlock);
       expect(hasThinkingBlock).toBe(false);
     });
   });
@@ -276,13 +319,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
 
       // Verify messages were sent without reasoning_content
       expect(capturedMessages).toBeDefined();
-      const assistantMessages = (capturedMessages ?? []).filter(
-        (m) =>
-          typeof m === 'object' &&
-          m !== null &&
-          'role' in m &&
-          m.role === 'assistant',
-      );
+      const assistantMessages = getAssistantMessages(capturedMessages);
       assistantMessages.forEach((msg) => {
         expect(msg).not.toHaveProperty('reasoning_content');
       });
@@ -326,13 +363,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       }
 
       expect(capturedMessages).toBeDefined();
-      const assistantMessages = (capturedMessages ?? []).filter(
-        (m) =>
-          typeof m === 'object' &&
-          m !== null &&
-          'role' in m &&
-          m.role === 'assistant',
-      );
+      const assistantMessages = getAssistantMessages(capturedMessages);
 
       // First assistant message should NOT have reasoning_content
       expect(assistantMessages[0]).not.toHaveProperty('reasoning_content');
@@ -383,13 +414,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       }
 
       expect(capturedMessages).toBeDefined();
-      const assistantMessages = (capturedMessages ?? []).filter(
-        (m) =>
-          typeof m === 'object' &&
-          m !== null &&
-          'role' in m &&
-          m.role === 'assistant',
-      );
+      const assistantMessages = getAssistantMessages(capturedMessages);
 
       // All assistant messages should have reasoning_content
       assistantMessages.forEach((msg) => {
@@ -448,22 +473,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       expect(thinkingBlocks.length).toBeGreaterThan(0);
 
       // Extract all thinking blocks from the content
-      const allThinkingThoughts: string[] = [];
-      thinkingBlocks.forEach((content) => {
-        const innerBlocks = (
-          content as { blocks: Array<{ type: string; thought?: string }> }
-        ).blocks;
-        innerBlocks
-          .filter(
-            (block) =>
-              block.type === 'thinking' &&
-              block.thought != null &&
-              block.thought !== '',
-          )
-          .forEach((block) => {
-            allThinkingThoughts.push(block.thought!);
-          });
-      });
+      const allThinkingThoughts = extractThinkingThoughts(thinkingBlocks);
 
       // Should have extracted at least one thinking thought
       expect(allThinkingThoughts.length).toBeGreaterThan(0);
@@ -611,13 +621,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       }
 
       expect(capturedMessages).toBeDefined();
-      const assistantMsg = (capturedMessages ?? []).find(
-        (m) =>
-          typeof m === 'object' &&
-          m !== null &&
-          'role' in m &&
-          m.role === 'assistant',
-      );
+      const assistantMsg = getAssistantMessages(capturedMessages)[0];
 
       expect(assistantMsg).toBeDefined();
       expect(assistantMsg).toHaveProperty('reasoning_content');
@@ -662,13 +666,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       }
 
       expect(capturedMessages).toBeDefined();
-      const assistantMessages = (capturedMessages ?? []).filter(
-        (m) =>
-          typeof m === 'object' &&
-          m !== null &&
-          'role' in m &&
-          m.role === 'assistant',
-      );
+      const assistantMessages = getAssistantMessages(capturedMessages);
 
       assistantMessages.forEach((msg) => {
         expect(msg).not.toHaveProperty('reasoning_content');
@@ -728,13 +726,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       }
 
       expect(capturedMessages).toBeDefined();
-      const assistantMsg = (capturedMessages ?? []).find(
-        (m) =>
-          typeof m === 'object' &&
-          m !== null &&
-          'role' in m &&
-          m.role === 'assistant',
-      );
+      const assistantMsg = getAssistantMessages(capturedMessages)[0];
 
       expect(assistantMsg).toBeDefined();
       const reasoning = (assistantMsg as { reasoning_content?: string })
@@ -826,13 +818,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       }
 
       expect(capturedMessages).toBeDefined();
-      const assistantMessages = (capturedMessages ?? []).filter(
-        (m) =>
-          typeof m === 'object' &&
-          m !== null &&
-          'role' in m &&
-          m.role === 'assistant',
-      );
+      const assistantMessages = getAssistantMessages(capturedMessages);
 
       // Messages without thinking should not have reasoning_content
       assistantMessages.forEach((msg) => {

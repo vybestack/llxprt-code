@@ -25,6 +25,20 @@ const realLlxprtCodeSettingsModule = {
 
 const mockChatCompletionsCreate = vi.fn();
 
+function isImagesFromToolResponsePart(part: unknown): boolean {
+  if (typeof part !== 'object' || part === null) return false;
+  if (!('type' in part) || part.type !== 'text') return false;
+  if (!('text' in part) || typeof part.text !== 'string') return false;
+  return part.text.includes('Images from tool response');
+}
+
+function isSyntheticToolImageMessage(message: unknown): boolean {
+  if (typeof message !== 'object' || message === null) return false;
+  if (!('role' in message) || message.role !== 'user') return false;
+  if (!('content' in message) || !Array.isArray(message.content)) return false;
+  return message.content.some(isImagesFromToolResponsePart);
+}
+
 const mockOpenAIConstructor = vi.fn().mockImplementation(() => ({
   chat: {
     completions: {
@@ -217,14 +231,7 @@ describe('OpenAIProvider - MediaBlock support', () => {
 
     // Synthetic user message should contain the image
     const syntheticUserMessage = callArgs.messages.find(
-      (m: { role: string; content?: unknown }) =>
-        m.role === 'user' &&
-        Array.isArray(m.content) &&
-        m.content.some(
-          (c: { type: string; text?: string }) =>
-            c.type === 'text' &&
-            c.text?.includes('Images from tool response') === true,
-        ),
+      isSyntheticToolImageMessage,
     );
     expect(syntheticUserMessage).toBeDefined();
     expect(syntheticUserMessage.content).toHaveLength(2);
@@ -622,14 +629,7 @@ describe('OpenAIProvider - MediaBlock support', () => {
         (m: { role: string }) => m.role === 'tool',
       );
       const syntheticUserMessage = callArgs.messages.find(
-        (m: { role: string; content?: unknown }) =>
-          m.role === 'user' &&
-          Array.isArray(m.content) &&
-          m.content.some(
-            (c: { type: string; text?: string }) =>
-              c.type === 'text' &&
-              (c.text?.includes('Images from tool response') ?? false),
-          ),
+        isSyntheticToolImageMessage,
       );
 
       // Tool message should NOT contain image placeholder
@@ -806,14 +806,7 @@ describe('OpenAIProvider - MediaBlock support', () => {
         (m: { role: string }) => m.role === 'tool',
       );
       const syntheticUserMessage = callArgs.messages.find(
-        (m: { role: string; content?: unknown }) =>
-          m.role === 'user' &&
-          Array.isArray(m.content) &&
-          m.content.some(
-            (c: { type: string; text?: string }) =>
-              c.type === 'text' &&
-              (c.text?.includes('Images from tool response') ?? false),
-          ),
+        isSyntheticToolImageMessage,
       );
 
       // Tool message should only contain video placeholder (non-image media)

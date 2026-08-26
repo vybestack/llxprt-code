@@ -187,6 +187,78 @@ function parseMoveMapRows(
   return rows;
 }
 
+function destinationForSource(sourcePath: string): string {
+  return (
+    CORE_OWNED_DESTINATION_OVERRIDES.get(sourcePath) ??
+    AGENT_OWNED_DESTINATION_OVERRIDES.get(sourcePath) ??
+    RENAMED_DESTINATION_OVERRIDES.get(sourcePath) ??
+    sourcePath.replace(
+      'packages/core/src/providers/',
+      'packages/providers/src/',
+    )
+  );
+}
+
+function findDeterministicDestinationViolations(
+  rows: ReturnType<typeof parseMoveMapRows>,
+): string[] {
+  const violations: string[] = [];
+  for (const row of rows) {
+    const expectedDest = destinationForSource(row.sourcePath);
+    if (row.destPath !== expectedDest) {
+      violations.push(
+        `Row ${row.rowNum}: source="${row.sourcePath}" dest="${row.destPath}" expected="${expectedDest}"`,
+      );
+    }
+  }
+  return violations;
+}
+
+function extractProviderDestinationPath(line: string): string {
+  const startIdx = line.indexOf('`packages/providers/src/');
+  if (startIdx === -1) return '';
+  const endIdx = line.indexOf('`', startIdx + 1);
+  if (endIdx === -1) return '';
+  return line.slice(startIdx + 'packages/providers/src/'.length + 1, endIdx);
+}
+
+function isCoreDestinationPath(destPath: string): boolean {
+  return destPath.length > 0 && destPath.includes('packages/core');
+}
+
+function hasCompatOrShimBasename(filePath: string): boolean {
+  const basename = path.basename(filePath);
+  return [/compat/i, /shim/i].some((pattern) => pattern.test(basename));
+}
+
+function findCoreProviderImports(
+  coreSrcDir: string,
+  coreFiles: readonly string[],
+): string[] {
+  const violations: string[] = [];
+  for (const filePath of coreFiles) {
+    const lines = fs.readFileSync(filePath, 'utf-8').split('\n');
+    for (let index = 0; index < lines.length; index++) {
+      const trimmed = lines[index].trim();
+      if (
+        trimmed.startsWith('//') ||
+        trimmed.startsWith('*') ||
+        trimmed.startsWith('/*')
+      ) {
+        continue;
+      }
+      if (
+        /from\s+['"]@vybestack\/llxprt-code-providers['"]/.test(lines[index])
+      ) {
+        violations.push(
+          `${path.relative(coreSrcDir, filePath)}:${index + 1}: ${lines[index].trim()}`,
+        );
+      }
+    }
+  }
+  return violations;
+}
+
 describe('P09 Move-map completeness validation', () => {
   /**
    * @plan:PLAN-20260603-ISSUE1584.P09
@@ -233,18 +305,8 @@ describe('P09 Move-map completeness validation', () => {
 
     for (const inventoryLine of inventoryLines) {
       const source = inventoryLine.trim();
-      const dest =
-        CORE_OWNED_DESTINATION_OVERRIDES.get(source) ??
-        AGENT_OWNED_DESTINATION_OVERRIDES.get(source) ??
-        RENAMED_DESTINATION_OVERRIDES.get(source) ??
-        source.replace(
-          'packages/core/src/providers/',
-          'packages/providers/src/',
-        );
-      expect(
-        fs.existsSync(path.join(ROOT_DIR, dest)),
-        `Missing moved file: ${dest}`,
-      ).toBe(true);
+      const dest = destinationForSource(source);
+      expect(fs.existsSync(path.join(ROOT_DIR, dest))).toBe(true);
     }
   });
 
@@ -279,10 +341,7 @@ describe('P09 Move-map completeness validation', () => {
 
     for (const inventoryLine of inventoryLines) {
       const fileName = inventoryLine.trim();
-      expect(
-        moveMapSources.has(fileName),
-        `Move map missing source entry for: ${fileName}`,
-      ).toBe(true);
+      expect(moveMapSources.has(fileName)).toBe(true);
     }
   });
 
@@ -331,27 +390,9 @@ describe('P09 Move-map completeness validation', () => {
     const moveMapContent = fs.readFileSync(MOVE_MAP_PATH, 'utf-8');
     const parsedRows = parseMoveMapRows(moveMapContent);
 
-    const violations: string[] = [];
-    for (const row of parsedRows) {
-      const expectedDest =
-        CORE_OWNED_DESTINATION_OVERRIDES.get(row.sourcePath) ??
-        AGENT_OWNED_DESTINATION_OVERRIDES.get(row.sourcePath) ??
-        RENAMED_DESTINATION_OVERRIDES.get(row.sourcePath) ??
-        row.sourcePath.replace(
-          'packages/core/src/providers/',
-          'packages/providers/src/',
-        );
-      if (row.destPath !== expectedDest) {
-        violations.push(
-          `Row ${row.rowNum}: source="${row.sourcePath}" dest="${row.destPath}" expected="${expectedDest}"`,
-        );
-      }
-    }
+    const violations = findDeterministicDestinationViolations(parsedRows);
 
-    expect(
-      violations,
-      `Destination transform violations:\n${violations.join('\n')}`,
-    ).toHaveLength(0);
+    expect(violations).toHaveLength(0);
   });
 
   /**
@@ -369,20 +410,8 @@ describe('P09 Move-map completeness validation', () => {
     );
 
     const violations: string[] = destLines
-      .map((line: string) => {
-        const startIdx = line.indexOf('`packages/providers/src/');
-        if (startIdx === -1) return '';
-        const endIdx = line.indexOf('`', startIdx + 1);
-        if (endIdx === -1) return '';
-        return line.slice(
-          startIdx + 'packages/providers/src/'.length + 1,
-          endIdx,
-        );
-      })
-      .filter(
-        (destPath: string) =>
-          destPath.length > 0 && destPath.includes('packages/core'),
-      );
+      .map(extractProviderDestinationPath)
+      .filter(isCoreDestinationPath);
 
     expect(violations).toHaveLength(0);
   });
@@ -442,10 +471,7 @@ describe('P09 Move-map completeness validation', () => {
       'types.ts',
     ];
     for (const file of keyFiles) {
-      expect(
-        fs.existsSync(path.join(PROVIDERS_SRC_DIR, file)),
-        `Missing key file: ${file}`,
-      ).toBe(true);
+      expect(fs.existsSync(path.join(PROVIDERS_SRC_DIR, file))).toBe(true);
     }
   });
 
@@ -473,10 +499,7 @@ describe('P09 Move-map completeness validation', () => {
       'test-utils',
     ];
     for (const dir of keyDirs) {
-      expect(
-        fs.existsSync(path.join(PROVIDERS_SRC_DIR, dir)),
-        `Missing key directory: ${dir}`,
-      ).toBe(true);
+      expect(fs.existsSync(path.join(PROVIDERS_SRC_DIR, dir))).toBe(true);
     }
   });
 
@@ -510,10 +533,7 @@ describe('P09 Move-map completeness validation', () => {
    */
   it('no compat/shim files in core providers', () => {
     const allFiles = collectAllFiles(CORE_PROVIDERS_DIR);
-    const violations = allFiles.filter((filePath: string) => {
-      const basename = path.basename(filePath);
-      return /compat/i.test(basename) || /shim/i.test(basename);
-    });
+    const violations = allFiles.filter(hasCompatOrShimBasename);
     expect(violations).toHaveLength(0);
   });
 
@@ -526,27 +546,7 @@ describe('P09 Move-map completeness validation', () => {
   it('core production code has no imports from providers package', () => {
     const coreSrcDir = path.join(ROOT_DIR, 'packages', 'core', 'src');
     const coreFiles = collectTsFiles(coreSrcDir, true); // exclude tests
-    const violations: string[] = [];
-
-    for (const filePath of coreFiles) {
-      const content = fs.readFileSync(filePath, 'utf-8');
-      const lines = content.split('\n');
-      for (let i = 0; i < lines.length; i++) {
-        const trimmed = lines[i].trim();
-        if (
-          trimmed.startsWith('//') ||
-          trimmed.startsWith('*') ||
-          trimmed.startsWith('/*')
-        ) {
-          continue;
-        }
-        if (/from\s+['"]@vybestack\/llxprt-code-providers['"]/.test(lines[i])) {
-          violations.push(
-            `${path.relative(coreSrcDir, filePath)}:${i + 1}: ${lines[i].trim()}`,
-          );
-        }
-      }
-    }
+    const violations = findCoreProviderImports(coreSrcDir, coreFiles);
     expect(violations).toHaveLength(0);
   });
 
@@ -621,10 +621,7 @@ describe('P09 Move-map completeness validation', () => {
       'L', // Test utilities
     ];
     for (const cat of categories) {
-      expect(
-        moveMapContent.includes(cat),
-        `Move map missing category: ${cat}`,
-      ).toBe(true);
+      expect(moveMapContent.includes(cat)).toBe(true);
     }
   });
 

@@ -29,6 +29,53 @@ const MINUTE = 60 * SECOND;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
+function hasLongRelativeTimeFormat(result: string): boolean {
+  const hasTimeWords =
+    result.includes('just now') ||
+    result.includes('minute') ||
+    result.includes('hour');
+  const hasDateWords =
+    result.includes('yesterday') ||
+    result.includes('day') ||
+    result.includes('week');
+  const hasAbbreviatedMonth = /^[A-Z][a-z]{2}/.test(result);
+  return hasTimeWords || hasDateWords || hasAbbreviatedMonth;
+}
+
+function hasShortRelativeTimeFormat(result: string): boolean {
+  return (
+    result === 'now' ||
+    /^\d+[mhdw] ago$/.test(result) ||
+    /^[A-Z][a-z]{2}/.test(result)
+  );
+}
+function hasRecognizedRelativeTimeFormats(
+  longResult: string,
+  shortResult: string,
+): boolean {
+  return (
+    hasLongRelativeTimeFormat(longResult) &&
+    hasShortRelativeTimeFormat(shortResult)
+  );
+}
+
+function relativeTimeOrder(result: string): number {
+  if (result === 'just now' || result === 'now') return 0;
+  if (result.includes('minute') || /^\d+m ago$/.test(result)) return 1;
+  if (result.includes('hour') || /^\d+h ago$/.test(result)) return 2;
+  if (result === 'yesterday' || /^1d ago$/.test(result)) return 3;
+  if (result.includes('day') || /^\d+d ago$/.test(result)) return 4;
+  if (result.includes('week') || /^\d+w ago$/.test(result)) return 5;
+  return 6;
+}
+
+function orderedDeltas(
+  first: number,
+  second: number,
+): readonly [number, number] {
+  return first <= second ? [first, second] : [second, first];
+}
+
 describe('formatRelativeTime', () => {
   describe('long mode (REQ-RT-001)', () => {
     it('returns "just now" for current time', () => {
@@ -411,48 +458,18 @@ describe('formatRelativeTime', () => {
             now: NOW,
           });
 
-          // Long mode should contain words
-          const hasTimeWords =
-            longResult.includes('just now') ||
-            longResult.includes('minute') ||
-            longResult.includes('hour');
-          const hasDateWords =
-            longResult.includes('yesterday') ||
-            longResult.includes('day') ||
-            longResult.includes('week');
-          const hasAbbreviatedMonth = /^[A-Z][a-z]{2}/.test(longResult);
-          const hasWords = hasTimeWords || hasDateWords || hasAbbreviatedMonth;
-
-          // Short mode should be abbreviated or date
-          const isShortFormat =
-            shortResult === 'now' ||
-            /^\d+[mhdw] ago$/.test(shortResult) ||
-            /^[A-Z][a-z]{2}/.test(shortResult);
-
-          return hasWords && isShortFormat;
+          return hasRecognizedRelativeTimeFormats(longResult, shortResult);
         }),
       );
     });
 
     it('monotonic: larger deltas never produce "more recent" labels', () => {
-      // Define order: just now < minutes < hours < yesterday < days < weeks < dates
-      const getOrder = (result: string): number => {
-        if (result === 'just now' || result === 'now') return 0;
-        if (result.includes('minute') || /^\d+m ago$/.test(result)) return 1;
-        if (result.includes('hour') || /^\d+h ago$/.test(result)) return 2;
-        if (result === 'yesterday' || /^1d ago$/.test(result)) return 3;
-        if (result.includes('day') || /^\d+d ago$/.test(result)) return 4;
-        if (result.includes('week') || /^\d+w ago$/.test(result)) return 5;
-        return 6; // formatted dates
-      };
-
       fc.assert(
         fc.property(
           fc.integer({ min: 0, max: 45 * DAY }),
           fc.integer({ min: 0, max: 45 * DAY }),
           (delta1, delta2) => {
-            const [smaller, larger] =
-              delta1 <= delta2 ? [delta1, delta2] : [delta2, delta1];
+            const [smaller, larger] = orderedDeltas(delta1, delta2);
 
             const smallerResult = formatRelativeTime(ago(smaller), {
               mode: 'long',
@@ -463,7 +480,10 @@ describe('formatRelativeTime', () => {
               now: NOW,
             });
 
-            return getOrder(smallerResult) <= getOrder(largerResult);
+            return (
+              relativeTimeOrder(smallerResult) <=
+              relativeTimeOrder(largerResult)
+            );
           },
         ),
       );

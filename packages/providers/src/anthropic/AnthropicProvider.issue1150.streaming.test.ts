@@ -168,6 +168,32 @@ describe('AnthropicProvider Issue #1150: Streaming Thinking Block Consolidation'
     | { type: 'redacted_thinking'; data: string } =>
     block.type === 'thinking' || block.type === 'redacted_thinking';
 
+  const assistantHasToolUse = (message: AnthropicMessage): boolean =>
+    Array.isArray(message.content) &&
+    message.content.some((block) => block.type === 'tool_use');
+
+  const isAssistantWithToolUse = (message: AnthropicMessage): boolean =>
+    message.role === 'assistant' && assistantHasToolUse(message);
+
+  const isAssistantWithFourToolUses = (message: AnthropicMessage): boolean =>
+    message.role === 'assistant' &&
+    Array.isArray(message.content) &&
+    message.content.filter((block) => block.type === 'tool_use').length === 4;
+
+  const messageHasThinking = (message: AnthropicMessage): boolean => {
+    if (!Array.isArray(message.content)) {
+      return false;
+    }
+    return message.content.some(isThinkingBlock);
+  };
+
+  const messageHasToolResult = (message: AnthropicMessage): boolean => {
+    if (!Array.isArray(message.content)) {
+      return false;
+    }
+    return message.content.some((block) => block.type === 'tool_result');
+  };
+
   describe('Critical: History with separate thinking and tool_use IContents', () => {
     /**
      * THIS IS THE ACTUAL BUG SCENARIO
@@ -182,6 +208,7 @@ describe('AnthropicProvider Issue #1150: Streaming Thinking Block Consolidation'
      * orphaned thinking blocks. The REAL bug is that thinking blocks are NEVER making it
      * to history in the first place - see the next test.
      */
+
     it('should merge separate thinking IContent with subsequent tool_use IContent', async () => {
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'Response' }],
@@ -249,11 +276,7 @@ describe('AnthropicProvider Issue #1150: Streaming Thinking Block Consolidation'
 
       // Find the assistant message that has tool_use
       const assistantMessages = getAssistantMessages(request);
-      const assistantWithToolUse = assistantMessages.find(
-        (m) =>
-          Array.isArray(m.content) &&
-          m.content.some((b) => b.type === 'tool_use'),
-      );
+      const assistantWithToolUse = assistantMessages.find(assistantHasToolUse);
 
       expect(assistantWithToolUse).toBeDefined();
       const content = assistantWithToolUse!.content as AnthropicContentBlock[];
@@ -262,10 +285,13 @@ describe('AnthropicProvider Issue #1150: Streaming Thinking Block Consolidation'
       // This test FAILS if the provider doesn't merge the separate IContents
       expect(content.length).toBeGreaterThan(0);
       const firstBlock = content[0];
-      expect(
-        isThinkingBlock(firstBlock),
-        `First block should be thinking/redacted_thinking but was ${firstBlock.type}`,
-      ).toBe(true);
+      expect({
+        observation: `First block should be thinking/redacted_thinking but was ${firstBlock.type}`,
+        firstBlockIsThinking: isThinkingBlock(firstBlock),
+      }).toStrictEqual({
+        observation: `First block should be thinking/redacted_thinking but was ${firstBlock.type}`,
+        firstBlockIsThinking: true,
+      });
     });
 
     /**
@@ -274,6 +300,7 @@ describe('AnthropicProvider Issue #1150: Streaming Thinking Block Consolidation'
      * - History shows: ["text","tool_call","tool_call","tool_call","tool_call"]
      * - No thinking in history!
      */
+
     it('should include thinking when history has multiple tool_calls but thinking was streamed separately', async () => {
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'Response' }],
@@ -401,26 +428,29 @@ describe('AnthropicProvider Issue #1150: Streaming Thinking Block Consolidation'
 
       // Find the assistant message with all the tool_use blocks
       const assistantWithToolUse = request.messages.find(
-        (m) =>
-          m.role === 'assistant' &&
-          Array.isArray(m.content) &&
-          m.content.filter((b) => b.type === 'tool_use').length === 4,
+        isAssistantWithFourToolUses,
       );
 
-      expect(
-        assistantWithToolUse,
-        'Should have assistant message with 4 tool_use blocks',
-      ).toBeDefined();
+      expect({
+        observation: 'Should have assistant message with 4 tool_use blocks',
+        assistantMessageIsDefined: assistantWithToolUse !== undefined,
+      }).toStrictEqual({
+        observation: 'Should have assistant message with 4 tool_use blocks',
+        assistantMessageIsDefined: true,
+      });
 
       const content = assistantWithToolUse!.content as AnthropicContentBlock[];
 
       // CRITICAL: First block MUST be thinking
       // Error if not: "messages.1.content.0.type: Expected thinking, but found text"
       const firstBlock = content[0];
-      expect(
-        isThinkingBlock(firstBlock),
-        `First block must be thinking/redacted_thinking, got: ${firstBlock.type}`,
-      ).toBe(true);
+      expect({
+        observation: `First block must be thinking/redacted_thinking, got: ${firstBlock.type}`,
+        firstBlockIsThinking: isThinkingBlock(firstBlock),
+      }).toStrictEqual({
+        observation: `First block must be thinking/redacted_thinking, got: ${firstBlock.type}`,
+        firstBlockIsThinking: true,
+      });
 
       // Should have all 4 tool_use blocks after thinking
       const toolUseBlocks = content.filter((b) => b.type === 'tool_use');
@@ -430,6 +460,7 @@ describe('AnthropicProvider Issue #1150: Streaming Thinking Block Consolidation'
     /**
      * Test that text-only thinking (no tool_use) remains separate
      */
+
     it('should keep thinking-only messages separate when no tool_use follows', async () => {
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'Response' }],
@@ -480,13 +511,14 @@ describe('AnthropicProvider Issue #1150: Streaming Thinking Block Consolidation'
       expect(assistantMessages.length).toBeGreaterThan(0);
 
       // Verify at least one message has thinking
-      const hasThinking = assistantMessages.some((m) => {
-        if (Array.isArray(m.content)) {
-          return m.content.some((b) => isThinkingBlock(b));
-        }
-        return false;
+      const hasThinking = assistantMessages.some(messageHasThinking);
+      expect({
+        observation: 'Should have thinking block somewhere',
+        hasThinking,
+      }).toStrictEqual({
+        observation: 'Should have thinking block somewhere',
+        hasThinking: true,
       });
-      expect(hasThinking, 'Should have thinking block somewhere').toBe(true);
     });
   });
 
@@ -494,6 +526,7 @@ describe('AnthropicProvider Issue #1150: Streaming Thinking Block Consolidation'
     /**
      * When merging thinking with tool_use, the signature MUST be preserved
      */
+
     it('should preserve thinking signature after merging with tool_use IContent', async () => {
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'Response' }],
@@ -557,10 +590,7 @@ describe('AnthropicProvider Issue #1150: Streaming Thinking Block Consolidation'
 
       // Find assistant with tool_use
       const assistantWithToolUse = request.messages.find(
-        (m) =>
-          m.role === 'assistant' &&
-          Array.isArray(m.content) &&
-          m.content.some((b) => b.type === 'tool_use'),
+        isAssistantWithToolUse,
       );
 
       expect(assistantWithToolUse).toBeDefined();
@@ -655,19 +685,18 @@ describe('AnthropicProvider Issue #1150: Streaming Thinking Block Consolidation'
         .calls[0][0] as AnthropicRequestBody;
 
       const assistantMessages = getAssistantMessages(request);
-      const assistantWithToolUse = assistantMessages.find(
-        (m) =>
-          Array.isArray(m.content) &&
-          m.content.some((b) => b.type === 'tool_use'),
-      );
+      const assistantWithToolUse = assistantMessages.find(assistantHasToolUse);
 
       expect(assistantWithToolUse).toBeDefined();
       const content = assistantWithToolUse!.content as AnthropicContentBlock[];
 
-      expect(
-        isThinkingBlock(content[0]),
-        `First block must be thinking, got ${content[0].type}`,
-      ).toBe(true);
+      expect({
+        observation: `First block must be thinking, got ${content[0].type}`,
+        firstBlockIsThinking: isThinkingBlock(content[0]),
+      }).toStrictEqual({
+        observation: `First block must be thinking, got ${content[0].type}`,
+        firstBlockIsThinking: true,
+      });
 
       const toolUseBlocks = content.filter((b) => b.type === 'tool_use');
       expect(toolUseBlocks.length).toBe(2);
@@ -677,12 +706,7 @@ describe('AnthropicProvider Issue #1150: Streaming Thinking Block Consolidation'
       expect(toolUseIds).toContain('toolu_1293_B');
 
       const userMessages = request.messages.filter((m) => m.role === 'user');
-      const toolResultMessage = userMessages.find((m) => {
-        if (Array.isArray(m.content)) {
-          return m.content.some((b) => b.type === 'tool_result');
-        }
-        return false;
-      });
+      const toolResultMessage = userMessages.find(messageHasToolResult);
 
       expect(toolResultMessage).toBeDefined();
       const toolResults = (
@@ -768,11 +792,7 @@ describe('AnthropicProvider Issue #1150: Streaming Thinking Block Consolidation'
         .calls[0][0] as AnthropicRequestBody;
 
       const assistantMessages = getAssistantMessages(request);
-      const assistantWithToolUse = assistantMessages.find(
-        (m) =>
-          Array.isArray(m.content) &&
-          m.content.some((b) => b.type === 'tool_use'),
-      );
+      const assistantWithToolUse = assistantMessages.find(assistantHasToolUse);
 
       expect(assistantWithToolUse).toBeDefined();
       const content = assistantWithToolUse!.content as AnthropicContentBlock[];
@@ -780,12 +800,20 @@ describe('AnthropicProvider Issue #1150: Streaming Thinking Block Consolidation'
       const thinkingBlocks = content.filter((b) => isThinkingBlock(b));
       expect(thinkingBlocks.length).toBe(2);
 
-      expect(isThinkingBlock(content[0]), 'First block must be thinking').toBe(
-        true,
-      );
-      expect(isThinkingBlock(content[1]), 'Second block must be thinking').toBe(
-        true,
-      );
+      expect({
+        observation: 'First block must be thinking',
+        firstBlockIsThinking: isThinkingBlock(content[0]),
+      }).toStrictEqual({
+        observation: 'First block must be thinking',
+        firstBlockIsThinking: true,
+      });
+      expect({
+        observation: 'Second block must be thinking',
+        secondBlockIsThinking: isThinkingBlock(content[1]),
+      }).toStrictEqual({
+        observation: 'Second block must be thinking',
+        secondBlockIsThinking: true,
+      });
 
       const textBlocks = content.filter((b) => b.type === 'text');
       expect(textBlocks.length).toBe(1);

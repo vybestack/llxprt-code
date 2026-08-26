@@ -6,10 +6,19 @@
 
 import { describe, it, expect } from 'bun:test';
 
-import { loadProviderAliasEntries } from './providerAliases.js';
+import {
+  loadProviderAliasEntries,
+  type ProviderAliasEntry,
+} from './providerAliases.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
+
+function configuredStaticModelIds(
+  entry: ProviderAliasEntry | undefined,
+): string[] {
+  return (entry?.config.staticModels ?? []).map((model) => model.id);
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -68,7 +77,7 @@ describe('Codex provider alias', () => {
   it('should expose exactly the current Codex model set', () => {
     const aliases = loadProviderAliasEntries();
     const codexAlias = aliases.find((a) => a.alias === 'codex');
-    const modelIds = (codexAlias?.config.staticModels ?? []).map((m) => m.id);
+    const modelIds = configuredStaticModelIds(codexAlias);
 
     expect(modelIds).toStrictEqual([
       'gpt-5.6-sol',

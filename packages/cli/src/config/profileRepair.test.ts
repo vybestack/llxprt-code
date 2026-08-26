@@ -179,11 +179,9 @@ describe('repairProfiles — debug diagnostics without public leak (#2)', () => 
 
       // The debug log must have been called with structured outcome.errors
       // so diagnostics are available without leaking into the public result.
-      const errorLogCall = debugSpy.mock.calls.find(
-        (call) =>
-          typeof call[0] === 'string' &&
-          call[0].includes('Profile repair errors'),
-      );
+      const errorLogCall = debugSpy.mock.calls
+        .filter((call) => typeof call[0] === 'string')
+        .find((call) => String(call[0]).includes('Profile repair errors'));
       expect(errorLogCall).toBeDefined();
       expect(errorLogCall?.[1]).toStrictEqual(
         expect.arrayContaining([expect.stringContaining(canonicalDir)]),

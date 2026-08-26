@@ -643,7 +643,13 @@ describe('useReactToolScheduler (split)', () => {
     expect(result.current[0]).toStrictEqual([]);
   });
 
-  it('should handle tool not found', async () => {
+  const observeMissingToolCompletion = async (): Promise<{
+    readonly completion: Mock<OnCompleteFn>;
+    readonly completionArgs: readonly CompletedToolCall[];
+    readonly failedCall: CompletedToolCall;
+    readonly errorMessage: string;
+    readonly scheduledCalls: readonly ToolCall[];
+  }> => {
     vi.useRealTimers();
     mockToolRegistry.getTool.mockReturnValue(undefined);
     const { result } = renderScheduler(
@@ -663,25 +669,39 @@ describe('useReactToolScheduler (split)', () => {
     });
 
     await waitFor(
-      () =>
-        expect(onComplete).toHaveBeenCalledWith(
-          expect.anything(),
-          expect.anything(),
-          { isPrimary: true },
-        ),
+      () => {
+        if (onComplete.mock.calls.length === 0) {
+          throw new Error('Expected the missing tool completion callback');
+        }
+      },
       { interval: 10, timeout: 5000 },
     );
 
     const completionArgs = onComplete.mock.calls[0][1];
-    expect(completionArgs).toHaveLength(1);
     const failedCall = completionArgs[0];
-    expect(failedCall.status).toBe('error');
-    expect(failedCall.request.agentId).toBe('primary');
-    const errorMessage = failedCall.response.error?.message ?? '';
-    expect(errorMessage).toContain('could not be loaded');
-    expect(errorMessage).toContain('Did you mean one of:');
-    expect(errorMessage).toContain('"mockTool"');
-    expect(errorMessage).toContain('"anotherTool"');
-    expect(result.current[0]).toStrictEqual([]);
+    return {
+      completion: onComplete,
+      completionArgs,
+      failedCall,
+      errorMessage: failedCall.response.error?.message ?? '',
+      scheduledCalls: result.current[0],
+    };
+  };
+
+  it('should handle tool not found', async () => {
+    const missingTool = await observeMissingToolCompletion();
+    expect(missingTool.completion).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      { isPrimary: true },
+    );
+    expect(missingTool.completionArgs).toHaveLength(1);
+    expect(missingTool.failedCall.status).toBe('error');
+    expect(missingTool.failedCall.request.agentId).toBe('primary');
+    expect(missingTool.errorMessage).toContain('could not be loaded');
+    expect(missingTool.errorMessage).toContain('Did you mean one of:');
+    expect(missingTool.errorMessage).toContain('"mockTool"');
+    expect(missingTool.errorMessage).toContain('"anotherTool"');
+    expect(missingTool.scheduledCalls).toStrictEqual([]);
   });
 });

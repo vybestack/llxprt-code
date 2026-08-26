@@ -446,9 +446,12 @@ describe('runStartupMigrationWithPath — hard-link atomic publish', () => {
     runStartupMigrationWithPath(env.legacyDir, env.destinations);
 
     const profilesDir = path.join(env.destinations.configDir, 'profiles');
+    const temporaryFileSuffixes = ['.tmp', '.norm.tmp'];
     const temps = fs
       .readdirSync(profilesDir)
-      .filter((f) => f.endsWith('.tmp') || f.endsWith('.norm.tmp'));
+      .filter((fileName) =>
+        temporaryFileSuffixes.some((suffix) => fileName.endsWith(suffix)),
+      );
     expect(temps).toStrictEqual([]);
   });
 
@@ -486,28 +489,30 @@ describe('runStartupMigrationWithPath — hard-link atomic publish', () => {
     expect(canonical.provider).toBe('openai');
   });
 
-  it.skipIf(process.platform === 'win32')(
-    'normalized publish preserves source file mode',
+  describe.skipIf(process.platform === 'win32')(
+    'on non-Windows systems',
     () => {
-      const legacyProfile = {
-        version: 1,
-        provider: 'anthropic',
-        model: 'glm-5.2',
-        ephemeralSettings: {},
-      };
-      writeFiles(env.legacyDir, {
-        'profiles/sec.json': JSON.stringify(legacyProfile),
-        'settings.json': '{}',
+      it('normalized publish preserves source file mode', () => {
+        const legacyProfile = {
+          version: 1,
+          provider: 'anthropic',
+          model: 'glm-5.2',
+          ephemeralSettings: {},
+        };
+        writeFiles(env.legacyDir, {
+          'profiles/sec.json': JSON.stringify(legacyProfile),
+          'settings.json': '{}',
+        });
+        // Set source to 0600.
+        fs.chmodSync(path.join(env.legacyDir, 'profiles/sec.json'), 0o600);
+
+        runStartupMigrationWithPath(env.legacyDir, env.destinations);
+
+        const stat = fs.statSync(
+          path.join(env.destinations.configDir, 'profiles/sec.json'),
+        );
+        expect(stat.mode & 0o777).toBe(0o600);
       });
-      // Set source to 0600.
-      fs.chmodSync(path.join(env.legacyDir, 'profiles/sec.json'), 0o600);
-
-      runStartupMigrationWithPath(env.legacyDir, env.destinations);
-
-      const stat = fs.statSync(
-        path.join(env.destinations.configDir, 'profiles/sec.json'),
-      );
-      expect(stat.mode & 0o777).toBe(0o600);
     },
   );
 });

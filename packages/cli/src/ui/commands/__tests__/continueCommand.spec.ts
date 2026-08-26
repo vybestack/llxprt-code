@@ -78,6 +78,20 @@ function isPerformResumeAction(
   return result !== undefined && result.type === 'perform_resume';
 }
 
+function completionValue(completion: string | { value: string }): string {
+  return typeof completion === 'string' ? completion : completion.value;
+}
+
+function hasValidResultType(
+  result: SlashCommandActionReturn | void | undefined,
+  validTypes: readonly string[],
+): boolean {
+  if (result === undefined) {
+    return true;
+  }
+  return validTypes.includes(result.type);
+}
+
 describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
   let ctx: CommandContext;
 
@@ -270,9 +284,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       assertDefined(firstArg.completer);
 
       const completions = await firstArg.completer(ctx, '', mockTokenInfo());
-      const values = completions.map((c) =>
-        typeof c === 'string' ? c : c.value,
-      );
+      const values = completions.map(completionValue);
       expect(values).toContain('latest');
     });
 
@@ -359,9 +371,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
         assertDefined(firstArg.completer);
 
         const completions = await firstArg.completer(ctx, '', mockTokenInfo());
-        const values = completions.map((completion) =>
-          typeof completion === 'string' ? completion : completion.value,
-        );
+        const values = completions.map(completionValue);
         expect(values).toContain('release-ready');
         expect(values).toContain(sessionId);
       } finally {
@@ -428,11 +438,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       await fc.assert(
         fc.asyncProperty(fc.string(), async (args) => {
           const result = await continueCommand.action!(ctx, args);
-          if (result === undefined) {
-            // void return is valid for some commands
-            return true;
-          }
-          return validTypes.includes(result.type);
+          return hasValidResultType(result, validTypes);
         }),
       );
     });

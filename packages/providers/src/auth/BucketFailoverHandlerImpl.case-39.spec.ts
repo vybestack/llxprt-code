@@ -11,6 +11,19 @@ import {
   makeToken,
 } from './BucketFailoverHandlerImpl.test-helpers.js';
 
+type BucketFixture = ReturnType<typeof createBucketFailoverFixture>;
+
+function createOnlyBucketAuthentication(
+  tokenStore: BucketFixture['tokenStore'],
+  freshToken: ReturnType<typeof makeToken>,
+): (provider: string, bucket?: string) => Promise<void> {
+  return async (_provider: string, bucket?: string): Promise<void> => {
+    if (bucket === 'only-bucket') {
+      await tokenStore.saveToken('anthropic', freshToken, bucket);
+    }
+  };
+}
+
 describe('BucketFailoverHandlerImpl #39', () => {
   it('should allow reauth of the triggering bucket in single-bucket profiles', async () => {
     const { tokenStore, oauthManager } = createBucketFailoverFixture();
@@ -32,11 +45,7 @@ describe('BucketFailoverHandlerImpl #39', () => {
     // Mock authenticate to save a fresh token
     const freshToken = makeToken('fresh-after-reauth');
     oauthManager.authenticate = vi.fn(
-      async (_provider: string, bucket?: string) => {
-        if (bucket === 'only-bucket') {
-          await tokenStore.saveToken('anthropic', freshToken, bucket);
-        }
-      },
+      createOnlyBucketAuthentication(tokenStore, freshToken),
     );
 
     const result = await handler.tryFailover();

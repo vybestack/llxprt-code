@@ -14,6 +14,66 @@ import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 // Mock fetch globally
 global.fetch = vi.fn();
 
+type ToolCallReference = { id?: string };
+type AssistantMessageWithToolCalls = {
+  role: 'assistant';
+  tool_calls: ToolCallReference[];
+  reasoning_content?: unknown;
+};
+
+function selectResponseChunks(
+  callCount: number,
+  firstResponseChunks: string[],
+  secondResponseChunks: string[],
+): string[] {
+  return callCount === 1 ? firstResponseChunks : secondResponseChunks;
+}
+
+function isToolCallReference(value: unknown): value is ToolCallReference {
+  return typeof value === 'object' && value !== null;
+}
+
+function hasAssistantToolCalls(
+  message: unknown,
+): message is AssistantMessageWithToolCalls {
+  if (typeof message !== 'object' || message === null) return false;
+  if (!('role' in message) || message.role !== 'assistant') return false;
+  if (!('tool_calls' in message) || !Array.isArray(message.tool_calls)) {
+    return false;
+  }
+  return (
+    message.tool_calls.length > 0 &&
+    message.tool_calls.every(isToolCallReference)
+  );
+}
+
+function getAssistantToolCallIds(
+  message: AssistantMessageWithToolCalls | undefined,
+): string[] {
+  return (message?.tool_calls ?? [])
+    .map((toolCall) => toolCall.id)
+    .filter((id): id is string => typeof id === 'string');
+}
+
+function getFirstAssistantToolCallId(
+  message: AssistantMessageWithToolCalls | undefined,
+): string | undefined {
+  return getAssistantToolCallIds(message)[0];
+}
+
+function isContinuationPrompt(message: unknown): boolean {
+  if (typeof message !== 'object' || message === null) return false;
+  if (!('role' in message) || message.role !== 'user') return false;
+  if (!('content' in message) || typeof message.content !== 'string') {
+    return false;
+  }
+  return message.content.includes('tool calls above have been registered');
+}
+
+function isTypeScriptTextBlock(block: IContent['blocks'][number]): boolean {
+  return block.type === 'text' && block.text.includes('TypeScript');
+}
+
 describe('OpenAIProvider empty response retry (issue #584)', () => {
   let provider: OpenAIProvider;
   let settingsService: SettingsService;
@@ -154,10 +214,13 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     let callCount = 0;
     (global.fetch as Mock<typeof global.fetch>).mockImplementation(async () => {
       callCount++;
-      if (callCount === 1) {
-        return createStreamingResponse(firstResponseChunks);
-      }
-      return createStreamingResponse(secondResponseChunks);
+      return createStreamingResponse(
+        selectResponseChunks(
+          callCount,
+          firstResponseChunks,
+          secondResponseChunks,
+        ),
+      );
     });
 
     const messages: IMessage[] = [
@@ -235,11 +298,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
       c.blocks.some((b) => b.type === 'text'),
     );
     expect(textContent).toBeDefined();
-    expect(
-      textContent?.blocks.some(
-        (b) => b.type === 'text' && b.text.includes('TypeScript'),
-      ),
-    ).toBe(true);
+    expect(textContent?.blocks.some(isTypeScriptTextBlock)).toBe(true);
 
     // Verify fetch was called twice (original + retry)
     expect(callCount).toBe(2);
@@ -271,9 +330,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     const continuationMessages = secondRequestBody.messages;
 
     // Should have assistant message with tool_calls
-    const assistantMsg = continuationMessages.find(
-      (m) => m.role === 'assistant' && m.tool_calls != null,
-    );
+    const assistantMsg = continuationMessages.find(hasAssistantToolCalls);
     expect(assistantMsg).toBeDefined();
     expect(assistantMsg?.tool_calls).toHaveLength(1);
 
@@ -285,11 +342,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
 
     // In strict OpenAI-compatible mode we must preserve OpenAI-style IDs in
     // continuation replay (e.g. call_123), not rewritten history IDs.
-    const continuationToolCallId =
-      assistantMsg?.tool_calls?.[0] &&
-      typeof assistantMsg.tool_calls[0].id === 'string'
-        ? assistantMsg.tool_calls[0].id
-        : undefined;
+    const continuationToolCallId = getFirstAssistantToolCallId(assistantMsg);
     expect(continuationToolCallId).toMatch(/^call_/);
 
     expect(toolResponseMsgs[0]?.content).toBe(
@@ -298,10 +351,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
 
     // Assistant tool_call IDs and following tool tool_call_id MUST stay aligned.
     // Strict OpenAI-compatible gateways validate adjacency and exact ID matching.
-    const assistantToolCallIds =
-      assistantMsg?.tool_calls
-        ?.map((tc) => tc.id)
-        .filter((id): id is string => typeof id === 'string') ?? [];
+    const assistantToolCallIds = getAssistantToolCallIds(assistantMsg);
     const toolResponseIds = toolResponseMsgs
       .map((m) => m.tool_call_id)
       .filter((id): id is string => typeof id === 'string');
@@ -330,11 +380,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     }
 
     // Should have user continuation prompt
-    const continuationPrompt = continuationMessages.find(
-      (m): boolean =>
-        m.role === 'user' &&
-        m.content?.includes('tool calls above have been registered') === true,
-    );
+    const continuationPrompt = continuationMessages.find(isContinuationPrompt);
     expect(continuationPrompt).toBeDefined();
   });
 
@@ -427,10 +473,13 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     let callCount = 0;
     (global.fetch as Mock<typeof global.fetch>).mockImplementation(async () => {
       callCount++;
-      if (callCount === 1) {
-        return createStreamingResponse(firstResponseChunks);
-      }
-      return createStreamingResponse(secondResponseChunks);
+      return createStreamingResponse(
+        selectResponseChunks(
+          callCount,
+          firstResponseChunks,
+          secondResponseChunks,
+        ),
+      );
     });
 
     const messages: IMessage[] = [
@@ -499,10 +548,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     };
 
     const continuationAssistant = secondRequestBody.messages.find(
-      (m): boolean =>
-        m.role === 'assistant' &&
-        m.tool_calls != null &&
-        m.tool_calls.length > 0,
+      hasAssistantToolCalls,
     );
     expect(continuationAssistant).toBeDefined();
 
@@ -511,7 +557,9 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     );
     expect(continuationTool).toBeDefined();
 
-    const assistantToolCallId = continuationAssistant?.tool_calls?.[0]?.id;
+    const assistantToolCallId = getFirstAssistantToolCallId(
+      continuationAssistant,
+    );
     expect(assistantToolCallId).toBe('call_provider_999');
     expect(continuationTool?.tool_call_id).toBe(assistantToolCallId);
   });
@@ -590,7 +638,11 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     (global.fetch as Mock<typeof global.fetch>).mockImplementation(async () => {
       callCount++;
       return createStreamingResponse(
-        callCount === 1 ? firstResponseChunks : secondResponseChunks,
+        selectResponseChunks(
+          callCount,
+          firstResponseChunks,
+          secondResponseChunks,
+        ),
       );
     });
 
@@ -738,19 +790,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
       'openai',
     );
 
-    const assistantToolCallMessage = messages.find(
-      (msg) =>
-        msg.role === 'assistant' &&
-        'tool_calls' in msg &&
-        Array.isArray(msg.tool_calls) &&
-        msg.tool_calls.length > 0,
-    ) as
-      | {
-          role: string;
-          tool_calls?: Array<{ id?: string }>;
-          reasoning_content?: unknown;
-        }
-      | undefined;
+    const assistantToolCallMessage = messages.find(hasAssistantToolCalls);
 
     expect(assistantToolCallMessage).toBeDefined();
     expect(assistantToolCallMessage?.tool_calls?.[0]?.id).toBe('call_abc123');

@@ -21,7 +21,7 @@ describe('processToolParameters', () => {
     };
     const doubleEscaped = JSON.stringify(JSON.stringify(params));
 
-    expect(processToolParameters(doubleEscaped, 'test-tool')).toEqual({
+    expect(processToolParameters(doubleEscaped, 'test-tool')).toStrictEqual({
       integer: 123,
       decimal: 0.5,
       exponent: 3.14e-10,

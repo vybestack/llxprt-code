@@ -54,6 +54,19 @@ const testTodos: Todo[] = [
   },
 ];
 
+function fullOrTruncatedContent(
+  hasFullContent: boolean,
+  hasTruncatedContent: RegExpMatchArray | null,
+): boolean | RegExpMatchArray | null {
+  return hasFullContent || hasTruncatedContent;
+}
+
+function visibleContentLength(visibleContent: string): number {
+  return visibleContent.endsWith('...')
+    ? visibleContent.length - 3
+    : visibleContent.length;
+}
+
 describe('TodoPanel Responsive Behavior', () => {
   let mockUseTerminalSize: Mock<typeof useTerminalSize>;
 
@@ -101,7 +114,9 @@ describe('TodoPanel Responsive Behavior', () => {
       );
 
       // Either full content is shown or it's truncated but with much more content visible
-      expect(hasFullContent || hasTruncatedContent).toBe(true);
+      expect(fullOrTruncatedContent(hasFullContent, hasTruncatedContent)).toBe(
+        true,
+      );
 
       // Should NOT show task count summary (that's only for narrow)
       expect(output).not.toMatch(testRegex('3 tasks', 'i'));
@@ -234,10 +249,7 @@ describe('TodoPanel Responsive Behavior', () => {
       // With better truncation (80-90%), we should see more content
       // Old logic (50%): ~25 chars visible before "..."
       // New logic (80-90%): ~40+ chars visible before "..."
-      const isTruncated = visibleContent.endsWith('...');
-      const visibleChars = isTruncated
-        ? visibleContent.length - 3
-        : visibleContent.length;
+      const visibleChars = visibleContentLength(visibleContent);
 
       expect(visibleChars).toBeGreaterThan(30); // Should show more content
     });
@@ -277,9 +289,7 @@ describe('TodoPanel Responsive Behavior', () => {
 
         expect(contentMatch).toBeDefined();
         const visibleContent = contentMatch![1];
-        const visibleChars = visibleContent.endsWith('...')
-          ? visibleContent.length - 3
-          : visibleContent.length;
+        const visibleChars = visibleContentLength(visibleContent);
 
         expect(visibleChars).toBeGreaterThanOrEqual(expectedMinChars);
       });

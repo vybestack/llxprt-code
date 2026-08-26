@@ -238,39 +238,55 @@ describe('MiddleOutStrategy — usage propagation (Issue #1211)', () => {
   });
 
   it('summary IContent has usage metadata attached when provider emits usage', async () => {
-    const strategy = new MiddleOutStrategy();
-    const ctx = buildContext();
-
-    const result = await strategy.compress(ctx);
-
-    // Find the summary IContent — it's the first human entry after toKeepTop
-    // In middle-out: [toKeepTop..., summary, continuationDirective, toKeepBottom...]
-    const topPreserved = result.metadata.topPreserved ?? 0;
-    const summaryEntry = result.newHistory[topPreserved];
-
+    const { summaryEntry, usageObservation, totalTokensObservation } =
+      await observeSummaryIContentHasUsageMetadataAttachedWhenProviderEmitsUsage();
     expect(summaryEntry).toBeDefined();
     expect(summaryEntry.speaker).toBe('human');
-    expect(summaryEntry.metadata?.usage).toBeDefined();
-    expect(summaryEntry.metadata?.usage?.totalTokens).toBe(
-      MOCK_USAGE.totalTokens,
-    );
+    expect(usageObservation).toBeDefined();
+    expect(totalTokensObservation).toBe(MOCK_USAGE.totalTokens);
   });
+
+  const observeSummaryIContentHasUsageMetadataAttachedWhenProviderEmitsUsage =
+    async () => {
+      const strategy = new MiddleOutStrategy();
+      const ctx = buildContext();
+
+      const result = await strategy.compress(ctx);
+
+      // Find the summary IContent — it's the first human entry after toKeepTop
+      // In middle-out: [toKeepTop..., summary, continuationDirective, toKeepBottom...]
+      const topPreserved = result.metadata.topPreserved ?? 0;
+      const summaryEntry = result.newHistory[topPreserved];
+
+      const usageObservation = summaryEntry.metadata?.usage;
+      const totalTokensObservation = summaryEntry.metadata?.usage?.totalTokens;
+      return { summaryEntry, usageObservation, totalTokensObservation };
+    };
 
   it('summary IContent has no usage metadata when provider emits no usage', async () => {
-    const strategy = new MiddleOutStrategy();
-    const provider = makeMockProviderNoUsage();
-    const ctx = buildContext({ provider });
-
-    const result = await strategy.compress(ctx);
-
-    const topPreserved = result.metadata.topPreserved ?? 0;
-    const summaryEntry = result.newHistory[topPreserved];
-
+    const { summaryEntry, usageObservation } =
+      await observeSummaryIContentHasNoUsageMetadataWhenProviderEmitsNoUsage();
     expect(summaryEntry).toBeDefined();
     expect(summaryEntry.speaker).toBe('human');
-    // metadata.usage should be absent when provider gives no usage
-    expect(summaryEntry.metadata?.usage).toBeUndefined();
+    expect(usageObservation).toBeUndefined();
   });
+
+  const observeSummaryIContentHasNoUsageMetadataWhenProviderEmitsNoUsage =
+    async () => {
+      const strategy = new MiddleOutStrategy();
+      const provider = makeMockProviderNoUsage();
+      const ctx = buildContext({ provider });
+
+      const result = await strategy.compress(ctx);
+
+      const topPreserved = result.metadata.topPreserved ?? 0;
+      const summaryEntry = result.newHistory[topPreserved];
+
+      // metadata.usage should be absent when provider gives no usage
+
+      const usageObservation = summaryEntry.metadata?.usage;
+      return { summaryEntry, usageObservation };
+    };
 
   it('no compression returns result without usage (llmCallMade=false)', async () => {
     const strategy = new MiddleOutStrategy();
@@ -366,22 +382,40 @@ describe('OneShotStrategy — usage propagation (Issue #1211)', () => {
 
 describe('CompressionResultMetadata — usage field type (Issue #1211)', () => {
   it('usage field matches UsageStats interface shape when present', async () => {
-    const strategy = new MiddleOutStrategy();
-    const ctx = buildContext();
-
-    const result = await strategy.compress(ctx);
-
-    const usage = result.metadata.usage;
+    const {
+      usage,
+      resolvedUsage,
+      usageFieldMatchesUsageStatsInterfaceShapeWhenPresentObservation1,
+    } = await observeUsageFieldMatchesUsageStatsInterfaceShapeWhenPresent();
     expect(usage).toBeDefined();
-    const resolvedUsage = usage as UsageStats;
     expect(typeof resolvedUsage.promptTokens).toBe('number');
     expect(typeof resolvedUsage.completionTokens).toBe('number');
     expect(typeof resolvedUsage.totalTokens).toBe('number');
     expect(
-      resolvedUsage.cachedTokens === undefined ||
-        typeof resolvedUsage.cachedTokens === 'number',
+      usageFieldMatchesUsageStatsInterfaceShapeWhenPresentObservation1,
     ).toBe(true);
   });
+
+  const observeUsageFieldMatchesUsageStatsInterfaceShapeWhenPresent =
+    async () => {
+      const strategy = new MiddleOutStrategy();
+      const ctx = buildContext();
+
+      const result = await strategy.compress(ctx);
+
+      const usage = result.metadata.usage;
+
+      const resolvedUsage = usage as UsageStats;
+
+      const usageFieldMatchesUsageStatsInterfaceShapeWhenPresentObservation1 =
+        resolvedUsage.cachedTokens === undefined ||
+        typeof resolvedUsage.cachedTokens === 'number';
+      return {
+        usage,
+        resolvedUsage,
+        usageFieldMatchesUsageStatsInterfaceShapeWhenPresentObservation1,
+      };
+    };
 
   it('usage field captures the LAST usage from provider stream (not accumulated)', async () => {
     // Provider emits two usage chunks — only the final one should be captured

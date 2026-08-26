@@ -13,8 +13,8 @@ import {
   McpClientManager,
   DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS,
 } from './mcp-client-manager.js';
-import { McpClient } from './mcp-client.js';
-import { MCPDiscoveryState } from './mcp-client.js';
+import { McpClient, MCPDiscoveryState } from './mcp-client.js';
+import { MCPServerStatus } from './mcp-status.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
@@ -33,6 +33,28 @@ void vi.mock('./mcp-client.js', () => ({
   },
   populateMcpServerCommand: vi.fn((servers, _command) => servers),
 }));
+
+interface MockMcpInstructionClient {
+  readonly connect: Mock<McpClient['connect']>;
+  readonly discover: Mock<McpClient['discover']>;
+  readonly disconnect: Mock<McpClient['disconnect']>;
+  readonly getStatus: Mock<McpClient['getStatus']>;
+  readonly getServerConfig: Mock<McpClient['getServerConfig']>;
+  readonly getInstructions: Mock<McpClient['getInstructions']>;
+}
+
+function createMockMcpInstructionClient(
+  instructions: string,
+): MockMcpInstructionClient {
+  return {
+    connect: vi.fn(),
+    discover: vi.fn(),
+    disconnect: vi.fn(),
+    getStatus: vi.fn(() => MCPServerStatus.CONNECTED),
+    getServerConfig: vi.fn(() => ({})),
+    getInstructions: vi.fn(() => instructions),
+  };
+}
 
 describe('McpClientManager', () => {
   afterEach(() => {
@@ -359,31 +381,16 @@ describe('McpClientManager', () => {
 
   describe('getMcpInstructions', () => {
     it('should aggregate instructions from all connected servers', async () => {
-      const mockedMcpClient1 = {
-        connect: vi.fn(),
-        discover: vi.fn(),
-        disconnect: vi.fn(),
-        getStatus: vi.fn().mockReturnValue('connected'),
-        getServerConfig: vi.fn().mockReturnValue({}),
-        getInstructions: vi.fn().mockReturnValue('Server 1 instructions'),
-      };
-      const mockedMcpClient2 = {
-        connect: vi.fn(),
-        discover: vi.fn(),
-        disconnect: vi.fn(),
-        getStatus: vi.fn().mockReturnValue('connected'),
-        getServerConfig: vi.fn().mockReturnValue({}),
-        getInstructions: vi.fn().mockReturnValue('Server 2 instructions'),
-      };
+      const mockedMcpClient1 = createMockMcpInstructionClient(
+        'Server 1 instructions',
+      );
+      const mockedMcpClient2 = createMockMcpInstructionClient(
+        'Server 2 instructions',
+      );
 
-      let callCount = 0;
-      (
-        McpClient as unknown as Mock<(...args: never[]) => unknown>
-      ).mockImplementation(() => {
-        const client = callCount === 0 ? mockedMcpClient1 : mockedMcpClient2;
-        callCount++;
-        return client as unknown as McpClient;
-      });
+      (McpClient as unknown as Mock<(...args: never[]) => unknown>)
+        .mockReturnValueOnce(mockedMcpClient1)
+        .mockReturnValueOnce(mockedMcpClient2);
 
       const mockConfig = {
         isTrustedFolder: () => true,
@@ -472,33 +479,14 @@ describe('McpClientManager', () => {
     });
 
     it('should include instructions from servers with content', async () => {
-      const mockedMcpClient1 = {
-        connect: vi.fn(),
-        discover: vi.fn(),
-        disconnect: vi.fn(),
-        getStatus: vi.fn().mockReturnValue('connected'),
-        getServerConfig: vi.fn().mockReturnValue({}),
-        getInstructions: vi
-          .fn()
-          .mockReturnValue('Connected server instructions'),
-      };
-      const mockedMcpClient2 = {
-        connect: vi.fn(),
-        discover: vi.fn(),
-        disconnect: vi.fn(),
-        getStatus: vi.fn().mockReturnValue('connected'),
-        getServerConfig: vi.fn().mockReturnValue({}),
-        getInstructions: vi.fn().mockReturnValue(''),
-      };
+      const mockedMcpClient1 = createMockMcpInstructionClient(
+        'Connected server instructions',
+      );
+      const mockedMcpClient2 = createMockMcpInstructionClient('');
 
-      let callCount = 0;
-      (
-        McpClient as unknown as Mock<(...args: never[]) => unknown>
-      ).mockImplementation(() => {
-        const client = callCount === 0 ? mockedMcpClient1 : mockedMcpClient2;
-        callCount++;
-        return client as unknown as McpClient;
-      });
+      (McpClient as unknown as Mock<(...args: never[]) => unknown>)
+        .mockReturnValueOnce(mockedMcpClient1)
+        .mockReturnValueOnce(mockedMcpClient2);
 
       const mockConfig = {
         isTrustedFolder: () => true,

@@ -157,7 +157,7 @@ describe('CoreSubagentServiceAdapter lossless text streaming', () => {
 
   it('does not invent separators at fragment boundaries', async () => {
     const { adapter } = createStreamingAdapter((scope) => {
-      for (const token of 'Hello World'.match(/(\w+|\s)/g) ?? []) {
+      for (const token of matchTokens('Hello World')) {
         scope.onMessage?.(token);
       }
     });
@@ -239,3 +239,7 @@ describe('CoreSubagentServiceAdapter lossless text streaming', () => {
     );
   });
 });
+
+function matchTokens(s: string): string[] {
+  return s.match(/(\w+|\s)/g) ?? [];
+}

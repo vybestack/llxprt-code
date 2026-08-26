@@ -6,8 +6,21 @@
 
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { ActivateSkillTool } from './activate-skill.js';
+import type {
+  ToolCallConfirmationDetails,
+  ToolInfoConfirmationDetails,
+} from './tools.js';
 import type { ISkillService, SkillInfo } from '../interfaces/index.js';
 import type { IToolMessageBus } from '../interfaces/IToolMessageBus.js';
+
+function requireInfoConfirmation(
+  details: ToolCallConfirmationDetails | false,
+): ToolInfoConfirmationDetails {
+  if (details === false || details.type !== 'info') {
+    throw new Error('Expected informational confirmation details');
+  }
+  return details;
+}
 
 describe('ActivateSkillTool', () => {
   let mockSkillService: ISkillService;
@@ -68,15 +81,12 @@ describe('ActivateSkillTool', () => {
     );
 
     expect(details).not.toBe(false);
-    if (details === false) throw new Error('unreachable: narrowing failed');
-    expect(details.title).toBe('Activate Skill: test-skill');
-    expect(details.type).toBe('info');
-    if (details.type !== 'info') {
-      throw new Error('Expected informational confirmation details');
-    }
-    expect(details.prompt).toContain('enable the specialized agent skill');
-    expect(details.prompt).toContain('A test skill');
-    expect(details.prompt).toContain('Mock folder structure');
+    const infoDetails = requireInfoConfirmation(details);
+    expect(infoDetails.title).toBe('Activate Skill: test-skill');
+    expect(infoDetails.type).toBe('info');
+    expect(infoDetails.prompt).toContain('enable the specialized agent skill');
+    expect(infoDetails.prompt).toContain('A test skill');
+    expect(infoDetails.prompt).toContain('Mock folder structure');
   });
 
   it('should activate a valid skill and return its content in XML tags', async () => {

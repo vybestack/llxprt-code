@@ -20,13 +20,38 @@ import { AppContainer } from '../AppContainer.js';
 import { initialAppState } from '../reducers/appReducer.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { Command } from '../keyMatchers.js';
-import { defaultKeyBindings } from '../../config/keyBindings.js';
+import {
+  defaultKeyBindings,
+  type KeyBinding,
+} from '../../config/keyBindings.js';
 import { createMockAgent } from '../../test-utils/mockAgent.js';
 import {
   buildSlashCommandRuntime,
   buildUiRuntimeFromSource,
   type UiRuntimeBareSource,
 } from '../cliUiRuntime.js';
+
+const keyBindingProperties: ReadonlyArray<keyof KeyBinding> = [
+  'key',
+  'sequence',
+  'ctrl',
+  'shift',
+  'command',
+  'paste',
+];
+
+function hasKeyBinding(
+  bindings: readonly KeyBinding[],
+  requiredBinding: KeyBinding,
+): boolean {
+  return bindings.some((binding) =>
+    keyBindingProperties.every(
+      (property) =>
+        !Object.hasOwn(requiredBinding, property) ||
+        binding[property] === requiredBinding[property],
+    ),
+  );
+}
 
 // Mock config type
 interface MockConfig {
@@ -391,9 +416,9 @@ void vi.mock('../../config/config.js', () => ({
   }),
 }));
 
-const actual = { ...(await import('@vybestack/llxprt-code-core')) };
+const coreModule = { ...(await import('@vybestack/llxprt-code-core')) };
 void vi.mock('@vybestack/llxprt-code-core', () => ({
-  ...actual,
+  ...coreModule,
   triggerSessionStartHook: vi.fn().mockResolvedValue(null),
   triggerSessionEndHook: vi.fn().mockResolvedValue(undefined),
   SessionStartSource: { Startup: 'startup' },
@@ -463,42 +488,38 @@ describe('AppContainer.keybindings', () => {
   describe('key binding configuration', () => {
     it('should have Ctrl+C bound to QUIT command', () => {
       const quitBindings = defaultKeyBindings[Command.QUIT];
-      const hasCtrlC = quitBindings.some(
-        (b) => b.key === 'c' && b.ctrl === true,
-      );
+      const hasCtrlC = hasKeyBinding(quitBindings, { key: 'c', ctrl: true });
       expect(hasCtrlC).toBe(true);
     });
 
     it('should have Ctrl+D bound to EXIT command', () => {
       const exitBindings = defaultKeyBindings[Command.EXIT];
-      const hasCtrlD = exitBindings.some(
-        (b) => b.key === 'd' && b.ctrl === true,
-      );
+      const hasCtrlD = hasKeyBinding(exitBindings, { key: 'd', ctrl: true });
       expect(hasCtrlD).toBe(true);
     });
 
     it('should have Cmd+M (macOS) / Alt+M bound to TOGGLE_MARKDOWN command', () => {
       const markdownBindings = defaultKeyBindings[Command.TOGGLE_MARKDOWN];
-      const hasAltM = markdownBindings.some(
-        (b) => b.key === 'm' && b.command === true,
-      );
+      const hasAltM = hasKeyBinding(markdownBindings, {
+        key: 'm',
+        command: true,
+      });
       expect(hasAltM).toBe(true);
     });
 
     it('should have Ctrl+S bound to TOGGLE_COPY_MODE command', () => {
       const copyBindings = defaultKeyBindings[Command.TOGGLE_COPY_MODE];
-      const hasCtrlS = copyBindings.some(
-        (b) => b.key === 's' && b.ctrl === true,
-      );
+      const hasCtrlS = hasKeyBinding(copyBindings, { key: 's', ctrl: true });
       expect(hasCtrlS).toBe(true);
     });
 
     it('should have Ctrl+F bound to TOGGLE_SHELL_INPUT_FOCUS command', () => {
       const shellFocusBindings =
         defaultKeyBindings[Command.TOGGLE_SHELL_INPUT_FOCUS];
-      const hasCtrlF = shellFocusBindings.some(
-        (b) => b.key === 'f' && b.ctrl === true,
-      );
+      const hasCtrlF = hasKeyBinding(shellFocusBindings, {
+        key: 'f',
+        ctrl: true,
+      });
       expect(hasCtrlF).toBe(true);
     });
   });

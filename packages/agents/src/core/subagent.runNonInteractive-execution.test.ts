@@ -190,53 +190,69 @@ describe('subagent.ts', () => {
     });
 
     it('prompts the model to finish outstanding todos before completing', async () => {
-      const { config } = await createMockConfig();
-
-      mockSendMessageStream.mockImplementation(
-        createMockStream(['stop', 'stop']),
-      );
-
-      TodoStoreMock.mockClear();
-      mockReadTodos
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([
-          {
-            id: 'todo-1',
-            content: 'Complete the technical report',
-            status: 'in_progress',
-          },
-        ])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([
-          {
-            id: 'todo-1',
-            content: 'Complete the technical report',
-            status: 'completed',
-          },
-        ]);
-
-      const { overrides } = createRuntimeOverrides();
-      const scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        promptConfig,
-        defaultModelConfig,
-        defaultRunConfig,
-        undefined,
-        undefined,
-        overrides,
-      );
-
-      await scope.runNonInteractive(new ContextState());
-
+      const {
+        scope,
+        promptsTheModelToFinishOutstandingTodosBeforeCompletingObservation1,
+      } =
+        await observePromptsTheModelToFinishOutstandingTodosBeforeCompleting();
       expect(mockSendMessageStream).toHaveBeenCalledTimes(2);
-      const firstCallMessage =
-        mockSendMessageStream.mock.calls[0]?.[0]?.message;
-      expect(firstCallMessage?.[0]?.text ?? '').toContain(
-        'Follow the task directives provided in the system prompt.',
-      );
+      expect(
+        promptsTheModelToFinishOutstandingTodosBeforeCompletingObservation1,
+      ).toContain('Follow the task directives provided in the system prompt.');
       expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
     });
+
+    const observePromptsTheModelToFinishOutstandingTodosBeforeCompleting =
+      async () => {
+        const { config } = await createMockConfig();
+
+        mockSendMessageStream.mockImplementation(
+          createMockStream(['stop', 'stop']),
+        );
+
+        TodoStoreMock.mockClear();
+        mockReadTodos
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([
+            {
+              id: 'todo-1',
+              content: 'Complete the technical report',
+              status: 'in_progress',
+            },
+          ])
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([
+            {
+              id: 'todo-1',
+              content: 'Complete the technical report',
+              status: 'completed',
+            },
+          ]);
+
+        const { overrides } = createRuntimeOverrides();
+        const scope = await SubAgentScope.create(
+          'test-agent',
+          config,
+          promptConfig,
+          defaultModelConfig,
+          defaultRunConfig,
+          undefined,
+          undefined,
+          overrides,
+        );
+
+        await scope.runNonInteractive(new ContextState());
+
+        const firstCallMessage =
+          mockSendMessageStream.mock.calls[0]?.[0]?.message;
+
+        const promptsTheModelToFinishOutstandingTodosBeforeCompletingObservation1 =
+          firstCallMessage?.[0]?.text ?? '';
+        return {
+          scope,
+          promptsTheModelToFinishOutstandingTodosBeforeCompletingObservation1,
+        };
+      };
 
     it('should handle self_emitvalue and terminate with GOAL when outputs are met', async () => {
       const { config } = await createMockConfig();
@@ -446,79 +462,92 @@ describe('subagent.ts', () => {
     });
 
     it('should filter functionCall from error responseParts in non-interactive flow (Anthropic boundary)', async () => {
-      const { config } = await createMockConfig();
-      const toolConfig: ToolConfig = { tools: ['erroring_tool'] };
-
-      mockSendMessageStream.mockImplementation(
-        createMockStream([
-          [
-            {
-              id: 'call_err',
-              name: 'erroring_tool',
-              args: {},
-            },
-          ],
-          'stop',
-        ]),
-      );
-
-      (executeToolCall as Mock<typeof executeToolCall>).mockResolvedValue({
-        ...createCompletedToolCallResponse({
-          callId: 'call_err',
-          responseParts: [
-            {
-              type: 'tool_response',
-              callId: 'call_err',
-              toolName: 'erroring_tool',
-              result: { error: 'Tool crashed' },
-            },
-          ],
-          resultDisplay: 'Tool crashed',
-          error: new Error('Tool crashed'),
-          errorType: ToolErrorType.UNHANDLED_EXCEPTION,
-        }),
+      const responsePartShape =
+        await observeFilterFunctionCallFromErrorResponsePartsInNonInteractiveFlowAnthropicBoundary();
+      expect(responsePartShape).toStrictEqual({
+        hasToolResponse: true,
+        toolCallParts: [],
       });
-
-      const runtimeBundle = createStatelessRuntimeBundle({
-        toolRegistry: config.getToolRegistry(),
-        toolsView: {
-          listToolNames: () => ['erroring_tool'],
-          getToolMetadata: () => ({
-            name: 'erroring_tool',
-            description: 'Tool that errors',
-            parameterSchema: { type: 'object', properties: {} },
-          }),
-        },
-      });
-      const { overrides } = createRuntimeOverrides({
-        runtimeBundle,
-        toolRegistry: config.getToolRegistry(),
-      });
-
-      const scope = await SubAgentScope.create(
-        'test-agent',
-        config,
-        promptConfig,
-        defaultModelConfig,
-        defaultRunConfig,
-        toolConfig,
-        undefined,
-        overrides,
-      );
-
-      await scope.runNonInteractive(new ContextState());
-
-      const secondCallArgs = mockSendMessageStream.mock.calls[1][0];
-      for (const part of secondCallArgs.message) {
-        expect(part).not.toMatchObject({ type: 'tool_call' });
-      }
-      const hasToolResponse = secondCallArgs.message.some(
-        (p: ContentBlock) =>
-          'type' in p &&
-          (p as Record<string, unknown>).type === 'tool_response',
-      );
-      expect(hasToolResponse).toBe(true);
     });
+
+    const observeFilterFunctionCallFromErrorResponsePartsInNonInteractiveFlowAnthropicBoundary =
+      async () => {
+        const { config } = await createMockConfig();
+        const toolConfig: ToolConfig = { tools: ['erroring_tool'] };
+
+        mockSendMessageStream.mockImplementation(
+          createMockStream([
+            [
+              {
+                id: 'call_err',
+                name: 'erroring_tool',
+                args: {},
+              },
+            ],
+            'stop',
+          ]),
+        );
+
+        (executeToolCall as Mock<typeof executeToolCall>).mockResolvedValue({
+          ...createCompletedToolCallResponse({
+            callId: 'call_err',
+            responseParts: [
+              {
+                type: 'tool_response',
+                callId: 'call_err',
+                toolName: 'erroring_tool',
+                result: { error: 'Tool crashed' },
+              },
+            ],
+            resultDisplay: 'Tool crashed',
+            error: new Error('Tool crashed'),
+            errorType: ToolErrorType.UNHANDLED_EXCEPTION,
+          }),
+        });
+
+        const runtimeBundle = createStatelessRuntimeBundle({
+          toolRegistry: config.getToolRegistry(),
+          toolsView: {
+            listToolNames: () => ['erroring_tool'],
+            getToolMetadata: () => ({
+              name: 'erroring_tool',
+              description: 'Tool that errors',
+              parameterSchema: { type: 'object', properties: {} },
+            }),
+          },
+        });
+        const { overrides } = createRuntimeOverrides({
+          runtimeBundle,
+          toolRegistry: config.getToolRegistry(),
+        });
+
+        const scope = await SubAgentScope.create(
+          'test-agent',
+          config,
+          promptConfig,
+          defaultModelConfig,
+          defaultRunConfig,
+          toolConfig,
+          undefined,
+          overrides,
+        );
+
+        await scope.runNonInteractive(new ContextState());
+
+        const secondCallArgs = mockSendMessageStream.mock.calls[1][0];
+        const toolCallParts = secondCallArgs.message.filter(
+          (part: ContentBlock) =>
+            'type' in part &&
+            (part as Record<string, unknown>).type === 'tool_call',
+        );
+        const hasToolResponse = secondCallArgs.message.some(
+          (p: ContentBlock) =>
+            'type' in p &&
+            (p as Record<string, unknown>).type === 'tool_response',
+        );
+
+        return { hasToolResponse, toolCallParts };
+      };
 
     it('fails fast when a tool is disabled in the current profile', async () => {
       const listToolNames = () => ['write_file'];

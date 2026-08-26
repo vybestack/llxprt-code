@@ -168,10 +168,65 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
       )
       .map((b) => b.tool_use_id);
 
+  interface ToolUseMessageLocation {
+    readonly index: number;
+    readonly ids: string[];
+  }
+
+  const findFirstToolResult = (
+    request: AnthropicRequestBody,
+  ): AnthropicContentBlock | undefined => {
+    for (const message of request.messages) {
+      if (message.role === 'user' && Array.isArray(message.content)) {
+        const toolResult = message.content.find(
+          (block) => block.type === 'tool_result',
+        );
+        if (toolResult !== undefined) {
+          return toolResult;
+        }
+      }
+    }
+    return undefined;
+  };
+
+  const toolUseMessageLocations = (
+    request: AnthropicRequestBody,
+  ): ToolUseMessageLocation[] => {
+    const locations: ToolUseMessageLocation[] = [];
+    for (let index = 0; index < request.messages.length; index++) {
+      const message = request.messages[index];
+      if (message.role !== 'assistant' || !Array.isArray(message.content)) {
+        continue;
+      }
+      const ids = getToolUseIds(message.content);
+      if (ids.length > 0) {
+        locations.push({ index, ids });
+      }
+    }
+    return locations;
+  };
+
+  const firstToolUseMessageLocation = (
+    request: AnthropicRequestBody,
+  ): ToolUseMessageLocation => {
+    for (let index = 0; index < request.messages.length; index++) {
+      const message = request.messages[index];
+      if (message.role !== 'assistant' || !Array.isArray(message.content)) {
+        continue;
+      }
+      const ids = getToolUseIds(message.content);
+      if (ids.length > 0) {
+        return { index, ids };
+      }
+    }
+    return { index: -1, ids: [] };
+  };
+
   describe('Edge cases for tool_result handling', () => {
     /**
      * Test handling of tool errors
      */
+
     it('should properly format tool_result with is_error for failed tools', async () => {
       mockMessagesCreate.mockResolvedValueOnce({
         content: [{ type: 'text', text: 'Response' }],
@@ -227,13 +282,7 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
         .calls[0][0] as AnthropicRequestBody;
 
       // Find the tool_result
-      let toolResult: AnthropicContentBlock | undefined;
-      for (const msg of request.messages) {
-        if (msg.role === 'user' && Array.isArray(msg.content)) {
-          toolResult = msg.content.find((b) => b.type === 'tool_result');
-          if (toolResult) break;
-        }
-      }
+      const toolResult = findFirstToolResult(request);
 
       expect(toolResult).toBeDefined();
       expect(toolResult!.type).toBe('tool_result');
@@ -245,10 +294,13 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
         content: unknown;
         is_error?: boolean;
       };
-      expect(
-        result.is_error,
-        'Tool error should set is_error: true in tool_result',
-      ).toBe(true);
+      expect({
+        observation: 'Tool error should set is_error: true in tool_result',
+        isError: result.is_error,
+      }).toStrictEqual({
+        observation: 'Tool error should set is_error: true in tool_result',
+        isError: true,
+      });
     });
 
     it('should serialize tool_result content correctly for complex objects', async () => {
@@ -316,13 +368,7 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
         .calls[0][0] as AnthropicRequestBody;
 
       // Find the tool_result
-      let toolResult: AnthropicContentBlock | undefined;
-      for (const msg of request.messages) {
-        if (msg.role === 'user' && Array.isArray(msg.content)) {
-          toolResult = msg.content.find((b) => b.type === 'tool_result');
-          if (toolResult) break;
-        }
-      }
+      const toolResult = findFirstToolResult(request);
 
       expect(toolResult).toBeDefined();
 
@@ -425,20 +471,8 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
 
       assertStrictAlternation(request.messages);
 
-      let toolUseMessageIndex = -1;
-      let toolUseIds: string[] = [];
-
-      for (let i = 0; i < request.messages.length; i++) {
-        const msg = request.messages[i];
-        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-          const ids = getToolUseIds(msg.content);
-          if (ids.length > 0) {
-            toolUseMessageIndex = i;
-            toolUseIds = ids;
-            break;
-          }
-        }
-      }
+      const { index: toolUseMessageIndex, ids: toolUseIds } =
+        firstToolUseMessageLocation(request);
 
       expect(toolUseMessageIndex).toBeGreaterThan(-1);
       expect(toolUseIds.length).toBe(2);
@@ -536,18 +570,7 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
 
       assertStrictAlternation(request.messages);
 
-      let toolUseIdx = -1;
-      for (let i = 0; i < request.messages.length; i++) {
-        const msg = request.messages[i];
-        if (
-          msg.role === 'assistant' &&
-          Array.isArray(msg.content) &&
-          msg.content.some((b) => b.type === 'tool_use')
-        ) {
-          toolUseIdx = i;
-          break;
-        }
-      }
+      const { index: toolUseIdx } = firstToolUseMessageLocation(request);
 
       expect(toolUseIdx).toBeGreaterThan(-1);
       const nextMsg = request.messages[toolUseIdx + 1];
@@ -637,19 +660,7 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
 
       assertStrictAlternation(request.messages);
 
-      const toolUseIndices: Array<{
-        index: number;
-        ids: string[];
-      }> = [];
-      for (let i = 0; i < request.messages.length; i++) {
-        const msg = request.messages[i];
-        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-          const ids = getToolUseIds(msg.content);
-          if (ids.length > 0) {
-            toolUseIndices.push({ index: i, ids });
-          }
-        }
-      }
+      const toolUseIndices = toolUseMessageLocations(request);
 
       for (const { index, ids } of toolUseIndices) {
         const nextMsg = request.messages[index + 1];

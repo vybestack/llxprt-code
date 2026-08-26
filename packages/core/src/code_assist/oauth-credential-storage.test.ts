@@ -60,6 +60,28 @@ void vi.mock('../utils/events.js', () => ({
   },
 }));
 
+function createEnoentError(): NodeJS.ErrnoException {
+  const error = new Error('File not found') as NodeJS.ErrnoException;
+  error.code = 'ENOENT';
+  return error;
+}
+
+function readLegacyPathFile(
+  llxprtFilePath: string,
+  geminiFilePath: string,
+  credentials: Credentials,
+): (filePath: string) => Promise<string> {
+  return async (filePath: string): Promise<string> => {
+    if (filePath === llxprtFilePath) {
+      throw createEnoentError();
+    }
+    if (filePath === geminiFilePath) {
+      return JSON.stringify(credentials);
+    }
+    throw new Error(`Unexpected path ${filePath}`);
+  };
+}
+
 describe('OAuthCredentialStorage', () => {
   let storage: KeychainTokenStorage;
   let oauthStorage: OAuthCredentialStorage;
@@ -86,11 +108,6 @@ describe('OAuthCredentialStorage', () => {
 
   const llxprtFilePath = path.join('/mock/home', '.llxprt', 'oauth_creds.json');
   const geminiFilePath = path.join('/mock/home', '.gemini', 'oauth_creds.json');
-  const createEnoentError = () => {
-    const error = new Error('File not found') as NodeJS.ErrnoException;
-    error.code = 'ENOENT';
-    return error;
-  };
 
   beforeEach(() => {
     storage = new KeychainTokenStorage('');
@@ -141,15 +158,9 @@ describe('OAuthCredentialStorage', () => {
 
       (
         fs.readFile as unknown as Mock<(...args: never[]) => unknown>
-      ).mockImplementation(async (filePath: string) => {
-        if (filePath === llxprtFilePath) {
-          throw createEnoentError();
-        }
-        if (filePath === geminiFilePath) {
-          return JSON.stringify(mockCredentials);
-        }
-        throw new Error(`Unexpected path ${filePath}`);
-      });
+      ).mockImplementation(
+        readLegacyPathFile(llxprtFilePath, geminiFilePath, mockCredentials),
+      );
 
       const result = await oauthStorage.loadCredentials();
 

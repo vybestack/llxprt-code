@@ -104,7 +104,7 @@ describe('Zed Session.prompt (Agent API) - streaming output', () => {
     ]);
   });
 
-  it('emits the emoji-blocked message without hanging', async () => {
+  async function observeEmojiBlockedMessage() {
     const { agent } = buildFakeAgent([
       { type: 'text', text: 'blocked \u{1F600}' },
       { type: 'done', reason: 'stop' },
@@ -117,16 +117,20 @@ describe('Zed Session.prompt (Agent API) - streaming output', () => {
     } as unknown as Config;
     const session = createSession(agent, connection, config);
     createdSessions.push(session);
-
     await runPrompt(session);
-
     const update = connection.onlySessionUpdates()[0] as {
       content: { text: string };
     };
-    expect(update.content.text).toContain('blocked due to emoji detection');
+
+    return update.content.text;
+  }
+
+  it('emits the emoji-blocked message without hanging', async () => {
+    const messageText = await observeEmojiBlockedMessage();
+    expect(messageText).toContain('blocked due to emoji detection');
   });
 
-  it('flushes the emoji buffer on a blocked chunk so a following clean chunk is emitted instead of re-blocked', async () => {
+  async function observeMessagesAfterBlockedEmojiChunk() {
     // Error mode: the first chunk carries an emoji and is blocked. The blocking
     // content stays in the EmojiFilter's internal buffer; without flushing it on
     // the blocked path, the NEXT (clean) chunk would be concatenated with the
@@ -144,16 +148,23 @@ describe('Zed Session.prompt (Agent API) - streaming output', () => {
     } as unknown as Config;
     const session = createSession(agent, connection, config);
     createdSessions.push(session);
-
     await runPrompt(session);
-
-    // Exactly ONE blocked error, THEN the clean follow-up text — proving the
-    // buffer was flushed so the clean chunk filtered cleanly instead of being
-    // re-blocked (which would produce a second error and drop 'all clean now.').
     const texts = connection
       .onlySessionUpdates()
       .map((u) => (u as { content: { text: string } }).content.text);
-    expect(texts).toStrictEqual([STREAM_BLOCKED_MESSAGE, 'all clean now.']);
+
+    return texts;
+  }
+
+  it('flushes the emoji buffer on a blocked chunk so a following clean chunk is emitted instead of re-blocked', async () => {
+    const messageTexts = await observeMessagesAfterBlockedEmojiChunk();
+    // Exactly ONE blocked error, THEN the clean follow-up text — proving the
+    // buffer was flushed so the clean chunk filtered cleanly instead of being
+    // re-blocked (which would produce a second error and drop 'all clean now.').
+    expect(messageTexts).toStrictEqual([
+      STREAM_BLOCKED_MESSAGE,
+      'all clean now.',
+    ]);
   });
 });
 
@@ -269,6 +280,8 @@ describe('Zed Session.prompt (Agent API) - tool permission round-trip', () => {
 });
 
 describe('Zed Session.prompt (Agent API) - cancellation', () => {
+  const supersededConfirmationId = 'conf-supersede';
+
   afterEach(disposeCreatedSessions);
 
   it('maps done reasons to ACP stop reasons and terminal errors', async () => {
@@ -366,8 +379,7 @@ describe('Zed Session.prompt (Agent API) - cancellation', () => {
     expect(response.stopReason).toBe('cancelled');
   });
 
-  it('cancels a pending permission when a new prompt supersedes the old one', async () => {
-    const confirmationId = 'conf-supersede';
+  async function observeSupersededPermissionCancellation() {
     const toolCallId = 'perm-supersede-tool';
     let promptCount = 0;
     const { agent, confirmations } = buildScriptedAgent(() => {
@@ -378,7 +390,7 @@ describe('Zed Session.prompt (Agent API) - cancellation', () => {
               type: 'tool-call',
               call: { id: toolCallId, name: 'edit', args: {} },
             },
-            editConfirmation(confirmationId, toolCallId),
+            editConfirmation(supersededConfirmationId, toolCallId),
             { type: 'done', reason: 'stop' },
           ]
         : [
@@ -397,10 +409,23 @@ describe('Zed Session.prompt (Agent API) - cancellation', () => {
     const firstResponse = await firstPrompt;
     const secondResponse = await secondPrompt;
 
-    expect(firstResponse.stopReason).toBe('cancelled');
-    expect(secondResponse.stopReason).toBe('end_turn');
-    expect(confirmations).toStrictEqual([
-      { confirmationId, decision: ToolConfirmationOutcome.Cancel },
+    return {
+      firstStopReason: firstResponse.stopReason,
+      secondStopReason: secondResponse.stopReason,
+      confirmations,
+    };
+  }
+
+  it('cancels a pending permission when a new prompt supersedes the old one', async () => {
+    const behaviorResult = await observeSupersededPermissionCancellation();
+
+    expect(behaviorResult.firstStopReason).toBe('cancelled');
+    expect(behaviorResult.secondStopReason).toBe('end_turn');
+    expect(behaviorResult.confirmations).toStrictEqual([
+      {
+        confirmationId: supersededConfirmationId,
+        decision: ToolConfirmationOutcome.Cancel,
+      },
     ]);
   });
 });

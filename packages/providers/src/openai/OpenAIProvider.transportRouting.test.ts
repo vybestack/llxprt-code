@@ -78,6 +78,30 @@ function makeChatCompletionResponse(): Response {
   });
 }
 
+async function readBlobRequestBody(
+  init: RequestInit | undefined,
+): Promise<string | undefined> {
+  return init?.body instanceof Blob ? init.body.text() : undefined;
+}
+
+async function readChatRequestBody(
+  init: RequestInit | undefined,
+): Promise<string | undefined> {
+  const body = init?.body;
+  if (body === undefined || body === null) return undefined;
+  return typeof body === 'string' ? body : new Blob([body]).text();
+}
+
+function parseRequiredRequestBody(body: string | undefined): unknown {
+  return JSON.parse(body ?? '');
+}
+
+function parseRequestBodyObject(
+  body: string | undefined,
+): Record<string, unknown> {
+  return JSON.parse(body ?? '{}') as Record<string, unknown>;
+}
+
 describe('OpenAIProvider transport routing @issue:2483', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
 
@@ -270,9 +294,7 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
     let capturedBody: string | undefined;
     mockFetch.mockImplementation(
       async (_input: RequestInfo | URL, init?: RequestInit) => {
-        if (init?.body instanceof Blob) {
-          capturedBody = await init.body.text();
-        }
+        capturedBody = await readBlobRequestBody(init);
         return makeSseResponse();
       },
     );
@@ -294,7 +316,7 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
     }
 
     expect(capturedBody).toBeDefined();
-    const parsed: unknown = JSON.parse(capturedBody ?? '');
+    const parsed = parseRequiredRequestBody(capturedBody);
     expect(parsed).toMatchObject({ reasoning: { effort: 'max' } });
   });
 
@@ -315,9 +337,7 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
     let capturedBody: string | undefined;
     mockFetch.mockImplementation(
       async (_input: RequestInfo | URL, init?: RequestInit) => {
-        if (init?.body instanceof Blob) {
-          capturedBody = await init.body.text();
-        }
+        capturedBody = await readBlobRequestBody(init);
         return makeSseResponse();
       },
     );
@@ -339,7 +359,7 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
     }
 
     expect(capturedBody).toBeDefined();
-    const parsed: unknown = JSON.parse(capturedBody ?? '');
+    const parsed = parseRequiredRequestBody(capturedBody);
     expect(parsed).toMatchObject({ reasoning: { effort: 'none' } });
   });
 
@@ -649,9 +669,7 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
       let capturedBody: string | undefined;
       mockFetch.mockImplementation(
         async (_input: RequestInfo | URL, init?: RequestInit) => {
-          if (init?.body instanceof Blob) {
-            capturedBody = await init.body.text();
-          }
+          capturedBody = await readBlobRequestBody(init);
           return makeSseResponse();
         },
       );
@@ -675,10 +693,7 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
       }
 
       expect(capturedBody).toBeDefined();
-      const parsed = JSON.parse(capturedBody ?? '{}') as Record<
-        string,
-        unknown
-      >;
+      const parsed = parseRequestBodyObject(capturedBody);
       expect(parsed).not.toHaveProperty('apiMode');
       expect(parsed).not.toHaveProperty('responsesMode');
       expect(parsed).not.toHaveProperty('responses-mode');
@@ -705,12 +720,7 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
       let capturedBody: string | undefined;
       mockFetch.mockImplementation(
         async (_input: RequestInfo | URL, init?: RequestInit) => {
-          if (init?.body !== undefined && init.body !== null) {
-            capturedBody =
-              typeof init.body === 'string'
-                ? init.body
-                : await new Blob([init.body]).text();
-          }
+          capturedBody = await readChatRequestBody(init);
           return makeChatCompletionResponse();
         },
       );
@@ -735,10 +745,7 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
 
       // The SDK sends body as a string for Chat Completions
       expect(capturedBody).toBeDefined();
-      const parsed = JSON.parse(capturedBody ?? '{}') as Record<
-        string,
-        unknown
-      >;
+      const parsed = parseRequestBodyObject(capturedBody);
       expect(parsed).not.toHaveProperty('apiMode');
       expect(parsed).not.toHaveProperty('responsesMode');
       expect(parsed).not.toHaveProperty('responses-mode');
@@ -763,9 +770,7 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
       mockFetch.mockImplementation(
         async (input: RequestInfo | URL, init?: RequestInit) => {
           capturedUrl = String(input);
-          if (init?.body instanceof Blob) {
-            capturedBody = await init.body.text();
-          }
+          capturedBody = await readBlobRequestBody(init);
           return makeSseResponse();
         },
       );
@@ -793,10 +798,7 @@ describe('OpenAIProvider transport routing @issue:2483', () => {
 
       // But the selector key itself is absent from the body
       expect(capturedBody).toBeDefined();
-      const parsed = JSON.parse(capturedBody ?? '{}') as Record<
-        string,
-        unknown
-      >;
+      const parsed = parseRequestBodyObject(capturedBody);
       expect(parsed).not.toHaveProperty('apiMode');
       expect(parsed).not.toHaveProperty('responsesMode');
     });

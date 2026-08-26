@@ -111,6 +111,40 @@ const findCodeBlocks = (
   return codeBlocks;
 };
 
+function collectFileMarkers(tokenList: unknown[]): {
+  fileMarkers: string[];
+  endMarkers: string[];
+} {
+  const fileMarkers: string[] = [];
+  const endMarkers: string[] = [];
+
+  function walkTokens(tokens: unknown[]) {
+    for (const token of tokens) {
+      const t = token as { type: string; raw: string; tokens?: unknown[] };
+      if (t.type === 'paragraph' && t.raw.includes('--- File:')) {
+        const match = t.raw.match(/--- File: (.+?) ---/);
+        if (match) {
+          // Normalize the path before adding to fileMarkers
+          fileMarkers.push(path.normalize(match[1]));
+        }
+      }
+      if (t.type === 'paragraph' && t.raw.includes('--- End of File:')) {
+        const match = t.raw.match(/--- End of File: (.+?) ---/);
+        if (match) {
+          // Normalize the path before adding to endMarkers
+          endMarkers.push(path.normalize(match[1]));
+        }
+      }
+      if (t.tokens) {
+        walkTokens(t.tokens);
+      }
+    }
+  }
+
+  walkTokens(tokenList);
+  return { fileMarkers, endMarkers };
+}
+
 describe('memoryImportProcessor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -603,30 +637,9 @@ describe('memoryImportProcessor', () => {
       const fileMarkers: string[] = [];
       const endMarkers: string[] = [];
 
-      function walkTokens(tokenList: unknown[]) {
-        for (const token of tokenList) {
-          const t = token as { type: string; raw: string; tokens?: unknown[] };
-          if (t.type === 'paragraph' && t.raw.includes('--- File:')) {
-            const match = t.raw.match(/--- File: (.+?) ---/);
-            if (match) {
-              // Normalize the path before adding to fileMarkers
-              fileMarkers.push(path.normalize(match[1]));
-            }
-          }
-          if (t.type === 'paragraph' && t.raw.includes('--- End of File:')) {
-            const match = t.raw.match(/--- End of File: (.+?) ---/);
-            if (match) {
-              // Normalize the path before adding to endMarkers
-              endMarkers.push(path.normalize(match[1]));
-            }
-          }
-          if (t.tokens) {
-            walkTokens(t.tokens);
-          }
-        }
-      }
-
-      walkTokens(tokens);
+      const markers = collectFileMarkers(tokens);
+      fileMarkers.push(...markers.fileMarkers);
+      endMarkers.push(...markers.endMarkers);
 
       // Verify all expected files are present
       const expectedFiles = ['nested.md', 'simple.md', 'inner.md'];

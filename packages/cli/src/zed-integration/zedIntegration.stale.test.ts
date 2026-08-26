@@ -5,6 +5,7 @@
  */
 
 import { afterEach, describe, expect, it } from 'bun:test';
+import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 
 import { Session } from './zedIntegration.js';
@@ -17,6 +18,11 @@ import {
   editConfirmation,
 } from './zed-test-helpers.js';
 
+type AgentToolStatus = Extract<
+  AgentEvent,
+  { type: 'tool-status' }
+>['update']['status'];
+
 const createdSessions: Session[] = [];
 
 async function disposeCreatedSessions(): Promise<void> {
@@ -28,7 +34,7 @@ async function disposeCreatedSessions(): Promise<void> {
 describe('Zed Session.prompt (Agent API) - stale prompt terminal events', () => {
   afterEach(disposeCreatedSessions);
 
-  it('preserves a completed turn when cancellation arrives after done', async () => {
+  async function observeCompletedTurnAfterLateCancellation() {
     const sessionRef: { current: Session | null } = { current: null };
     const { agent } = buildFakeAgent([]);
     agent.stream = async function* () {
@@ -41,13 +47,17 @@ describe('Zed Session.prompt (Agent API) - stale prompt terminal events', () => 
     const session = createSession(agent, connection);
     sessionRef.current = session;
     createdSessions.push(session);
-
     const response = await runPrompt(session);
 
-    expect(response.stopReason).toBe('end_turn');
+    return response.stopReason;
+  }
+
+  it('preserves a completed turn when cancellation arrives after done', async () => {
+    const stopReason = await observeCompletedTurnAfterLateCancellation();
+    expect(stopReason).toBe('end_turn');
   });
 
-  it('returns cancelled (not an error) when a superseded prompt ends with done:error', async () => {
+  async function observeSupersededPromptResponses() {
     const toolCallId = 'stale-error-tool';
     let promptCount = 0;
     const { agent } = buildScriptedAgent(() => {
@@ -77,11 +87,20 @@ describe('Zed Session.prompt (Agent API) - stale prompt terminal events', () => 
     const firstResponse = await firstPrompt;
     const secondResponse = await secondPrompt;
 
-    expect(firstResponse.stopReason).toBe('cancelled');
-    expect(secondResponse.stopReason).toBe('end_turn');
+    return {
+      firstStopReason: firstResponse.stopReason,
+      secondStopReason: secondResponse.stopReason,
+    };
+  }
+
+  it('returns cancelled (not an error) when a superseded prompt ends with done:error', async () => {
+    const behaviorResult = await observeSupersededPromptResponses();
+
+    expect(behaviorResult.firstStopReason).toBe('cancelled');
+    expect(behaviorResult.secondStopReason).toBe('end_turn');
   });
 
-  it('stops consuming a stream at the first event after a prompt becomes stale', async () => {
+  async function observeStaleEventsProduced() {
     let promptCount = 0;
     let staleEventsProduced = 0;
     const { agent } = buildScriptedAgent(() => []);
@@ -105,13 +124,17 @@ describe('Zed Session.prompt (Agent API) - stale prompt terminal events', () => 
     const gate = connection.armPermissionGate();
     const session = createSession(agent, connection);
     createdSessions.push(session);
-
     const firstPrompt = runPrompt(session);
     await gate.arrived;
     const secondPrompt = runPrompt(session);
     await firstPrompt;
     await secondPrompt;
 
+    return staleEventsProduced;
+  }
+
+  it('stops consuming a stream at the first event after a prompt becomes stale', async () => {
+    const staleEventsProduced = await observeStaleEventsProduced();
     expect(staleEventsProduced).toBe(1);
   });
 
@@ -144,38 +167,45 @@ describe('Zed Session.prompt (Agent API) - stale prompt terminal events', () => 
 describe('Zed Session.prompt (Agent API) - terminal tool-status without tool-result', () => {
   afterEach(disposeCreatedSessions);
 
+  async function observeMappedToolStatus(status: AgentToolStatus) {
+    const toolCallId = `status-only-${status}`;
+    const { agent } = buildFakeAgent([
+      {
+        type: 'tool-call',
+        call: { id: toolCallId, name: 'run_shell_command', args: {} },
+      },
+      {
+        type: 'tool-status',
+        update: {
+          id: toolCallId,
+          name: 'run_shell_command',
+          status,
+          output: status === 'success' ? 'done' : undefined,
+        },
+      },
+      { type: 'done', reason: 'stop' },
+    ]);
+    const connection = new RecordingConnection();
+    const session = createSession(agent, connection);
+    createdSessions.push(session);
+    await runPrompt(session);
+    const update = connection.onlySessionUpdates()[1];
+    if (update.sessionUpdate !== 'tool_call_update') {
+      throw new Error('Expected a tool_call_update');
+    }
+
+    return update.status;
+  }
+
   it.each([
     ['success', 'completed'],
     ['error', 'failed'],
     ['cancelled', 'failed'],
   ] as const)(
     'maps tool-status %s to %s even without a tool-result',
-    async (status, expected) => {
-      const toolCallId = `status-only-${status}`;
-      const { agent } = buildFakeAgent([
-        {
-          type: 'tool-call',
-          call: { id: toolCallId, name: 'run_shell_command', args: {} },
-        },
-        {
-          type: 'tool-status',
-          update: {
-            id: toolCallId,
-            name: 'run_shell_command',
-            status,
-            output: status === 'success' ? 'done' : undefined,
-          },
-        },
-        { type: 'done', reason: 'stop' },
-      ]);
-      const connection = new RecordingConnection();
-      const session = createSession(agent, connection);
-      createdSessions.push(session);
-
-      await runPrompt(session);
-
-      const updates = connection.onlySessionUpdates();
-      expect((updates[1] as { status: string }).status).toBe(expected);
+    async (status, completionStatus) => {
+      const mappedStatus = await observeMappedToolStatus(status);
+      expect(mappedStatus).toBe(completionStatus);
     },
   );
 });

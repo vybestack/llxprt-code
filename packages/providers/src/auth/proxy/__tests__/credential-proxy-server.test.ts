@@ -280,9 +280,8 @@ describe('CredentialProxyServer', () => {
    * @when start() is called
    * @then A Unix socket file exists at the returned path
    */
-  it.skipIf(isWindows)(
-    'start creates a Unix socket and returns the socket path',
-    async () => {
+  describe.skipIf(isWindows)('Unix socket lifecycle', () => {
+    it('start creates a Unix socket and returns the socket path', async () => {
       server = createServer();
       const socketPath = await server.start();
 
@@ -290,19 +289,16 @@ describe('CredentialProxyServer', () => {
       expect(socketPath.endsWith('.sock')).toBe(true);
       const stat = fs.statSync(socketPath);
       expect(stat.isSocket()).toBe(true);
-    },
-  );
+    });
 
-  /**
-   * @requirement R25.2
-   * @scenario stop removes the socket file and rejects new connections
-   * @given A server is started
-   * @when stop() is called
-   * @then The socket file is removed from disk
-   */
-  it.skipIf(isWindows)(
-    'stop removes the socket file and rejects new connections',
-    async () => {
+    /**
+     * @requirement R25.2
+     * @scenario stop removes the socket file and rejects new connections
+     * @given A server is started
+     * @when stop() is called
+     * @then The socket file is removed from disk
+     */
+    it('stop removes the socket file and rejects new connections', async () => {
       server = createServer();
       const socketPath = await server.start();
 
@@ -311,8 +307,8 @@ describe('CredentialProxyServer', () => {
       await server.stop();
 
       expect(fs.existsSync(socketPath)).toBe(false);
-    },
-  );
+    });
+  });
 
   /**
    * @requirement R25.3

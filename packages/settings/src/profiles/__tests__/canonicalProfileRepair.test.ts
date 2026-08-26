@@ -50,6 +50,12 @@ import {
   genuineLbProfile,
 } from './canonicalProfileRepair.testHelpers.js';
 
+function repairedProfileCount(
+  result: ReturnType<typeof repairCanonicalProfiles>,
+): number {
+  return result.kind === 'repaired' ? result.profilesRepaired : 0;
+}
+
 // ─── Corruption signature: conservative raw structural predicate ────────────
 
 describe('isCorruptStandardProfileFromRaw — conservative structural signature', () => {
@@ -170,7 +176,7 @@ describe('repairCanonicalProfiles — generalized corrupt profile repair', () =>
     );
 
     expect(result.kind).toBe('repaired');
-    expect(result.kind === 'repaired' ? result.profilesRepaired : 0).toBe(1);
+    expect(repairedProfileCount(result)).toBe(1);
 
     const repaired = JSON.parse(
       fs.readFileSync(path.join(env.canonicalDir, 'mycustom.json'), 'utf-8'),
@@ -255,9 +261,8 @@ describe('repairCanonicalProfiles — generalized corrupt profile repair', () =>
     ).toBe(corruptData);
   });
 
-  it.skipIf(process.platform === 'win32')(
-    'repairs a read-only (0o444) corrupt canonical file and preserves its backup',
-    () => {
+  describe.skipIf(process.platform === 'win32')(() => {
+    it('repairs a read-only (0o444) corrupt canonical file and preserves its backup', () => {
       const corruptData = JSON.stringify(corruptCanonicalProfile());
       const corruptPath = path.join(env.canonicalDir, 'zai.json');
       writeProfile(env.canonicalDir, 'zai.json', corruptCanonicalProfile());
@@ -276,8 +281,8 @@ describe('repairCanonicalProfiles — generalized corrupt profile repair', () =>
       expect(JSON.parse(fs.readFileSync(corruptPath, 'utf-8'))).toStrictEqual(
         validLegacyProfile(),
       );
-    },
-  );
+    });
+  });
 
   it('does not modify the legacy profile file during repair', () => {
     const legacyData = JSON.stringify(validLegacyProfile());

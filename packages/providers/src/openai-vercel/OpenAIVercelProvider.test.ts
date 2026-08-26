@@ -32,10 +32,6 @@ import { AuthenticationError } from './errors.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
-afterEach(() => {
-  restoreGlobals();
-});
-
 /**
  * Helper function to extract URL string from various input types.
  */
@@ -45,7 +41,63 @@ function extractUrl(input: RequestInfo | URL): string {
   return input.url;
 }
 
+function createQwenChatResponse(
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+  observeRoles: (roles: string[]) => void,
+): Response {
+  const url = extractUrl(input);
+  if (!url.includes('/chat/completions')) {
+    throw new Error(`Unexpected URL: ${url}`);
+  }
+
+  const parsedBody = JSON.parse(String(init?.body ?? '{}')) as {
+    messages?: Array<{ role?: string }>;
+    model?: string;
+  };
+  const roles = (parsedBody.messages ?? []).map((msg) => msg.role ?? '');
+  observeRoles(roles);
+
+  if (roles.includes('developer')) {
+    return new Response(
+      JSON.stringify({
+        error: {
+          message:
+            "developer is not one of ['system', 'assistant', 'user', 'tool', 'function'] - 'messages.[0].role'",
+        },
+      }),
+      { status: 400, headers: { 'content-type': 'application/json' } },
+    );
+  }
+
+  return new Response(
+    JSON.stringify({
+      id: 'chatcmpl-test',
+      object: 'chat.completion',
+      created: 0,
+      model: parsedBody.model ?? 'qwen3-coder-plus',
+      choices: [
+        {
+          index: 0,
+          message: { role: 'assistant', content: 'Hello from Qwen' },
+          finish_reason: 'stop',
+        },
+      ],
+      usage: {
+        prompt_tokens: 1,
+        completion_tokens: 1,
+        total_tokens: 2,
+      },
+    }),
+    { status: 200, headers: { 'content-type': 'application/json' } },
+  );
+}
+
 describe('OpenAIVercelProvider', () => {
+  afterEach(() => {
+    restoreGlobals();
+  });
+
   describe('Provider Registration (REQ-OAV-001)', () => {
     it('should exist as a class', () => {
       expect(OpenAIVercelProvider).toBeDefined();
@@ -227,7 +279,10 @@ describe('OpenAIVercelProvider', () => {
 
         expect(models).toStrictEqual(
           expect.arrayContaining([
-            expect.objectContaining({ id: 'gpt-4o', provider: 'openaivercel' }),
+            expect.objectContaining({
+              id: 'gpt-4o',
+              provider: 'openaivercel',
+            }),
           ]),
         );
       });
@@ -323,56 +378,10 @@ describe('OpenAIVercelProvider', () => {
 
       let observedRoles: string[] | undefined;
       const fetchMock = vi.fn(
-        async (input: RequestInfo | URL, init?: RequestInit) => {
-          const url = extractUrl(input);
-
-          if (!url.includes('/chat/completions')) {
-            throw new Error(`Unexpected URL: ${url}`);
-          }
-
-          const parsedBody = JSON.parse(String(init?.body ?? '{}')) as {
-            messages?: Array<{ role?: string }>;
-            model?: string;
-          };
-          const roles = (parsedBody.messages ?? []).map(
-            (msg) => msg.role ?? '',
-          );
-          observedRoles = roles;
-
-          if (roles.includes('developer')) {
-            return new Response(
-              JSON.stringify({
-                error: {
-                  message:
-                    "developer is not one of ['system', 'assistant', 'user', 'tool', 'function'] - 'messages.[0].role'",
-                },
-              }),
-              { status: 400, headers: { 'content-type': 'application/json' } },
-            );
-          }
-
-          return new Response(
-            JSON.stringify({
-              id: 'chatcmpl-test',
-              object: 'chat.completion',
-              created: 0,
-              model: parsedBody.model ?? 'qwen3-coder-plus',
-              choices: [
-                {
-                  index: 0,
-                  message: { role: 'assistant', content: 'Hello from Qwen' },
-                  finish_reason: 'stop',
-                },
-              ],
-              usage: {
-                prompt_tokens: 1,
-                completion_tokens: 1,
-                total_tokens: 2,
-              },
-            }),
-            { status: 200, headers: { 'content-type': 'application/json' } },
-          );
-        },
+        async (input: RequestInfo | URL, init?: RequestInit) =>
+          createQwenChatResponse(input, init, (roles) => {
+            observedRoles = roles;
+          }),
       );
 
       setGlobal('fetch', fetchMock);
@@ -406,6 +415,10 @@ describe('OpenAIVercelProvider', () => {
  * @requirement REQ-OAV-003 - Authentication Support
  */
 describe('Authentication (REQ-OAV-003)', () => {
+  afterEach(() => {
+    restoreGlobals();
+  });
+
   let originalEnv: NodeJS.ProcessEnv;
   let runtime: ProviderRuntimeContext;
   let settingsService: SettingsService;

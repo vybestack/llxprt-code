@@ -163,7 +163,7 @@ describe('guardUnconfiguredProvider: production main-boundary guard (#2481)', ()
     expect(cleanupFn).toHaveBeenCalledTimes(1);
   });
 
-  it('reports UNCONFIGURED_PROVIDER_MESSAGE to stderr before exit', async () => {
+  function observeStderrBeforeUnconfiguredProviderExit() {
     const stderrChunks: string[] = [];
     vi.spyOn(process.stderr, 'write').mockImplementation(
       (chunk: string | Uint8Array) => {
@@ -171,10 +171,25 @@ describe('guardUnconfiguredProvider: production main-boundary guard (#2481)', ()
         return true;
       },
     );
-    await expect(
-      guardUnconfiguredProvider(makeConfig(false, false), cleanupFn),
-    ).rejects.toThrow('process.exit(52) called');
-    expect(stderrChunks.join('')).toContain(UNCONFIGURED_PROVIDER_MESSAGE);
+
+    return {
+      guardResult: guardUnconfiguredProvider(
+        makeConfig(false, false),
+        cleanupFn,
+      ),
+      stderrChunks,
+    };
+  }
+
+  it('reports UNCONFIGURED_PROVIDER_MESSAGE to stderr before exit', async () => {
+    const behaviorResult = observeStderrBeforeUnconfiguredProviderExit();
+
+    await expect(behaviorResult.guardResult).rejects.toThrow(
+      'process.exit(52) called',
+    );
+    expect(behaviorResult.stderrChunks.join('')).toContain(
+      UNCONFIGURED_PROVIDER_MESSAGE,
+    );
   });
 
   it('still exits 52 when cleanup rejects', async () => {

@@ -175,6 +175,13 @@ function makeCoordinator(opts?: {
   return { coordinator, tokenStore, registry, provider };
 }
 
+async function peekStoredAccessToken(
+  coordinator: TokenAccessCoordinator,
+): Promise<string | null> {
+  const stored = await coordinator.peekStoredToken('anthropic');
+  return stored?.access_token ?? null;
+}
+
 function seedRuntimeCacheEntry(
   runtimeId: string,
   providerId: string,
@@ -587,10 +594,7 @@ describe('issue #2035 end-to-end: retry resolves fresh token after 401 refresh',
     // it returns whatever access token currently lives on disk. This models the
     // real getToken() path which reads from the token store.
     const oauthManager: OAuthManager = {
-      getToken: vi.fn(async () => {
-        const stored = await coordinator.peekStoredToken('anthropic');
-        return stored?.access_token ?? null;
-      }),
+      getToken: vi.fn(() => peekStoredAccessToken(coordinator)),
       isAuthenticated: vi.fn().mockResolvedValue(true),
       getOAuthToken: vi.fn(async () =>
         coordinator.peekStoredToken('anthropic'),
@@ -662,10 +666,7 @@ describe('issue #2035 end-to-end: retry resolves fresh token after 401 refresh',
         settingsService,
       );
       const oauthManager: OAuthManager = {
-        getToken: vi.fn(async () => {
-          const stored = await coordinator.peekStoredToken('anthropic');
-          return stored?.access_token ?? null;
-        }),
+        getToken: vi.fn(() => peekStoredAccessToken(coordinator)),
         isAuthenticated: vi.fn().mockResolvedValue(true),
         getOAuthToken: vi.fn(async () =>
           coordinator.peekStoredToken('anthropic'),

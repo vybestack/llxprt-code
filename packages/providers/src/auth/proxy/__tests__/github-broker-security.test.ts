@@ -34,6 +34,51 @@ const CAPABILITY = 'test-capability-token-with-plenty-of-entropy';
 /** A realistically shaped GitHub token; must never appear in any response. */
 const SECRET = 'ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 
+function isBrokerSourceFile(file: string): boolean {
+  return file.startsWith('github-broker') && file.endsWith('.ts');
+}
+
+async function findCredentialImportOffenders(
+  fs: typeof import('node:fs/promises'),
+  path: typeof import('node:path'),
+  dir: string,
+  brokerFiles: readonly string[],
+): Promise<string[]> {
+  const offenders: string[] = [];
+  for (const file of brokerFiles) {
+    const source = await fs.readFile(path.join(dir, file), 'utf8');
+    const specifiers = [...source.matchAll(/from\s+'([^']+)'/g)].map(
+      (match) => match[1],
+    );
+    for (const specifier of specifiers) {
+      if (
+        /credential-store-factory|provider-key-storage|token-store|llxprt-code-storage/.test(
+          specifier,
+        )
+      ) {
+        offenders.push(`${file} -> ${specifier}`);
+      }
+    }
+  }
+  return offenders;
+}
+
+async function findShellSpawnOffenders(
+  fs: typeof import('node:fs/promises'),
+  path: typeof import('node:path'),
+  dir: string,
+  brokerFiles: readonly string[],
+): Promise<string[]> {
+  const shellSpawn =
+    /(?:child_process['"]\s*\)?[\s\S]{0,200}?\b(?:exec|spawn)\s*\()|(?:\bimport\s*\{[^}]*\b(?:exec|spawn)\b[^}]*\}\s*from\s*['"]node:child_process)|(?:shell:\s*true)/;
+  const offenders: string[] = [];
+  for (const file of brokerFiles) {
+    const source = await fs.readFile(path.join(dir, file), 'utf8');
+    if (shellSpawn.test(source)) offenders.push(file);
+  }
+  return offenders;
+}
+
 /** Minimal in-memory stores; the broker must never reach these at all. */
 function makeStores() {
   const keys = new Map<string, string>([['github-pat', SECRET]]);
@@ -200,14 +245,12 @@ describe('GitHub broker security regressions (#1954)', () => {
    * @requirement REQ-001, REQ-004
    */
   it('exposes no github operation that returns a stored credential', () => {
-    for (const [name, descriptor] of Object.entries(OP_REGISTRY)) {
+    for (const [, descriptor] of Object.entries(OP_REGISTRY)) {
       const argv = JSON.stringify(
         descriptor.buildArgv({ number: 1, threadId: 'T', name: 'n' }),
       );
-      expect(argv, `${name} must not read the keystore`).not.toContain(
-        'get_api_key',
-      );
-      expect(argv, `${name} must not invoke a shell`).not.toContain('sh -c');
+      expect(argv).not.toContain('get_api_key');
+      expect(argv).not.toContain('sh -c');
     }
   });
 
@@ -225,35 +268,20 @@ describe('GitHub broker security regressions (#1954)', () => {
     const url = await import('node:url');
     const here = path.dirname(url.fileURLToPath(import.meta.url));
     const dir = path.resolve(here, '..');
-    const brokerFiles = (await fs.readdir(dir)).filter(
-      (f) => f.startsWith('github-broker') && f.endsWith('.ts'),
-    );
+    const brokerFiles = (await fs.readdir(dir)).filter(isBrokerSourceFile);
     expect(brokerFiles.length).toBeGreaterThan(0);
 
     // Match module specifiers across the whole file rather than filtering
     // for lines that start with `import`. Prettier wraps long imports, which
     // puts the specifier on a later line — so the line-based check silently
     // passed for exactly the formatting this repo produces.
-    const offenders: string[] = [];
-    for (const file of brokerFiles) {
-      const source = await fs.readFile(path.join(dir, file), 'utf8');
-      const specifiers = [...source.matchAll(/from\s+'([^']+)'/g)].map(
-        (m) => m[1],
-      );
-      for (const specifier of specifiers) {
-        if (
-          /credential-store-factory|provider-key-storage|token-store|llxprt-code-storage/.test(
-            specifier,
-          )
-        ) {
-          offenders.push(`${file} -> ${specifier}`);
-        }
-      }
-    }
-    expect(
-      offenders,
-      'broker modules must not import credential storage',
-    ).toStrictEqual([]);
+    const offenders = await findCredentialImportOffenders(
+      fs,
+      path,
+      dir,
+      brokerFiles,
+    );
+    expect(offenders).toStrictEqual([]);
   });
 
   /**
@@ -271,25 +299,15 @@ describe('GitHub broker security regressions (#1954)', () => {
     const dir = path.resolve(here, '..');
     // Every broker module, not just the entry point. Spawning could be
     // introduced in any of them and a single-file check would miss it.
-    const brokerFiles = (await fs.readdir(dir)).filter(
-      (f) => f.startsWith('github-broker') && f.endsWith('.ts'),
-    );
+    const brokerFiles = (await fs.readdir(dir)).filter(isBrokerSourceFile);
     expect(brokerFiles.length).toBeGreaterThan(1);
 
     // Match shell-capable spawns specifically. A bare /exec\(/ also matches
     // RegExp.prototype.exec, which is unrelated and produced a false
     // positive; the risk is child_process exec/spawn, or shell: true on any
     // call.
-    const SHELL_SPAWN =
-      /(?:child_process['"]\s*\)?[\s\S]{0,200}?\b(?:exec|spawn)\s*\()|(?:\bimport\s*\{[^}]*\b(?:exec|spawn)\b[^}]*\}\s*from\s*['"]node:child_process)|(?:shell:\s*true)/;
-    const offenders: string[] = [];
-    for (const file of brokerFiles) {
-      const source = await fs.readFile(path.join(dir, file), 'utf8');
-      if (SHELL_SPAWN.test(source)) offenders.push(file);
-    }
-    expect(offenders, 'gh must never be spawned through a shell').toStrictEqual(
-      [],
-    );
+    const offenders = await findShellSpawnOffenders(fs, path, dir, brokerFiles);
+    expect(offenders).toStrictEqual([]);
 
     const entry = await fs.readFile(path.join(dir, 'github-broker.ts'), 'utf8');
     expect(entry).toContain('shell: false');
@@ -381,7 +399,7 @@ describe('handler dispatch is not prototype-reachable', () => {
         { v: 2, id: `p-${op}`, op, payload: {} },
       ]);
       const reply = frames.find((f) => f.id === `p-${op}`);
-      expect(reply?.ok, `${op} must not dispatch`).toBe(false);
+      expect(reply?.ok).toBe(false);
       expect(reply?.code).toBe('INVALID_REQUEST');
     }
   });

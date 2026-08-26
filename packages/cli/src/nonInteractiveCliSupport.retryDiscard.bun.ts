@@ -61,6 +61,16 @@ function parseStreamEvents(spy: StdoutSpy): ParsedStreamEvent[] {
     .map((line) => JSON.parse(line) as ParsedStreamEvent);
 }
 
+function onlyAssistantMessageContent(
+  messages: readonly ParsedStreamEvent[],
+): string | undefined {
+  const message = messages.at(0);
+  if (message === undefined) {
+    throw new Error('Expected one assistant message');
+  }
+  return message.content;
+}
+
 function parseJsonResult(spy: StdoutSpy): Record<string, unknown> {
   const jsonLine = spy.mock.calls
     .map((call) => String(call[0]).trimEnd())
@@ -217,7 +227,7 @@ describe('processAgentStream — retry discard (REQ-3048-010)', () => {
     expect(String(result.response)).not.toContain('held');
   });
 
-  it('does not disturb pendingDone — a done after the retry still finalizes', async () => {
+  async function verifyDoesNotDisturbPendingDoneADoneAfterTheRetryStillFinalizes() {
     const streamFormatter = new StreamJsonFormatter();
     const events: AgentEvent[] = [
       { type: 'text', text: 'abandoned' },
@@ -244,8 +254,15 @@ describe('processAgentStream — retry discard (REQ-3048-010)', () => {
     );
     // pendingDone survived the retry, so handleDone emitted the assistant
     // message and the terminal RESULT.
-    expect(messages).toHaveLength(1);
-    expect(messages[0].content).toBe('kept');
-    expect(result).toBeDefined();
+    return { messages, result };
+  }
+
+  it('does not disturb pendingDone — a done after the retry still finalizes', async () => {
+    const behaviorResult =
+      await verifyDoesNotDisturbPendingDoneADoneAfterTheRetryStillFinalizes();
+
+    expect(behaviorResult.messages).toHaveLength(1);
+    expect(onlyAssistantMessageContent(behaviorResult.messages)).toBe('kept');
+    expect(behaviorResult.result).toBeDefined();
   });
 });

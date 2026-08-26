@@ -83,6 +83,84 @@ function seedHistory(service: HistoryService, count: number): IContent[] {
 // Test suite
 // ---------------------------------------------------------------------------
 
+function validReplacementMap(
+  rawIndices: readonly number[],
+  historySize: number,
+  excludedIndices: ReadonlySet<number> = new Set<number>(),
+  prefix = 'R',
+): Map<number, IContent> {
+  const replacements = new Map<number, IContent>();
+  for (const index of rawIndices) {
+    if (index >= 0 && index < historySize && !excludedIndices.has(index)) {
+      replacements.set(index, makeEntry('human', `${prefix}${index}`));
+    }
+  }
+  return replacements;
+}
+
+function unchangedReferenceObservations(
+  raw: readonly IContent[],
+  entries: readonly IContent[],
+  historySize: number,
+  removals: readonly number[],
+  touched: ReadonlySet<number>,
+): boolean[] {
+  const observations: boolean[] = [];
+  let rawIndex = 0;
+  for (let originalIndex = 0; originalIndex < historySize; originalIndex++) {
+    if (!removals.includes(originalIndex)) {
+      observations.push(
+        touched.has(originalIndex) || raw[rawIndex] === entries[originalIndex],
+      );
+      rawIndex++;
+    }
+  }
+  return observations;
+}
+
+interface ReplacementObservation {
+  readonly actual: IContent | undefined;
+  readonly expected: IContent;
+}
+
+async function observeReplacementCase(
+  historySize: number,
+  rawReplacements: readonly number[],
+): Promise<readonly ReplacementObservation[]> {
+  const service = new HistoryService();
+  seedHistory(service, historySize);
+  await service.waitForTokenUpdates();
+  const replacements = validReplacementMap(
+    rawReplacements,
+    historySize,
+    new Set<number>(),
+    'REPLACED_',
+  );
+  if (replacements.size === 0) return [];
+
+  await service.applyDensityResult(makeDensityResult([], replacements));
+  const raw = service.getRawHistory();
+  return [...replacements].map(([index, expected]) => ({
+    actual: raw[index],
+    expected,
+  }));
+}
+
+async function conflictApplications(
+  historySize: number,
+  conflictIndex: number,
+): Promise<ReadonlyArray<Promise<void>>> {
+  if (conflictIndex >= historySize) return [];
+  const service = new HistoryService();
+  seedHistory(service, historySize);
+  await service.waitForTokenUpdates();
+  const result = makeDensityResult(
+    [conflictIndex],
+    new Map([[conflictIndex, makeEntry('human', 'X')]]),
+  );
+  return [service.applyDensityResult(result)];
+}
+
 describe('HistoryService — Density Extensions', () => {
   let service: HistoryService;
 
@@ -421,6 +499,10 @@ describe('HistoryService — Density Extensions', () => {
   // Property-based tests (≥ 30% of total)
   // =========================================================================
 
+  function inRangeIndices(indices: number[], size: number): number[] {
+    return indices.filter((i) => i >= 0 && i < size);
+  }
+
   describe('property-based tests', () => {
     /**
      * @plan PLAN-20260211-HIGHDENSITY.P07
@@ -442,8 +524,9 @@ describe('HistoryService — Density Extensions', () => {
               seedHistory(svc, histSize);
               await svc.waitForTokenUpdates();
 
-              const removals = [...new Set(rawRemovals)].filter(
-                (i) => i >= 0 && i < histSize,
+              const removals = inRangeIndices(
+                [...new Set(rawRemovals)],
+                histSize,
               );
 
               const result = makeDensityResult(removals, new Map());
@@ -482,15 +565,12 @@ describe('HistoryService — Density Extensions', () => {
               const entries = seedHistory(svc, histSize);
               await svc.waitForTokenUpdates();
 
-              const removalSet = new Set(
-                rawRemovals.filter((i) => i >= 0 && i < histSize),
+              const removalSet = new Set(inRangeIndices(rawRemovals, histSize));
+              const replacements = validReplacementMap(
+                rawReplacements,
+                histSize,
+                removalSet,
               );
-              const replacements = new Map<number, IContent>();
-              for (const idx of rawReplacements) {
-                if (idx >= 0 && idx < histSize && !removalSet.has(idx)) {
-                  replacements.set(idx, makeEntry('human', `R${idx}`));
-                }
-              }
               const removals = [...removalSet].filter(
                 (i) => !replacements.has(i),
               );
@@ -500,15 +580,15 @@ describe('HistoryService — Density Extensions', () => {
               const result = makeDensityResult(removals, replacements);
               await svc.applyDensityResult(result);
 
-              const raw = svc.getRawHistory();
-              let rawIdx = 0;
-              for (let origIdx = 0; origIdx < histSize; origIdx++) {
-                if (removals.includes(origIdx)) continue;
-                const isTouched = touched.has(origIdx);
-                expect(isTouched || raw[rawIdx] === entries[origIdx]).toBe(
-                  true,
-                );
-                rawIdx++;
+              const observations = unchangedReferenceObservations(
+                svc.getRawHistory(),
+                entries,
+                histSize,
+                removals,
+                touched,
+              );
+              for (const unchanged of observations) {
+                expect(unchanged).toBe(true);
               }
             },
           ),
@@ -532,24 +612,12 @@ describe('HistoryService — Density Extensions', () => {
               maxLength: 4,
             }),
             async (histSize, rawReplacements) => {
-              const svc = new HistoryService();
-              seedHistory(svc, histSize);
-              await svc.waitForTokenUpdates();
-
-              const replacements = new Map<number, IContent>();
-              for (const idx of rawReplacements) {
-                if (idx >= 0 && idx < histSize) {
-                  replacements.set(idx, makeEntry('human', `REPLACED_${idx}`));
-                }
-              }
-              if (replacements.size === 0) return;
-
-              const result = makeDensityResult([], replacements);
-              await svc.applyDensityResult(result);
-
-              const raw = svc.getRawHistory();
-              for (const [idx, expected] of replacements) {
-                expect(raw[idx]).toBe(expected);
+              const observations = await observeReplacementCase(
+                histSize,
+                rawReplacements,
+              );
+              for (const { actual, expected } of observations) {
+                expect(actual).toBe(expected);
               }
             },
           ),
@@ -570,20 +638,15 @@ describe('HistoryService — Density Extensions', () => {
             fc.integer({ min: 1, max: 8 }),
             fc.integer({ min: 0, max: 7 }),
             async (histSize, conflictIdx) => {
-              if (conflictIdx >= histSize) return;
-
-              const svc = new HistoryService();
-              seedHistory(svc, histSize);
-              await svc.waitForTokenUpdates();
-
-              const result = makeDensityResult(
-                [conflictIdx],
-                new Map([[conflictIdx, makeEntry('human', 'X')]]),
+              const applications = await conflictApplications(
+                histSize,
+                conflictIdx,
               );
-
-              await expect(svc.applyDensityResult(result)).rejects.toThrow(
-                CompressionStrategyError,
-              );
+              for (const application of applications) {
+                await expect(application).rejects.toThrow(
+                  CompressionStrategyError,
+                );
+              }
             },
           ),
           { numRuns: 5 },
@@ -659,8 +722,9 @@ describe('HistoryService — Density Extensions', () => {
               seedHistory(svc, histSize);
               await svc.waitForTokenUpdates();
 
-              const removals = [...new Set(rawRemovals)].filter(
-                (i) => i >= 0 && i < histSize,
+              const removals = inRangeIndices(
+                [...new Set(rawRemovals)],
+                histSize,
               );
               const result = makeDensityResult(removals, new Map());
               await svc.applyDensityResult(result);

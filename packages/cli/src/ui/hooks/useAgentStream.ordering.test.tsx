@@ -461,7 +461,11 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
     expect(historyItem.thinkingBlocks).toBeDefined();
     expect(historyItem.thinkingBlocks!.length).toBeGreaterThan(0);
   });
-  it('should reset thinking blocks on new prompt', async () => {
+  const observeThinkingBlocksAcrossPrompts = async (): Promise<{
+    readonly firstPromptAiCallCount: number;
+    readonly secondPromptAiCallCount: number;
+    readonly secondPromptThinkingBlocks: readonly unknown[];
+  }> => {
     // First query with thought
     mockSendMessageStream.mockReturnValue(
       (async function* () {
@@ -490,11 +494,16 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
     });
 
     await waitFor(() => {
-      const aiCalls = mockAddItem.mock.calls.filter(
+      const aiCallCount = mockAddItem.mock.calls.filter(
         (call) => call[0].type === MessageType.AI,
-      );
-      expect(aiCalls.length).toBeGreaterThan(0);
+      ).length;
+      if (aiCallCount === 0) {
+        throw new Error('Expected the first AI response');
+      }
     });
+    const firstPromptAiCallCount = mockAddItem.mock.calls.filter(
+      (call) => call[0].type === MessageType.AI,
+    ).length;
 
     // Second query without thought
     mockSendMessageStream.mockReturnValue(
@@ -515,20 +524,31 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
     });
 
     await waitFor(() => {
-      const aiCalls = mockAddItem.mock.calls.filter(
+      const aiCallCount = mockAddItem.mock.calls.filter(
         (call) => call[0].type === MessageType.AI,
-      );
-      expect(aiCalls.length).toBeGreaterThan(1);
+      ).length;
+      if (aiCallCount <= 1) {
+        throw new Error('Expected the second AI response');
+      }
     });
 
-    const secondAiCall = mockAddItem.mock.calls
-      .filter((call) => call[0].type === MessageType.AI)
-      .pop();
-
+    const secondPromptAiCalls = mockAddItem.mock.calls.filter(
+      (call) => call[0].type === MessageType.AI,
+    );
+    const secondAiCall = secondPromptAiCalls.at(-1);
     const historyItem = secondAiCall[0] as HistoryItemAi;
-    // Second query should have no thinking blocks or an empty array
-    const thinkingBlocks = historyItem.thinkingBlocks ?? [];
-    expect(thinkingBlocks).toHaveLength(0);
+    return {
+      firstPromptAiCallCount,
+      secondPromptAiCallCount: secondPromptAiCalls.length,
+      secondPromptThinkingBlocks: historyItem.thinkingBlocks ?? [],
+    };
+  };
+
+  it('should reset thinking blocks on new prompt', async () => {
+    const prompts = await observeThinkingBlocksAcrossPrompts();
+    expect(prompts.firstPromptAiCallCount).toBeGreaterThan(0);
+    expect(prompts.secondPromptAiCallCount).toBeGreaterThan(1);
+    expect(prompts.secondPromptThinkingBlocks).toHaveLength(0);
   });
   it('should handle Thought events with empty subject or description', async () => {
     mockSendMessageStream.mockReturnValue(
@@ -577,7 +597,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
 
     const historyItem = lastAiCall[0] as HistoryItemAi;
     expect(historyItem.thinkingBlocks).toBeDefined();
-    expect(historyItem.thinkingBlocks!.length).toBe(2);
+    expect(historyItem.thinkingBlocks!).toHaveLength(2);
 
     // Verify that empty fields are handled gracefully
     expect(historyItem.thinkingBlocks![0].thought).toContain(
@@ -586,7 +606,13 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
     expect(historyItem.thinkingBlocks![1].thought).toContain('Subject only');
   });
   describe('Ordering contract: thinking ownership on content split (#1272)', () => {
-    it('should attach thinkingBlocks only to the first committed gemini item, not gemini_content', async () => {
+    const observeThinkingOwnershipOnCommittedItems = async (): Promise<{
+      readonly committedItemCount: number;
+      readonly firstItemType: string;
+      readonly firstThinkingBlocks: HistoryItemAi['thinkingBlocks'];
+      readonly subsequentThinkingOwnership: readonly boolean[];
+      readonly sourceField: unknown;
+    }> => {
       // A real paragraph break outside a code fence is what makes the
       // streaming pipeline commit a segment and keep the rest pending.
       mockSendMessageStream.mockReturnValue(
@@ -616,12 +642,14 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
       });
 
       await waitFor(() => {
-        const aiCalls = mockAddItem.mock.calls.filter(
+        const aiCallCount = mockAddItem.mock.calls.filter(
           (call) =>
             call[0].type === MessageType.AI ||
             call[0].type === 'gemini_content',
-        );
-        expect(aiCalls.length).toBeGreaterThanOrEqual(2);
+        ).length;
+        if (aiCallCount < 2) {
+          throw new Error('Expected multiple committed AI items');
+        }
       });
 
       const committedAgentItems = mockAddItem.mock.calls
@@ -632,23 +660,39 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
         )
         .map((call) => call[0] as HistoryItemAi);
 
-      // First committed item (type: 'gemini') should own thinkingBlocks
       const firstItem = committedAgentItems[0];
-      expect(firstItem.type).toBe('gemini');
-      expect(firstItem.thinkingBlocks).toBeDefined();
-      expect(firstItem.thinkingBlocks!.length).toBeGreaterThan(0);
-      expect(firstItem.thinkingBlocks![0].sourceField).toBe('thought');
+      return {
+        committedItemCount: committedAgentItems.length,
+        firstItemType: firstItem.type,
+        firstThinkingBlocks: firstItem.thinkingBlocks,
+        subsequentThinkingOwnership: committedAgentItems
+          .slice(1)
+          .map(
+            (item) =>
+              item.thinkingBlocks !== undefined &&
+              item.thinkingBlocks.length > 0,
+          ),
+        sourceField: firstItem.thinkingBlocks![0].sourceField,
+      };
+    };
 
-      // Subsequent gemini_content items should NOT have thinkingBlocks
-      for (let i = 1; i < committedAgentItems.length; i++) {
-        const item = committedAgentItems[i];
-        const hasThinking =
-          item.thinkingBlocks && item.thinkingBlocks.length > 0;
+    it('should attach thinkingBlocks only to the first committed gemini item, not gemini_content', async () => {
+      const ownership = await observeThinkingOwnershipOnCommittedItems();
+      expect(ownership.committedItemCount).toBeGreaterThanOrEqual(2);
+      expect(ownership.firstItemType).toBe('gemini');
+      expect(ownership.firstThinkingBlocks).toBeDefined();
+      expect(ownership.firstThinkingBlocks?.length).toBeGreaterThan(0);
+      for (const hasThinking of ownership.subsequentThinkingOwnership) {
         expect(hasThinking).toBeFalsy();
       }
+      expect(ownership.sourceField).toBe('thought');
     });
 
-    it('should not duplicate thinkingBlocks across multiple committed content segments', async () => {
+    const observeThinkingOwnershipAcrossSegments = async (): Promise<{
+      readonly committedItemCount: number;
+      readonly itemsWithThinkingCount: number;
+      readonly thinkingOwnerType: string;
+    }> => {
       // Several real paragraph breaks produce several committed segments.
       mockSendMessageStream.mockReturnValue(
         (async function* () {
@@ -682,12 +726,14 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
       });
 
       await waitFor(() => {
-        const allAiCalls = mockAddItem.mock.calls.filter(
+        const aiCallCount = mockAddItem.mock.calls.filter(
           (call) =>
             call[0].type === MessageType.AI ||
             call[0].type === 'gemini_content',
-        );
-        expect(allAiCalls.length).toBeGreaterThanOrEqual(2);
+        ).length;
+        if (aiCallCount < 2) {
+          throw new Error('Expected multiple committed content segments');
+        }
       });
 
       const committedItems = mockAddItem.mock.calls
@@ -698,17 +744,30 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
         )
         .map((call) => call[0] as HistoryItemAi);
 
-      // Count how many items have thinkingBlocks
       const itemsWithThinking = committedItems.filter(
         (item) => item.thinkingBlocks != null && item.thinkingBlocks.length > 0,
       );
+      return {
+        committedItemCount: committedItems.length,
+        itemsWithThinkingCount: itemsWithThinking.length,
+        thinkingOwnerType: itemsWithThinking[0].type,
+      };
+    };
 
-      // Exactly one item should own thinkingBlocks
-      expect(itemsWithThinking).toHaveLength(1);
-      expect(itemsWithThinking[0].type).toBe('gemini');
+    it('should not duplicate thinkingBlocks across multiple committed content segments', async () => {
+      const ownership = await observeThinkingOwnershipAcrossSegments();
+      expect(ownership.committedItemCount).toBeGreaterThanOrEqual(2);
+      expect(ownership.itemsWithThinkingCount).toBe(1);
+      expect(ownership.thinkingOwnerType).toBe('gemini');
     });
 
-    it('should maintain thinking-above-content ordering on the first committed gemini item', async () => {
+    const observeFirstCommittedThinkingOrder = async (): Promise<{
+      readonly committedItemCount: number;
+      readonly firstItemType: string;
+      readonly thinkingBlocks: HistoryItemAi['thinkingBlocks'];
+      readonly firstThought: string | undefined;
+      readonly textLength: number;
+    }> => {
       mockSendMessageStream.mockReturnValue(
         (async function* () {
           yield {
@@ -736,12 +795,14 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
       });
 
       await waitFor(() => {
-        const aiCalls = mockAddItem.mock.calls.filter(
+        const aiCallCount = mockAddItem.mock.calls.filter(
           (call) =>
             call[0].type === MessageType.AI ||
             call[0].type === 'gemini_content',
-        );
-        expect(aiCalls.length).toBeGreaterThanOrEqual(1);
+        ).length;
+        if (aiCallCount < 1) {
+          throw new Error('Expected a committed AI item');
+        }
       });
 
       const allCommitted = mockAddItem.mock.calls
@@ -752,13 +813,24 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
         )
         .map((call) => call[0] as HistoryItemAi);
 
-      // The first committed item must be 'gemini' type with thinking
       const first = allCommitted[0];
-      expect(first.type).toBe('gemini');
-      expect(first.thinkingBlocks).toBeDefined();
-      expect(first.thinkingBlocks!.length).toBe(1);
-      expect(first.thinkingBlocks![0].thought).toBe('Planning: the response');
-      expect(first.text.length).toBeGreaterThan(0);
+      return {
+        committedItemCount: allCommitted.length,
+        firstItemType: first.type,
+        thinkingBlocks: first.thinkingBlocks,
+        firstThought: first.thinkingBlocks?.[0]?.thought,
+        textLength: first.text.length,
+      };
+    };
+
+    it('should maintain thinking-above-content ordering on the first committed gemini item', async () => {
+      const ordering = await observeFirstCommittedThinkingOrder();
+      expect(ordering.committedItemCount).toBeGreaterThanOrEqual(1);
+      expect(ordering.firstItemType).toBe('gemini');
+      expect(ordering.thinkingBlocks).toBeDefined();
+      expect(ordering.thinkingBlocks).toHaveLength(1);
+      expect(ordering.firstThought).toBe('Planning: the response');
+      expect(ordering.textLength).toBeGreaterThan(0);
     });
   });
 });

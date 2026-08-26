@@ -68,6 +68,15 @@ class StubAdoptedProvider implements IProvider {
   }
 }
 
+async function cleanupIfNotCaptured(
+  captured: { providerManager: unknown } | undefined,
+  handle: IsolatedRuntimeContextHandle,
+): Promise<void> {
+  if (captured === undefined) {
+    await handle.cleanup().catch(() => undefined);
+  }
+}
+
 /** Builds a real ProviderManager the way the providers test suite bootstraps one. */
 function buildRealManager(): ProviderManager {
   const settingsService = new SettingsService();
@@ -330,9 +339,7 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
       expect(disposeAfter).toBeUndefined();
     } finally {
       // ensure cleanup ran even if an assertion threw
-      if (captured === undefined) {
-        await handle.cleanup().catch(() => undefined);
-      }
+      await cleanupIfNotCaptured(captured, handle);
     }
   });
 

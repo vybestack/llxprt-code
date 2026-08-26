@@ -107,6 +107,47 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Create sessionCount sessions sharing one project hash, spacing creations
+ * apart so each subsequent file has a strictly later mtime.
+ */
+async function createSpacedSessionsWithHash(
+  chatsDir: string,
+  sessionCount: number,
+  projectHash: string,
+  spacingMs: number,
+): Promise<void> {
+  for (let i = 0; i < sessionCount; i++) {
+    await createTestSession(chatsDir, { projectHash });
+    if (i < sessionCount - 1) await delay(spacingMs);
+  }
+}
+
+/**
+ * Create sessionCount sessions with sequential names, collecting each created
+ * session id in order while spacing creations apart by mtime.
+ */
+async function createOrderedSessions(
+  chatsDir: string,
+  sessionCount: number,
+  spacingMs: number,
+): Promise<Array<{ sessionId: string }>> {
+  const sessions: Array<{ sessionId: string }> = [];
+  for (let i = 0; i < sessionCount; i++) {
+    const sessionId = `session-${String(i).padStart(4, '0')}`;
+    await createTestSession(chatsDir, { sessionId, projectHash: PROJECT_HASH });
+    sessions.push({ sessionId });
+    if (i < sessionCount - 1) await delay(spacingMs);
+  }
+  return sessions;
+}
+/**
+ * Return whichever session id sorts first lexicographically.
+ */
+function greaterId(a: string, b: string): string {
+  return a.localeCompare(b) > 0 ? a : b;
+}
+
 // ---------------------------------------------------------------------------
 // Test suite
 // ---------------------------------------------------------------------------
@@ -675,10 +716,12 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
 
               try {
                 const hash = crypto.randomUUID();
-                for (let i = 0; i < sessionCount; i++) {
-                  await createTestSession(localChatsDir, { projectHash: hash });
-                  if (i < sessionCount - 1) await delay(20);
-                }
+                await createSpacedSessionsWithHash(
+                  localChatsDir,
+                  sessionCount,
+                  hash,
+                  20,
+                );
 
                 const sessions = await SessionDiscovery.listSessions(
                   localChatsDir,
@@ -759,15 +802,13 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
 
             try {
               const sessions: Array<{ sessionId: string }> = [];
-              for (let i = 0; i < sessionCount; i++) {
-                const sessionId = `session-${String(i).padStart(4, '0')}`;
-                await createTestSession(localChatsDir, {
-                  sessionId,
-                  projectHash: PROJECT_HASH,
-                });
-                sessions.push({ sessionId });
-                if (i < sessionCount - 1) await delay(50);
-              }
+              sessions.push(
+                ...(await createOrderedSessions(
+                  localChatsDir,
+                  sessionCount,
+                  50,
+                )),
+              );
 
               const discovered = await SessionDiscovery.listSessions(
                 localChatsDir,
@@ -845,12 +886,12 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
             await fs.mkdir(localChatsDir, { recursive: true });
 
             try {
-              for (let i = 0; i < sessionCount; i++) {
-                await createTestSession(localChatsDir, {
-                  projectHash: PROJECT_HASH,
-                });
-                if (i < sessionCount - 1) await delay(50);
-              }
+              await createSpacedSessionsWithHash(
+                localChatsDir,
+                sessionCount,
+                PROJECT_HASH,
+                50,
+              );
 
               const sessions = await SessionDiscovery.listSessions(
                 localChatsDir,
@@ -936,7 +977,7 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
 
               // First result has lexicographically greater session ID
               expect(result1).toHaveLength(2);
-              const expectedFirst = idA.localeCompare(idB) > 0 ? idA : idB;
+              const expectedFirst = greaterId(idA, idB);
               expect(result1[0].sessionId).toBe(expectedFirst);
             } finally {
               await fs.rm(localTempDir, { recursive: true, force: true });

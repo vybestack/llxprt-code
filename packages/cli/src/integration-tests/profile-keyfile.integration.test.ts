@@ -75,20 +75,16 @@ describe('Profile with Keyfile Integration Tests', () => {
   });
 
   describe('Basic Keyfile Functionality', () => {
-    // POSIX-only: Windows has no mode bits for this to assert. NTFS reports
-    // 666 whatever the file was created with, and chmod there only toggles the
-    // read-only flag, so owner-only permissions are a POSIX guarantee.
-    it.skipIf(process.platform === 'win32')(
-      'creates the keyfile with owner-only permissions',
-      async () => {
+    describe.skipIf(process.platform === 'win32')('POSIX behavior', () => {
+      it('creates the keyfile with owner-only permissions', async () => {
         const keyfilePath = await createTempKeyfile(tempDir, 'perm-check-key');
 
         const stats = await fs.stat(keyfilePath);
         const permissions = (stats.mode & parseInt('777', 8)).toString(8);
 
         expect(permissions).toBe('600');
-      },
-    );
+      });
+    });
 
     it('should load the API key from a keyfile', async () => {
       const apiKeyContent = 'test-api-key-from-file-123456';
