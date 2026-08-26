@@ -388,6 +388,13 @@ describe('scripts/build_sandbox.ts', () => {
     expect(buildSandbox).toContain('bind-release-deps.ts --backup');
     expect(buildSandbox).toContain('bind-release-deps.ts --restore');
   });
+
+  it('clears stale dist tarballs by enumerating dist entries instead of a glob rmSync (#3334)', () => {
+    // rmSync does not expand globs, so any literal `-*.tgz` path is a silent
+    // no-op that leaves stale tarballs for the Dockerfile COPY glob.
+    expect(buildSandbox).toMatch(/removeTarballs\(/);
+    expect(buildSandbox).not.toMatch(/-\*\.tgz/);
+  });
 });
 
 describe('.github/workflows/build-sandbox.yml', () => {
