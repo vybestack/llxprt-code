@@ -49,7 +49,6 @@ export function isCompletedToolCallShapeWithTool(
 
 export interface ProviderCapabilities {
   supportsStreaming: boolean;
-  supportsTools: boolean;
   supportsVision: boolean;
   maxTokens: number;
   supportedFormats: string[];

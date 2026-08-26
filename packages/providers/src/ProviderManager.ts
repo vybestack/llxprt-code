@@ -77,7 +77,6 @@ function isBlankValue(value: unknown): boolean {
 
 export class ProviderManager implements IProviderManager {
   private providers: Map<string, IProvider>;
-  private serverToolsProvider: IProvider | null;
   private config?: Config;
   private injectedTokenizerFactory?: RuntimeTokenizerFactory;
   /**
@@ -94,7 +93,6 @@ export class ProviderManager implements IProviderManager {
   constructor(init?: ProviderManagerInit | ProviderRuntimeContext) {
     const resolved = this.resolveInit(init);
     this.providers = new Map<string, IProvider>();
-    this.serverToolsProvider = null;
     this.settingsService = resolved.settingsService;
     this.config = resolved.config ?? this.config;
     this.runtime = resolved.runtime;
@@ -249,11 +247,6 @@ export class ProviderManager implements IProviderManager {
 
       this.syncProviderRuntime(finalProvider);
       this.providers.set(name, finalProvider);
-
-      // Update server tools provider reference if needed
-      if (this.serverToolsProvider && this.serverToolsProvider.name === name) {
-        this.serverToolsProvider = finalProvider;
-      }
     }
   }
 
@@ -463,14 +456,9 @@ export class ProviderManager implements IProviderManager {
       (this.settingsService.get('activeProvider') as string) || '';
 
     // Only clear state from the provider we're switching FROM
-    // BUT never clear the serverToolsProvider's state
     if (previousProviderName && previousProviderName !== name) {
       const previousProvider = this.providers.get(previousProviderName);
-      if (
-        previousProvider &&
-        previousProvider !== this.serverToolsProvider &&
-        'clearState' in previousProvider
-      ) {
+      if (previousProvider && 'clearState' in previousProvider) {
         const candidate = previousProvider as { clearState?: () => void };
         candidate.clearState?.();
       }
@@ -498,15 +486,6 @@ export class ProviderManager implements IProviderManager {
 
     // Update SettingsService as the single source of truth
     this.settingsService.set('activeProvider', name);
-
-    // If switching to Gemini, use it as both active and serverTools provider
-    // BUT only if we don't already have a Gemini serverToolsProvider with auth state
-    if (
-      name === 'gemini' &&
-      (!this.serverToolsProvider || this.serverToolsProvider.name !== 'gemini')
-    ) {
-      this.serverToolsProvider = this.providers.get(name) ?? null;
-    }
   }
 
   clearActiveProvider(): void {
@@ -598,14 +577,6 @@ export class ProviderManager implements IProviderManager {
     return (
       activeProviderName !== undefined && this.providers.has(activeProviderName)
     );
-  }
-
-  getServerToolsProvider(): IProvider | null {
-    return this.serverToolsProvider;
-  }
-
-  setServerToolsProvider(provider: IProvider | null): void {
-    this.serverToolsProvider = provider;
   }
 
   private generateConversationId(): string {

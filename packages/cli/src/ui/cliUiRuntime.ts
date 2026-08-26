@@ -112,17 +112,6 @@ export interface UiContentGeneratorConfig {
           getContextLimit?: () => number | undefined;
         }
       | undefined;
-    getServerToolsProvider?():
-      | {
-          getServerTools: () => string[];
-          invokeServerTool: (
-            name: string,
-            params: { prompt: string },
-            options: { signal: AbortSignal },
-          ) => Promise<unknown>;
-        }
-      | null
-      | undefined;
   };
 }
 

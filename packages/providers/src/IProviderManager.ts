@@ -62,16 +62,6 @@ export interface IProviderManager {
   listProviders(): string[];
 
   /**
-   * Get the server tools provider (typically Gemini for web search)
-   */
-  getServerToolsProvider(): IProvider | null;
-
-  /**
-   * Set the server tools provider
-   */
-  setServerToolsProvider(provider: IProvider | null): void;
-
-  /**
    * Accumulate token usage for a session
    */
   accumulateSessionTokens(

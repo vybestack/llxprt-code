@@ -275,8 +275,6 @@ function createDefaultProvider(): IProvider {
     generateChatCompletion: vi.fn(async function* () {
       yield { speaker: 'ai' as const, blocks: [] };
     }),
-    getServerTools: () => [],
-    invokeServerTool: vi.fn(),
   };
 }
 

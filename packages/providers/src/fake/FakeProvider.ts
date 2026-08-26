@@ -301,12 +301,4 @@ export class FakeProvider implements IProvider {
   getCurrentModel(): string {
     return 'fake-model';
   }
-
-  getServerTools(): string[] {
-    return [];
-  }
-
-  async invokeServerTool(): Promise<unknown> {
-    throw new Error('FakeProvider does not support server tools');
-  }
 }

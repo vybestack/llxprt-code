@@ -156,9 +156,8 @@ async function executeNoAuth(
 /**
  * Reproduces the Zed integration's `authenticateWithProviderOrFallback` +
  * `applyRuntimeProviderOverrides` + `applyProfileModelParams`. When the manager
- * has an active provider: configure runtime factories, set config on the gemini
- * serverToolsProvider, refreshAuth('provider'), attach providerManager to the
- * content generator config. Else refreshAuth('oauth').
+ * has an active provider: configure runtime factories, refreshAuth('provider'), and
+ * attach providerManager to the content generator config. Else refreshAuth('oauth').
  */
 async function executeProviderOrOauth(
   config: Config,
@@ -258,23 +257,13 @@ async function applyRuntimeProviderOverrides(
 
 /**
  * Mirrors the Zed `ensureProviderManagerOnConfig`: configure runtime factories
- * on the config and set the config on the gemini serverToolsProvider when
- * present.
+ * on the config.
  */
 async function ensureProviderManagerOnConfig(
   config: Config,
   manager: RuntimeProviderManager,
 ): Promise<void> {
   configureProviderRuntimeFactories(config, manager);
-  const serverToolsProvider = manager.getServerToolsProvider();
-  if (
-    serverToolsProvider &&
-    serverToolsProvider.name === 'gemini' &&
-    'setConfig' in serverToolsProvider &&
-    typeof serverToolsProvider.setConfig === 'function'
-  ) {
-    serverToolsProvider.setConfig(config);
-  }
 }
 
 /**

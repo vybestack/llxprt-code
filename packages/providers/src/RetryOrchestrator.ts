@@ -195,24 +195,6 @@ export class RetryOrchestrator implements IProvider {
     return this.wrappedProvider.isPaidMode?.() ?? false;
   }
 
-  getServerTools(): string[] {
-    return this.wrappedProvider.getServerTools();
-  }
-
-  async invokeServerTool(
-    toolName: string,
-    params: unknown,
-    config?: unknown,
-    signal?: AbortSignal,
-  ): Promise<unknown> {
-    return this.wrappedProvider.invokeServerTool(
-      toolName,
-      params,
-      config,
-      signal,
-    );
-  }
-
   getModelParams?(): Record<string, unknown> | undefined {
     return this.wrappedProvider.getModelParams?.();
   }
@@ -223,6 +205,19 @@ export class RetryOrchestrator implements IProvider {
 
   clearAuthCache?(): void {
     this.wrappedProvider.clearAuthCache?.();
+  }
+
+  // Forward clearState so ProviderManager.setActiveProvider's uniform
+  // switch-away state clear (#2626) reaches the underlying provider through
+  // the standard wrapping chain instead of stopping at this wrapper.
+  // clearState is an optional member outside IProvider, so it is detected
+  // structurally (same pattern as LoggingProviderWrapper.clearState).
+  clearState?(): void {
+    if ('clearState' in this.wrappedProvider) {
+      const candidate = (this.wrappedProvider as { clearState?: () => void })
+        .clearState;
+      candidate?.call(this.wrappedProvider);
+    }
   }
 
   clearAuth?(): void {

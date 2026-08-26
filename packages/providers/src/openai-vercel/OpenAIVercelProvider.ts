@@ -376,21 +376,6 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     this.clearAuthCache();
   }
 
-  override getServerTools(): string[] {
-    return [];
-  }
-
-  override async invokeServerTool(
-    toolName: string,
-    _params: unknown,
-    _config?: unknown,
-    _signal?: AbortSignal,
-  ): Promise<unknown> {
-    throw new Error(
-      `Server tool '${toolName}' not supported by OpenAIVercelProvider`,
-    );
-  }
-
   override getToolFormat(): string {
     const modelName = this.getModel() || this.getDefaultModel();
     const settings = this.resolveSettingsService();

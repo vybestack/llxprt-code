@@ -383,23 +383,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     this.clearAuthCache();
   }
 
-  override getServerTools(): string[] {
-    // Follow-up (#1569): Implement server tools for OpenAI provider
-    return [];
-  }
-
-  override async invokeServerTool(
-    toolName: string,
-    _params: unknown,
-    _config?: unknown,
-    _signal?: AbortSignal,
-  ): Promise<unknown> {
-    // Follow-up (#1569): Implement server tool invocation for OpenAI provider
-    throw new Error(
-      `Server tool '${toolName}' not supported by OpenAI provider`,
-    );
-  }
-
   /**
    * @plan PLAN-20250218-STATELESSPROVIDER.P04
    * @requirement REQ-SP-001

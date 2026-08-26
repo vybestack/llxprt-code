@@ -205,17 +205,6 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
     signal: AbortSignal,
     tokenBudget?: number,
   ): Promise<string> {
-    const contentGenConfig = this.config.getContentGeneratorConfig();
-    if (contentGenConfig?.providerManager === undefined) {
-      return content;
-    }
-
-    const serverToolsProvider =
-      contentGenConfig.providerManager.getServerToolsProvider();
-    if (serverToolsProvider == null || serverToolsProvider.name !== 'gemini') {
-      return content;
-    }
-
     return summarizeToolOutput(
       content,
       this.config.getAgentClient(),

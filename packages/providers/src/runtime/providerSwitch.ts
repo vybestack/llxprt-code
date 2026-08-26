@@ -260,20 +260,12 @@ function clearPreviousProviderSettings(context: ProviderSwitchContext): void {
     return;
   }
 
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P14
-   * @requirement:REQ-API-001
-   * @pseudocode consumer-migration.md lines 10-18
-   */
-  const legacyProviderManager = context.providerManager as {
-    getServerToolsProvider?: () => { name?: string } | null | undefined;
-  };
-  const serverToolsProviderName =
-    legacyProviderManager.getServerToolsProvider?.()?.name;
-  if (serverToolsProviderName === currentProvider) {
-    return;
-  }
-
+  // Uniform wipe (#2626, @plan:PLAN-20260826-SERVERTOOLS-DELETE): ALL of the
+  // previous provider's provider-scoped settings — including persisted keys
+  // such as auth-key — are cleared on switch-away, gemini included, exactly
+  // like every other provider. This is the consciously-owned consequence of
+  // retiring the serverToolsProvider exemption (supersedes the
+  // PLAN-20260603-ISSUE1584.P14 special case this block used to carry).
   const previousSettings = getProviderSettingsSnapshot(
     settingsService,
     currentProvider,

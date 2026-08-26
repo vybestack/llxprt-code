@@ -493,19 +493,6 @@ export class LoadBalancingProvider implements IProvider {
     return this.getDefaultModel();
   }
 
-  getServerTools(): string[] {
-    return [];
-  }
-
-  async invokeServerTool(
-    toolName: string,
-    _params: unknown,
-    _config?: unknown,
-    _signal?: AbortSignal,
-  ): Promise<unknown> {
-    throw new Error(`Server tool '${toolName}' not supported by load balancer`);
-  }
-
   /**
    * Mark a sub-profile as the active selection. This is the UI-refresh trigger:
    * it updates `lastSelected` and emits LoadBalancerSelectionChanged whenever the

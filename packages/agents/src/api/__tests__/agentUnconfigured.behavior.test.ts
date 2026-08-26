@@ -40,13 +40,11 @@ function makeUnconfiguredProviderManager(): RuntimeProviderManager {
     getActiveProvider: () => undefined,
     getActiveProviderName: () => undefined,
     listProviders: () => [],
-    getServerToolsProvider: () => null,
     setConfig: () => {},
     registerProvider: () => {},
     setActiveProvider: () => {},
     clearActiveProvider: () => {},
     getAvailableModels: async () => [],
-    setServerToolsProvider: () => {},
     accumulateSessionTokens: () => {},
     getSessionTokenUsage: () => ({
       input: 0,

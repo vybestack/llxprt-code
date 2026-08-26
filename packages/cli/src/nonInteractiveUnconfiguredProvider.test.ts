@@ -95,7 +95,6 @@ function makeUnconfiguredConfig(): Config {
     getProviderManager: vi.fn().mockReturnValue({
       getActiveProviderName: () => '',
       hasActiveProvider: () => false,
-      getServerToolsProvider: () => null,
     }),
     getOutputFormat: vi.fn().mockReturnValue('text'),
     getFolderTrust: vi.fn().mockReturnValue(false),
@@ -347,7 +346,6 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
     ).mockReturnValue({
       getActiveProviderName: () => 'openai',
       hasActiveProvider: () => true,
-      getServerToolsProvider: () => null,
     } as never);
 
     await runNonInteractive({
@@ -371,7 +369,6 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
     ).mockReturnValue({
       getActiveProviderName: () => 'anthropic',
       hasActiveProvider: () => true,
-      getServerToolsProvider: () => null,
     } as never);
 
     await runNonInteractive({

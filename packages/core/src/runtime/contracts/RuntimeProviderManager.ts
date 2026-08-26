@@ -60,8 +60,6 @@ export interface RuntimeProviderManager {
   prepareStatelessProviderInvocation?(runtimeContext?: unknown): unknown;
   getProviderMetrics(): RuntimeProviderMetrics;
   getSessionTokenUsage(): RuntimeSessionTokenUsage;
-  getServerToolsProvider(): RuntimeProvider | null | undefined;
-  setServerToolsProvider(provider: RuntimeProvider | null): void;
   setConfig(config: Config): void;
   setRuntimeContext(runtimeContext: ProviderRuntimeContext): void;
   hasActiveProvider(): boolean;

@@ -14,6 +14,10 @@ import type { ShellJob, ShellJobManager } from '../services/shellJobManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ShellTool, type IToolMessageBus } from '@vybestack/llxprt-code-tools';
 import { initializeParser, isParserAvailable } from '../utils/shell-parser.js';
+import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
+import type { IContent } from '../services/history/IContent.js';
+import { createTestAgentClient } from '../test-utils/config.js';
+import { MessageBus } from '../confirmation-bus/message-bus.js';
 
 /**
  * Windows-only end-to-end coverage for the real background-job path that was
@@ -332,3 +336,134 @@ describe.skipIf(os.platform() !== 'win32' || !pwshAvailable)(
     });
   },
 );
+
+/**
+ * Issue #2626: `trySummarizeOutput` must honor the caller's token budget on
+ * every runtime. The previous implementation refused to summarize unless the
+ * content generator config carried a gemini serverToolsProvider — a
+ * server-tools-era gate unrelated to summarization. These tests drive the
+ * real adapter against a real initialized Config whose agent client performs
+ * the summarization; the only substituted piece is the generation boundary
+ * itself (no network), which reports the prompt it received.
+ */
+describe('CoreShellToolHostAdapter.trySummarizeOutput (issue #2626: uniform summarization)', () => {
+  async function makeSummarizingAdapter(providerManager?: {
+    getActiveProvider(): { name: string } | undefined;
+  }): Promise<{
+    adapter: CoreShellToolHostAdapter;
+    summarizedPromptLengths: number[];
+  }> {
+    sessionIdCounter += 1;
+    const summarizedPromptLengths: number[] = [];
+    const agentClient = createTestAgentClient({
+      generateContent: async (contents: IContent[]) => {
+        const prompt = partToText(contents[0]?.blocks);
+        summarizedPromptLengths.push(prompt.length);
+        return {
+          content: {
+            speaker: 'ai' as const,
+            blocks: [
+              { type: 'text' as const, text: `SUMMARY:${prompt.length}` },
+            ],
+          },
+        };
+      },
+    });
+    const config = new Config({
+      model: 'test-model',
+      question: 'test question',
+      embeddingModel: 'test-embedding',
+      targetDir: os.tmpdir(),
+      usageStatisticsEnabled: false,
+      sessionId: `adapter-summarize-${Date.now()}-${sessionIdCounter}`,
+      debugMode: false,
+      cwd: os.tmpdir(),
+      settingsService: new SettingsService(),
+      agentClientFactory: () => agentClient,
+    });
+
+    const messageBus = new MessageBus(
+      config.getPolicyEngine(),
+      config.getDebugMode(),
+    );
+    await config.initialize({ messageBus });
+    if (providerManager !== undefined) {
+      const target = config as unknown as {
+        contentGeneratorConfig: ContentGeneratorConfig;
+      };
+      target.contentGeneratorConfig = {
+        model: 'test-model',
+        providerManager:
+          providerManager as unknown as ContentGeneratorConfig['providerManager'],
+      };
+    }
+    return {
+      adapter: new CoreShellToolHostAdapter(config),
+      summarizedPromptLengths,
+    };
+  }
+
+  it('summarizes oversized output when no provider manager is configured', async () => {
+    const { adapter, summarizedPromptLengths } = await makeSummarizingAdapter();
+    const oversized = `command output line
+${'x'.repeat(1200)}`;
+
+    const result = await adapter.trySummarizeOutput(
+      oversized,
+      new AbortController().signal,
+      1000,
+    );
+
+    expect(result).not.toBe(oversized);
+    expect(result).toMatch(/^SUMMARY:\d+$/);
+    // The full oversized content must reach the summarizer prompt: the
+    // returned length is the prompt's length, which embeds the content plus
+    // the instruction template.
+    const promptLength = Number(result.slice('SUMMARY:'.length));
+    expect(promptLength).toBeGreaterThan(oversized.length);
+    expect(summarizedPromptLengths).toEqual([promptLength]);
+  });
+
+  it('summarizes oversized output when the active provider is not gemini', async () => {
+    const { adapter } = await makeSummarizingAdapter({
+      getActiveProvider: () => ({ name: 'openai' }),
+    });
+    const oversized = `command output line
+${'y'.repeat(1200)}`;
+
+    const result = await adapter.trySummarizeOutput(
+      oversized,
+      new AbortController().signal,
+      1000,
+    );
+
+    expect(result).not.toBe(oversized);
+    expect(result).toMatch(/^SUMMARY:\d+$/);
+    expect(Number(result.slice('SUMMARY:'.length))).toBeGreaterThan(
+      oversized.length,
+    );
+  });
+
+  it('returns content under the token budget unchanged without summarizing', async () => {
+    const { adapter, summarizedPromptLengths } = await makeSummarizingAdapter();
+    const small = 'short output';
+
+    const result = await adapter.trySummarizeOutput(
+      small,
+      new AbortController().signal,
+      1000,
+    );
+
+    expect(result).toBe(small);
+    expect(summarizedPromptLengths).toEqual([]);
+  });
+});
+
+function partToText(blocks: IContent['blocks'] | undefined): string {
+  if (blocks === undefined) {
+    return '';
+  }
+  return blocks
+    .map((block) => (block.type === 'text' ? block.text : ''))
+    .join('');
+}

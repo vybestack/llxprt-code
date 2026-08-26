@@ -24,7 +24,6 @@ export interface ProviderToolCall {
 // Enhanced provider capability types
 export interface ProviderCapabilities {
   supportsStreaming: boolean;
-  supportsTools: boolean;
   supportsVision: boolean;
   maxTokens: number;
   supportedFormats: string[];

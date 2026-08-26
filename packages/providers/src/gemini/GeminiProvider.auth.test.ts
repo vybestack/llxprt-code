@@ -8,12 +8,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { GeminiProvider } from './GeminiProvider.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 
-const googleGenAIConstructor = vi.fn();
-
-void vi.mock('@google/genai', () => ({
-  GoogleGenAI: googleGenAIConstructor,
-}));
-
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
 }));
@@ -27,13 +21,22 @@ const mockSettingsService = {
   getProviderSettings: vi.fn().mockReturnValue({}),
 };
 
+// The GoogleGenAI options the provider hands to the SDK client. These are
+// exactly the options `new GoogleGenAI(...)` receives in production, so
+// asserting on them pins what the SDK is configured with.
 type GeminiProviderInternals = {
-  createGenAIClient: (
+  buildGoogleGenAIOptions: (
     authToken: string,
     authMode: 'vertex-ai' | 'gemini-api-key',
     httpOptions: { headers: Record<string, string> },
     baseURL?: string,
-  ) => Promise<unknown>;
+  ) => {
+    apiKey: string;
+    vertexai: boolean;
+    project?: string;
+    location?: string;
+    httpOptions: { headers: Record<string, string>; baseUrl?: string };
+  };
 };
 
 function mockVertexAISettings(
@@ -51,16 +54,14 @@ function mockVertexAISettings(
   });
 }
 
-function createGenAIClientViaProvider(
+function buildGenAIOptionsViaProvider(
   provider: GeminiProvider,
   authToken: string,
   authMode: 'vertex-ai' | 'gemini-api-key',
-): Promise<unknown> {
-  return (provider as unknown as GeminiProviderInternals).createGenAIClient(
-    authToken,
-    authMode,
-    { headers: {} },
-  );
+): ReturnType<GeminiProviderInternals['buildGoogleGenAIOptions']> {
+  return (
+    provider as unknown as GeminiProviderInternals
+  ).buildGoogleGenAIOptions(authToken, authMode, { headers: {} });
 }
 
 function createProviderWithRuntimeSettings(): GeminiProvider {
@@ -168,14 +169,18 @@ describe('GeminiProvider Authentication', () => {
     });
   });
 
-  it('passes runtime Vertex AI project and location to GoogleGenAI', async () => {
+  it('passes runtime Vertex AI project and location to GoogleGenAI', () => {
     mockVertexAISettings();
 
     const provider = createProviderWithRuntimeSettings();
 
-    await createGenAIClientViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai');
+    const options = buildGenAIOptionsViaProvider(
+      provider,
+      'USE_VERTEX_AI',
+      'vertex-ai',
+    );
 
-    expect(googleGenAIConstructor).toHaveBeenCalledWith({
+    expect(options).toStrictEqual({
       apiKey: 'USE_VERTEX_AI',
       vertexai: true,
       project: 'settings-project',
@@ -184,15 +189,19 @@ describe('GeminiProvider Authentication', () => {
     });
   });
 
-  it('runtime settings override env vars for Vertex AI project and location', async () => {
+  it('runtime settings override env vars for Vertex AI project and location', () => {
     process.env.GOOGLE_CLOUD_PROJECT = 'env-project';
     process.env.GOOGLE_CLOUD_LOCATION = 'env-location';
     mockVertexAISettings('settings-project', 'settings-location');
     const provider = createProviderWithRuntimeSettings();
 
-    await createGenAIClientViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai');
+    const options = buildGenAIOptionsViaProvider(
+      provider,
+      'USE_VERTEX_AI',
+      'vertex-ai',
+    );
 
-    expect(googleGenAIConstructor).toHaveBeenCalledWith({
+    expect(options).toStrictEqual({
       apiKey: 'USE_VERTEX_AI',
       vertexai: true,
       project: 'settings-project',
@@ -201,14 +210,18 @@ describe('GeminiProvider Authentication', () => {
     });
   });
 
-  it('falls back to env vars when settings service returns no Vertex AI config', async () => {
+  it('falls back to env vars when settings service returns no Vertex AI config', () => {
     process.env.GOOGLE_CLOUD_PROJECT = 'env-project';
     process.env.GOOGLE_CLOUD_LOCATION = 'us-central1';
     const provider = createProviderWithRuntimeSettings();
 
-    await createGenAIClientViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai');
+    const options = buildGenAIOptionsViaProvider(
+      provider,
+      'USE_VERTEX_AI',
+      'vertex-ai',
+    );
 
-    expect(googleGenAIConstructor).toHaveBeenCalledWith({
+    expect(options).toStrictEqual({
       apiKey: 'USE_VERTEX_AI',
       vertexai: true,
       project: 'env-project',
@@ -217,74 +230,101 @@ describe('GeminiProvider Authentication', () => {
     });
   });
 
-  it('throws a clear error when Vertex AI project or location is missing', async () => {
+  it('throws a clear error when Vertex AI project or location is missing', () => {
     const provider = createProviderWithRuntimeSettings();
 
-    await expect(
-      createGenAIClientViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai'),
-    ).rejects.toThrow(
+    expect(() =>
+      buildGenAIOptionsViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai'),
+    ).toThrow(
       'Vertex AI mode is active but project/location are not configured',
     );
   });
 
-  it('throws when only a Vertex AI project is configured', async () => {
+  it('throws when only a Vertex AI project is configured', () => {
     process.env.GOOGLE_CLOUD_PROJECT = 'env-project';
     const provider = createProviderWithRuntimeSettings();
 
-    await expect(
-      createGenAIClientViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai'),
-    ).rejects.toThrow(
+    expect(() =>
+      buildGenAIOptionsViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai'),
+    ).toThrow(
       'Vertex AI mode is active but project/location are not configured',
     );
   });
 
-  it('throws when only a Vertex AI location is configured', async () => {
+  it('throws when only a Vertex AI location is configured', () => {
     process.env.GOOGLE_CLOUD_LOCATION = 'us-central1';
     const provider = createProviderWithRuntimeSettings();
 
-    await expect(
-      createGenAIClientViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai'),
-    ).rejects.toThrow(
+    expect(() =>
+      buildGenAIOptionsViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai'),
+    ).toThrow(
       'Vertex AI mode is active but project/location are not configured',
     );
   });
 
-  it('does not require project and location when application credentials are configured', async () => {
+  it('does not require project and location when application credentials are configured', () => {
     process.env.GOOGLE_APPLICATION_CREDENTIALS = '/path/to/credentials.json';
     const provider = createProviderWithRuntimeSettings();
 
-    await createGenAIClientViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai');
+    const options = buildGenAIOptionsViaProvider(
+      provider,
+      'USE_VERTEX_AI',
+      'vertex-ai',
+    );
 
-    expect(googleGenAIConstructor).toHaveBeenCalledWith({
+    expect(options).toStrictEqual({
       apiKey: 'USE_VERTEX_AI',
       vertexai: true,
       httpOptions: { headers: {} },
     });
   });
 
-  it('requires project and location when only GOOGLE_API_KEY is configured for Vertex AI', async () => {
+  it('requires project and location when only GOOGLE_API_KEY is configured for Vertex AI', () => {
     process.env.GOOGLE_API_KEY = 'vertex-api-key';
     const provider = createProviderWithRuntimeSettings();
 
-    await expect(
-      createGenAIClientViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai'),
-    ).rejects.toThrow(
+    expect(() =>
+      buildGenAIOptionsViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai'),
+    ).toThrow(
       'Vertex AI mode is active but project/location are not configured',
     );
   });
 
-  it('does not pass Vertex AI project and location for API key auth', async () => {
+  it('does not pass Vertex AI project and location for API key auth', () => {
     process.env.GOOGLE_CLOUD_PROJECT = 'env-project';
     process.env.GOOGLE_CLOUD_LOCATION = 'us-central1';
     const provider = createProviderWithRuntimeSettings();
 
-    await createGenAIClientViaProvider(provider, 'api-key', 'gemini-api-key');
+    const options = buildGenAIOptionsViaProvider(
+      provider,
+      'api-key',
+      'gemini-api-key',
+    );
 
-    expect(googleGenAIConstructor).toHaveBeenCalledWith({
+    expect(options).toStrictEqual({
       apiKey: 'api-key',
       vertexai: false,
       httpOptions: { headers: {} },
     });
+  });
+
+  it('maps a resolved baseURL into httpOptions.baseUrl for the SDK client', () => {
+    const provider = createProviderWithRuntimeSettings();
+
+    const options = (
+      provider as unknown as GeminiProviderInternals
+    ).buildGoogleGenAIOptions(
+      'api-key',
+      'gemini-api-key',
+      { headers: {} },
+      'https://proxy.example.com',
+    );
+
+    expect(options.httpOptions).toStrictEqual({
+      headers: {},
+      baseUrl: 'https://proxy.example.com',
+    });
+    expect(options.vertexai).toBe(false);
   });
 
   it('should respect auth precedence (SettingsService over env var)', async () => {
@@ -324,25 +364,25 @@ describe('GeminiProvider Authentication', () => {
     });
   });
 
-  it('rejects whitespace-only Vertex AI project settings', async () => {
+  it('rejects whitespace-only Vertex AI project settings', () => {
     mockVertexAISettings('   ', 'europe-west4');
     const provider = createProviderWithRuntimeSettings();
 
-    await expect(
-      createGenAIClientViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai'),
-    ).rejects.toThrow(
+    expect(() =>
+      buildGenAIOptionsViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai'),
+    ).toThrow(
       'Vertex AI mode is active but project/location are not configured',
     );
   });
 
-  it('rejects whitespace-only Vertex AI location from the environment', async () => {
+  it('rejects whitespace-only Vertex AI location from the environment', () => {
     process.env.GOOGLE_CLOUD_PROJECT = 'env-project';
     process.env.GOOGLE_CLOUD_LOCATION = '   ';
     const provider = createProviderWithRuntimeSettings();
 
-    await expect(
-      createGenAIClientViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai'),
-    ).rejects.toThrow(
+    expect(() =>
+      buildGenAIOptionsViaProvider(provider, 'USE_VERTEX_AI', 'vertex-ai'),
+    ).toThrow(
       'Vertex AI mode is active but project/location are not configured',
     );
   });
