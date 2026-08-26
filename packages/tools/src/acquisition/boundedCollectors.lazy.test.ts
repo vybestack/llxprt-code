@@ -24,6 +24,8 @@ function countHeapClass(name: string): number {
   // Validate the snapshot layout via a class every JavaScript heap has; a
   // Bun format change must fail loudly instead of silently counting zero.
   if (
+    !Array.isArray(snapshot.nodes) ||
+    !Array.isArray(snapshot.nodeClassNames) ||
     snapshot.nodes.length % 4 !== 0 ||
     snapshot.nodeClassNames.indexOf('Object') < 0
   ) {
@@ -31,6 +33,7 @@ function countHeapClass(name: string): number {
       'Unexpected heap snapshot encoding; class counts would be unreliable',
     );
   }
+  const classCount = snapshot.nodeClassNames.length;
   const classIndex = snapshot.nodeClassNames.indexOf(name);
   if (classIndex < 0) {
     return 0;
@@ -38,7 +41,13 @@ function countHeapClass(name: string): number {
 
   let count = 0;
   for (let position = 2; position < snapshot.nodes.length; position += 4) {
-    if (snapshot.nodes[position] === classIndex) {
+    const nodeClass = snapshot.nodes[position];
+    if (nodeClass >= classCount) {
+      throw new Error(
+        'Unexpected heap snapshot encoding; class index out of bounds',
+      );
+    }
+    if (nodeClass === classIndex) {
       count += 1;
     }
   }

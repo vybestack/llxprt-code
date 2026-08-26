@@ -8,6 +8,11 @@
  * Scoped tree consumers for the shell parser. Keeping the tree lifetime in
  * one place (consume, then delete) prevents the tree-sitter heap objects
  * from outliving the call that parsed them (Issue #3329 secondary leak #4).
+ *
+ * This module and shell-parser.ts import each other. Every binding imported
+ * across that cycle must be used only inside function bodies or call-time
+ * default-parameter expressions, never at module-evaluation time, or the
+ * cycle throws a TDZ ReferenceError during import.
  */
 
 import type { Tree } from 'web-tree-sitter';
