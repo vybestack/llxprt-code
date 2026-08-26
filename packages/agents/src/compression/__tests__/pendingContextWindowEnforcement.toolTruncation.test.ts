@@ -79,7 +79,7 @@ function buildEnforcerDeps(
     performCompression: async () => PerformCompressionResult.FAILED,
     buildCompressionContext: async () => ({}) as never,
     compressWithFallbackStrategy: async () => ({ newHistory: [] }) as never,
-    applyFallbackCompressionResult: () => {},
+    applyFallbackCompressionResult: async () => {},
     setSuppressDensityDirty: () => {},
     recordCompressionFailure: () => {},
     resetLastPromptTokenCount: () => {},
@@ -175,5 +175,212 @@ describe('PendingContextWindowEnforcer structured overflow on estimator error (i
     await expect(enforcer.enforce(0, 'prompt-1')).rejects.toThrow(
       /context limit/i,
     );
+  });
+
+  it('reports an applied fallback that does not commit candidate history', async () => {
+    historyService.add(textContent('human', 'history remains unchanged'));
+    await historyService.waitForTokenUpdates();
+
+    const deps = buildEnforcerDeps(historyService, {
+      completionBudget: 100,
+      marginAdjustedLimit: 1,
+    });
+    deps.compressWithFallbackStrategy = async () => ({
+      kind: 'applied',
+      newHistory: [textContent('human', 'candidate was never committed')],
+      metadata: {
+        originalMessageCount: 1,
+        compressedMessageCount: 1,
+        strategyUsed: 'top-down-truncation',
+        llmCallMade: false,
+      },
+    });
+
+    await expect(
+      new PendingContextWindowEnforcer(deps).enforce(
+        0,
+        'missing-fallback-commit',
+      ),
+    ).rejects.toThrow(
+      /reported applied but no candidate history was committed/i,
+    );
+    expect(historyService.getRawHistory()[0].blocks[0]).toStrictEqual({
+      type: 'text',
+      text: 'history remains unchanged',
+    });
+  });
+
+  it('restores the complete original state when an applied fallback rebuild fails', async () => {
+    historyService.add({
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'original retained answer' }],
+      metadata: {
+        id: 'resp-original-parent',
+        responsesStored: true,
+        providerMetadata: { custom: 'original metadata' },
+      },
+    });
+    historyService.add(textContent('human', 'original follow-up'));
+    await historyService.waitForTokenUpdates();
+    historyService.setBaseTokenOffset(37);
+    const anchor = historyService.getChronologyTrace()[0].seq;
+    historyService.setCacheAnchorSeq(anchor);
+    const originalHistory = [...historyService.getRawHistory()];
+    const originalHistoryTokens =
+      await historyService.estimateTokensForContents(originalHistory);
+
+    const deps = buildEnforcerDeps(historyService, {
+      completionBudget: 100,
+      marginAdjustedLimit: 1,
+    });
+    deps.compressWithFallbackStrategy = async () => ({
+      kind: 'applied',
+      newHistory: [
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'candidate rewrite' }],
+          metadata: {
+            id: 'resp-candidate',
+            responsesStored: true,
+          },
+        },
+      ],
+      metadata: {
+        originalMessageCount: 2,
+        compressedMessageCount: 1,
+        strategyUsed: 'top-down-truncation',
+        llmCallMade: false,
+      },
+    });
+    deps.applyFallbackCompressionResult = async (result, applyResult) => {
+      if (result.kind === 'applied') {
+        await applyResult(
+          result.newHistory,
+          result.newHistory[0],
+          result.metadata.topPreserved ?? 0,
+        );
+      }
+    };
+    historyService.on('tokensUpdated', () => {
+      throw new Error('injected rebuild failure');
+    });
+
+    await expect(
+      new PendingContextWindowEnforcer(deps).enforce(0, 'failed-rebuild'),
+    ).rejects.toThrow(/context limit/i);
+
+    expect(historyService.getRawHistory()).toStrictEqual(originalHistory);
+    expect(historyService.getTotalTokens()).toBe(originalHistoryTokens + 37);
+    expect(historyService.getCacheAnchorSeq()).toBe(anchor);
+    expect(historyService.getRawHistory()[0].metadata?.responsesStored).toBe(
+      true,
+    );
+    expect(historyService.getRawHistory()[0].metadata?.id).toBe(
+      'resp-original-parent',
+    );
+  });
+
+  it('invalidates lineage after a successful fallback rebuild but preserves a structural no-op lineage', async () => {
+    historyService.add({
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'x'.repeat(10_000) }],
+      metadata: {
+        id: 'resp-before-fallback',
+        responsesStored: true,
+        providerMetadata: { custom: 'preserve me' },
+      },
+    });
+    await historyService.waitForTokenUpdates();
+
+    const fallbackHistory: IContent[] = [
+      {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'short fallback summary' }],
+        metadata: {
+          id: 'resp-in-fallback',
+          responsesStored: true,
+          providerMetadata: { custom: 'fallback metadata' },
+        },
+      },
+    ];
+    const deps = buildEnforcerDeps(historyService, {
+      completionBudget: 100,
+      marginAdjustedLimit: 500,
+    });
+    deps.compressWithFallbackStrategy = async () => ({
+      kind: 'applied',
+      newHistory: fallbackHistory,
+      metadata: {
+        originalMessageCount: 1,
+        compressedMessageCount: 1,
+        strategyUsed: 'top-down-truncation',
+        llmCallMade: false,
+      },
+    });
+    deps.applyFallbackCompressionResult = async (result, applyResult) => {
+      if (result.kind === 'applied') {
+        await applyResult(
+          result.newHistory,
+          result.newHistory[0],
+          result.metadata.topPreserved ?? 0,
+        );
+      }
+    };
+
+    const enforcer = new PendingContextWindowEnforcer(deps);
+
+    await enforcer.enforce(0, 'successful-fallback');
+
+    expect(historyService.getRawHistory()[0].metadata).toMatchObject({
+      id: 'resp-in-fallback',
+      providerMetadata: { custom: 'fallback metadata' },
+    });
+    expect(
+      historyService.getRawHistory()[0].metadata?.responsesStored,
+    ).toBeUndefined();
+
+    const noOpHistory = new HistoryService();
+    noOpHistory.add({
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'x'.repeat(10_000) }],
+      metadata: {
+        id: 'resp-noop',
+        responsesStored: true,
+        providerMetadata: { custom: 'unchanged metadata' },
+      },
+    });
+    await noOpHistory.waitForTokenUpdates();
+    const noOpDeps = buildEnforcerDeps(noOpHistory, {
+      completionBudget: 100,
+      marginAdjustedLimit: 1,
+    });
+    noOpDeps.compressWithFallbackStrategy = async () => ({
+      kind: 'noop',
+      reason: 'already-under-target',
+      metadata: {
+        originalMessageCount: 1,
+        compressedMessageCount: 1,
+        strategyUsed: 'top-down-truncation',
+        llmCallMade: false,
+      },
+    });
+    noOpDeps.applyFallbackCompressionResult = async (result, applyResult) => {
+      if (result.kind === 'applied') {
+        await applyResult(
+          result.newHistory,
+          result.newHistory[0],
+          result.metadata.topPreserved ?? 0,
+        );
+      }
+    };
+
+    await expect(
+      new PendingContextWindowEnforcer(noOpDeps).enforce(0, 'noop-fallback'),
+    ).rejects.toThrow(/context limit/i);
+    expect(noOpHistory.getRawHistory()[0].metadata).toMatchObject({
+      id: 'resp-noop',
+      responsesStored: true,
+      providerMetadata: { custom: 'unchanged metadata' },
+    });
   });
 });

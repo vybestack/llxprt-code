@@ -24,6 +24,7 @@ export interface StatefulConversation {
   enabled: boolean;
   parentId: string | undefined;
   content: IContent[];
+  parentPromptTokens?: number;
 }
 
 const RESPONSES_STATEFUL_KEY = 'responses-stateful';
@@ -75,6 +76,21 @@ function isEligibleParent(entry: IContent, rawBaseURL: string): boolean {
   if (entry.speaker !== 'ai') return false;
   if (!hasStoredResponseId(entry.metadata)) return false;
   return isSameEndpoint(entry.metadata?.providerBaseURL, rawBaseURL);
+}
+
+function readObservedPromptTokens(
+  entry: IContent | undefined,
+): number | undefined {
+  if (entry === undefined) return undefined;
+  if (entry.metadata === undefined) return undefined;
+  if (entry.metadata.usage === undefined) return undefined;
+
+  const promptTokens: unknown = entry.metadata.usage.promptTokens;
+  if (typeof promptTokens !== 'number') return undefined;
+  if (!Number.isFinite(promptTokens)) return undefined;
+  if (!Number.isInteger(promptTokens)) return undefined;
+  if (promptTokens < 0) return undefined;
+  return promptTokens;
 }
 
 /**
@@ -184,10 +200,12 @@ export function computeStatefulConversation(
     return { enabled: true, parentId: undefined, content };
   }
 
+  const parentPromptTokens = readObservedPromptTokens(content[parentIndex]);
   return {
     enabled: true,
     parentId,
     content: trimmedContent,
+    ...(parentPromptTokens === undefined ? {} : { parentPromptTokens }),
   };
 }
 

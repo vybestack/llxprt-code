@@ -43,6 +43,22 @@ import {
   InvalidContextBudgetError,
 } from '../compressionBudgeting.js';
 import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
+import type {
+  RuntimePromptEstimateRequest,
+  RuntimeTokenizerFactory,
+} from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
+import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import {
+  clearActiveProviderRuntimeContext,
+  createProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { OpenAIResponsesProvider } from '@vybestack/llxprt-code-providers';
+import { prepareAtSendSeam } from '../../core/promptEnvelopeSendSeam.js';
+import { ContextOverflowError } from '../contextOverflowError.js';
 
 // ---------------------------------------------------------------------------
 // Logger stub — DebugLogger surface used by the enforcer
@@ -147,6 +163,7 @@ function buildEnforcerHarness(
     ensureDensityOptimized,
     performCompression,
     performFallbackCompression,
+    resetPromptTokenBaseline: () => {},
   };
   return {
     enforcer: new ProviderContentEnforcer(deps),
@@ -172,6 +189,49 @@ function buildEnvelope(
     contents,
     ...(pendingContents !== undefined ? { pendingContents } : {}),
   } as ProviderContentEnvelope;
+}
+
+function createPromptTokenizerFactory(): RuntimeTokenizerFactory {
+  return {
+    getTokenizer: () => undefined,
+    estimatePrompt: async (request: RuntimePromptEstimateRequest) => ({
+      count: await request.legacyEstimate(),
+      method: 'calibrated',
+      family: 'stateful-enforcement-fixture',
+      estimatorVersion: '1',
+      assetRevision: 'fixture',
+      projectionRevision: request.projectionRevision,
+    }),
+  };
+}
+
+function amplifiedProjectionLength(
+  request: RuntimePromptEstimateRequest,
+): number {
+  const projection = request.finalizedProjection;
+  if (
+    typeof projection !== 'object' ||
+    projection === null ||
+    !('promptText' in projection) ||
+    typeof projection.promptText !== 'string'
+  ) {
+    throw new Error('Expected finalized prompt text');
+  }
+  return projection.promptText.length * 4;
+}
+
+function createAmplifyingPromptTokenizerFactory(): RuntimeTokenizerFactory {
+  return {
+    getTokenizer: () => undefined,
+    estimatePrompt: async (request) => ({
+      count: amplifiedProjectionLength(request),
+      method: 'exact',
+      family: 'amplified-stateful-fixture',
+      estimatorVersion: '1',
+      assetRevision: 'fixture',
+      projectionRevision: request.projectionRevision,
+    }),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -227,6 +287,233 @@ describe('P26: providerContentEnforcement characterization', () => {
 
     expect(finalizedEstimate).toHaveBeenCalled();
     expect(harness.performCompression).toHaveBeenCalled();
+  });
+
+  it('uses the stateful Responses effective estimate and reprojects recomposed history before send', async () => {
+    const settings = new SettingsService();
+    const tokenizerFactory = createPromptTokenizerFactory();
+    const config = createRuntimeConfigStub(settings, {
+      getTokenizerFactory: () => tokenizerFactory,
+    });
+    const providerRuntime = createProviderRuntimeContext({
+      settingsService: settings,
+      config,
+      runtimeId: 'stateful-responses-enforcement',
+    });
+    setActiveProviderRuntimeContext(providerRuntime);
+
+    try {
+      const provider = new OpenAIResponsesProvider(
+        'stateful-test-token',
+        'https://api.openai.com/v1',
+      );
+      const harness = buildEnforcerHarness({
+        compressionThreshold: 0.5,
+        contextLimit: 20_000,
+        generationConfig: { maxOutputTokens: 100 },
+      });
+      const retainedParent: IContent = {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'retained answer' }],
+        metadata: {
+          id: 'resp-retained-parent',
+          responsesStored: true,
+          usage: {
+            promptTokens: 12_000,
+            cachedTokens: 11_000,
+            completionTokens: 50,
+            totalTokens: 12_050,
+          },
+        },
+      };
+      harness.historyService.add(textContent('human', 'retained question'));
+      harness.historyService.add(retainedParent);
+      await harness.historyService.waitForTokenUpdates();
+      const pending = textContent('human', 'small wire delta');
+      const effectiveEstimates: PromptEnvelopeEstimate[] = [];
+
+      const estimateAtSendSeam = async (
+        candidate: IContent[],
+      ): Promise<number> => {
+        const prepared = await prepareAtSendSeam(
+          provider,
+          createProviderCallOptions({
+            providerName: provider.name,
+            settings,
+            config,
+            runtime: providerRuntime,
+            resolved: {
+              model: 'gpt-4o',
+              baseURL: 'https://api.openai.com/v1',
+              telemetry: { providerName: provider.name },
+            },
+            contents: candidate,
+            ephemerals: { 'responses-stateful': true },
+          }),
+        );
+        if (prepared.estimate === null) {
+          throw new Error('Responses projection did not produce an estimate');
+        }
+        effectiveEstimates.push(prepared.estimate);
+        return prepared.estimate.estimatedPromptTokens;
+      };
+      harness.deps.estimateFinalizedPromptTokens = estimateAtSendSeam;
+      harness.performCompression.mockImplementation(async () => {
+        harness.historyService.clear();
+        harness.historyService.add(
+          textContent('human', 'compressed retained summary'),
+        );
+        return PerformCompressionResult.COMPRESSED;
+      });
+
+      const result = await harness.enforcer.enforce(
+        buildEnvelope(harness.historyService.getCuratedForProvider([pending]), [
+          pending,
+        ]),
+        'stateful-effective-threshold',
+        provider,
+      );
+
+      const initialStateful = effectiveEstimates.find(
+        (estimate) => estimate.statefulParentUsed === true,
+      );
+      if (initialStateful?.incrementalTokens === undefined) {
+        throw new Error('Expected a stateful Responses estimate');
+      }
+      const finalEstimate = effectiveEstimates[effectiveEstimates.length - 1];
+
+      expect(initialStateful.transmittedTokens).toBeLessThan(10_000);
+      expect(initialStateful).toMatchObject({
+        retainedBaselineTokens: 12_000,
+        effectiveTokens: initialStateful.estimatedPromptTokens,
+        statefulParentUsed: true,
+      });
+      expect(initialStateful.transmittedTokens).toBeGreaterThan(
+        initialStateful.incrementalTokens,
+      );
+      expect(12_000 + initialStateful.incrementalTokens).toBe(
+        initialStateful.estimatedPromptTokens,
+      );
+      expect(finalEstimate).toMatchObject({
+        transmittedTokens: finalEstimate.estimatedPromptTokens,
+        retainedBaselineTokens: 0,
+        effectiveTokens: finalEstimate.estimatedPromptTokens,
+        statefulParentUsed: false,
+      });
+      expect(finalEstimate.estimatedPromptTokens).toBeLessThan(
+        initialStateful.estimatedPromptTokens,
+      );
+      const resultTexts = result
+        .flatMap((content) => content.blocks)
+        .filter((block): block is TextBlock => block.type === 'text')
+        .map((block) => block.text);
+      expect(resultTexts).toContain('compressed retained summary');
+      expect(resultTexts).toContain('small wire delta');
+    } finally {
+      clearActiveProviderRuntimeContext();
+    }
+  });
+
+  it('preserves structured overflow metadata when real stateful reprojection remains over limit', async () => {
+    const settings = new SettingsService();
+    const tokenizerFactory = createAmplifyingPromptTokenizerFactory();
+    const config = createRuntimeConfigStub(settings, {
+      getTokenizerFactory: () => tokenizerFactory,
+    });
+    const providerRuntime = createProviderRuntimeContext({
+      settingsService: settings,
+      config,
+      runtimeId: 'stateful-responses-overflow',
+    });
+    setActiveProviderRuntimeContext(providerRuntime);
+
+    try {
+      const provider = new OpenAIResponsesProvider(
+        'stateful-overflow-token',
+        'https://api.openai.com/v1',
+      );
+      const harness = buildEnforcerHarness({
+        compressionThreshold: 0.5,
+        contextLimit: 2_000,
+        generationConfig: { maxOutputTokens: 100 },
+      });
+      harness.historyService.add(textContent('human', 'retained question'));
+      harness.historyService.add({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'retained answer' }],
+        metadata: {
+          id: 'resp-overflow-parent',
+          responsesStored: true,
+          usage: {
+            promptTokens: 700,
+            completionTokens: 20,
+            totalTokens: 720,
+          },
+        },
+      });
+      await harness.historyService.waitForTokenUpdates();
+      const pending = textContent(
+        'human',
+        'Continue the retained analysis with one additional observation.',
+      );
+      const estimates: PromptEnvelopeEstimate[] = [];
+      harness.deps.estimateFinalizedPromptTokens = async (candidate) => {
+        const prepared = await prepareAtSendSeam(
+          provider,
+          createProviderCallOptions({
+            providerName: provider.name,
+            settings,
+            config,
+            runtime: providerRuntime,
+            resolved: {
+              model: 'gpt-4o',
+              baseURL: 'https://api.openai.com/v1',
+              telemetry: { providerName: provider.name },
+            },
+            contents: candidate,
+            ephemerals: { 'responses-stateful': true },
+          }),
+        );
+        if (prepared.estimate === null) {
+          throw new Error('Responses projection did not produce an estimate');
+        }
+        estimates.push(prepared.estimate);
+        return prepared.estimate.estimatedPromptTokens;
+      };
+      harness.performCompression.mockResolvedValue(
+        PerformCompressionResult.COMPRESSED,
+      );
+      harness.performFallbackCompression.mockResolvedValue(false);
+
+      let overflow: unknown;
+      try {
+        await harness.enforcer.enforce(
+          buildEnvelope(
+            harness.historyService.getCuratedForProvider([pending]),
+            [pending],
+          ),
+          'stateful-ineffective-overflow',
+          provider,
+        );
+      } catch (error) {
+        overflow = error;
+      }
+
+      expect(overflow).toBeInstanceOf(ContextOverflowError);
+      if (!(overflow instanceof ContextOverflowError)) {
+        throw new Error('Expected structured local context overflow');
+      }
+      const finalEstimate = estimates[estimates.length - 1];
+      expect(overflow.estimatedRequestTokenCount).toBe(
+        finalEstimate.estimatedPromptTokens,
+      );
+      expect(overflow.remainingTokenCount).toBe(905);
+      expect(overflow.message).toContain(
+        'Last-resort tool-response truncation replaced 0 response(s)',
+      );
+    } finally {
+      clearActiveProviderRuntimeContext();
+    }
   });
 
   it('triggers compression when projected tokens exceed the compression threshold', async () => {

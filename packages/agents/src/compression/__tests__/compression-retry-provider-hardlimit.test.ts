@@ -73,6 +73,7 @@ function buildEnforcerHarness(
     ensureDensityOptimized,
     performCompression,
     performFallbackCompression,
+    resetPromptTokenBaseline: () => {},
     ...overrides,
   };
   return {
@@ -279,7 +280,7 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       harness.deps.performFallbackCompression.mockImplementation(
         async (_promptId, applyResult) => {
           estimateSpy.mockResolvedValue(50_000); // fits
-          applyResult([makeUserMessage('truncated history')]);
+          await applyResult([makeUserMessage('truncated history')]);
           return true;
         },
       );
@@ -586,7 +587,7 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       harness.deps.performFallbackCompression.mockImplementation(
         async (_promptId, applyResult) => {
           estimateSpy.mockResolvedValue(50_000);
-          applyResult([makeUserMessage('truncated history')]);
+          await applyResult([makeUserMessage('truncated history')]);
           return true;
         },
       );
@@ -629,7 +630,7 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       harness.deps.performFallbackCompression.mockImplementation(
         async (_promptId, applyResult) => {
           estimateSpy.mockResolvedValue(50_000);
-          applyResult([makeUserMessage('truncated history')]);
+          await applyResult([makeUserMessage('truncated history')]);
           return true;
         },
       );
@@ -847,17 +848,8 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
     });
   });
 
-  // -----------------------------------------------------------------------
-  // Finding 3 (CodeRabbit PR #2598): Data integrity bug — silent history loss
-  //
-  // If performFallbackCompression rejects AND restoring the original history
-  // fails, forceTruncation can leave historyService empty. A low projection
-  // against that empty history would then fit under the margin-adjusted limit,
-  // and enforce() would return "successfully" despite having lost all
-  // established history. This must be rejected, not silently accepted.
-  // -----------------------------------------------------------------------
-  describe('data integrity: rejects instead of silently accepting lost history (CodeRabbit PR #2598)', () => {
-    it('throws when fallback rejects, history restoration fails, and empty-history projection fits', async () => {
+  describe('data integrity: rejects failed fallback candidate installation', () => {
+    it('throws when candidate installation fails even when the candidate projection fits', async () => {
       runtimeContext = buildRuntimeContext(historyService, {
         contextLimit: STANDARD_CONTEXT_LIMIT,
         compressionThreshold: COMPRESSION_THRESHOLD,
@@ -867,24 +859,12 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       const pending = makeUserMessage('pending request');
       const contents = historyService.getCuratedForProvider([pending]);
 
-      const harness = buildEnforcerHarness(historyService, runtimeContext);
-
-      // Script the projection sequence so the real fallback stage is
-      // provably reached:
-      // 1. Initial — over-limit
-      // 2. Post-density — over-limit
-      // 3. Post-first-compression — over-limit, effective (>=5%) to avoid retry
-      // 4. Post-truncation — under-limit BUT history was lost
-      const estimateSpy = vi.spyOn(historyService, 'estimateTokensForContents');
-      // completionBudget = 65_536, marginAdjustedLimit = 199_995
-      // estimate > 134_459 → over-limit
-      estimateSpy.mockResolvedValueOnce(150_000); // initial
-      estimateSpy.mockResolvedValueOnce(150_000); // post-density
-      // 150_000 + 65_536 = 215_536, need >=5% reduction: <= 139_223
-      // 135_000 + 65_536 = 200_536 > 199_995 (still over)
-      estimateSpy.mockResolvedValueOnce(135_000); // post-compression (effective, still over)
-      // Post-truncation: empty history fits, but history was lost
-      estimateSpy.mockResolvedValueOnce(50_000); // post-truncation
+      const finalizedEstimates = [150_000, 150_000, 135_000, 50_000];
+      let estimateIndex = 0;
+      const harness = buildEnforcerHarness(historyService, runtimeContext, {
+        estimateFinalizedPromptTokens: async () =>
+          finalizedEstimates[estimateIndex++] ?? 50_000,
+      });
 
       harness.deps.performCompression.mockImplementation(async () => {
         historyService.clear();
@@ -892,19 +872,12 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
         return PerformCompressionResult.COMPRESSED;
       });
 
-      // Make addAll fail during fallback, so restoreHistory cannot apply
-      // either the new or backup history — leaving historyService empty.
-      const addAllSpy = vi
-        .spyOn(historyService, 'addAll')
-        .mockImplementation(() => {
-          throw new Error('history persistence layer down');
-        });
-
-      // The fallback rejects because restoreHistory throws when addAll fails
-      // for both new and backup history.
       harness.deps.performFallbackCompression.mockImplementation(
         async (_promptId, applyResult) => {
-          applyResult([makeUserMessage('truncated history')]);
+          historyService.on('tokensUpdated', () => {
+            throw new Error('history persistence layer down');
+          });
+          await applyResult([makeUserMessage('truncated history')]);
           return true;
         },
       );
@@ -917,11 +890,8 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
         );
       } catch (error) {
         thrownError = error as Error;
-      } finally {
-        addAllSpy.mockRestore();
       }
 
-      // Enforcement MUST reject rather than silently accept lost history.
       expect(thrownError).toBeInstanceOf(Error);
       expect(thrownError!.message).toContain(
         'Truncation fallback failed during hard-limit enforcement',

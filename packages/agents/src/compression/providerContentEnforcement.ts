@@ -7,7 +7,10 @@
 import type { ModelGenerationSettings } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import {
+  invalidateResponsesStatefulChain,
+  type IContent,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -43,8 +46,9 @@ export interface ProviderContentEnforcementDeps {
   ) => Promise<PerformCompressionResult>;
   performFallbackCompression: (
     promptId: string,
-    applyResult: (newHistory: IContent[]) => void,
+    applyResult: (newHistory: IContent[]) => Promise<void>,
   ) => Promise<boolean>;
+  resetPromptTokenBaseline: () => void;
   estimateFinalizedPromptTokens?: (contents: IContent[]) => Promise<number>;
 }
 
@@ -526,32 +530,28 @@ export class ProviderContentEnforcer {
   }
 
   /**
-   * Executes the fallback truncation strategy and manages history restoration.
-   * Truncation is only considered successfully applied when the fallback
-   * reported success AND history was restored into historyService.
+   * Executes fallback truncation and commits its candidate history atomically.
+   * The existing history remains untouched unless the complete candidate is
+   * accepted and its token accounting succeeds.
    */
   private async executeFallbackTruncation(promptId: string): Promise<{
     truncationApplied: boolean;
     truncationFailure?: Error;
   }> {
-    const originalHistory = this.deps.historyService.getCurated();
-    const fallbackState = { historyRestored: false };
     let truncationFailure: Error | undefined;
     let fallbackSucceeded = false;
+    const candidate = { committed: false };
     try {
       fallbackSucceeded = await this.deps.performFallbackCompression(
         promptId,
-        (newHistory) => {
-          try {
-            this.restoreHistory(newHistory);
-            fallbackState.historyRestored = true;
-          } catch (restoreError) {
-            fallbackState.historyRestored = this.tryRestoreHistory(
-              originalHistory,
-              '[CompressionHandler] Failed to restore history after fallback failure',
-            );
-            throw restoreError;
-          }
+        async (newHistory) => {
+          await this.deps.historyService.replaceAll(
+            [...invalidateResponsesStatefulChain(newHistory)],
+            this.deps.runtimeContext.state.model,
+          );
+          this.deps.historyService.resetCacheAnchorSeq();
+          this.deps.resetPromptTokenBaseline();
+          candidate.committed = true;
         },
       );
     } catch (fallbackError) {
@@ -561,34 +561,15 @@ export class ProviderContentEnforcer {
           '[CompressionHandler] Provider truncation fallback rejected during hard-limit enforcement',
         fallbackError,
       );
-      if (!fallbackState.historyRestored) {
-        fallbackState.historyRestored = this.tryRestoreHistory(
-          originalHistory,
-          '[CompressionHandler] History restored after fallback rejection',
-        );
-      }
     }
-    if (!fallbackSucceeded && !fallbackState.historyRestored) {
-      this.deps.logger.debug(
-        () =>
-          '[CompressionHandler] Fallback compression returned false; restoring original history',
-      );
-      fallbackState.historyRestored = this.tryRestoreHistory(
-        originalHistory,
-        '[CompressionHandler] Failed to restore history after fallback returned false',
-      );
-    } else if (fallbackSucceeded && !fallbackState.historyRestored) {
+    if (fallbackSucceeded && !candidate.committed) {
       this.deps.logger.warn(
         () =>
-          '[CompressionHandler] Fallback compression succeeded without applying history; restoring original history',
-      );
-      fallbackState.historyRestored = this.tryRestoreHistory(
-        originalHistory,
-        '[CompressionHandler] Failed to restore history after fallback succeeded without applying history',
+          '[CompressionHandler] Fallback compression succeeded without providing candidate history',
       );
     }
     return {
-      truncationApplied: fallbackSucceeded && fallbackState.historyRestored,
+      truncationApplied: fallbackSucceeded && candidate.committed,
       truncationFailure,
     };
   }
@@ -640,59 +621,6 @@ export class ProviderContentEnforcer {
     return compressionFailure === undefined
       ? { contents, projected }
       : { contents, projected, compressionFailure };
-  }
-
-  private restoreHistory(history: IContent[]): void {
-    const backup = this.deps.historyService.getCurated();
-    this.deps.historyService.clear();
-    // Post-truncation rebuild: the prefix is already destroyed, so reset the
-    // cache anchor (#3070). Subsequent clears in the error-handling flow find
-    // it already at 0.
-    this.deps.historyService.resetCacheAnchorSeq();
-    try {
-      this.addHistoryEntries(history);
-    } catch (restoreError) {
-      this.deps.historyService.clear();
-      try {
-        this.addHistoryEntries(backup);
-      } catch (backupError) {
-        this.deps.logger.error(
-          () =>
-            '[CompressionHandler] Failed to restore both new and backup history; retrying requested history',
-          backupError,
-        );
-        try {
-          this.deps.historyService.clear();
-          this.addHistoryEntries(history);
-          return;
-        } catch (finalError) {
-          this.deps.historyService.clear();
-          this.deps.logger.error(
-            () =>
-              '[CompressionHandler] All history restoration attempts failed; history is empty',
-            finalError,
-          );
-        }
-      }
-      throw restoreError;
-    }
-  }
-
-  private addHistoryEntries(history: IContent[]): void {
-    this.deps.historyService.addAll(
-      history,
-      this.deps.runtimeContext.state.model,
-    );
-  }
-
-  private tryRestoreHistory(history: IContent[], message: string): boolean {
-    try {
-      this.restoreHistory(history);
-      return true;
-    } catch (restoreError) {
-      this.deps.logger.error(() => message, restoreError);
-      return false;
-    }
   }
 
   private recomposeProviderContents(pendingContents: IContent[]): IContent[] {
