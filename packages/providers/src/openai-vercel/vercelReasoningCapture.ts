@@ -16,6 +16,14 @@
 
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { resolveReasoningField } from '../utils/reasoningField.js';
+import {
+  assertProviderStreamByteLimit,
+  MAX_PROVIDER_REASONING_CAPTURE_BYTES,
+  MAX_PROVIDER_SSE_LINE_BYTES,
+  ProviderStreamProtocolError,
+  exceedsUtf8ByteLimit,
+  utf8ByteLength,
+} from '../streamLimits.js';
 
 /**
  * Buffer that accumulates reasoning chunks captured from the
@@ -26,6 +34,7 @@ import { resolveReasoningField } from '../utils/reasoningField.js';
  */
 export interface CaptureBuffer {
   reasoningChunks: string[];
+  reasoningBytes: number;
   finalized: boolean;
   headers?: Headers;
   parsePromise?: Promise<void>;
@@ -36,6 +45,7 @@ export interface CaptureBuffer {
 export function createCaptureBuffer(fieldName?: string): CaptureBuffer {
   return {
     reasoningChunks: [],
+    reasoningBytes: 0,
     finalized: false,
     headers: undefined,
     parsePromise: undefined,
@@ -73,6 +83,14 @@ function captureReasoningFromJson(
     delta,
   });
   if (resolved !== undefined) {
+    const reasoningBytes =
+      captureBuffer.reasoningBytes + utf8ByteLength(resolved.value);
+    assertProviderStreamByteLimit(
+      'captured reasoning',
+      reasoningBytes,
+      MAX_PROVIDER_REASONING_CAPTURE_BYTES,
+    );
+    captureBuffer.reasoningBytes = reasoningBytes;
     captureBuffer.reasoningChunks.push(resolved.value);
     captureBuffer.actualFieldName = resolved.actualFieldName;
     logger.debug(
@@ -91,16 +109,23 @@ export async function parseReasoningFromSseStream(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   captureBuffer: CaptureBuffer,
   logger: DebugLogger,
+  signal?: AbortSignal,
 ): Promise<void> {
   const decoder = new TextDecoder();
   let buffer = '';
+  const cancelReader = (): void => {
+    void reader.cancel(signal?.reason).catch(() => undefined);
+  };
+  signal?.addEventListener('abort', cancelReader, { once: true });
 
   try {
-    let streamDone = false;
+    let streamDone = signal?.aborted === true;
+    if (streamDone) {
+      cancelReader();
+    }
     while (!streamDone) {
       const { done, value } = await reader.read();
-      if (done) {
-        captureBuffer.finalized = true;
+      if (done || signal?.aborted === true) {
         streamDone = true;
         continue;
       }
@@ -110,6 +135,16 @@ export async function parseReasoningFromSseStream(
       // Parse SSE chunks (data: {...}\n\n)
       const lines = buffer.split('\n');
       buffer = lines.pop() ?? '';
+      // Cheap length pre-check first: this re-examines a growing accumulator on
+      // every read, so measuring it exactly each time would be O(n^2) in the
+      // no-newline case this limit exists to catch.
+      if (exceedsUtf8ByteLimit(buffer, MAX_PROVIDER_SSE_LINE_BYTES)) {
+        assertProviderStreamByteLimit(
+          'incomplete SSE line',
+          utf8ByteLength(buffer),
+          MAX_PROVIDER_SSE_LINE_BYTES,
+        );
+      }
 
       const dataLines = lines.filter(
         (line) =>
@@ -121,11 +156,15 @@ export async function parseReasoningFromSseStream(
       }
     }
   } catch (err) {
+    if (err instanceof ProviderStreamProtocolError) {
+      throw err;
+    }
     logger.debug(
       () =>
         `[ReasoningCaptureFetch] Stream parsing error: ${err instanceof Error ? err.message : String(err)}`,
     );
   } finally {
+    signal?.removeEventListener('abort', cancelReader);
     reader.releaseLock();
     captureBuffer.finalized = true;
   }
@@ -158,6 +197,7 @@ export function createReasoningCaptureFetch(
       parserStream.getReader(),
       captureBuffer,
       logger,
+      init?.signal ?? undefined,
     );
 
     return new Response(sdkStream, {
