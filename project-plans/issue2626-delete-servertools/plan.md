@@ -341,3 +341,17 @@ Fix (In-scope-Fix):
   matches on the PR head; the bot's "provided diff summary" is stale.
 - PR round budget: this fix push closes round 1; round 2 reserved for any
   new CI/bot findings on the final head.
+
+## Final status (2026-08-26)
+
+- CI on final head `5761f082d`: 38/38 checks pass (incl. Lint (Javascript)
+  10m51s — the ratchet fix confirmed; zero pending, zero fail).
+- The round-1 OCR inline finding ("restore the @google/genai constructor mock",
+  maintainability/medium) — **Reject**: conflicts with the shrink-only genai
+  import ratchet this PR's CI fix enforces; no separate mapping layer exists
+  (helper result is passed straight to `new GoogleGenAI(...)`); live
+  instantiation covered by the smoke test. Disposition posted on PR and the
+  thread resolved.
+- PR body amended (seam-coverage wording for A4/A5 claims; auth-test line in
+  the reviewer plan). CodeRabbit: skipped by the bot (file count + credits).
+- All acceptance greps clean on the final head (A1/A5/supportsTools=0).
