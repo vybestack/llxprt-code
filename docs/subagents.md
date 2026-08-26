@@ -399,11 +399,23 @@ A value of `-1` at any layer means **unlimited** and omits the budget entirely.
 
 The clamp is the part that matters. Deriving the default purely from
 `max_turns * modelMaxOutputTokens` reproduces the bound that failed in practice,
-because the turn cap is itself generous. 2,000,000 output tokens is roughly
-4,000 turns of ordinary 500-token responses, or 122 consecutive maximum-length
-16,384-token responses; a subagent still emitting maximum-length responses after
-122 turns is looping rather than working. Ordinary runs generate well under
-500,000 tokens.
+because the turn cap is itself generous.
+
+Measured against 8,138 real responses, typical output is 122 tokens per turn
+(mean 339). At that rate 2,000,000 tokens is roughly 16,000 turns, so the turn
+cap stops an ordinary run thousands of turns before the budget is anywhere near
+reached. At the other end, 2,000,000 is 122 consecutive maximum-length
+16,384-token responses, and a subagent still emitting maximum-length responses
+after 122 turns is looping rather than working.
+
+That gap is deliberate: the budget is sized to be unreachable in normal use and
+to catch the case where a subagent generates far more than a working one would.
+
+**What the budget does not catch.** Because it measures total volume, a subagent
+that loops with small responses never approaches it. A 253-turn loop of typical
+122-token responses uses about 1.5% of the budget. What bounds memory in that
+case is the per-chunk retention limits in the streaming path, not this budget.
+See issue #3344.
 
 When the budget is exceeded the run terminates with `MAX_OUTPUT` and the final
 message names the budget and the observed total, so the parent agent can decide
@@ -411,7 +423,14 @@ whether to relaunch with a larger budget or change approach.
 
 Cumulative output is counted from provider-reported usage metadata where
 available. Providers that omit usage fall back to a character-based estimate, so
-a provider that reports nothing cannot make the budget unenforceable.
+a provider that reports nothing cannot make the budget unenforceable. Reasoning
+tokens count towards the budget: they are generated output, and on high-effort
+reasoning profiles they can exceed the visible text by a wide margin.
+
+The budget is evaluated as soon as a turn's output is counted, so a subagent
+over budget stops before another request goes out. The turn and time limits are
+checked at the start of each turn instead, so a subagent on its final allowed
+turn still runs the tool calls it just requested rather than discarding them.
 
 ## Related commands
 
