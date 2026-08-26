@@ -15,6 +15,16 @@ import {
 } from 'bun:test';
 
 const mockedExec = vi.fn();
+const realChildProcess = { ...(await import('node:child_process')) };
+const mockedExecFileSync = vi.fn();
+void vi.mock('node:child_process', () => ({
+  ...realChildProcess,
+  execFileSync: mockedExecFileSync,
+}));
+void vi.mock('child_process', () => ({
+  ...realChildProcess,
+  execFileSync: mockedExecFileSync,
+}));
 void vi.mock('node:util', () => ({
   promisify: vi.fn().mockReturnValue(mockedExec),
 }));
@@ -42,6 +52,7 @@ describe('getIdeProcessInfo', () => {
   beforeEach(() => {
     Object.defineProperty(process, 'pid', { value: 1000, configurable: true });
     mockedExec.mockReset();
+    mockedExecFileSync.mockReset();
   });
 
   afterEach(() => {
@@ -52,10 +63,10 @@ describe('getIdeProcessInfo', () => {
     it('should traverse up to find the shell and return grandparent process info', async () => {
       os.platform.mockReturnValue('linux');
       // process (1000) -> shell (800) -> IDE (700)
-      mockedExec
-        .mockResolvedValueOnce({ stdout: '800 /bin/bash' }) // ps -o ppid=,command= -p 1000 (find shell)
-        .mockResolvedValueOnce({ stdout: '700 /usr/lib/vscode/code' }) // ps -o ppid=,command= -p 800 (get grandparent)
-        .mockResolvedValueOnce({ stdout: '1 /usr/lib/vscode/code' }); // ps -o ppid=,command= -p 700 (final command lookup)
+      mockedExecFileSync
+        .mockReturnValueOnce('800 /bin/bash') // ps -o ppid=,command= -p 1000 (find shell)
+        .mockReturnValueOnce('700 /usr/lib/vscode/code') // ps -o ppid=,command= -p 800 (get grandparent)
+        .mockReturnValueOnce('1 /usr/lib/vscode/code'); // ps -o ppid=,command= -p 700 (final command lookup)
 
       const result = await getIdeProcessInfo();
 
@@ -67,13 +78,33 @@ describe('getIdeProcessInfo', () => {
 
     it('should return parent process info if grandparent lookup fails', async () => {
       os.platform.mockReturnValue('linux');
-      mockedExec
-        .mockResolvedValueOnce({ stdout: '800 /bin/bash' }) // ps -o ppid=,command= -p 1000
-        .mockRejectedValueOnce(new Error('ps failed')) // ps -o ppid=,command= -p 800 fails
-        .mockResolvedValueOnce({ stdout: '700 /bin/bash' }); // ps -o ppid=,command= -p 800 (final call)
+      mockedExecFileSync
+        .mockReturnValueOnce('800 /bin/bash') // ps -o ppid=,command= -p 1000
+        .mockImplementationOnce(() => {
+          throw new Error('ps failed');
+        }) // ps -o ppid=,command= -p 800 fails
+        .mockReturnValueOnce('700 /bin/bash'); // ps -o ppid=,command= -p 800 (final call)
 
       const result = await getIdeProcessInfo();
       expect(result).toStrictEqual({ pid: 800, command: '/bin/bash' });
+    });
+
+    it('settles process discovery synchronously when asynchronous child completion remains pending', async () => {
+      os.platform.mockReturnValue('linux');
+      mockedExec.mockReturnValue(
+        new Promise<{ readonly stdout: string }>(() => {}),
+      );
+      mockedExecFileSync
+        .mockReturnValueOnce('800 /bin/bash')
+        .mockReturnValueOnce('700 /usr/lib/vscode/code')
+        .mockReturnValueOnce('1 /usr/lib/vscode/code');
+
+      const result = await getIdeProcessInfo();
+
+      expect(result).toStrictEqual({
+        pid: 700,
+        command: '/usr/lib/vscode/code',
+      });
     });
   });
 

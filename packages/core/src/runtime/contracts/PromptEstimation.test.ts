@@ -120,6 +120,10 @@ describe('PromptEnvelopeEstimate result contract (issue #2817)', () => {
   it('carries model identity, protocol, method/version, projection revision, token count, and unsupported media', () => {
     const estimate: PromptEnvelopeEstimate = {
       estimatedPromptTokens: 842,
+      transmittedTokens: 842,
+      retainedBaselineTokens: 0,
+      effectiveTokens: 842,
+      statefulParentUsed: false,
       activeProvider: 'anthropic',
       model: 'claude-3-5-sonnet',
       protocol: 'anthropic-messages',
@@ -208,6 +212,148 @@ describe('PromptEnvelopeEstimate result contract (issue #2817)', () => {
     expect(estimate.method).toBe('responses/v1');
     expect(estimate.projectionRevision).toBe(1);
     expect(estimate.unsupportedMedia).toStrictEqual([]);
+  });
+
+  it('uses effective provider context as the authoritative estimate and exposes its accounting facts', async () => {
+    const projection: PromptEnvelopeProjection = {
+      model: 'gpt-4o',
+      protocol: 'openai-responses',
+      method: 'responses/v1',
+      projectionRevision: 3,
+      unsupportedMedia: [],
+      transportToken: Object.freeze({}),
+      finalizedProjection: Object.freeze({}),
+      legacyEstimate: () => Promise.resolve(17),
+      accounting: {
+        statefulParentUsed: true,
+        retainedBaselineTokens: 50_000,
+        incremental: {
+          finalizedProjection: Object.freeze({}),
+          legacyEstimate: () => Promise.resolve(5),
+        },
+      },
+    };
+
+    const estimate = await estimatePromptEnvelope(projection);
+
+    expect(estimate.estimatedPromptTokens).toBe(50_005);
+    expect(estimate.transmittedTokens).toBe(17);
+    expect(estimate.incrementalTokens).toBe(5);
+    expect(estimate.retainedBaselineTokens).toBe(50_000);
+    expect(estimate.effectiveTokens).toBe(50_005);
+    expect(estimate.statefulParentUsed).toBe(true);
+  });
+
+  it('uses configured estimator counts instead of legacy accounting values', async () => {
+    const incrementalProjection = Object.freeze({ kind: 'incremental' });
+    const projection: PromptEnvelopeProjection = {
+      model: 'gpt-4o',
+      protocol: 'openai-responses',
+      method: 'responses/v1',
+      projectionRevision: 3,
+      unsupportedMedia: [],
+      transportToken: Object.freeze({}),
+      finalizedProjection: Object.freeze({ kind: 'wire' }),
+      legacyEstimate: () => Promise.resolve(17),
+      accounting: {
+        statefulParentUsed: true,
+        retainedBaselineTokens: 50_000,
+        incremental: {
+          finalizedProjection: incrementalProjection,
+          legacyEstimate: () => Promise.resolve(7),
+        },
+      },
+    };
+    const configuredFactory: RuntimeTokenizerFactory = {
+      getTokenizer: () => undefined,
+      estimatePrompt: async (request) => ({
+        count: request.finalizedProjection === incrementalProjection ? 11 : 29,
+        method: 'exact',
+        family: 'configured-estimator',
+        estimatorVersion: 'authority-v1',
+        assetRevision: 'authority-fixture',
+        projectionRevision: request.projectionRevision,
+      }),
+    };
+
+    const estimate = await estimatePromptEnvelopeImpl(
+      'test-provider',
+      projection,
+      configuredFactory,
+    );
+
+    expect(estimate.transmittedTokens).toBe(29);
+    expect(estimate.incrementalTokens).toBe(11);
+    expect(estimate.estimatedPromptTokens).toBe(50_011);
+    expect(estimate.effectiveTokens).toBe(50_011);
+    expect(estimate.estimatorMethod).toBe('exact');
+    expect(estimate.estimatorFamily).toBe('configured-estimator');
+  });
+
+  it('rejects full-history accounting smaller than its incremental contribution', async () => {
+    const projection: PromptEnvelopeProjection = {
+      model: 'gpt-4o',
+      protocol: 'openai-responses',
+      method: 'responses/v1',
+      projectionRevision: 3,
+      unsupportedMedia: [],
+      transportToken: Object.freeze({}),
+      finalizedProjection: Object.freeze({}),
+      legacyEstimate: () => Promise.resolve(7),
+      accounting: {
+        statefulParentUsed: true,
+        incremental: {
+          finalizedProjection: Object.freeze({}),
+          legacyEstimate: () => Promise.resolve(11),
+        },
+        fullHistory: {
+          finalizedProjection: Object.freeze({}),
+          legacyEstimate: () => Promise.resolve(5),
+        },
+      },
+    };
+
+    await expect(estimatePromptEnvelope(projection)).rejects.toThrow(
+      /full-history estimate \(5\) is smaller than the incremental estimate \(11\)/i,
+    );
+  });
+
+  it.each([
+    [
+      'stateless accounting with a retained baseline',
+      { statefulParentUsed: false, retainedBaselineTokens: 1 },
+      /stateless accounting cannot carry retained/i,
+    ],
+    [
+      'stateful accounting without an incremental projection',
+      { statefulParentUsed: true, retainedBaselineTokens: 50_000 },
+      /requires an incremental projection/i,
+    ],
+    [
+      'stateful accounting without observed usage or full history',
+      {
+        statefulParentUsed: true,
+        incremental: {
+          finalizedProjection: Object.freeze({}),
+          legacyEstimate: () => Promise.resolve(7),
+        },
+      },
+      /requires a full-history projection/i,
+    ],
+  ])('rejects %s before estimation', async (_name, accounting, expected) => {
+    const projection: PromptEnvelopeProjection = {
+      model: 'gpt-4o',
+      protocol: 'openai-responses',
+      method: 'responses/v1',
+      projectionRevision: 3,
+      unsupportedMedia: [],
+      transportToken: Object.freeze({}),
+      finalizedProjection: Object.freeze({}),
+      legacyEstimate: () => Promise.resolve(17),
+      accounting,
+    };
+
+    await expect(estimatePromptEnvelope(projection)).rejects.toThrow(expected);
   });
 
   it.each([

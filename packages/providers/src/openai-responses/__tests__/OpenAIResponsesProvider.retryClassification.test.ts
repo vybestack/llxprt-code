@@ -100,6 +100,10 @@ function okResponse(): Response {
   return new Response(OK_BODY, { status: 200 });
 }
 
+function sseResponse(event: unknown): Response {
+  return new Response(`data: ${JSON.stringify(event)}\n\n`, { status: 200 });
+}
+
 function buildNormalizedOptions(
   overrides: {
     ephemerals?: Record<string, unknown>;
@@ -429,5 +433,226 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
 
     expect(error).toBeInstanceOf(Error);
     expect(fetchMock.calls.count).toBe(1);
+  });
+
+  it('AC-5: response.failed context-window input is one fetch with actionable provider details', async () => {
+    const providerError = {
+      message: 'Your input exceeds the context window of this model.',
+      type: 'invalid_request_error',
+      code: 'context_length_exceeded',
+      param: 'input',
+    };
+    fetchMock = installFetch(() =>
+      sseResponse({
+        type: 'response.failed',
+        response: {
+          id: 'resp_context',
+          object: 'response',
+          model: 'gpt-5',
+          status: 'failed',
+          error: providerError,
+        },
+      }),
+    );
+    const options = buildNormalizedOptions({
+      ephemerals: { retries: 6, retrywait: 0 },
+    });
+    const { messages, error } = await drain(
+      executeOpenAIResponsesRequest(options, buildDeps(provider)),
+    );
+
+    expect(messages).toHaveLength(0);
+    expect(fetchMock.calls.count).toBe(1);
+    expect(error).toMatchObject({
+      message: providerError.message,
+      status: 413,
+      code: providerError.code,
+      providerErrorType: providerError.type,
+      details: {
+        providerError,
+        responseStatus: 'failed',
+      },
+    });
+    expect(provider.retryDecision(error)).toBe(false);
+  });
+
+  it('AC-5: documented top-level invalid input is one fetch and preserves provider fields', async () => {
+    fetchMock = installFetch(() =>
+      sseResponse({
+        type: 'error',
+        code: 'invalid_prompt',
+        message: 'The input field is invalid.',
+        param: 'input',
+        sequence_number: 4,
+      }),
+    );
+    const options = buildNormalizedOptions({
+      ephemerals: { retries: 6, retrywait: 0 },
+    });
+    const { messages, error } = await drain(
+      executeOpenAIResponsesRequest(options, buildDeps(provider)),
+    );
+
+    expect(messages).toHaveLength(0);
+    expect(fetchMock.calls.count).toBe(1);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toHaveProperty('message', 'The input field is invalid.');
+    expect(error).toHaveProperty('status', 400);
+    expect(error).toHaveProperty('code', 'invalid_prompt');
+    expect(error).toHaveProperty('providerErrorType', 'error');
+    expect(error).toHaveProperty(
+      'details.providerError.message',
+      'The input field is invalid.',
+    );
+    expect(error).toHaveProperty('details.providerError.type', 'error');
+    expect(error).toHaveProperty(
+      'details.providerError.code',
+      'invalid_prompt',
+    );
+    expect(error).toHaveProperty('details.providerError.param', 'input');
+    expect(shouldRetryError(error)).toBe(false);
+  });
+
+  it('AC-5: documented invalid image input is terminal and preserves the provider payload', async () => {
+    const providerError = {
+      message: 'The image must use a supported format.',
+      type: 'image_validation_error',
+      code: 'invalid_image_format',
+      param: 'input[0].content[0].image_url',
+      provider_detail: { accepted_formats: ['png', 'jpeg'] },
+    };
+    fetchMock = installFetch(() =>
+      sseResponse({
+        type: 'response.failed',
+        response: {
+          id: 'resp_invalid_image',
+          object: 'response',
+          model: 'gpt-5',
+          status: 'failed',
+          error: providerError,
+        },
+      }),
+    );
+    const options = buildNormalizedOptions({
+      ephemerals: { retries: 6, retrywait: 0 },
+    });
+
+    const { messages, error } = await drain(
+      executeOpenAIResponsesRequest(options, buildDeps(provider)),
+    );
+
+    expect(messages).toHaveLength(0);
+    expect(fetchMock.calls.count).toBe(1);
+    expect(error).toMatchObject({
+      message: providerError.message,
+      status: 400,
+      code: providerError.code,
+      providerErrorType: providerError.type,
+      details: {
+        providerError,
+        responseStatus: 'failed',
+      },
+    });
+    expect(shouldRetryError(error)).toBe(false);
+  });
+
+  it('AC-5: equivalent HTTP and SSE invalid-request failures are equally non-retryable', async () => {
+    fetchMock = installFetch((call) =>
+      call === 0
+        ? sseResponse({
+            type: 'error',
+            code: 'invalid_prompt',
+            message: 'The input field is invalid.',
+            param: 'input',
+          })
+        : errorResponse(400, {
+            error: {
+              message: 'The input field is invalid.',
+              type: 'invalid_request_error',
+              code: 'invalid_prompt',
+              param: 'input',
+            },
+          }),
+    );
+    const options = buildNormalizedOptions({
+      ephemerals: { retries: 6, retrywait: 0 },
+    });
+
+    const sseOutcome = await drain(
+      executeOpenAIResponsesRequest(options, buildDeps(provider)),
+    );
+    const httpOutcome = await drain(
+      executeOpenAIResponsesRequest(options, buildDeps(provider)),
+    );
+
+    expect(fetchMock.calls.count).toBe(2);
+    expect(sseOutcome.error).toMatchObject({
+      status: 400,
+      code: 'invalid_prompt',
+      providerErrorType: 'error',
+    });
+    expect(httpOutcome.error).toMatchObject({
+      status: 400,
+      providerErrorType: 'invalid_request_error',
+    });
+    expect(provider.retryDecision(sseOutcome.error)).toBe(false);
+    expect(provider.retryDecision(httpOutcome.error)).toBe(false);
+  });
+
+  it('AC-5 control: genuine premature EOF remains retryable and succeeds on the next fetch', async () => {
+    fetchMock = installFetch((call) =>
+      call === 0
+        ? new Response(
+            'data: {"type":"response.created","response":{"id":"resp_partial","status":"in_progress"}}\n\n',
+            { status: 200 },
+          )
+        : okResponse(),
+    );
+    const options = buildNormalizedOptions({
+      ephemerals: { retries: 3, retrywait: 0 },
+    });
+    const { messages, error } = await drain(
+      executeOpenAIResponsesRequest(options, buildDeps(provider)),
+    );
+
+    expect(error).toBeUndefined();
+    expect(fetchMock.calls.count).toBe(2);
+    expect(
+      messages.some((message) =>
+        message.blocks.some(
+          (block) => block.type === 'text' && block.text === 'ok',
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it('AC-5 control: response.failed server_error remains retryable and succeeds on the next fetch', async () => {
+    fetchMock = installFetch((call) =>
+      call === 0
+        ? sseResponse({
+            type: 'response.failed',
+            response: {
+              id: 'resp_server',
+              object: 'response',
+              model: 'gpt-5',
+              status: 'failed',
+              error: {
+                message: 'Internal server error',
+                type: 'server_error',
+              },
+            },
+          })
+        : okResponse(),
+    );
+    const options = buildNormalizedOptions({
+      ephemerals: { retries: 3, retrywait: 0 },
+    });
+    const { messages, error } = await drain(
+      executeOpenAIResponsesRequest(options, buildDeps(provider)),
+    );
+
+    expect(error).toBeUndefined();
+    expect(fetchMock.calls.count).toBe(2);
+    expect(messages.length).toBeGreaterThan(0);
   });
 });

@@ -16,9 +16,10 @@
  */
 
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type {
-  IContent,
-  ContentBlock,
+import {
+  invalidateResponsesStatefulChain,
+  type IContent,
+  type ContentBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type {
@@ -71,8 +72,8 @@ export interface PendingContextWindowEnforcerDeps {
       newHistory: IContent[],
       summary: IContent | undefined,
       topPreserved: number,
-    ) => void,
-  ): void;
+    ) => Promise<void>,
+  ): Promise<void>;
   setSuppressDensityDirty(value: boolean): void;
   recordCompressionFailure(): void;
   resetLastPromptTokenCount(): void;
@@ -403,7 +404,7 @@ export class PendingContextWindowEnforcer {
     try {
       const context = await this.deps.buildCompressionContext(input.promptId);
       const result = await this.deps.compressWithFallbackStrategy(context);
-      this.applyFallbackCompressionResult(result);
+      await this.applyFallbackCompressionResult(result);
       this.deps.logger.debug(
         'Compression completed with hard-limit fallback (TopDownTruncation)',
       );
@@ -442,9 +443,9 @@ export class PendingContextWindowEnforcer {
     );
   }
 
-  private applyFallbackCompressionResult(
+  private async applyFallbackCompressionResult(
     result: StrategyCompressionResult,
-  ): void {
+  ): Promise<void> {
     if (result.kind === 'noop') {
       // Truthful no-op: do not mutate history or counters.
       this.deps.logger.debug(
@@ -452,18 +453,29 @@ export class PendingContextWindowEnforcer {
       );
       return;
     }
-    this.deps.applyFallbackCompressionResult(
+    const application = { completed: false };
+    await this.deps.applyFallbackCompressionResult(
       result,
-      (newHistory, _summary, _topPreserved) => {
-        this.deps.historyService.clear();
-        // Post-truncation rebuild: the prefix is already destroyed (#3070).
-        this.deps.historyService.resetCacheAnchorSeq();
-        for (const content of newHistory) {
-          this.deps.historyService.add(content, this.deps.getRuntimeModel());
-        }
-        this.deps.resetLastPromptTokenCount();
+      async (newHistory, _summary, _topPreserved) => {
+        await this.rebuildFallbackHistory(newHistory);
+        application.completed = true;
       },
     );
+    if (!application.completed) {
+      throw new Error(
+        `Hard-limit fallback reported applied but no candidate history was committed (${result.metadata.strategyUsed})`,
+      );
+    }
+  }
+
+  private async rebuildFallbackHistory(newHistory: IContent[]): Promise<void> {
+    await this.deps.historyService.replaceAll(
+      [...invalidateResponsesStatefulChain(newHistory)],
+      this.deps.getRuntimeModel(),
+    );
+    // Post-truncation rebuild: the prefix is already destroyed (#3070).
+    this.deps.historyService.resetCacheAnchorSeq();
+    this.deps.resetLastPromptTokenCount();
   }
 
   private async truncateToolResponsesIfStillOverLimit(input: {

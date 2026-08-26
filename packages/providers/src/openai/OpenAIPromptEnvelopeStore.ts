@@ -45,10 +45,14 @@ export class OpenAIPromptEnvelopeStore {
     const transportToken = Object.freeze({});
     this.prepared.set(transportToken, prepared);
     return prepared.protocol === 'openai-responses'
-      ? projectOpenAIResponsesPromptEnvelope(prepared.requestContext.request, {
-          unsupportedMedia,
-          transportToken,
-        })
+      ? projectOpenAIResponsesPromptEnvelope(
+          prepared.requestContext.request,
+          {
+            unsupportedMedia,
+            transportToken,
+          },
+          prepared.requestContext.projectionContext,
+        )
       : projectOpenAIChatPromptEnvelope(prepared.requestContext.requestBody, {
           unsupportedMedia,
           transportToken,

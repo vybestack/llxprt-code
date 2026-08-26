@@ -7,7 +7,7 @@
 export type ResponsesApiError = {
   message?: string;
   type?: string;
-  code?: string;
+  code?: string | null;
   param?: string | null;
 };
 
@@ -22,7 +22,7 @@ export type ResponsesEvent = {
   // Real OpenAI ResponseErrorEvent carries these at the top level (not nested
   // under error). See node_modules/openai/resources/responses/responses.d.ts.
   message?: string;
-  code?: string;
+  code?: string | null;
   param?: string | null;
   item?: {
     id: string;

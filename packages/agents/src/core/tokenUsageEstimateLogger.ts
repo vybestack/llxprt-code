@@ -67,6 +67,21 @@ export function recordFinalizedPromptEnvelopeEstimate(
       assetRevision: estimate.assetRevision,
       projectionRevision: estimate.projectionRevision,
       protocol: estimate.protocol,
+      ...(estimate.transmittedTokens !== undefined && {
+        transmittedTokens: estimate.transmittedTokens,
+      }),
+      ...(estimate.incrementalTokens !== undefined && {
+        incrementalTokens: estimate.incrementalTokens,
+      }),
+      ...(estimate.retainedBaselineTokens !== undefined && {
+        retainedBaselineTokens: estimate.retainedBaselineTokens,
+      }),
+      ...(estimate.effectiveTokens !== undefined && {
+        effectiveTokens: estimate.effectiveTokens,
+      }),
+      ...(estimate.statefulParentUsed !== undefined && {
+        statefulParentUsed: estimate.statefulParentUsed,
+      }),
     });
   } catch (error) {
     logger.error(

@@ -25,6 +25,11 @@ import {
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import type {
+  RuntimePromptEstimateRequest,
+  RuntimeTokenizerFactory,
+} from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 
 void vi.mock('openai', () => ({
   default: class FakeOpenAI {
@@ -71,6 +76,33 @@ function buildCallOptions(
   });
 }
 
+function finalizedPromptLength(request: RuntimePromptEstimateRequest): number {
+  const projection = request.finalizedProjection;
+  if (
+    typeof projection !== 'object' ||
+    projection === null ||
+    !('promptText' in projection) ||
+    typeof projection.promptText !== 'string'
+  ) {
+    throw new Error('Expected a finalized provider prompt projection');
+  }
+  return projection.promptText.length;
+}
+
+function createLengthTokenizerFactory(): RuntimeTokenizerFactory {
+  return {
+    getTokenizer: () => undefined,
+    estimatePrompt: async (request) => ({
+      count: finalizedPromptLength(request),
+      method: 'exact',
+      family: 'projection-length-fixture',
+      estimatorVersion: '1',
+      assetRevision: 'fixture',
+      projectionRevision: request.projectionRevision,
+    }),
+  };
+}
+
 describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () => {
   beforeEach(() => {
     setActiveProviderRuntimeContext(
@@ -97,6 +129,342 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
 
     expect(await projection.legacyEstimate()).toBeGreaterThan(0);
     expect(provider.promptAuthResolutions).toStrictEqual([]);
+  });
+
+  it('AC-1: reports equal transmitted and effective tokens for a stateless request', async () => {
+    const provider = new TestResponsesProvider();
+    const projection = await provider.projectPromptEnvelope(
+      buildCallOptions(provider, {
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
+        ],
+      }),
+    );
+
+    const estimate = await estimatePromptEnvelope(
+      provider.name,
+      projection,
+      createLengthTokenizerFactory(),
+    );
+
+    expect(estimate.statefulParentUsed).toBe(false);
+    expect(estimate.retainedBaselineTokens).toBe(0);
+    expect(estimate.transmittedTokens).toBe(estimate.effectiveTokens);
+    expect(estimate.estimatedPromptTokens).toBe(estimate.effectiveTokens);
+  });
+
+  it('AC-1: prefers a large provider-observed retained baseline to a deliberately smaller local replay without subtracting cached tokens', async () => {
+    const provider = new TestResponsesProvider();
+    const contents = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'small question' }] },
+      {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'small answer' }],
+        metadata: {
+          id: 'resp_1',
+          responsesStored: true,
+          usage: {
+            promptTokens: 50_000,
+            completionTokens: 0,
+            totalTokens: 50_000,
+            cachedTokens: 45_000,
+          },
+        },
+      },
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'small follow up' }],
+      },
+    ];
+    const projection = await provider.projectPromptEnvelope(
+      buildCallOptions(provider, {
+        contents,
+        ephemerals: { 'responses-stateful': true },
+      }),
+    );
+    const fullHistory = await provider.projectPromptEnvelope(
+      buildCallOptions(provider, { contents }),
+    );
+    const factory = createLengthTokenizerFactory();
+
+    const estimate = await estimatePromptEnvelope(
+      provider.name,
+      projection,
+      factory,
+    );
+    const fullHistoryEstimate = await estimatePromptEnvelope(
+      provider.name,
+      fullHistory,
+      factory,
+    );
+    if (estimate.incrementalTokens === undefined) {
+      throw new Error('Expected a stateful incremental estimate');
+    }
+
+    expect(estimate.retainedBaselineTokens).toBe(50_000);
+    expect(estimate.effectiveTokens).toBe(50_000 + estimate.incrementalTokens);
+    expect(estimate.effectiveTokens).toBeGreaterThan(
+      fullHistoryEstimate.effectiveTokens,
+    );
+  });
+
+  it('includes nonzero parent completion usage without serializing complete local history', async () => {
+    const provider = new TestResponsesProvider();
+    const projection = await provider.projectPromptEnvelope(
+      buildCallOptions(provider, {
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'question' }] },
+          {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'answer' }],
+            metadata: {
+              id: 'resp_with_completion',
+              responsesStored: true,
+              usage: {
+                promptTokens: 700,
+                completionTokens: 300,
+                totalTokens: 1_000,
+              },
+            },
+          },
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'follow up' }],
+          },
+        ],
+        configOverrides: {
+          getEphemeralSettings: () => {
+            throw new Error('retained local history was serialized');
+          },
+        },
+        ephemerals: { 'responses-stateful': true },
+      }),
+    );
+
+    const estimate = await estimatePromptEnvelope(
+      provider.name,
+      projection,
+      createLengthTokenizerFactory(),
+    );
+
+    expect(estimate.retainedBaselineTokens).toBe(1_000);
+  });
+
+  it('counts current changed instructions and tools even though prior noncarried configuration may be conservatively overcounted', async () => {
+    const provider = new TestResponsesProvider();
+    const contents = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'first question' }] },
+      {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'first answer' }],
+        metadata: {
+          id: 'resp_before_configuration_change',
+          responsesStored: true,
+          usage: {
+            promptTokens: 700,
+            completionTokens: 300,
+            totalTokens: 1_000,
+          },
+        },
+      },
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'use the changed configuration' }],
+      },
+    ];
+    const configuredProjection = await provider.projectPromptEnvelope(
+      buildCallOptions(provider, {
+        contents,
+        systemInstruction:
+          'These current instructions must remain visible to the model.',
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: 'lookup_current_record',
+                description:
+                  'Look up a record under the current tool contract.',
+                parametersJsonSchema: {
+                  type: 'object',
+                  properties: { id: { type: 'string' } },
+                  required: ['id'],
+                },
+              },
+            ],
+          },
+        ],
+        ephemerals: { 'responses-stateful': true },
+      }),
+    );
+    const plainProjection = await provider.projectPromptEnvelope(
+      buildCallOptions(provider, {
+        contents,
+        ephemerals: { 'responses-stateful': true },
+      }),
+    );
+    const factory = createLengthTokenizerFactory();
+
+    const configuredEstimate = await estimatePromptEnvelope(
+      provider.name,
+      configuredProjection,
+      factory,
+    );
+    const plainEstimate = await estimatePromptEnvelope(
+      provider.name,
+      plainProjection,
+      factory,
+    );
+    if (
+      configuredEstimate.incrementalTokens === undefined ||
+      plainEstimate.incrementalTokens === undefined
+    ) {
+      throw new Error('Expected stateful incremental estimates');
+    }
+
+    expect(configuredEstimate.incrementalTokens).toBe(
+      configuredEstimate.transmittedTokens,
+    );
+    expect(configuredEstimate.incrementalTokens).toBeGreaterThan(
+      plainEstimate.incrementalTokens,
+    );
+  });
+
+  it.each([
+    ['missing usage', undefined, undefined],
+    ['negative prompt usage', -1, 20],
+    ['fractional prompt usage', 1.5, 20],
+    ['nonfinite prompt usage', Number.POSITIVE_INFINITY, 20],
+    ['negative completion usage', 20, -1],
+    ['fractional completion usage', 20, 1.5],
+    ['nonfinite completion usage', 20, Number.POSITIVE_INFINITY],
+  ])(
+    'AC-1: falls back to complete model-visible local history for %s',
+    async (_case, promptTokens, completionTokens) => {
+      const provider = new TestResponsesProvider();
+      const contents = [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'previous q' }] },
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'previous a' }],
+          metadata: {
+            id: 'resp_1',
+            responsesStored: true,
+            ...(promptTokens === undefined || completionTokens === undefined
+              ? {}
+              : {
+                  usage: {
+                    promptTokens,
+                    completionTokens,
+                    totalTokens: promptTokens + completionTokens,
+                  },
+                }),
+          },
+        },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'follow up' }],
+        },
+      ];
+      const stateful = await provider.projectPromptEnvelope(
+        buildCallOptions(provider, {
+          contents,
+          ephemerals: { 'responses-stateful': true },
+        }),
+      );
+      const fullHistory = await provider.projectPromptEnvelope(
+        buildCallOptions(provider, { contents }),
+      );
+      const factory = createLengthTokenizerFactory();
+      const statefulEstimate = await estimatePromptEnvelope(
+        provider.name,
+        stateful,
+        factory,
+      );
+      const fullHistoryEstimate = await estimatePromptEnvelope(
+        provider.name,
+        fullHistory,
+        factory,
+      );
+
+      expect(statefulEstimate.statefulParentUsed).toBe(true);
+      expect(statefulEstimate.effectiveTokens).toBe(
+        fullHistoryEstimate.effectiveTokens,
+      );
+      expect(statefulEstimate.effectiveTokens).toBeGreaterThan(
+        statefulEstimate.transmittedTokens,
+      );
+    },
+  );
+
+  it('AC-2: transports only the selected parent id and post-parent delta from a prepared envelope', async () => {
+    const provider = new TestResponsesProvider();
+    const options = buildCallOptions(provider, {
+      contents: [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'previous q' }] },
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'previous a' }],
+          metadata: {
+            id: 'resp_1',
+            responsesStored: true,
+            usage: {
+              promptTokens: 40_000,
+              completionTokens: 100,
+              totalTokens: 40_100,
+            },
+          },
+        },
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'follow up' }],
+        },
+      ],
+      ephemerals: { 'responses-stateful': true },
+    });
+    const projection = await provider.projectPromptEnvelope(options);
+    const transportedBodies: string[] = [];
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn(async (_input, init) => {
+      const requestBody = init?.body;
+      if (requestBody === undefined || requestBody === null) {
+        throw new Error('Expected Responses transport to send a body');
+      }
+      transportedBodies.push(await new Response(requestBody).text());
+      const encoder = new TextEncoder();
+      const body = new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            encoder.encode(
+              'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
+            ),
+          );
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          controller.close();
+        },
+      });
+      return new Response(body, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    });
+
+    try {
+      for await (const _chunk of provider.generateChatCompletion({
+        ...options,
+        promptEnvelopeTransportToken: projection.transportToken,
+      })) {
+        // Drain the real provider stream.
+      }
+    } finally {
+      global.fetch = originalFetch;
+    }
+
+    expect(projection.accounting?.statefulParentUsed).toBe(true);
+    expect(transportedBodies).toHaveLength(1);
+    expect(transportedBodies[0]).toContain('"previous_response_id":"resp_1"');
+    expect(transportedBodies[0]).not.toContain('previous q');
+    expect(transportedBodies[0]).not.toContain('previous a');
+    expect(transportedBodies[0]).toContain('follow up');
   });
 
   it('identifies openai-responses protocol, responses/v1 method, and the model', async () => {

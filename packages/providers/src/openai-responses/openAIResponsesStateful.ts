@@ -24,6 +24,7 @@ export interface StatefulConversation {
   enabled: boolean;
   parentId: string | undefined;
   content: IContent[];
+  parentRetainedTokens?: number;
 }
 
 const RESPONSES_STATEFUL_KEY = 'responses-stateful';
@@ -75,6 +76,33 @@ function isEligibleParent(entry: IContent, rawBaseURL: string): boolean {
   if (entry.speaker !== 'ai') return false;
   if (!hasStoredResponseId(entry.metadata)) return false;
   return isSameEndpoint(entry.metadata?.providerBaseURL, rawBaseURL);
+}
+
+function isValidatedTokenCount(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    Number.isSafeInteger(value) &&
+    value >= 0
+  );
+}
+
+function readObservedRetainedTokens(
+  entry: IContent | undefined,
+): number | undefined {
+  const usage = entry?.metadata?.usage;
+  if (usage === undefined) return undefined;
+
+  const promptTokens: unknown = usage.promptTokens;
+  const completionTokens: unknown = usage.completionTokens;
+  if (
+    !isValidatedTokenCount(promptTokens) ||
+    !isValidatedTokenCount(completionTokens)
+  ) {
+    return undefined;
+  }
+  const retainedTokens = promptTokens + completionTokens;
+  return Number.isSafeInteger(retainedTokens) ? retainedTokens : undefined;
 }
 
 /**
@@ -184,10 +212,12 @@ export function computeStatefulConversation(
     return { enabled: true, parentId: undefined, content };
   }
 
+  const parentRetainedTokens = readObservedRetainedTokens(content[parentIndex]);
   return {
     enabled: true,
     parentId,
     content: trimmedContent,
+    ...(parentRetainedTokens === undefined ? {} : { parentRetainedTokens }),
   };
 }
 

@@ -70,6 +70,7 @@ import {
   bestEffortDump,
 } from '../utils/dumpSDKContext.js';
 import type { DumpMode } from '../utils/dumpContext.js';
+import type { OpenAIResponsesProjectionContext } from '../runtime/promptEnvelopeProjections.js';
 
 /**
  * Provider-specific capabilities that the executor needs to do its work.
@@ -163,6 +164,7 @@ export interface PreparedResponsesRequestContext {
   readonly includeThinkingInResponse: boolean;
   readonly responsesStored: boolean;
   readonly request: OpenAIResponsesRequest;
+  readonly projectionContext: OpenAIResponsesProjectionContext;
 }
 
 interface RequestContext extends PreparedResponsesRequestContext {
@@ -406,6 +408,77 @@ function buildStreamParams(
   };
 }
 
+function buildResponsesProjectionContext(
+  request: OpenAIResponsesRequest,
+  options: NormalizedGenerateChatOptions,
+  patchedContent: IContent[],
+  invocationEphemerals: Record<string, unknown>,
+  deps: ResponsesExecutorDeps,
+  stateful: ReturnType<typeof computeStatefulConversation>,
+): OpenAIResponsesProjectionContext {
+  const statefulParentUsed = stateful.parentId !== undefined;
+  if (!statefulParentUsed) {
+    return {
+      statefulParentUsed,
+      incrementalRequest: request,
+    };
+  }
+  if (stateful.parentRetainedTokens !== undefined) {
+    return {
+      statefulParentUsed,
+      incrementalRequest: request,
+      retainedBaselineTokens: stateful.parentRetainedTokens,
+    };
+  }
+  return {
+    statefulParentUsed,
+    incrementalRequest: request,
+    fullHistoryRequest: {
+      ...request,
+      input: buildInput(
+        options,
+        patchedContent,
+        invocationEphemerals,
+        deps,
+        false,
+      ),
+    },
+  };
+}
+
+function computeRequestStatefulConversation(
+  options: NormalizedGenerateChatOptions,
+  patchedContent: IContent[],
+  invocationEphemerals: Record<string, unknown>,
+  explicitUserStore: boolean | undefined,
+  isCodex: boolean,
+  rawBaseURL: string,
+  forceStateless: boolean,
+  deps: ResponsesExecutorDeps,
+): ReturnType<typeof computeStatefulConversation> {
+  // Codex can only be stateful over the WebSocket transport because the parent
+  // lives on the socket. Non-Codex storage is transport-independent.
+  let statefulTransportSupported: boolean;
+  if (forceStateless) {
+    statefulTransportSupported = false;
+  } else if (!isCodex) {
+    statefulTransportSupported = true;
+  } else {
+    statefulTransportSupported = deps.isWebSocketTransportActive?.() ?? false;
+  }
+  return computeStatefulConversation(
+    options,
+    patchedContent,
+    invocationEphemerals,
+    explicitUserStore,
+    isCodex,
+    rawBaseURL,
+    (responseId) => deps.isRejectedStatefulParent?.(responseId) ?? false,
+    statefulTransportSupported,
+    deps.logger,
+  );
+}
+
 export async function buildRequestContext(
   options: NormalizedGenerateChatOptions,
   patchedContent: IContent[],
@@ -425,22 +498,15 @@ export async function buildRequestContext(
     typeof requestOverrides['store'] === 'boolean'
       ? requestOverrides['store']
       : undefined;
-  // Codex can only be stateful over the WebSocket transport (the backend
-  // rejects store=true, so the parent lives on the socket). Non-Codex uses
-  // real server-side storage and is transport-independent.
-  const statefulTransportSupported =
-    !forceStateless &&
-    (!isCodex || (deps.isWebSocketTransportActive?.() ?? false));
-  const stateful = computeStatefulConversation(
+  const stateful = computeRequestStatefulConversation(
     options,
     patchedContent,
     invocationEphemerals,
     explicitUserStore,
     isCodex,
     rawBaseURL,
-    (responseId) => deps.isRejectedStatefulParent?.(responseId) ?? false,
-    statefulTransportSupported,
-    deps.logger,
+    forceStateless,
+    deps,
   );
   const input = buildInput(
     options,
@@ -471,6 +537,14 @@ export async function buildRequestContext(
     rawBaseURL,
     isCodex,
     request,
+    projectionContext: buildResponsesProjectionContext(
+      request,
+      options,
+      patchedContent,
+      invocationEphemerals,
+      deps,
+      stateful,
+    ),
     includeThinkingInResponse: reasoning.includeThinkingInResponse,
     // Codex cannot use `store` (the backend rejects store=true), so its
     // continuation is tracked by the connection instead. A stateful Codex turn

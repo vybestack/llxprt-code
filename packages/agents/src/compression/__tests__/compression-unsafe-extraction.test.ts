@@ -68,6 +68,9 @@ function buildEnforcerHarness(
     ensureDensityOptimized,
     performCompression,
     performFallbackCompression,
+    getPromptTokenBaseline: () => null,
+    resetPromptTokenBaseline: () => {},
+    restorePromptTokenBaseline: () => {},
     ...overrides,
   };
   return { enforcer: new ProviderContentEnforcer(deps), deps, historyService };
@@ -181,7 +184,7 @@ describe('ProviderContentEnforcer envelope-based enforcement (issue #2304)', () 
 
     harness.deps.performFallbackCompression.mockImplementation(
       async (_promptId, applyResult) => {
-        applyResult([makeUserMessage('truncated history')]);
+        await applyResult([makeUserMessage('truncated history')]);
         return true;
       },
     );

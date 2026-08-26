@@ -46,6 +46,11 @@ export interface PendingTokenEstimate {
   readonly assetRevision?: string;
   readonly projectionRevision?: number;
   readonly protocol?: string;
+  readonly transmittedTokens?: number;
+  readonly incrementalTokens?: number;
+  readonly retainedBaselineTokens?: number;
+  readonly effectiveTokens?: number;
+  readonly statefulParentUsed?: boolean;
   readonly tiktokenTokens: number | null;
   readonly tiktokenEstimationFailed?: boolean;
 }
@@ -100,6 +105,11 @@ interface PendingEntry {
   readonly assetRevision?: string;
   readonly projectionRevision?: number;
   readonly protocol?: string;
+  readonly transmittedTokens?: number;
+  readonly incrementalTokens?: number;
+  readonly retainedBaselineTokens?: number;
+  readonly effectiveTokens?: number;
+  readonly statefulParentUsed?: boolean;
   readonly tiktokenTokens?: number | null;
   readonly tiktokenEstimationFailed?: boolean;
   readonly turnContext?: Partial<TokenUsageTurnContext>;
@@ -134,6 +144,11 @@ interface WritableTurnRecord {
   readonly assetRevision?: string;
   readonly projectionRevision?: number;
   readonly protocol?: string;
+  readonly transmittedTokens?: number;
+  readonly incrementalTokens?: number;
+  readonly retainedBaselineTokens?: number;
+  readonly effectiveTokens?: number;
+  readonly statefulParentUsed?: boolean;
   readonly tiktokenTokens: number | null;
   readonly tiktokenEstimationFailed?: boolean;
   readonly actualPromptTokens: number;
@@ -276,6 +291,11 @@ export class TokenUsageLogger {
       assetRevision: data.assetRevision,
       projectionRevision: data.projectionRevision,
       protocol: data.protocol,
+      transmittedTokens: data.transmittedTokens,
+      incrementalTokens: data.incrementalTokens,
+      retainedBaselineTokens: data.retainedBaselineTokens,
+      effectiveTokens: data.effectiveTokens,
+      statefulParentUsed: data.statefulParentUsed,
       tiktokenTokens: data.tiktokenTokens,
       tiktokenEstimationFailed: data.tiktokenEstimationFailed,
       turnContext: existing?.turnContext,
@@ -350,6 +370,11 @@ export class TokenUsageLogger {
       assetRevision: pending.assetRevision,
       projectionRevision: pending.projectionRevision,
       protocol: pending.protocol,
+      transmittedTokens: pending.transmittedTokens,
+      incrementalTokens: pending.incrementalTokens,
+      retainedBaselineTokens: pending.retainedBaselineTokens,
+      effectiveTokens: pending.effectiveTokens,
+      statefulParentUsed: pending.statefulParentUsed,
       tiktokenTokens: pending.tiktokenTokens,
       tiktokenEstimationFailed: pending.tiktokenEstimationFailed,
       actualPromptTokens: actual.actualPromptTokens,
@@ -429,6 +454,21 @@ export class TokenUsageLogger {
       provider: record.provider,
       model: record.model,
       estimated_tokens: record.estimatedTokens,
+      ...(record.transmittedTokens !== undefined && {
+        transmitted_prompt_tokens: record.transmittedTokens,
+      }),
+      ...(record.incrementalTokens !== undefined && {
+        incremental_prompt_tokens: record.incrementalTokens,
+      }),
+      ...(record.retainedBaselineTokens !== undefined && {
+        retained_context_tokens: record.retainedBaselineTokens,
+      }),
+      ...(record.effectiveTokens !== undefined && {
+        effective_provider_context_tokens: record.effectiveTokens,
+      }),
+      ...(record.statefulParentUsed !== undefined && {
+        stateful_parent_used: record.statefulParentUsed,
+      }),
       estimator: record.estimator,
       ...(record.estimatorMethod !== undefined && {
         estimator_method: record.estimatorMethod,

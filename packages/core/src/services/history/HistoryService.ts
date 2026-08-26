@@ -14,12 +14,10 @@
  * limitations under the License.
  */
 
-import {
-  type IContent,
-  type ToolCallBlock,
-  type ToolResponseBlock,
-} from './IContent.js';
+import { invalidateResponsesStatefulChainForRetainedRewrite as invalidateRetainedRewrite } from './IContent.js';
+import type { IContent, ToolCallBlock, ToolResponseBlock } from './IContent.js';
 import { EventEmitter } from 'events';
+import { isDeepStrictEqual } from 'node:util';
 // @plan:PLAN-20260603-ISSUE1584.P05 RuntimeTokenizerFactory used for injection path
 import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
 import type { RuntimeTokenizer as ITokenizer } from '../../runtime/contracts/RuntimeTokenizer.js';
@@ -719,46 +717,49 @@ export class HistoryService
     replacement: ToolResponseBlock,
     modelName?: string,
   ): Promise<boolean> {
-    if (
-      !Number.isInteger(entryIndex) ||
-      entryIndex < 0 ||
-      entryIndex >= this.history.length
-    ) {
-      return false;
-    }
-    const entry = this.history[entryIndex];
-    if (
-      !Number.isInteger(blockIndex) ||
-      blockIndex < 0 ||
-      blockIndex >= entry.blocks.length
-    ) {
-      return false;
-    }
+    let replaced = false;
+    await this.enqueueAsynchronousHistoryMutation(async () => {
+      replaced = await this.replaceToolResponseBlockInternal(
+        entryIndex,
+        blockIndex,
+        replacement,
+        modelName,
+      );
+    });
+    return replaced;
+  }
 
-    const target = entry.blocks[blockIndex];
-    if (target.type !== 'tool_response') {
-      return false;
-    }
+  private async replaceToolResponseBlockInternal(
+    entryIndex: number,
+    blockIndex: number,
+    replacement: ToolResponseBlock,
+    modelName?: string,
+  ): Promise<boolean> {
+    const entry = Number.isInteger(entryIndex)
+      ? this.history[entryIndex]
+      : undefined;
+    if (entry === undefined) return false;
+    const target = Number.isInteger(blockIndex)
+      ? entry.blocks[blockIndex]
+      : undefined;
+    if (target?.type !== 'tool_response') return false;
     // Runtime invariant: the replacement MUST be a tool_response at runtime,
     // even though the TypeScript type already constrains it. A malformed
     // object with matching callId/toolName but wrong type (or missing type)
     // could slip through at runtime and corrupt tool-call/response pairing.
     const replacementType = (replacement as { type?: unknown }).type;
-    if (replacementType !== 'tool_response') {
-      return false;
-    }
-    if (
-      target.callId !== replacement.callId ||
-      target.toolName !== replacement.toolName
-    ) {
-      return false;
-    }
+    if (replacementType !== 'tool_response') return false;
+    if (target.callId !== replacement.callId) return false;
+    if (target.toolName !== replacement.toolName) return false;
+    if (isDeepStrictEqual(target, replacement)) return true;
 
     const newBlocks = [...entry.blocks];
     newBlocks[blockIndex] = replacement;
-    const previousEntry = this.history[entryIndex];
-    const previousTotalTokens = this.totalTokens;
-    this.history[entryIndex] = { ...entry, blocks: newBlocks };
+    const oldHistory = this.history;
+    const oldTokens = this.totalTokens;
+    const candidateHistory = [...oldHistory];
+    candidateHistory[entryIndex] = { ...entry, blocks: newBlocks };
+    this.history = invalidateRetainedRewrite(candidateHistory, entryIndex);
 
     try {
       await this.recalculateTotalTokens(modelName);
@@ -767,8 +768,7 @@ export class HistoryService
       // recalculateTotalTokens may have already mutated this.totalTokens to
       // reflect the replacement content before a listener/event error aborted
       // the emit. Leaving totalTokens stale would corrupt the token budget.
-      this.history[entryIndex] = previousEntry;
-      this.totalTokens = previousTotalTokens;
+      [this.history, this.totalTokens] = [oldHistory, oldTokens];
       // Best-effort notification so healthy listeners observe the rollback.
       // A broken listener that originally caused the failure must not mask
       // the original error.

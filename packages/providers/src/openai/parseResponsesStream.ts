@@ -15,6 +15,7 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { StreamLivenessListener } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import { randomUUID } from 'node:crypto';
 import { isAcceptedTerminalEventType } from './responsesTerminalEvents.js';
+import { createResponsesTerminalError } from './responsesErrorParsing.js';
 import { mapFinishReasonToStopReason } from './finishReasonMapping.js';
 import type {
   DispatchResult,
@@ -338,23 +339,6 @@ function* handleFunctionCallDone(
   functionCalls.delete(itemId);
 }
 
-/**
- * Build a stream-interruption error for terminal `response.failed`
- * or top-level `error` events. Uses createStreamInterruptionError so the error
- * is classified as transient/retryable (server-side failures should be retried).
- * Callers are responsible for throwing the returned Error.
- */
-function createTerminalStreamError(
-  errorPayload: ResponsesApiError | undefined,
-  responseStatus?: string | number,
-): Error {
-  const message = errorPayload?.message ?? 'OpenAI Responses API stream failed';
-  return createStreamInterruptionError(message, {
-    providerError: errorPayload,
-    responseStatus,
-  });
-}
-
 // OpenAI's ResponseErrorEvent carries message/code/param at the top level.
 // Merge the two shapes so the documented top-level fields win for message/code
 // while anything already modelled on the nested error object (notably type)
@@ -370,10 +354,10 @@ function topLevelErrorPayload(
   if (nested === undefined && !hasTopLevel) return undefined;
   return {
     message: event.message ?? nested?.message,
-    type: nested?.type,
-    code: event.code ?? nested?.code,
-    // `null` is a meaningful value (no offending param): preserve it rather
-    // than treating it as a fallback trigger.
+    type: nested?.type ?? event.type,
+    code: event.code !== undefined ? event.code : nested?.code,
+    // `null` is a meaningful value (no provider code or offending param):
+    // preserve it rather than treating it as a fallback trigger.
     param: event.param !== undefined ? event.param : nested?.param,
   };
 }
@@ -406,7 +390,7 @@ function* handleResponseCompleted(
   // Defensive: some implementations send failure via response.completed with
   // status "failed" rather than a standalone response.failed event.
   if (terminalReason === 'failed') {
-    throw createTerminalStreamError(
+    throw createResponsesTerminalError(
       event.response?.error,
       event.response?.status,
     );
@@ -769,12 +753,12 @@ function* dispatchEventCases(
       );
       break;
     case 'response.failed':
-      throw createTerminalStreamError(
+      throw createResponsesTerminalError(
         event.response?.error ?? event.error,
         event.response?.status,
       );
     case 'error':
-      throw createTerminalStreamError(topLevelErrorPayload(event));
+      throw createResponsesTerminalError(topLevelErrorPayload(event));
     default:
       break;
   }
