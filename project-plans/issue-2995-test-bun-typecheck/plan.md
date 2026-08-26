@@ -160,3 +160,30 @@ unavailable — provider usage limit): verdict COMPLIANT.
 - Smoke test (stepfun-37): CLI startup path verified working; the profile's
   API returns a deterministic upstream `400 you have no active step plan
   subscription` — account/subscription condition, unrelated to this diff.
+
+## CI record (PR #3360)
+
+- Round 1 (`0a4e9a5af9`): `Lint (Javascript)` failed — 2x TS2339 in the guard
+  test (`endsWith`/`replaceAll` on `string | NonSharedBuffer`); root cause: the
+  scripts tsc pass was not re-run after OCR remediation. Fix: `readdirSync`
+  call pinned to the `string[]` overload via `encoding: 'utf8'` (commit
+  `f56cf3e8b9`). Process lesson recorded: `bun test`/eslint/prettier do not
+  typecheck; any `tsconfig.scripts.json` include edit requires the scripts tsc
+  pass.
+- Round 2 (`f56cf3e8b9`): ALL checks green (Lint (Javascript) 11m23s, all test
+  shards incl. scripts 11m21s, E2E docker+none, CodeRabbit pass, OpenCodeReview
+  pass "No findings", Run LLxprt review pass). `mergeStateStatus: CLEAN`,
+  mergeable.
+
+## Final review triage
+
+- CodeRabbit pre-merge warning "Docstring Coverage 55.56%": Reject — repo
+  convention (see sibling `scripts/tests/test-bun-all-script.bun.test.ts`) uses
+  file-level docs for test wiring files; per-function docstrings are not a repo
+  requirement and adding them would deviate from siblings.
+- llxprt-walkthrough "Out of Scope" note claiming tsconfig files absent from
+  the working tree: Reject — factual artifact of the bot's snapshot; CI on the
+  PR head ran the exact wiring (typecheck `-p` passes + guard test) and passed.
+- OCR PR review: no findings. Review caps respected (1 local + 1 PR OCR).
+- Deferred follow-ups (unchanged): guard exclude-blindness; `expect.fail`
+  removal from `bun-test-corrections.d.ts` when bun-types ships it.
