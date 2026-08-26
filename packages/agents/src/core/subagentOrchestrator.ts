@@ -248,6 +248,7 @@ export class SubagentOrchestrator {
     const modelConfig = this.buildModelConfig(
       SubagentOrchestrator.getRuntimeStateProfile(runtimeProfile),
     );
+    const runConfig = this.buildResolvedRunConfig(profile, request.runConfig);
     this.throwIfAborted(
       signal,
       'Subagent launch aborted before runtime assembly.',
@@ -258,12 +259,6 @@ export class SubagentOrchestrator {
       { subagent, runtimeProfile, modelConfig, agentRuntimeId },
       signal,
     );
-    const runConfig = this.buildResolvedRunConfig(
-      profile,
-      request.runConfig,
-      isolatedHandle.settingsService,
-    );
-
     let scope: SubAgentScopeInstance | undefined;
     try {
       this.throwIfAborted(
@@ -453,12 +448,11 @@ export class SubagentOrchestrator {
   private buildResolvedRunConfig(
     profile: Profile,
     custom: RunConfig | undefined,
-    settingsService: SettingsService,
   ): RunConfig {
     return this.buildRunConfig(
       profile,
       custom,
-      this.resolveModelMaxOutputTokens(profile, settingsService),
+      this.resolveModelMaxOutputTokens(profile),
     );
   }
 
@@ -549,24 +543,28 @@ export class SubagentOrchestrator {
     return undefined;
   }
 
-  private resolveModelMaxOutputTokens(
-    profile: Profile,
-    settingsService: SettingsService,
-  ): number | undefined {
-    const catalogValue = settingsService.get('maxOutputTokens');
-    if (
-      typeof catalogValue === 'number' &&
-      Number.isFinite(catalogValue) &&
-      catalogValue > 0
-    ) {
-      return catalogValue;
+  /**
+   * The model's declared per-response output ceiling, read from the profile.
+   *
+   * Deliberately does not consult the isolated runtime's SettingsService: doing
+   * so would force run-config resolution to happen after runtime assembly, and
+   * a launch that fails during assembly would then dereference a runtime that
+   * does not exist. The profile carries everything needed, and because the
+   * derived budget is clamped to MAX_OUTPUT_TOKENS_TOTAL_CEILING anyway, a
+   * catalog value would only matter for profiles whose ceiling is small enough
+   * to keep the product under the clamp.
+   */
+  private resolveModelMaxOutputTokens(profile: Profile): number | undefined {
+    const candidates = [
+      getNumberSetting(profile.ephemeralSettings, ['maxOutputTokens']),
+      profile.modelParams.max_tokens,
+    ];
+    for (const value of candidates) {
+      if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+        return value;
+      }
     }
-    const profileValue = profile.modelParams.max_tokens;
-    return typeof profileValue === 'number' &&
-      Number.isFinite(profileValue) &&
-      profileValue > 0
-      ? profileValue
-      : undefined;
+    return undefined;
   }
 
   private baseSessionId(): string {

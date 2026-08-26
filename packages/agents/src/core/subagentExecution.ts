@@ -92,9 +92,17 @@ export function recordTurnOutputTokens(
 /**
  * Check whether the loop should terminate (max_turns, max_output, or max_time).
  */
-export function checkTerminationConditions(
-  turnCounter: number,
-  startTime: number,
+/**
+ * Check only the aggregate output budget.
+ *
+ * Split out from {@link checkTerminationConditions} because the budget is the
+ * one condition that must be evaluated in the middle of a turn, right after the
+ * model's output is counted. The turn and time limits deliberately stay at the
+ * top of the loop: re-checking them mid-turn would abandon tool calls the model
+ * already emitted on its final allowed turn, which is a behaviour change the
+ * budget work has no business making.
+ */
+export function checkOutputBudget(
   ctx: Pick<
     ExecutionLoopContext,
     'runConfig' | 'subagentId' | 'output' | 'logger'
@@ -114,6 +122,21 @@ export function checkTerminationConditions(
         `Subagent ${ctx.subagentId} exceeded aggregate output token budget (${outputTokensTotal}/${outputBudget})`,
     );
     return { shouldStop: true, reason: SubagentTerminateMode.MAX_OUTPUT };
+  }
+  return { shouldStop: false };
+}
+
+export function checkTerminationConditions(
+  turnCounter: number,
+  startTime: number,
+  ctx: Pick<
+    ExecutionLoopContext,
+    'runConfig' | 'subagentId' | 'output' | 'logger'
+  >,
+): TerminationCheck {
+  const budgetCheck = checkOutputBudget(ctx);
+  if (budgetCheck.shouldStop) {
+    return budgetCheck;
   }
   if (
     ctx.runConfig.max_turns !== undefined &&

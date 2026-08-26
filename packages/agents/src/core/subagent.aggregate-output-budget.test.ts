@@ -21,6 +21,10 @@ import {
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { SubAgentScope } from './subagent.js';
 import {
+  checkOutputBudget,
+  checkTerminationConditions,
+} from './subagentExecution.js';
+import {
   createMockConfig,
   createRuntimeOverrides,
   createStatelessRuntimeBundle,
@@ -273,5 +277,44 @@ describe('subagent aggregate output token budget', () => {
       SubagentTerminateMode.MAX_OUTPUT,
     );
     expect(scope.output.output_tokens_total).toBe(12);
+  });
+
+  describe('mid-turn budget check scope', () => {
+    /**
+     * The budget must be checkable mid-turn, but the turn and time limits must
+     * not be, or a subagent on its last allowed turn would have the tool calls
+     * it just emitted thrown away instead of executed.
+     */
+    const exhaustedTurns = {
+      runConfig: { max_turns: 1, max_time_minutes: 5 },
+      subagentId: 'sub-1',
+      output: { output_tokens_total: 0, emitted_vars: {} },
+      logger: { warn: () => {}, debug: () => {} },
+    } as unknown as Parameters<typeof checkOutputBudget>[0];
+
+    it('does not stop on an exhausted turn budget', () => {
+      expect(checkOutputBudget(exhaustedTurns).shouldStop).toBe(false);
+    });
+
+    it('still stops on turns when the full check runs at the top of the loop', () => {
+      const result = checkTerminationConditions(1, Date.now(), exhaustedTurns);
+
+      expect(result.shouldStop).toBe(true);
+      expect(result.reason).toBe(SubagentTerminateMode.MAX_TURNS);
+    });
+
+    it('stops on an exceeded output budget', () => {
+      const overBudget = {
+        runConfig: { max_output_tokens_total: 100, max_time_minutes: 5 },
+        subagentId: 'sub-1',
+        output: { output_tokens_total: 101, emitted_vars: {} },
+        logger: { warn: () => {}, debug: () => {} },
+      } as unknown as Parameters<typeof checkOutputBudget>[0];
+
+      const result = checkOutputBudget(overBudget);
+
+      expect(result.shouldStop).toBe(true);
+      expect(result.reason).toBe(SubagentTerminateMode.MAX_OUTPUT);
+    });
   });
 });

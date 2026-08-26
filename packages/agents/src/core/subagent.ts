@@ -61,6 +61,7 @@ import {
   processInteractiveTextResponse,
   handleExecutionError,
   initInteractiveScheduler,
+  checkOutputBudget,
   recordTurnOutputTokens,
   type ExecutionLoopContext,
 } from './subagentExecution.js';
@@ -548,12 +549,9 @@ export class SubAgentScope {
     if (abortController.signal.aborted === true) return { action: 'abort' };
 
     recordTurnOutputTokens(execCtx, reportedOutputTokens, outputCharacterCount);
-    const postTurnCheck = checkTerminationConditions(
-      nextTurnCounter,
-      startTime,
-      execCtx,
-    );
-    if (postTurnCheck.shouldStop) return { action: 'stop' };
+    // Budget only. The turn and time limits are checked at the top of the loop,
+    // so that tool calls the model emitted on its last allowed turn still run.
+    if (checkOutputBudget(execCtx).shouldStop) return { action: 'stop' };
 
     processInteractiveTextResponse(textResponse, execCtx);
 
