@@ -333,8 +333,7 @@ async function readStreamToCompletion(
   );
   while (result.done !== true) {
     const resp = result.value;
-    const isRuntimeAborted = Boolean(abortController.signal.aborted);
-    if (isRuntimeAborted) {
+    if (abortController.signal.aborted) {
       return {
         textResponse,
         parseableTextResponse,
@@ -348,9 +347,8 @@ async function readStreamToCompletion(
       outputCharacterCount += countGeneratedCharacters(
         resp.value.content.blocks,
       );
-      if (resp.value.usage !== undefined) {
-        reportedOutputTokens = resp.value.usage.completionTokens;
-      }
+      reportedOutputTokens =
+        resp.value.usage?.completionTokens ?? reportedOutputTokens;
       const chunkResult = collectNonInteractiveChunk(
         resp,
         functionCalls,

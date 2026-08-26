@@ -24,13 +24,12 @@ function createSseStream(
   let index = 0;
   return new ReadableStream<Uint8Array>({
     pull(controller) {
-      const chunk = chunks[index];
-      if (chunk === undefined) {
+      if (index >= chunks.length) {
         controller.close();
         return;
       }
+      controller.enqueue(encoder.encode(chunks[index]));
       index++;
-      controller.enqueue(encoder.encode(chunk));
     },
   });
 }

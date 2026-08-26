@@ -38,6 +38,10 @@ import {
   type StreamEvent,
 } from './chatSession.js';
 import { closeIteratorBounded } from './iteratorCleanup.js';
+import {
+  TurnDebugResponses,
+  MAX_DEBUG_RESPONSE_CHUNKS,
+} from './turnDebugResponses.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { ContextOverflowError } from '../compression/contextOverflowError.js';
 import {
@@ -76,19 +80,12 @@ import {
   type StructuredError,
 } from '@vybestack/llxprt-code-core/core/turn.js';
 
+// Re-exported so existing importers of this symbol keep working.
+export { MAX_DEBUG_RESPONSE_CHUNKS };
+
 type TurnRequest = string | object | readonly unknown[];
 /** @deprecated Use DEFAULT_STREAM_IDLE_TIMEOUT_MS from streamIdleTimeout.js instead */
 export const TURN_STREAM_IDLE_TIMEOUT_MS = DEFAULT_STREAM_IDLE_TIMEOUT_MS;
-/**
- * Diagnostic chunk retention cap. Exported so tests bind to the real value
- * rather than duplicating a literal that could drift away from it.
- */
-export const MAX_DEBUG_RESPONSE_CHUNKS = 1024;
-
-interface DebugThinkingLocation {
-  readonly chunkIndex: number;
-  readonly blockIndex: number;
-}
 
 interface IdleFlag {
   timedOut: boolean;
@@ -186,11 +183,7 @@ interface TurnWatchdogBundle {
 // A turn manages the agentic loop turn within the server context.
 export class Turn {
   readonly pendingToolCalls: ToolCallRequestInfo[];
-  private debugResponses: ModelStreamChunk[];
-  private readonly debugThinkingByStreamId = new Map<
-    string,
-    DebugThinkingLocation
-  >();
+  private readonly debugResponses = new TurnDebugResponses();
   finishReason: CanonicalFinishReason | undefined;
   private logger: DebugLogger;
 
@@ -201,7 +194,6 @@ export class Turn {
     private readonly providerName: string = 'backend',
   ) {
     this.pendingToolCalls = [];
-    this.debugResponses = [];
     this.finishReason = undefined;
     this.logger = new DebugLogger('llxprt:core:turn');
   }
@@ -266,87 +258,6 @@ export class Turn {
     });
   }
 
-  private pushFilteredDebugChunk(
-    chunk: ModelStreamChunk,
-    allowedBlocks: ContentBlock[],
-  ): void {
-    const blocksToAppend: ContentBlock[] = [];
-
-    for (const block of allowedBlocks) {
-      if (block.type === 'thinking' && typeof block.streamId === 'string') {
-        const location = this.debugThinkingByStreamId.get(block.streamId);
-        if (location !== undefined) {
-          const existingChunk = this.debugResponses[location.chunkIndex];
-          if (existingChunk !== undefined) {
-            const replacementBlocks = [...existingChunk.content.blocks];
-            replacementBlocks[location.blockIndex] = block;
-            this.debugResponses[location.chunkIndex] = {
-              ...chunk,
-              content: { ...chunk.content, blocks: replacementBlocks },
-            };
-            continue;
-          }
-        }
-      }
-      blocksToAppend.push(block);
-    }
-
-    if (blocksToAppend.length > 0 || allowedBlocks.length === 0) {
-      const chunkIndex = this.debugResponses.length;
-      this.debugResponses.push({
-        ...chunk,
-        content: { ...chunk.content, blocks: blocksToAppend },
-      });
-      for (const [blockIndex, block] of blocksToAppend.entries()) {
-        if (block.type === 'thinking' && typeof block.streamId === 'string') {
-          this.debugThinkingByStreamId.set(block.streamId, {
-            chunkIndex,
-            blockIndex,
-          });
-        }
-      }
-      this.trimDebugResponses();
-    }
-  }
-
-  /**
-   * Drops the oldest chunks once retention passes the high-water mark.
-   *
-   * Trimming on every chunk past the cap costs an O(cap) front-splice plus an
-   * O(cap) index rebuild per chunk, which is O(n * cap) over a stream. At the
-   * cap used here that measured 12.2s and 407M operations for 200k chunks,
-   * turning the memory blowup this bound exists to prevent into a CPU stall.
-   *
-   * Letting the array reach twice the cap and then dropping a full cap's worth
-   * in one batch amortises both costs to O(1) per chunk: the same 200k chunks
-   * cost 23ms and 397k operations, a 544x speedup for 1026x fewer operations,
-   * while still retaining the most recent chunks and staying bounded.
-   */
-  private trimDebugResponses(): void {
-    if (this.debugResponses.length <= MAX_DEBUG_RESPONSE_CHUNKS * 2) {
-      return;
-    }
-    this.debugResponses.splice(
-      0,
-      this.debugResponses.length - MAX_DEBUG_RESPONSE_CHUNKS,
-    );
-    this.rebuildDebugThinkingIndex();
-  }
-
-  private rebuildDebugThinkingIndex(): void {
-    this.debugThinkingByStreamId.clear();
-    for (const [chunkIndex, chunk] of this.debugResponses.entries()) {
-      for (const [blockIndex, block] of chunk.content.blocks.entries()) {
-        if (block.type === 'thinking' && typeof block.streamId === 'string') {
-          this.debugThinkingByStreamId.set(block.streamId, {
-            chunkIndex,
-            blockIndex,
-          });
-        }
-      }
-    }
-  }
-
   private *processStreamChunk(
     chunk: ModelStreamChunk,
     traceId: string | undefined,
@@ -356,7 +267,7 @@ export class Turn {
       chunk.content.blocks,
       chunk.hookRestrictions?.allowedToolNames,
     );
-    this.pushFilteredDebugChunk(chunk, allowedBlocks);
+    this.debugResponses.push(chunk, allowedBlocks);
 
     yield* this.emitThoughtContent(allowedBlocks, traceId);
     const text = yield* this.emitTextContent(allowedBlocks, traceId);
@@ -994,7 +905,7 @@ export class Turn {
     return `${name}-${functionCallIndex}-${digest}`;
   }
 
-  getDebugResponses(): ModelStreamChunk[] {
-    return this.debugResponses;
+  getDebugResponses(): readonly ModelStreamChunk[] {
+    return this.debugResponses.retained;
   }
 }
