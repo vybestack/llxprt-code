@@ -75,14 +75,13 @@ function shouldSkipPromptCompletion(
   const noClient = !agentClient;
   const isSpecialInput =
     isSlashCommand(trimmedText) || trimmedText.includes('@');
+  // Without a utility model there is no model to route the completion
+  // request to; the hook stays inert rather than guessing one (#2627).
   const noUtilityModel = utilityModel === undefined || utilityModel === '';
-  return (
-    tooShort ||
-    noClient ||
-    isSpecialInput ||
-    !isPromptCompletionEnabled ||
-    noUtilityModel
-  );
+  if (noUtilityModel || !isPromptCompletionEnabled) {
+    return true;
+  }
+  return tooShort || noClient || isSpecialInput;
 }
 
 function buildPromptCompletionRequest(trimmedText: string): {

@@ -141,7 +141,7 @@ function resolveApprovalAndProvider(
     envDefaultModel: process.env.LLXPRT_DEFAULT_MODEL,
     envGeminiModel: process.env.GEMINI_MODEL,
     providerDefaultModel: runtimeState.providerManager
-      ?.getProviderByName('gemini')
+      .getProviderByName('gemini')
       ?.getDefaultModel(),
   });
   if (

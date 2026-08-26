@@ -19,7 +19,6 @@
 
 import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
-import { AgentEventType } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
   runAdapterStatic,
   loopToolsComplete,
@@ -42,6 +41,7 @@ import {
   streamError,
   streamFinished,
   streamFinishedWithUsage,
+  streamUsage,
   streamUserCancelled,
   wrapStream,
   loopStream,
@@ -408,15 +408,14 @@ describe('Event adapter projection @plan:PLAN-20260617-COREAPI.P14 @requirement:
     // must carry every nonzero count across — a missing mapping would
     // silently emit zeroed counts (all fields are optional).
     const events = await runAdapterStatic([
-      wrapStream({
-        type: AgentEventType.UsageMetadata,
-        value: {
+      wrapStream(
+        streamUsage({
           inputTokenCount: 120,
           outputTokenCount: 30,
           totalTokenCount: 150,
           cachedTokenCount: 12,
-        },
-      }),
+        }),
+      ),
     ]);
     const usageEvents = events.filter((e) => e.type === 'usage');
     expect(usageEvents).toHaveLength(1);
