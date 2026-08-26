@@ -28,6 +28,7 @@ import {
   requireTransportAttempt,
 } from './delegateAttempt.js';
 import { wrapWithTimeout } from './streamTimeout.js';
+import { findRequestCommitState } from '../retryRequestContext.js';
 import type { CircuitBreakerManager } from './circuitBreakerManager.js';
 
 export interface BackendAttemptDeps {
@@ -101,10 +102,8 @@ function startDelegateIterator(
     settings.timeoutMs,
     subProfile.name,
     deps.logger,
-    {
-      signal: attempt.linked.controller.signal,
-      cancel: () => attempt.linked.controller.abort(),
-    },
+    attempt.linked.controller,
+    findRequestCommitState(resolvedOptions),
   );
   return { attempt, iterator };
 }

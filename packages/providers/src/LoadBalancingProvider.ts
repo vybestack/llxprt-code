@@ -41,6 +41,7 @@ import {
 } from './loadBalancing/requestAbort.js';
 import { optionsWithSelectedModelPrompt } from './loadBalancing/selectedModelPrompt.js';
 import { hasTransportAttemptRemaining } from './transportAttemptBudget.js';
+import { isRequestCommitted } from './retryRequestContext.js';
 import { requireTransportAttempt } from './loadBalancing/delegateAttempt.js';
 import { executeBackendAttempt } from './loadBalancing/backendAttemptExecutor.js';
 import {
@@ -853,7 +854,7 @@ export class LoadBalancingProvider implements IProvider {
           maxAttempts,
           settings,
           errors,
-          chunksYielded.value,
+          chunksYielded.value || isRequestCommitted(options),
           currentIndex,
           numProfiles,
           requestOwner,
@@ -949,7 +950,7 @@ export class LoadBalancingProvider implements IProvider {
     maxAttempts: number,
     settings: FailoverSettings,
     errors: Array<{ profile: string; error: Error }>,
-    chunksYielded: boolean,
+    requestCommitted: boolean,
     currentIndex: number,
     numProfiles: number,
     requestOwner: symbol,
@@ -963,7 +964,7 @@ export class LoadBalancingProvider implements IProvider {
       maxAttempts,
       settings,
       errors,
-      chunksYielded,
+      requestCommitted,
       currentIndex,
       numProfiles,
       requestOwner,

@@ -17,6 +17,7 @@ export interface RetryRequestContext {
   readonly options: GenerateChatOptions;
   readonly budget: TransportAttemptBudget;
   readonly releaseBudget: () => void;
+  readonly markCommitted: (exposure: StreamExposure) => void;
   readonly committed: boolean;
   readonly exposure: StreamExposure;
   readonly terminalSeen: boolean;
@@ -48,6 +49,16 @@ const EXPOSURE_STRENGTH: Readonly<Record<StreamExposure, number>> = {
   content: 2,
   tool_call: 3,
 };
+
+/**
+ * Structural seam through which any wrapper layer (guarded stream, load
+ * balancer backend attempt) marks the request's shared commit state. A
+ * RetryRequestContext satisfies this interface; an options-only caller can
+ * obtain a handle via findRequestCommitState.
+ */
+export interface RequestCommitState {
+  markCommitted(exposure: StreamExposure): void;
+}
 
 function positiveInteger(value: unknown, fallback: number): number {
   const defaultValue =
@@ -126,6 +137,16 @@ function requireRequestCommitState(
   return state;
 }
 
+function applyCommit(
+  state: MutableRequestCommitState,
+  exposure: StreamExposure,
+): void {
+  state.committed = true;
+  if (EXPOSURE_STRENGTH[exposure] > EXPOSURE_STRENGTH[state.exposure]) {
+    state.exposure = exposure;
+  }
+}
+
 export function resolveRetryRequestContext(
   options: GenerateChatOptions,
   defaults: {
@@ -172,6 +193,8 @@ export function resolveRetryRequestContext(
       ephemerals?.[RETRY_EPHEMERAL_KEYS.authRetryTimeoutMs],
       defaults.authRetryTimeoutMs,
     ),
+    markCommitted: (exposure: StreamExposure) =>
+      markRequestCommitted(request, exposure),
   };
   requestCommitStates.set(request, commitState);
   return request;
@@ -188,10 +211,36 @@ export function markRequestCommitted(
   exposure: StreamExposure,
 ): void {
   const state = requireRequestCommitState(context);
-  state.committed = true;
-  if (EXPOSURE_STRENGTH[exposure] > EXPOSURE_STRENGTH[state.exposure]) {
-    state.exposure = exposure;
-  }
+  applyCommit(state, exposure);
+}
+
+/**
+ * Locates the shared request commit state through the request options.
+ *
+ * The metadata record under RETRY_REQUEST_CONTEXT_KEY is the single commit
+ * store: handles returned here mutate that same record, so marking from a
+ * delegate layer (e.g. a load-balancer backend attempt) is immediately
+ * visible to the orchestrator that owns the request context.
+ *
+ * @returns A commit handle, or undefined when no retry context is attached
+ * (the caller then operates without shared commitment marking).
+ */
+export function findRequestCommitState(
+  options: GenerateChatOptions,
+): RequestCommitState | undefined {
+  const record = options.metadata?.[RETRY_REQUEST_CONTEXT_KEY];
+  if (!isMutableRequestCommitState(record)) return undefined;
+  return {
+    markCommitted(exposure: StreamExposure): void {
+      applyCommit(record, exposure);
+    },
+  };
+}
+
+/** Whether the shared request commit state is currently committed. */
+export function isRequestCommitted(options: GenerateChatOptions): boolean {
+  const record = options.metadata?.[RETRY_REQUEST_CONTEXT_KEY];
+  return isMutableRequestCommitState(record) && record.committed === true;
 }
 
 /**

@@ -99,8 +99,9 @@ function createScriptedProvider(options: ScriptedProviderOptions): {
   const provider: IProvider = {
     name: 'scripted-provider',
     generateChatCompletion(
-      requestOptions: GenerateChatOptions,
+      optionsOrContents: GenerateChatOptions | IContent[],
     ): AsyncIterableIterator<IContent> {
+      const requestOptions = optionsOrContents as GenerateChatOptions;
       const index = callCount++;
       const factory =
         index < options.script.length
@@ -133,23 +134,23 @@ function trackedStream(factory: StreamFactory): {
   returns: () => number;
 } {
   let returnCount = 0;
-  const wrapper: StreamFactory = (signal) => {
+  const wrapper: StreamFactory = async function* wrapped(signal) {
     const iterator = factory(signal)[Symbol.asyncIterator]();
-    const tracked: AsyncGenerator<IContent> = {
-      next: () => iterator.next(),
-      return: async (value?: unknown) => {
+    let completed = false;
+    try {
+      let result = await iterator.next();
+      while (result.done !== true) {
+        yield result.value;
+        result = await iterator.next();
+      }
+      completed = true;
+      return result.value;
+    } finally {
+      if (!completed) {
         returnCount += 1;
-        return iterator.return(value);
-      },
-      throw: async (error?: unknown) => {
-        if (iterator.throw) return iterator.throw(error);
-        return { done: true as const, value: undefined };
-      },
-      [Symbol.asyncIterator]() {
-        return this;
-      },
-    };
-    return tracked;
+        await iterator.return(undefined);
+      }
+    }
   };
   return { factory: wrapper, returns: () => returnCount };
 }

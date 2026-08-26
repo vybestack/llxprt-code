@@ -7,18 +7,18 @@
 /**
  * @plan PLAN-20251212issue489 - Phase 3
  * Stream timeout wrapping for load-balancer first-chunk timeouts.
+ *
+ * Since issue #2532 the timeout, exposure marking, and cleanup semantics live
+ * in the single guarded-stream primitive shared with RetryOrchestrator. This
+ * module keeps the load balancer's observable timeout surface (the typed
+ * RequestTimeoutError, its log line, and isTimeoutError) while delegating
+ * behavior to guardStream.
  */
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
-import { raceWithAbort } from '../utils/abortSignal.js';
-import { closeIteratorBeforeContinuing } from '../utils/streamCleanup.js';
-
-export interface AttemptCancellation {
-  readonly signal: AbortSignal;
-  cancel(): void;
-}
+import { guardStream } from '../guardedStream.js';
+import type { RequestCommitState } from '../retryRequestContext.js';
 
 const REQUEST_TIMEOUT_ERROR_CODE = 'LLXPRT_REQUEST_TIMEOUT';
 
@@ -31,58 +31,22 @@ export class RequestTimeoutError extends Error {
   }
 }
 
-function createAttemptCancellation(): AttemptCancellation {
-  const controller = new AbortController();
-  return {
-    signal: controller.signal,
-    cancel: () => controller.abort(),
-  };
-}
-
-async function waitForFirstChunk(
-  iterator: AsyncIterableIterator<IContent>,
-  timeoutMs: number | undefined,
-  signal: AbortSignal,
-): Promise<IteratorResult<IContent>> {
-  const next = iterator.next();
-  if (timeoutMs === undefined || timeoutMs <= 0) {
-    return raceWithAbort(next, signal);
-  }
-  const waitController = new AbortController();
-  try {
-    const timeout = delay(timeoutMs, waitController.signal).then(() => {
-      throw new RequestTimeoutError(timeoutMs);
-    });
-    return await raceWithAbort(Promise.race([next, timeout]), signal);
-  } finally {
-    waitController.abort();
-  }
-}
-
 export async function* wrapWithTimeout(
   iterator: AsyncIterableIterator<IContent>,
   timeoutMs: number | undefined,
   profileName: string,
   logger: DebugLogger,
-  attemptCancellation: AttemptCancellation = createAttemptCancellation(),
+  attemptController: AbortController = new AbortController(),
+  context?: RequestCommitState,
 ): AsyncGenerator<IContent> {
-  let completed = false;
-  let failed = false;
-  let failure: unknown;
   try {
-    const firstResult = await waitForFirstChunk(
-      iterator,
-      timeoutMs,
-      attemptCancellation.signal,
-    );
-    if (firstResult.done !== true) yield firstResult.value;
-    for await (const chunk of { [Symbol.asyncIterator]: () => iterator }) {
-      yield chunk;
-    }
-    completed = true;
+    yield* guardStream(iterator, {
+      ...(timeoutMs !== undefined && timeoutMs > 0 ? { timeoutMs } : {}),
+      attemptController,
+      ...(context !== undefined ? { context } : {}),
+      timeoutError: (ms) => new RequestTimeoutError(ms),
+    });
   } catch (error) {
-    failed = true;
-    failure = error;
     if (isTimeoutError(error)) {
       logger.debug(
         () =>
@@ -90,20 +54,6 @@ export async function* wrapWithTimeout(
       );
     }
     throw error;
-  } finally {
-    if (!completed) {
-      let cancellationFailure: unknown;
-      try {
-        attemptCancellation.cancel();
-      } catch (error) {
-        cancellationFailure = error;
-      }
-      await closeIteratorBeforeContinuing(
-        iterator,
-        failed ? failure : cancellationFailure,
-        failed || cancellationFailure !== undefined,
-      );
-    }
   }
 }
 

@@ -10,10 +10,7 @@ import {
   delay,
 } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { markErrorAfterStreamOutput } from './retryErrorClassification.js';
-import {
-  markRequestCommitted,
-  type RetryRequestContext,
-} from './retryRequestContext.js';
+import type { RequestCommitState } from './retryRequestContext.js';
 import type { StreamExposure } from './retryFailureTaxonomy.js';
 import { raceWithAbort } from './utils/abortSignal.js';
 import { closeIteratorBeforeContinuing } from './utils/streamCleanup.js';
@@ -21,7 +18,19 @@ import { closeIteratorBeforeContinuing } from './utils/streamCleanup.js';
 export interface GuardedStreamOptions {
   readonly timeoutMs?: number;
   readonly attemptController: AbortController;
-  readonly context: RetryRequestContext;
+  /**
+   * Shared commit state marked immediately before every outward yield. The
+   * orchestrator always supplies its request context; standalone consumers
+   * (e.g. an unwrapped load balancer) may omit it, in which case chunks are
+   * not marked against a shared request.
+   */
+  readonly context?: RequestCommitState;
+  /**
+   * Optional factory for the first-chunk timeout error, letting callers
+   * surface their own typed timeout error (e.g. RequestTimeoutError) while
+   * the default remains the generic stream-timeout error.
+   */
+  readonly timeoutError?: (timeoutMs: number) => Error;
 }
 
 function exposureOf(content: Partial<IContent> | undefined): StreamExposure {
@@ -36,18 +45,23 @@ async function raceFirstChunkWithTimeout<T>(
   nextPromise: Promise<IteratorResult<T>>,
   timeoutMs: number,
   signal: AbortSignal,
+  timeoutError: (timeoutMs: number) => Error,
 ): Promise<IteratorResult<T>> {
   const timeoutController = new AbortController();
   try {
     const timeout = delay(timeoutMs, timeoutController.signal).then(() => {
-      throw new Error(
-        `Stream timeout: first chunk not received after ${timeoutMs}ms`,
-      );
+      throw timeoutError(timeoutMs);
     });
     return await raceWithAbort(Promise.race([nextPromise, timeout]), signal);
   } finally {
     timeoutController.abort();
   }
+}
+
+function defaultTimeoutError(timeoutMs: number): Error {
+  return new Error(
+    `Stream timeout: first chunk not received after ${timeoutMs}ms`,
+  );
 }
 
 /**
@@ -66,6 +80,7 @@ export async function* guardStream(
   options: GuardedStreamOptions,
 ): AsyncGenerator<IContent, boolean> {
   const { attemptController, context, timeoutMs } = options;
+  const timeoutError = options.timeoutError ?? defaultTimeoutError;
   const iterator = stream[Symbol.asyncIterator]();
   let firstChunk = true;
   let chunksYielded = false;
@@ -85,6 +100,7 @@ export async function* guardStream(
               nextPromise,
               timeoutMs,
               attemptController.signal,
+              timeoutError,
             )
           : await nextPromise;
       if (result.done === true) {
@@ -96,7 +112,7 @@ export async function* guardStream(
       }
       firstChunk = false;
       chunksYielded = true;
-      markRequestCommitted(context, exposureOf(result.value));
+      context?.markCommitted(exposureOf(result.value));
       yield result.value;
     }
   } catch (error) {

@@ -32,7 +32,7 @@ function anthropicError(type: string): Readonly<Record<string, unknown>> {
   };
 }
 
-const mappingCases: readonly FailureCase[] = [
+const mappingCases: FailureCase[] = [
   {
     label: '429 without Retry-After',
     error: errorWithStatus(429),

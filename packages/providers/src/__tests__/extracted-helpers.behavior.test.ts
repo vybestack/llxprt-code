@@ -188,9 +188,8 @@ describe('extracted provider helper behavior', () => {
     expect(isTimeoutError(typedTimeout)).toBe(true);
   });
 
-  it('uses the attempt cancellation capability supplied by its owner', async () => {
+  it('uses the attempt controller supplied by its owner', async () => {
     const controller = new AbortController();
-    const cancel = vi.fn(() => controller.abort());
     async function* delayedFirstChunk(): AsyncIterableIterator<IContent> {
       await new Promise((resolve) => setTimeout(resolve, 20));
       yield { speaker: 'ai', blocks: [{ type: 'text', text: 'late' }] };
@@ -203,11 +202,11 @@ describe('extracted provider helper behavior', () => {
           1,
           'owned-attempt',
           debugLoggerStub(),
-          { signal: controller.signal, cancel },
+          controller,
         ),
       ),
     ).rejects.toThrow('Request timeout after 1ms');
-    expect(cancel).toHaveBeenCalledOnce();
+    expect(controller.signal.aborted).toBe(true);
   });
 
   it('preserves backend token extraction and request metrics accumulation', () => {
