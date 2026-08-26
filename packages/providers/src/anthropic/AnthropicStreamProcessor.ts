@@ -23,6 +23,11 @@ import {
   logDoubleEscapingInChunk,
 } from '@vybestack/llxprt-code-tools/doubleEscapeUtils.js';
 import { coerceParametersToSchema } from '@vybestack/llxprt-code-core/utils/parameterCoercion.js';
+import {
+  assertProviderStreamByteLimit,
+  MAX_PROVIDER_TOOL_CALL_BYTES,
+  utf8ByteLength,
+} from '../streamLimits.js';
 
 export type StreamProcessorOptions = {
   isOAuth: boolean;
@@ -43,6 +48,13 @@ type CurrentThinkingBlock = {
   thinking: string;
   signature?: string;
   streamId: string;
+};
+
+type CurrentToolCall = {
+  id: string;
+  name: string;
+  input: string;
+  inputBytes: number;
 };
 
 type ThinkingBlockIdentity = {
@@ -126,7 +138,7 @@ async function* processStreamEvents(
     cacheLogger,
   } = options;
 
-  let currentToolCall: { id: string; name: string; input: string } | undefined;
+  let currentToolCall: CurrentToolCall | undefined;
   let currentThinkingBlock: CurrentThinkingBlock | undefined;
   const thinkingBlockIdentity = createThinkingBlockIdentity();
 
@@ -257,7 +269,7 @@ function handleContentBlockStartStateful(
   logger: { debug: (fn: () => string) => void },
   includeThinkingInResponse: boolean,
 ): {
-  currentToolCall?: { id: string; name: string; input: string };
+  currentToolCall?: CurrentToolCall;
   currentThinkingBlock?: CurrentThinkingBlock;
   content?: IContent;
 } {
@@ -269,6 +281,7 @@ function handleContentBlockStartStateful(
         id: toolBlock.id,
         name: unprefixToolName(toolBlock.name, isOAuth),
         input: '',
+        inputBytes: 0,
       },
     };
   }
@@ -308,7 +321,7 @@ function handleContentBlockStartStateful(
 
 function handleContentBlockDelta(
   chunk: Anthropic.MessageStreamEvent & { type: 'content_block_delta' },
-  currentToolCall: { id: string; name: string; input: string } | undefined,
+  currentToolCall: CurrentToolCall | undefined,
   currentThinkingBlock: CurrentThinkingBlock | undefined,
   includeThinkingInResponse: boolean,
   logger: { debug: (fn: () => string) => void },
@@ -319,6 +332,12 @@ function handleContentBlockDelta(
     return textDelta.text ? buildTextDeltaContent(textDelta.text) : undefined;
   } else if (chunk.delta.type === 'input_json_delta' && currentToolCall) {
     const jsonDelta = chunk.delta as InputJSONDelta;
+    currentToolCall.inputBytes += utf8ByteLength(jsonDelta.partial_json);
+    assertProviderStreamByteLimit(
+      'tool-call arguments',
+      currentToolCall.inputBytes,
+      MAX_PROVIDER_TOOL_CALL_BYTES,
+    );
     currentToolCall.input += jsonDelta.partial_json;
 
     logDoubleEscapingInChunk(
@@ -375,7 +394,7 @@ function sanitizeTokenCount(value: number | null | undefined): number {
 }
 
 function completeToolCall(
-  currentToolCall: { id: string; name: string; input: string },
+  currentToolCall: CurrentToolCall,
   tools: ProviderToolset | undefined,
   isOAuth: boolean,
   findToolSchema: (
@@ -461,7 +480,7 @@ function completeThinkingBlock(
 
 function handleContentBlockStop(
   chunk: Anthropic.MessageStreamEvent & { type: 'content_block_stop' },
-  currentToolCall: { id: string; name: string; input: string } | undefined,
+  currentToolCall: CurrentToolCall | undefined,
   currentThinkingBlock: CurrentThinkingBlock | undefined,
   tools: ProviderToolset | undefined,
   isOAuth: boolean,
@@ -474,7 +493,7 @@ function handleContentBlockStop(
   logger: { debug: (fn: () => string) => void },
 ): {
   content?: IContent;
-  currentToolCall?: { id: string; name: string; input: string };
+  currentToolCall?: CurrentToolCall;
   currentThinkingBlock?: CurrentThinkingBlock;
 } {
   if (currentToolCall) {

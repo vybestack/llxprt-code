@@ -16,6 +16,13 @@
 
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { resolveReasoningField } from '../utils/reasoningField.js';
+import {
+  assertProviderStreamByteLimit,
+  MAX_PROVIDER_REASONING_CAPTURE_BYTES,
+  ProviderStreamProtocolError,
+  assertSseLinesWithinLimit,
+  utf8ByteLength,
+} from '../streamLimits.js';
 
 /**
  * Buffer that accumulates reasoning chunks captured from the
@@ -26,9 +33,15 @@ import { resolveReasoningField } from '../utils/reasoningField.js';
  */
 export interface CaptureBuffer {
   reasoningChunks: string[];
+  reasoningBytes: number;
   finalized: boolean;
   headers?: Headers;
   parsePromise?: Promise<void>;
+  /**
+   * Failure from the detached parser, captured so the rejection is always
+   * observed and can be re-surfaced by whoever awaits `parsePromise`.
+   */
+  parseError?: Error;
   fieldName?: string;
   actualFieldName?: string;
 }
@@ -36,9 +49,11 @@ export interface CaptureBuffer {
 export function createCaptureBuffer(fieldName?: string): CaptureBuffer {
   return {
     reasoningChunks: [],
+    reasoningBytes: 0,
     finalized: false,
     headers: undefined,
     parsePromise: undefined,
+    parseError: undefined,
     fieldName,
   };
 }
@@ -73,6 +88,14 @@ function captureReasoningFromJson(
     delta,
   });
   if (resolved !== undefined) {
+    const reasoningBytes =
+      captureBuffer.reasoningBytes + utf8ByteLength(resolved.value);
+    assertProviderStreamByteLimit(
+      'captured reasoning',
+      reasoningBytes,
+      MAX_PROVIDER_REASONING_CAPTURE_BYTES,
+    );
+    captureBuffer.reasoningBytes = reasoningBytes;
     captureBuffer.reasoningChunks.push(resolved.value);
     captureBuffer.actualFieldName = resolved.actualFieldName;
     logger.debug(
@@ -91,16 +114,23 @@ export async function parseReasoningFromSseStream(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   captureBuffer: CaptureBuffer,
   logger: DebugLogger,
+  signal?: AbortSignal,
 ): Promise<void> {
   const decoder = new TextDecoder();
   let buffer = '';
+  const cancelReader = (): void => {
+    void reader.cancel(signal?.reason).catch(() => undefined);
+  };
+  signal?.addEventListener('abort', cancelReader, { once: true });
 
   try {
-    let streamDone = false;
+    let streamDone = signal?.aborted === true;
+    if (streamDone) {
+      cancelReader();
+    }
     while (!streamDone) {
       const { done, value } = await reader.read();
-      if (done) {
-        captureBuffer.finalized = true;
+      if (done || signal?.aborted === true) {
         streamDone = true;
         continue;
       }
@@ -110,6 +140,7 @@ export async function parseReasoningFromSseStream(
       // Parse SSE chunks (data: {...}\n\n)
       const lines = buffer.split('\n');
       buffer = lines.pop() ?? '';
+      assertSseLinesWithinLimit(lines, buffer);
 
       const dataLines = lines.filter(
         (line) =>
@@ -121,13 +152,31 @@ export async function parseReasoningFromSseStream(
       }
     }
   } catch (err) {
+    if (err instanceof ProviderStreamProtocolError) {
+      throw err;
+    }
     logger.debug(
       () =>
         `[ReasoningCaptureFetch] Stream parsing error: ${err instanceof Error ? err.message : String(err)}`,
     );
   } finally {
-    reader.releaseLock();
+    // Order matters. `finalized` is set first so a consumer waiting on it is
+    // released even if a cleanup step throws.
     captureBuffer.finalized = true;
+    signal?.removeEventListener('abort', cancelReader);
+    // Cancel before releasing the lock. This reader owns one branch of a tee;
+    // merely releasing it leaves the branch live, so as the SDK drains the
+    // other branch the tee keeps queueing every chunk for this abandoned one.
+    // On the byte-limit path that would retain the whole rest of the response,
+    // which is the opposite of what the limit is for.
+    // Start the cancellation but do not await it. `cancel()` on a tee branch
+    // can stay pending while the sibling branch is still open, and the SDK may
+    // leave `sdkStream` open after an abort. Awaiting here would keep
+    // `parsePromise` pending and hang `vercelStreamHandler`, which awaits it:
+    // a leak traded for a deadlock. Releasing the lock is what matters
+    // synchronously; the cancellation lands whenever the tee lets it.
+    void reader.cancel().catch(() => undefined);
+    reader.releaseLock();
   }
 }
 
@@ -154,11 +203,25 @@ export function createReasoningCaptureFetch(
     }
 
     const [parserStream, sdkStream] = response.body.tee();
+    // The parser runs detached from the SDK stream and can now reject (the
+    // byte limits throw). Nothing guarantees the consumer reaches its `await`:
+    // the SDK stream can throw first, the signal can abort, or the generator
+    // can simply not be iterated to completion. An unobserved rejection is a
+    // process-level crash, so the outcome is captured here and re-surfaced by
+    // whoever awaits, rather than left to escape.
     captureBuffer.parsePromise = parseReasoningFromSseStream(
       parserStream.getReader(),
       captureBuffer,
       logger,
-    );
+      init?.signal ?? undefined,
+    ).catch((error: unknown) => {
+      captureBuffer.parseError =
+        error instanceof Error ? error : new Error(String(error));
+      logger.debug(
+        () =>
+          `[vercel:reasoning] detached parser failed: ${captureBuffer.parseError?.message}`,
+      );
+    });
 
     return new Response(sdkStream, {
       status: response.status,

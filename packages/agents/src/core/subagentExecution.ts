@@ -17,6 +17,7 @@
 
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   type SchedulerCallbacks,
   type SchedulerOptions,
@@ -36,6 +37,7 @@ import type {
 } from './coreToolScheduler.js';
 import {
   SubagentTerminateMode,
+  UNLIMITED_OUTPUT_TOKENS_TOTAL,
   type OutputObject,
   type OutputConfig,
   type RunConfig,
@@ -69,9 +71,138 @@ export interface TerminationCheck {
   reason?: SubagentTerminateMode;
 }
 
+const FALLBACK_CHARACTERS_PER_TOKEN = 4;
+
 /**
- * Check whether the loop should terminate (max_turns or max_time).
+ * Counts characters a model generated over one streamed response.
+ *
+ * Stateful because thinking cannot be counted by summing deltas. Providers that
+ * carry a `streamId` re-emit the entire accumulated thought on every delta
+ * (Anthropic does), so adding each one counts an N-character thought roughly
+ * N^2/2 times. On a high-reasoning profile that inflates the total enough to
+ * trip an aggregate budget during legitimate work, which is worse than not
+ * counting reasoning at all. Each span is therefore tracked by its latest
+ * length and only the newest value contributes.
+ *
+ * Thinking without a `streamId` is treated as a true delta and summed, which is
+ * what providers that emit incremental thoughts actually send.
+ *
+ * `tool_response` and `media` blocks are deliberately excluded. This budget
+ * bounds what the *model* generated, and those two carry tool results and
+ * inputs the model did not produce. Counting them would let a large tool result
+ * consume a budget meant to stop runaway generation, stopping healthy runs.
  */
+export class GeneratedOutputCounter {
+  private plainCharacters = 0;
+  private readonly latestThinkingLength = new Map<string, number>();
+
+  add(blocks: readonly ContentBlock[]): void {
+    for (const block of blocks) {
+      if (block.type === 'text') {
+        this.plainCharacters += block.text.length;
+      } else if (block.type === 'code') {
+        // Model-generated like text, and a runaway can emit it exclusively.
+        this.plainCharacters += block.code.length;
+      } else if (block.type === 'thinking') {
+        this.addThinking(block);
+      } else if (block.type === 'tool_call') {
+        this.plainCharacters += block.name.length;
+        this.plainCharacters +=
+          typeof block.parameters === 'string'
+            ? block.parameters.length
+            : JSON.stringify(block.parameters ?? '').length;
+      }
+    }
+  }
+
+  private addThinking(block: { thought: string; streamId?: string }): void {
+    if (typeof block.streamId !== 'string') {
+      this.plainCharacters += block.thought.length;
+      return;
+    }
+    this.latestThinkingLength.set(block.streamId, block.thought.length);
+  }
+
+  get total(): number {
+    let thinking = 0;
+    for (const length of this.latestThinkingLength.values()) {
+      thinking += length;
+    }
+    return this.plainCharacters + thinking;
+  }
+}
+
+/**
+ * Add one completed turn's output usage to the aggregate run total.
+ *
+ * Provider-reported completion tokens are authoritative when present, because
+ * the character estimate is only an approximation and real tokenizers pack code
+ * and JSON far denser than four characters per token. Overriding an accurate
+ * report with the estimate would stop runs early.
+ *
+ * The exception is a report of zero alongside output that plainly exists. Some
+ * providers normalise a missing `completion_tokens` to 0, and treating that as
+ * authoritative would stop counting the run entirely, which is the one way this
+ * accounting can fail open. Only that case falls back to the estimate.
+ */
+export function recordTurnOutputTokens(
+  ctx: Pick<ExecutionLoopContext, 'output'>,
+  reportedOutputTokens: number | undefined,
+  outputCharacterCount: number,
+): number {
+  const estimated = Math.ceil(
+    outputCharacterCount / FALLBACK_CHARACTERS_PER_TOKEN,
+  );
+  const turnOutputTokens =
+    reportedOutputTokens !== undefined &&
+    (reportedOutputTokens > 0 || outputCharacterCount === 0)
+      ? reportedOutputTokens
+      : estimated;
+  const total = (ctx.output.output_tokens_total ?? 0) + turnOutputTokens;
+  ctx.output.output_tokens_total = total;
+  return total;
+}
+
+/**
+ * Check whether the loop should terminate (max_turns, max_output, or max_time).
+ */
+/**
+ * Check only the aggregate output budget.
+ *
+ * Split out from {@link checkTerminationConditions} because the budget is the
+ * one condition that must be evaluated in the middle of a turn, right after the
+ * model's output is counted. The turn and time limits deliberately stay at the
+ * top of the loop: re-checking them mid-turn would abandon tool calls the model
+ * already emitted on its final allowed turn, which is a behaviour change the
+ * budget work has no business making.
+ */
+export function checkOutputBudget(
+  ctx: Pick<
+    ExecutionLoopContext,
+    'runConfig' | 'subagentId' | 'output' | 'logger'
+  >,
+): TerminationCheck {
+  const outputBudget = ctx.runConfig.max_output_tokens_total;
+  const outputTokensTotal = ctx.output.output_tokens_total ?? 0;
+  if (
+    outputBudget !== undefined &&
+    outputBudget !== UNLIMITED_OUTPUT_TOKENS_TOTAL &&
+    // >= not >. Stopping only once the total exceeds the budget lets a run that
+    // lands exactly on it issue one more request, so the overshoot is a whole
+    // extra response rather than nothing.
+    outputTokensTotal >= outputBudget
+  ) {
+    ctx.output.terminate_reason = SubagentTerminateMode.MAX_OUTPUT;
+    ctx.output.output_tokens_budget = outputBudget;
+    ctx.logger.warn(
+      () =>
+        `Subagent ${ctx.subagentId} exceeded aggregate output token budget (${outputTokensTotal}/${outputBudget})`,
+    );
+    return { shouldStop: true, reason: SubagentTerminateMode.MAX_OUTPUT };
+  }
+  return { shouldStop: false };
+}
+
 export function checkTerminationConditions(
   turnCounter: number,
   startTime: number,
@@ -80,6 +211,10 @@ export function checkTerminationConditions(
     'runConfig' | 'subagentId' | 'output' | 'logger'
   >,
 ): TerminationCheck {
+  const budgetCheck = checkOutputBudget(ctx);
+  if (budgetCheck.shouldStop) {
+    return budgetCheck;
+  }
   if (
     ctx.runConfig.max_turns !== undefined &&
     turnCounter >= ctx.runConfig.max_turns

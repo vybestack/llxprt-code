@@ -14,6 +14,11 @@ export interface PendingResponsePushResult {
   readonly feedback?: string;
 }
 
+export interface PendingResponseConsumeResult {
+  readonly committedText: string;
+  readonly retainedText: string;
+}
+
 /**
  * Owns the in-progress assistant response for one turn.
  *
@@ -77,8 +82,10 @@ export class PendingResponseBuffer {
   }
 
   /** Drops the committed prefix `[0, splitPoint)` from the retained text. */
-  consume(splitPoint: number): void {
-    this.scanner.consume(splitPoint);
+  consume(splitPoint: number): PendingResponseConsumeResult {
+    const committedText = this.scanner.getText().slice(0, splitPoint);
+    const retainedText = this.scanner.consume(splitPoint);
+    return { committedText, retainedText };
   }
 
   /**

@@ -168,6 +168,28 @@ describe('streamed content pipeline (issue #2852)', () => {
     }
   });
 
+  it('commits a forced code-block prefix and renders a fenced continuation', () => {
+    const harness = createHarness();
+    const opening = '```typescript\n';
+    const source = opening + 'x'.repeat(524_288);
+
+    harness.stream([source]);
+
+    const committedText = harness.committed
+      .map((item) => (item as { text: string }).text)
+      .join('');
+    const retainedText = harness.deps.pendingResponse.stableText;
+    expect({
+      retainedIsBounded: retainedText.length < 524_288,
+      continuationOpening: retainedText.slice(0, opening.length),
+      reconstructed: committedText + retainedText.slice(opening.length),
+    }).toStrictEqual({
+      retainedIsBounded: true,
+      continuationOpening: opening,
+      reconstructed: source,
+    });
+  });
+
   it('commits emoji-bearing content identically to whole-text filtering', () => {
     const source =
       'Result ✅ ready.\n\nWarning ⚠️ applies to step 1️⃣ only.\n\nDone 😀 now.';

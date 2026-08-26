@@ -22,6 +22,13 @@
  */
 
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import {
+  assertProviderStreamByteLimit,
+  assertProviderStreamFragmentLimit,
+  MAX_PROVIDER_TOOL_CALL_FRAGMENTS,
+  MAX_PROVIDER_TOOL_CALL_BYTES,
+  utf8ByteLength,
+} from '../streamLimits.js';
 
 const logger = new DebugLogger('llxprt:providers:openai:toolCallCollector');
 
@@ -58,16 +65,18 @@ export interface ToolCallCandidate {
  */
 export class ToolCallCollector {
   private fragments = new Map<number, ToolCallFragment[]>();
+  private retainedBytes = new Map<number, number>();
 
   /**
    * Add tool call fragment
    */
   addFragment(index: number, fragment: Partial<ToolCallFragment>): void {
-    if (!this.fragments.has(index)) {
-      this.fragments.set(index, []);
+    let existingFragments = this.fragments.get(index);
+    if (existingFragments === undefined) {
+      existingFragments = [];
+      this.fragments.set(index, existingFragments);
     }
 
-    const existingFragments = this.fragments.get(index)!;
     const completeFragment: ToolCallFragment = {
       index,
       timestamp: Date.now(),
@@ -79,10 +88,40 @@ export class ToolCallCollector {
       this.isDuplicateFragment(existing, completeFragment),
     );
 
+    // A fragment carrying no identity and no payload contributes nothing to the
+    // reconstructed call but still costs a retained object and lengthens the
+    // duplicate scan below, which is linear per fragment. Dropping it is not a
+    // limit, just refusing to store noise.
+    if (this.fragmentByteLength(completeFragment) === 0) {
+      return;
+    }
+
     if (!isDuplicate) {
+      assertProviderStreamFragmentLimit(
+        'tool-call fragments',
+        existingFragments.length + 1,
+        MAX_PROVIDER_TOOL_CALL_FRAGMENTS,
+      );
+      const nextRetainedBytes =
+        (this.retainedBytes.get(index) ?? 0) +
+        this.fragmentByteLength(completeFragment);
+      assertProviderStreamByteLimit(
+        'tool-call fragments',
+        nextRetainedBytes,
+        MAX_PROVIDER_TOOL_CALL_BYTES,
+      );
+      this.retainedBytes.set(index, nextRetainedBytes);
       existingFragments.push(completeFragment);
       logger.debug(`Added fragment to tool call ${index}`);
     }
+  }
+
+  private fragmentByteLength(fragment: ToolCallFragment): number {
+    return (
+      utf8ByteLength(fragment.id ?? '') +
+      utf8ByteLength(fragment.name ?? '') +
+      utf8ByteLength(fragment.args ?? '')
+    );
   }
 
   /**
@@ -201,6 +240,7 @@ export class ToolCallCollector {
    */
   reset(): void {
     this.fragments.clear();
+    this.retainedBytes.clear();
     logger.debug('ToolCallCollector reset');
   }
 }

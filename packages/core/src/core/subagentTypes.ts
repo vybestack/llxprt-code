@@ -101,6 +101,10 @@ export enum SubagentTerminateMode {
    * Indicates that the subagent's execution terminated because it exceeded the maximum number of turns.
    */
   MAX_TURNS = 'MAX_TURNS',
+  /**
+   * Indicates that the subagent's execution terminated because it exceeded the aggregate output token budget.
+   */
+  MAX_OUTPUT = 'MAX_OUTPUT',
 }
 
 /**
@@ -118,6 +122,14 @@ export interface OutputObject {
    * The final natural language response produced by the subagent (if any).
    */
   final_message?: string;
+  /**
+   * The cumulative output tokens reported or estimated across all completed turns.
+   */
+  output_tokens_total?: number;
+  /**
+   * The aggregate output token budget that terminated the run, when applicable.
+   */
+  output_tokens_budget?: number;
   /**
    * The reason for the subagent's termination, indicating whether it completed
    * successfully, timed out, or encountered an error.
@@ -202,6 +214,16 @@ export interface ModelConfig {
 }
 
 /**
+ * Sentinel meaning "no aggregate output budget".
+ *
+ * Shared so the orchestrator (which decides whether to set a budget) and the
+ * execution loop (which decides whether to enforce one) cannot drift apart on
+ * the convention. Zero is a legitimate budget meaning "stop immediately", so it
+ * must not be conflated with unlimited.
+ */
+export const UNLIMITED_OUTPUT_TOKENS_TOTAL = -1;
+
+/**
  * Configures the execution environment and constraints for the subagent.
  * This interface defines parameters that control the subagent's runtime behavior,
  * such as maximum execution time, to prevent infinite loops or excessive resource consumption.
@@ -216,6 +238,11 @@ export interface RunConfig {
    * before the execution is terminated. Helps prevent infinite loops.
    */
   max_turns?: number;
+  /**
+   * The aggregate output token budget across all model responses in the run.
+   * {@link UNLIMITED_OUTPUT_TOKENS_TOTAL} disables the budget.
+   */
+  max_output_tokens_total?: number;
   /** Maximum time in seconds allowed for a recovery turn after a termination condition. */
   grace_period_seconds?: number;
 }
