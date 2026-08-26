@@ -15,7 +15,6 @@
 
 import { afterEach, describe, expect, it } from 'bun:test';
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -109,15 +108,15 @@ describe('removeTarballs', () => {
   });
 
   it('propagates removal failures instead of silently keeping stale tarballs', () => {
-    // A read-only dist directory makes unlink of a matched entry fail with
-    // EACCES/EPERM. The old `force: true` swallowed this, which is the same
-    // silent-stale-tarball failure mode #3334 exists to eliminate.
-    const distDir = createDistDir([`${CORE_PREFIX}-0.11.0.tgz`]);
-    chmodSync(distDir, 0o555);
-    try {
-      expect(() => removeTarballs(distDir, CORE_PREFIX)).toThrow();
-    } finally {
-      chmodSync(distDir, 0o755);
-    }
+    // A directory masquerading as a tarball makes the non-recursive rmSync
+    // fail with EISDIR on every platform and for any uid, so the error
+    // propagation is exercised deterministically. The old `force: true`
+    // swallowed such failures, the same silent-stale-tarball failure mode
+    // #3334 exists to eliminate.
+    const distDir = join(createTempRoot(), 'dist');
+    mkdirSync(distDir);
+    mkdirSync(join(distDir, `${CORE_PREFIX}-0.11.0.tgz`));
+
+    expect(() => removeTarballs(distDir, CORE_PREFIX)).toThrow();
   });
 });
