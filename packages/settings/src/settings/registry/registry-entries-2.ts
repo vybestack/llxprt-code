@@ -253,13 +253,6 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
     persistToProfile: true,
   },
   {
-    key: 'include-folder-structure',
-    category: 'cli-behavior',
-    description: 'Include folder structure in system prompts',
-    type: 'boolean',
-    persistToProfile: true,
-  },
-  {
     key: 'enable-tool-prompts',
     category: 'cli-behavior',
     description: 'Load tool-specific prompts from <config>/prompts/tools/**',

@@ -132,7 +132,6 @@ export interface ProfileEphemeralSettings {
   'tools.disabled'?: string[];
   GOOGLE_CLOUD_PROJECT?: string;
   GOOGLE_CLOUD_LOCATION?: string;
-  'include-folder-structure'?: boolean;
   'prompt-caching'?: 'off' | '5m' | '1h' | '24h';
   'enable-tool-prompts'?: boolean;
   'rate-limit-throttle'?: 'on' | 'off';

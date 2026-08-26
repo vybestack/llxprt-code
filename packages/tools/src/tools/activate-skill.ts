@@ -31,8 +31,6 @@ class ActivateSkillToolInvocation extends BaseToolInvocation<
   ActivateSkillToolParams,
   ToolResult
 > {
-  private cachedFolderStructure: string | undefined;
-
   constructor(
     private readonly skillService: ISkillService,
     params: ActivateSkillToolParams,
@@ -52,12 +50,6 @@ class ActivateSkillToolInvocation extends BaseToolInvocation<
     return `"${skillName}" (?) unknown skill`;
   }
 
-  private async getOrFetchFolderStructure(skillName: string): Promise<string> {
-    this.cachedFolderStructure ??=
-      await this.skillService.getFolderStructure(skillName);
-    return this.cachedFolderStructure;
-  }
-
   override async shouldConfirmExecute(
     _abortSignal: AbortSignal,
   ): Promise<ToolCallConfirmationDetails | false> {
@@ -72,18 +64,13 @@ class ActivateSkillToolInvocation extends BaseToolInvocation<
       return false;
     }
 
-    const folderStructure = await this.getOrFetchFolderStructure(skillName);
-
     const confirmationDetails: ToolCallConfirmationDetails = {
       type: 'info',
       title: `Activate Skill: ${skillName}`,
       prompt: `You are about to enable the specialized agent skill **${skillName}**.
 
 **Description:**
-${skill.description ?? ''}
-
-**Resources to be shared with the model:**
-${folderStructure}`,
+${skill.description ?? ''}`,
       onConfirm: async (outcome: ToolConfirmationOutcome) => {
         await this.publishPolicyUpdate(outcome);
       },
@@ -110,21 +97,20 @@ ${folderStructure}`,
       };
     }
 
-    const folderStructure =
-      result.folderStructure ??
-      (await this.getOrFetchFolderStructure(skillName));
-
     return {
       llmContent: `<activated_skill name="${skillName}">
   <instructions>
     ${result.instructions ?? ''}
   </instructions>
-
-  <available_resources>
-    ${folderStructure}
-  </available_resources>
+${
+  result.resourceDirectory
+    ? `<resource_directory>
+    ${result.resourceDirectory}
+  </resource_directory>`
+    : ''
+}
 </activated_skill>`,
-      returnDisplay: `Skill **${skillName}** activated. Resources loaded from \`${result.resourceDirectory ?? ''}\`:\n\n${folderStructure}`,
+      returnDisplay: `Skill **${skillName}** activated. Resources loaded from \`${result.resourceDirectory ?? ''}\` (if a resource directory is present, it has been added to the workspace context).`,
     };
   }
 }

@@ -12,7 +12,6 @@ import type {
   SkillManager as ToolsSkillManager,
 } from '@vybestack/llxprt-code-tools';
 import type { Config } from '../config/config.js';
-import { getFolderStructure } from '../utils/getFolderStructure.js';
 import type { SkillDefinition } from '../skills/skillLoader.js';
 
 function toSkillInfo(skill: SkillDefinition): SkillInfo {
@@ -24,8 +23,6 @@ function toSkillInfo(skill: SkillDefinition): SkillInfo {
 }
 
 export class CoreSkillServiceAdapter implements ISkillService {
-  private folderStructureCache = new Map<string, string>();
-
   constructor(private readonly config: Config) {}
 
   async activateSkill(name: string): Promise<SkillActivationResult> {
@@ -46,14 +43,12 @@ export class CoreSkillServiceAdapter implements ISkillService {
     skillManager.activateSkill(name);
     const resourceDirectory = path.dirname(skill.location);
     this.config.getWorkspaceContext().addDirectory(resourceDirectory);
-    const folderStructure = await this.getFolderStructure(name);
 
     return {
       success: true,
       instructions: skill.body,
       description: skill.description,
       location: skill.location,
-      folderStructure,
       resourceDirectory,
     };
   }
@@ -81,23 +76,5 @@ export class CoreSkillServiceAdapter implements ISkillService {
   getSkill(name: string): SkillInfo | null {
     const skill = this.config.getSkillManager().getSkill(name);
     return skill ? toSkillInfo(skill) : null;
-  }
-
-  async getFolderStructure(skillName: string): Promise<string> {
-    const cached = this.folderStructureCache.get(skillName);
-    if (cached !== undefined) {
-      return cached;
-    }
-
-    const skill = this.config.getSkillManager().getSkill(skillName);
-    if (!skill) {
-      return '';
-    }
-
-    const folderStructure = await getFolderStructure(
-      path.dirname(skill.location),
-    );
-    this.folderStructureCache.set(skillName, folderStructure);
-    return folderStructure;
   }
 }

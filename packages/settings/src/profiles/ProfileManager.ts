@@ -61,10 +61,6 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
-function optionalBoolean(value: unknown): boolean | undefined {
-  return typeof value === 'boolean' ? value : undefined;
-}
-
 function referencedProfileIsLoadBalancer(profile: unknown): boolean {
   return isPlainObject(profile) && profile.type === 'loadbalancer';
 }
@@ -347,9 +343,6 @@ export class ProfileManager {
         'prompt-caching': parsePromptCaching(
           providerSettings['prompt-caching'],
         ),
-        'include-folder-structure': optionalBoolean(
-          providerSettings['include-folder-structure'],
-        ),
         'tool-format': optionalString(providerSettings.toolFormat),
       } satisfies EphemeralSettings,
     };
@@ -403,8 +396,6 @@ export class ProfileManager {
           'auth-key': profile.ephemeralSettings['auth-key'],
           'auth-keyfile': profile.ephemeralSettings['auth-keyfile'],
           'prompt-caching': profile.ephemeralSettings['prompt-caching'],
-          'include-folder-structure':
-            profile.ephemeralSettings['include-folder-structure'],
           toolFormat: profile.ephemeralSettings['tool-format'],
         },
       },

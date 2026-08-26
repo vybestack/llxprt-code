@@ -59,7 +59,7 @@ export async function buildAgentSystemPrompt(
   // Inject user inputs into the prompt template.
   let finalPrompt = templateString(systemPromptTemplate, inputs);
 
-  // Append environment context (CWD and folder structure).
+  // Append environment context (CWD only; no folder-tree listing, #3072).
   const dirContext = await getDirectoryContextString(runtimeContext);
   finalPrompt += `\n\n# Environment Context\n${dirContext}`;
 
