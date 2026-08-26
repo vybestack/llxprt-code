@@ -47,9 +47,17 @@ export const MAX_UNCLOSED_FENCE_LENGTH = 512 * 1024;
 
 /** Tail kept after a forced split, so the continuation still has context. */
 export const FORCED_SPLIT_RETAINED_LENGTH = 64 * 1024;
-const FENCE_HEADER_PATTERN = new RegExp(
-  '^(`{3,100}) {0,40}(\\w{0,100}?) {0,40}$',
-);
+/**
+ * Info string following an opening fence.
+ *
+ * CommonMark allows any run of non-backtick characters, so the language is
+ * matched as such rather than as `\w`: `c++`, `objective-c` and `c#` are all
+ * legal and all contain punctuation. Getting this wrong is not cosmetic. The
+ * continuation fence would fall back to three backticks with no language, and a
+ * literal ``` inside the retained tail would then close it early, inverting
+ * fence parity for the rest of the stream.
+ */
+const FENCE_INFO_PATTERN = new RegExp('^[ \\t]*([^`\\n]{0,100}?)[ \\t]*$');
 
 export class IncrementalSplitScanner {
   private text = '';
@@ -155,11 +163,15 @@ export class IncrementalSplitScanner {
    * decision has to wait for more text.
    */
   private stepAt(index: number, length: number): number {
-    this.captureFenceHeaderCharacter(this.text[index]);
     const char = this.text[index];
     if (char === '`') {
+      // Header capture deliberately does not run here. scanFence can defer
+      // (return 0) when the run is still arriving, leaving scanPos unchanged,
+      // and capturing first would then feed the same backtick in again on the
+      // next delta and corrupt the header.
       return this.scanFence(index, length);
     }
+    this.captureFenceHeaderCharacter(char);
     if (char === '\n') {
       return this.scanParagraphBreak(index, length);
     }
@@ -179,18 +191,30 @@ export class IncrementalSplitScanner {
     if (this.text[index + 2] !== '`') {
       return 1;
     }
+    // Measure the whole backtick run rather than assuming three. A 4+ backtick
+    // fence reconstructed as three would be closed early by a literal ``` in
+    // the retained tail.
+    let runEnd = index + 3;
+    while (runEnd < length && this.text[runEnd] === '`') {
+      runEnd += 1;
+    }
+    // The run may still be growing at the end of the text; wait for more rather
+    // than recording a truncated fence.
+    if (runEnd >= length) {
+      return 0;
+    }
     if (this.fenceParityOdd) {
       this.fenceParityOdd = false;
       this.clearOpenFence();
     } else {
       this.fenceParityOdd = true;
-      this.openFence = this.text.slice(index, index + 3);
+      this.openFence = this.text.slice(index, runEnd);
       this.openFenceLanguage = '';
-      this.openFenceHeader = this.openFence;
+      this.openFenceHeader = '';
       this.capturingFenceHeader = true;
     }
     this.lastFencePos = index;
-    return 3;
+    return runEnd - index;
   }
 
   private scanParagraphBreak(index: number, length: number): number {
@@ -239,13 +263,10 @@ export class IncrementalSplitScanner {
       return;
     }
     if (char === '\n') {
-      const match = this.openFenceHeader.match(FENCE_HEADER_PATTERN);
-      const fence = match?.[1];
-      const language = match?.[2];
-      if (fence !== undefined && language !== undefined) {
-        this.openFence = fence;
-        this.openFenceLanguage = language;
-      }
+      // openFence was recorded from the actual backtick run, so only the info
+      // string is derived here.
+      const language = this.openFenceHeader.match(FENCE_INFO_PATTERN)?.[1];
+      this.openFenceLanguage = language ?? '';
       this.capturingFenceHeader = false;
       return;
     }

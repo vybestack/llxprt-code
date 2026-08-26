@@ -86,6 +86,38 @@ describe('PendingResponseBuffer markdown splitting', () => {
     );
   });
 
+  it.each([
+    ['four backticks', '````'],
+    ['five backticks', '`````'],
+    ['six backticks', '``````'],
+  ])('bounds an unclosed %s fence', (_label, fence) => {
+    // The scanner used to match exactly three backticks, so a six-backtick run
+    // read as open-then-close and the block was never seen as open at all.
+    const result = streamBuffer([
+      `${fence}ts\n`,
+      ...Array.from({ length: STREAM_DELTA_COUNT }, () => STREAM_DELTA),
+    ]);
+
+    expect(result.retained.length).toBeLessThanOrEqual(
+      MAX_UNCLOSED_FENCE_LENGTH,
+    );
+    expect(result.retained.startsWith(`${fence}ts\n`)).toBe(true);
+  });
+
+  it('preserves a punctuated info string on the continuation fence', () => {
+    // CommonMark info strings are any run of non-backticks. Matching \w only
+    // dropped the language and fell back to three backticks, which a literal
+    // ``` in the retained tail would then close early.
+    for (const language of ['c++', 'objective-c', 'c#']) {
+      const result = streamBuffer([
+        `\`\`\`\`${language}\n`,
+        ...Array.from({ length: STREAM_DELTA_COUNT }, () => STREAM_DELTA),
+      ]);
+
+      expect(result.retained.startsWith(`\`\`\`\`${language}\n`)).toBe(true);
+    }
+  });
+
   it('keeps unclosed-fence retention independent of stream length', () => {
     // The defect is retention that GROWS with the stream. Asserting a single
     // stream lands under the limit does not catch that: it would still pass if
