@@ -246,6 +246,35 @@ interface ExtendedSchema {
   [key: string]: unknown;
 }
 
+/**
+ * Ajv keys its compiled-validator cache on schema **object identity**. Deriving
+ * a fresh object per validation therefore misses the cache every time and
+ * retains one compiled validator, plus its generated code, for the life of the
+ * process (issue #3361). Memoising the derived schema on the source object
+ * restores the cache hit.
+ *
+ * A WeakMap keeps this bounded: entries disappear with the source schema, so a
+ * caller that legitimately builds schemas dynamically does not accumulate.
+ * Tool schemas are declared once and treated as immutable, so a later mutation
+ * of a source schema is not reflected. That matches how Ajv itself caches.
+ */
+const ajvSchemaCache = new WeakMap<ExtendedSchema, ExtendedSchema>();
+
+/** Returns the Ajv-ready schema for a source schema, deriving it once. */
+function toAjvSchema(extSchema: ExtendedSchema): ExtendedSchema {
+  const cached = ajvSchemaCache.get(extSchema);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const ajvSchema = { ...extSchema };
+  delete ajvSchema.requireOne;
+  delete ajvSchema.$schema;
+
+  ajvSchemaCache.set(extSchema, ajvSchema);
+  return ajvSchema;
+}
+
 /** Resolves the error path from AJV instancePath or dataPath. */
 function resolveErrorPath(instancePath: unknown, dataPath: unknown): string {
   if (typeof instancePath === 'string' && instancePath !== '') {
@@ -290,11 +319,7 @@ export class SchemaValidator {
       ? ajValidator07
       : ajValidator2020;
 
-    const ajvSchema = { ...extSchema };
-    delete ajvSchema.requireOne;
-    delete ajvSchema.$schema;
-
-    const validate = instance.compile(ajvSchema);
+    const validate = instance.compile(toAjvSchema(extSchema));
     const valid = validate(data);
 
     if (
