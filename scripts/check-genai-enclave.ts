@@ -58,6 +58,7 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import {
   isInGenaiImportEnclave,
+  isSanctionedDynamicLoader,
   isInGeminiNameEnclave,
   isExplicitlyAllowedGeminiName,
   isTestFile,
@@ -419,12 +420,53 @@ interface FileScanResult {
   readonly errors: string[];
 }
 
+/**
+ * A sanctioned dynamic module loader must contain no genai reference at all,
+ * not merely no genai *import*. A computed specifier is unreadable to the
+ * scanner, so the safety property is enforced on the file instead: with no
+ * `@google/` text anywhere, the file cannot name the SDK directly and cannot
+ * assemble the name from parts.
+ *
+ * This is what makes the loader's exemption earned rather than granted. If the
+ * file ever gains a genai reference, the exemption stops applying and the
+ * guard fails.
+ */
+function assertLoaderIsGenaiFree(
+  content: string,
+  relPath: string,
+): Violation[] {
+  const index = content.indexOf('@google/');
+  if (index === -1) {
+    return [];
+  }
+  const line = content.slice(0, index).split('\n').length;
+  return [
+    {
+      kind: 'genai-import',
+      file: relPath,
+      line,
+      importForm: 'sanctioned dynamic loader references',
+      specifier: '@google/',
+    },
+  ];
+}
+
 function collectGenaiImportViolations(
   sourceFile: ReturnType<typeof parseSourceFile>,
   relPath: string,
+  content: string,
 ): Violation[] {
   if (isInGenaiImportEnclave(relPath)) return [];
-  return scanGenaiImports(sourceFile, relPath);
+  const violations = scanGenaiImports(sourceFile, relPath);
+  if (!isSanctionedDynamicLoader(relPath)) {
+    return violations;
+  }
+  // The loader keeps every genai check; only the unreadable-specifier
+  // complaint is waived, and only once the file is proven genai-free.
+  return [
+    ...assertLoaderIsGenaiFree(content, relPath),
+    ...violations.filter((v) => v.kind !== 'computed-import'),
+  ];
 }
 
 function scanFile(filePath: string): FileScanResult {
@@ -464,7 +506,7 @@ function scanFile(filePath: string): FileScanResult {
   }
 
   const violations = [
-    ...collectGenaiImportViolations(sourceFile, relPath),
+    ...collectGenaiImportViolations(sourceFile, relPath, content),
     ...collectGeminiExportViolations(sourceFile, relPath),
   ].map(formatViolation);
   return { violations, errors: [] };

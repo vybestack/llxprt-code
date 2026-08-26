@@ -54,6 +54,56 @@ export const GENAI_IMPORT_ENCLAVES: readonly ImportEnclave[] = [
   },
 ];
 
+// ─── 1b. Sanctioned dynamic module loaders ──────────────────────────────────
+
+/**
+ * A file permitted to call `import()` with a specifier that is only known at
+ * runtime.
+ *
+ * The computed-specifier ban exists so a genai import cannot hide behind a
+ * value the scanner cannot read. A module loader that resolves a
+ * user-installed package is the one legitimate case: the specifier is a
+ * parameter by definition, so no formulation of it can be a literal.
+ *
+ * This is NOT an enclave. A file listed here is still scanned for genai
+ * imports in full, and the guard additionally verifies it contains no
+ * `@google/` reference of any kind (see `assertLoaderIsGenaiFree`). The entry
+ * waives only the "I cannot read this specifier" complaint; it grants no
+ * permission to touch genai. An entry whose file stops satisfying those
+ * properties fails the guard.
+ */
+export interface DynamicModuleLoader {
+  readonly path: string;
+  readonly justification: string;
+}
+
+/**
+ * Exact repo-relative paths (not prefixes) permitted to perform a computed
+ * import. Kept exact so a sanctioned loader cannot silently extend its
+ * permission to sibling files.
+ */
+export const DYNAMIC_MODULE_LOADERS: readonly DynamicModuleLoader[] = [
+  {
+    path: 'packages/providers/src/composition/runtimePlugins/loadRuntimePlugins.ts',
+    justification:
+      'Resolves provider packages the user installed. The specifier is a ' +
+      'runtime value, so it can never be a literal. The file itself is ' +
+      'genai-free and narrows the imported module through Zod validation ' +
+      'before it reaches any other code.',
+  },
+];
+
+const DYNAMIC_MODULE_LOADER_PATHS: ReadonlySet<string> = new Set(
+  DYNAMIC_MODULE_LOADERS.map((loader) => loader.path),
+);
+
+/**
+ * Determine if `relPath` is a sanctioned dynamic module loader.
+ */
+export function isSanctionedDynamicLoader(relPath: string): boolean {
+  return DYNAMIC_MODULE_LOADER_PATHS.has(relPath);
+}
+
 /**
  * Convenience: the raw prefix strings.
  */
