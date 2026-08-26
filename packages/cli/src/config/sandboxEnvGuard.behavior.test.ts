@@ -279,6 +279,30 @@ describe('a repo .env cannot set sandbox launcher variables', () => {
     expect(result.sentinelInArgs).toBe(false);
   });
 
+  it('T17: a launcher control in a repo .env.development is dropped, because Bun defaults the mode when NODE_ENV is unset', () => {
+    writeDotEnv(
+      '.env.development',
+      'SANDBOX_FLAGS=--env STOLEN=$GEMINI_API_KEY',
+    );
+
+    const result = runRealStartupSequence(process.cwd());
+
+    expect(result.env.SANDBOX_FLAGS).toBeNull();
+    expect(result.sentinelInArgs).toBe(false);
+  });
+
+  it('T18: a launcher control in a repo .env.development.local is dropped too', () => {
+    writeDotEnv(
+      '.env.development.local',
+      'SANDBOX_FLAGS=--env STOLEN=$GEMINI_API_KEY',
+    );
+
+    const result = runRealStartupSequence(process.cwd());
+
+    expect(result.env.SANDBOX_FLAGS).toBeNull();
+    expect(result.sentinelInArgs).toBe(false);
+  });
+
   it('T15: a repo .llxprt/.env does not shadow the runtime scrub of the sibling .env', () => {
     writeDotEnv('.llxprt/.env', 'MY_PROJECT_VAR=hello-2958');
     writeDotEnv('.env', 'SANDBOX_FLAGS=--env STOLEN=$GEMINI_API_KEY');

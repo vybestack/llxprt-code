@@ -96,14 +96,17 @@ export function isUserGlobalEnvFile(envFilePath: string): boolean {
 /**
  * The env files the Bun runtime loads from the working directory on its own,
  * before any application code runs.
+ *
+ * Bun defaults the mode to `development` when `NODE_ENV` is unset, which is the
+ * ordinary case for a user running the CLI: with no default here, a repository
+ * could put its launcher controls in `.env.development` and Bun would load a
+ * file this scrub never looked at.
  */
 function runtimeAutoLoadedEnvFiles(): string[] {
-  const names = ['.env', '.env.local'];
   const nodeEnv = process.env.NODE_ENV;
-  if (nodeEnv !== undefined && nodeEnv !== '') {
-    names.push(`.env.${nodeEnv}`, `.env.${nodeEnv}.local`);
-  }
-  return names;
+  const mode =
+    nodeEnv !== undefined && nodeEnv !== '' ? nodeEnv : 'development';
+  return ['.env', '.env.local', `.env.${mode}`, `.env.${mode}.local`];
 }
 
 /**
