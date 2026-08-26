@@ -130,6 +130,25 @@ V0. **Test-audit gate passes: no new findings on any touched test file.**
     is at 208-223, and the findings sit 200+ lines later. Confirmed directly by
     grepping `main` for the flagged test names, which are present there.
 
+V2. **Full verification result.**
+
+    ```
+    npm run build      EXIT 0
+    npm run typecheck  CLEAN (all workspaces, after build refreshed dist)
+    npm run lint       EXIT 0 (all workspaces)
+    npm run test       1 failure, the known flake below, nothing else
+    test-audit scan    no new findings on any touched file
+    smoke              EXIT 0 on dsflash-mi300x, the incident profile
+    ```
+
+    The suite exits 1 solely because of V1. Across the whole run there is
+    exactly one `(fail)` line and it is that test; filtering it out leaves
+    nothing. The repeated `Internal error: directory mismatch ... You don't need
+    to do anything` lines are a bun runner warning, not failures.
+
+    Re-confirmed after the suite finished and the machine was quiet: the test
+    passes in 17.56ms (21/21).
+
 V1. **`grep-ripgrep-issue3203-remediation.test.ts` flakes under load, not from
     this branch.** The full-suite run reported
     `grep with exactly max_results matches is NOT marked incomplete` failing at
