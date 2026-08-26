@@ -146,6 +146,56 @@ Fixing it means tracking fence run-length rather than parity, which is a real
 change to the scanner and unrelated to the memory bound this PR is about.
 Recorded rather than smuggled in.
 
+## Review findings deliberately not fixed here
+
+Two independent reviews (ocr, 16 findings; deepthinker, 15) drove the fixes in
+this branch. Everything ranked HIGH or MEDIUM that this change introduced is
+closed. What remains is recorded rather than silently dropped.
+
+R1. **Kimi section counts persist across buffer flushes.** MEDIUM.
+    `kimiScanTail` and the cumulative counts live in
+    `openaiTextBuffer.ts:48-65`, but a normal flush clears only `textBuffer` and
+    `textBufferBytes` (`OpenAIStreamProcessor.ts:312-325`). A begin marker whose
+    prefix is flushed and whose suffix arrives next is counted as open even
+    though the current buffer no longer holds the prefix, so flushing can be
+    suppressed until an end marker or the 8 MiB cap.
+
+    Not fixed here because the correct fix is to make flush and scan state
+    move together, which changes Kimi tool-call framing rather than any memory
+    bound. The 8 MiB cap means the failure is now bounded either way, which it
+    was not before this branch.
+
+R2. **Non-interactive still re-checks turn and time limits after the
+    response.** MEDIUM, pre-existing. `subagentNonInteractive.ts` runs the full
+    termination check between receiving a response and dispatching its tool
+    calls, so a subagent on its final permitted turn can have those calls
+    discarded. This is the same defect fixed for the interactive path in
+    `62cd3c328`, but on the non-interactive path it predates the branch and is
+    not caused by the budget work. Fixing it changes when existing runs stop,
+    which deserves its own change and its own regression coverage.
+
+R3. **`MAX_DEBUG_RESPONSE_CHUNKS` peaks at twice its name.** LOW. Retention is
+    capped at 1,024 but trimming waits for `> 2 * cap`, so the true high-water
+    mark is 2,048 chunks. That is the deliberate amortisation described above,
+    and both the constant's comment and the test assert the `* 2` bound, so the
+    behaviour is documented rather than surprising. The name could still be
+    read as an absolute.
+
+R4. **The derived default does not consult the model catalog.** LOW.
+    `resolveModelMaxOutputTokens` reads the profile's `maxOutputTokens` and
+    `modelParams.max_tokens` only, so a model whose limit is known only to the
+    catalog or an alias falls back to the flat 2,000,000 rather than
+    `max_turns * catalogMaxOutputTokens`. The clamp means the incident's shape
+    is still caught; the effect is that some low-turn profiles get a looser
+    default than they could. Reading the catalog here requires run-config
+    resolution to happen after runtime activation, which is the ordering that
+    caused the launch-failure bug fixed in `62cd3c328`.
+
+R5. **Catalog maximum is 131,072, not 128,000.** LOW. Kimi declares 131,072,
+    above the Anthropic figure used when sizing the caps. Every headroom ratio
+    in this branch is therefore slightly overstated (16x becomes 15.26x for the
+    aggregate ceiling). No cap changes rank as a result.
+
 ## Verification notes
 
 V0. **Test-audit gate passes: no new findings on any touched test file.**
