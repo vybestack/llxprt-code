@@ -560,3 +560,26 @@ export function invalidateResponsesStatefulChain(
     return entry;
   });
 }
+
+/**
+ * Invalidates a Responses chain only when a rewrite touches content retained by
+ * a stored parent.
+ *
+ * @param history History after the successful rewrite.
+ * @param rewriteStartIndex First rewritten entry.
+ * @returns History with stale parent markers removed when required.
+ */
+export function invalidateResponsesStatefulChainForRetainedRewrite(
+  history: IContent[],
+  rewriteStartIndex: number,
+): IContent[] {
+  const rewritesRetainedHistory = history
+    .slice(rewriteStartIndex)
+    .some(
+      (entry) =>
+        entry.speaker === 'ai' && entry.metadata?.responsesStored === true,
+    );
+  return rewritesRetainedHistory
+    ? [...invalidateResponsesStatefulChain(history)]
+    : history;
+}

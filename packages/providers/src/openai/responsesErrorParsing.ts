@@ -10,7 +10,9 @@
  * within the max-lines budget.
  */
 
+import { createStreamInterruptionError } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { findTerminalQuotaCode } from '../utils/quotaExhaustion.js';
+import type { ResponsesApiError } from './parseResponsesStreamTypes.js';
 
 interface ErrorWithResponse extends Error {
   status?: number;
@@ -31,6 +33,88 @@ interface OpenAIErrorBody {
   type?: unknown;
   error?: { code?: unknown; type?: unknown };
   detail?: { code?: unknown; type?: unknown };
+}
+
+const CONTEXT_LENGTH_EXCEEDED_CODE = 'context_length_exceeded';
+const INVALID_REQUEST_ERROR_TYPE = 'invalid_request_error';
+const TERMINAL_INPUT_ERROR_CODES: ReadonlySet<string> = new Set([
+  'invalid_prompt',
+  'invalid_image',
+  'invalid_image_format',
+  'invalid_base64_image',
+  'invalid_image_url',
+  'image_too_large',
+  'image_too_small',
+  'image_parse_error',
+  'image_content_policy_violation',
+  'invalid_image_mode',
+  'image_file_too_large',
+  'unsupported_image_media_type',
+  'empty_image_file',
+  'failed_to_download_image',
+  'image_file_not_found',
+]);
+
+interface TerminalProviderError extends Error {
+  status?: number;
+  code?: string | null;
+  providerErrorType?: string;
+  details?: {
+    providerError: ResponsesApiError;
+    responseStatus?: string | number;
+  };
+}
+
+// The agent's existing context-size recovery path is keyed to 413. The provider
+// sends this condition inside an HTTP-200 stream, so there is no HTTP status to
+// retain and the structured context code supplies the actionable status.
+function terminalInputStatus(
+  providerError: ResponsesApiError | undefined,
+): number | undefined {
+  if (providerError?.code === CONTEXT_LENGTH_EXCEEDED_CODE) return 413;
+  if (
+    (typeof providerError?.code === 'string' &&
+      TERMINAL_INPUT_ERROR_CODES.has(providerError.code)) ||
+    providerError?.type === INVALID_REQUEST_ERROR_TYPE
+  ) {
+    return 400;
+  }
+  return undefined;
+}
+
+/**
+ * Converts a provider-declared terminal SSE error into the same status-bearing
+ * shape used by HTTP failures while leaving transport/server failures retryable.
+ *
+ * @param providerError Structured fields declared by the Responses API.
+ * @param responseStatus Terminal response status when the event includes one.
+ * @returns A terminal client error or a retryable stream interruption.
+ */
+export function createResponsesTerminalError(
+  providerError: ResponsesApiError | undefined,
+  responseStatus?: string | number,
+): Error {
+  const message =
+    providerError?.message ?? 'OpenAI Responses API stream failed';
+  const status = terminalInputStatus(providerError);
+  if (providerError === undefined || status === undefined) {
+    return createStreamInterruptionError(message, {
+      providerError,
+      responseStatus,
+    });
+  }
+
+  const error: TerminalProviderError = new Error(message);
+  error.status = status;
+  if (providerError.code !== undefined) error.code = providerError.code;
+  if (providerError.type !== undefined) {
+    error.providerErrorType = providerError.type;
+  }
+  error.details = {
+    providerError,
+    ...(responseStatus !== undefined ? { responseStatus } : {}),
+  };
+  return error;
 }
 
 function readStringField(value: unknown): string | undefined {
