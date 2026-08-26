@@ -76,6 +76,20 @@ context loss and get checked before the PR goes up.
 8. **Check for drive-by edits** in both subagents' diffs before committing, the
    way item A needed.
 
+## Verification notes
+
+V1. **`grep-ripgrep-issue3203-remediation.test.ts` flakes under load, not from
+    this branch.** The full-suite run reported
+    `grep with exactly max_results matches is NOT marked incomplete` failing at
+    15,006.97ms, which is its 15s timeout rather than a wrong result. Evidence
+    it is environmental: the branch does not touch `packages/tools` at all
+    (`git diff main --stat -- packages/tools` is empty); the test passes on
+    `main` in 35ms; and it passes on this branch in isolation in 47ms (21/21).
+    The failing run had `npm run lint`, `npm run test`, and a review subagent
+    all running concurrently. Re-check any full-suite failure in isolation
+    before treating it as real, and prefer not to run the suite alongside other
+    heavy jobs.
+
 ## Findings on the provider work (#3341)
 
 A. **Check 6 passes: cap values are safely generous.** `streamLimits.ts` sets
