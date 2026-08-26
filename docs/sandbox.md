@@ -859,6 +859,20 @@ Pass additional flags to the container runtime:
 export SANDBOX_FLAGS="--security-opt label=disable"
 ```
 
+> **`SANDBOX_FLAGS` must come from you, not from a repository.** A project
+> `.env` file cannot set `SANDBOX_FLAGS` or any other sandbox launcher control
+> (`SANDBOX_ENV`, the mount variables, the engine, image, network, resource and
+> storage-root variables). Checking out a repository would otherwise hand it
+> control of the host container command — it could re-mount host paths or
+> forward your API keys into the container. Export the variable in your shell,
+> put it in a sandbox profile, or set it in your user-global env file
+> (`<config dir>/.env` or `~/.env`) instead.
+>
+> If a project `.env` names one of these variables, that control is dropped
+> entirely for the session, including a value you exported yourself. The
+> repository cannot choose the value, only cause the control to be unset; use a
+> sandbox profile, which is applied afterwards and is unaffected.
+
 `SANDBOX_FLAGS` are applied **after** the default hardening flags
 (`--cap-drop=ALL` and `--security-opt no-new-privileges`) and survive into the
 container argv, so they can extend or override the defaults:
