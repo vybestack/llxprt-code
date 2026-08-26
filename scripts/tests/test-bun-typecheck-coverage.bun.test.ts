@@ -93,7 +93,13 @@ function discoverTestBunPackages(): TestBunPackage[] {
       // nested file can never be typechecked yet invisible to this guard.
       // Node's recursive readdirSync yields platform separators; normalize
       // to `/` so the package-relative paths match the globs everywhere.
-      files: readdirSync(join(dir, 'test-bun'), { recursive: true })
+      // `encoding: 'utf8'` pins the string[] overload; without it the
+      // recursive variant widens to (string | Buffer)[] and defeats
+      // map/filter below.
+      files: readdirSync(join(dir, 'test-bun'), {
+        recursive: true,
+        encoding: 'utf8',
+      })
         .filter((file) => file.endsWith('.ts'))
         .map(
           (file) => `test-bun/${file.replaceAll(String.fromCharCode(92), '/')}`,
