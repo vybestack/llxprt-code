@@ -194,8 +194,11 @@ jobs:
               # gh issue --milestone accepts a milestone TITLE, not a number.
               # Resolve the title by exact match across ALL open milestone
               # pages, then return it for assignment.
-              local milestone_title
-              milestone_title="$(gh api --paginate --slurp "repos/${GH_REPO}/milestones?state=open&per_page=100" --jq "[.[][] | select(.title == \"${current_version}\")] | .[0].title // empty" 2>/dev/null)"
+              local milestone_title=""
+              if ! milestone_title="$(gh api --paginate --slurp "repos/${GH_REPO}/milestones?state=open&per_page=100" 2>/dev/null | jq -r --arg version "${current_version}" '[.[][] | select(.title == $version)] | .[0].title // empty' 2>/dev/null)"; then
+                echo "Warning: could not list open milestones; skipping milestone assignment" >&2
+                return
+              fi
               if [[ -z "${milestone_title}" ]]; then
                 echo "Warning: no open milestone titled '${current_version}'; skipping milestone assignment" >&2
                 return

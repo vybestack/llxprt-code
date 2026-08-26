@@ -16,7 +16,9 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import { spawnSync } from 'node:child_process';
 import {
+  FAKE_GH_PYTHON_SOURCE,
   notificationScript,
   runNotification,
   type FakeMetadataState,
@@ -100,7 +102,12 @@ function run(
     site.jobId,
     site.stepName,
   );
-  return runNotification({ script: script.run, env: script.env, fake });
+  return runNotification({
+    script: script.run,
+    env: script.env,
+    shell: script.shell,
+    fake,
+  });
 }
 
 function createCalls(result: {
@@ -111,23 +118,40 @@ function createCalls(result: {
     .map((call) => call.argv);
 }
 
+/**
+ * Issue numbers that received the FULL Bug-type PATCH contract.
+ *
+ * Every part is required: the `api` subcommand, an explicit `-X PATCH`, the
+ * issues endpoint scoped to the expected repository, and `-f type=Bug`.
+ * Matching on the issue number alone would let a PATCH that set the wrong
+ * type, or set no type at all, satisfy these assertions.
+ */
+/** Value of `flag` in an argv, or undefined when the flag is absent. */
+function flagValue(argv: string[], flag: string): string | undefined {
+  const index = argv.indexOf(flag);
+  return index === -1 ? undefined : argv[index + 1];
+}
+
+function isBugTypePatch(argv: string[]): boolean {
+  return (
+    argv[0] === 'api' &&
+    flagValue(argv, '-X') === 'PATCH' &&
+    flagValue(argv, '-f') === 'type=Bug'
+  );
+}
+
 function patchCalls(result: { ghCalls: Array<{ argv: string[] }> }): number[] {
+  const prefix = `repos/${REPO}/issues/`;
   return result.ghCalls
-    .filter(
-      (call) =>
-        call.argv[0] === 'api' && call.argv.some((arg) => arg === 'PATCH'),
+    .filter((call) => isBugTypePatch(call.argv))
+    .map(({ argv }) =>
+      argv.find(
+        (arg) =>
+          arg.startsWith(prefix) && /^\d{1,10}$/.test(arg.slice(prefix.length)),
+      ),
     )
-    .map((call) => {
-      const target = call.argv.find((arg) =>
-        /^repos\/[^/]+\/[^/]+\/issues\/\d+$/.test(arg),
-      );
-      if (target === undefined) {
-        return -1;
-      }
-      // The path already matched the pattern above, so the trailing segment
-      // is known to be digits; slicing avoids a second, backtracking regex.
-      return Number(target.slice(target.lastIndexOf('/') + 1));
-    });
+    .filter((endpoint): endpoint is string => endpoint !== undefined)
+    .map((endpoint) => Number(endpoint.slice(prefix.length)));
 }
 
 function editCalls(result: { ghCalls: Array<{ argv: string[] }> }): string[][] {
@@ -153,6 +177,22 @@ function milestoneArgv(calls: string[][]): string[] {
   }
   return [];
 }
+
+describe('fake gh infrastructure', () => {
+  // The fake is Python inside a TypeScript template literal. An escaping slip
+  // makes it a syntax error, which the notifier scripts see as an ordinary gh
+  // failure and retry past -- leaving the suite green against a fake that
+  // never ran. Compile it directly so that failure is loud.
+  it('is syntactically valid Python', () => {
+    const result = spawnSync(
+      'python3',
+      ['-c', 'import sys; compile(sys.stdin.read(), "fake-gh", "exec")'],
+      { input: FAKE_GH_PYTHON_SOURCE, encoding: 'utf8' },
+    );
+    expect(result.stderr ?? '').toBe('');
+    expect(result.status).toBe(0);
+  });
+});
 
 describe('auto-created failure issues carry label, milestone, and type', () => {
   for (const site of SITES) {

@@ -104,6 +104,18 @@ def handle_api(argv, state, state_file):
     opts, pairs, tokens = parse_args(argv)
     method = opts["method"]
     path = (tokens[0] if tokens else "").lstrip("/")
+    jq = next(iter(pairs.get("--jq", []) + pairs.get("-q", [])), None)
+    # Real gh validates these combinations before issuing any request. Both
+    # messages and exit codes were captured from gh 2.83.2; modelling them is
+    # what stops a workflow that cannot run in CI from passing these tests.
+    if opts["slurp"] and jq is not None:
+        sys.stderr.write(
+            "the --slurp option is not supported with --jq or --template\n"
+        )
+        return 1
+    if opts["slurp"] and not opts["paginate"]:
+        sys.stderr.write("--paginate required when passing --slurp\n")
+        return 1
     if should_fail(state, method, path):
         sys.stderr.write("HTTP 500: %s failed\n" % path)
         return 1
@@ -122,10 +134,10 @@ def handle_api(argv, state, state_file):
         pages = [items[i:i + per_page] for i in range(0, len(items), per_page)]
         if not pages:
             pages = [[]]
-        jq = next(iter(pairs.get("--jq", []) + pairs.get("-q", [])), None)
         if opts["slurp"]:
-            data = "\n".join(json.dumps(p) for p in pages)
-            sys.stdout.write(jq_output(data, jq, slurp=True))
+            # gh --paginate --slurp emits ONE array whose elements are the
+            # per-page arrays, which is why the workflow's jq uses .[][].
+            sys.stdout.write(json.dumps(pages) + "\n")
         elif opts["paginate"]:
             outs = [jq_output(json.dumps(p), jq) for p in pages]
             sys.stdout.write("\n".join(outs) + "\n")
@@ -135,12 +147,25 @@ def handle_api(argv, state, state_file):
     m = re.match(r"^repos/[^/]+/[^/]+/issues/(\d+)$", path)
     if m and method == "PATCH":
         num = int(m.group(1))
-        state.setdefault("patched", []).append({"number": num})
+        fields = pairs.get("-f", []) + pairs.get("--raw-field", [])
+        state.setdefault("patched", []).append({"number": num, "fields": fields})
         save(state_file, state)
-        sys.stdout.write(json.dumps({"number": num, "type": "Bug"}) + "\n")
+        applied = None
+        for field in fields:
+            if field.startswith("type="):
+                applied = field.split("=", 1)[1]
+        sys.stdout.write(json.dumps({"number": num, "type": applied}) + "\n")
         return 0
     sys.stdout.write("{}\n")
     return 0
+
+def issue_reference(token):
+    """gh accepts an issue number or an issue URL wherever it takes an issue."""
+    if token is None:
+        return None
+    tail = token.rstrip("/").rsplit("/", 1)[-1]
+    return int(tail) if tail.isdigit() else None
+
 
 def handle_issue(argv, state, state_file):
     sub = argv[0] if argv else ""
@@ -159,6 +184,16 @@ def handle_issue(argv, state, state_file):
         sys.stdout.write(jq_output(json.dumps(objs), jq))
         return 0
     if sub == "create":
+        opts, pairs, tokens = parse_args(argv[1:])
+        # Real gh refuses to open an issue with no title or no body. Modelling
+        # that is what stops a step whose title/body assignment silently failed
+        # (e.g. an unresolved ${{}} expression) from passing as a success.
+        if not pairs.get("--title"):
+            sys.stderr.write("must provide --title when not running interactively\n")
+            return 1
+        if not pairs.get("--body") and not pairs.get("--body-file"):
+            sys.stderr.write("must provide --body or --body-file\n")
+            return 1
         if should_fail(state, "POST", "issue/create"):
             sys.stderr.write("HTTP 500: issue create failed\n")
             return 1
@@ -173,13 +208,21 @@ def handle_issue(argv, state, state_file):
         return 0
     if sub == "comment":
         opts, pairs, tokens = parse_args(argv[1:])
-        state.setdefault("commented", []).append({"number": int(tokens[0]) if tokens else None})
+        number = issue_reference(tokens[0] if tokens else None)
+        if number is None:
+            sys.stderr.write("invalid issue reference\n")
+            return 1
+        state.setdefault("commented", []).append({"number": number})
         save(state_file, state)
         return 0
     if sub == "edit":
         opts, pairs, tokens = parse_args(argv[1:])
+        number = issue_reference(tokens[0] if tokens else None)
+        if number is None:
+            sys.stderr.write("invalid issue reference\n")
+            return 1
         state.setdefault("edited", []).append({
-            "number": int(tokens[0]) if tokens else None,
+            "number": number,
             "milestone": next(iter(pairs.get("--milestone", [])), None),
         })
         save(state_file, state)
@@ -227,6 +270,18 @@ if __name__ == "__main__":
     main()
 `;
 
+/**
+ * The fake `gh` source, exposed so a test can assert it still compiles.
+ *
+ * It is Python embedded in a TypeScript template literal, so an escaping slip
+ * (a stray backtick, or a `
+` that became a real newline) turns it into a
+ * syntax error. That failure surfaces only as `gh` exiting non-zero, which the
+ * notifier scripts treat as an ordinary API failure and retry past -- so the
+ * suite would go green against a fake that never ran.
+ */
+export const FAKE_GH_PYTHON_SOURCE = FAKE_GH_SOURCE;
+
 export interface FakeIssue {
   title: string;
   number: number;
@@ -255,17 +310,23 @@ export interface FakeMetadataState {
   runId?: string;
   ref?: string;
   results?: Record<string, string>;
+  /** Values for `needs.*.outputs.*` / `steps.*.outputs.*` expressions. */
+  outputs?: Record<string, string>;
 }
 
 export interface NotificationScript {
   run: string;
   env: Record<string, string>;
+  /** The step's declared `shell:`, or undefined when it relies on the default. */
+  shell: string | undefined;
 }
 
 export interface RunNotificationOptions {
   script: string;
   env: Record<string, string>;
   fake: FakeMetadataState;
+  /** The step's declared `shell:`, which decides the runner's bash flags. */
+  shell: string | undefined;
 }
 
 export interface GhCall {
@@ -304,7 +365,18 @@ function resolveExpression(expr: string, fake: FakeMetadataState): string {
   const needsResult = /^needs\.([A-Za-z0-9_-]+)\.result$/.exec(text);
   if (needsResult)
     return fake.results?.[`${needsResult[1]}.result`] ?? 'failure';
-  return '';
+  // A job or step output that was never set is legitimately empty on the
+  // runner, so '' here is faithful rather than a silent hole.
+  const output =
+    /^(?:needs|steps)\.[A-Za-z0-9_-]+\.outputs\.[A-Za-z0-9_-]+$/.exec(text);
+  if (output) return fake.outputs?.[text] ?? '';
+  // Returning '' for an unknown expression silently changes the script under
+  // test -- an unresolved `${{ }}` left in the run body is a bash "bad
+  // substitution", which would drop whole arguments while the test still
+  // passed. Fail loudly instead.
+  throw new Error(
+    `unhandled GitHub expression in workflow step: \${{ ${text} }}`,
+  );
 }
 
 function substituteExpressions(text: string, fake: FakeMetadataState): string {
@@ -345,7 +417,29 @@ export function notificationScript(
   for (const [key, value] of Object.entries(step.env ?? {})) {
     env[key] = String(value);
   }
-  return { run: String(step.run ?? ''), env };
+  return {
+    run: String(step.run ?? ''),
+    env,
+    shell: step.shell === undefined ? undefined : String(step.shell),
+  };
+}
+
+/**
+ * The argv GitHub Actions uses to run a `run:` block.
+ *
+ * `shell: bash` means `bash --noprofile --norc -eo pipefail`; omitting `shell`
+ * on Linux means plain `bash -e`. Both are fail-fast, so running the script
+ * under a bare `bash -c` would let failures the real runner treats as fatal
+ * pass silently here.
+ */
+function shellArgv(shell: string | undefined, scriptPath: string): string[] {
+  if (shell === 'bash') {
+    return ['--noprofile', '--norc', '-eo', 'pipefail', scriptPath];
+  }
+  if (shell === undefined) {
+    return ['-e', scriptPath];
+  }
+  throw new Error(`unsupported step shell: ${shell}`);
 }
 
 /**
@@ -381,8 +475,15 @@ export function runNotification(
     env[key] = substituteExpressions(value, opts.fake);
   }
 
+  // The runner substitutes `${{ }}` in the run body too, not just in env. Left
+  // in place they become bash "bad substitution" errors that silently drop
+  // arguments, so resolve them here and write the result to a real script file
+  // the way the runner does.
+  const scriptPath = path.join(dir, 'step.sh');
+  writeFileSync(scriptPath, substituteExpressions(opts.script, opts.fake));
+
   try {
-    const result = spawnSync('bash', ['-c', opts.script], {
+    const result = spawnSync('bash', shellArgv(opts.shell, scriptPath), {
       cwd: workDir,
       encoding: 'utf8',
       env,
