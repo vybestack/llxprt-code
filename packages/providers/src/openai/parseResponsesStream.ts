@@ -302,6 +302,16 @@ function* handleFunctionCallDone(
   const call = functionCalls.get(itemId);
   if (!call) return;
 
+  // A provider that sends the whole payload in the terminal event, with no
+  // deltas, would otherwise never pass through the delta cap. The accumulated
+  // path is already bounded, so only the terminal payload is measured here.
+  if (event.arguments !== undefined) {
+    assertProviderStreamByteLimit(
+      'tool-call arguments',
+      utf8ByteLength(event.arguments),
+      MAX_PROVIDER_TOOL_CALL_BYTES,
+    );
+  }
   const finalArguments = event.arguments ?? call.arguments;
 
   let parsedArguments: unknown = {};

@@ -36,6 +36,7 @@ import type {
 } from './coreToolScheduler.js';
 import {
   SubagentTerminateMode,
+  UNLIMITED_OUTPUT_TOKENS_TOTAL,
   type OutputObject,
   type OutputConfig,
   type RunConfig,
@@ -112,7 +113,7 @@ export function checkOutputBudget(
   const outputTokensTotal = ctx.output.output_tokens_total ?? 0;
   if (
     outputBudget !== undefined &&
-    outputBudget !== -1 &&
+    outputBudget !== UNLIMITED_OUTPUT_TOKENS_TOTAL &&
     outputTokensTotal > outputBudget
   ) {
     ctx.output.terminate_reason = SubagentTerminateMode.MAX_OUTPUT;

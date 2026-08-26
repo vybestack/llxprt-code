@@ -214,6 +214,16 @@ export interface ModelConfig {
 }
 
 /**
+ * Sentinel meaning "no aggregate output budget".
+ *
+ * Shared so the orchestrator (which decides whether to set a budget) and the
+ * execution loop (which decides whether to enforce one) cannot drift apart on
+ * the convention. Zero is a legitimate budget meaning "stop immediately", so it
+ * must not be conflated with unlimited.
+ */
+export const UNLIMITED_OUTPUT_TOKENS_TOTAL = -1;
+
+/**
  * Configures the execution environment and constraints for the subagent.
  * This interface defines parameters that control the subagent's runtime behavior,
  * such as maximum execution time, to prevent infinite loops or excessive resource consumption.
@@ -230,7 +240,7 @@ export interface RunConfig {
   max_turns?: number;
   /**
    * The aggregate output token budget across all model responses in the run.
-   * A value of -1 disables the budget.
+   * {@link UNLIMITED_OUTPUT_TOKENS_TOTAL} disables the budget.
    */
   max_output_tokens_total?: number;
   /** Maximum time in seconds allowed for a recovery turn after a termination condition. */

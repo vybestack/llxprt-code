@@ -16,6 +16,7 @@ import type { AgentRuntimeProviderAdapter } from '@vybestack/llxprt-code-core/ru
 import {
   ContextState,
   SubagentTerminateMode,
+  UNLIMITED_OUTPUT_TOKENS_TOTAL,
   type OutputConfig,
   type RunConfig,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
@@ -301,6 +302,36 @@ describe('subagent aggregate output token budget', () => {
 
       expect(result.shouldStop).toBe(true);
       expect(result.reason).toBe(SubagentTerminateMode.MAX_TURNS);
+    });
+
+    it('treats a budget of 0 as stop-immediately, not unlimited', () => {
+      // -1 is the only unlimited sentinel. A `> 0` guard anywhere in the chain
+      // would turn a deliberate 0 into its opposite.
+      const zeroBudget = {
+        runConfig: { max_output_tokens_total: 0, max_time_minutes: 5 },
+        subagentId: 'sub-1',
+        output: { output_tokens_total: 1, emitted_vars: {} },
+        logger: { warn: () => {}, debug: () => {} },
+      } as unknown as Parameters<typeof checkOutputBudget>[0];
+
+      const result = checkOutputBudget(zeroBudget);
+
+      expect(result.shouldStop).toBe(true);
+      expect(result.reason).toBe(SubagentTerminateMode.MAX_OUTPUT);
+    });
+
+    it('does not enforce the unlimited sentinel', () => {
+      const unlimited = {
+        runConfig: {
+          max_output_tokens_total: UNLIMITED_OUTPUT_TOKENS_TOTAL,
+          max_time_minutes: 5,
+        },
+        subagentId: 'sub-1',
+        output: { output_tokens_total: 999_999_999, emitted_vars: {} },
+        logger: { warn: () => {}, debug: () => {} },
+      } as unknown as Parameters<typeof checkOutputBudget>[0];
+
+      expect(checkOutputBudget(unlimited).shouldStop).toBe(false);
     });
 
     it('stops on an exceeded output budget', () => {

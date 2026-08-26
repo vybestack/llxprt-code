@@ -37,6 +37,7 @@ import type {
   ToolConfig,
   OutputConfig,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { UNLIMITED_OUTPUT_TOKENS_TOTAL } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 
 import {
   createAgentRuntimeState,
@@ -510,8 +511,15 @@ export class SubagentOrchestrator {
     const maxOutputTokensTotal =
       configuredMaxOutputTokensTotal ?? defaultMaxOutputTokensTotal;
 
-    if (maxOutputTokensTotal > 0) {
-      runConfig.max_output_tokens_total = Math.floor(maxOutputTokensTotal);
+    // -1 is the unlimited sentinel and is the only value that omits the budget.
+    // Testing `> 0` instead would silently discard a deliberate 0 (stop
+    // immediately) and turn it into no budget at all, which is its opposite.
+    // checkOutputBudget treats -1 the same way, and the two must agree.
+    if (maxOutputTokensTotal !== UNLIMITED_OUTPUT_TOKENS_TOTAL) {
+      runConfig.max_output_tokens_total = Math.max(
+        0,
+        Math.floor(maxOutputTokensTotal),
+      );
     }
 
     if (custom?.grace_period_seconds !== undefined) {
