@@ -11,6 +11,11 @@ import {
   writeToStderr,
 } from '@vybestack/llxprt-code-core';
 import {
+  getActiveProviderNameForApiError,
+  getErrorFallbackModel,
+  type ApiErrorRuntimeInfo,
+} from '../utils/apiErrorFormatting.js';
+import {
   markMachineErrorReported,
   wasMachineErrorReported,
 } from './machineErrorReporting.js';
@@ -30,8 +35,16 @@ export function __setWriteToStderrForTesting(
   stderrWriter = fn ?? writeToStderr;
 }
 
-export function formatNonInteractiveError(error: unknown): string {
-  const formatted = parseAndFormatApiError(error);
+export function formatNonInteractiveError(
+  error: unknown,
+  context?: { providerName?: string; model?: string },
+): string {
+  const formatted = parseAndFormatApiError(
+    error,
+    undefined,
+    context?.model,
+    context?.providerName,
+  );
   if (formatted && !formatted.includes('[object Object]')) {
     return formatted;
   }
@@ -51,12 +64,15 @@ export function formatNonInteractiveError(error: unknown): string {
   return String(error);
 }
 
-function normalizeErrorForJson(error: unknown): Error {
+function normalizeErrorForJson(
+  error: unknown,
+  context?: { providerName?: string; model?: string },
+): Error {
   if (error instanceof Error) {
     return error;
   }
 
-  return new Error(formatNonInteractiveError(error));
+  return new Error(formatNonInteractiveError(error, context));
 }
 
 /**
@@ -65,14 +81,21 @@ function normalizeErrorForJson(error: unknown): Error {
  * and the run-phase catch share a single error-reporting path.
  */
 export function reportNonInteractiveError(
-  config: Pick<Config, 'getOutputFormat'>,
+  config: Pick<Config, 'getOutputFormat'> & ApiErrorRuntimeInfo,
   error: unknown,
 ): void {
   if (wasMachineErrorReported(error)) return;
+  // API-error messages interpolate the active model; the caller's runtime
+  // supplies it so no Gemini-named default is needed (#2627).
+  const providerName = getActiveProviderNameForApiError(config);
+  const errorContext = {
+    providerName,
+    model: getErrorFallbackModel(config, providerName),
+  };
   const outputFormat = config.getOutputFormat();
   if (outputFormat === OutputFormat.JSON) {
     const formatter = new JsonFormatter();
-    const normalizedError = normalizeErrorForJson(error);
+    const normalizedError = normalizeErrorForJson(error, errorContext);
     // Omit the optional error-code argument: JsonFormatter.formatError's
     // second parameter is an application error code with no documented value,
     // not a process exit status. Hardcoding 1 would conflate exit status with
@@ -89,14 +112,14 @@ export function reportNonInteractiveError(
         type: JsonStreamEventType.ERROR,
         timestamp: new Date().toISOString(),
         severity: 'error',
-        message: formatNonInteractiveError(error),
+        message: formatNonInteractiveError(error, errorContext),
         ...(status !== undefined ? { status } : {}),
         ...(category !== undefined ? { category } : {}),
         ...(reason !== undefined ? { reason } : {}),
       }),
     );
   } else {
-    const printableError = formatNonInteractiveError(error);
+    const printableError = formatNonInteractiveError(error, errorContext);
     stderrWriter(`Non-interactive run failed: ${printableError}\n`);
   }
   if (error instanceof Error) markMachineErrorReported(error);

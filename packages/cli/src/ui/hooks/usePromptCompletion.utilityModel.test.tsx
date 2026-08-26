@@ -12,7 +12,7 @@
 import { describe, it, expect, vi, afterEach } from 'bun:test';
 import { act } from 'react';
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
-import { renderHook, waitFor } from '../../test-utils/render.js';
+import { renderHook } from '../../test-utils/render.js';
 import {
   usePromptCompletion,
   PROMPT_COMPLETION_DEBOUNCE_MS,
@@ -99,6 +99,7 @@ describe('usePromptCompletion utilityModel gating (issue #2627)', () => {
   });
 
   it('requests completion with the configured utilityModel', async () => {
+    vi.useFakeTimers();
     const generateContent = vi
       .fn()
       .mockResolvedValue(
@@ -117,13 +118,12 @@ describe('usePromptCompletion utilityModel gating (issue #2627)', () => {
 
     expect(result.current.isActive).toBe(true);
 
-    await waitFor(() => {
-      expect(result.current.text).toBe(
-        'a sufficiently long prompt continuation',
-      );
+    await act(async () => {
+      await advanceTimersByTimeAsync(PROMPT_COMPLETION_DEBOUNCE_MS + 10);
     });
 
     expect(generateContent).toHaveBeenCalledTimes(1);
     expect(generateContent.mock.calls[0]?.[3]).toBe('utility-model-x');
+    expect(result.current.text).toBe('a sufficiently long prompt continuation');
   });
 });
