@@ -329,13 +329,39 @@ describe('DefaultAppLayout', () => {
 
   it('keeps the dialog test table aligned with every property read by the real predicate', () => {
     const readKeys = new Set<string>();
+    const recordKey = (property: string | symbol): void => {
+      if (typeof property !== 'string') {
+        throw new Error(
+          `hasActiveDialog read the symbol key ${String(property)}. The drift ` +
+            'guard can only account for string keys; update the guard and ' +
+            'ACTIVE_DIALOG_FLAGS together.',
+        );
+      }
+      readKeys.add(property);
+    };
+    // Enumeration would let the predicate reach every flag at once, which
+    // would make the recorded read-set meaningless. Fail loudly instead of
+    // silently passing.
+    const rejectEnumeration = (trap: string): never => {
+      throw new Error(
+        `hasActiveDialog enumerated the UI state via ${trap}. The drift guard ` +
+          'observes discrete property accesses and cannot verify an ' +
+          'enumeration-based predicate; update the guard and ' +
+          'ACTIVE_DIALOG_FLAGS together.',
+      );
+    };
     const uiState = new Proxy(createBaseUIState(), {
       get(target, property, receiver) {
-        if (typeof property === 'string') {
-          readKeys.add(property);
-        }
+        recordKey(property);
         return Reflect.get(target, property, receiver);
       },
+      has(target, property) {
+        recordKey(property);
+        return Reflect.has(target, property);
+      },
+      ownKeys: () => rejectEnumeration('ownKeys'),
+      getOwnPropertyDescriptor: () =>
+        rejectEnumeration('getOwnPropertyDescriptor'),
     });
 
     hasActiveDialog(uiState);
