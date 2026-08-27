@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Type, type Schema, type Part } from '@google/genai';
+import type { Part, Schema } from './geminiWireTypes.js';
+import { SchemaType } from './geminiWireTypes.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { type NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { convertHistoryToGeminiFormat } from './GeminiMessageConverter.js';
@@ -58,7 +59,7 @@ export function buildGeminiTools(
       let parameters = cleanGeminiSchema(schema);
       const parametersRecord = parameters as Record<string, unknown>;
       if (!('type' in parametersRecord)) {
-        parameters = { type: Type.OBJECT, ...parameters };
+        parameters = { type: SchemaType.OBJECT, ...parameters };
       }
       return {
         name: decl.name,

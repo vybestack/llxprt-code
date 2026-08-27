@@ -540,7 +540,9 @@ function convertFromVercelSystem(message: ModelMessage): IContent | null {
   return null;
 }
 
-export function convertFromVercelMessages(messages: ModelMessage[]): IContent[] {
+export function convertFromVercelMessages(
+  messages: ModelMessage[],
+): IContent[] {
   const contents: IContent[] = [];
 
   for (const message of messages) {

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type Part, type GenerateContentResponse } from '@google/genai';
+import type { GenerateContentResponse, Part } from './geminiWireTypes.js';
 import { type Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';

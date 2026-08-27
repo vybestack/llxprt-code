@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Part } from '@google/genai';
+import type { Part } from './geminiWireTypes.js';
 
 /**
  * Synthetic thought signature used when a functionCall part lacks one.

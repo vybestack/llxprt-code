@@ -58,7 +58,8 @@ void vi.mock('@google/genai', () => {
     }
   }
 
-  const Type = { OBJECT: 'object' };
+  // Mirrors the real Gemini schema-type constant, which is uppercase.
+  const Type = { OBJECT: 'OBJECT' };
 
   return { GoogleGenAI: FakeGoogleGenAI, Type };
 });

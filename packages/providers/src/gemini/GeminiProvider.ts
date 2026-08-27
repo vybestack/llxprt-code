@@ -14,12 +14,12 @@ import {
 } from '../BaseProvider.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  type GenerateContentParameters,
-  type GenerateContentResponse,
-  type GoogleGenAI,
-  type GoogleGenAIOptions,
-} from '@google/genai';
+import type {
+  GenerateContentParameters,
+  GenerateContentResponse,
+} from './geminiWireTypes.js';
+import type { GeminiClient, GeminiClientOptions } from './geminiWireTypes.js';
+import { createGeminiClient } from './geminiClientFactory.js';
 import {
   getSettingOrEnv,
   getVertexAIAuthConfig,
@@ -316,9 +316,8 @@ export class GeminiProvider extends BaseProvider {
     authMode: GeminiAuthMode,
     httpOptions: ReturnType<typeof this.createHttpOptions>,
     baseURL?: string,
-  ): Promise<GoogleGenAI> {
-    const { GoogleGenAI } = await import('@google/genai');
-    return new GoogleGenAI(
+  ): Promise<GeminiClient> {
+    return createGeminiClient(
       this.buildGoogleGenAIOptions(authToken, authMode, httpOptions, baseURL),
     );
   }
@@ -340,7 +339,7 @@ export class GeminiProvider extends BaseProvider {
   private buildVertexAIOptions(
     isVertex: boolean,
     vertexConfig: VertexAIAuthConfig,
-  ): Pick<GoogleGenAIOptions, 'project' | 'location'> {
+  ): Pick<GeminiClientOptions, 'project' | 'location'> {
     if (!isVertex) {
       return {};
     }
@@ -355,7 +354,7 @@ export class GeminiProvider extends BaseProvider {
     authMode: GeminiAuthMode,
     httpOptions: ReturnType<typeof this.createHttpOptions>,
     baseURL?: string,
-  ): GoogleGenAIOptions {
+  ): GeminiClientOptions {
     const isVertex = authMode === 'vertex-ai';
     const settingsService = this.resolveSettingsServiceIfAvailable();
     const vertexConfig = getVertexAIAuthConfig(settingsService);
@@ -441,8 +440,7 @@ export class GeminiProvider extends BaseProvider {
       params: GenerateContentParameters,
     ) => Promise<AsyncIterable<GenerateContentResponse>>;
   }> {
-    const { GoogleGenAI } = await import('@google/genai');
-    const genAI = new GoogleGenAI(
+    const client = await createGeminiClient(
       this.buildGoogleGenAIOptions(
         setup.authToken,
         setup.authMode,
@@ -450,7 +448,7 @@ export class GeminiProvider extends BaseProvider {
         setup.baseURL,
       ),
     );
-    return genAI.models;
+    return client.models;
   }
 
   protected nonOAuthNonStreamingGenerate(

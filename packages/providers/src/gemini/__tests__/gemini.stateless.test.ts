@@ -58,7 +58,8 @@ void vi.mock('@google/genai', () => {
     }
   }
 
-  const Type = { OBJECT: 'object' };
+  // Mirrors the real Gemini schema-type constant, which is uppercase.
+  const Type = { OBJECT: 'OBJECT' };
 
   return { GoogleGenAI: FakeGoogleGenAI, Type };
 });
@@ -410,7 +411,7 @@ describe('Gemini provider stateless contract tests', () => {
         expect.objectContaining({
           functionDeclarations: expect.arrayContaining([
             expect.objectContaining({
-              parameters: expect.objectContaining({ type: 'object' }),
+              parameters: expect.objectContaining({ type: 'OBJECT' }),
             }),
           ]),
         }),

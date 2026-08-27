@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  type Part,
-  type GenerateContentParameters,
-  type GenerateContentResponse,
-} from '@google/genai';
+import type {
+  GenerateContentParameters,
+  GenerateContentResponse,
+  Part,
+} from './geminiWireTypes.js';
 import { type Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { type NormalizedGenerateChatOptions } from '../BaseProvider.js';

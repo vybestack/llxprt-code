@@ -6,7 +6,8 @@
 
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { type Part, type GoogleGenAI } from '@google/genai';
+import type { Part } from './geminiWireTypes.js';
+import type { GeminiClient } from './geminiWireTypes.js';
 import type { GeminiAuthMode } from './geminiAuth.js';
 import { throwIfAborted } from './geminiAbort.js';
 
@@ -26,7 +27,7 @@ export interface ServerToolContext {
     authMode: GeminiAuthMode,
     httpOptions: HttpOptions,
     baseURL?: string,
-  ) => Promise<GoogleGenAI>;
+  ) => Promise<GeminiClient>;
   globalConfig: Config | undefined;
 }
 

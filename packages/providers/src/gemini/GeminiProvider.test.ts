@@ -15,7 +15,7 @@ import {
 } from 'bun:test';
 import { GeminiProvider } from './GeminiProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { Part } from '@google/genai';
+import type { Part } from './geminiWireTypes.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import {
   getSettingsService,

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type Part, type FunctionCall, type Content } from '@google/genai';
+import type { Content, FunctionCall, Part } from './geminiWireTypes.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
   type IContent,
@@ -13,7 +13,7 @@ import {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 import { extractAfcHistory } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import type { GenerateContentResponse } from '@google/genai';
+import type { GenerateContentResponse } from './geminiWireTypes.js';
 
 /** Subset of Gemini usage metadata consumed by chunk mapping. */
 export interface GeminiUsageMetadata {
