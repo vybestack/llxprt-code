@@ -284,3 +284,69 @@ describe('Gemini client seam: replayed assistant turns', () => {
     expect(JSON.stringify(request.body['contents'])).toContain('sig-abc');
   });
 });
+
+describe('Gemini client seam: anyOf branches that only constrain requiredness', () => {
+  // apply_patch declares `anyOf: [{ required: ['absolute_path'] },
+  // { required: ['file_path'] }]`, meaning "at least one of these". Gemini
+  // rejects a branch that marks a property required without being an object
+  // schema that defines it:
+  //   any_of[0].required: only allowed for OBJECT type
+  //   any_of[0].required[0]: property is not defined
+  const applyPatchLike = {
+    maxOutputTokens: 16,
+    tools: [
+      {
+        functionDeclarations: [
+          {
+            name: 'apply_patch',
+            description: 'Apply a patch',
+            parametersJsonSchema: {
+              type: 'object',
+              properties: {
+                absolute_path: { type: 'string' },
+                file_path: { type: 'string' },
+                patch_content: { type: 'string' },
+              },
+              required: ['patch_content'],
+              anyOf: [
+                { required: ['absolute_path'] },
+                { required: ['file_path'] },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  it('gives each branch an object type and the property it requires', async () => {
+    const request = await callWith(applyPatchLike);
+    const parameters = firstTool(request.body)['parameters'] as Record<
+      string,
+      unknown
+    >;
+    const branches = parameters['anyOf'] as Array<Record<string, unknown>>;
+    expect(branches).toHaveLength(2);
+    for (const branch of branches) {
+      const required = branch['required'] as string[];
+      expect(branch['type']).toBe('object');
+      const properties = branch['properties'] as Record<string, unknown>;
+      for (const name of required) {
+        expect(properties[name]).toBeTruthy();
+      }
+    }
+  });
+
+  it('keeps the branches distinct so the either/or meaning survives', async () => {
+    const request = await callWith(applyPatchLike);
+    const parameters = firstTool(request.body)['parameters'] as Record<
+      string,
+      unknown
+    >;
+    const branches = parameters['anyOf'] as Array<Record<string, unknown>>;
+    expect(branches.map((b) => b['required'])).toEqual([
+      ['absolute_path'],
+      ['file_path'],
+    ]);
+  });
+});

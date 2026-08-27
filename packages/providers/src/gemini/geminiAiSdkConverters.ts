@@ -271,6 +271,49 @@ function lowerGeminiType(value: unknown): unknown {
   return value;
 }
 
+/**
+ * Make `anyOf` branches that only constrain requiredness legal for Gemini.
+ *
+ * The idiom `anyOf: [{ required: ['a'] }, { required: ['b'] }]` means "at least
+ * one of a or b". It is valid JSON Schema and apply_patch uses it, but Gemini
+ * rejects it outright:
+ *
+ *   any_of[0].required: only allowed for OBJECT type
+ *   any_of[0].required[0]: property is not defined
+ *
+ * Gemini needs each branch to be an object schema that itself defines the
+ * properties it marks required, so the referenced definitions are copied down
+ * from the parent. Branches that already declare a type are left alone.
+ */
+function repairRequiredOnlyAnyOf(
+  branches: readonly unknown[],
+  parentProperties: unknown,
+): unknown[] {
+  const parent = isRecord(parentProperties) ? parentProperties : undefined;
+  return branches.map((branch) => {
+    if (!isRecord(branch)) {
+      return branch;
+    }
+    const required = branch['required'];
+    if (
+      branch['type'] !== undefined ||
+      !Array.isArray(required) ||
+      required.length === 0
+    ) {
+      return branch;
+    }
+    const properties: Record<string, unknown> = {};
+    for (const name of required) {
+      if (typeof name === 'string') {
+        // An unconstrained fallback still defines the name, which is what
+        // Gemini objects to when it is missing.
+        properties[name] = parent?.[name] ?? {};
+      }
+    }
+    return { ...branch, type: 'object', properties };
+  });
+}
+
 function normaliseSchemaTypes(node: unknown): unknown {
   if (Array.isArray(node)) {
     return node.map(normaliseSchemaTypes);
@@ -280,8 +323,15 @@ function normaliseSchemaTypes(node: unknown): unknown {
   }
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(node)) {
-    out[key] =
-      key === 'type' ? lowerGeminiType(value) : normaliseSchemaTypes(value);
+    if (key === 'type') {
+      out[key] = lowerGeminiType(value);
+    } else if (key === 'anyOf' && Array.isArray(value)) {
+      out[key] = repairRequiredOnlyAnyOf(value, node['properties']).map(
+        normaliseSchemaTypes,
+      );
+    } else {
+      out[key] = normaliseSchemaTypes(value);
+    }
   }
   return out;
 }
