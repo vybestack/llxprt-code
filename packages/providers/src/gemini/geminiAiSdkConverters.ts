@@ -162,8 +162,22 @@ function toAssistantPart(part: Part): AssistantPart {
       type: 'tool-call',
       toolCallId: part.functionCall.id ?? part.functionCall.name ?? '',
       toolName: part.functionCall.name ?? '',
-      // Serialised because the AI SDK carries tool input as a JSON string.
-      input: JSON.stringify(part.functionCall.args ?? {}),
+      // Passed as an object. doGenerate RETURNS input as a JSON string, but the
+      // prompt side takes the parsed value: stringifying here double-encodes it
+      // and the API rejects the turn with INVALID_ARGUMENT on
+      // function_call.args.
+      input: part.functionCall.args ?? {},
+      // Gemini 3 carries the thought signature on the function-call part, and
+      // the API rejects a replayed turn whose signature is missing. The AI SDK
+      // reads it from providerOptions.google, so it has to travel there or it
+      // is silently dropped between the wire format and the request.
+      ...(part.thoughtSignature !== undefined
+        ? {
+            providerOptions: {
+              google: { thoughtSignature: part.thoughtSignature },
+            },
+          }
+        : {}),
     };
   }
   if (part.thought === true) {
@@ -349,15 +363,18 @@ export function toParts(content: readonly LanguageModelV4Content[]): Part[] {
         });
         break;
       }
-      case 'tool-call':
+      case 'tool-call': {
+        const signature = extractThoughtSignature(item);
         parts.push({
           functionCall: {
             ...(item.toolCallId !== '' ? { id: item.toolCallId } : {}),
             name: item.toolName,
             args: parseToolInput(item.input),
           },
+          ...(signature !== undefined ? { thoughtSignature: signature } : {}),
         });
         break;
+      }
       case 'tool-result':
         parts.push({
           functionResponse: {
@@ -378,7 +395,11 @@ function extractThoughtSignature(item: unknown): string | undefined {
   if (!isRecord(item)) {
     return undefined;
   }
-  const options = item['providerOptions'];
+  // `providerOptions` on the prompt side, `providerMetadata` on the result
+  // side; both carry the same google-scoped payload.
+  const options = isRecord(item['providerOptions'])
+    ? item['providerOptions']
+    : item['providerMetadata'];
   if (!isRecord(options)) {
     return undefined;
   }
