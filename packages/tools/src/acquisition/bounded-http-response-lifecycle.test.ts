@@ -6,361 +6,88 @@
 
 /**
  * Lifecycle tests for acquireBoundedHttpBody: cancellation, cancel-callback
- * invocation, listener cleanup, abort registration edges, and premature-close
- * settlement. Split from bounded-http-response.test.ts to keep each file under
- * the source-size limit.
+ * invocation, abort registration edges, and settlement.
+ * Split from bounded-http-response.test.ts to keep each file under the
+ * source-size limit.
  *
  * @plan PLAN-20260810-ISSUE3202
  */
 
-import http from 'node:http';
-import type { AddressInfo } from 'node:net';
-import { Readable } from 'node:stream';
-import { describe, it, expect, afterEach } from 'bun:test';
-import fetch from 'node-fetch';
+import type http from 'node:http';
+import { describe, it, expect } from 'bun:test';
 import { createByteBudget } from './index.js';
 import {
   acquireBoundedHttpBody,
   HttpBodyTooLargeError,
   type BoundedFetchResponse,
 } from './bounded-http-response.js';
+import { createLoopbackHarness } from '../test-utils/loopback-test-helpers.js';
 
-const servers: http.Server[] = [];
-const pendingWriters = new Set<Promise<void>>();
-
-afterEach(async () => {
-  while (servers.length > 0) {
-    const server = servers.pop()!;
-    server.closeAllConnections();
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  }
-  await Promise.allSettled([...pendingWriters]);
-});
-
-function trackWriter(writer: Promise<void>): Promise<void> {
-  pendingWriters.add(writer);
-  void writer.then(
-    () => pendingWriters.delete(writer),
-    () => pendingWriters.delete(writer),
-  );
-  return writer;
-}
-
-function startServer(
-  handler: (req: http.IncomingMessage, res: http.ServerResponse) => void,
-): Promise<http.Server> {
-  return new Promise((resolve) => {
-    const server = http.createServer(handler);
-    server.listen(0, '127.0.0.1', () => {
-      servers.push(server);
-      resolve(server);
-    });
-  });
-}
-
-function serverUrl(server: http.Server): string {
-  const { port } = server.address() as AddressInfo;
-  return `http://127.0.0.1:${port}/`;
-}
+const loopback = createLoopbackHarness();
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** No-op cancel for tests that do not exercise cancellation behavior. */
-const noopCancel = (): void => {};
+type AcquisitionOutcome =
+  | { readonly state: 'resolved' }
+  | { readonly state: 'rejected'; readonly error: unknown }
+  | { readonly state: 'pending' };
 
-/**
- * Creates a cancel callback that records whether it was invoked.
- */
-function createTrackingCancel(): { cancel: () => void; called: boolean } {
-  let called = false;
+async function observePromptSettlement(
+  acquisition: Promise<unknown>,
+): Promise<AcquisitionOutcome> {
+  return Promise.race([
+    acquisition.then(
+      (): AcquisitionOutcome => ({ state: 'resolved' }),
+      (error: unknown): AcquisitionOutcome => ({ state: 'rejected', error }),
+    ),
+    delay(100).then<AcquisitionOutcome>(() => ({ state: 'pending' })),
+  ]);
+}
+
+function rejectedError(outcome: AcquisitionOutcome): unknown {
+  if (outcome.state !== 'rejected') {
+    throw new Error(`Expected prompt rejection, observed ${outcome.state}`);
+  }
+  return outcome.error;
+}
+
+interface TrackingCancel {
+  readonly cancel: () => void;
+  readonly invocations: number;
+}
+
+function createTrackingCancel(cancelRequest?: () => void): TrackingCancel {
+  let count = 0;
   return {
     cancel: () => {
-      called = true;
+      count++;
+      cancelRequest?.();
     },
-    get called() {
-      return called;
+    get invocations() {
+      return count;
     },
   };
 }
 
-/**
- * Count listener names attached to a readable stream so we can prove
- * cleanup in behavioral tests without asserting on mock call counts.
- */
-function attachedListenerCount(
-  stream: NodeJS.ReadableStream | null,
-  ...events: string[]
-): number {
-  if (stream === null) return 0;
-  let total = 0;
-  for (const evt of events) {
-    total += (stream as EventEmitterLike).listenerCount(evt);
+function responseBody(
+  response: BoundedFetchResponse,
+): ReadableStream<Uint8Array> {
+  if (response.body === null) {
+    throw new Error('Expected a response body');
   }
-  return total;
+  return response.body;
 }
 
-interface EventEmitterLike {
-  listenerCount(event: string): number;
+function expectReaderLockReleased(body: ReadableStream<Uint8Array>): void {
+  const reader = body.getReader();
+  reader.releaseLock();
 }
 
-describe('acquireBoundedHttpBody — real server-side cancellation', () => {
-  function startPacedServer(options?: { contentLength?: number }): Promise<{
-    server: http.Server;
-    getState: () => { completed: boolean; canceled: boolean };
-    getWriterDone: () => Promise<void>;
-    getSocketClosed: () => Promise<void>;
-  }> {
-    let completed = false;
-    let canceled = false;
-    let writerDone: Promise<void> | undefined;
-    let socketClosed: Promise<void> | undefined;
-    const serverPromise = startServer((_req, res) => {
-      const headers: Record<string, string> = {
-        'content-type': 'text/plain',
-      };
-      if (options?.contentLength !== undefined) {
-        headers['content-length'] = String(options.contentLength);
-      }
-      res.writeHead(200, headers);
-
-      const socket = res.socket;
-      if (socket === null) {
-        throw new Error('Paced server response has no socket');
-      }
-      socketClosed = new Promise<void>((resolve) => {
-        socket.on('close', () => {
-          canceled = !completed;
-          resolve();
-        });
-      });
-
-      writerDone = trackWriter(
-        (async () => {
-          for (let i = 0; i < 100; i++) {
-            if (
-              res.writableEnded ||
-              res.destroyed ||
-              res.socket?.destroyed === true
-            ) {
-              return;
-            }
-            res.write('x'.repeat(128));
-            await delay(10);
-          }
-          if (
-            !res.writableEnded &&
-            !res.destroyed &&
-            res.socket?.destroyed !== true
-          ) {
-            completed = true;
-            res.end();
-          }
-        })(),
-      );
-    });
-    return serverPromise.then((server) => ({
-      server,
-      getState: () => ({ completed, canceled }),
-      getWriterDone: () => {
-        if (writerDone === undefined) {
-          throw new Error('Paced response writer did not start');
-        }
-        return writerDone;
-      },
-      getSocketClosed: () => {
-        if (socketClosed === undefined) {
-          throw new Error('Paced response socket did not start');
-        }
-        return socketClosed;
-      },
-    }));
-  }
-
-  it('cancels the fetch request on observed overflow (no Content-Length)', async () => {
-    const { server, getState, getWriterDone, getSocketClosed } =
-      await startPacedServer();
-
-    const controller = new AbortController();
-    const response = await fetch(serverUrl(server), {
-      signal: controller.signal,
-    });
-
-    await expect(
-      acquireBoundedHttpBody(
-        response,
-        createByteBudget(1024),
-        new AbortController().signal,
-        () => controller.abort(),
-      ),
-    ).rejects.toBeInstanceOf(HttpBodyTooLargeError);
-    await Promise.all([getWriterDone(), getSocketClosed()]);
-
-    const state = getState();
-    expect(state.canceled).toBe(true);
-    expect(state.completed).toBe(false);
-  });
-
-  it('cancels the fetch request on valid over-limit Content-Length early rejection', async () => {
-    const { server, getState, getWriterDone, getSocketClosed } =
-      await startPacedServer({
-        contentLength: 999999,
-      });
-
-    const controller = new AbortController();
-    const response = await fetch(serverUrl(server), {
-      signal: controller.signal,
-    });
-
-    await expect(
-      acquireBoundedHttpBody(
-        response,
-        createByteBudget(1024),
-        new AbortController().signal,
-        () => controller.abort(),
-      ),
-    ).rejects.toBeInstanceOf(HttpBodyTooLargeError);
-    await Promise.all([getWriterDone(), getSocketClosed()]);
-
-    const state = getState();
-    expect(state.canceled).toBe(true);
-    expect(state.completed).toBe(false);
-  });
-
-  it('cancels the fetch request on mid-read external abort through node-fetch', async () => {
-    const { server, getState, getWriterDone, getSocketClosed } =
-      await startPacedServer();
-
-    const controller = new AbortController();
-    const response = await fetch(serverUrl(server), {
-      signal: controller.signal,
-    });
-
-    const promise = acquireBoundedHttpBody(
-      response,
-      createByteBudget(10 * 1024 * 1024),
-      controller.signal,
-      () => controller.abort(),
-    );
-
-    controller.abort();
-
-    await expect(promise).rejects.toThrow(/abort/i);
-    await Promise.all([getWriterDone(), getSocketClosed()]);
-
-    const state = getState();
-    expect(state.canceled).toBe(true);
-    expect(state.completed).toBe(false);
-  });
-});
-
-describe('acquireBoundedHttpBody — cancel callback invocation', () => {
-  it('invokes cancelRequest and releases listeners on observed overflow', async () => {
-    const payload = 'x'.repeat(2048);
-    const server = await startServer((_req, res) => {
-      res.writeHead(200, { 'content-type': 'text/plain' });
-      res.end(payload);
-    });
-
-    const response = await fetch(serverUrl(server));
-    const tracker = createTrackingCancel();
-
-    await expect(
-      acquireBoundedHttpBody(
-        response,
-        createByteBudget(1024),
-        new AbortController().signal,
-        tracker.cancel,
-      ),
-    ).rejects.toBeInstanceOf(HttpBodyTooLargeError);
-
-    expect(tracker.called).toBe(true);
-  });
-
-  it('invokes cancelRequest and releases listeners on over-limit Content-Length early reject', async () => {
-    const fakeResponse: BoundedFetchResponse = {
-      body: Readable.from([Buffer.from('x'.repeat(100))]),
-      headers: {
-        get: (name: string) => (name === 'content-length' ? '999999' : null),
-      },
-    };
-    const tracker = createTrackingCancel();
-
-    await expect(
-      acquireBoundedHttpBody(
-        fakeResponse,
-        createByteBudget(1024),
-        new AbortController().signal,
-        tracker.cancel,
-      ),
-    ).rejects.toBeInstanceOf(HttpBodyTooLargeError);
-
-    expect(tracker.called).toBe(true);
-  });
-
-  it('invokes cancelRequest and releases listeners on stream read error', async () => {
-    const errorStream = new Readable({
-      read() {
-        this.destroy(new Error('stream read failure'));
-      },
-    });
-    const fakeResponse: BoundedFetchResponse = {
-      body: errorStream,
-      headers: { get: () => null },
-    };
-    const tracker = createTrackingCancel();
-
-    await expect(
-      acquireBoundedHttpBody(
-        fakeResponse,
-        createByteBudget(1024),
-        new AbortController().signal,
-        tracker.cancel,
-      ),
-    ).rejects.toThrow('stream read failure');
-
-    expect(tracker.called).toBe(true);
-    expect(
-      attachedListenerCount(
-        errorStream as NodeJS.ReadableStream,
-        'data',
-        'end',
-        'error',
-        'close',
-      ),
-    ).toBe(0);
-  });
-
-  it('does NOT invoke cancelRequest on normal successful completion', async () => {
-    const payload = 'x'.repeat(256);
-    const server = await startServer((_req, res) => {
-      res.writeHead(200, { 'content-type': 'text/plain' });
-      res.end(payload);
-    });
-
-    const response = await fetch(serverUrl(server));
-    const tracker = createTrackingCancel();
-
-    const body = await acquireBoundedHttpBody(
-      response,
-      createByteBudget(1024),
-      new AbortController().signal,
-      tracker.cancel,
-    );
-
-    expect(body.text).toBe(payload);
-    expect(tracker.called).toBe(false);
-  });
-});
-
-/**
- * Wrap a real AbortController so tests can observe abort-listener
- * add/remove without mock call counting. The underlying signal is genuine.
- */
 function createTrackingController(): {
-  signal: AbortSignal;
-  abortListenerCount: number;
+  readonly signal: AbortSignal;
+  readonly abortListenerCount: number;
   abort(): void;
 } {
   const controller = new AbortController();
@@ -404,278 +131,457 @@ function createTrackingController(): {
   };
 }
 
-describe('acquireBoundedHttpBody — listener lifecycle', () => {
-  it('removes all adapter-owned listeners and the abort listener after normal success', async () => {
-    const server = await startServer((_req, res) => {
-      res.writeHead(200, { 'content-type': 'text/plain' });
-      res.end('x'.repeat(256));
-    });
+function syntheticResponse(
+  body: ReadableStream<Uint8Array>,
+  contentLength?: string,
+): BoundedFetchResponse {
+  return {
+    body,
+    headers: {
+      get: (name: string) =>
+        name.toLowerCase() === 'content-length'
+          ? (contentLength ?? null)
+          : null,
+    },
+  };
+}
 
-    const response = await fetch(serverUrl(server));
-    const tracker = createTrackingController();
-    const body = response.body;
+describe('acquireBoundedHttpBody: native fetch response lifecycle', () => {
+  function startPacedServer(options?: { contentLength?: number }): Promise<{
+    readonly server: http.Server;
+    readonly getState: () => { completed: boolean; canceled: boolean };
+    readonly getWriterDone: () => Promise<void>;
+    readonly getSocketClosed: () => Promise<void>;
+  }> {
+    let completed = false;
+    let canceled = false;
+    let writerDone: Promise<void> | undefined;
+    let socketClosed: Promise<void> | undefined;
+    const serverPromise = loopback.startServer((_req, res) => {
+      const headers: Record<string, string> = {
+        'content-type': 'text/plain',
+      };
+      if (options?.contentLength !== undefined) {
+        headers['content-length'] = String(options.contentLength);
+      }
+      res.writeHead(200, headers);
 
-    await acquireBoundedHttpBody(
-      response,
-      createByteBudget(1024),
-      tracker.signal,
-      noopCancel,
-    );
+      const socket = res.socket;
+      if (socket === null) {
+        throw new Error('Paced server response has no socket');
+      }
 
-    expect(attachedListenerCount(body, 'data', 'end', 'error', 'close')).toBe(
-      0,
-    );
-    expect(tracker.abortListenerCount).toBe(0);
-  });
+      socketClosed = new Promise<void>((resolve) => {
+        socket.once('close', () => {
+          canceled = !completed;
+          resolve();
+        });
+      });
 
-  it('removes all adapter-owned listeners and the abort listener after overflow', async () => {
-    const server = await startServer((_req, res) => {
-      res.writeHead(200, { 'content-type': 'text/plain' });
-      res.end('x'.repeat(2048));
-    });
-
-    const response = await fetch(serverUrl(server));
-    const tracker = createTrackingController();
-    const body = response.body;
-
-    await expect(
-      acquireBoundedHttpBody(
-        response,
-        createByteBudget(1024),
-        tracker.signal,
-        noopCancel,
-      ),
-    ).rejects.toBeInstanceOf(HttpBodyTooLargeError);
-
-    expect(attachedListenerCount(body, 'data', 'end', 'error', 'close')).toBe(
-      0,
-    );
-    expect(tracker.abortListenerCount).toBe(0);
-  });
-
-  it('removes all adapter-owned listeners and the abort listener after abort', async () => {
-    let writerDone = Promise.resolve();
-    const server = await startServer((_req, res) => {
-      res.writeHead(200, { 'content-type': 'text/plain' });
-      writerDone = trackWriter(
-        (async () => {
-          for (let i = 0; i < 20; i++) {
-            if (res.destroyed || res.writableEnded) return;
-            res.write('x'.repeat(128));
-            await delay(20);
+      const writer = (async (): Promise<void> => {
+        for (let i = 0; i < 100; i++) {
+          if (
+            res.writableEnded ||
+            res.destroyed ||
+            res.socket?.destroyed === true
+          ) {
+            return;
           }
-          if (!res.destroyed && !res.writableEnded) res.end();
-        })(),
-      );
+          res.write('x'.repeat(128));
+          await delay(10);
+        }
+        if (
+          !res.writableEnded &&
+          !res.destroyed &&
+          res.socket?.destroyed !== true
+        ) {
+          completed = true;
+          res.end();
+        }
+      })();
+      loopback.trackWriter(writer);
+      writerDone = writer;
     });
-
-    const requestController = new AbortController();
-    const response = await fetch(serverUrl(server), {
-      signal: requestController.signal,
-    });
-    const tracker = createTrackingController();
-    const body = response.body;
-
-    const promise = acquireBoundedHttpBody(
-      response,
-      createByteBudget(1024),
-      tracker.signal,
-      () => requestController.abort(),
-    );
-    tracker.abort();
-    await expect(promise).rejects.toThrow(/abort/i);
-    await writerDone;
-
-    expect(attachedListenerCount(body, 'data', 'end', 'error', 'close')).toBe(
-      0,
-    );
-    expect(tracker.abortListenerCount).toBe(0);
-  });
-
-  it('removes all adapter-owned listeners and the abort listener after a stream error', async () => {
-    const errorStream = new Readable({
-      read() {
-        this.destroy(new Error('stream read failure'));
+    return serverPromise.then((server) => ({
+      server,
+      getState: () => ({ completed, canceled }),
+      getWriterDone: () => {
+        if (writerDone === undefined) {
+          throw new Error('Paced response writer did not start');
+        }
+        return writerDone;
       },
+      getSocketClosed: () => {
+        if (socketClosed === undefined) {
+          throw new Error('Paced response socket did not start');
+        }
+        return socketClosed;
+      },
+    }));
+  }
+
+  it('releases the reader lock without canceling transport after success', async () => {
+    const server = await loopback.startServer((_req, res) => {
+      res.end('complete body');
     });
-    const fakeResponse: BoundedFetchResponse = {
-      body: errorStream,
-      headers: { get: () => null },
-    };
-    const tracker = createTrackingController();
-
-    await expect(
-      acquireBoundedHttpBody(
-        fakeResponse,
-        createByteBudget(1024),
-        tracker.signal,
-        noopCancel,
-      ),
-    ).rejects.toThrow('stream read failure');
-
-    expect(
-      attachedListenerCount(
-        errorStream as NodeJS.ReadableStream,
-        'data',
-        'end',
-        'error',
-        'close',
-      ),
-    ).toBe(0);
-    expect(tracker.abortListenerCount).toBe(0);
-  });
-});
-
-describe('acquireBoundedHttpBody — abort registration edge', () => {
-  it('rejects immediately with AbortError when signal is already aborted before acquisition starts', async () => {
-    // A live stream with real data — the adapter must still reject for abort
-    // because the signal was already aborted when listeners were registered.
-    const stream = Readable.from([Buffer.from('x'.repeat(10))]);
-    const fakeResponse: BoundedFetchResponse = {
-      body: stream,
-      headers: { get: () => null },
-    };
+    const response = await fetch(loopback.serverUrl(server));
     const tracker = createTrackingCancel();
     const abortTracker = createTrackingController();
-    abortTracker.abort();
-    const promise = acquireBoundedHttpBody(
-      fakeResponse,
+    const body = responseBody(response);
+
+    const result = await acquireBoundedHttpBody(
+      response,
       createByteBudget(1024),
       abortTracker.signal,
       tracker.cancel,
     );
 
-    await expect(promise).rejects.toThrow(/abort/i);
-
-    // The post-registration check must fire onAbort which calls cancelRequest
-    // and destroys the body.
-    expect(tracker.called).toBe(true);
-    expect((stream as unknown as { destroyed: boolean }).destroyed).toBe(true);
-    // No adapter-owned listeners remain on the body.
-    expect(
-      attachedListenerCount(
-        stream as NodeJS.ReadableStream,
-        'data',
-        'end',
-        'error',
-        'close',
-      ),
-    ).toBe(0);
+    expect(result.text).toBe('complete body');
+    expect(tracker.invocations).toBe(0);
     expect(abortTracker.abortListenerCount).toBe(0);
+    expectReaderLockReleased(body);
+  });
+
+  it('settles with AbortError for an already-aborted signal and cleans up once', async () => {
+    const { server, getWriterDone, getSocketClosed } = await startPacedServer();
+    const requestController = new AbortController();
+    const response = await fetch(loopback.serverUrl(server), {
+      signal: requestController.signal,
+    });
+    const body = responseBody(response);
+    const abortTracker = createTrackingController();
+    const tracker = createTrackingCancel(() => requestController.abort());
+    abortTracker.abort();
+
+    const acquisition = acquireBoundedHttpBody(
+      response,
+      createByteBudget(1024),
+      abortTracker.signal,
+      tracker.cancel,
+    );
+
+    await expect(acquisition).rejects.toMatchObject({ name: 'AbortError' });
+    await Promise.all([getWriterDone(), getSocketClosed()]);
+    expect(tracker.invocations).toBe(1);
+    expect(abortTracker.abortListenerCount).toBe(0);
+    expectReaderLockReleased(body);
+  });
+
+  it('settles with AbortError for a mid-read abort and cleans up once', async () => {
+    const { server, getState, getWriterDone, getSocketClosed } =
+      await startPacedServer();
+    const requestController = new AbortController();
+    const response = await fetch(loopback.serverUrl(server), {
+      signal: requestController.signal,
+    });
+    const body = responseBody(response);
+    const abortTracker = createTrackingController();
+    const tracker = createTrackingCancel(() => requestController.abort());
+
+    const acquisition = acquireBoundedHttpBody(
+      response,
+      createByteBudget(10 * 1024 * 1024),
+      abortTracker.signal,
+      tracker.cancel,
+    );
+    abortTracker.abort();
+
+    await expect(acquisition).rejects.toMatchObject({ name: 'AbortError' });
+    await Promise.all([getWriterDone(), getSocketClosed()]);
+    expect(tracker.invocations).toBe(1);
+    expect(abortTracker.abortListenerCount).toBe(0);
+    expectReaderLockReleased(body);
+    expect(getState()).toEqual({ completed: false, canceled: true });
+  });
+
+  it('settles with HttpBodyTooLargeError for observed overflow and cleans up once', async () => {
+    const { server, getState, getWriterDone, getSocketClosed } =
+      await startPacedServer();
+    const requestController = new AbortController();
+    const response = await fetch(loopback.serverUrl(server), {
+      signal: requestController.signal,
+    });
+    const body = responseBody(response);
+    const abortTracker = createTrackingController();
+    const tracker = createTrackingCancel(() => requestController.abort());
+
+    await expect(
+      acquireBoundedHttpBody(
+        response,
+        createByteBudget(1024),
+        abortTracker.signal,
+        tracker.cancel,
+      ),
+    ).rejects.toBeInstanceOf(HttpBodyTooLargeError);
+    await Promise.all([getWriterDone(), getSocketClosed()]);
+
+    expect(tracker.invocations).toBe(1);
+    expect(abortTracker.abortListenerCount).toBe(0);
+    expectReaderLockReleased(body);
+    expect(getState()).toEqual({ completed: false, canceled: true });
+  });
+
+  it('settles with HttpBodyTooLargeError for declared overflow and cancels once', async () => {
+    const { server, getState, getWriterDone, getSocketClosed } =
+      await startPacedServer({ contentLength: 999999 });
+    const requestController = new AbortController();
+    const response = await fetch(loopback.serverUrl(server), {
+      signal: requestController.signal,
+    });
+    const tracker = createTrackingCancel(() => requestController.abort());
+
+    await expect(
+      acquireBoundedHttpBody(
+        response,
+        createByteBudget(1024),
+        new AbortController().signal,
+        tracker.cancel,
+      ),
+    ).rejects.toBeInstanceOf(HttpBodyTooLargeError);
+    await Promise.all([getWriterDone(), getSocketClosed()]);
+
+    expect(tracker.invocations).toBe(1);
+    expect(getState()).toEqual({ completed: false, canceled: true });
+  });
+
+  it('keeps abort authoritative when buffered overflow races cancellation', async () => {
+    const { server, getWriterDone, getSocketClosed } = await startPacedServer();
+    const requestController = new AbortController();
+    const response = await fetch(loopback.serverUrl(server), {
+      signal: requestController.signal,
+    });
+    const body = responseBody(response);
+    const abortTracker = createTrackingController();
+    const tracker = createTrackingCancel(() => requestController.abort());
+
+    const acquisition = acquireBoundedHttpBody(
+      response,
+      createByteBudget(8),
+      abortTracker.signal,
+      tracker.cancel,
+    );
+    abortTracker.abort();
+
+    await expect(acquisition).rejects.toMatchObject({ name: 'AbortError' });
+    await Promise.all([getWriterDone(), getSocketClosed()]);
+    expect(tracker.invocations).toBe(1);
+    expect(abortTracker.abortListenerCount).toBe(0);
+    expectReaderLockReleased(body);
   });
 });
 
-/**
- * A body that closes without emitting 'end' must not leave the acquisition
- * promise pending forever. The adapter must settle (reject) on the close
- * event, distinguish premature close from a clean end, and never double-settle
- * when 'error' or 'abort' precedes 'close'. These tests target that
- * authoritative-settlement behavior (issue #3202).
- */
-describe('acquireBoundedHttpBody — premature close settlement', () => {
-  it('rejects when the body closes without end (no prior error)', async () => {
-    const stream = new Readable({
-      read() {
-        this.push(Buffer.from('partial-body'));
-        // Destroy without an error: emits 'close' but NOT 'end'.
-        this.destroy();
+describe('acquireBoundedHttpBody: synthetic cleanup failures', () => {
+  it('preserves an ordinary read error and releases the reader lock', async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.error(new Error('stream read failure'));
       },
     });
-    const fakeResponse: BoundedFetchResponse = {
-      body: stream,
-      headers: { get: () => null },
-    };
+    const response = syntheticResponse(stream);
     const tracker = createTrackingCancel();
+    const abortTracker = createTrackingController();
 
     await expect(
       acquireBoundedHttpBody(
-        fakeResponse,
+        response,
         createByteBudget(1024),
-        new AbortController().signal,
+        abortTracker.signal,
         tracker.cancel,
       ),
-    ).rejects.toThrow(/closed|premature|incomplete/i);
+    ).rejects.toThrow('stream read failure');
 
-    // Premature close cancels the request and cleans up all listeners.
-    expect(tracker.called).toBe(true);
-    expect(
-      attachedListenerCount(
-        stream as NodeJS.ReadableStream,
-        'data',
-        'end',
-        'error',
-        'close',
-      ),
-    ).toBe(0);
+    expect(tracker.invocations).toBe(1);
+    expect(abortTracker.abortListenerCount).toBe(0);
+    expectReaderLockReleased(stream);
   });
 
-  it('settles once with the read error when the stream errors then closes', async () => {
-    const stream = new Readable({
-      read() {
-        this.destroy(new Error('socket reset'));
+  it('keeps a read error authoritative when request cancellation throws', async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.error(new Error('stream read failure'));
       },
     });
-    const fakeResponse: BoundedFetchResponse = {
-      body: stream,
-      headers: { get: () => null },
-    };
-    const tracker = createTrackingCancel();
+    const response = syntheticResponse(stream);
+    const abortTracker = createTrackingController();
+    let cancellations = 0;
 
     await expect(
       acquireBoundedHttpBody(
-        fakeResponse,
+        response,
         createByteBudget(1024),
-        new AbortController().signal,
-        tracker.cancel,
+        abortTracker.signal,
+        () => {
+          cancellations++;
+          throw new Error('request cancellation failed');
+        },
       ),
-    ).rejects.toThrow('socket reset');
+    ).rejects.toThrow('stream read failure');
 
-    // The 'close' that follows 'error' must not mutate the settlement.
-    expect(tracker.called).toBe(true);
-    expect(
-      attachedListenerCount(
-        stream as NodeJS.ReadableStream,
-        'data',
-        'end',
-        'error',
-        'close',
-      ),
-    ).toBe(0);
+    expect(cancellations).toBe(1);
+    expect(abortTracker.abortListenerCount).toBe(0);
+    expectReaderLockReleased(stream);
   });
 
-  it('settles once on abort then close and cleans up listeners', async () => {
-    const stream = new Readable({
-      read() {
-        this.push(Buffer.from('x'.repeat(64)));
+  it('settles abort promptly and releases its reader when cancellation never settles', async () => {
+    let streamCancellationStarted = false;
+    const stream = new ReadableStream<Uint8Array>({
+      cancel() {
+        streamCancellationStarted = true;
+        return new Promise<void>(() => {});
       },
     });
-    const fakeResponse: BoundedFetchResponse = {
-      body: stream,
-      headers: { get: () => null },
-    };
-    const controller = new AbortController();
+    const response = syntheticResponse(stream);
     const tracker = createTrackingCancel();
+    const abortTracker = createTrackingController();
+    abortTracker.abort();
 
-    const promise = acquireBoundedHttpBody(
-      fakeResponse,
-      createByteBudget(10 * 1024 * 1024),
-      controller.signal,
+    const outcome = await observePromptSettlement(
+      acquireBoundedHttpBody(
+        response,
+        createByteBudget(1024),
+        abortTracker.signal,
+        tracker.cancel,
+      ),
+    );
+
+    expect(rejectedError(outcome)).toMatchObject({ name: 'AbortError' });
+    expect(streamCancellationStarted).toBe(true);
+    expect(tracker.invocations).toBe(1);
+    expect(abortTracker.abortListenerCount).toBe(0);
+    expectReaderLockReleased(stream);
+  });
+
+  it('keeps AbortError authoritative when already-aborted reader cancellation rejects', async () => {
+    const cancelError = new Error('reader cancellation rejected');
+    const stream = new ReadableStream<Uint8Array>({
+      cancel() {
+        return Promise.reject(cancelError);
+      },
+    });
+    const response = syntheticResponse(stream);
+    const tracker = createTrackingCancel();
+    const abortTracker = createTrackingController();
+    abortTracker.abort();
+
+    await expect(
+      acquireBoundedHttpBody(
+        response,
+        createByteBudget(1024),
+        abortTracker.signal,
+        tracker.cancel,
+      ),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(tracker.invocations).toBe(1);
+    expect(abortTracker.abortListenerCount).toBe(0);
+    expectReaderLockReleased(stream);
+  });
+
+  it('keeps AbortError authoritative when mid-flight reader cancellation rejects', async () => {
+    const pullStarted = Promise.withResolvers<void>();
+    const cancelError = new Error('reader cancellation rejected');
+    const stream = new ReadableStream<Uint8Array>({
+      pull() {
+        pullStarted.resolve();
+      },
+      cancel() {
+        return Promise.reject(cancelError);
+      },
+    });
+    const response = syntheticResponse(stream);
+    const tracker = createTrackingCancel();
+    const abortTracker = createTrackingController();
+    const acquisition = acquireBoundedHttpBody(
+      response,
+      createByteBudget(1024),
+      abortTracker.signal,
       tracker.cancel,
     );
-    controller.abort();
+    await pullStarted.promise;
 
-    await expect(promise).rejects.toThrow(/abort/i);
-    expect(tracker.called).toBe(true);
-    // The adapter destroys the body on abort; the trailing 'close' must not
-    // double-settle. No listeners remain.
-    expect(
-      attachedListenerCount(
-        stream as NodeJS.ReadableStream,
-        'data',
-        'end',
-        'error',
-        'close',
+    abortTracker.abort();
+
+    await expect(acquisition).rejects.toMatchObject({ name: 'AbortError' });
+    expect(tracker.invocations).toBe(1);
+    expect(abortTracker.abortListenerCount).toBe(0);
+    expectReaderLockReleased(stream);
+  });
+
+  it('keeps observed overflow authoritative when reader cancellation rejects', async () => {
+    const cancelError = new Error('reader cancellation rejected');
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(1025));
+      },
+      cancel() {
+        return Promise.reject(cancelError);
+      },
+    });
+    const response = syntheticResponse(stream);
+    const tracker = createTrackingCancel();
+    const abortTracker = createTrackingController();
+
+    await expect(
+      acquireBoundedHttpBody(
+        response,
+        createByteBudget(1024),
+        abortTracker.signal,
+        tracker.cancel,
       ),
-    ).toBe(0);
+    ).rejects.toBeInstanceOf(HttpBodyTooLargeError);
+
+    expect(tracker.invocations).toBe(1);
+    expect(abortTracker.abortListenerCount).toBe(0);
+    expectReaderLockReleased(stream);
+  });
+
+  it('keeps declared overflow authoritative when body cancellation rejects', async () => {
+    const cancelError = new Error('body cancellation rejected');
+    const stream = new ReadableStream<Uint8Array>({
+      cancel() {
+        return Promise.reject(cancelError);
+      },
+    });
+    const response = syntheticResponse(stream, '2048');
+    const tracker = createTrackingCancel();
+
+    await expect(
+      acquireBoundedHttpBody(
+        response,
+        createByteBudget(1024),
+        new AbortController().signal,
+        tracker.cancel,
+      ),
+    ).rejects.toBeInstanceOf(HttpBodyTooLargeError);
+
+    expect(tracker.invocations).toBe(1);
+    expectReaderLockReleased(stream);
+  });
+
+  it('settles declared overflow promptly without locking the body when cancellation never settles', async () => {
+    let streamCancellationStarted = false;
+    const stream = new ReadableStream<Uint8Array>({
+      cancel() {
+        streamCancellationStarted = true;
+        return new Promise<void>(() => {});
+      },
+    });
+    const response = syntheticResponse(stream, '2048');
+    const tracker = createTrackingCancel();
+
+    const outcome = await observePromptSettlement(
+      acquireBoundedHttpBody(
+        response,
+        createByteBudget(1024),
+        new AbortController().signal,
+        tracker.cancel,
+      ),
+    );
+
+    expect(rejectedError(outcome)).toBeInstanceOf(HttpBodyTooLargeError);
+    expect(streamCancellationStarted).toBe(true);
+    expect(tracker.invocations).toBe(1);
+    expect(stream.locked).toBe(false);
+    expectReaderLockReleased(stream);
   });
 });

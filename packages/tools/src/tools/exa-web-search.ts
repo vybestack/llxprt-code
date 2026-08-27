@@ -8,8 +8,6 @@
  * Licensed under the MIT License.
  */
 
-import fetch from 'node-fetch';
-
 import type { IToolKeyStorage, IToolMessageBus } from '../interfaces/index.js';
 import { ToolErrorType } from '../types/tool-error.js';
 import { ensureJsonSafe } from '../utils/unicodeUtils.js';
@@ -165,7 +163,7 @@ class ExaWebSearchToolInvocation extends BaseToolInvocation<
    * the HTTP status is preserved in the thrown error message.
    */
   private async readErrorResponseBody(
-    response: Awaited<ReturnType<typeof fetch>>,
+    response: Response,
     signal: AbortSignal,
     cancelRequest: () => void,
   ): Promise<string> {

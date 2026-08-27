@@ -20,10 +20,8 @@ import { DIRECT_WEB_FETCH_TOOL } from '../types/tool-names.js';
 import { ToolErrorType } from '../types/tool-error.js';
 import { stringOrDefault } from '../utils/stringCoalescing.js';
 import type { IToolHost, IToolMessageBus } from '../interfaces/index.js';
-
-import fetch, { type RequestInit } from 'node-fetch';
+import { htmlToText } from 'html-to-text';
 import TurndownService from 'turndown';
-import * as cheerio from 'cheerio';
 import { retryWithBackoff } from '../utils/retry.js';
 import { ensureJsonSafe } from '../utils/unicodeUtils.js';
 import { createByteBudget } from '../acquisition/index.js';
@@ -37,10 +35,23 @@ const FETCH_BYTE_BUDGET = createByteBudget(MAX_RESPONSE_SIZE);
 const DEFAULT_TIMEOUT = 30 * 1000; // 30 seconds
 const MAX_TIMEOUT = 120 * 1000; // 2 minutes
 
+/**
+ * Every 4xx response is terminal for direct fetch. The shared retry helper also
+ * retries 401, 403, and 429 for consumers whose authentication or quota state
+ * can change between attempts.
+ */
+const TERMINAL_4XX_PREFIX = 400;
+const TERMINAL_5XX_PREFIX = 500;
+
 /** A fetched response paired with its per-attempt cancellation handle. */
 interface FetchedResponse {
-  readonly response: Awaited<ReturnType<typeof fetch>>;
+  readonly response: Response;
   readonly cancelRequest: () => void;
+}
+
+/** True when a status is a client error (4xx) that must not be retried. */
+function isTerminal4xx(status: number): boolean {
+  return status >= TERMINAL_4XX_PREFIX && status < TERMINAL_5XX_PREFIX;
 }
 const ACCEPT_HEADERS: Record<DirectWebFetchToolParams['format'], string> = {
   markdown:
@@ -211,15 +222,24 @@ class DirectWebFetchToolInvocation extends BaseToolInvocation<
               Accept: ACCEPT_HEADERS[this.params.format],
               'Accept-Language': 'en-US,en;q=0.9',
             },
-          } as RequestInit);
+          });
 
           const cancelRequest = (): void => attemptController.abort();
 
           if (!resp.ok) {
             disposeHttpResponseBody(resp, cancelRequest);
-            const error = new Error(
+            const error: Error & { status?: number } = new Error(
               `Request failed with status code: ${resp.status}`,
-            ) as Error & { status: number };
+            );
+            // A 4xx is terminal here: the request URL and headers are in user
+            // control, so a client status is fixed by the caller, not by re-issuing
+            // the request. The shared retry helper would otherwise retry its
+            // previously-retryable 401/403/429 statuses, so each 4xx error is
+            // re-thrown locally as a plain Error without the status property.
+            if (isTerminal4xx(resp.status)) {
+              error.name = 'TerminalHttpStatus';
+              throw error;
+            }
             error.status = resp.status;
             throw error;
           }
@@ -238,7 +258,7 @@ class DirectWebFetchToolInvocation extends BaseToolInvocation<
   }
 
   private async readBoundedResponse(
-    response: Awaited<ReturnType<typeof fetch>>,
+    response: Response,
     signal: AbortSignal,
     cancelRequest: () => void,
   ): Promise<string> {
@@ -280,18 +300,14 @@ class DirectWebFetchToolInvocation extends BaseToolInvocation<
     if (!(error instanceof Error)) return String(error);
 
     let errorMessage = error.message;
-    const err = error as Error & { cause?: unknown };
-    if (this.hasTruthyCause(err)) {
+    if (this.isTruthyCause(error.cause)) {
       const causeMessage =
-        err.cause instanceof Error ? err.cause.message : String(err.cause);
+        error.cause instanceof Error
+          ? error.cause.message
+          : String(error.cause);
       errorMessage += `: ${causeMessage}`;
     }
     return errorMessage;
-  }
-
-  private hasTruthyCause(error: Error & { cause?: unknown }): boolean {
-    if (!('cause' in error)) return false;
-    return this.isTruthyCause(error.cause);
   }
 
   private isTruthyCause(cause: unknown): boolean {
@@ -301,10 +317,7 @@ class DirectWebFetchToolInvocation extends BaseToolInvocation<
   }
 
   private extractTextFromHTML(html: string): string {
-    const $ = cheerio.load(html);
-    // Remove scripts, styles, etc.
-    $('script, style, noscript, iframe, object, embed').remove();
-    return $.text().trim();
+    return htmlToText(html).trim();
   }
 
   private convertHTMLToMarkdown(html: string): string {

@@ -7,9 +7,9 @@
 import type { ByteBudget, TruncationMetadata } from './types.js';
 import { BoundedStreamCollector } from './boundedStreamCollector.js';
 
-/** Minimal structural interface satisfied by a node-fetch Response. */
+/** Structural surface of a native fetch Response used by bounded acquisition. */
 export interface BoundedFetchResponse {
-  readonly body: NodeJS.ReadableStream | null;
+  readonly body: ReadableStream<Uint8Array> | null;
   readonly headers: { get(name: string): string | null };
 }
 
@@ -34,28 +34,17 @@ export interface BoundedHttpBody {
   readonly metadata: TruncationMetadata;
 }
 
-type ManagedStream = NodeJS.ReadableStream & {
-  destroyed?: boolean;
-  destroy?(error?: Error): unknown;
-};
-
 function createAbortError(): Error {
   const error = new Error('The operation was aborted');
   error.name = 'AbortError';
   return error;
 }
 
-function destroyStream(stream: ManagedStream | null | undefined): void {
-  if (stream === null || stream === undefined) return;
-  if (stream.destroyed === true) return;
-  stream.destroy?.();
-}
-
 /**
  * Parse a Content-Length header strictly. Only when the entire trimmed value
- * consists solely of decimal digits and is safely representable as a
- * nonnegative integer is it accepted. Malformed or unsafe values are treated
- * as absent, forcing observed-byte streaming enforcement.
+ * consists solely of decimal digits and is safely representable as a nonnegative
+ * integer is it accepted. Malformed or unsafe values are treated as absent,
+ * forcing observed-byte streaming enforcement.
  */
 function parseContentLength(header: string | null): number | undefined {
   if (header === null) return undefined;
@@ -66,142 +55,165 @@ function parseContentLength(header: string | null): number | undefined {
   return value;
 }
 
-function toBuffer(chunk: unknown): Buffer {
-  if (Buffer.isBuffer(chunk)) return chunk;
-  if (chunk instanceof Uint8Array) return Buffer.from(chunk);
-  // Node.js streams may emit strings; encode via UTF-8.
-  return Buffer.from(String(chunk));
-}
-
 /**
- * Close/destroy a response body without reading it. Used by callers that
- * reject a response before body acquisition (e.g. non-2xx status).
+ * Close/cancel a native fetch response body without reading it. Used by callers
+ * that reject a response before body acquisition (e.g. non-2xx status).
  *
- * Both cancels the concrete HTTP request (via the caller-owned callback) and
- * destroys the response body wrapper so the underlying socket is released.
+ * The body is canceled directly, then the caller-owned callback aborts the
+ * concrete fetch request. Cleanup failures are ignored so the caller's primary
+ * HTTP status error remains authoritative and the helper stays synchronous.
  */
 export function disposeHttpResponseBody(
   response: BoundedFetchResponse,
   cancelRequest: () => void,
 ): void {
-  cancelRequest();
-  destroyStream(response.body as ManagedStream | null | undefined);
+  try {
+    void response.body?.cancel().catch(() => undefined);
+  } catch {
+    // Cleanup must not replace the caller's primary HTTP status error.
+  }
+  attemptRequestCancellation(cancelRequest);
+}
+
+function createReaderRelease(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+): () => void {
+  let released = false;
+  return (): void => {
+    if (released) return;
+    released = true;
+    reader.releaseLock();
+  };
+}
+
+function attemptRequestCancellation(cancelRequest: () => void): void {
+  try {
+    cancelRequest();
+  } catch {
+    return;
+  }
 }
 
 /**
- * Read a managed stream through a {@link BoundedStreamCollector} configured to
- * retain the complete bounded response.
+ * Read a native {@link ReadableStream} through a {@link BoundedStreamCollector}
+ * configured to retain the complete bounded response.
  *
- * On overflow, abort, or read error the caller-owned {@link cancelRequest}
- * callback is invoked (cancelling the concrete HTTP request), the stream
- * wrapper is destroyed, and all listeners are removed. Normal completion does
+ * The body is consumed chunk-by-chunk via a Web Stream reader. Bytes are counted
+ * in one pass and decoded only when the complete body fits the budget. Overflow
+ * and abort cancel the locked reader and concrete request. A read error
+ * cancels the request directly because the stream is already errored. Every path
+ * releases the reader lock and removes the abort listener. Normal completion does
  * not cancel the request.
  */
 function streamBoundedBody(
-  body: ManagedStream,
+  body: ReadableStream<Uint8Array>,
   budget: ByteBudget,
   signal: AbortSignal,
   cancelRequest: () => void,
 ): Promise<BoundedHttpBody> {
-  return new Promise<BoundedHttpBody>((resolve, reject) => {
-    const collector = new BoundedStreamCollector({ budget, headFraction: 1 });
-    let settled = false;
+  const reader = body.getReader();
+  const releaseReader = createReaderRelease(reader);
+  const collector = new BoundedStreamCollector({ budget, headFraction: 1 });
+  let settled = false;
+  let cancellationStarted = false;
 
-    const cleanup = (): void => {
-      body.removeListener('data', onData);
-      body.removeListener('end', onEnd);
-      body.removeListener('error', onError);
-      body.removeListener('close', onClose);
-      signal.removeEventListener('abort', onAbort);
+  const cancelAcquisition = (): void => {
+    if (cancellationStarted) return;
+    cancellationStarted = true;
+    attemptRequestCancellation(cancelRequest);
+    try {
+      void reader.cancel().catch(() => undefined);
+    } catch {
+      // Cleanup must not replace the authoritative acquisition error.
+    }
+    releaseReader();
+  };
+
+  return new Promise<BoundedHttpBody>((resolve, reject) => {
+    const rejectAfterCancellation = (error: unknown): void => {
+      cancelAcquisition();
+      reject(error);
     };
 
     const settle = (action: () => void): void => {
       if (settled) return;
       settled = true;
-      cleanup();
+      signal.removeEventListener('abort', onAbort);
       action();
-    };
-
-    const onData = (chunk: unknown): void => {
-      collector.append(toBuffer(chunk));
-      if (collector.observedByteCount > budget.bytes) {
-        const overflowBytes = collector.observedByteCount;
-        settle(() => {
-          cancelRequest();
-          destroyStream(body);
-          reject(new HttpBodyTooLargeError(overflowBytes, budget.bytes));
-        });
-      }
-    };
-
-    const onEnd = (): void => {
-      settle(() => {
-        const result = collector.getResult();
-        resolve({ text: result.text, metadata: result.metadata });
-      });
-    };
-
-    const onError = (err: Error): void => {
-      settle(() => {
-        cancelRequest();
-        destroyStream(body);
-        reject(err);
-      });
-    };
-
-    /**
-     * 'close' without a prior 'end' means the body terminated prematurely —
-     * the complete bounded body cannot be known, so acquisition settles by
-     * rejecting. When 'end', 'error', or 'abort' settled first, this is a
-     * guarded no-op (single authoritative settlement).
-     */
-    const onClose = (): void => {
-      settle(() => {
-        cancelRequest();
-        destroyStream(body);
-        reject(new Error('Response body closed before end (incomplete body)'));
-      });
     };
 
     const onAbort = (): void => {
       settle(() => {
-        cancelRequest();
-        destroyStream(body);
-        reject(createAbortError());
+        rejectAfterCancellation(createAbortError());
       });
     };
 
-    body.on('error', onError);
-    body.on('end', onEnd);
-    body.on('close', onClose);
-    body.on('data', onData);
     signal.addEventListener('abort', onAbort, { once: true });
-
-    // Check for abort after listener registration to avoid the race where
-    // the signal fires between a pre-registration check and addEventListener.
     if (signal.aborted) {
       onAbort();
+      return;
     }
+
+    void (async () => {
+      try {
+        while (!settled) {
+          const { done, value } = await reader.read();
+          if (signal.aborted) return;
+          if (done) {
+            settle(() => {
+              const result = collector.getResult();
+              resolve({ text: result.text, metadata: result.metadata });
+            });
+            return;
+          }
+          collector.append(Buffer.from(value));
+          if (collector.observedByteCount > budget.bytes) {
+            const observedBytes = collector.observedByteCount;
+            settle(() => {
+              rejectAfterCancellation(
+                new HttpBodyTooLargeError(observedBytes, budget.bytes),
+              );
+            });
+            return;
+          }
+        }
+      } catch (readError) {
+        settle(() => {
+          attemptRequestCancellation(cancelRequest);
+          reject(readError);
+        });
+      } finally {
+        releaseReader();
+      }
+    })();
   });
+}
+
+function attemptUnlockedBodyCancellation(
+  body: ReadableStream<Uint8Array> | null,
+  cancelRequest: () => void,
+): void {
+  attemptRequestCancellation(cancelRequest);
+  try {
+    void body?.cancel().catch(() => undefined);
+  } catch {
+    // Cleanup must not replace the authoritative acquisition error.
+  }
 }
 
 /**
  * Stream an HTTP response body through a bounded byte budget.
  *
- * The body is consumed chunk-by-chunk via stream events and retained by a
- * {@link BoundedStreamCollector} configured to retain the complete bounded
+ * The body is consumed chunk-by-chunk via a native Web Stream reader and retained
+ * by a {@link BoundedStreamCollector} configured to retain the complete bounded
  * response (headFraction 1). Content-Length is used only as an early-reject
- * optimization — the actual streamed bytes are authoritative.
+ * optimization; the actual streamed bytes are authoritative.
  *
- * On overflow, abort, or read error the caller-owned {@link cancelRequest}
- * callback is invoked (cancelling the concrete HTTP request), the underlying
- * stream wrapper is destroyed, all listeners are removed, and the function
- * rejects. No partial body text is returned in the failure paths. Normal
+ * Overflow and abort cancel the body through the locked reader and invoke the
+ * caller-owned {@link cancelRequest} callback. Read errors invoke the callback
+ * directly because the stream is already errored. All failure paths release the
+ * reader lock, remove the abort listener, and return no partial body text. Normal
  * completion does not cancel the request.
- *
- * @param cancelRequest Caller-owned cancellation of the concrete fetch request
- *   (e.g. aborting a per-fetch AbortController). Required so forgetting
- *   transport ownership is a compile error.
  */
 export async function acquireBoundedHttpBody(
   response: BoundedFetchResponse,
@@ -211,13 +223,13 @@ export async function acquireBoundedHttpBody(
 ): Promise<BoundedHttpBody> {
   const advertised = parseContentLength(response.headers.get('content-length'));
   if (advertised !== undefined && advertised > budget.bytes) {
-    cancelRequest();
-    destroyStream(response.body as ManagedStream | null | undefined);
-    throw new HttpBodyTooLargeError(advertised, budget.bytes);
+    const overflowError = new HttpBodyTooLargeError(advertised, budget.bytes);
+    attemptUnlockedBodyCancellation(response.body, cancelRequest);
+    throw overflowError;
   }
 
-  const body = response.body as ManagedStream | null | undefined;
-  if (body === null || body === undefined) {
+  const body = response.body;
+  if (body === null) {
     return Promise.resolve({
       text: '',
       metadata: {
