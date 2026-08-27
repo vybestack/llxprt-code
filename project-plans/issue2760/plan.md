@@ -434,19 +434,19 @@ direct-value network stubs, or assertions about mock calls.
 
 ### Final candidate verification
 
-- `npm run typecheck`, `npm run format:check`, `npm run build`,
-  `npm run check:lockfile`, and `git diff --check HEAD` passed after the final
-  finding remediation.
-- `npm run lint` exited 134 because its lint runner forced ESLint to a 12,288 MiB
-  heap and V8 exhausted that heap. A post-remediation direct run of the same
+- After rebasing onto `origin/main` at `354957220`, `npm run build`,
+  `npm run typecheck`, `npm run format`, `npm run format:check`,
+  `npm run check:lockfile`, and `git diff --check origin/main...HEAD` passed.
+- The post-rebase `npm run lint` exited 134 because its lint runner forced ESLint
+  to a 12,288 MiB heap and V8 exhausted that heap. A direct run of the same
   full-tree `eslint .` command with a 24,576 MiB heap passed. The package-script
   result is an environment/resource blocker, not a reported lint violation.
 - Source and manifest scans found no `node-fetch` or Cheerio import, mock, or
   direct declaration in the accepted root/core/tools scope. The existing
   `packages/cli` declaration remains outside this issue's scope.
-- The final root archive contains 4,715 files, is 12,534,366 bytes, has an
-  unpacked size of 52,696,551 bytes, and has SHA-1
-  `79cdc26d3f282b7451eecb2a905de24b3690b504`. Current and packed hashes match
+- The post-rebase root archive contains 4,726 files, is 12,580,849 bytes, has an
+  unpacked size of 52,913,384 bytes, and has SHA-1
+  `383c6b347ce3769dc68dd67f2e1ed6460d6c34ff`. Current and packed hashes match
   for the root, core, and tools manifests and every changed tools production,
   test, and helper source file.
 - The archive installed 505 packages in an empty project with lifecycle scripts
@@ -458,14 +458,9 @@ direct-value network stubs, or assertions about mock calls.
   `node-domexception` paths to `@google/genai` or `google-auth-library` through
   `gaxios`. Cheerio, `encoding-sniffer`, `whatwg-encoding`, and
   `whatwg-mimetype` are absent.
-- The serialized `npm run test` completed with exit code 1 after the first test
-  timed out in seven unchanged `packages/agents` files. Six reached Bun's
-  180,000 ms limit; `mutationCoverage.tokens.behavior.test.ts` reached its
-  30,000 ms limit. Separate isolated reruns passed six files. In
-  `memoryControl.behavior.test.ts`, eight tests passed and its first test reached
-  its 5,000 ms limit. No changed tools test failed, and the final seven affected
-  tools suites pass 79 tests with 265 assertions. This is classified as an
-  unrelated agents test-runner blocker rather than an issue #2760 regression.
+- The post-rebase serialized `npm run test` passed after refreshing generated
+  workspace artifacts. The seven affected tools suites also pass independently:
+  79 tests with 265 assertions.
 - The StepFun smoke failed with HTTP 400, `you have no active step plan
   subscription`. The ollamakimi smoke failed with HTTP 404 because model
   `kimi-k2.7` was not found. Neither external smoke passed.
@@ -478,5 +473,6 @@ direct-value network stubs, or assertions about mock calls.
 - Both allowed local Open Code Review rounds are complete. Every accepted
   round-one finding is remediated, and every round-two comment is classified
   above with no accepted candidate change.
-- The verified local candidate remains to be committed. Push, PR, CI,
-  CodeRabbit, and merge actions require separate user authorization.
+- The implementation is committed and rebased onto `origin/main` at
+  `354957220`. Push, PR review, CI, and CodeRabbit remain workflow gates. Merge
+  requires explicit user approval.
