@@ -20,7 +20,7 @@
  * without touching the filesystem, git, telemetry or a real provider.
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi, type Mock } from 'bun:test';
 import { Config } from './config.js';
 import type { SkillDefinition } from '../skills/skillLoader.js';
 import type { LlxprtExtension } from './configTypes.js';
@@ -243,6 +243,43 @@ describe('extension load and unload refresh the skill surface @issue:3383', () =
     for (const observation of observations) {
       expect(observation.skills).toContain('alpha');
     }
+  });
+
+  it('still reconciles after a failed load, on the next transition', async () => {
+    const { config, loader, observations } = await buildHarness();
+    const manager = config.getMcpClientManager() as unknown as {
+      startExtension: Mock<(extension: LlxprtExtension) => Promise<void>>;
+    };
+    manager.startExtension.mockRejectedValueOnce(new Error('mcp exploded'));
+
+    // loadExtension adds to the collection before starting, so the skill is
+    // already discoverable even though the transition failed.
+    await expect(
+      loader.loadExtension(skillExtension('pack', [extensionSkill('alpha')])),
+    ).rejects.toThrow('mcp exploded');
+
+    await loader.loadExtension(skillExtension('other', []));
+
+    expect(discoveredSkillNames(config)).toContain('alpha');
+    expect(lastRebuiltFrom(observations)).toContain('alpha');
+  });
+
+  it('retries on the next transition when the refresh itself fails', async () => {
+    const { config, loader, observations } = await buildHarness();
+    vi.spyOn(config, 'refreshSkills').mockRejectedValueOnce(
+      new Error('discovery exploded'),
+    );
+
+    await expect(
+      loader.loadExtension(skillExtension('pack', [extensionSkill('alpha')])),
+    ).rejects.toThrow('discovery exploded');
+    expect(observations).toEqual([]);
+
+    await loader.loadExtension(skillExtension('other', []));
+
+    // The second extension ships no skills, so only the retained marker from
+    // the failed refresh can explain a rebuild happening here.
+    expect(lastRebuiltFrom(observations)).toContain('alpha');
   });
 
   it('rediscovers once for a batch of concurrent loads', async () => {

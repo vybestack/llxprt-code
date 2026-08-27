@@ -77,8 +77,11 @@ export abstract class ExtensionLoader {
       completed: this.startCompletedCount,
     });
     try {
-      await this.config.getMcpClientManager()!.startExtension(extension);
+      // Before the await: loadExtension/unloadExtension have already mutated
+      // the collection discoverSkills reads, so if the MCP transition rejects
+      // the skill surface is stale and still needs reconciling.
       this.markSkillsDirty(extension);
+      await this.config.getMcpClientManager()!.startExtension(extension);
       await this.maybeRefreshAgentTools(extension);
       // Register extension subagents
       if (
@@ -108,8 +111,8 @@ export abstract class ExtensionLoader {
         this.startingCount = 0;
         this.startCompletedCount = 0;
       }
-      await this.maybeRefreshSkills();
       await this.maybeRefreshMemory();
+      await this.maybeRefreshSkills();
     }
   }
 
@@ -159,9 +162,12 @@ export abstract class ExtensionLoader {
   /**
    * Rediscovers skills once every extension transition has settled.
    *
-   * Batched on the same counters as {@link maybeRefreshMemory}, so a
-   * `restartExtension` (a stop followed by a start) rediscovers once rather
-   * than twice, and a parallel batch rediscovers once at the end.
+   * Batched on the same counters as {@link maybeRefreshMemory}, so a batch of
+   * concurrent transitions rediscovers once at the end rather than once each.
+   * Sequential transitions are not collapsed: `restartExtension` awaits its
+   * stop before its start, so each settles on its own and this runs twice. That
+   * is harmless, because a restart leaves the extension listed and active, so
+   * its skills stay available throughout.
    *
    * Skipped during the initial `start()`: `Config.initialize` runs
    * `discoverSkills` immediately after `start()` returns, so anything done here
@@ -184,7 +190,15 @@ export abstract class ExtensionLoader {
       return;
     }
     this.skillsNeedRefresh = false;
-    await this.config.refreshSkills();
+    try {
+      await this.config.refreshSkills();
+    } catch (error) {
+      // The failure propagates; this only restores the marker so the next
+      // transition retries rather than inheriting a skill surface that was
+      // never reconciled.
+      this.skillsNeedRefresh = true;
+      throw error;
+    }
   }
 
   /**
@@ -227,8 +241,10 @@ export abstract class ExtensionLoader {
     });
 
     try {
-      await this.config.getMcpClientManager()!.stopExtension(extension);
+      // See startExtension: mark before the await so a rejected transition
+      // does not leave the skill surface stale.
       this.markSkillsDirty(extension);
+      await this.config.getMcpClientManager()!.stopExtension(extension);
       await this.maybeRefreshAgentTools(extension);
       // Remove extension subagents
       const subagentMgr = this.config.getSubagentManager();
@@ -250,8 +266,8 @@ export abstract class ExtensionLoader {
         this.stoppingCount = 0;
         this.stopCompletedCount = 0;
       }
-      await this.maybeRefreshSkills();
       await this.maybeRefreshMemory();
+      await this.maybeRefreshSkills();
     }
   }
 

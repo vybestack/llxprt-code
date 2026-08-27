@@ -29,6 +29,13 @@ the two roots have already drifted once.
 
 - `createAgent` sets `params.postSkillDiscoveryToolRegistrar = registerActivateSkillTool`
   next to the existing `params.agentClientFactory` assignment.
+- `fromConfig` is the other public entry, and it adopts a `Config` the caller
+  built. A caller has no reason to know the hook exists, so `fromConfig`
+  installs the shared registrar when the adopted config has none, leaving a
+  deliberately supplied one alone. `ensureInitialized` is a no-op for a config
+  the caller already initialized, so when `fromConfig` installs the hook it also
+  calls `refreshSkills()` to reconcile. On a fresh config that repeats one
+  discovery, which is a better trade than leaving the model with no skill tool.
 - `packages/cli/src/config/configBuilder.ts` imports it from
   `@vybestack/llxprt-code-agents` instead of its local module, which is deleted.
 
@@ -98,7 +105,11 @@ extension loading.
 Mirror the existing `maybeRefreshMemory` shape:
 
 - `startExtension` and `stopExtension` mark skills dirty when the extension
-  actually contributes skills, so an extension with none costs nothing.
+  actually contributes skills, so an extension with none costs nothing. The mark
+  happens *before* the awaited MCP transition: `loadExtension` and
+  `unloadExtension` mutate the collection `discoverSkills` reads before starting
+  or stopping anything, so a rejected transition still leaves a stale skill
+  surface that needs reconciling.
 - Refresh only once every in-flight start and stop has settled, using the same
   counter comparison `maybeRefreshMemory` uses, so a batch of concurrent loads
   rediscovers once rather than once each. This does not collapse *sequential*
@@ -111,6 +122,12 @@ Mirror the existing `maybeRefreshMemory` shape:
   `getExtensionLoader().start(this)` returns, so refreshing per-extension there
   would be redundant work whose result is immediately overwritten. The dirty
   flag is cleared on that path so the first real transition is not misattributed.
+- Run after `maybeRefreshMemory`, not before. Memory and hook reconciliation
+  predate this change, and a `refreshSkills` rejection must not stop them from
+  happening.
+- Restore the dirty flag if `refreshSkills` rejects, then rethrow. The failure
+  still propagates; the marker only ensures the next transition retries instead
+  of inheriting a surface that was never reconciled.
 
 ## Tests
 
@@ -143,11 +160,30 @@ and `enableExtensionReloading: true`:
 - An extension contributing no skills triggers no rediscovery at all.
 - A restart leaves the skill available throughout.
 - A batch of concurrent loads rediscovers once.
+- A failed MCP transition still leaves the surface reconciled on the next one.
+- A failed `refreshSkills` retries on the next transition.
 
-Four of the five fail on pre-fix code. The remaining link, that the rebuilt tool
+Four of these fail on pre-fix code. The remaining link, that the rebuilt tool
 reaches the provider request, is already covered end to end by
 `skillReloadDeclaration.behavior.test.ts` in the agents package, so it is not
 duplicated here.
+
+New `packages/agents/src/api/__tests__/fromConfigSkills.behavior.test.ts`: an
+agent built with `fromConfig` from a caller-built config that supplied no
+registrar offers a discovered skill in its provider-facing declarations. Fails
+on pre-fix code. `buildCliStyleConfig` gains an overrides parameter so the
+config can enable skills and point at a workspace; existing callers are
+unaffected.
+
+### Known limitation, not fixed here
+
+`refreshSkills` updates the foreground `AgentClient` only. A subagent already
+running when an extension is loaded or unloaded keeps the declarations its
+`ChatSession` was assembled with, so a later turn in that subagent can advertise
+a stale enum. This is not specific to skills: the same is true of any registry
+change during a subagent's lifetime, including MCP tool changes today. Fixing it
+means propagating tool-surface changes into live subagent sessions, which is a
+change to subagent runtime setup rather than to skill discovery.
 
 ### Regression
 

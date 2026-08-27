@@ -167,6 +167,7 @@ function createDefaultToolSchedulerFactory(): ToolSchedulerFactory {
  */
 export async function buildCliStyleConfig(
   fixtureRelPath: string,
+  overrides: Readonly<Partial<AgentConfig>> = {},
 ): Promise<BuiltCliConfig> {
   const prev = process.env.LLXPRT_FAKE_RESPONSES;
   const fixturePath = resolve(FIXTURES_DIR, fixtureRelPath);
@@ -176,6 +177,7 @@ export async function buildCliStyleConfig(
     provider: 'fake',
     model: 'fake-model',
     workingDir: resolve(HARNESS_DIR, '..'),
+    ...overrides,
   };
   const runtimeId = `cli-config-${randomUUID()}`;
 

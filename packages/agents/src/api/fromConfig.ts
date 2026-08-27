@@ -27,6 +27,7 @@ import {
 import { executeProviderActivation } from './providerActivationExecutor.js';
 import { consumeCompletedActivationPreflight } from './activationPreflightState.js';
 import { finalizeAgent, registerProvidersOntoManager } from './createAgent.js';
+import { registerActivateSkillTool } from '../skill-tool-registrar.js';
 
 /**
  * Adopts an existing caller-supplied Config and returns a ready Agent.
@@ -113,8 +114,28 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
       metadata: { source: 'fromConfig' },
     });
 
+    // The caller built this Config, so it may not have wired the hook that
+    // lets core build the skill activation tool (issue #2417 forbids core
+    // constructing it directly). Without a hook the tool is never registered
+    // and the model is told nothing about skills, which is the same
+    // composition failure #3382 fixed in createAgent. A registrar the caller
+    // supplied deliberately is left alone.
+    const installedRegistrar =
+      config.getPostSkillDiscoveryToolRegistrar() === undefined;
+    if (installedRegistrar) {
+      config.setPostSkillDiscoveryToolRegistrar(registerActivateSkillTool);
+    }
+
     // @pseudocode lines 31-35: initialize once or adopt the original result.
     await config.ensureInitialized({ messageBus });
+
+    // ensureInitialized is a no-op for a Config the caller already
+    // initialized, so a registrar installed above would never run. Reconcile
+    // whenever we installed one. On a fresh Config this repeats one discovery,
+    // which is a better trade than leaving the model with no skill tool.
+    if (installedRegistrar) {
+      await config.refreshSkills();
+    }
 
     // @plan:PLAN-20270104-ISSUE2374.P03 @requirement:REQ-001
     await resolveActivation(config, options);
