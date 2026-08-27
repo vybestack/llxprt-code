@@ -22,7 +22,7 @@ import { describe, it, expect } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { fromConfig } from '@vybestack/llxprt-code-agents';
+import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
 import { ACTIVATE_SKILL_TOOL_NAME } from '@vybestack/llxprt-code-tools';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
@@ -87,7 +87,7 @@ describe('fromConfig gives the model the skills the config discovered @issue:338
       skillsSupport: true,
       workingDir: workspace,
     });
-    let agent;
+    let agent: Agent | undefined;
     try {
       agent = await fromConfig({ config: built.config });
       for await (const _event of agent.stream('hello')) {

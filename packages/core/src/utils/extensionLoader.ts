@@ -182,11 +182,7 @@ export abstract class ExtensionLoader {
       this.skillsNeedRefresh = false;
       return;
     }
-    if (
-      !this.skillsNeedRefresh ||
-      this.startingCount !== this.startCompletedCount ||
-      this.stoppingCount !== this.stopCompletedCount
-    ) {
+    if (!this.skillsNeedRefresh || !this.transitionsSettled()) {
       return;
     }
     this.skillsNeedRefresh = false;
@@ -202,6 +198,19 @@ export abstract class ExtensionLoader {
   }
 
   /**
+   * Whether every in-flight extension start and stop has completed.
+   *
+   * Shared by the memory and skill reconciliation steps so the two cannot
+   * drift apart on what "settled" means.
+   */
+  private transitionsSettled(): boolean {
+    return (
+      this.startingCount === this.startCompletedCount &&
+      this.stoppingCount === this.stopCompletedCount
+    );
+  }
+
+  /**
    * Refreshes memory only after all extensions are done loading/unloading.
    */
   private async maybeRefreshMemory(): Promise<void> {
@@ -210,8 +219,7 @@ export abstract class ExtensionLoader {
     }
     if (
       !this.isStarting && // Don't refresh memories on the first call to `start`.
-      this.startingCount === this.startCompletedCount &&
-      this.stoppingCount === this.stopCompletedCount
+      this.transitionsSettled()
     ) {
       // Wait until all extensions are done starting and stopping before we
       // reload memory, this is somewhat expensive and also busts the context

@@ -120,9 +120,9 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
     // and the model is told nothing about skills, which is the same
     // composition failure #3382 fixed in createAgent. A registrar the caller
     // supplied deliberately is left alone.
-    const installedRegistrar =
-      config.getPostSkillDiscoveryToolRegistrar() === undefined;
-    if (installedRegistrar) {
+    const callerSuppliedRegistrar =
+      config.getPostSkillDiscoveryToolRegistrar() !== undefined;
+    if (!callerSuppliedRegistrar) {
       config.setPostSkillDiscoveryToolRegistrar(registerActivateSkillTool);
     }
 
@@ -133,7 +133,7 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
     // initialized, so a registrar installed above would never run. Reconcile
     // whenever we installed one. On a fresh Config this repeats one discovery,
     // which is a better trade than leaving the model with no skill tool.
-    if (installedRegistrar) {
+    if (!callerSuppliedRegistrar) {
       await config.refreshSkills();
     }
 
