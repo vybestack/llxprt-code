@@ -23,6 +23,10 @@ export abstract class ExtensionLoader {
   // Whether or not we are currently executing `start`
   private isStarting: boolean = false;
 
+  // Set when an extension that contributes skills starts or stops, so the
+  // rediscovery happens once per settled batch instead of once per extension.
+  private skillsNeedRefresh: boolean = false;
+
   constructor(private readonly eventEmitter?: EventEmitter<ExtensionEvents>) {}
 
   /**
@@ -74,6 +78,7 @@ export abstract class ExtensionLoader {
     });
     try {
       await this.config.getMcpClientManager()!.startExtension(extension);
+      this.markSkillsDirty(extension);
       await this.maybeRefreshAgentTools(extension);
       // Register extension subagents
       if (
@@ -103,6 +108,7 @@ export abstract class ExtensionLoader {
         this.startingCount = 0;
         this.startCompletedCount = 0;
       }
+      await this.maybeRefreshSkills();
       await this.maybeRefreshMemory();
     }
   }
@@ -134,6 +140,51 @@ export abstract class ExtensionLoader {
         await agentClient.setTools();
       }
     }
+  }
+
+  /**
+   * Records that an extension transition changed the available skills.
+   *
+   * Extension-contributed skills are one of the sources SkillManager reads, so
+   * loading or unloading an extension that ships skills makes the discovered
+   * set, and therefore the model-facing skill activation tool, stale
+   * (issue #3383). Extensions that ship no skills cost nothing here.
+   */
+  private markSkillsDirty(extension: LlxprtExtension): void {
+    if (Array.isArray(extension.skills) && extension.skills.length > 0) {
+      this.skillsNeedRefresh = true;
+    }
+  }
+
+  /**
+   * Rediscovers skills once every extension transition has settled.
+   *
+   * Batched on the same counters as {@link maybeRefreshMemory}, so a
+   * `restartExtension` (a stop followed by a start) rediscovers once rather
+   * than twice, and a parallel batch rediscovers once at the end.
+   *
+   * Skipped during the initial `start()`: `Config.initialize` runs
+   * `discoverSkills` immediately after `start()` returns, so anything done here
+   * would be thrown away. The flag is cleared on that path so the first real
+   * transition is not misattributed to startup.
+   */
+  private async maybeRefreshSkills(): Promise<void> {
+    if (!this.config) {
+      throw new Error('Cannot refresh skills prior to calling `start`.');
+    }
+    if (this.isStarting) {
+      this.skillsNeedRefresh = false;
+      return;
+    }
+    if (
+      !this.skillsNeedRefresh ||
+      this.startingCount !== this.startCompletedCount ||
+      this.stoppingCount !== this.stopCompletedCount
+    ) {
+      return;
+    }
+    this.skillsNeedRefresh = false;
+    await this.config.refreshSkills();
   }
 
   /**
@@ -177,6 +228,7 @@ export abstract class ExtensionLoader {
 
     try {
       await this.config.getMcpClientManager()!.stopExtension(extension);
+      this.markSkillsDirty(extension);
       await this.maybeRefreshAgentTools(extension);
       // Remove extension subagents
       const subagentMgr = this.config.getSubagentManager();
@@ -198,6 +250,7 @@ export abstract class ExtensionLoader {
         this.stoppingCount = 0;
         this.stopCompletedCount = 0;
       }
+      await this.maybeRefreshSkills();
       await this.maybeRefreshMemory();
     }
   }

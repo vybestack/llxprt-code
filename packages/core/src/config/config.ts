@@ -460,17 +460,16 @@ export class Config extends ConfigBase {
     await this.mcpClientManager?.reconcileConfiguredMcpServers();
   }
 
-  async reloadSkills(): Promise<void> {
-    if (this._onReload) {
-      const result = await this._onReload();
-      if (result.disabledSkills) {
-        this.disabledSkills = result.disabledSkills;
-      }
-      if (result.adminSkillsEnabled !== undefined) {
-        this.adminSkillsEnabled = result.adminSkillsEnabled;
-        this.skillManager.setAdminSettings(this.adminSkillsEnabled);
-      }
-    }
+  /**
+   * Rediscovers skills and carries the result through to the model, without
+   * re-reading settings.
+   *
+   * Use this when the set of skill *sources* changes underneath the session,
+   * for example when an extension that contributes skills is loaded or
+   * unloaded (issue #3383). `reloadSkills` is the variant to use when the user
+   * asked for a reload and settings should be re-read too.
+   */
+  async refreshSkills(): Promise<void> {
     await this.skillManager.discoverSkills(this.storage, this.getExtensions());
     this.skillManager.setDisabledSkills(this.disabledSkills);
 
@@ -482,6 +481,20 @@ export class Config extends ConfigBase {
     if (client) {
       await client.setTools();
     }
+  }
+
+  async reloadSkills(): Promise<void> {
+    if (this._onReload) {
+      const result = await this._onReload();
+      if (result.disabledSkills) {
+        this.disabledSkills = result.disabledSkills;
+      }
+      if (result.adminSkillsEnabled !== undefined) {
+        this.adminSkillsEnabled = result.adminSkillsEnabled;
+        this.skillManager.setAdminSettings(this.adminSkillsEnabled);
+      }
+    }
+    await this.refreshSkills();
   }
 
   /**

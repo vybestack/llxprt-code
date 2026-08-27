@@ -14,9 +14,11 @@ import {
   type PolicyEngineConfig,
   type MCPServerConfig,
 } from '@vybestack/llxprt-code-core';
-import { createAgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-agents';
+import {
+  createAgentRuntimeFactoryBindings,
+  registerActivateSkillTool,
+} from '@vybestack/llxprt-code-agents';
 import { registerAgentRuntimeFactories } from '@vybestack/llxprt-code-providers/runtime.js';
-import { registerActivateSkillTool } from './activateSkillToolRegistrar.js';
 import { getEnableHooks, getEnableHooksUI } from './settingsSchema.js';
 import { loadSettings } from './settings.js';
 import { appEvents } from '../utils/events.js';

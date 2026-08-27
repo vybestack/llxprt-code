@@ -14,20 +14,20 @@
  * therefore assert on that declaration rather than on which functions were
  * called.
  *
- * The whole production chain runs for real: skill files on disk, the real
- * SkillManager, the real ActivateSkillTool, a real ToolRegistry, the real
- * AgentClient.setTools(), and the real ChatSession. Only the registrar hook is
- * supplied by the test, because wiring it is the composition root's job and the
- * standalone `createAgent` composition does not currently do it (issue #3382).
- * When #3382 is fixed this test should drop `setPostSkillDiscoveryToolRegistrar`
- * and rely on production wiring instead.
+ * The whole production chain runs for real, with nothing supplied by the test:
+ * skill files on disk, the real SkillManager, the registrar `createAgent`
+ * installs, the real ActivateSkillTool, a real ToolRegistry, the real
+ * AgentClient.setTools(), and the real ChatSession.
+ *
+ * This file used to install the registrar itself, because `createAgent` did not
+ * (issue #3382). Now that it does, these cases also cover that wiring: removing
+ * it from `createAgent` fails every test here.
  */
 
 import { describe, it, expect } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { ActivateSkillTool } from '@vybestack/llxprt-code-tools/tools/activate-skill.js';
 import { ACTIVATE_SKILL_TOOL_NAME } from '@vybestack/llxprt-code-tools';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
@@ -112,27 +112,15 @@ function removeSkill(workspace: string, name: string): void {
 }
 
 /**
- * Installs the composition-root registrar, drives one turn so a live chat
- * session exists to be refreshed, then performs the first reload, which stands
- * in for the startup registration a real CLI session gets.
+ * Drives one turn so a live chat session exists with a tool list, which is the
+ * state a reload has to update. The registrar is already installed by
+ * `createAgent`; nothing here supplies it.
  */
-async function installRegistrarAndSettle(agent: Agent): Promise<Config> {
-  const config = internalConfig(agent);
-  config.setPostSkillDiscoveryToolRegistrar(
-    (toolRegistry, skillService, messageBus) => {
-      toolRegistry.unregisterTool(ActivateSkillTool.Name);
-      if (skillService.listSkills().length > 0) {
-        toolRegistry.registerTool(
-          new ActivateSkillTool(skillService, messageBus),
-        );
-      }
-    },
-  );
+async function settle(agent: Agent): Promise<Config> {
   for await (const _event of agent.stream('hello')) {
     // Drain the turn so the chat session and its tool list exist.
   }
-  await agent.skills.reload();
-  return config;
+  return internalConfig(agent);
 }
 
 async function withWorkspace(
@@ -152,7 +140,7 @@ async function withWorkspace(
     workingDir: workspace,
   });
   try {
-    const config = await installRegistrarAndSettle(agent);
+    const config = await settle(agent);
     await run({ agent, config, workspace });
   } finally {
     await cleanup();
@@ -161,7 +149,14 @@ async function withWorkspace(
 }
 
 describe('skill reload reaches the model @issue:3379', () => {
-  it('offers a skill that existed before the reload', async () => {
+  /**
+   * No reload happens here. This is the startup path: `createAgent` installs
+   * the registrar, `Config.initialize` discovers the skill and rebuilds the
+   * tool, and the first turn hands the declaration to the chat session. Before
+   * issue #3382 the public Agent API supplied no registrar, so this produced no
+   * activate_skill tool at all.
+   */
+  it('offers a skill discovered at startup, with no reload @issue:3382', async () => {
     await withWorkspace(['alpha'], async ({ config }) => {
       expect(modelVisibleSkillNames(config)).toEqual(['alpha']);
     });
