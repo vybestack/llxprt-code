@@ -495,10 +495,12 @@ function run() {
   try {
     child = spawn(bunExe, [entry, ...process.argv.slice(2)], { stdio });
   } catch (error) {
-    // A marked but unopened fd 3 makes spawn throw EBADF synchronously. Name
-    // the capability transport rather than blaming the Bun binary.
-    if (forwardsCapability) {
-      failCapabilityForward(error?.message ?? String(error));
+    // A marked but unopened fd 3 makes spawn throw EBADF synchronously, and
+    // that is the only failure the capability transport is responsible for.
+    // Every other spawn failure keeps its original error so it is not
+    // misattributed to fd 3.
+    if (forwardsCapability && error?.code === 'EBADF') {
+      failCapabilityForward(error.message ?? String(error));
       return;
     }
     throw error;
