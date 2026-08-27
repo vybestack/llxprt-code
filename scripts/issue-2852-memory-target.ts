@@ -270,6 +270,13 @@ const deltas = toDeltas(buildResponse());
  * Frames per turn for `ink`. Large enough that the allocator high-water settles
  * inside the first turn, so later turns measure accumulation rather than
  * warm-up.
+ *
+ * Do not trim this for speed without re-measuring. On the pinned fork over five
+ * turns, 20 frames a turn leaves the post-GC JSC heap climbing 12.5% across the
+ * settled turns, because the first turn has not finished filling Ink's caches
+ * and the verdict reports that warm-up as a leak. At 1500 the heap and
+ * `external` settle inside 0.1%. At 3000 they hold between 0.02% and 0.09%
+ * across six runs.
  */
 const INK_FRAMES_PER_TURN = 3_000;
 
