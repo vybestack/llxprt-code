@@ -174,17 +174,8 @@ export interface FixtureHelpers {
 }
 
 /**
- * The exact version string the guard requires for sanctioned workspaces.
- * Imported from the source-of-truth config module to prevent drift between
- * config and tests.
- */
-import { SANCTIONED_GENAI_VERSION } from '../genai-enclave/config.ts';
-const SANCTIONED_VERSION = SANCTIONED_GENAI_VERSION;
-
-/**
- * Write the three required `package.json` manifests (root, core, providers)
- * with correct `@google/genai` dependency declarations so the guard's
- * manifest enforcement (F4/F10) does not fail-closed on absent manifests.
+ * Write the required `package.json` manifests (root, providers) with no
+ * `@google/genai` declaration, which is the post-removal state.
  *
  * Positive tests that expect exit code 0 must call this before running the
  * guard, because the guard treats a missing required manifest as an
