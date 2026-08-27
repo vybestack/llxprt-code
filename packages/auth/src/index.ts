@@ -73,7 +73,10 @@ export type { RetryConfig } from './oauth-errors.js';
 export { mergeRefreshedToken } from './token-merge.js';
 export type { OAuthTokenWithExtras } from './token-merge.js';
 
-export { sanitizeTokenForProxy } from './token-sanitization.js';
+export {
+  SanitizedOAuthTokenSchema,
+  sanitizeTokenForProxy,
+} from './token-sanitization.js';
 export type { SanitizedOAuthToken } from './token-sanitization.js';
 
 // ─── Precedence / Auth Resolution ────────────────────────────────────────────
@@ -130,6 +133,17 @@ export type {
   ProxyResponse,
   RequestOptions,
 } from './proxy/proxy-socket-client.js';
+
+export {
+  ProxyResponseSchema,
+  OAuthTokenDataSchema,
+  ProvidersDataSchema,
+  BucketsDataSchema,
+  BucketStatsDataSchema,
+  ApiKeyDataSchema,
+  ApiKeysDataSchema,
+  HasApiKeyDataSchema,
+} from './proxy/proxy-payload-schemas.js';
 
 export { ProxyTokenStore } from './proxy/proxy-token-store.js';
 export { ProxyProviderKeyStorage } from './proxy/proxy-provider-key-storage.js';

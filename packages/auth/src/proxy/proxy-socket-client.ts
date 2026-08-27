@@ -15,18 +15,16 @@
 import * as net from 'node:net';
 import * as crypto from 'node:crypto';
 import { encodeFrame, FrameDecoder } from './framing.js';
+import {
+  ProxyResponseSchema,
+  type ProxyResponse,
+} from './proxy-payload-schemas.js';
+
+export type { ProxyResponse } from './proxy-payload-schemas.js';
 
 export const REQUEST_TIMEOUT_MS = 30000;
 export const IDLE_TIMEOUT_MS = 300000;
 export const PROTOCOL_VERSION = 2;
-
-export type ProxyResponse = {
-  ok: boolean;
-  data?: Record<string, unknown>;
-  error?: string;
-  code?: string;
-  retryAfter?: number;
-};
 
 /**
  * Per-request options controlling timeout and cancellation.
@@ -42,26 +40,12 @@ export interface RequestOptions {
   signal?: AbortSignal;
 }
 
-/** Validates that a decoded frame has the shape of a ProxyResponse, guarding
- *  against adversarial or malformed server responses with unexpected types
- *  for `ok`, `code`, or `error`. */
-function isProxyResponseFrame(
+function parseResponseFrame(
   frame: Record<string, unknown>,
-): frame is ProxyResponse {
-  if (typeof frame.ok !== 'boolean') return false;
-  if (frame.code !== undefined && typeof frame.code !== 'string') return false;
-  if (frame.error !== undefined && typeof frame.error !== 'string')
-    return false;
-  if (frame.retryAfter !== undefined && typeof frame.retryAfter !== 'number')
-    return false;
-  if (
-    frame.data !== undefined &&
-    (typeof frame.data !== 'object' ||
-      frame.data === null ||
-      Array.isArray(frame.data))
-  )
-    return false;
-  return true;
+): ProxyResponse | null {
+  const parsed = ProxyResponseSchema.safeParse(frame);
+  if (!parsed.success) return null;
+  return parsed.data;
 }
 
 interface PendingRequest {
@@ -399,7 +383,7 @@ export class ProxySocketClient {
       );
     }
     // Record the negotiated version from the server's handshake_ack.
-    const serverVersion = response.data?.version as number | undefined;
+    const serverVersion = response.data?.version;
     this._negotiatedVersion =
       typeof serverVersion === 'number' ? serverVersion : 1;
     this.handshakeComplete = true;
@@ -436,8 +420,9 @@ export class ProxySocketClient {
       return;
     }
     this.handshakeResolver = null;
-    if (isProxyResponseFrame(frame)) {
-      resolver.resolve(frame);
+    const parsedFrame = parseResponseFrame(frame);
+    if (parsedFrame !== null) {
+      resolver.resolve(parsedFrame);
     } else {
       // Reject first, then clean up. destroy() will not double-reject
       // because handshakeResolver was already nulled above.
@@ -456,8 +441,8 @@ export class ProxySocketClient {
    * @pseudocode 002-frame-and-cancel.md lines 30-32
    */
   private resolvePendingRequest(frame: Record<string, unknown>): void {
-    const id = frame.id as string | undefined;
-    if (!id) {
+    const id = frame.id;
+    if (typeof id !== 'string' || id === '') {
       return;
     }
     const pending = this.pendingRequests.get(id);
@@ -465,8 +450,9 @@ export class ProxySocketClient {
       clearTimeout(pending.timer);
       this.pendingRequests.delete(id);
       this.releaseAbortCleanup(id);
-      if (isProxyResponseFrame(frame)) {
-        pending.resolve(frame);
+      const parsedFrame = parseResponseFrame(frame);
+      if (parsedFrame !== null) {
+        pending.resolve(parsedFrame);
       } else {
         pending.reject(new Error(`Malformed response for request ${id}`));
         this.destroy('Malformed response from proxy — connection reset');

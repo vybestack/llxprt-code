@@ -747,6 +747,38 @@ describe('CredentialProxyServer', () => {
     expect(stored!.refresh_token).not.toBe('malicious-rt');
   });
 
+  /**
+   * @requirement R10.2
+   * @scenario save_token from inner process does not overwrite the host refresh_token
+   * @given An existing token with refresh_token "original-rt" in the store
+   * @when save_token is sent with a refresh_token from the inner process
+   * @then The stored token's refresh_token stays "original-rt"
+   */
+  it('save_token from inner process keeps the host refresh_token', async () => {
+    const existing = makeToken({
+      access_token: 'old-at',
+      refresh_token: 'original-rt',
+    });
+    await tokenStore.saveToken('anthropic', existing);
+
+    server = createServer();
+    client = await startAndConnect(server);
+
+    await client.request('save_token', {
+      provider: 'anthropic',
+      token: {
+        access_token: 'new-at',
+        refresh_token: 'malicious-rt',
+        expiry: 8888888888,
+        token_type: 'Bearer',
+      },
+    });
+
+    const stored = await tokenStore.getToken('anthropic');
+    expect(stored!.refresh_token).toBe('original-rt');
+    expect(stored!.refresh_token).not.toBe('malicious-rt');
+  });
+
   // ─── Error Handling ────────────────────────────────────────────────────────
 
   /**

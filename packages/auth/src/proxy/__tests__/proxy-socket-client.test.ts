@@ -433,6 +433,85 @@ describe('ProxySocketClient', () => {
     await expect(client.ensureConnected()).rejects.toThrow(/version/i);
   });
 
+  it('rejects a malformed handshake response with the stable message', async () => {
+    const result = await createHandshakeCapturingServer(socketPath, () =>
+      encodeFrame({ ok: 'yes' }),
+    );
+    server = result.server;
+    trackServerSockets(server);
+
+    client = new ProxySocketClient(socketPath);
+
+    await expect(client.ensureConnected()).rejects.toThrow(
+      'Malformed handshake response from proxy',
+    );
+  });
+
+  it('rejects a handshake with a missing ok and empty data', async () => {
+    const result = await createHandshakeCapturingServer(socketPath, () =>
+      encodeFrame({ data: {} }),
+    );
+    server = result.server;
+    trackServerSockets(server);
+
+    client = new ProxySocketClient(socketPath);
+    await expect(client.ensureConnected()).rejects.toThrow(
+      'Malformed handshake response from proxy',
+    );
+  });
+
+  it('rejects a handshake with null data', async () => {
+    const result = await createHandshakeCapturingServer(socketPath, () =>
+      encodeFrame({ ok: true, data: null }),
+    );
+    server = result.server;
+    trackServerSockets(server);
+
+    client = new ProxySocketClient(socketPath);
+    await expect(client.ensureConnected()).rejects.toThrow(
+      'Malformed handshake response from proxy',
+    );
+  });
+
+  it('rejects a handshake with a wrong-typed error field', async () => {
+    const result = await createHandshakeCapturingServer(socketPath, () =>
+      encodeFrame({ ok: false, error: 42 }),
+    );
+    server = result.server;
+    trackServerSockets(server);
+
+    client = new ProxySocketClient(socketPath);
+    await expect(client.ensureConnected()).rejects.toThrow(
+      'Malformed handshake response from proxy',
+    );
+  });
+
+  it('rejects a handshake with a wrong-typed retryAfter field', async () => {
+    const result = await createHandshakeCapturingServer(socketPath, () =>
+      encodeFrame({ ok: false, error: 'retry', retryAfter: 'soon' }),
+    );
+    server = result.server;
+    trackServerSockets(server);
+
+    client = new ProxySocketClient(socketPath);
+    await expect(client.ensureConnected()).rejects.toThrow(
+      'Malformed handshake response from proxy',
+    );
+  });
+
+  it('rejects a handshake with a wrong-typed code field', async () => {
+    const result = await createHandshakeCapturingServer(socketPath, () =>
+      encodeFrame({ ok: false, code: 7 }),
+    );
+    server = result.server;
+    trackServerSockets(server);
+
+    client = new ProxySocketClient(socketPath);
+    await expect(client.ensureConnected()).rejects.toThrow(
+      'Malformed handshake response from proxy',
+    );
+  });
+
   /**
    * @requirement R6.3
    * @scenario Each request generates a unique UUID
@@ -647,6 +726,87 @@ describe('ProxySocketClient', () => {
     expect(r1.data).toStrictEqual({ echo: 'alpha' });
     expect(r2.data).toStrictEqual({ echo: 'beta' });
     expect(r3.data).toStrictEqual({ echo: 'gamma' });
+  });
+
+  /** @requirement R-2197 @scenario malformed data envelope rejects a correlated request */
+  it('rejects a malformed envelope for a correlated request', async () => {
+    let connectionCount = 0;
+    server = net.createServer((socket) => {
+      connectionCount++;
+      trackServerSockets(initialized(server, 'server'));
+      const decoder = new FrameDecoder();
+      socket.on('data', (chunk) => {
+        const frames = decoder.feed(chunk);
+        for (const frame of frames) {
+          if (frame.op === 'handshake') {
+            socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
+            continue;
+          }
+          socket.write(
+            connectionCount === 1
+              ? encodeFrame({ ok: true, id: frame.id, data: [1, 2] })
+              : encodeFrame({
+                  ok: true,
+                  id: frame.id,
+                  data: { recovered: true },
+                }),
+          );
+        }
+      });
+    });
+
+    await new Promise<void>((resolve) =>
+      initialized(server, 'server').listen(socketPath, resolve),
+    );
+
+    client = new ProxySocketClient(socketPath);
+
+    const { result, timer } = await deadlineRace(
+      client.request('alpha', {}),
+      TEST_DEADLINE_MS,
+    );
+    try {
+      expect(result).toMatch(/Malformed response for request/i);
+    } finally {
+      clearTimeout(timer);
+    }
+
+    const recovered = await client.request('beta', {});
+    expect(recovered.data).toStrictEqual({ recovered: true });
+    expect(connectionCount).toBe(2);
+  });
+
+  it('ignores a malformed response without a usable correlation ID', async () => {
+    server = net.createServer((socket) => {
+      trackServerSockets(initialized(server, 'server'));
+      const decoder = new FrameDecoder();
+      socket.on('data', (chunk) => {
+        const frames = decoder.feed(chunk);
+        for (const frame of frames) {
+          if (frame.op === 'handshake') {
+            socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
+            continue;
+          }
+          socket.write(encodeFrame({ ok: 'invalid' }));
+          socket.write(
+            encodeFrame({
+              ok: true,
+              id: frame.id,
+              data: { correlated: true },
+            }),
+          );
+        }
+      });
+    });
+
+    await new Promise<void>((resolve) =>
+      initialized(server, 'server').listen(socketPath, resolve),
+    );
+
+    client = new ProxySocketClient(socketPath);
+
+    const response = await client.request('alpha', {});
+    expect(response.data).toStrictEqual({ correlated: true });
   });
 
   /**
