@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { act } from 'react';
+import * as path from 'path';
 import type { Config, FileSearch } from '@vybestack/llxprt-code-core';
 import { FileSearchFactory } from '@vybestack/llxprt-code-core';
 import type { FileSystemStructure } from '@vybestack/llxprt-code-test-utils';
@@ -355,6 +356,66 @@ describe('useAtCompletion', () => {
       // We can't directly inspect the internal state, but we can ensure it doesn't crash
       // and the suggestions remain empty.
       expect(result.current.suggestions).toStrictEqual([]);
+    });
+
+    it('should recover from an initialization error when the cwd changes', async () => {
+      const structure: FileSystemStructure = {
+        failed: {},
+        recovered: { 'recovered.txt': '' },
+      };
+      testRootDir = await createTmpDir(structure);
+      const failedCwd = path.join(testRootDir, 'failed');
+      const recoveredCwd = path.join(testRootDir, 'recovered');
+
+      const realFileSearch = FileSearchFactory.create({
+        projectRoot: recoveredCwd,
+        ignoreDirs: [],
+        useGitignore: false,
+        useExtensionIgnore: false,
+        cache: false,
+        enableRecursiveFileSearch: true,
+        enableFuzzySearch: true,
+      });
+      const mockFileSearch: FileSearch = {
+        initialize: vi
+          .fn()
+          .mockRejectedValueOnce(new Error('Initialization failed'))
+          .mockImplementation(async () => realFileSearch.initialize()),
+        search: vi
+          .fn()
+          .mockImplementation(async (...args) =>
+            realFileSearch.search(...args),
+          ),
+      };
+      vi.spyOn(FileSearchFactory, 'create').mockReturnValue(mockFileSearch);
+
+      const { result, rerender } = renderHook(
+        ({ cwd, pattern }) =>
+          useTestHarnessForAtCompletion(true, pattern, mockConfig, cwd),
+        {
+          initialProps: {
+            cwd: failedCwd,
+            pattern: 'recovered',
+          },
+        },
+      );
+
+      expect(result.current.isLoadingSuggestions).toBe(true);
+      await waitFor(() => {
+        expect(result.current.isLoadingSuggestions).toBe(false);
+      });
+      expect(result.current.suggestions).toStrictEqual([]);
+
+      act(() => {
+        rerender({ cwd: recoveredCwd, pattern: 'recovered' });
+      });
+
+      await waitFor(() => {
+        expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
+          'recovered.txt',
+        ]);
+      });
+      expect(result.current.isLoadingSuggestions).toBe(false);
     });
 
     it('should reset when disabled during initialization', async () => {

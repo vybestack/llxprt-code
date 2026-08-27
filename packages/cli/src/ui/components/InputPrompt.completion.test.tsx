@@ -12,7 +12,10 @@ import {
 import { renderWithProviders } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
 import { act } from 'react';
-import { ESC_TIMEOUT } from '../contexts/KeypressContext.js';
+import {
+  ESC_TIMEOUT,
+  FAST_RETURN_TIMEOUT,
+} from '../contexts/KeypressContext.js';
 import type { InputPromptProps } from './InputPrompt.js';
 import { InputPrompt } from './InputPrompt.js';
 import type { TextBuffer } from './shared/text-buffer.js';
@@ -129,6 +132,13 @@ const mockSlashCommands: SlashCommand[] = [
     ],
   },
 ];
+
+const pressEnter = async (stdin: { write: (data: string) => void }) => {
+  await new Promise((resolve) => setTimeout(resolve, FAST_RETURN_TIMEOUT + 10));
+  await act(async () => {
+    stdin.write('\r');
+  });
+};
 
 describe('InputPrompt', () => {
   let props: InputPromptProps;
@@ -291,6 +301,58 @@ describe('InputPrompt', () => {
       setQueueErrorMessage: vi.fn(),
       streamingState: StreamingState.Idle,
     };
+  });
+
+  describe('completion acceptance and dismissal', () => {
+    it.each(['Tab', 'Enter'])(
+      '%s accepts the first suggestion when no suggestion is actively selected',
+      async (keyName) => {
+        const { handleAutocomplete } = mockCommandCompletion;
+        mockedUseCommandCompletion.mockReturnValue({
+          ...mockCommandCompletion,
+          showSuggestions: true,
+          suggestions: [{ label: 'memory', value: 'memory' }],
+          activeSuggestionIndex: -1,
+        });
+
+        const { stdin, unmount } = renderWithProviders(
+          <InputPrompt {...props} />,
+          { kittyProtocolEnabled: false },
+        );
+
+        await (keyName === 'Tab'
+          ? act(async () => stdin.write('\t'))
+          : pressEnter(stdin));
+
+        expect(handleAutocomplete).toHaveBeenCalledWith(0);
+        expect(props.onSubmit).not.toHaveBeenCalled();
+        unmount();
+      },
+    );
+
+    it('Escape dismisses the suggestions without accepting one', async () => {
+      props.buffer.setText('/mem');
+      mockedUseCommandCompletion.mockReturnValue({
+        ...mockCommandCompletion,
+        showSuggestions: true,
+        suggestions: [{ label: 'memory', value: 'memory' }],
+      });
+
+      const { stdin, unmount } = renderWithProviders(
+        <InputPrompt {...props} />,
+        { kittyProtocolEnabled: false },
+      );
+
+      await act(async () => stdin.write('\x1B'));
+
+      await waitFor(() =>
+        expect(mockCommandCompletion.resetCompletionState).toHaveBeenCalled(),
+      );
+      expect(mockCommandCompletion.handleAutocomplete).not.toHaveBeenCalled();
+      expect(props.onSubmit).not.toHaveBeenCalled();
+      expect(props.buffer.text).toBe('/mem');
+      unmount();
+    });
   });
 
   describe('Highlighting and Cursor Display', () => {
