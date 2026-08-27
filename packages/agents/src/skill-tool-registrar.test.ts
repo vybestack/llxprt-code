@@ -22,7 +22,7 @@ import {
   type SkillManager,
 } from '@vybestack/llxprt-code-tools';
 import type { MessageBus } from '@vybestack/llxprt-code-core';
-import { registerActivateSkillTool } from './activateSkillToolRegistrar.js';
+import { registerActivateSkillTool } from './skill-tool-registrar.js';
 
 /**
  * The registry and the registrar hook describe the same bus through different
@@ -115,7 +115,7 @@ function enumeratedSkillNames(registry: ToolRegistry): string[] {
   return schema.properties?.name?.enum ?? [];
 }
 
-describe('registerActivateSkillTool @issue:3379', () => {
+describe('registerActivateSkillTool @issue:3379 @issue:3382', () => {
   it('registers the activation tool enumerating every available skill', () => {
     const registry = createRegistry();
     const skillService = new FakeSkillService([

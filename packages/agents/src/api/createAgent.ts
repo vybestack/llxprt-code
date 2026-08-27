@@ -47,6 +47,7 @@ import {
   toConfigParameters,
   applyRuntimeEphemerals,
 } from './agentConfig.adapter.js';
+import { registerActivateSkillTool } from '../skill-tool-registrar.js';
 import { AgenticLoop } from '../core/agenticLoop/AgenticLoop.js';
 import type { DisplayCallbacks } from '../core/agenticLoop/types.js';
 import { CoreToolScheduler } from '../core/coreToolScheduler.js';
@@ -104,6 +105,12 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
   // to inject the agentClientFactory and optional toolSchedulerFactory.
   const params = { ...frozenParams };
   params.agentClientFactory = agentClientFactory;
+  // Without this the model never learns which skills exist: Config cannot
+  // construct ActivateSkillTool itself (issue #2417), so a composition root
+  // that omits the hook silently produces an agent with no skill activation
+  // tool at all (issue #3382). Unconditional because syncSkillActivationTool
+  // already gates on skillsSupport.
+  params.postSkillDiscoveryToolRegistrar = registerActivateSkillTool;
   // @plan:PLAN-20260617-COREAPI.P23 @requirement:REQ-006 @requirement:REQ-016
   const forceConfirmations = applyHarnessGates(parsed, params);
   // Registry of scheduler handles created via a caller-injected factory. The
