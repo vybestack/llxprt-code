@@ -271,7 +271,7 @@ export interface GeminiModelsSeam {
  * `vertexai` plus `project`/`location` select the Vertex endpoint; `apiKey`
  * with `httpOptions.baseUrl` selects the Generative Language endpoint.
  */
-export interface GeminiClientOptions {
+export interface GeminiApiClientOptions {
   apiKey?: string;
   vertexai?: boolean;
   project?: string;
@@ -285,6 +285,6 @@ export interface GeminiClientOptions {
  * Server-tool callers reach through `.models`, so the client is modelled as a
  * holder of the generate seam rather than as the seam itself.
  */
-export interface GeminiClient {
+export interface GeminiApiClient {
   models: GeminiModelsSeam;
 }

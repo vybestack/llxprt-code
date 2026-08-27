@@ -13,8 +13,8 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 // pointed at our own code and survives the transport change.
 const googleGenAIConstructor = vi.fn();
 
-void vi.mock('./geminiClientFactory.js', () => ({
-  createGeminiClient: googleGenAIConstructor,
+void vi.mock('./geminiApiClientFactory.js', () => ({
+  createGeminiApiClient: googleGenAIConstructor,
 }));
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({

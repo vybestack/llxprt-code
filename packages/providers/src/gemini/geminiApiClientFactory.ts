@@ -14,8 +14,8 @@ import {
   toUsageMetadata,
 } from './geminiAiSdkConverters.js';
 import type {
-  GeminiClient,
-  GeminiClientOptions,
+  GeminiApiClient,
+  GeminiApiClientOptions,
   GenerateContentParameters,
   GenerateContentResponse,
   Part,
@@ -29,9 +29,9 @@ import type {
  * geminiAiSdkConverters.ts, because this provider builds and reads the Gemini
  * generateContent wire format directly.
  */
-export async function createGeminiClient(
-  options: GeminiClientOptions,
-): Promise<GeminiClient> {
+export async function createGeminiApiClient(
+  options: GeminiApiClientOptions,
+): Promise<GeminiApiClient> {
   const baseURL = options.httpOptions?.baseUrl;
   const provider = createGoogleGenerativeAI({
     ...(options.apiKey !== undefined ? { apiKey: options.apiKey } : {}),

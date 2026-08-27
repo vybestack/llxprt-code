@@ -34,8 +34,8 @@ const googleGenAIConstructor = vi.fn().mockImplementation(() => ({
   },
 }));
 
-void vi.mock('./geminiClientFactory.js', () => ({
-  createGeminiClient: googleGenAIConstructor,
+void vi.mock('./geminiApiClientFactory.js', () => ({
+  createGeminiApiClient: googleGenAIConstructor,
 }));
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({

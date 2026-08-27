@@ -18,8 +18,11 @@ import type {
   GenerateContentParameters,
   GenerateContentResponse,
 } from './geminiWireTypes.js';
-import type { GeminiClient, GeminiClientOptions } from './geminiWireTypes.js';
-import { createGeminiClient } from './geminiClientFactory.js';
+import type {
+  GeminiApiClient,
+  GeminiApiClientOptions,
+} from './geminiWireTypes.js';
+import { createGeminiApiClient } from './geminiApiClientFactory.js';
 import {
   getSettingOrEnv,
   getVertexAIAuthConfig,
@@ -316,8 +319,8 @@ export class GeminiProvider extends BaseProvider {
     authMode: GeminiAuthMode,
     httpOptions: ReturnType<typeof this.createHttpOptions>,
     baseURL?: string,
-  ): Promise<GeminiClient> {
-    return createGeminiClient(
+  ): Promise<GeminiApiClient> {
+    return createGeminiApiClient(
       this.buildGoogleGenAIOptions(authToken, authMode, httpOptions, baseURL),
     );
   }
@@ -339,7 +342,7 @@ export class GeminiProvider extends BaseProvider {
   private buildVertexAIOptions(
     isVertex: boolean,
     vertexConfig: VertexAIAuthConfig,
-  ): Pick<GeminiClientOptions, 'project' | 'location'> {
+  ): Pick<GeminiApiClientOptions, 'project' | 'location'> {
     if (!isVertex) {
       return {};
     }
@@ -354,7 +357,7 @@ export class GeminiProvider extends BaseProvider {
     authMode: GeminiAuthMode,
     httpOptions: ReturnType<typeof this.createHttpOptions>,
     baseURL?: string,
-  ): GeminiClientOptions {
+  ): GeminiApiClientOptions {
     const isVertex = authMode === 'vertex-ai';
     const settingsService = this.resolveSettingsServiceIfAvailable();
     const vertexConfig = getVertexAIAuthConfig(settingsService);
@@ -440,7 +443,7 @@ export class GeminiProvider extends BaseProvider {
       params: GenerateContentParameters,
     ) => Promise<AsyncIterable<GenerateContentResponse>>;
   }> {
-    const client = await createGeminiClient(
+    const client = await createGeminiApiClient(
       this.buildGoogleGenAIOptions(
         setup.authToken,
         setup.authMode,
