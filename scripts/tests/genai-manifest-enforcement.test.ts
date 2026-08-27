@@ -132,11 +132,12 @@ describe('validateManifestDependencies — F1: reject unauthorized npm aliases t
     ).toEqual([]);
   });
 
-  it('does NOT reject a sanctioned workspace with a normal alias', () => {
+  it('does NOT reject an unrelated npm alias', () => {
+    // The alias rule targets aliases that resolve to the SDK. An ordinary
+    // alias must pass, and no SDK declaration is needed to show that.
     const result = validateManifestDependencies(
       input(SANCTIONED, {
         dependencies: {
-          '@google/genai': SANCTIONED_VERSION,
           'mime-types': 'npm:mime-types@^3.0.1',
         },
       }),
@@ -177,7 +178,6 @@ describe('validateManifestDependencies — F9: reject duplicate dependency secti
         optionalDependencies: { '@google/genai': SANCTIONED_VERSION },
       }),
     );
-    expect(result.violations).toHaveLength(2);
     const hasDuplicate = result.violations.some((v) =>
       v.message.includes('multiple dependency sections'),
     );
@@ -202,57 +202,61 @@ describe('validateManifestDependencies — F9: reject duplicate dependency secti
     expect(duplicateViolations.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('does NOT reject a single declaration in dependencies', () => {
+  it('reports no DUPLICATE violation for a single declaration', () => {
+    // The declaration itself is now a violation, but it must not also be
+    // reported as a duplicate: that rule is about multiple sections.
     const result = validateManifestDependencies(
       input(SANCTIONED, {
         dependencies: { '@google/genai': SANCTIONED_VERSION },
       }),
     );
-    expect(result.violations).toEqual([]);
+    expect(
+      result.violations.filter((v) => v.message.includes('duplicate')),
+    ).toEqual([]);
   });
 
-  it('rejects SDK ONLY in devDependencies (wrong section for sanctioned workspace)', () => {
+  it('rejects SDK declared only in devDependencies', () => {
     const result = validateManifestDependencies(
       input(SANCTIONED, {
         devDependencies: { '@google/genai': SANCTIONED_VERSION },
       }),
     );
     expect(result.violations.length).toBeGreaterThanOrEqual(1);
+    // Names the package and the section it was found in, so the message is
+    // actionable regardless of which rule fired.
     expect(
-      result.violations.some((v) => v.message.includes('dependencies')),
+      result.violations.some(
+        (v) =>
+          v.message.includes('@google/genai') &&
+          v.message.includes('devDependencies'),
+      ),
     ).toBe(true);
   });
 });
 
-describe('validateManifestDependencies: F10 exact configured root/providers dependencies', () => {
-  it('requires root workspace (.) to declare SDK at exact version', () => {
-    const result = validateManifestDependencies(
-      input('.', {
-        dependencies: { '@google/genai': SANCTIONED_VERSION },
-      }),
-    );
-    expect(result.violations).toEqual([]);
-  });
+describe('validateManifestDependencies: F10 no workspace may declare the SDK', () => {
+  // @google/genai has been removed from the tree. The dependency allowlist is
+  // empty, so declaring the SDK anywhere is a reappearance, and declaring it
+  // nowhere is the required state.
 
-  it('rejects root with wrong SDK version', () => {
-    const result = validateManifestDependencies(
-      input('.', {
-        dependencies: { '@google/genai': '1.29.0' },
-      }),
-    );
-    expect(result.violations.length).toBeGreaterThanOrEqual(1);
-    expect(
-      result.violations.some((v) => v.message.includes(SANCTIONED_VERSION)),
-    ).toBe(true);
-  });
-
-  it('rejects root without SDK declaration', () => {
+  it('accepts root workspace (.) with no SDK declaration', () => {
     const result = validateManifestDependencies(
       input('.', {
         dependencies: { chalk: '^4.0.0' },
       }),
     );
-    expect(result.violations.length).toBeGreaterThanOrEqual(1);
+    expect(result.violations).toEqual([]);
+  });
+
+  it('rejects root declaring the SDK, whatever the version', () => {
+    for (const version of [SANCTIONED_VERSION, '1.29.0', '2.0.0']) {
+      const result = validateManifestDependencies(
+        input('.', {
+          dependencies: { '@google/genai': version },
+        }),
+      );
+      expect(result.violations.length).toBeGreaterThanOrEqual(1);
+    }
   });
 
   it('rejects packages/core declaring the SDK', () => {
@@ -273,19 +277,21 @@ describe('validateManifestDependencies: F10 exact configured root/providers depe
     expect(result.violations.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('requires packages/providers to declare SDK at exact version', () => {
+  it('accepts packages/providers with no SDK declaration', () => {
+    // Previously the sanctioned home for the SDK. The Gemini provider now
+    // reaches the API through @ai-sdk/google.
     const result = validateManifestDependencies(
       input('packages/providers', {
-        dependencies: { '@google/genai': SANCTIONED_VERSION },
+        dependencies: { chalk: '^4.0.0' },
       }),
     );
     expect(result.violations).toEqual([]);
   });
 
-  it('rejects packages/providers without SDK declaration', () => {
+  it('rejects packages/providers declaring the SDK', () => {
     const result = validateManifestDependencies(
       input('packages/providers', {
-        dependencies: { chalk: '^4.0.0' },
+        dependencies: { '@google/genai': SANCTIONED_VERSION },
       }),
     );
     expect(result.violations.length).toBeGreaterThanOrEqual(1);
