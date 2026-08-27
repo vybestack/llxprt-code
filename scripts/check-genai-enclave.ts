@@ -60,7 +60,7 @@ import {
   isExplicitlyAllowedGeminiName,
   isTestFile,
   isRuntimeExportSurface,
-  getGenaiDependencyWorkspaceDirs,
+  REQUIRED_MANIFEST_WORKSPACE_DIRS,
 } from './genai-enclave/config.ts';
 import { discoverScannableFiles } from './genai-enclave/file-discovery.ts';
 import {
@@ -223,7 +223,7 @@ function readRawManifest(filePath: string): RawManifest {
  * must fail closed (F4).
  */
 const REQUIRED_MANIFEST_DIRS: ReadonlySet<string> = new Set(
-  getGenaiDependencyWorkspaceDirs(),
+  REQUIRED_MANIFEST_WORKSPACE_DIRS,
 );
 
 function checkManifest(

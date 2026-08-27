@@ -88,6 +88,20 @@ export const SANCTIONED_GENAI_VERSION = '1.30.0';
 export const GENAI_DEPENDENCY_MANIFESTS: readonly DependencyManifestAllowlistEntry[] =
   [];
 
+/**
+ * Workspaces whose package.json must exist and be readable.
+ *
+ * This is deliberately independent of the dependency allowlist above. That
+ * list is now empty because no workspace may declare the SDK, but the guard
+ * still has to be able to READ these manifests to prove the absence. Deriving
+ * the required set from an empty allowlist would mean a deleted manifest
+ * silently passed.
+ */
+export const REQUIRED_MANIFEST_WORKSPACE_DIRS: readonly string[] = [
+  '.',
+  'packages/providers',
+];
+
 /** The exact package name the guard checks for. */
 export const GENAI_PACKAGE = '@google/genai';
 

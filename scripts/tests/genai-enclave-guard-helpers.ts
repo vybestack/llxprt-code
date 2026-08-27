@@ -191,8 +191,11 @@ const SANCTIONED_VERSION = SANCTIONED_GENAI_VERSION;
  * operational error (fail-closed).
  */
 export function writeRequiredManifests(write: FixtureHelpers['write']): void {
+  // The required manifests must EXIST so the guard can prove the SDK is
+  // absent. They must not declare it: the dependency allowlist is empty now
+  // that @google/genai has been removed.
   const manifest = {
-    dependencies: { '@google/genai': SANCTIONED_VERSION },
+    dependencies: { chalk: '^4.0.0' },
   };
   write('package.json', JSON.stringify(manifest, null, 2) + '\n');
   write(
