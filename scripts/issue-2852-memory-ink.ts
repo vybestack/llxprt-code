@@ -96,6 +96,13 @@ function Frame({ seq }: FrameProps): React.ReactElement {
 export type InkWorkload = {
   /** Renders `count` frames through the live reconciler. */
   renderFrames: (count: number) => void;
+  /**
+   * Frames the renderer actually produced, counted from Ink's `onRender`.
+   * This is not the same as the number of `rerender` calls unless throttling
+   * is disabled, so the caller can verify the workload did the work it asked
+   * for rather than assuming it.
+   */
+  framesRendered: () => number;
   /** Total bytes the renderer emitted, for sanity-checking the run did work. */
   bytesWritten: () => number;
   /** Unmounts the app. */
@@ -109,12 +116,23 @@ export type InkWorkload = {
  */
 export function createInkWorkload(): InkWorkload {
   const stdout = new SinkStdout();
+  let rendered = 0;
+
   const instance = render(React.createElement(Frame, { seq: 0 }), {
     stdout: stdout as unknown as NodeJS.WriteStream,
     stderr: new SinkStdout() as unknown as NodeJS.WriteStream,
     stdin: new SinkStdin() as unknown as NodeJS.ReadStream,
     exitOnCtrlC: false,
     patchConsole: false,
+    // Ink throttles frame production to `maxFps ?? 30` while reconciliation
+    // stays synchronous. Left at the default, a tight rerender loop would
+    // reconcile thousands of times but produce only a handful of frames, so
+    // the text and layout work this mode exists to measure would barely run.
+    // Zero disables the throttle so every rerender produces a frame.
+    maxFps: 0,
+    onRender: () => {
+      rendered += 1;
+    },
   });
 
   let seq = 0;
@@ -125,6 +143,7 @@ export function createInkWorkload(): InkWorkload {
         instance.rerender(React.createElement(Frame, { seq }));
       }
     },
+    framesRendered: () => rendered,
     bytesWritten: () => stdout.bytesWritten,
     dispose: () => {
       instance.unmount();

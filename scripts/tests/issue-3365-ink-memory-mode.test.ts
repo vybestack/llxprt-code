@@ -143,6 +143,43 @@ describe('issue-3365 ink memory mode', () => {
   });
 
   /**
+   * Ink throttles frame production to `maxFps ?? 30` while reconciliation stays
+   * synchronous, so a tight rerender loop at the default reconciles thousands
+   * of times and produces almost nothing. Measured on the pinned fork: 3,000
+   * rerenders yielded **39** rendered frames. The workload disables the
+   * throttle, and this asserts it, because a silent regression here would leave
+   * the mode measuring reconciliation instead of the render path it exists to
+   * guard.
+   *
+   * @plan PLAN-20260826-INKGUARD.P01
+   * @requirement REQ-3365-04
+   */
+  it('produces one rendered frame per rerender', async () => {
+    const { createInkWorkload } = await import('../issue-2852-memory-ink.ts');
+    const workload = createInkWorkload();
+    try {
+      const requested = 200;
+      workload.renderFrames(requested);
+
+      // The initial mount renders once before any rerender.
+      expect(workload.framesRendered()).toBe(requested + 1);
+      expect(workload.bytesWritten()).toBeGreaterThan(0);
+    } finally {
+      workload.dispose();
+    }
+  });
+
+  /**
+   * The throttle must be disabled explicitly rather than relied on by accident.
+   *
+   * @plan PLAN-20260826-INKGUARD.P01
+   * @requirement REQ-3365-04
+   */
+  it('disables the frame throttle explicitly', () => {
+    expect(readScript('issue-2852-memory-ink.ts')).toContain('maxFps: 0');
+  });
+
+  /**
    * The workload must render the shape that actually runs by default. A tree
    * carrying `<Static>` would measure the standard-buffer layout, which the
    * default configuration never mounts.
