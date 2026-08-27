@@ -38,6 +38,31 @@ import type {
   UiSubagentManager,
 } from '../../../cliUiRuntime.js';
 
+export interface IsInputActiveInputs {
+  streamingState: StreamingState;
+  initError: ReturnType<typeof useAgentStream>['initError'];
+  isProcessing: boolean;
+  slashCommands: ReturnType<typeof useSlashCommandProcessor>['slashCommands'];
+}
+
+/**
+ * The composer is visible only while the stream is idle or responding, there is
+ * no initialization error, no slash-command processing is in flight, and slash
+ * commands have finished loading.
+ */
+export function computeIsInputActive(inputs: IsInputActiveInputs): boolean {
+  const isStreamingIdleOrResponding =
+    inputs.streamingState === StreamingState.Idle ||
+    inputs.streamingState === StreamingState.Responding;
+
+  return (
+    isStreamingIdleOrResponding &&
+    !inputs.initError &&
+    !inputs.isProcessing &&
+    !!inputs.slashCommands
+  );
+}
+
 export interface AppInputParams {
   // From bootstrap
   streamRuntime: AppBootstrapResult['streamRuntime'];
@@ -496,14 +521,12 @@ function useInputFinish(
   const handleSettingsRestart = useCallback(() => {
     void handleSlashCommand('/quit');
   }, [handleSlashCommand]);
-  const isStreamingIdleOrResponding =
-    streamingState === StreamingState.Idle ||
-    streamingState === StreamingState.Responding;
-  const isInputActive =
-    isStreamingIdleOrResponding &&
-    !initError &&
-    !isProcessing &&
-    !!slashCommands;
+  const isInputActive = computeIsInputActive({
+    streamingState,
+    initError,
+    isProcessing,
+    slashCommands,
+  });
   return {
     handleIdePromptComplete,
     vimHandleInput,

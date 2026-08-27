@@ -6,14 +6,19 @@
 
 import { render } from 'ink-testing-library';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
+import { Text } from '../../../test-utils/real-ink.js';
 
 // Unmock ink to use real Ink with ink-testing-library
 // The global mock in test-setup.ts conflicts with renderer behavior here.
 // Under Bun, ink is redirected to a stub by a resolution plugin rather than a
 // module mock, so there is nothing to unmock.
+const realInkModule = await import('../../../test-utils/real-ink.js');
+
+void vi.mock('ink', () => realInkModule);
 
 import { DefaultAppLayout } from './DefaultAppLayout.js';
-import { useUIState } from '../contexts/UIStateContext.js';
+import { hasActiveDialog } from './DefaultAppLayoutHelpers.js';
+import { useUIState, type UIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
 import { StreamingState } from '../types.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
@@ -22,10 +27,13 @@ import {
   buildUiRuntimeFromSource,
 } from '../cliUiRuntime.js';
 
-const { dialogManagerRenderSpy, composerRenderSpy } = {
-  dialogManagerRenderSpy: vi.fn(() => null),
-  composerRenderSpy: vi.fn(() => null),
-};
+const DIALOG_MANAGER_SENTINEL = 'DIALOG_MANAGER_RENDERED';
+const COMPOSER_SENTINEL = 'COMPOSER_RENDERED';
+
+const DialogManagerSentinel = () => (
+  <Text color="white">{DIALOG_MANAGER_SENTINEL}</Text>
+);
+const ComposerSentinel = () => <Text color="white">{COMPOSER_SENTINEL}</Text>;
 
 void vi.mock('../contexts/UIStateContext.js', () => ({
   useUIState: vi.fn(),
@@ -36,11 +44,11 @@ void vi.mock('../contexts/UIActionsContext.js', () => ({
 }));
 
 void vi.mock('../components/DialogManager.js', () => ({
-  DialogManager: dialogManagerRenderSpy,
+  DialogManager: DialogManagerSentinel,
 }));
 
 void vi.mock('../components/Composer.js', () => ({
-  Composer: composerRenderSpy,
+  Composer: ComposerSentinel,
 }));
 
 // Mock all other child components as null so this test only verifies
@@ -241,11 +249,76 @@ function createBaseUIState() {
     isModelsDialogOpen: false,
     isSessionBrowserDialogOpen: false,
     isModelConfigDialogOpen: false,
+    isPoliciesDialogOpen: false,
     showPrivacyNotice: false,
 
     rootUiRef: { current: null },
     pendingHistoryItemRef: { current: null },
-  };
+  } as never;
+}
+
+const ACTIVE_DIALOG_FLAGS = [
+  'showWorkspaceMigrationDialog',
+  'shouldShowIdePrompt',
+  'isFolderTrustDialogOpen',
+  'isWelcomeDialogOpen',
+  'isPermissionsDialogOpen',
+  'confirmationRequest',
+  'isThemeDialogOpen',
+  'isSettingsDialogOpen',
+  'isAuthDialogOpen',
+  'isOAuthCodeDialogOpen',
+  'isEditorDialogOpen',
+  'isProviderDialogOpen',
+  'isLoadProfileDialogOpen',
+  'isCreateProfileDialogOpen',
+  'isProfileListDialogOpen',
+  'isProfileDetailDialogOpen',
+  'isProfileEditorDialogOpen',
+  'isToolsDialogOpen',
+  'isLoggingDialogOpen',
+  'isSubagentDialogOpen',
+  'isModelsDialogOpen',
+  'isSessionBrowserDialogOpen',
+  'isModelConfigDialogOpen',
+  'isPoliciesDialogOpen',
+  'showPrivacyNotice',
+] as const satisfies ReadonlyArray<keyof UIState>;
+
+type ActiveDialogFlag = (typeof ACTIVE_DIALOG_FLAGS)[number];
+
+function createUIStateWithActiveDialog(flag: ActiveDialogFlag): UIState {
+  const baseState: UIState = createBaseUIState();
+  if (flag === 'confirmationRequest') {
+    return {
+      ...baseState,
+      confirmationRequest: {
+        prompt: null,
+        onConfirm: () => {},
+      },
+    };
+  }
+  return { ...baseState, [flag]: true };
+}
+
+function renderDefaultAppLayout(uiState: UIState): ReturnType<typeof render> {
+  mockUseUIState.mockReturnValue(uiState);
+  const config = createConfigStub() as never;
+
+  return render(
+    <DefaultAppLayout
+      uiRuntime={buildUiRuntimeFromSource(config)}
+      slashCommandRuntime={buildSlashCommandRuntime(config)}
+      settings={createSettingsStub() as never}
+      startupWarnings={[]}
+      version={'0.0.0-test'}
+      nightly={false}
+      mainControlsRef={{ current: null }}
+      availableTerminalHeight={40}
+      contextFileNames={[]}
+      updateInfo={null}
+    />,
+  );
 }
 
 describe('DefaultAppLayout', () => {
@@ -254,81 +327,42 @@ describe('DefaultAppLayout', () => {
     mockUseUIActions.mockReturnValue(createActionsStub() as never);
   });
 
-  it('renders DialogManager when session browser dialog is open', () => {
-    mockUseUIState.mockReturnValue({
-      ...createBaseUIState(),
-      isSessionBrowserDialogOpen: true,
-    } as never);
+  it('keeps the dialog test table aligned with every property read by the real predicate', () => {
+    const readKeys = new Set<string>();
+    const uiState = new Proxy(createBaseUIState(), {
+      get(target, property, receiver) {
+        if (typeof property === 'string') {
+          readKeys.add(property);
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
 
-    render(
-      <DefaultAppLayout
-        uiRuntime={buildUiRuntimeFromSource(createConfigStub() as never)}
-        slashCommandRuntime={buildSlashCommandRuntime(
-          createConfigStub() as never,
-        )}
-        settings={createSettingsStub() as never}
-        startupWarnings={[]}
-        version={'0.0.0-test'}
-        nightly={false}
-        mainControlsRef={{ current: null }}
-        availableTerminalHeight={40}
-        contextFileNames={[]}
-        updateInfo={null}
-      />,
-    );
+    hasActiveDialog(uiState);
 
-    expect(dialogManagerRenderSpy).toHaveBeenCalledTimes(1);
-    expect(composerRenderSpy).not.toHaveBeenCalled();
+    expect([...readKeys].sort()).toEqual([...ACTIVE_DIALOG_FLAGS].sort());
   });
 
-  it('renders DialogManager when model config dialog is the only active dialog', () => {
-    mockUseUIState.mockReturnValue({
-      ...createBaseUIState(),
-      isModelConfigDialogOpen: true,
-    } as never);
+  it.each(ACTIVE_DIALOG_FLAGS.map((flag) => [flag] as const))(
+    'renders DialogManager instead of Composer when %s is active',
+    (flag) => {
+      const rendered = renderDefaultAppLayout(
+        createUIStateWithActiveDialog(flag),
+      );
+      const frame = rendered.lastFrame();
 
-    render(
-      <DefaultAppLayout
-        uiRuntime={buildUiRuntimeFromSource(createConfigStub() as never)}
-        slashCommandRuntime={buildSlashCommandRuntime(
-          createConfigStub() as never,
-        )}
-        settings={createSettingsStub() as never}
-        startupWarnings={[]}
-        version={'0.0.0-test'}
-        nightly={false}
-        mainControlsRef={{ current: null }}
-        availableTerminalHeight={40}
-        contextFileNames={[]}
-        updateInfo={null}
-      />,
-    );
-
-    expect(dialogManagerRenderSpy).toHaveBeenCalledTimes(1);
-    expect(composerRenderSpy).not.toHaveBeenCalled();
-  });
+      expect(frame).toContain(DIALOG_MANAGER_SENTINEL);
+      expect(frame).not.toContain(COMPOSER_SENTINEL);
+      rendered.unmount();
+    },
+  );
 
   it('renders Composer when no dialog is open', () => {
-    mockUseUIState.mockReturnValue(createBaseUIState() as never);
+    const rendered = renderDefaultAppLayout(createBaseUIState());
+    const frame = rendered.lastFrame();
 
-    render(
-      <DefaultAppLayout
-        uiRuntime={buildUiRuntimeFromSource(createConfigStub() as never)}
-        slashCommandRuntime={buildSlashCommandRuntime(
-          createConfigStub() as never,
-        )}
-        settings={createSettingsStub() as never}
-        startupWarnings={[]}
-        version={'0.0.0-test'}
-        nightly={false}
-        mainControlsRef={{ current: null }}
-        availableTerminalHeight={40}
-        contextFileNames={[]}
-        updateInfo={null}
-      />,
-    );
-
-    expect(composerRenderSpy).toHaveBeenCalledTimes(1);
-    expect(dialogManagerRenderSpy).not.toHaveBeenCalled();
+    expect(frame).toContain(COMPOSER_SENTINEL);
+    expect(frame).not.toContain(DIALOG_MANAGER_SENTINEL);
+    rendered.unmount();
   });
 });

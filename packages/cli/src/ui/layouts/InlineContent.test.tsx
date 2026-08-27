@@ -10,9 +10,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { ApprovalMode, Config } from '@vybestack/llxprt-code-core';
 import { render } from 'ink-testing-library';
 import { LoadedSettings } from '../../config/settings.js';
+import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { renderWithProviders } from '../../test-utils/render.js';
 import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
 import { StreamingState } from '../types.js';
 import { StreamingContext } from '../contexts/StreamingContext.js';
+import type { UIState } from '../contexts/UIStateContext.js';
+import {
+  UIActionsContext,
+  type UIActions,
+} from '../contexts/UIActionsContext.js';
 import { InlineContent, type InlineContentProps } from './InlineContent.js';
 
 const activeRenders: Array<ReturnType<typeof render>> = [];
@@ -93,6 +100,102 @@ function createProps(): InlineContentProps {
   };
 }
 
+function createComposerUIState(overrides: Partial<UIState> = {}): UIState {
+  return {
+    buffer: {
+      text: '',
+      lines: [''],
+      cursor: [0, 0],
+      transformationsByLine: [[]],
+      visualToTransformedMap: [0],
+      viewportVisualLines: [''],
+      allVisualLines: [''],
+      visualCursor: [0, 0],
+      visualScrollRow: 0,
+      visualToLogicalMap: [[0, 0]],
+      setText: vi.fn(),
+      replaceRangeByOffset: vi.fn(),
+      moveToVisualPosition: vi.fn(),
+    },
+    inputWidth: 80,
+    suggestionsWidth: 80,
+    shellModeActive: false,
+    isFocused: true,
+    vimModeEnabled: false,
+    showAutoAcceptIndicator: ApprovalMode.DEFAULT,
+    placeholder: '',
+    slashCommands: [],
+    commandContext: createMockCommandContext(),
+    inputHistory: [],
+    streamingState: StreamingState.Idle,
+    queueErrorMessage: null,
+    embeddedShellFocused: false,
+    queuedSubmissions: [],
+    ...overrides,
+  } as never;
+}
+
+function createUIActions(): UIActions {
+  return {
+    handleUserInputSubmit: vi.fn(),
+    handleClearScreen: vi.fn(),
+    handleSteer: vi.fn(),
+    setShellModeActive: vi.fn(),
+    vimHandleInput: vi.fn(),
+    handleEscapePromptChange: vi.fn(),
+    setQueueErrorMessage: vi.fn(),
+    sendAllQueuedSubmissions: vi.fn(),
+    steerAllQueuedSubmissions: vi.fn(),
+    clearQueuedSubmissions: vi.fn(),
+  } as never;
+}
+
+function renderComposer(
+  uiStateOverrides: Partial<UIState> = {},
+  isInputActive = true,
+): ReturnType<typeof render> {
+  const props = {
+    ...createProps(),
+    isInputActive,
+    shellModeActive: uiStateOverrides.shellModeActive ?? false,
+  };
+  const rendered = renderWithProviders(
+    <UIActionsContext.Provider value={createUIActions()}>
+      <StreamingContext.Provider value={props.streamingState}>
+        <InlineContent {...props} />
+      </StreamingContext.Provider>
+    </UIActionsContext.Provider>,
+    {
+      settings: props.settings,
+      uiState: createComposerUIState(uiStateOverrides),
+    },
+  );
+  activeRenders.push(rendered);
+  return rendered;
+}
+
+const COMPOSER_MODES = [
+  {
+    mode: 'default',
+    uiState: {},
+    placeholder: 'Type your message or @path/to/file',
+  },
+  {
+    mode: 'vim',
+    uiState: { vimModeEnabled: true },
+    placeholder: "Press 'i' for INSERT mode",
+  },
+  {
+    mode: 'shell',
+    uiState: { shellModeActive: true },
+    placeholder: 'Type your shell command',
+  },
+] satisfies Array<{
+  mode: string;
+  uiState: Partial<UIState>;
+  placeholder: string;
+}>;
+
 describe('InlineContent', () => {
   beforeEach(() => {
     setEnv('GEMINI_SYSTEM_MD', '');
@@ -148,6 +251,24 @@ describe('InlineContent', () => {
 
     expect(lastFrame()).toContain('context-summary-mock');
   });
+
+  it.each(COMPOSER_MODES)(
+    'renders the $mode placeholder through the composer input surface when input is active',
+    ({ uiState, placeholder }) => {
+      const { lastFrame } = renderComposer(uiState);
+
+      expect(lastFrame()).toContain(placeholder);
+    },
+  );
+
+  it.each(COMPOSER_MODES)(
+    'does not render the $mode placeholder when input is inactive',
+    ({ uiState, placeholder }) => {
+      const { lastFrame } = renderComposer(uiState, false);
+
+      expect(lastFrame()).not.toContain(placeholder);
+    },
+  );
 
   it('renders the system-md indicator when GEMINI_SYSTEM_MD is set', () => {
     setEnv('GEMINI_SYSTEM_MD', 'true');

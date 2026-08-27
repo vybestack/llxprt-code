@@ -21,10 +21,11 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import { readFileSync, readdirSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterAll, describe, it } from 'bun:test';
+import { afterAll, describe, expect, it } from 'bun:test';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '../..');
@@ -176,6 +177,38 @@ describe('Interactive UI (tmux harness)', () => {
         },
       );
       assertHarnessSuccess(result);
+    },
+    300_000,
+  );
+
+  runTmuxE2E(
+    'shows the composer in the first meaningful startup frame',
+    () => {
+      const testName = 'issue2018-composer-visibility';
+      const artifactDir = getArtifactDir(testName);
+      rmSync(artifactDir, { recursive: true, force: true });
+      const result = runHarness(
+        'tmux-script.issue2018-composer-visibility-smoke.json',
+        testName,
+      );
+      assertHarnessSuccess(result);
+
+      const startupFrameArtifacts = readdirSync(artifactDir).filter((entry) =>
+        entry.endsWith('-00-composer-visible-screen.txt'),
+      );
+      expect(startupFrameArtifacts).toHaveLength(1);
+      const startupFrameArtifact = startupFrameArtifacts[0];
+      if (startupFrameArtifact === undefined) {
+        throw new Error('Composer startup frame artifact was not created');
+      }
+
+      const startupFrame = readFileSync(
+        path.join(artifactDir, startupFrameArtifact),
+        'utf8',
+      );
+      expect(startupFrame).toContain('Type your message');
+      expect(startupFrame.trim().length).toBeGreaterThan(20);
+      expect(startupFrame).not.toContain('Initialization Error');
     },
     300_000,
   );
