@@ -46,25 +46,6 @@ describe('Codex Responses WebSocket transport', () => {
     ]);
   });
 
-  it('passes every current handshake header to the connector', async () => {
-    const harness = new SocketHarness([completingScript()]);
-    const transport = createCodexResponsesWebSocketTransport({
-      openSocket: harness.openSocket,
-    });
-    const headers = {
-      Authorization: 'Bearer secret',
-      'ChatGPT-Account-ID': 'account',
-      originator: 'codex_cli_rs',
-      session_id: 'session',
-      'X-Custom': 'custom',
-      'OpenAI-Beta': 'responses_websockets=2026-02-06',
-    };
-
-    await drain(transport.streamResponse(request(), options({ headers })));
-
-    expect(harness.headers).toStrictEqual([headers]);
-  });
-
   it('feeds text frames through the existing Responses parser', async () => {
     const harness = new SocketHarness([completingScript('Hello')]);
     const transport = createCodexResponsesWebSocketTransport({

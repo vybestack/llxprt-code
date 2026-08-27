@@ -72,11 +72,21 @@ interface WebSocketTransportConfig {
    * path without waiting the full production duration.
    */
   readonly handshakeTimeoutMs?: number;
+  /**
+   * Established-stream idle timeout. Defaults to
+   * {@link STREAM_IDLE_TIMEOUT_MS}. Exposed so tests can exercise the timeout
+   * path without waiting the full production duration. Values <= 0 disable it.
+   */
+  readonly streamIdleTimeoutMs?: number;
 }
 
 // Matches the Codex client's default WebSocket connect timeout
 // (websocket_connect_timeout_ms in codex-rs/model-provider-info/src/lib.rs).
 const HANDSHAKE_TIMEOUT_MS = 15_000;
+
+// Matches the Codex client's default established-stream idle timeout
+// (stream_idle_timeout_ms in codex-rs/model-provider-info/src/lib.rs).
+export const STREAM_IDLE_TIMEOUT_MS = 300_000;
 
 function eventType(value: unknown): string | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
@@ -234,51 +244,21 @@ class RequestFrameSource {
   private readonly detachListeners: () => void;
   private readonly detachAbort: () => void;
   private readonly logger: TransportLogger | undefined;
+  private readonly streamIdleTimeoutMs: number;
+  private idleTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
     socket: TransportSocket,
     abortSignal: AbortSignal | undefined,
     onResponseEvent: (() => void) | undefined,
     logger: TransportLogger | undefined,
+    streamIdleTimeoutMs: number,
   ) {
     this.logger = logger;
-    const detachMessage = socket.onMessage((data) => {
-      if (this.ended) return;
-      if (typeof data !== 'string') {
-        this.fail(
-          createStreamInterruptionError(
-            'Codex Responses WebSocket received a non-text frame',
-          ),
-        );
-        return;
-      }
-      let frame: { type: string | undefined; data: string };
-      try {
-        frame = parseFrame(data);
-      } catch (error) {
-        this.fail(
-          error instanceof Error
-            ? error
-            : createStreamInterruptionError(
-                'Codex Responses WebSocket received an invalid frame',
-              ),
-        );
-        return;
-      }
-      this.queue.push(frame.data);
-      if (isTerminalEventType(frame.type)) {
-        this.receivedTerminal = true;
-        if (
-          frame.type !== undefined &&
-          ACCEPTED_TERMINAL_EVENT_TYPES.has(frame.type)
-        ) {
-          this.acceptedTerminal = true;
-        }
-        this.ended = true;
-      }
-      this.drain();
-      this.notifyResponseEvent(onResponseEvent);
-    });
+    this.streamIdleTimeoutMs = streamIdleTimeoutMs;
+    const detachMessage = socket.onMessage((data) =>
+      this.handleMessage(data, onResponseEvent),
+    );
     const detachClose = socket.onClose((info) => {
       this.logger?.debug(
         () =>
@@ -313,6 +293,50 @@ class RequestFrameSource {
     } else {
       this.detachAbort = () => undefined;
     }
+    this.resetIdleTimer();
+  }
+  private handleMessage(
+    data: unknown,
+    onResponseEvent: (() => void) | undefined,
+  ): void {
+    if (this.ended) return;
+    if (typeof data !== 'string') {
+      this.fail(
+        createStreamInterruptionError(
+          'Codex Responses WebSocket received a non-text frame',
+        ),
+      );
+      return;
+    }
+    let frame: { type: string | undefined; data: string };
+    try {
+      frame = parseFrame(data);
+    } catch (error) {
+      this.fail(
+        error instanceof Error
+          ? error
+          : createStreamInterruptionError(
+              'Codex Responses WebSocket received an invalid frame',
+            ),
+      );
+      return;
+    }
+    const isTerminal = isTerminalEventType(frame.type);
+    this.queue.push(frame.data);
+    if (isTerminal) {
+      this.receivedTerminal = true;
+      if (
+        frame.type !== undefined &&
+        ACCEPTED_TERMINAL_EVENT_TYPES.has(frame.type)
+      ) {
+        this.acceptedTerminal = true;
+      }
+      this.ended = true;
+    }
+    if (isTerminal) this.clearIdleTimer();
+    else this.resetIdleTimer();
+    this.drain();
+    this.notifyResponseEvent(onResponseEvent);
   }
 
   didReceiveAcceptedTerminal(): boolean {
@@ -353,6 +377,7 @@ class RequestFrameSource {
   }
 
   detach(): void {
+    this.clearIdleTimer();
     this.detachListeners();
     this.detachAbort();
     this.ended = true;
@@ -360,12 +385,30 @@ class RequestFrameSource {
   }
 
   private fail(error: Error): void {
+    this.clearIdleTimer();
     // First outcome wins: a terminal frame or recorded failure cannot be
     // replaced by a later close/error/abort.
     if (this.receivedTerminal || this.failure !== undefined) return;
     this.failure = error;
     this.ended = true;
     this.drain();
+  }
+
+  private resetIdleTimer(): void {
+    this.clearIdleTimer();
+    if (this.ended || this.streamIdleTimeoutMs <= 0) return;
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = undefined;
+      this.fail(
+        createStreamInterruptionError('Codex Responses WebSocket idle timeout'),
+      );
+    }, this.streamIdleTimeoutMs);
+  }
+
+  private clearIdleTimer(): void {
+    if (this.idleTimer === undefined) return;
+    clearTimeout(this.idleTimer);
+    this.idleTimer = undefined;
   }
 
   private drain(): void {
@@ -414,10 +457,13 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
 
   private readonly openSocket: OpenTransportSocket;
   private readonly handshakeTimeoutMs: number;
+  private readonly streamIdleTimeoutMs: number;
 
   constructor(private readonly config: WebSocketTransportConfig) {
     this.openSocket = config.openSocket ?? openUndiciSocket;
     this.handshakeTimeoutMs = config.handshakeTimeoutMs ?? HANDSHAKE_TIMEOUT_MS;
+    this.streamIdleTimeoutMs =
+      config.streamIdleTimeoutMs ?? STREAM_IDLE_TIMEOUT_MS;
   }
 
   async *streamResponse(
@@ -436,6 +482,7 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
         options.abortSignal,
         options.onResponseEvent,
         this.config.logger,
+        this.streamIdleTimeoutMs,
       );
       try {
         throwIfAborted(options.abortSignal);
