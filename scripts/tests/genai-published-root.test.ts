@@ -22,11 +22,9 @@
 import { describe, expect, it } from 'bun:test';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { SANCTIONED_GENAI_VERSION } from '../genai-enclave/config.ts';
 import { REPO_ROOT } from './genai-enclave-guard-helpers.ts';
 
 const GENAI_PACKAGE = '@google/genai';
-const REQUIRED_VERSION = SANCTIONED_GENAI_VERSION;
 const REQUIRED_WORKSPACES = ['.', 'packages/providers'] as const;
 
 interface DependencyManifest {
@@ -112,27 +110,22 @@ function getGenaiVersion(manifest: DependencyManifest): string | undefined {
 }
 
 describe('published-root packaging bridge regression (finding2)', () => {
-  describe('exact dependency declarations exist', () => {
+  describe('no dependency declarations remain', () => {
+    // The packaging bridge existed so npm would install @google/genai for the
+    // published root artifact. The Gemini provider now reaches the API through
+    // @ai-sdk/google, so the SDK is absent and must stay absent.
     for (const workspace of REQUIRED_WORKSPACES) {
       const label =
         workspace === '.' ? 'root package.json' : `${workspace}/package.json`;
 
-      it(`${label} declares ${GENAI_PACKAGE} at exactly ${REQUIRED_VERSION}`, () => {
+      it(`${label} does not declare ${GENAI_PACKAGE}`, () => {
         const manifest = readManifest(workspace);
-        const version = getGenaiVersion(manifest);
-        expect(version, `${label} must declare ${GENAI_PACKAGE}`).toBeDefined();
-        expect(version).toBe(REQUIRED_VERSION);
+        expect(
+          getGenaiVersion(manifest),
+          `${label} must not declare ${GENAI_PACKAGE}`,
+        ).toBeUndefined();
       });
     }
-
-    it('both workspace versions are identical (no drift)', () => {
-      const versions = REQUIRED_WORKSPACES.map((ws) =>
-        getGenaiVersion(readManifest(ws)),
-      );
-      const uniqueVersions = new Set(versions);
-      expect(uniqueVersions.size).toBe(1);
-      expect([...uniqueVersions][0]).toBe(REQUIRED_VERSION);
-    });
   });
 
   describe('root packaging bridge rationale', () => {
