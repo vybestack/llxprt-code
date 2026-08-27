@@ -245,7 +245,7 @@ hyphenated forms used by the current Codex client.
 
 The WebSocket handshake times out after 15 seconds. After the connection is
 established, the stream has a five-minute idle timeout that resets on each
-incoming frame. If it expires, LLxprt closes the socket. When no output has been
+valid text frame. If it expires, LLxprt closes the socket. When no output has been
 streamed, LLxprt serves that request over HTTP/SSE instead; after repeated
 consecutive pre-output WebSocket failures it stays on HTTP for the session.
 When output has already been streamed, LLxprt reports a stream interruption

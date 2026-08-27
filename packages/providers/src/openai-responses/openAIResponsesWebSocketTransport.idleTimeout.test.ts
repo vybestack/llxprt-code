@@ -184,6 +184,37 @@ describe('Codex Responses WebSocket stream idle timeout', () => {
     expect(fallback.calls).toBe(0);
   });
 
+  it('closes the socket on idle expiry while the consumer is paused after partial output', async () => {
+    const harness = new SocketHarness([
+      (socket) => {
+        socket.open();
+        socket.onSend = () => {
+          socket.message(
+            frame({ type: 'response.output_text.delta', delta: 'partial' }),
+          );
+        };
+      },
+    ]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+      streamIdleTimeoutMs: 50,
+    });
+    const iterator = transport.streamResponse(request(), options());
+
+    // The generator stays suspended at this yield until the final next() call,
+    // so only the transport's eager invalidation can close the socket.
+    const first = await iterator.next();
+    expect(first.value).toStrictEqual(textContent('partial'));
+
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(harness.sockets[0].closedByClient).toBe(true);
+
+    await expect(iterator.next()).rejects.toMatchObject({
+      name: 'StreamInterruptionError',
+      message: expect.stringMatching(/idle timeout/),
+    });
+  });
+
   it('falls back to HTTP once after a pre-event idle timeout', async () => {
     const fallback = { calls: 0 };
     let stickyCalls = 0;

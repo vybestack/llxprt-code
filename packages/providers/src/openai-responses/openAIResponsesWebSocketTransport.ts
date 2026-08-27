@@ -245,6 +245,7 @@ class RequestFrameSource {
   private readonly detachAbort: () => void;
   private readonly logger: TransportLogger | undefined;
   private readonly streamIdleTimeoutMs: number;
+  private readonly onIdleTimeout: () => void;
   private idleTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
@@ -253,9 +254,11 @@ class RequestFrameSource {
     onResponseEvent: (() => void) | undefined,
     logger: TransportLogger | undefined,
     streamIdleTimeoutMs: number,
+    onIdleTimeout: () => void,
   ) {
     this.logger = logger;
     this.streamIdleTimeoutMs = streamIdleTimeoutMs;
+    this.onIdleTimeout = onIdleTimeout;
     const detachMessage = socket.onMessage((data) =>
       this.handleMessage(data, onResponseEvent),
     );
@@ -399,9 +402,15 @@ class RequestFrameSource {
     if (this.ended || this.streamIdleTimeoutMs <= 0) return;
     this.idleTimer = setTimeout(() => {
       this.idleTimer = undefined;
+      // A terminal frame or earlier failure clears the timer, so an armed
+      // timer only fires on a genuinely idle stream; the predicate keeps a
+      // late firing from invalidating a socket that already settled.
+      const settled =
+        this.ended || this.receivedTerminal || this.failure !== undefined;
       this.fail(
         createStreamInterruptionError('Codex Responses WebSocket idle timeout'),
       );
+      if (!settled) this.onIdleTimeout();
     }, this.streamIdleTimeoutMs);
   }
 
@@ -477,12 +486,18 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
       throwIfAborted(options.abortSignal);
       socket = await this.acquireConnection(options);
       throwIfAborted(options.abortSignal);
+      // A const alias keeps the narrowed socket type inside the closures below.
+      const liveSocket = socket;
       const source = new RequestFrameSource(
-        socket,
+        liveSocket,
         options.abortSignal,
         options.onResponseEvent,
         this.config.logger,
         this.streamIdleTimeoutMs,
+        // The consumer may be suspended at a yield when the idle timer fires,
+        // so the source's failure alone never closes the socket; invalidate
+        // eagerly so a stalled stream cannot hold the connection open.
+        () => this.invalidate(liveSocket),
       );
       try {
         throwIfAborted(options.abortSignal);
