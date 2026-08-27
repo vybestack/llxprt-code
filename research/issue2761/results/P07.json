@@ -11,14 +11,14 @@
     "observation": {
       "budgetForm": {
         "thoughtPartCount": 1,
-        "thoughtPartLength": 966,
-        "thoughtTextPreview": "**My Thought Process on the Bat and Ball Riddle**\n\nOkay, so the user's presented a classic puzzle, a word problem really",
+        "thoughtPartLength": 792,
+        "thoughtTextPreview": "**My Approach to the Bat and Ball Problem**\n\nOkay, here's how I'd break down this classic problem. First, I need to real",
         "partKinds": [
           "text",
           "text"
         ],
         "finishReason": "MAX_TOKENS",
-        "thoughtsTokenCount": 147,
+        "thoughtsTokenCount": 151,
         "wire": {
           "httpStatus": 200,
           "providerError": null,
@@ -30,17 +30,24 @@
       },
       "levelForm": {
         "thoughtPartCount": 1,
-        "thoughtPartLength": 653,
-        "thoughtTextPreview": "**My Initial Breakdown of the Problem**\n\nOkay, so the challenge is this: a bat and a ball together cost $1.10. The bat i",
+        "thoughtPartLength": 849,
+        "thoughtTextPreview": "**My Initial Breakdown of the Problem**\n\nOkay, so the challenge is this: a bat and a ball together cost $1.10. We're als",
         "partKinds": [
           "text",
           "text"
         ],
         "finishReason": "MAX_TOKENS",
         "thoughtsTokenCount": 142,
-        "wire": null
+        "wire": {
+          "httpStatus": 200,
+          "providerError": null,
+          "thinkingConfigOnWire": {
+            "thinkingLevel": "low",
+            "includeThoughts": true
+          }
+        }
       },
-      "note": "Sent with no llxprt-side reasoning translation, to expose what a plain thinkingConfig does across the adapter boundary."
+      "note": "Both forms sent with no llxprt-side reasoning translation, both through the recording proxy, exposing what a plain thinkingConfig does across the adapter boundary."
     }
   },
   "aisdk": {
@@ -49,27 +56,32 @@
     "observation": {
       "budgetForm": {
         "reasoningPartCount": 1,
-        "reasoningPartLength": 680,
-        "reasoningTextPreview": "**My Initial Analysis and Approach to the Bat and Ball Problem**\n\nOkay, let's break this down. The problem presents a cl",
+        "reasoningPartLength": 833,
+        "reasoningTextPreview": "**My Initial Breakdown of the Problem**\n\nOkay, so here's what I'm looking at: a classic little riddle. It's a bat and ba",
         "content": [
           {
             "type": "reasoning",
-            "length": 680,
-            "preview": "**My Initial Analysis and Approach to the Bat and Ball Problem**\n\nOkay, let's break this down. The problem presents a classic riddle: a bat and a ball together "
+            "length": 833,
+            "preview": "**My Initial Breakdown of the Problem**\n\nOkay, so here's what I'm looking at: a classic little riddle. It's a bat and ball problem, totaling $1.10. The tricky b"
           },
           {
             "type": "text",
-            "length": 324,
-            "preview": "To find the answer, let’s break it down using basic algebra.\n\n1.  **Define the variables:**\n    *   Let $B$ be the price of the ball.\n    *   Let the bat be $B ",
+            "length": 331,
+            "preview": "To find the answer, let’s break it down using basic algebra.\n\n**1. Define your variables:**\n*   Let **$B$** be the cost of the ball.\n*   Let the bat be **$B + 1",
             "providerMetadata": {
               "google": {
-                "thoughtSignature": "ErUECrIEARFNMg/X++C2RRVwNljBqiToeKmkvxDuNdatRc1n4TmE6KC6Iyzt3nt/b+tZIu6JkFSeH+1wksJryuqdn3R3bb7jg0vjG9rqaS3Th2Zwg2hHpIxaLlyg8SaMxYrWJSDVvwHKhWG4U1eLbH6C3g6iUxkNmrZcavlSuEzPduW8QLMuJH/HrD5mAe9V4S2D/L3U5hXxyIkaiuHL9msnfJbYhJFrwk+Ik0HuxsXwq6FFnxrJXbu5Ka7UPrONCNAZE9TEzh3qHG4uSIesN6kJYMU4gYt+tzICY3gzsQvL/+xp3a491rJUU8RDBK7WPb4g1KpQ7laMcppAMTH5M4OxLWYXyVY0HMhasrSaozxq0U2jdo+291UYPotE62uhmKxg8WVhCiprXTKmR9IQdvitPrGVbFydxaMfTa5PZFHcxn02dMvWQFEdoeiYYk8vqzTI0mn+dobMNn289Mtl8HoQT+0IfXiO/TOV5/ydThxuEPxoex+BoX8UvLtNmE6lkh7IoMTs6Ig2YTZ7TCbeOAn61Pd90ovk9I7OW7Es4z2yPYzzRI98Ukry6sZIdW+krtXdZ8YMr3agEHDUue/covPjPrR6R6QOgtUZvVZcMqVOtL3brcyQWNSkCOAxf96UKMS2OqyVSAHa2Lx0mEbffagCQrOTyfe03Svb1dmkWOYLivnet+4ShrRzoZ2935usF0FNh7ceHFnI69/OTGe3pAtVHQTGAuMizYou/iX9Z0w4ZllAjmzhAg=="
+                "thoughtSignature": {
+                  "present": true,
+                  "length": 780,
+                  "prefix": "EsYECsMEARFNMg/1",
+                  "isSentinel": false
+                }
               }
             }
           }
         ],
         "finishReason": "length",
-        "usageReasoningTokens": 138,
+        "usageReasoningTokens": 140,
         "warnings": [],
         "providerMetadataGoogle": {
           "promptFeedback": null,
@@ -78,9 +90,9 @@
           "safetyRatings": null,
           "serviceTier": null,
           "usageMetadata": {
-            "thoughtsTokenCount": 138,
+            "thoughtsTokenCount": 140,
             "promptTokenCount": 37,
-            "candidatesTokenCount": 114,
+            "candidatesTokenCount": 112,
             "totalTokenCount": 289,
             "promptTokensDetails": [
               {
@@ -102,27 +114,32 @@
       },
       "levelForm": {
         "reasoningPartCount": 1,
-        "reasoningPartLength": 609,
-        "reasoningTextPreview": "**My Initial Assessment and the Trap**\n\nOkay, so the prompt is a classic. \"A bat and a ball cost $1.10 together, and the",
+        "reasoningPartLength": 466,
+        "reasoningTextPreview": "**My Initial Breakdown of the Problem**\n\nOkay, so the prompt is pretty straightforward. I'm given a classic word problem",
         "content": [
           {
             "type": "reasoning",
-            "length": 609,
-            "preview": "**My Initial Assessment and the Trap**\n\nOkay, so the prompt is a classic. \"A bat and a ball cost $1.10 together, and the bat costs a dollar more than the ball. "
+            "length": 466,
+            "preview": "**My Initial Breakdown of the Problem**\n\nOkay, so the prompt is pretty straightforward. I'm given a classic word problem: a bat and a ball together cost $1.10, "
           },
           {
             "type": "text",
-            "length": 239,
-            "preview": "To find the answer, let’s use a little bit of algebra:\n\n1.  Let the cost of the **ball** be **$x$**.\n2.  Since the **bat** costs $1.00 more than the ball, the c",
+            "length": 342,
+            "preview": "To find the answer, let's break it down with simple algebra.\n\nLet **$B$** be the cost of the ball.\nSince the bat costs $1.00 more than the ball, the cost of the",
             "providerMetadata": {
               "google": {
-                "thoughtSignature": "EukECuYEARFNMg9SeNeGAl9lKMQC9Tr6P6Gk/dAT9h9mU6uKenPj4x+vw1Ba/cDFzJqUjxIq1kpD3hlal+EKRCDZeV4MO/8hMCsGAl4P4D1IOElCO0chpSk5dxJLRacwNFGSB35qcRs6PMqWvdxrQZNVb7UMFuLf/UI73EGIxvvmDvD5hWeeW5ElXh3xGZQPow9YUc39JdPSJbxK5mq8cGgL7/KWVQ28ztmBVbuTHWwfL3CP2DVmdpp1uMQTD/UIZ3WGvlrKia0vQscZFu5m243DiXLdHs6E52IMOxWrDQ+TTFHA1VF2JphISFJQEdS9Dkjp74ajrZcnyT6QSVvbnmYZfIKPYcIyVNmiK0NlUpZBQiFyYeI7NganDxUqW13WSxqiVcQ2ySy3drBj5DASSDvHbR/e9I+/DaG8cTU79Nn19ukgGG2a8R3xe23Y1azvIq9lK39bSjxGRgyXXiInODGU1rQs0xBhATJd5eOWQOTh3DrN7/qWnpabf+cdQfX77IeZRU1qS7chyCkiiUx3p3Go+u0+rxp8hSQv1N8wXTuGNvyRckO2imQoY/aMBmQmSK8oui2eproyUPqMR4R7hkbzmUoio++5xCj2rZ1s+ABhf7TgUK+JFM+JYZjYQobOgo8HaLAi1ImYP8bPgvylCmXzOj5HPXuylzSEee67AEmo0FogIJUQoSMuqZh8NiDsDsnmiW7QKHABb17ejFujoncW5MG8m0UnQ2RncDNXr3I3D+y1tPhWx67GGp/r2C07n5GbBql96eF3qelGX9b9K5EzhTaIsrCBgadPgtFul3OqYYvpTa5BDYOLxgY="
+                "thoughtSignature": {
+                  "present": true,
+                  "length": 716,
+                  "prefix": "EpUECpIEARFNMg8T",
+                  "isSentinel": false
+                }
               }
             }
           }
         ],
         "finishReason": "length",
-        "usageReasoningTokens": 161,
+        "usageReasoningTokens": 131,
         "warnings": [],
         "providerMetadataGoogle": {
           "promptFeedback": null,
@@ -131,9 +148,9 @@
           "safetyRatings": null,
           "serviceTier": null,
           "usageMetadata": {
-            "thoughtsTokenCount": 161,
+            "thoughtsTokenCount": 131,
             "promptTokenCount": 37,
-            "candidatesTokenCount": 91,
+            "candidatesTokenCount": 121,
             "totalTokenCount": 289,
             "promptTokensDetails": [
               {
@@ -144,11 +161,18 @@
           }
         },
         "rawResponseBodyFinishReason": "MAX_TOKENS",
-        "wire": null
+        "wire": {
+          "httpStatus": 200,
+          "providerError": null,
+          "thinkingConfigOnWire": {
+            "includeThoughts": true,
+            "thinkingLevel": "low"
+          }
+        }
       },
-      "note": "Reasoning parts arrive as `reasoning` content; reasoningTokens is the AI SDK mapping of usageMetadata.thoughtsTokenCount."
+      "note": "Reasoning parts arrive as `reasoning` content; reasoningTokens is the AI SDK mapping of usageMetadata.thoughtsTokenCount. Both forms ran through the recording proxy."
     }
   },
   "verdict": "parity",
-  "finding": "Budget form: @google/genai surfaced 1 thought part(s) (147 thoughtsTokenCount); the AI SDK surfaced 1 reasoning part(s) (138 reasoningTokens). Level form: genai 1 thought part(s), AI SDK 1 reasoning part(s). On the wire, genai sent thinkingConfig={\"thinkingBudget\":512,\"includeThoughts\":true} and the AI SDK sent {\"thinkingBudget\":512,\"includeThoughts\":true}. Both put the config in generationConfig.thinkingConfig, so the translation geminiReasoningTranslation performs still has a home. Both surfaced thinking content and a thinking-token count, so the ThinkingBlock geminiResponseMapper emits can still be built."
+  "finding": "Budget form: @google/genai surfaced 1 thought part(s) (151 thoughtsTokenCount); the AI SDK surfaced 1 reasoning part(s) (140 reasoningTokens). Level form: genai 1 thought part(s), AI SDK 1 reasoning part(s). On the wire, budget form: genai sent generationConfig.thinkingConfig={\"thinkingBudget\":512,\"includeThoughts\":true} and the AI SDK sent {\"thinkingBudget\":512,\"includeThoughts\":true}. Level form: genai sent generationConfig.thinkingConfig={\"thinkingLevel\":\"low\",\"includeThoughts\":true} and the AI SDK sent {\"includeThoughts\":true,\"thinkingLevel\":\"low\"}. Budget form reached generationConfig.thinkingConfig on both, so the budget translation still has a wire home. Level form reached generationConfig.thinkingConfig on both, so thinkingLevel transport is proven on the wire for both forms. Both surfaced thinking content and a thinking-token count, so the ThinkingBlock geminiResponseMapper emits can still be built."
 }

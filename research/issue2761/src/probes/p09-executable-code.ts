@@ -221,9 +221,11 @@ export const p09ExecutableCode: Probe = {
         `tool-call "${(a.toolCalls ?? [])[0]?.toolName ?? '?'}" ` +
         `(providerExecuted: ${(a.toolCalls ?? [])[0]?.providerExecuted ?? false}) and a ` +
         `tool-result carrying the output. The executableCode -> CodeBlock and ` +
-        `codeExecutionResult -> tool-response convention from neutralConverters maps ` +
-        `unchanged, with the SDK already stamping the code_execution name and ` +
-        `providerExecuted flag.`,
+        `codeExecutionResult -> tool-response convention in neutralConverters is ` +
+        `written against @google/genai Part shapes, so on the AI SDK path an adapter ` +
+        `re-targets it at tool-call/tool-result parts and parses the JSON-string ` +
+        `input. The payloads themselves are equivalent, and the SDK already ` +
+        `stamps the code_execution name and the providerExecuted flag.`,
     };
   },
 };

@@ -5,7 +5,8 @@
  */
 
 /**
- * Wire-capture helpers for the baseURL / custom-fetch / dump probe (P12).
+ * Wire-capture helpers for the baseURL / custom-fetch / dump probe (P12) and
+ * for the abort probe (P11).
  *
  * Two independent mechanisms, because the two adapters expose different
  * interception surfaces:
@@ -13,6 +14,12 @@
  *  - a local recording HTTP proxy, which works for BOTH adapters because both
  *    accept a base URL override; and
  *  - a recording `fetch`, which only `@ai-sdk/google` accepts.
+ *
+ * The proxy appends a `WireRecord` even when the downstream client disconnects
+ * before the relay finishes, so a stream that was aborted mid-flight still shows
+ * up in `records`. `relayCompleted` / `clientDisconnected` /
+ * `requestHeaders` are populated only by the proxy path; the recording fetch has
+ * no downstream stream to cut short, so those fields stay undefined there.
  */
 
 import { createServer, type IncomingMessage, type Server } from 'node:http';
@@ -24,11 +31,30 @@ export interface WireRecord {
   readonly method: string;
   readonly url: string;
   readonly requestHeaderNames: string[];
+  /** Header values as received by the proxy, for value-level checks. */
+  readonly requestHeaders?: Record<string, string>;
   readonly authCarrier: 'x-goog-api-key-header' | 'key-query-param' | 'none';
   readonly requestBody: unknown;
   readonly status: number;
   readonly responseContentType: string | null;
   readonly responseBodyPreview: string;
+  /**
+   * True when the proxy relayed the full upstream response to the client and
+   * called `res.end()`. False when the relay was cut short, which is exactly
+   * what a mid-stream abort looks like from the wire.
+   */
+  readonly relayCompleted?: boolean;
+  /**
+   * True when the downstream client closed the connection before the relay
+   * finished. Only the proxy path can observe this.
+   */
+  readonly clientDisconnected?: boolean;
+  /**
+   * True when the upstream read loop ended without draining the response body to the
+   * end, whether because the client left (and the reader was cancelled) or because
+   * the upstream stream itself errored.
+   */
+  readonly upstreamCutShort?: boolean;
 }
 
 function classifyAuthCarrier(
@@ -42,6 +68,17 @@ function classifyAuthCarrier(
     return 'key-query-param';
   }
   return 'none';
+}
+
+function collectHeaderValues(req: IncomingMessage): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [name, value] of Object.entries(req.headers)) {
+    if (value === undefined) {
+      continue;
+    }
+    out[name] = Array.isArray(value) ? value.join(', ') : value;
+  }
+  return out;
 }
 
 function parseJsonOrText(raw: string): unknown {
@@ -73,7 +110,9 @@ export interface RecordingProxy {
 /**
  * Starts a local proxy that forwards to the real Gemini endpoint and records
  * both directions. Streaming responses are relayed chunk-by-chunk so the SSE
- * behavior under test is not altered.
+ * behavior under test is not altered. A record is appended even if the relay was
+ * cut short, so a downstream abort shows up with `relayCompleted: false` and
+ * `clientDisconnected: true` instead of silently vanishing.
  */
 export async function startRecordingProxy(): Promise<RecordingProxy> {
   const records: WireRecord[] = [];
@@ -82,13 +121,14 @@ export async function startRecordingProxy(): Promise<RecordingProxy> {
     void (async () => {
       const path = req.url ?? '/';
       const requestBodyRaw = await readBody(req);
-      const headerNames = Object.keys(req.headers);
+      const requestHeaders = collectHeaderValues(req);
+      const headerNames = Object.keys(requestHeaders);
       const forwardHeaders: Record<string, string> = {};
-      for (const [name, value] of Object.entries(req.headers)) {
+      for (const [name, value] of Object.entries(requestHeaders)) {
         if (name === 'host' || name === 'connection' || value === undefined) {
           continue;
         }
-        forwardHeaders[name] = Array.isArray(value) ? value.join(', ') : value;
+        forwardHeaders[name] = value;
       }
 
       const upstream = await fetch(`${UPSTREAM_ORIGIN}${path}`, {
@@ -103,13 +143,68 @@ export async function startRecordingProxy(): Promise<RecordingProxy> {
       });
 
       let responsePreview = '';
+      let relayCompleted = false;
+      let clientDisconnected = false;
+      let upstreamDrained = false;
+
+      const finalize = (): void => {
+        records.push({
+          method: req.method ?? 'GET',
+          url: path,
+          requestHeaderNames: headerNames.sort(),
+          requestHeaders,
+          authCarrier: classifyAuthCarrier(headerNames, path),
+          requestBody: parseJsonOrText(requestBodyRaw),
+          status: upstream.status,
+          responseContentType: contentType,
+          responseBodyPreview: responsePreview.slice(0, 4000),
+          relayCompleted,
+          clientDisconnected,
+          upstreamCutShort: !upstreamDrained,
+        });
+      };
+
       if (upstream.body === null) {
-        res.end();
-      } else {
-        const reader = upstream.body.getReader();
+        relayCompleted = true;
+        upstreamDrained = true;
+        if (!res.destroyed) {
+          res.end();
+        }
+        finalize();
+        return;
+      }
+
+      res.on('close', () => {
+        // Emitted on normal completion too (after res.end), so only a close
+        // that happens before the relay finished counts as a disconnect.
+        if (!relayCompleted) {
+          clientDisconnected = true;
+        }
+      });
+
+      const reader = upstream.body.getReader();
+      try {
         for (;;) {
+          if (clientDisconnected || res.destroyed) {
+            // The downstream client went away before the relay finished. The
+            // reader.cancel() is what actually tells Google the request is being
+            // dropped; without it this read loop would keep pulling chunks.
+            void reader.cancel().catch(() => undefined);
+            break;
+          }
           const { done, value } = await reader.read();
           if (done) {
+            // A cancelled read also resolves as done; only a done that arrives
+            // while the client is still connected means the relay truly drained.
+            if (clientDisconnected) {
+              void reader.cancel().catch(() => undefined);
+              break;
+            }
+            upstreamDrained = true;
+            break;
+          }
+          if (clientDisconnected || res.destroyed) {
+            void reader.cancel().catch(() => undefined);
             break;
           }
           if (responsePreview.length < 4000) {
@@ -117,22 +212,28 @@ export async function startRecordingProxy(): Promise<RecordingProxy> {
           }
           res.write(Buffer.from(value));
         }
-        res.end();
+        if (upstreamDrained && !res.destroyed) {
+          // The ordinary path: upstream finished and the client is still
+          // attached, so the relay is complete and the response must be closed.
+          // Forgetting this leaves every proxied call hanging.
+          relayCompleted = true;
+          res.end();
+        } else if (!res.destroyed) {
+          res.end();
+        }
+      } catch {
+        clientDisconnected = clientDisconnected || res.destroyed;
+        void reader.cancel().catch(() => undefined);
+        if (!res.destroyed) {
+          res.end();
+        }
       }
-
-      records.push({
-        method: req.method ?? 'GET',
-        url: path,
-        requestHeaderNames: headerNames.sort(),
-        authCarrier: classifyAuthCarrier(headerNames, path),
-        requestBody: parseJsonOrText(requestBodyRaw),
-        status: upstream.status,
-        responseContentType: contentType,
-        responseBodyPreview: responsePreview.slice(0, 4000),
-      });
+      finalize();
     })().catch((error: unknown) => {
-      res.writeHead(502, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ proxyError: String(error) }));
+      if (!res.destroyed) {
+        res.writeHead(502, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ proxyError: String(error) }));
+      }
     });
   });
 
@@ -149,6 +250,28 @@ export async function startRecordingProxy(): Promise<RecordingProxy> {
         server.close((error) => (error ? rejectClose(error) : resolveClose()));
       }),
   };
+}
+
+/**
+ * A proxy record is appended only after the relay loop unwinds, which for an
+ * aborted stream happens a beat after the client stops reading. Callers that
+ * abort mid-stream must wait for the record rather than sampling the array
+ * immediately, or they see `undefined` and conclude nothing was observed.
+ */
+export async function waitForRecord(
+  proxy: RecordingProxy,
+  index: number,
+  timeoutMs = 5000,
+): Promise<WireRecord | undefined> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const record = proxy.records[index];
+    if (record !== undefined) {
+      return record;
+    }
+    await new Promise((done) => setTimeout(done, 50));
+  }
+  return proxy.records[index];
 }
 
 export interface RecordingFetch {
@@ -175,8 +298,10 @@ export function makeRecordingFetch(): RecordingFetch {
             ? input.toString()
             : input.url;
       const headerNames: string[] = [];
-      new Headers(init?.headers ?? {}).forEach((_value, name) => {
+      const requestHeaders: Record<string, string> = {};
+      new Headers(init?.headers ?? {}).forEach((value, name) => {
         headerNames.push(name);
+        requestHeaders[name] = value;
       });
       const bodyRaw = typeof init?.body === 'string' ? init.body : '';
       const response = await fetch(input as RequestInfo, init);
@@ -202,6 +327,7 @@ export function makeRecordingFetch(): RecordingFetch {
             method: init?.method ?? 'GET',
             url,
             requestHeaderNames: headerNames.sort(),
+            requestHeaders,
             authCarrier: classifyAuthCarrier(headerNames, url),
             requestBody: parseJsonOrText(bodyRaw),
             status: response.status,

@@ -10,8 +10,12 @@
  * llxprt's `GeminiProvider.createHttpOptions()` stamps a `User-Agent` and
  * merges user custom headers into `httpOptions.headers`. This probe records the
  * carrier form (`x-goog-api-key` header vs `?key=` query param) each
- * adapter actually sends, whether the custom header and User-Agent reach the
- * wire, and what a deliberately bad key produces on each side.
+ * adapter actually sends, and now compares header VALUES, not just names: whether
+ * the `User-Agent` actually carries the llxprt prefix that
+ * `GeminiProvider.createHttpOptions` stamps, and whether the custom header value
+ * matches what was sent. Header values are recorded through the proxy's
+ * `requestHeaders` and scrubbed by the harness redactor (which removes the API
+ * key from them). A deliberately bad key is also recorded on both sides.
  */
 
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider';
@@ -35,6 +39,18 @@ const PROMPT: LanguageModelV2Prompt = [
   { role: 'user', content: [{ type: 'text', text: PROMPT_TEXT }] },
 ];
 
+/** The prefix `GeminiProvider.createHttpOptions` stamps via llxprtUserAgent(). */
+const LLXPRT_UA_PREFIX = 'LLxprt-Code';
+
+function headerValue(record: { requestHeaders?: Record<string, string> }, name: string): string | null {
+  const headers = record.requestHeaders;
+  if (headers === undefined) {
+    return null;
+  }
+  const value = headers[name] ?? headers[name.toLowerCase()];
+  return value ?? null;
+}
+
 export const p01ApiKeyAuth: Probe = {
   id: 'P01',
   area: 'API-key auth',
@@ -55,14 +71,22 @@ export const p01ApiKeyAuth: Probe = {
         if (record === undefined) {
           throw new Error('no proxy record captured');
         }
+        const ua = headerValue(record, 'user-agent');
+        const custom = headerValue(record, CUSTOM_HEADER);
         return {
           method: record.method,
           url: record.url,
           status: record.status,
           authCarrier: record.authCarrier,
           requestHeaderNames: record.requestHeaderNames,
+          requestHeaders: record.requestHeaders,
           customHeaderOnWire: record.requestHeaderNames.includes(CUSTOM_HEADER),
           userAgentOnWire: record.requestHeaderNames.includes('user-agent'),
+          userAgentCarriesLlxprtPrefix:
+            ua !== null && ua.startsWith(LLXPRT_UA_PREFIX),
+          userAgentValue: ua,
+          customHeaderValueMatches: custom === 'p01',
+          customHeaderValue: custom,
           responseText: (response.text ?? '').slice(0, 80),
         };
       } finally {
@@ -84,14 +108,22 @@ export const p01ApiKeyAuth: Probe = {
         if (record === undefined) {
           throw new Error('no proxy record captured');
         }
+        const ua = headerValue(record, 'user-agent');
+        const custom = headerValue(record, CUSTOM_HEADER);
         return {
           method: record.method,
           url: record.url,
           status: record.status,
           authCarrier: record.authCarrier,
           requestHeaderNames: record.requestHeaderNames,
+          requestHeaders: record.requestHeaders,
           customHeaderOnWire: record.requestHeaderNames.includes(CUSTOM_HEADER),
           userAgentOnWire: record.requestHeaderNames.includes('user-agent'),
+          userAgentCarriesLlxprtPrefix:
+            ua !== null && ua.startsWith(LLXPRT_UA_PREFIX),
+          userAgentValue: ua,
+          customHeaderValueMatches: custom === 'p01',
+          customHeaderValue: custom,
           content: summarizeContent(result.content),
           requestBodySent: result.request?.body ?? null,
         };
@@ -186,6 +218,11 @@ export const p01ApiKeyAuth: Probe = {
       genai.observation.userAgentOnWire === true &&
       aisdk.observation.customHeaderOnWire === true &&
       aisdk.observation.userAgentOnWire === true;
+    const valuesPreserved =
+      genai.observation.userAgentCarriesLlxprtPrefix === true &&
+      genai.observation.customHeaderValueMatches === true &&
+      aisdk.observation.userAgentCarriesLlxprtPrefix === true &&
+      aisdk.observation.customHeaderValueMatches === true;
 
     return {
       id: 'P01',
@@ -198,7 +235,7 @@ export const p01ApiKeyAuth: Probe = {
       aisdk: aisdkResult,
       verdict:
         genaiOk && aisdkOk && genaiBadRejected && aisdkBadRejected
-          ? carriersMatch && headersPreserved
+          ? carriersMatch && headersPreserved && valuesPreserved
             ? 'parity'
             : 'partial'
           : 'gap',
@@ -208,15 +245,23 @@ export const p01ApiKeyAuth: Probe = {
         (carriersMatch ? ' (same form). ' : ' (different forms). ') +
         `Custom header reached the wire: genai=${genai.observation.customHeaderOnWire === true}, ` +
         `ai-sdk=${aisdk.observation.customHeaderOnWire === true}; ` +
+        `its VALUE matched what was sent (expected "p01"): ` +
+        `genai=${genai.observation.customHeaderValueMatches === true}, ` +
+        `ai-sdk=${aisdk.observation.customHeaderValueMatches === true}. ` +
         `llxprt User-Agent survived: genai=${genai.observation.userAgentOnWire === true}, ` +
-        `ai-sdk=${aisdk.observation.userAgentOnWire === true}. ` +
+        `ai-sdk=${aisdk.observation.userAgentOnWire === true}; ` +
+        `the value carries the ${LLXPRT_UA_PREFIX} prefix: ` +
+        `genai=${genai.observation.userAgentCarriesLlxprtPrefix === true}, ` +
+        `ai-sdk=${aisdk.observation.userAgentCarriesLlxprtPrefix === true} ` +
+        `(sent UA: genai "${String(genai.observation.userAgentValue)}", ai-sdk ` +
+        `"${String(aisdk.observation.userAgentValue)}"). ` +
         `A deliberately invalid key was rejected by genai=${genaiBadRejected} and ` +
         `ai-sdk=${aisdkBadRejected}. ` +
-        (headersPreserved
+        (headersPreserved && valuesPreserved
           ? 'The header stamping and custom-header merge in ' +
-            'GeminiProvider.createHttpOptions carries over unchanged.'
-          : 'At least one adapter dropped a header llxprt stamps today in ' +
-            'GeminiProvider.createHttpOptions, which an adapter would have to restore.'),
+            'GeminiProvider.createHttpOptions carries over unchanged, values included.'
+          : 'At least one adapter dropped or rewrote a header llxprt stamps today ' +
+            'in GeminiProvider.createHttpOptions, which an adapter would have to restore.'),
     };
   },
 };

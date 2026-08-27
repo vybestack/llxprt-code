@@ -18,7 +18,10 @@
  *      HTTP request left the process (proxy.records.length === 0).
  *   2. Mid-stream: prompt long enough for several chunks, abort right after the
  *      first chunk, record chunksSeen, how iteration ended (threw vs clean),
- *      class name if it threw, and ms from abort to termination.
+ *      class name if it threw, and ms from the abort() call to termination. Both
+ *      adapter sides route the mid-stream sub-case through the recording proxy, which
+ *      records `relayCompleted` / `clientDisconnected` / `upstreamCutShort`
+ *      so the wire can show whether the upstream read was genuinely cut short.
  */
 
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider';
@@ -35,7 +38,11 @@ import {
   type ProbeContext,
   type ProbeResult,
 } from '../harness.ts';
-import { startRecordingProxy } from '../recording.ts';
+import {
+  startRecordingProxy,
+  waitForRecord,
+  type WireRecord,
+} from '../recording.ts';
 
 const STREAM_PROMPT =
   'Write a long essay about the history of the Roman Empire, covering many topics ' +
@@ -77,7 +84,77 @@ interface MidStreamEvidence {
   threw: boolean;
   name: string;
   message: string;
+  /** The true abort-to-termination interval: abort() to loop exit. */
   msAbortToEnd: number;
+  /** Whether the proxy relayed the full response to a client that stayed. */
+  relayCompleted: boolean | null;
+  /** Whether the downstream client disconnected before the relay finished. */
+  clientDisconnected: boolean | null;
+  /** Whether the proxy's upstream read loop was cut short before the body drained. */
+  upstreamCutShort: boolean | null;
+}
+
+function summarizeRelay(record: WireRecord | undefined): {
+  relayCompleted: boolean | null;
+  clientDisconnected: boolean | null;
+  upstreamCutShort: boolean | null;
+} {
+  if (record === undefined) {
+    return {
+      relayCompleted: null,
+      clientDisconnected: null,
+      upstreamCutShort: null,
+    };
+  }
+  return {
+    relayCompleted: record.relayCompleted ?? null,
+    clientDisconnected: record.clientDisconnected ?? null,
+    upstreamCutShort: record.upstreamCutShort ?? null,
+  };
+}
+
+interface MidStreamBase {
+  readonly chunksSeen: number;
+  readonly endedCleanly: boolean;
+  readonly threw: boolean;
+  readonly name: string;
+  readonly message: string;
+  readonly msAbortToEnd: number;
+}
+
+/** Reads the first chunk, aborts, then drains until termination. */
+async function driveAbortedStream(
+  first: Promise<unknown>,
+  abort: () => void,
+  readNext: () => Promise<boolean>,
+): Promise<MidStreamBase> {
+  await first;
+  const abortedAt = Date.now();
+  abort();
+  let threw = false;
+  let name = '';
+  let message = '';
+  try {
+    for (;;) {
+      const more = await readNext();
+      if (!more) {
+        break;
+      }
+    }
+  } catch (error) {
+    threw = true;
+    name = captureError(error).name;
+    message = captureError(error).message.slice(0, 200);
+  }
+  const terminatedAt = Date.now();
+  return {
+    chunksSeen: 1,
+    endedCleanly: !threw,
+    threw,
+    name,
+    message,
+    msAbortToEnd: terminatedAt - abortedAt,
+  };
 }
 
 export const p11Abort: Probe = {
@@ -117,49 +194,35 @@ export const p11Abort: Probe = {
 
         await pause();
 
-        // 2. Mid-stream.
+        // 2. Mid-stream, through the proxy, abort after the first chunk.
         const streamController = new AbortController();
-        const stream = await client.models.generateContentStream({
-          model: ctx.modelGeneral,
-          contents: [{ role: 'user', parts: [{ text: STREAM_PROMPT }] }],
-          config: {
-            maxOutputTokens: 512,
-            abortSignal: streamController.signal,
+        const recordsBefore = proxy.records.length;
+        const iterator = (
+          await client.models.generateContentStream({
+            model: ctx.modelGeneral,
+            contents: [{ role: 'user', parts: [{ text: STREAM_PROMPT }] }],
+            config: {
+              maxOutputTokens: 512,
+              abortSignal: streamController.signal,
+            },
+          })
+        )[Symbol.asyncIterator]();
+
+        const mid = await driveAbortedStream(
+          iterator.next(),
+          () => streamController.abort(),
+          async () => {
+            const next = await iterator.next();
+            return !next.done;
           },
-        });
-        let chunksSeen = 0;
-        const startedAt = Date.now();
-        let terminatedAt = 0;
-        const mid: MidStreamEvidence = {
-          chunksSeen: 0,
-          endedCleanly: false,
-          threw: false,
-          name: '',
-          message: '',
-          msAbortToEnd: 0,
-        };
-        try {
-          for await (const _chunk of stream) {
-            chunksSeen += 1;
-            if (chunksSeen === 1) {
-              streamController.abort();
-            }
-          }
-          terminatedAt = Date.now();
-          mid.chunksSeen = chunksSeen;
-          mid.endedCleanly = true;
-        } catch (error) {
-          terminatedAt = Date.now();
-          mid.chunksSeen = chunksSeen;
-          mid.threw = true;
-          mid.name = captureError(error).name;
-          mid.message = captureError(error).message.slice(0, 200);
-        }
-        mid.msAbortToEnd = terminatedAt - startedAt;
+        );
 
         return {
           preDispatch: pre,
-          midStream: mid,
+          midStream: {
+            ...mid,
+            ...summarizeRelay(await waitForRecord(proxy, recordsBefore)),
+          },
           totalProxyRecords: proxy.records.length,
         };
       } finally {
@@ -203,8 +266,9 @@ export const p11Abort: Probe = {
 
         await pause();
 
-        // 2. Mid-stream.
+        // 2. Mid-stream, through the proxy too.
         const streamController = new AbortController();
+        const recordsBefore = proxy.records.length;
         const result = await model.doStream({
           prompt: [
             { role: 'user', content: [{ type: 'text', text: STREAM_PROMPT }] },
@@ -213,43 +277,22 @@ export const p11Abort: Probe = {
           abortSignal: streamController.signal,
         });
         const reader = result.stream.getReader();
-        let chunksSeen = 0;
-        const startedAt = Date.now();
-        let terminatedAt = 0;
-        const mid: MidStreamEvidence = {
-          chunksSeen: 0,
-          endedCleanly: false,
-          threw: false,
-          name: '',
-          message: '',
-          msAbortToEnd: 0,
-        };
-        try {
-          for (;;) {
-            const { done } = await reader.read();
-            if (done) {
-              break;
-            }
-            chunksSeen += 1;
-            if (chunksSeen === 1) {
-              streamController.abort();
-            }
-          }
-          terminatedAt = Date.now();
-          mid.chunksSeen = chunksSeen;
-          mid.endedCleanly = true;
-        } catch (error) {
-          terminatedAt = Date.now();
-          mid.chunksSeen = chunksSeen;
-          mid.threw = true;
-          mid.name = captureError(error).name;
-          mid.message = captureError(error).message.slice(0, 200);
-        }
-        mid.msAbortToEnd = terminatedAt - startedAt;
+
+        const mid = await driveAbortedStream(
+          reader.read(),
+          () => streamController.abort(),
+          async () => {
+            const next = await reader.read();
+            return !next.done;
+          },
+        );
 
         return {
           preDispatch: pre,
-          midStream: mid,
+          midStream: {
+            ...mid,
+            ...summarizeRelay(await waitForRecord(proxy, recordsBefore)),
+          },
           totalProxyRecords: proxy.records.length,
         };
       } finally {
@@ -263,7 +306,8 @@ export const p11Abort: Probe = {
       question:
         'When the AbortSignal is already aborted, does each adapter fail before ' +
         'any request leaves the process with an identifiable abort error, and when a ' +
-        'stream is aborted mid-flight does iteration terminate promptly with a clear error?',
+        'stream is aborted mid-flight does iteration terminate promptly, with wire ' +
+        'evidence that the upstream request was cut short?',
       models: [ctx.modelGeneral],
       genai,
       aisdk,
@@ -295,8 +339,7 @@ function judge(
     gPre.requestsLeftProcess === false &&
     aPre.threw === true &&
     aPre.requestsLeftProcess === false;
-  const bothMidThrew =
-    gMid.threw === true && aMid.threw === true;
+  const bothMidThrew = gMid.threw === true && aMid.threw === true;
 
   const verdict: ProbeResult['verdict'] =
     bothPreThrewNoRequest && bothMidThrew ? 'parity' : 'partial';
@@ -317,9 +360,23 @@ function judge(
       `${gMid.threw ? 'threw ' + gMid.name + ' in ' + gMid.msAbortToEnd + 'ms' : 'ended cleanly'}; ` +
       `the AI SDK saw ${aMid.chunksSeen} chunk(s) and ` +
       `${aMid.threw ? 'threw ' + aMid.name + ' in ' + aMid.msAbortToEnd + 'ms' : 'ended cleanly'}. ` +
-      `The AI SDK short-circuits an already-aborted signal on its own (fetch ` +
-      `level), so llxprt's throwIfAborted guard would be redundant on that path; ` +
-      `@google/genai only registers an abort listener and lets the call through, ` +
-      `which is exactly why that guard exists today.`,
+      `On the wire, genai relayCompleted=${String(gMid.relayCompleted)}, ` +
+      `clientDisconnected=${String(gMid.clientDisconnected)}, ` +
+      `upstreamCutShort=${String(gMid.upstreamCutShort)}; ` +
+      `the AI SDK relayCompleted=${String(aMid.relayCompleted)}, ` +
+      `clientDisconnected=${String(aMid.clientDisconnected)}, ` +
+      `upstreamCutShort=${String(aMid.upstreamCutShort)}. ` +
+      (gMid.clientDisconnected === true || aMid.clientDisconnected === true
+        ? 'The proxy observed the mid-stream abort as a downstream disconnect and ' +
+          'cut the upstream read short, so the abort did reach the wire for that side. '
+        : 'The proxy did not observe a downstream disconnect for this run, so the wire ' +
+          'cannot confirm upstream cancellation there; what is recorded is iteration ' +
+          'terminating promptly after the abort. ') +
+      `The AI SDK short-circuits an already-aborted signal on its own, at the ` +
+      `fetch level, while @google/genai lets the call go out regardless. That ` +
+      `is the behavior geminiAbort.throwIfAborted compensates for, though note ` +
+      `its narrow use today: it is called from the server-tool and auth paths ` +
+      `(GeminiProvider.resolveAuthWithAbortCheck and geminiServerTools), not ` +
+      `from the ordinary chat generation path this probe exercises.`,
   };
 };

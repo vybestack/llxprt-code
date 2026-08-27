@@ -29,7 +29,7 @@
             "maxOutputTokens": 8
           }
         },
-        "responseBodyPreview": "{\n  \"candidates\": [\n    {\n      \"content\": {\n        \"parts\": [\n          {\n            \"text\": \"ok\",\n            \"thoughtSignature\": \"EnEKbwERTTIPcO2SYAOKrN4C4",
+        "responseBodyPreview": "{\n  \"candidates\": [\n    {\n      \"content\": {\n        \"parts\": [\n          {\n            \"text\": \"ok\",\n            \"thoughtSignature\": \"EnEKbwERTTIPdmPPHM10rymtF",
         "contentType": "application/json; charset=UTF-8"
       },
       "customFetchHook": {
@@ -49,8 +49,11 @@
           "timeout",
           "extraBody"
         ],
-        "hasFetchMember": false,
-        "note": "GoogleGenAIOptions has no fetch member; HttpOptions has no fetch member either, so the only interception surface is the baseUrl / headers / timeout trio."
+        "optionsDeclarationFile": "node_modules/@google/genai/dist/genai.d.ts",
+        "httpOptionsDeclarationFile": "node_modules/@google/genai/dist/genai.d.ts",
+        "googleGenAIOptionsHasFetch": false,
+        "httpOptionsHasFetch": false,
+        "note": "Member lists are read from the installed genai.d.ts declarations at probe time, not transcribed by hand."
       },
       "rawBodyAvailability": {
         "responseObjectWireBodyMember": "none (only sdkHttpResponse.responseInternal)"
@@ -81,7 +84,7 @@
             }
           ]
         },
-        "responseBodyPreview": "{\n  \"candidates\": [\n    {\n      \"content\": {\n        \"parts\": [\n          {\n            \"text\": \"ok\",\n            \"thoughtSignature\": \"EnEKbwERTTIPwRZkelqL5dhRa",
+        "responseBodyPreview": "{\n  \"candidates\": [\n    {\n      \"content\": {\n        \"parts\": [\n          {\n            \"text\": \"ok\",\n            \"thoughtSignature\": \"EnEKbwERTTIPEBLDtDCKnHRVv",
         "contentType": "application/json; charset=UTF-8"
       },
       "customFetch": {
@@ -97,5 +100,5 @@
     }
   },
   "verdict": "parity",
-  "finding": "Base-URL override: @google/genai was redirected (proxy path /v1beta/models/gemini-3.1-flash-lite:generateContent, status 200); the AI SDK was redirected too (proxy path /v1beta/models/gemini-3.1-flash-lite:generateContent, status 200), so both accept a custom baseURL. Custom fetch: only the AI SDK exposes one (makeRecordingFetch saw both directions: true); @google/genai has no fetch member in GoogleGenAIOptions (members [vertexai,project,location,apiKey,apiVersion,googleAuthOptions,httpOptions]) nor in HttpOptions (members [baseUrl,apiVersion,headers,timeout,extraBody]), so baseURL is its only interception surface. Raw bodies for dumps: the AI SDK returns request.body AND response.body directly (true), while @google/genai exposes only none (only sdkHttpResponse.responseInternal) on the response object. dumpSDKContext today writes the SDK parameter object; an AI SDK adapter would make dumps BETTER (real wire body with status/headers), not worse or equivalent."
+  "finding": "Base-URL override: @google/genai was redirected (proxy path /v1beta/models/gemini-3.1-flash-lite:generateContent, status 200); the AI SDK was redirected too (proxy path /v1beta/models/gemini-3.1-flash-lite:generateContent, status 200), so both accept a custom baseURL. Custom fetch: only the AI SDK exposes one (makeRecordingFetch saw both directions: true). Read out of the installed @google/genai genai.d.ts at probe time, GoogleGenAIOptions declares [vertexai,project,location,apiKey,apiVersion,googleAuthOptions,httpOptions] and HttpOptions declares [baseUrl,apiVersion,headers,timeout,extraBody]; neither declares a fetch member (noFetchMember=true), so baseURL is its only interception surface. Raw bodies for dumps: the AI SDK returns request.body AND response.body directly (true), while @google/genai exposes only none (only sdkHttpResponse.responseInternal) on the response object. dumpSDKContext today writes the SDK parameter object; an AI SDK adapter would make dumps BETTER (real wire body with status/headers), not worse or equivalent."
 }

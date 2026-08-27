@@ -129,17 +129,14 @@ function summarizeRecord(record: WireRecord | undefined): {
   };
 }
 
-/** One sub-case worth of `@google/genai` observations. */
+/** One sub-case worth of `@google/genai` observations, always through the proxy. */
 async function runGenaiCase(
   ctx: ProbeContext,
   thinkingConfig: Record<string, unknown>,
-  useProxy: boolean,
 ): Promise<Record<string, unknown>> {
   const proxy = await startRecordingProxy();
   try {
-    const client = createGenAI(ctx.apiKey, {
-      ...(useProxy ? { baseUrl: proxy.origin } : {}),
-    });
+    const client = createGenAI(ctx.apiKey, { baseUrl: proxy.origin });
     const userTurn: Content = { role: 'user', parts: [{ text: THINKING_PROMPT }] };
     const response = await client.models.generateContent({
       model: ctx.modelGeneral,
@@ -154,23 +151,22 @@ async function runGenaiCase(
     });
     return {
       ...summarizeGenaiThoughts(response),
-      wire: useProxy ? summarizeRecord(proxy.records[0]) : null,
+      wire: summarizeRecord(proxy.records[0]),
     };
   } finally {
     await proxy.close();
   }
 }
 
-/** One sub-case worth of AI SDK observations. */
+/** One sub-case worth of AI SDK observations, always through the proxy. */
 async function runAisdkCase(
   ctx: ProbeContext,
   thinkingConfig: Record<string, unknown>,
-  useProxy: boolean,
 ): Promise<Record<string, unknown>> {
   const proxy = await startRecordingProxy();
   try {
     const provider = createAISDK(ctx.apiKey, {
-      ...(useProxy ? { baseURL: `${proxy.origin}/v1beta` } : {}),
+      baseURL: `${proxy.origin}/v1beta`,
     });
     const prompt: LanguageModelV2Prompt = [
       { role: 'user', content: [{ type: 'text', text: THINKING_PROMPT }] },
@@ -207,7 +203,7 @@ async function runAisdkCase(
           | undefined;
         return body?.candidates?.[0]?.finishReason ?? null;
       })(),
-      wire: useProxy ? summarizeRecord(proxy.records[0]) : null,
+      wire: summarizeRecord(proxy.records[0]),
     };
   } finally {
     await proxy.close();
@@ -219,32 +215,36 @@ export const p07ThinkingConfig: Probe = {
   area: 'Thinking configuration',
 
   async run(ctx: ProbeContext): Promise<ProbeResult> {
-    // Budget form: wire capture on both sides so the config object is concrete.
+    // Both forms through the proxy on both sides, so the level-form wire
+    // evidence exists too: producing thinking output is NOT transport proof, because
+    // Gemini 3 reasons by default.
     const genai = await observe(ADAPTER_GENAI, async () => {
-      const budget = await runGenaiCase(ctx, BUDGET_FORM, true);
+      const budget = await runGenaiCase(ctx, BUDGET_FORM);
       await pause();
-      const level = await runGenaiCase(ctx, LEVEL_FORM, false);
+      const level = await runGenaiCase(ctx, LEVEL_FORM);
       return {
         budgetForm: budget,
         levelForm: level,
         note:
-          'Sent with no llxprt-side reasoning translation, to expose what a ' +
-          'plain thinkingConfig does across the adapter boundary.',
+          'Both forms sent with no llxprt-side reasoning translation, both ' +
+          'through the recording proxy, exposing what a plain thinkingConfig ' +
+          'does across the adapter boundary.',
       };
     });
 
     await pause();
 
     const aisdk = await observe(ADAPTER_AISDK, async () => {
-      const budget = await runAisdkCase(ctx, BUDGET_FORM, true);
+      const budget = await runAisdkCase(ctx, BUDGET_FORM);
       await pause();
-      const level = await runAisdkCase(ctx, LEVEL_FORM, false);
+      const level = await runAisdkCase(ctx, LEVEL_FORM);
       return {
         budgetForm: budget,
         levelForm: level,
         note:
           'Reasoning parts arrive as `reasoning` content; reasoningTokens is the ' +
-          'AI SDK mapping of usageMetadata.thoughtsTokenCount.',
+          'AI SDK mapping of usageMetadata.thoughtsTokenCount. Both forms ran ' +
+          'through the recording proxy.',
       };
     });
 
@@ -257,8 +257,13 @@ export const p07ThinkingConfig: Probe = {
       levelForm?: Record<string, unknown>;
     };
 
-    const gWire = nestedWire(g.budgetForm);
-    const aWire = nestedWire(a.budgetForm);
+    const gBudgetWire = nestedWire(g.budgetForm);
+    const aBudgetWire = nestedWire(a.budgetForm);
+    const gLevelWire = nestedWire(g.levelForm);
+    const aLevelWire = nestedWire(a.levelForm);
+    const budgetWireParity = gBudgetWire !== null && aBudgetWire !== null;
+    const levelWireParity = gLevelWire !== null && aLevelWire !== null;
+
     const bothProducedThoughts =
       genai.ok &&
       aisdk.ok &&
@@ -267,7 +272,9 @@ export const p07ThinkingConfig: Probe = {
       numberOf(g.levelForm?.thoughtPartCount) > 0 &&
       numberOf(a.levelForm?.reasoningPartCount) > 0;
 
-    const budgetWireParity = gWire !== null && aWire !== null;
+    // Wire evidence for the relevant form decides the verdict: outputting thinking
+    // content is not transport proof, because Gemini 3 reasons by default.
+    const wireParity = budgetWireParity && levelWireParity;
 
     const question =
       'Do both adapters carry thinkingConfig to the Gemini wire and surface ' +
@@ -296,7 +303,7 @@ export const p07ThinkingConfig: Probe = {
       models: [ctx.modelGeneral],
       genai,
       aisdk,
-      verdict: bothProducedThoughts && budgetWireParity ? 'parity' : 'partial',
+      verdict: bothProducedThoughts && wireParity ? 'parity' : 'partial',
       finding:
         `Budget form: @google/genai surfaced ` +
         `${numberOf(g.budgetForm?.thoughtPartCount)} thought part(s) ` +
@@ -305,13 +312,22 @@ export const p07ThinkingConfig: Probe = {
         `(${numberOf(a.budgetForm?.usageReasoningTokens)} reasoningTokens). ` +
         `Level form: genai ${numberOf(g.levelForm?.thoughtPartCount)} thought part(s), ` +
         `AI SDK ${numberOf(a.levelForm?.reasoningPartCount)} reasoning part(s). ` +
-        `On the wire, genai sent thinkingConfig=${jsonOfNested(gWire)} and the AI SDK ` +
-        `sent ${jsonOfNested(aWire)}. ` +
+        `On the wire, budget form: genai sent ` +
+        `generationConfig.thinkingConfig=${jsonOfNested(gBudgetWire)} and the AI SDK ` +
+        `sent ${jsonOfNested(aBudgetWire)}. ` +
+        `Level form: genai sent generationConfig.thinkingConfig=` +
+        `${jsonOfNested(gLevelWire)} and the AI SDK sent ` +
+        `${jsonOfNested(aLevelWire)}. ` +
         (budgetWireParity
-          ? 'Both put the config in generationConfig.thinkingConfig, so the ' +
-            'translation geminiReasoningTranslation performs still has a home. '
-          : 'The wire capture did not show the config on both sides, so the ' +
-            'transport claim is unproven for this run. ') +
+          ? 'Budget form reached generationConfig.thinkingConfig on both, so the ' +
+            'budget translation still has a wire home. '
+          : 'Budget-form wire capture did not show the config on both sides, so ' +
+            'budget transport is unproven for this run. ') +
+        (levelWireParity
+          ? 'Level form reached generationConfig.thinkingConfig on both, so ' +
+            'thinkingLevel transport is proven on the wire for both forms. '
+          : 'Level-form wire capture did not show the config on both sides, so ' +
+            'thinkingLevel transport is unproven for this run. ') +
         (bothProducedThoughts
           ? 'Both surfaced thinking content and a thinking-token count, so the ' +
             'ThinkingBlock geminiResponseMapper emits can still be built.'

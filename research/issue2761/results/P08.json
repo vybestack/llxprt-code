@@ -14,7 +14,7 @@
         "ok": true,
         "httpStatus": 200,
         "providerError": null,
-        "textPreview": "Black and white.",
+        "textPreview": "Black white squares.",
         "wirePartKeys": [
           "inlineData"
         ],
@@ -36,7 +36,7 @@
         "plainTextAccepted": true,
         "httpStatus": 200
       },
-      "note": "Ran through the recording proxy so the wire part keys and fileUri forwarding are captured whether accepted or rejected."
+      "note": "Ran both sub-cases through the recording proxy so the wire part keys and fileUri forwarding are captured for the genai side, whether accepted or rejected."
     }
   },
   "aisdk": {
@@ -48,7 +48,11 @@
         "ok": true,
         "httpStatus": 200,
         "providerError": null,
-        "textPreview": "Black and white.",
+        "textPreview": "Black white grid.",
+        "wirePartKeys": [
+          "inlineData"
+        ],
+        "wireUriForwarded": false,
         "sentDataKind": "base64"
       },
       "uri": {
@@ -57,6 +61,10 @@
         "httpStatus": 429,
         "providerError": "Resource has been exhausted (e.g. check quota).",
         "textPreview": "",
+        "wirePartKeys": [
+          "fileData"
+        ],
+        "wireUriForwarded": true,
         "sentDataKind": "url"
       },
       "supportedUrlsSummary": [
@@ -69,10 +77,10 @@
             ""
           ]
         }
-      ]
+      ],
+      "note": "BOTH sub-cases ran through the recording proxy, so the wire part keys and fileUri forwarding are captured for the AI SDK side too."
     }
   },
-  "verdict": "parity",
-  "transientHandled": true,
-  "finding": "Inline base64 PNG: @google/genai accepted (wire part keys [inlineData]); AI SDK accepted (ok). URI fileData: @google/genai rejected (wire fileData.uri forwarded: true); AI SDK rejected (Resource has been exhausted (e.g. check quota).). Both adapters put the URL on fileData.fileUri and got the same verdict from the endpoint, so the URI transport is equivalent. The shared RESOURCE_EXHAUSTED is the AI Studio endpoint refusing an arbitrary fileUri host, not a quota problem: a plain text call succeeded immediately afterwards. The MediaBlock encoding:url -> fileData and encoding:base64 -> inlineData mapping in neutralConverters maps unchanged."
+  "verdict": "partial",
+  "finding": "INCONCLUSIVE (HTTP 429 from the provider, not a capability result): Inline base64: @google/genai accepted (wire part keys [inlineData]); AI SDK accepted (wire part keys [inlineData]). URI fileData TRANSPORT: @google/genai sent the URL on fileData.fileUri=true; AI SDK sent it on fileData.fileUri=true. URI fileData ENDPOINT-ACCEPTANCE: unproven in this run. Both sides got a 429 (genai) / 429 (ai-sdk), and a 429 cannot be attributed to the arbitrary fileUri host: the plain-text control call that succeeded afterwards (plainTextAccepted=true, HTTP 200) only rules out a general generate-content quota, never a separate media or file-URI quota. Control call (context only, not proof): plain text succeeded after the URI case genai=true (HTTP 200). The MediaBlock encoding:url -> fileData and encoding:base64 -> inlineData mapping in neutralConverters is transported unchanged by both adapters."
 }

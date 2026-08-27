@@ -61,6 +61,54 @@ export function languageModel(
   return provider.languageModel(modelId);
 }
 
+/** The sentinel llxprt injects today, and the one `@ai-sdk/google` ships. */
+export const THOUGHT_SIGNATURE_SENTINEL = 'skip_thought_signature_validator';
+
+/** The redacted summary shape P06 is built around. */
+export interface ThoughtSignatureSummary {
+  readonly present: boolean;
+  readonly length: number;
+  readonly prefix: string | null;
+  readonly isSentinel: boolean;
+}
+
+export function summarizeThoughtSignature(value: unknown): ThoughtSignatureSummary {
+  if (typeof value !== 'string' || value.length === 0) {
+    return { present: false, length: 0, prefix: null, isSentinel: false };
+  }
+  return {
+    present: true,
+    length: value.length,
+    prefix: value.slice(0, 16),
+    isSentinel: value === THOUGHT_SIGNATURE_SENTINEL,
+  };
+}
+
+/**
+ * Recursively replaces every `thoughtSignature` string inside provider metadata
+ * (the AI SDK nests it at `google.thoughtSignature`) with the length-plus-prefix
+ * summary, so a full signature blob is never persisted. The rest of the metadata
+ * object is preserved verbatim.
+ */
+export function summarizeProviderMetadata(metadata: unknown): unknown {
+  if (Array.isArray(metadata)) {
+    return metadata.map((entry) => summarizeProviderMetadata(entry));
+  }
+  if (metadata === null || typeof metadata !== 'object') {
+    return metadata;
+  }
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(
+    metadata as Record<string, unknown>,
+  )) {
+    out[key] =
+      key === 'thoughtSignature' && typeof value === 'string'
+        ? summarizeThoughtSignature(value)
+        : summarizeProviderMetadata(value);
+  }
+  return out;
+}
+
 /** Collapses `doStream` output into an inspectable list of parts. */
 export async function drainStream(
   stream: ReadableStream<LanguageModelV2StreamPart>,
@@ -92,14 +140,14 @@ export function summarizeContent(
           type: 'text',
           length: part.text.length,
           preview: part.text.slice(0, 160),
-          providerMetadata: part.providerMetadata,
+          providerMetadata: summarizeProviderMetadata(part.providerMetadata),
         };
       case 'reasoning':
         return {
           type: 'reasoning',
           length: part.text.length,
           preview: part.text.slice(0, 160),
-          providerMetadata: part.providerMetadata,
+          providerMetadata: summarizeProviderMetadata(part.providerMetadata),
         };
       case 'tool-call':
         return {
@@ -108,7 +156,7 @@ export function summarizeContent(
           toolName: part.toolName,
           input: part.input,
           providerExecuted: part.providerExecuted,
-          providerMetadata: part.providerMetadata,
+          providerMetadata: summarizeProviderMetadata(part.providerMetadata),
         };
       case 'tool-result':
         return {
@@ -116,7 +164,7 @@ export function summarizeContent(
           toolCallId: part.toolCallId,
           toolName: part.toolName,
           result: part.result,
-          providerMetadata: part.providerMetadata,
+          providerMetadata: summarizeProviderMetadata(part.providerMetadata),
         };
       case 'file':
         return {
@@ -145,9 +193,9 @@ export function summarizeStreamParts(
         type: part.type,
         id: part.id,
         deltaLength: part.delta.length,
-        providerMetadata: part.providerMetadata,
+        providerMetadata: summarizeProviderMetadata(part.providerMetadata),
       };
     }
-    return part as unknown as Record<string, unknown>;
+    return summarizeProviderMetadata(part) as unknown as Record<string, unknown>;
   });
 }

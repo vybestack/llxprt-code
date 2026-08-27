@@ -17,8 +17,10 @@
  *      wire bodies would contain.
  *   3. Custom-fetch interception: `makeRecordingFetch()` with `createAISDK`
  *      proves the ai-sdk middleware path. For @google/genai the question is
- *      answered by MACHINE evidence from `@google/genai@1.30.0/dist/genai.d.ts`
- *      (GoogleGenAIOptions + HttpOptions members recorded), not an assertion.
+ *      answered by MACHINE evidence read from the INSTALLED
+ *      `@google/genai@1.30.0/dist/genai.d.ts` at probe time
+ *      (GoogleGenAIOptions + HttpOptions members extracted from the declaration,
+ *      and checked for a fetch member), not an assertion.
  *   4. Raw-body availability to the caller: AI SDK _does_ hand `request.body` /
  *      `response.body` back from doGenerate; @google/genai exposes no wire body on
  *      GenerateContentResponse (only a `responseInternal` Response on
@@ -27,11 +29,14 @@
 
 import { createAISDK } from '../adapters/aisdk.ts';
 import { createGenAI } from '../adapters/genai.ts';
+import { relative } from 'node:path';
+
 import {
   ADAPTER_AISDK,
   ADAPTER_GENAI,
   type AdapterObservation,
   observe,
+  PROBE_ROOT,
   type Probe,
   type ProbeContext,
   type ProbeResult,
@@ -41,24 +46,18 @@ import {
   startRecordingProxy,
   type WireRecord,
 } from '../recording.ts';
+import { interfaceMembersFromDts } from '../sdk-typings.ts';
 
-/** Machine facts from the installed SDK typings, documented once at module scope. */
-const GENAI_OPTIONS_MEMBERS = [
-  'vertexai',
-  'project',
-  'location',
-  'apiKey',
-  'apiVersion',
-  'googleAuthOptions',
-  'httpOptions',
-];
-const HTTP_OPTIONS_MEMBERS = [
-  'baseUrl',
-  'apiVersion',
-  'headers',
-  'timeout',
-  'extraBody',
-];
+/**
+ * Artifacts are committed, so an absolute path from one developer's machine
+ * would be noise. Record the declaration file relative to the probe context.
+ */
+function relativeToProbeRoot(file: string | undefined): string | null {
+  if (file === undefined) {
+    return null;
+  }
+  return relative(PROBE_ROOT, file);
+}
 
 const PROMPT_TEXT = 'Reply with the single word ok.';
 const MAX_OUTPUT_TOKENS = 8;
@@ -76,6 +75,24 @@ function summarizeRecord(
     requestBody: record.requestBody,
     responseBodyPreview: record.responseBodyPreview.slice(0, 160),
     contentType: record.responseContentType,
+  };
+}
+
+/** Machine facts read from the installed SDK typings at probe time. */
+function genaiFetchSurface(): {
+  readonly googleGenAIOptions: { readonly file: string; readonly members: string[] } | null;
+  readonly httpOptions: { readonly file: string; readonly members: string[] } | null;
+  readonly googleGenAIOptionsHasFetch: boolean;
+  readonly httpOptionsHasFetch: boolean;
+} {
+  const genai = interfaceMembersFromDts('GoogleGenAIOptions');
+  const http = interfaceMembersFromDts('HttpOptions');
+  return {
+    googleGenAIOptions: genai,
+    httpOptions: http,
+    googleGenAIOptionsHasFetch:
+      genai !== null && genai.members.includes('fetch'),
+    httpOptionsHasFetch: http !== null && http.members.includes('fetch'),
   };
 }
 
@@ -98,17 +115,20 @@ export const p12BaseurlFetchDumps: Probe = {
       } finally {
         await proxy.close();
       }
+      const surface = genaiFetchSurface();
       return {
         baseUrlRedirected: summary !== null,
         wireDump: summary,
         customFetchHook: {
-          googleGenAIOptionsMembers: GENAI_OPTIONS_MEMBERS,
-          httpOptionsMembers: HTTP_OPTIONS_MEMBERS,
-          hasFetchMember: false,
+          googleGenAIOptionsMembers: surface.googleGenAIOptions?.members ?? [],
+          httpOptionsMembers: surface.httpOptions?.members ?? [],
+          optionsDeclarationFile: relativeToProbeRoot(surface.googleGenAIOptions?.file),
+          httpOptionsDeclarationFile: relativeToProbeRoot(surface.httpOptions?.file),
+          googleGenAIOptionsHasFetch: surface.googleGenAIOptionsHasFetch,
+          httpOptionsHasFetch: surface.httpOptionsHasFetch,
           note:
-            'GoogleGenAIOptions has no fetch member; HttpOptions has no fetch ' +
-            'member either, so the only interception surface is the baseUrl / ' +
-            'headers / timeout trio.',
+            'Member lists are read from the installed genai.d.ts declarations at ' +
+            'probe time, not transcribed by hand.',
         },
         rawBodyAvailability: {
           responseObjectWireBodyMember: 'none (only sdkHttpResponse.responseInternal)',
@@ -211,7 +231,14 @@ function judge(
   const g = genai.observation as {
     baseUrlRedirected?: boolean;
     wireDump?: { url?: string; status?: number } | null;
-    customFetchHook?: { googleGenAIOptionsMembers?: string[]; httpOptionsMembers?: string[]; hasFetchMember?: boolean };
+    customFetchHook?: {
+      googleGenAIOptionsMembers?: string[];
+      httpOptionsMembers?: string[];
+      optionsDeclarationFile?: string | null;
+      httpOptionsDeclarationFile?: string | null;
+      googleGenAIOptionsHasFetch?: boolean;
+      httpOptionsHasFetch?: boolean;
+    };
     rawBodyAvailability?: { responseObjectWireBodyMember?: string };
   };
   const a = aisdk.observation as {
@@ -224,7 +251,9 @@ function judge(
   const aBase = a.baseUrlRedirected === true;
   const aFetch = a.customFetch?.sawRequestAndResponse === true;
   const aRaw = a.rawBodyAvailability?.responseBodyReturned === true;
-  void g.customFetchHook?.hasFetchMember;
+  const noGenaiFetch =
+    g.customFetchHook?.googleGenAIOptionsHasFetch === false &&
+    g.customFetchHook?.httpOptionsHasFetch === false;
 
   const verdict: ProbeResult['verdict'] =
     gBase && aBase && aFetch && aRaw ? 'parity' : 'partial';
@@ -237,9 +266,13 @@ function judge(
       `the AI SDK was redirected too (proxy path ${a.wireDump?.url ?? 'none'}, ` +
       `status ${a.wireDump?.status ?? 'none'}), so both accept a custom baseURL. ` +
       `Custom fetch: only the AI SDK exposes one (makeRecordingFetch saw both ` +
-      `directions: ${String(aFetch)}); @google/genai has no fetch member in ` +
-      `GoogleGenAIOptions (members [${(g.customFetchHook?.googleGenAIOptionsMembers ?? []).join(',')}]) ` +
-      `nor in HttpOptions (members [${(g.customFetchHook?.httpOptionsMembers ?? []).join(',')}]), ` +
+      `directions: ${String(aFetch)}). Read out of the installed ` +
+      `@google/genai genai.d.ts at probe time, GoogleGenAIOptions declares ` +
+      `[${(g.customFetchHook?.googleGenAIOptionsMembers ?? []).join(',')}] and ` +
+      `HttpOptions declares ` +
+      `[${(g.customFetchHook?.httpOptionsMembers ?? []).join(',')}]; ` +
+      `neither declares a fetch member ` +
+      `(noFetchMember=${String(noGenaiFetch)}), ` +
       `so baseURL is its only interception surface. Raw bodies for dumps: the AI ` +
       `SDK returns request.body AND response.body directly` +
       ` (${String(aRaw)}), while @google/genai exposes only ` +

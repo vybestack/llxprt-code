@@ -128,8 +128,10 @@ export const p02NonStreaming: Probe = {
           'additionally surfaces the exact request body it sent.'
         : `Text, finish reason and usage match, but response-id availability ` +
           `differs (genai=${genaiHasResponseId}, ai-sdk=${aisdkHasResponseId}). ` +
-          `llxprt treats responseId as a first-class ModelOutput field, so an ` +
-          `adapter would have to recover it from the raw response body.`,
+          `Core models responseId as a first-class ModelOutput field, but ` +
+          `geminiResponseMapper does not propagate it today either, so this is ` +
+          `not a loss against current behavior; recovering it from the AI SDK ` +
+          `raw response body would be an improvement rather than a repair.`,
     };
   },
 };

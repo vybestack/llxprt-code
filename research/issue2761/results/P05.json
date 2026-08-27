@@ -210,5 +210,5 @@
     }
   },
   "verdict": "partial",
-  "finding": "Uncleaned dialect schema: @google/genai forwarded it verbatim (keywords still on the wire: $schema, title, additionalProperties, format, exclusiveMinimum, anyOf, default), API accepted; @ai-sdk/google put format, anyOf on the wire, API accepted. Untyped-object sub-schema: genai rejected (HTTP 400), ai-sdk rejected (HTTP 400). llxprt would still own dialect cleaning: the AI SDK left Gemini-incompatible keywords on the wire."
+  "finding": "Uncleaned dialect schema: @google/genai forwarded it verbatim (keywords still on the wire: $schema, title, additionalProperties, format, exclusiveMinimum, anyOf, default), API accepted; @ai-sdk/google put format, anyOf on the wire, API accepted. Untyped-object sub-schema: genai rejected (HTTP 400), ai-sdk rejected (HTTP 400). The AI SDK strips a subset of what cleanGeminiSchema strips and leaves others, and the API accepted both wire bodies, so this run does not show the remaining keywords to be incompatible. What it does show is that neither adapter supplies the missing top-level object type that buildGeminiTools patches by hand."
 }

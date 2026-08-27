@@ -164,7 +164,9 @@ project-plans/issue2761/plan.md     # this file
 
 `research/` is gitignored but already carries committed artifacts from #2253,
 #2254 and #2835 (force-added). This spike follows that precedent: probe sources
-and result artifacts are force-added; `node_modules` and any lock churn are not.
+and result artifacts are force-added, together with the probe context's own
+`bun.lock` so the pinned comparison is reproducible. `node_modules` is not, and
+neither is any churn in the repository's root lockfiles.
 
 Placement rules honoured: plan under `project-plans/`, durable engineering
 reference under `dev-docs/`. Nothing is written to `dev-docs/plans/`.

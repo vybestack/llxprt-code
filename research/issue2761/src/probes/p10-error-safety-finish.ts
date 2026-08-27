@@ -278,6 +278,9 @@ export const p10ErrorSafetyFinish: Probe = {
         safetyRatingsCount: Array.isArray(googleSafetyRatings)
           ? googleSafetyRatings.length
           : null,
+        // The key can exist with a null value on a non-blocked response, which
+        // is not the same as the surface being absent. Record both.
+        promptFeedbackKeyDeclared: 'promptFeedback' in googleMeta,
         promptFeedbackPresent:
           typeof googlePromptFeedback === 'object' &&
           googlePromptFeedback !== null,
@@ -322,6 +325,7 @@ interface SafetyShape {
   readonly candidateSafetyRatingsCount?: number | null;
   readonly safetyRatingsPresent?: boolean;
   readonly promptFeedbackPresent?: boolean;
+  readonly promptFeedbackKeyDeclared?: boolean;
 }
 
 function judge(
@@ -387,6 +391,10 @@ function judge(
       `Safety: genai candidate safetyRatings=` +
       `${gSafety.candidateSafetyRatingsCount ?? 'null'}; AI SDK ` +
       `safetyRatingsPresent=${String(aSafety.safetyRatingsPresent)}, ` +
-      `promptFeedbackPresent=${String(aSafety.promptFeedbackPresent)}.`,
+      `the promptFeedback key is declared under providerMetadata.google ` +
+      `(${String(aSafety.promptFeedbackKeyDeclared)}) and carried a non-null ` +
+      `value (${String(aSafety.promptFeedbackPresent)}) on this non-blocked ` +
+      `response. Whether non-null prompt feedback survives a real block is not ` +
+      `established here, because no block was forced.`,
   };
 }

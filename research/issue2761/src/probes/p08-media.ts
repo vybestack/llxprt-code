@@ -18,10 +18,14 @@
  *                  `{ fileData }` (`@google/genai`) and as a `file` user
  *                  content part with a `URL` data value (`@ai-sdk/google`).
  *
- * The `@google/genai` side runs through the recording proxy so the exact wire part
- * is captured whether or not the API accepts it. If the Gemini endpoint rejects the
- * HTTPS `fileUri` on BOTH adapters that is parity (both transports fail the same
- * way), not an AI SDK gap.
+ * BOTH adapter sides run through the recording proxy, so the wire part (which part
+ * keys were sent, whether the URL reached `fileData.fileUri`) is captured for each
+ * side whether or not the API accepts it. The TRANSPORT dimension is judged on those
+ * wire bodies. The ENDPOINT-ACCEPTANCE dimension is separate: when the response is
+ * a 429 it is reported as unproven, because a plain-text control call can only
+ * rule out a general generate-content quota, never a separate media or file-URI
+ * quota (the way Google Search has its own quota). The control call is still run and
+ * recorded, as context rather than as proof.
  */
 
 import type {
@@ -72,36 +76,48 @@ interface MediaSubCase {
   readonly wireUriForwarded: boolean | null;
 }
 
-function recordOk(
-  preview: string,
-  wire: { partKeys: string[] | null; uriForwarded: boolean | null },
-): MediaSubCase {
-  return {
-    attempted: true,
-    ok: true,
-    httpStatus: 200,
-    providerError: null,
-    textPreview: preview.slice(0, 120),
-    wirePartKeys: wire.partKeys,
-    wireUriForwarded: wire.uriForwarded,
-  };
-}
-
-function recordFailure(error: unknown): MediaSubCase {
-  const captured = captureError(error);
+function makeSubCase(): MediaSubCase {
   return {
     attempted: true,
     ok: false,
-    httpStatus: captured.statusCode ?? null,
-    providerError: captured.message.slice(0, 400),
+    httpStatus: null,
+    providerError: null,
     textPreview: '',
     wirePartKeys: null,
     wireUriForwarded: null,
   };
 }
 
+function recordAccepted(
+  preview: string,
+  wire: { partKeys: string[] | null; uriForwarded: boolean | null },
+): MediaSubCase {
+  return {
+    ...makeSubCase(),
+    ok: true,
+    httpStatus: 200,
+    textPreview: preview.slice(0, 120),
+    wirePartKeys: wire.partKeys,
+    wireUriForwarded: wire.uriForwarded,
+  };
+}
+
+function recordRejected(
+  error: unknown,
+  wire: { partKeys: string[] | null; uriForwarded: boolean | null },
+): MediaSubCase {
+  const captured = captureError(error);
+  return {
+    ...makeSubCase(),
+    httpStatus: captured.statusCode ?? null,
+    providerError: captured.message.slice(0, 400),
+    wirePartKeys: wire.partKeys,
+    wireUriForwarded: wire.uriForwarded,
+  };
+}
+
 /** Pulls the second user part and its fileData URI off a captured request body. */
-function inspectRequest(record: WireRecord | undefined, partIndex: number): {
+function inspectRequest(record: WireRecord | undefined): {
   partKeys: string[] | null;
   uriForwarded: boolean | null;
 } {
@@ -112,7 +128,7 @@ function inspectRequest(record: WireRecord | undefined, partIndex: number): {
     | { contents?: Array<{ role?: string; parts?: Array<Record<string, unknown>> }> }
     | null;
   const firstUser = (body?.contents ?? []).find((turn) => turn.role === 'user');
-  const part = firstUser?.parts?.[partIndex];
+  const part = firstUser?.parts?.[1];
   if (part === undefined) {
     return { partKeys: null, uriForwarded: null };
   }
@@ -127,16 +143,17 @@ function inspectRequest(record: WireRecord | undefined, partIndex: number): {
   };
 }
 
-/** Wire evidence for a sub-case that threw before it could report success. */
-function inspectRequestForFailure(record: WireRecord | undefined): {
-  wirePartKeys: string[] | null;
-  wireUriForwarded: boolean | null;
-} {
-  const inspected = inspectRequest(record, 1);
-  return {
-    wirePartKeys: inspected.partKeys,
-    wireUriForwarded: inspected.uriForwarded,
-  };
+/** The wire evidence for the most recently captured request of a sub-case. */
+function inspectLatest(
+  records: readonly WireRecord[],
+): { partKeys: string[] | null; uriForwarded: boolean | null } {
+  if (records.length === 0) {
+    return { partKeys: null, uriForwarded: null };
+  }
+  // A sub-case can leave more than one proxy record behind when it had to retry a
+  // transient status; take the last one so it is the attempt whose outcome the
+  // sub-case is reporting.
+  return inspectRequest(records[records.length - 1]);
 }
 
 interface QuotaControl {
@@ -196,9 +213,15 @@ export const p08Media: Probe = {
             ],
             config: { maxOutputTokens: IMAGE_CASE_MAX_TOKENS },
           });
-          inline = recordOk(response.text ?? '', inspectRequest(proxy.records[0], 1));
+          inline = recordAccepted(
+            response.text ?? '',
+            inspectLatest(proxy.records),
+          );
         } catch (error) {
-          inline = recordFailure(error);
+          inline = recordRejected(
+            error,
+            inspectLatest(proxy.records),
+          );
         }
 
         await pause();
@@ -222,24 +245,24 @@ export const p08Media: Probe = {
             ],
             config: { maxOutputTokens: IMAGE_CASE_MAX_TOKENS },
           });
-          uri = recordOk(
+          uri = recordAccepted(
             response.text ?? '',
-            inspectRequest(proxy.records[proxy.records.length - 1], 1),
+            inspectLatest(proxy.records),
           );
         } catch (error) {
-          uri = {
-            ...recordFailure(error),
-            ...inspectRequestForFailure(proxy.records[proxy.records.length - 1]),
-          };
+          uri = recordRejected(
+            error,
+            inspectLatest(proxy.records),
+          );
         }
 
         await pause();
 
-        // The AI Studio endpoint answers an unsupported `fileData.fileUri`
-        // with a bare RESOURCE_EXHAUSTED, which looks exactly like a quota
-        // rejection. This control call proves which one it was: if a plain
-        // text request succeeds immediately afterwards, the 429 came from the
-        // fileUri, not from the quota.
+        // The fileUri rejection presents as RESOURCE_EXHAUSTED, which looks
+        // exactly like a general quota rejection. This control call only carries
+        // context: a succeeding plain-text call right after rules out a general
+        // generate-content quota, but cannot rule out a separate media or file-URI
+        // quota, so it is recorded, never treated as proof.
         const quotaControl = await runQuotaControl(client, ctx.modelGeneral);
 
         return {
@@ -247,8 +270,9 @@ export const p08Media: Probe = {
           uri,
           quotaControl,
           note:
-            'Ran through the recording proxy so the wire part keys and fileUri ' +
-            'forwarding are captured whether accepted or rejected.',
+            'Ran both sub-cases through the recording proxy so the wire part keys ' +
+            'and fileUri forwarding are captured for the genai side, whether ' +
+            'accepted or rejected.',
         };
       } finally {
         await proxy.close();
@@ -258,83 +282,87 @@ export const p08Media: Probe = {
     await pause();
 
     const aisdk = await observe(ADAPTER_AISDK, async () => {
-      const runCase = async (
-        data: string | URL,
-        dataKind: string,
-      ): Promise<Record<string, unknown>> => {
-        const filePart: LanguageModelV2FilePart = {
-          type: 'file',
-          mediaType: 'image/png',
-          data,
-        };
-        const prompt: LanguageModelV2Prompt = [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: PROMPT } as LanguageModelV2TextPart,
-              filePart,
-            ],
-          },
-        ];
-        try {
-          const provider = createAISDK(ctx.apiKey);
-          const result = await provider.languageModel(ctx.modelGeneral).doGenerate({
-            prompt,
-            maxOutputTokens: IMAGE_CASE_MAX_TOKENS,
-          });
-          return {
-            attempted: true,
-            ok: true,
-            httpStatus: 200,
-            providerError: null,
-            textPreview: result.content
+      const proxy = await startRecordingProxy();
+      try {
+        const provider = createAISDK(ctx.apiKey, {
+          baseURL: `${proxy.origin}/v1beta`,
+        });
+        const model = provider.languageModel(ctx.modelGeneral);
+
+        const runCase = async (
+          data: string | URL,
+          dataKind: string,
+        ): Promise<Record<string, unknown>> => {
+          const filePart: LanguageModelV2FilePart = {
+            type: 'file',
+            mediaType: 'image/png',
+            data,
+          };
+          const prompt: LanguageModelV2Prompt = [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: PROMPT } as LanguageModelV2TextPart,
+                filePart,
+              ],
+            },
+          ];
+          try {
+            const result = await model.doGenerate({
+              prompt,
+              maxOutputTokens: IMAGE_CASE_MAX_TOKENS,
+            });
+            const preview = result.content
               .filter((part) => part.type === 'text')
               .map((part) => (part.type === 'text' ? part.text : ''))
               .join('')
-              .slice(0, 120),
-            sentDataKind: dataKind,
-          };
-        } catch (error) {
-          const captured = captureError(error);
-          return {
-            attempted: true,
-            ok: false,
-            httpStatus: captured.statusCode ?? null,
-            providerError: captured.message.slice(0, 400),
-            textPreview: '',
-            sentDataKind: dataKind,
-          };
-        }
-      };
-
-      const inline = await runCase(TINY_PNG_BASE64, 'base64');
-      await pause();
-      const uri = await runCase(new URL(PUBLIC_IMAGE_URL), 'url');
-
-      return {
-        inline,
-        uri,
-        supportedUrlsSummary: (() => {
-          const model = createAISDK(ctx.apiKey).languageModel(
-            ctx.modelGeneral,
-          ) as { supportedUrls?: unknown };
-          const urls = model.supportedUrls;
-          if (urls === undefined || urls === null) {
-            return null;
+              .slice(0, 120);
+            return {
+              ...recordAccepted(preview, inspectLatest(proxy.records)),
+              sentDataKind: dataKind,
+            };
+          } catch (error) {
+            return {
+              ...recordRejected(error, inspectLatest(proxy.records)),
+              sentDataKind: dataKind,
+            };
           }
-          // Only keys and regex sources; never resolve the regexes themselves onto
-          // the artifact so it stays small and key-free.
-          return Object.entries(
-            urls as Record<string, RegExp[] | Array<{ source: string }>>,
-          ).map(([mediaType, patterns]) => ({
-            mediaType,
-            patternCount: patterns.length,
-            patternFlags: patterns.map((p) =>
-              p instanceof RegExp ? p.flags : '',
-            ),
-          }));
-        })(),
-      };
+        };
+
+        const inline = await runCase(TINY_PNG_BASE64, 'base64');
+        await pause();
+        const uri = await runCase(new URL(PUBLIC_IMAGE_URL), 'url');
+
+        return {
+          inline,
+          uri,
+          supportedUrlsSummary: (() => {
+            const model = provider.languageModel(
+              ctx.modelGeneral,
+            ) as { supportedUrls?: unknown };
+            const urls = model.supportedUrls;
+            if (urls === undefined || urls === null) {
+              return null;
+            }
+            // Only keys and regex sources; never resolve the regexes themselves onto
+            // the artifact so it stays small and key-free.
+            return Object.entries(
+              urls as Record<string, RegExp[] | Array<{ source: string }>>,
+            ).map(([mediaType, patterns]) => ({
+              mediaType,
+              patternCount: patterns.length,
+              patternFlags: patterns.map((p) =>
+                p instanceof RegExp ? p.flags : '',
+              ),
+            }));
+          })(),
+          note:
+            'BOTH sub-cases ran through the recording proxy, so the wire part ' +
+            'keys and fileUri forwarding are captured for the AI SDK side too.',
+        };
+      } finally {
+        await proxy.close();
+      }
     });
 
     const g = genai.observation as {
@@ -343,18 +371,19 @@ export const p08Media: Probe = {
       quotaControl?: QuotaControl;
     };
     const a = aisdk.observation as {
-      inline?: Record<string, unknown>;
-      uri?: Record<string, unknown>;
+      inline?: MediaSubCase;
+      uri?: MediaSubCase;
     };
 
-    const genaiInlineOk = g.inline?.ok === true;
-    const genaiUriOk = g.uri?.ok === true;
-    // A plain text call that succeeds right after the fileUri rejection shows
-    // the RESOURCE_EXHAUSTED came from the fileUri, not from the quota.
-    const quotaControlProvesEndpointBehavior =
-      g.quotaControl?.plainTextAccepted === true;
-    const aisdkInlineOk = a.inline?.ok === true;
-    const aisdkUriOk = a.uri?.ok === true;
+    const endpointAcceptedUri =
+      g.uri?.ok === true && a.uri?.ok === true;
+    const endpointRejectedUri = g.uri?.ok === false && a.uri?.ok === false;
+    const uriEndpointUnproven =
+      g.uri?.httpStatus === 429 || a.uri?.httpStatus === 429;
+
+    // TRANSPORT: did each adapter actually put the URL on fileData.fileUri?
+    const gUriTransported = g.uri?.wireUriForwarded === true;
+    const aUriTransported = a.uri?.wireUriForwarded === true;
 
     return {
       id: 'P08',
@@ -365,55 +394,88 @@ export const p08Media: Probe = {
       models: [ctx.modelGeneral],
       genai,
       aisdk,
-      // Media parity is about whether the two adapters TRANSPORT the same
-      // thing, not about whether the endpoint happens to like an arbitrary
-      // host. Identical outcomes on both sub-cases is parity even when the
-      // outcome is a rejection; a split is where the adapter loses something.
       verdict:
-        genaiInlineOk === aisdkInlineOk && genaiUriOk === aisdkUriOk
-          ? genaiInlineOk
-            ? 'parity'
-            : 'partial'
-          : 'gap',
-      // The fileUri rejection presents as RESOURCE_EXHAUSTED, so without this
-      // the central quota guard would blank out a conclusive result. The
-      // control call below is what licenses the suppression.
-      transientHandled: quotaControlProvesEndpointBehavior,
-      finding:
-        `Inline base64 PNG: @google/genai ` +
-        `${outcomeWord(genaiInlineOk)} ` +
-        `(wire part keys [${(g.inline?.wirePartKeys ?? []).join(',')}]); ` +
-        `AI SDK ${outcomeWord(aisdkInlineOk)} ` +
-        `(${errorOrOk(a.inline)}). ` +
-        `URI fileData: @google/genai ${outcomeWord(genaiUriOk)} ` +
-        `(wire fileData.uri forwarded: ${String(g.uri?.wireUriForwarded)}); ` +
-        `AI SDK ${outcomeWord(aisdkUriOk)} ` +
-        `(${errorOrOk(a.uri)}). ` +
-        (genaiUriOk === aisdkUriOk
-          ? 'Both adapters put the URL on fileData.fileUri and got the same ' +
-            'verdict from the endpoint, so the URI transport is equivalent. ' +
-            (quotaControlProvesEndpointBehavior
-              ? 'The shared RESOURCE_EXHAUSTED is the AI Studio endpoint ' +
-                'refusing an arbitrary fileUri host, not a quota problem: a ' +
-                'plain text call succeeded immediately afterwards.'
-              : 'The control call did not succeed, so a quota effect cannot be ' +
-                'ruled out for this run.')
-          : 'The URI transport split: one adapter accepted what the other ' +
-            'rejected, so this is a real transport difference.') +
-        ' The MediaBlock encoding:url -> fileData and encoding:base64 -> ' +
-        'inlineData mapping in neutralConverters maps unchanged.',
+        gUriTransported && aUriTransported ? 'parity' : 'partial',
+      finding: buildFinding(
+        g.inline,
+        g.uri,
+        g.quotaControl,
+        a.inline,
+        a.uri,
+        {
+          endpointAcceptedUri,
+          endpointRejectedUri,
+          uriEndpointUnproven,
+          gUriTransported,
+          aUriTransported,
+        },
+      ),
     };
   },
 };
 
-function outcomeWord(ok: boolean): string {
-  return ok ? 'accepted' : 'rejected';
+function buildFinding(
+  gInline: MediaSubCase | undefined,
+  gUri: MediaSubCase | undefined,
+  control: QuotaControl | undefined,
+  aInline: MediaSubCase | undefined,
+  aUri: MediaSubCase | undefined,
+  dims: {
+    endpointAcceptedUri: boolean;
+    endpointRejectedUri: boolean;
+    uriEndpointUnproven: boolean;
+    gUriTransported: boolean;
+    aUriTransported: boolean;
+  },
+): string {
+  const inline = `Inline base64: @google/genai ${outcomeWord(gInline?.ok)} ` +
+    `(wire part keys [${(gInline?.wirePartKeys ?? []).join(',')}]); ` +
+    `AI SDK ${outcomeWord(aInline?.ok)} ` +
+    `(wire part keys [${(aInline?.wirePartKeys ?? []).join(',')}]). `;
+
+  const transport = `URI fileData TRANSPORT: @google/genai sent the URL on ` +
+    `fileData.fileUri=${dims.gUriTransported}; AI SDK sent it on ` +
+    `fileData.fileUri=${dims.aUriTransported}. `;
+
+  let endpoint: string;
+  if (dims.uriEndpointUnproven) {
+    const genaiStatus = gUri?.httpStatus ?? 'unknown';
+    const aisdkStatus = aUri?.httpStatus ?? 'unknown';
+    endpoint =
+      `URI fileData ENDPOINT-ACCEPTANCE: unproven in this run. Both sides ` +
+      `got a ${genaiStatus} (genai) / ${aisdkStatus} (ai-sdk), and a 429 ` +
+      `cannot be attributed to the arbitrary fileUri host: the plain-text control ` +
+      `call that succeeded afterwards ` +
+      `(plainTextAccepted=${String(control?.plainTextAccepted)}, HTTP ` +
+      `${control?.httpStatus ?? 'unknown'}) only rules out a general ` +
+      `generate-content quota, never a separate media or file-URI quota. `;
+  } else if (dims.endpointAcceptedUri) {
+    endpoint =
+      `URI fileData ENDPOINT-ACCEPTANCE: the endpoint accepted the URL on both ` +
+      `sides (genai HTTP ${gUri?.httpStatus}, ai-sdk HTTP ${aUri?.httpStatus}). `;
+  } else if (dims.endpointRejectedUri) {
+    endpoint =
+      `URI fileData ENDPOINT-ACCEPTANCE: rejected on both sides with the same ` +
+      `non-429 status (genai HTTP ${gUri?.httpStatus}, ai-sdk HTTP ` +
+      `${aUri?.httpStatus}), so both adapters hit the same endpoint behavior. `;
+  } else {
+    endpoint =
+      `URI fileData ENDPOINT-ACCEPTANCE: split (genai HTTP ` +
+      `${gUri?.httpStatus ?? 'none'}, ai-sdk HTTP ${aUri?.httpStatus ?? 'none'}), ` +
+      `a real difference in how the endpoint treats the fileUri. `;
+  }
+
+  const mapping =
+    `The MediaBlock encoding:url -> fileData and encoding:base64 -> inlineData ` +
+    `mapping in neutralConverters is transported unchanged by both adapters.`;
+
+  const context =
+    `Control call (context only, not proof): plain text succeeded after the URI case ` +
+    `genai=${String(control?.plainTextAccepted)} (HTTP ${control?.httpStatus ?? 'unknown'}). `;
+
+  return inline + transport + endpoint + context + mapping;
 }
 
-function errorOrOk(shape: { ok?: boolean; providerError?: string | null } | undefined): string {
-  const ok =
-    typeof shape === 'object' && shape !== null && shape['ok'] === true;
-  return ok
-    ? 'ok'
-    : (shape?.providerError ?? 'error').slice(0, 120);
+function outcomeWord(ok: boolean | undefined): string {
+  return ok === true ? 'accepted' : 'rejected';
 }

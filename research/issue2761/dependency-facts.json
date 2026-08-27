@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-26T22:48:19.242Z",
+  "generatedAt": "2026-08-27T00:36:58.095Z",
   "probeContext": {
     "aiSdkGoogle": {
       "name": "@ai-sdk/google",
@@ -168,7 +168,7 @@
     "probeProviderProtocolMajor": 2,
     "rootProviderProtocolMajor": 2,
     "matches": true,
-    "registryLatest": "4.0.53",
+    "registryLatest": "4.0.54",
     "registryLatestProviderDependency": "4.0.8",
     "registryLatestProviderProtocolMajor": 4,
     "v4MixingRejected": true,
@@ -182,23 +182,23 @@
     "aiSdkGoogleDeclaresGoogleAuthLibrary": false,
     "googleGenaiDeclaresGoogleAuthLibrary": true,
     "aiSdkGoogleVertex": {
-      "latest": "5.0.65",
+      "latest": "5.0.66",
       "latestDependencies": {
-        "@ai-sdk/google": "4.0.53",
+        "@ai-sdk/google": "4.0.54",
         "@ai-sdk/provider": "4.0.8",
         "@ai-sdk/anthropic": "4.0.44",
         "google-auth-library": "^10.6.2",
         "@ai-sdk/provider-utils": "5.0.32",
         "@ai-sdk/openai-compatible": "3.0.39"
       },
-      "newestProtocolV2Line": "3.0.165",
+      "newestProtocolV2Line": "3.0.169",
       "newestProtocolV2Dependencies": {
-        "@ai-sdk/google": "2.0.90",
+        "@ai-sdk/google": "2.0.93",
         "@ai-sdk/provider": "2.0.3",
-        "@ai-sdk/anthropic": "2.0.96",
+        "@ai-sdk/anthropic": "2.0.98",
         "google-auth-library": "^10.5.0",
-        "@ai-sdk/provider-utils": "3.0.33",
-        "@ai-sdk/openai-compatible": "1.0.49"
+        "@ai-sdk/provider-utils": "3.0.35",
+        "@ai-sdk/openai-compatible": "1.0.52"
       }
     }
   }

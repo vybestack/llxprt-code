@@ -182,11 +182,12 @@ export const p03StreamingUsage: Probe = {
         `ai-sdk=${aisdkIncremental}. Usage placement: genai=${String(genaiUsage)}, ` +
         `ai-sdk=finish-part (present=${aisdkFinishUsage}). ` +
         (usagePlacementMatches
-          ? 'Both place usage the same way, so the per-chunk usage stamping in ' +
-            'geminiResponseMapper carries over directly.'
-          : 'The placements differ: geminiResponseMapper stamps usage onto every ' +
-            'chunk it maps, so on the AI SDK path an adapter would have to hold ' +
-            'the terminal usage and attach it to the IContent metadata itself.'),
+          ? 'Both place usage the same way, so the per-response usage stamping ' +
+            'in geminiResponseMapper carries over directly.'
+          : 'The placements differ: geminiResponseMapper copies usage onto the ' +
+            'text, tool-call and fallback chunks it emits for each mapped ' +
+            'response, so on the AI SDK path an adapter would have to hold the ' +
+            'terminal usage and attach it to the IContent metadata itself.'),
     };
   },
 };

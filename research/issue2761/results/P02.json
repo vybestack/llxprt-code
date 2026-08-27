@@ -29,7 +29,7 @@
         ],
         "serviceTier": "standard"
       },
-      "responseId": "KmCParS4FMiLqtsPoqCk0Qc",
+      "responseId": "24SPaqqlKqugz7IP6rfOsQM",
       "modelVersion": "gemini-3.1-flash-lite",
       "promptFeedback": null
     }
@@ -45,7 +45,12 @@
           "preview": "Paris",
           "providerMetadata": {
             "google": {
-              "thoughtSignature": "EnEKbwERTTIP9AolCZnMuWR7rB7/tDuxOD3yYhSy2Y94JIHXcMw0x3bW9pFvI5RyhQJm33kDdxRwLoFsC9iBr7dHf4X+SRzOGO0hiYqr3up9JHTDf1Nx5KzgI1Z6UjaAGmSIgTjNFvIUgov+3+0o10B1cQ=="
+              "thoughtSignature": {
+                "present": true,
+                "length": 156,
+                "prefix": "EnEKbwERTTIPeYnn",
+                "isSentinel": false
+              }
             }
           }
         }
@@ -84,5 +89,5 @@
     }
   },
   "verdict": "partial",
-  "finding": "Text, finish reason and usage match, but response-id availability differs (genai=true, ai-sdk=false). llxprt treats responseId as a first-class ModelOutput field, so an adapter would have to recover it from the raw response body."
+  "finding": "Text, finish reason and usage match, but response-id availability differs (genai=true, ai-sdk=false). Core models responseId as a first-class ModelOutput field, but geminiResponseMapper does not propagate it today either, so this is not a loss against current behavior; recovering it from the AI SDK raw response body would be an improvement rather than a repair."
 }

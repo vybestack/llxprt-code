@@ -288,8 +288,11 @@ export const p05Schemas: Probe = {
           : aisdkCleansDialect
             ? 'The AI SDK performs the Gemini-dialect conversion itself, so ' +
               'cleanGeminiSchema would become redundant.'
-            : 'llxprt would still own dialect cleaning: the AI SDK left ' +
-              'Gemini-incompatible keywords on the wire.'),
+            : 'The AI SDK strips a subset of what cleanGeminiSchema strips and ' +
+              'leaves others, and the API accepted both wire bodies, so this run ' +
+              'does not show the remaining keywords to be incompatible. What it ' +
+              'does show is that neither adapter supplies the missing top-level ' +
+              'object type that buildGeminiTools patches by hand.'),
     };
   },
 };
