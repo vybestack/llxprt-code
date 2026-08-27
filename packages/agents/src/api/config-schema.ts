@@ -8,6 +8,7 @@ import { z } from 'zod';
 import {
   ApprovalMode,
   AuthProviderType,
+  type LlxprtExtension,
   type MCPServerConfig,
 } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
@@ -230,7 +231,13 @@ const AgentExtensionSchema = z
       )
       .optional(),
   })
-  .strict();
+  // Hosts load extensions through the public core loader, which produces the
+  // full LlxprtExtension payload (installMetadata and any future fields
+  // included). Passthrough keeps that payload intact instead of stripping or
+  // rejecting it; the double cast is required because the passthrough
+  // output type does not structurally equal LlxprtExtension — the comment
+  // plus cast keep that gap explicit (#3221).
+  .passthrough() as unknown as z.ZodType<LlxprtExtension>;
 
 const LspServerConfigSchema = z
   .object({

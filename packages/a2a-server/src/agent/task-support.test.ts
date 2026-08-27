@@ -1,151 +1,109 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import {
-  AgentEventType,
-  type ServerAgentStreamEvent,
-} from '@vybestack/llxprt-code-core';
-import {
-  applyReplacement,
-  handleStreamError,
-  type TaskStreamContext,
+  mapOutcomeStringToEnum,
+  buildToolConfirmationPayload,
+  convertAnsiOutputToString,
+  createTextMessage,
+  createDataMessage,
 } from './task-support.js';
-import { CoderAgentEvent } from '../types.js';
-import type { StateChange } from '../types.js';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-core';
 
-describe('applyReplacement', () => {
-  describe('isNewFile behavior', () => {
-    it('should return newString if isNewFile is true', () => {
-      expect(applyReplacement(null, 'old', 'new', true)).toBe('new');
-      expect(applyReplacement('existing', 'old', 'new', true)).toBe('new');
-    });
+describe('mapOutcomeStringToEnum', () => {
+  it('maps each supported outcome string to its enum value', () => {
+    expect(mapOutcomeStringToEnum('proceed_once')).toBe(
+      ToolConfirmationOutcome.ProceedOnce,
+    );
+    expect(mapOutcomeStringToEnum('cancel')).toBe(
+      ToolConfirmationOutcome.Cancel,
+    );
+    expect(mapOutcomeStringToEnum('proceed_always')).toBe(
+      ToolConfirmationOutcome.ProceedAlways,
+    );
+    expect(mapOutcomeStringToEnum('proceed_always_server')).toBe(
+      ToolConfirmationOutcome.ProceedAlwaysServer,
+    );
+    expect(mapOutcomeStringToEnum('proceed_always_tool')).toBe(
+      ToolConfirmationOutcome.ProceedAlwaysTool,
+    );
+    expect(mapOutcomeStringToEnum('modify_with_editor')).toBe(
+      ToolConfirmationOutcome.ModifyWithEditor,
+    );
+    expect(mapOutcomeStringToEnum('suggest_edit')).toBe(
+      ToolConfirmationOutcome.SuggestEdit,
+    );
   });
 
-  describe('null currentContent handling', () => {
-    it('should return newString if currentContent is null and oldString is empty (defensive)', () => {
-      expect(applyReplacement(null, '', 'new', false)).toBe('new');
-    });
-
-    it('should return empty string if currentContent is null and oldString is not empty (defensive)', () => {
-      expect(applyReplacement(null, 'old', 'new', false)).toBe('');
-    });
-  });
-
-  describe('empty oldString handling', () => {
-    it('should return currentContent if oldString is empty and not a new file', () => {
-      expect(applyReplacement('hello world', '', 'new', false)).toBe(
-        'hello world',
-      );
-    });
-  });
-
-  describe('single replacement (default)', () => {
-    it('should replace only the first occurrence with default expectedReplacements=1', () => {
-      expect(applyReplacement('hello old world old', 'old', 'new', false)).toBe(
-        'hello new world old',
-      );
-    });
-
-    it('should handle text with special characters', () => {
-      expect(
-        applyReplacement(
-          'path/to/file path/to/other',
-          'path/to',
-          'new/path',
-          false,
-        ),
-      ).toBe('new/path/file path/to/other');
-    });
-  });
-
-  describe('multiple replacements', () => {
-    it('should replace all occurrences when expectedReplacements > 1', () => {
-      expect(
-        applyReplacement('hello old world old', 'old', 'new', false, 2),
-      ).toBe('hello new world new');
-    });
-
-    it('should replace all occurrences with replaceAll when expectedReplacements is large', () => {
-      expect(applyReplacement('a b a b a', 'a', 'X', false, 10)).toBe(
-        'X b X b X',
-      );
-    });
-  });
-
-  describe('edge cases', () => {
-    it('should handle replacement when oldString not found', () => {
-      expect(applyReplacement('hello world', 'notfound', 'new', false)).toBe(
-        'hello world',
-      );
-    });
-
-    it('should handle replacement with identical old and new strings', () => {
-      expect(applyReplacement('hello world', 'hello', 'hello', false)).toBe(
-        'hello world',
-      );
-    });
-
-    it('should handle empty newString (deletion)', () => {
-      expect(applyReplacement('hello world', ' world', '', false)).toBe(
-        'hello',
-      );
-    });
-
-    it('should handle oldString containing special regex characters literally', () => {
-      // Test that $ is treated literally, not as a regex special character
-      expect(applyReplacement('price: $100 price: $200', '$', '€', false)).toBe(
-        'price: €100 price: $200',
-      );
-
-      expect(
-        applyReplacement('price: $100 price: $200', '$', '€', false, 2),
-      ).toBe('price: €100 price: €200');
-    });
+  it('returns undefined for an unknown outcome', () => {
+    expect(mapOutcomeStringToEnum('not-an-outcome')).toBeUndefined();
   });
 });
 
-describe('handleStreamError', () => {
-  it('formats Anthropic rate-limit errors without Gemini fallback guidance', () => {
-    const publishedUpdates: Array<{ error?: string }> = [];
-    const context: TaskStreamContext = {
-      taskState: 'working',
-      providerName: 'anthropic',
-      currentModel: 'claude-opus-4-6',
-      cancelPendingTools: vi.fn(),
-      setTaskStateAndPublishUpdate: vi.fn(
-        (_state, _msg, _text, _parts, _final, error) => {
-          publishedUpdates.push({ error });
-        },
-      ),
-    };
-    const stateChange: StateChange = {
-      kind: CoderAgentEvent.StateChangeEvent,
-    };
-    const event: ServerAgentStreamEvent & {
-      type: typeof AgentEventType.Error;
-    } = {
-      type: AgentEventType.Error,
-      value: {
-        error: {
-          message: 'Rate limit exceeded',
-          status: 429,
-        },
-      },
-    };
+describe('buildToolConfirmationPayload', () => {
+  it('returns undefined when neither newContent nor editedCommand is present', () => {
+    expect(buildToolConfirmationPayload({})).toBeUndefined();
+  });
 
-    handleStreamError(event, context, stateChange);
+  it('carries newContent and editedCommand strings', () => {
+    expect(
+      buildToolConfirmationPayload({
+        newContent: 'new',
+        editedCommand: 'cmd',
+      }),
+    ).toStrictEqual({ newContent: 'new', editedCommand: 'cmd' });
+  });
 
-    expect(publishedUpdates[0]?.error).toContain(
-      'Anthropic rate limit exceeded',
-    );
-    expect(publishedUpdates[0]?.error).not.toContain('gemini');
-    expect(publishedUpdates[0]?.error).not.toContain('gemini-2.5-flash');
-    expect(publishedUpdates[0]?.error).not.toContain('AI Studio');
-    expect(publishedUpdates[0]?.error).not.toContain('Gemini Code Assist');
-    expect(publishedUpdates[0]?.error).not.toContain('Switching to the');
+  it('filters non-string payload fields', () => {
+    expect(
+      buildToolConfirmationPayload({
+        newContent: 7,
+        editedCommand: 8,
+      }),
+    ).toBeUndefined();
+  });
+});
+
+describe('convertAnsiOutputToString', () => {
+  it('passes plain strings through unchanged', () => {
+    expect(convertAnsiOutputToString('plain')).toBe('plain');
+  });
+
+  it('flattens an ANSI token grid into newline-joined text', () => {
+    const token = (text: string) =>
+      ({
+        text,
+        bold: false,
+        italic: false,
+        underline: false,
+        dim: false,
+        inverse: false,
+        fg: '',
+        bg: '',
+      }) as never;
+    const grid = [[token('a'), token('b')], [token('c')]];
+    expect(convertAnsiOutputToString(grid)).toBe('ab\nc');
+  });
+});
+
+describe('createTextMessage / createDataMessage', () => {
+  it('builds an agent text message carrying taskId and contextId', () => {
+    const message = createTextMessage('hello', 'task-1', 'ctx-1');
+    expect(message.kind).toBe('message');
+    expect(message.role).toBe('agent');
+    expect(message.taskId).toBe('task-1');
+    expect(message.contextId).toBe('ctx-1');
+    expect(message.parts).toEqual([{ kind: 'text', text: 'hello' }]);
+  });
+
+  it('builds a data message wrapping the raw payload', () => {
+    const message = createDataMessage({ value: 1 }, 'task-1', 'ctx-1');
+    expect(message.kind).toBe('message');
+    expect(message.taskId).toBe('task-1');
+    expect(message.parts).toEqual([{ kind: 'data', data: { value: 1 } }]);
   });
 });

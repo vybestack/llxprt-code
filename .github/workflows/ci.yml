@@ -367,6 +367,7 @@ jobs:
       - name: 'Run CLI import-boundary guard'
         run: |-
           npm run lint:cli-boundary
+          npm run lint:a2a-boundary
 
       - name: 'Run genai-enclave boundary guard'
         run: |-

@@ -1,292 +1,131 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2026 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it, vi } from 'bun:test';
-import {
-  ApprovalMode,
-  Config,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  PLACEHOLDER_MODEL,
-  UNCONFIGURED_PROVIDER,
+import { describe, expect, it, afterEach } from 'bun:test';
+import { mkdtempSync, rmSync, realpathSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, basename } from 'node:path';
+// The legacy loadConfig / createCoderConfig entry points were deleted in #3221:
+// the A2A host builds Agents via createTaskAgent (covered by
+// config.createTaskAgent.test.ts). This file pins the surviving pure config
+// helpers against real inputs.
+import { setTargetDir, mergeMcpServers } from './config.js';
+import type { AgentSettings } from '../types.js';
+import type {
+  LlxprtExtension,
+  MCPServerConfig,
 } from '@vybestack/llxprt-code-core';
-import { loadConfig } from './config.js';
 
-const ORIGINAL_ENV = { ...process.env };
-
-describe('loadConfig auth fallback', () => {
+describe('setTargetDir', () => {
+  const prevWorkspaceEnv = process.env['CODER_AGENT_WORKSPACE_PATH'];
+  const suiteCwd = process.cwd();
   afterEach(() => {
-    process.env = { ...ORIGINAL_ENV };
-    vi.restoreAllMocks();
+    if (prevWorkspaceEnv === undefined) {
+      delete process.env['CODER_AGENT_WORKSPACE_PATH'];
+    } else {
+      process.env['CODER_AGENT_WORKSPACE_PATH'] = prevWorkspaceEnv;
+    }
+    process.chdir(suiteCwd);
   });
 
-  it('does NOT call refreshAuth when no credentials or provider are set (unconfigured)', async () => {
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
-    vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
-    vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);
-
-    delete process.env.GEMINI_API_KEY;
-    delete process.env.USE_CCPA;
-    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
-    delete process.env.GOOGLE_CLOUD_PROJECT;
-    delete process.env.GOOGLE_CLOUD_LOCATION;
-    delete process.env.GOOGLE_API_KEY;
-    delete process.env.LLXPRT_DEFAULT_PROVIDER;
-
-    await loadConfig({} as never, [], 'test-task-id');
-
-    // Unconfigured: no Gemini auth fallback. Provider-neutral.
-    expect(Config.prototype.refreshAuth).not.toHaveBeenCalled();
+  it('resolves the agentSettings workspacePath to an absolute path', () => {
+    delete process.env['CODER_AGENT_WORKSPACE_PATH'];
+    const workspace = mkdtempSync(join(tmpdir(), 'set-target-dir-'));
+    const agentSettings = {
+      kind: 'agent-settings' as const,
+      workspacePath: workspace,
+    } as AgentSettings;
+    try {
+      expect(setTargetDir(agentSettings)).toBe(workspace);
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+    }
   });
 
-  it('uses vertex auth when USE_CCPA is set', async () => {
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
-    vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
-    vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);
-
-    process.env.USE_CCPA = 'true';
-
-    await loadConfig({} as never, [], 'test-task-id');
-
-    expect(Config.prototype.refreshAuth).toHaveBeenCalledWith('vertex-ai');
+  it('falls back to the current working directory when agentSettings is undefined', () => {
+    delete process.env['CODER_AGENT_WORKSPACE_PATH'];
+    expect(setTargetDir(undefined)).toBe(process.cwd());
   });
 
-  it('uses vertex auth when ADC credentials are present', async () => {
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
-    vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
-    vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);
-
-    process.env.GOOGLE_APPLICATION_CREDENTIALS = '/tmp/adc.json';
-
-    await loadConfig({} as never, [], 'test-task-id');
-
-    expect(Config.prototype.refreshAuth).toHaveBeenCalledWith('vertex-ai');
+  it('prefers CODER_AGENT_WORKSPACE_PATH over the agentSettings workspacePath', () => {
+    const envWorkspace = mkdtempSync(join(tmpdir(), 'set-target-env-'));
+    const settingsWorkspace = mkdtempSync(join(tmpdir(), 'set-target-lost-'));
+    process.env['CODER_AGENT_WORKSPACE_PATH'] = envWorkspace;
+    const agentSettings = {
+      kind: 'agent-settings' as const,
+      workspacePath: settingsWorkspace,
+    } as AgentSettings;
+    try {
+      expect(setTargetDir(agentSettings)).toBe(envWorkspace);
+    } finally {
+      delete process.env['CODER_AGENT_WORKSPACE_PATH'];
+      rmSync(envWorkspace, { recursive: true, force: true });
+      rmSync(settingsWorkspace, { recursive: true, force: true });
+    }
   });
 
-  it('does not map an OTLP endpoint environment variable into telemetry settings', async () => {
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
-    vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
-    vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);
-    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'https://collector.example';
+  it('resolves a relative agentSettings workspacePath against the current directory', () => {
+    delete process.env['CODER_AGENT_WORKSPACE_PATH'];
+    const workspace = mkdtempSync(join(tmpdir(), 'set-target-rel-'));
+    const agentSettings = {
+      kind: 'agent-settings' as const,
+      workspacePath: basename(workspace),
+    } as AgentSettings;
+    try {
+      process.chdir(tmpdir());
+      // process.chdir realpaths the cwd (macOS /var -> /private/var), and
+      // setTargetDir resolves the relative path against it; compare against
+      // the workspace's realpath.
+      expect(setTargetDir(agentSettings)).toBe(realpathSync(workspace));
+    } finally {
+      process.chdir(suiteCwd);
+      rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+});
 
-    const config = await loadConfig(
-      { telemetry: { enabled: true, logPrompts: false } },
-      [],
-      'test-task-id',
+describe('mergeMcpServers', () => {
+  it('merges settings and extension MCP servers; settings win on key collision', () => {
+    const settingsServer: MCPServerConfig = {
+      command: 'node',
+      args: ['settings-server.js'],
+    };
+    const collidingServer: MCPServerConfig = {
+      command: 'node',
+      args: ['extension-loses.js'],
+    };
+    const extensionServer: MCPServerConfig = {
+      command: 'node',
+      args: ['ext-server.js'],
+    };
+    const extension: LlxprtExtension = {
+      name: 'ext',
+      version: '1.0.0',
+      isActive: true,
+      path: '/ext',
+      contextFiles: [],
+      mcpServers: {
+        'ext-server': extensionServer,
+        'settings-server': collidingServer,
+      },
+    };
+    const merged = mergeMcpServers(
+      { mcpServers: { 'settings-server': settingsServer } },
+      [extension],
     );
-
-    expect(config.getTelemetrySettings()).not.toHaveProperty('otlpEndpoint');
-  });
-});
-
-describe('getApprovalMode LLXPRT_YOLO_MODE', () => {
-  const ORIGINAL_ENV = { ...process.env };
-
-  afterEach(() => {
-    process.env = { ...ORIGINAL_ENV };
-    vi.restoreAllMocks();
+    expect(merged['settings-server']).toBeDefined();
+    expect(merged['ext-server']).toBeDefined();
+    // The precedence invariant: a same-key extension server is skipped in
+    // favor of the settings-declared one.
+    expect(merged['settings-server']).toBe(settingsServer);
+    expect(merged['settings-server'].args).toEqual(['settings-server.js']);
   });
 
-  it('enables YOLO mode when LLXPRT_YOLO_MODE is "true"', async () => {
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
-    vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
-    vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);
-
-    delete process.env.GEMINI_API_KEY;
-    delete process.env.USE_CCPA;
-    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
-    delete process.env.GOOGLE_CLOUD_PROJECT;
-    delete process.env.GOOGLE_CLOUD_LOCATION;
-    delete process.env.GOOGLE_API_KEY;
-    process.env.LLXPRT_YOLO_MODE = 'true';
-    delete process.env.GEMINI_YOLO_MODE;
-
-    const config = await loadConfig({} as never, [], 'test-task-id');
-    expect(config.getApprovalMode()).toBe(ApprovalMode.YOLO);
-  });
-
-  it('uses DEFAULT mode when LLXPRT_YOLO_MODE is not set', async () => {
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
-    vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
-    vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);
-
-    delete process.env.GEMINI_API_KEY;
-    delete process.env.USE_CCPA;
-    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
-    delete process.env.GOOGLE_CLOUD_PROJECT;
-    delete process.env.GOOGLE_CLOUD_LOCATION;
-    delete process.env.GOOGLE_API_KEY;
-    delete process.env.LLXPRT_YOLO_MODE;
-    delete process.env.GEMINI_YOLO_MODE;
-
-    const config = await loadConfig({} as never, [], 'test-task-id');
-    expect(config.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
-  });
-
-  it('does not enable YOLO mode via GEMINI_YOLO_MODE fallback', async () => {
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
-    vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
-    vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);
-
-    delete process.env.GEMINI_API_KEY;
-    delete process.env.USE_CCPA;
-    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
-    delete process.env.GOOGLE_CLOUD_PROJECT;
-    delete process.env.GOOGLE_CLOUD_LOCATION;
-    delete process.env.GOOGLE_API_KEY;
-    delete process.env.LLXPRT_YOLO_MODE;
-    process.env.GEMINI_YOLO_MODE = 'true';
-
-    const config = await loadConfig({} as never, [], 'test-task-id');
-    expect(config.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
-  });
-});
-
-describe('loadConfig interactive mode', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('should make config.isInteractive() return true', async () => {
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
-    vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
-    vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);
-
-    const config = await loadConfig({} as never, [], 'test-task-id');
-
-    expect(config.isInteractive()).toBe(true);
-    expect(config.getNonInteractive()).toBe(false);
-  });
-});
-
-describe('loadConfig provider-neutral defaults', () => {
-  afterEach(() => {
-    process.env = { ...ORIGINAL_ENV };
-    vi.restoreAllMocks();
-  });
-
-  it('uses PLACEHOLDER_MODEL (not DEFAULT_GEMINI_MODEL) when no model configured', async () => {
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
-    vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
-    vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);
-
-    delete process.env.GEMINI_API_KEY;
-    delete process.env.USE_CCPA;
-    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
-    delete process.env.GOOGLE_CLOUD_PROJECT;
-    delete process.env.GOOGLE_CLOUD_LOCATION;
-    delete process.env.GOOGLE_API_KEY;
-    delete process.env.LLXPRT_DEFAULT_PROVIDER;
-
-    const config = await loadConfig({} as never, [], 'test-task-id');
-    expect(config.getModel()).toBe(PLACEHOLDER_MODEL);
-  });
-
-  it('does NOT call refreshAuth when unconfigured (no Gemini credentials)', async () => {
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
-    vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
-    const refreshAuthSpy = vi
-      .spyOn(Config.prototype, 'refreshAuth')
-      .mockResolvedValue(undefined);
-
-    delete process.env.GEMINI_API_KEY;
-    delete process.env.USE_CCPA;
-    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
-    delete process.env.GOOGLE_CLOUD_PROJECT;
-    delete process.env.GOOGLE_CLOUD_LOCATION;
-    delete process.env.GOOGLE_API_KEY;
-    delete process.env.LLXPRT_DEFAULT_PROVIDER;
-
-    await loadConfig({} as never, [], 'test-task-id');
-
-    // No Gemini credentials and no explicit Gemini provider → must NOT
-    // attempt any Gemini auth (stays unconfigured).
-    expect(refreshAuthSpy).not.toHaveBeenCalled();
-  });
-
-  it('preserves explicit Gemini auth when GEMINI_API_KEY is set', async () => {
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
-    vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
-    const refreshAuthSpy = vi
-      .spyOn(Config.prototype, 'refreshAuth')
-      .mockResolvedValue(undefined);
-
-    delete process.env.USE_CCPA;
-    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
-    delete process.env.GOOGLE_CLOUD_PROJECT;
-    delete process.env.GOOGLE_CLOUD_LOCATION;
-    delete process.env.GOOGLE_API_KEY;
-    delete process.env.LLXPRT_DEFAULT_PROVIDER;
-    process.env.GEMINI_API_KEY = 'test-key';
-
-    await loadConfig({} as never, [], 'test-task-id');
-
-    // Explicit Gemini API key must trigger gemini-api-key auth.
-    expect(refreshAuthSpy).toHaveBeenCalledWith('gemini-api-key');
-  });
-
-  it('preserves explicit Gemini auth when LLXPRT_DEFAULT_PROVIDER is gemini', async () => {
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
-    vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
-    const refreshAuthSpy = vi
-      .spyOn(Config.prototype, 'refreshAuth')
-      .mockResolvedValue(undefined);
-
-    delete process.env.GEMINI_API_KEY;
-    delete process.env.USE_CCPA;
-    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
-    delete process.env.GOOGLE_CLOUD_PROJECT;
-    delete process.env.GOOGLE_CLOUD_LOCATION;
-    delete process.env.GOOGLE_API_KEY;
-    process.env.LLXPRT_DEFAULT_PROVIDER = 'gemini';
-
-    await loadConfig({} as never, [], 'test-task-id');
-
-    // Explicit Gemini provider via env → OAuth fallback for Gemini.
-    expect(refreshAuthSpy).toHaveBeenCalledWith('oauth-personal');
-  });
-
-  it('treats whitespace-only LLXPRT_DEFAULT_PROVIDER as unconfigured', async () => {
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
-    vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
-    const refreshAuthSpy = vi
-      .spyOn(Config.prototype, 'refreshAuth')
-      .mockResolvedValue(undefined);
-
-    delete process.env.GEMINI_API_KEY;
-    delete process.env.USE_CCPA;
-    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
-    delete process.env.GOOGLE_CLOUD_PROJECT;
-    delete process.env.GOOGLE_CLOUD_LOCATION;
-    delete process.env.GOOGLE_API_KEY;
-    process.env.LLXPRT_DEFAULT_PROVIDER = '   ';
-
-    const config = await loadConfig({} as never, [], 'test-task-id');
-
-    // A whitespace-only env value must not select any provider or trigger auth.
-    expect(refreshAuthSpy).not.toHaveBeenCalled();
-    expect(config.getProvider()).toBe(UNCONFIGURED_PROVIDER);
-  });
-
-  it('trims a padded explicit provider from LLXPRT_DEFAULT_PROVIDER', async () => {
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
-    vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
-    vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);
-
-    delete process.env.GEMINI_API_KEY;
-    delete process.env.USE_CCPA;
-    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
-    delete process.env.GOOGLE_CLOUD_PROJECT;
-    delete process.env.GOOGLE_CLOUD_LOCATION;
-    delete process.env.GOOGLE_API_KEY;
-    process.env.LLXPRT_DEFAULT_PROVIDER = '  openai  ';
-
-    const config = await loadConfig({} as never, [], 'test-task-id');
-
-    // The padded value must be trimmed to 'openai'.
-    expect(config.getProvider()).toBe('openai');
+  it('returns an empty map when neither settings nor extensions declare MCP servers', () => {
+    const merged = mergeMcpServers({}, []);
+    expect(merged).toEqual({});
   });
 });
