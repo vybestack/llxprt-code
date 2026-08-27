@@ -10,7 +10,6 @@ import { PromptRegistry } from '../prompts/prompt-registry.js';
 import { ResourceRegistry } from '../resources/resource-registry.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import { CoreSkillServiceAdapter } from '../tools-adapters/CoreSkillServiceAdapter.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { initializeParser } from '../utils/shell-parser.js';
@@ -45,6 +44,7 @@ import {
   transferHistoryToNewClient,
 } from './agentClientLifecycle.js';
 import { syncActivateMcpServerTool } from './mcp-lazy-tool-sync.js';
+import { syncSkillActivationTool } from './skill-tool-sync.js';
 import {
   getOrCreateAsyncTaskManager,
   getOrCreateAsyncTaskReminderService,
@@ -241,19 +241,7 @@ export class Config extends ConfigBase {
         this.getExtensions(),
       );
       this.getSkillManager().setDisabledSkills(this.disabledSkills);
-
-      // Re-register ActivateSkillTool via the injected registrar hook
-      // (eliminates the inverted core->tools dependency — issue #2417)
-      if (this.getSkillManager().getSkills().length > 0) {
-        const registrar = this.getPostSkillDiscoveryToolRegistrar();
-        if (registrar) {
-          registrar(
-            this.getToolRegistry(),
-            new CoreSkillServiceAdapter(this),
-            initializationMessageBus,
-          );
-        }
-      }
+      syncSkillActivationTool(this);
     }
 
     // Register subagents (after skill discovery, before AgentClient creation)
@@ -485,6 +473,15 @@ export class Config extends ConfigBase {
     }
     await this.skillManager.discoverSkills(this.storage, this.getExtensions());
     this.skillManager.setDisabledSkills(this.disabledSkills);
+
+    syncSkillActivationTool(this);
+
+    // Registry changes do not reach the model on their own: the chat session
+    // caches the declarations it was last given.
+    const client = this.getAgentClientIfReady();
+    if (client) {
+      await client.setTools();
+    }
   }
 
   /**

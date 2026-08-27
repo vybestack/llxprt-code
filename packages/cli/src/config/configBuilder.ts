@@ -16,7 +16,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { createAgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-agents';
 import { registerAgentRuntimeFactories } from '@vybestack/llxprt-code-providers/runtime.js';
-import { ActivateSkillTool } from '@vybestack/llxprt-code-tools/tools/activate-skill.js';
+import { registerActivateSkillTool } from './activateSkillToolRegistrar.js';
 import { getEnableHooks, getEnableHooksUI } from './settingsSchema.js';
 import { loadSettings } from './settings.js';
 import { appEvents } from '../utils/events.js';
@@ -360,16 +360,7 @@ export function buildConfig(input: ConfigBuildInput): Config {
     agentClientFactory: agentRuntimeFactoryBindings.agentClientFactory,
     toolSchedulerFactory: agentRuntimeFactoryBindings.toolSchedulerFactory,
     taskToolRegistration: agentRuntimeFactoryBindings.taskToolRegistration(),
-    postSkillDiscoveryToolRegistrar: (
-      toolRegistry,
-      skillService,
-      messageBus,
-    ) => {
-      toolRegistry.unregisterTool(ActivateSkillTool.Name);
-      toolRegistry.registerTool(
-        new ActivateSkillTool(skillService, messageBus),
-      );
-    },
+    postSkillDiscoveryToolRegistrar: registerActivateSkillTool,
   });
 }
 

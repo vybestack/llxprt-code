@@ -47,10 +47,17 @@ export type { MCPOAuthConfig, AnyToolInvocation, SkillDefinition };
 
 /**
  * Registration hook for post-skill-discovery tool registration.
- * Core calls this during initialize() after skill discovery, passing
- * core-owned dependencies. The composition root (CLI) supplies a
- * callback that constructs and registers the concrete ActivateSkillTool
- * from the tools package, eliminating the inverted core->tools dependency.
+ *
+ * Core calls this after every skill discovery, during initialize() and again
+ * on reloadSkills(), passing core-owned dependencies. The composition root
+ * (CLI) supplies a callback that constructs and registers the concrete
+ * ActivateSkillTool from the tools package, eliminating the inverted
+ * core->tools dependency.
+ *
+ * The callback owns both halves of the decision: it must replace any existing
+ * registration so the tool's captured skill names stay current, and it must
+ * unregister the tool when the skill service reports no available skills
+ * (issue #3379).
  */
 export type PostSkillDiscoveryToolRegistrar = (
   toolRegistry: ToolRegistry,
