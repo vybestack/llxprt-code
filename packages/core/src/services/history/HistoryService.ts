@@ -74,10 +74,7 @@ import {
   type MutationFailure,
   combineMutationFailures,
 } from './historyMutationFailure.js';
-import {
-  CompressionOperationQueue,
-  type CompressionOperationKind,
-} from './historyCompressionQueue.js';
+import { CompressionOperationQueue } from './historyCompressionQueue.js';
 
 type QueuedHistoryMutation =
   | { kind: 'synchronous'; execute: () => void }
@@ -135,8 +132,7 @@ export class HistoryService
   private activeTokenizationProvider?: string;
 
   private isCompressing: boolean = false;
-  // Queue tagged add/clear so a rebuild clear never destroys streaming content
-  // queued before it (#3264) - see CompressionOperationQueue.
+  private inRebuildScope = false;
   private pendingOperations = new CompressionOperationQueue((pendingCount) =>
     this.logger.error(
       'History compression queue exceeded its high-water mark; the compression lock is being held for an unexpectedly long time. No operations are dropped.',
@@ -449,11 +445,13 @@ export class HistoryService
   add(content: IContent, modelName?: string): void {
     if (this.isCompressing) {
       logQueuedDuringCompression(this.logger, content);
-      this.queueCompressionOperation('add', () => {
-        this.runSynchronousHistoryMutation(() => {
-          this.addInternal(content, modelName);
-        });
-      });
+      this.pendingOperations.enqueue(
+        () =>
+          this.runSynchronousHistoryMutation(() => {
+            this.addInternal(content, modelName);
+          }),
+        this.inRebuildScope ? 'rebuild' : 'streaming',
+      );
       return;
     }
 
@@ -463,28 +461,23 @@ export class HistoryService
   }
 
   /**
-   * Queues an operation that arrived while compression held the history lock.
+   * Identify synchronous clear and add operations as compression rebuild work.
    *
-   * Operations are tagged with whether they came from streaming content (`add`)
-   * or a compression rebuild (`clear`). When the queue is flushed, everything
-   * from the FIRST rebuild clear onward is applied before streaming operations,
-   * so a rebuild clear never destroys streaming content queued before it: that
-   * content is re-applied after the rebuild, and its `contentAdded` fires
-   * after `compressionLockReleased` so recording captures it (issue #3264).
-   *
-   * Operations are never dropped and never rejected: `add()` is on the
-   * streaming path, so failing here would lose conversation content and could
-   * break a turn. `startCompression`/`endCompression` are balanced in a
-   * `finally` by the only caller (`CompressionHandler.performCompression`), so
-   * the lock is always released and the queue is bounded by how long a single
-   * compression takes. Crossing the high-water mark is reported once so an
-   * unbalanced lock would be diagnosable rather than silent (issue #2852).
+   * The callback is typed `() => undefined` rather than `() => void` on purpose:
+   * TypeScript accepts async functions for a `void` callback (any returned value
+   * is assignable to `void`), so an `await` would exit the rebuild scope and tag
+   * the remaining work as streaming, breaking event ordering and record suppression.
+   * An async function returns `Promise<void>`, which is not assignable to
+   * `undefined`, so the synchronous contract fails at compile time (#3338).
    */
-  private queueCompressionOperation(
-    kind: CompressionOperationKind,
-    operation: () => void,
-  ): void {
-    this.pendingOperations.enqueue(operation, kind);
+  rebuildWith(callback: () => undefined): void {
+    const previousScope = this.inRebuildScope;
+    this.inRebuildScope = true;
+    try {
+      callback();
+    } finally {
+      this.inRebuildScope = previousScope;
+    }
   }
 
   private addInternal(content: IContent, modelName?: string): void {
@@ -883,14 +876,15 @@ export class HistoryService
    * Clear all history
    */
   clear(): void {
-    // If compression is active, queue this operation
     if (this.isCompressing) {
       this.logger.debug('Queueing clear operation during compression');
-      this.queueCompressionOperation('clear', () => {
-        this.runSynchronousHistoryMutation(() => {
-          this.clearInternal();
-        });
-      });
+      this.pendingOperations.enqueue(
+        () =>
+          this.runSynchronousHistoryMutation(() => {
+            this.clearInternal();
+          }),
+        this.inRebuildScope ? 'rebuild' : 'streaming',
+      );
       return;
     }
 
@@ -1144,25 +1138,13 @@ export class HistoryService
   }
 
   /**
-   * Mark compression as complete
-   * This will flush all queued operations in two phases, partitioned at the
-   * FIRST queued rebuild clear.
+   * Mark compression as complete and flush explicitly tagged rebuild operations
+   * before the release events, followed by streaming operations. Rebuilt entries
+   * remain suppressed by recording, while streaming entries remain recoverable
+   * (#3132, #3264, #3338).
    *
-   * Rebuild phase (the first `clear` and everything queued after it) flushes
-   * first: its `contentAdded` events stay inside the recording suppression
-   * window, so rebuilt entries produce no duplicate content records (#3132).
-   * Only then are `compressionLockReleased`/`compressionEnded` emitted.
-   *
-   * Streaming phase (operations queued before the first `clear`) flushes after
-   * the events: a rebuild clear never destroys that content — it is re-applied
-   * after the rebuild and its `contentAdded` fires after
-   * `compressionLockReleased`, so recording captures it and replay can recover
-   * it (issue #3264).
-   *
-   * `compressionLockReleased` fires unconditionally so a summary-less end
-   * (no-op/failed compression) cannot wedge recording, while
-   * `compressionEnded` stays conditional on summary + itemsCompressed
-   * (issue #3263).
+   * `compressionLockReleased` fires unconditionally. `compressionEnded` remains
+   * conditional on a summary and item count (#3263).
    */
   endCompression(summary?: IContent, itemsCompressed?: number): void {
     this.logger.debug('Compression complete - unlocking history', {

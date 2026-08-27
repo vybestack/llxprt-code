@@ -644,38 +644,40 @@ export class ProviderContentEnforcer {
 
   private restoreHistory(history: IContent[]): void {
     const backup = this.deps.historyService.getCurated();
-    this.deps.historyService.clear();
-    // Post-truncation rebuild: the prefix is already destroyed, so reset the
-    // cache anchor (#3070). Subsequent clears in the error-handling flow find
-    // it already at 0.
-    this.deps.historyService.resetCacheAnchorSeq();
-    try {
-      this.addHistoryEntries(history);
-    } catch (restoreError) {
+    this.deps.historyService.rebuildWith(() => {
       this.deps.historyService.clear();
+      // Post-truncation rebuild: the prefix is already destroyed, so reset the
+      // cache anchor (#3070). Subsequent clears in the error-handling flow find
+      // it already at 0.
+      this.deps.historyService.resetCacheAnchorSeq();
       try {
-        this.addHistoryEntries(backup);
-      } catch (backupError) {
-        this.deps.logger.error(
-          () =>
-            '[CompressionHandler] Failed to restore both new and backup history; retrying requested history',
-          backupError,
-        );
+        this.addHistoryEntries(history);
+      } catch (restoreError) {
+        this.deps.historyService.clear();
         try {
-          this.deps.historyService.clear();
-          this.addHistoryEntries(history);
-          return;
-        } catch (finalError) {
-          this.deps.historyService.clear();
+          this.addHistoryEntries(backup);
+        } catch (backupError) {
           this.deps.logger.error(
             () =>
-              '[CompressionHandler] All history restoration attempts failed; history is empty',
-            finalError,
+              '[CompressionHandler] Failed to restore both new and backup history; retrying requested history',
+            backupError,
           );
+          try {
+            this.deps.historyService.clear();
+            this.addHistoryEntries(history);
+            return;
+          } catch (finalError) {
+            this.deps.historyService.clear();
+            this.deps.logger.error(
+              () =>
+                '[CompressionHandler] All history restoration attempts failed; history is empty',
+              finalError,
+            );
+          }
         }
+        throw restoreError;
       }
-      throw restoreError;
-    }
+    });
   }
 
   private addHistoryEntries(history: IContent[]): void {

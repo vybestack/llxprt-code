@@ -176,4 +176,92 @@ describe('PendingContextWindowEnforcer structured overflow on estimator error (i
       /context limit/i,
     );
   });
+
+  describe('PendingContextWindowEnforcer fallback rebuild under an active compression lock (#3338)', () => {
+    let historyService: HistoryService;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      historyService = new HistoryService();
+    });
+
+    it('runs the fallback clear/re-add inside one rebuild scope and keeps a late ordinary add streaming', async () => {
+      // Seed large history so every projection stays over the hard limit until the
+      // fallback truncation shrinks it. The real enforcer reaches the fallback on
+      // its own (auto compression fails), and the fallback's applyResult runs the
+      // migrated rebuildWith path on the real HistoryService.
+      historyService.add(textContent('human', 'hello'));
+      historyService.add(
+        toolResponseContent('call-big', 'read_file', 'x'.repeat(100000)),
+      );
+      await historyService.waitForTokenUpdates();
+
+      const deps: PendingContextWindowEnforcerDeps = {
+        ...buildEnforcerDeps(historyService, {
+          completionBudget: 100,
+          marginAdjustedLimit: 10_000,
+        }),
+        compressWithFallbackStrategy: async () => ({
+          kind: 'applied',
+          newHistory: [
+            textContent('ai', 'rebuilt-1'),
+            textContent('ai', 'rebuilt-2'),
+          ],
+          metadata: {
+            originalMessageCount: 2,
+            compressedMessageCount: 2,
+            strategyUsed: 'top-down-truncation',
+            llmCallMade: false,
+            topPreserved: 0,
+          },
+        }),
+        applyFallbackCompressionResult: (result, applyResult) => {
+          if (result.kind === 'noop') return;
+          applyResult(
+            result.newHistory,
+            undefined,
+            result.metadata.topPreserved ?? 0,
+          );
+        },
+      };
+      const enforcer = new PendingContextWindowEnforcer(deps);
+
+      const observed: string[] = [];
+      historyService.on('contentAdded', (content) => {
+        const block = content.blocks[0];
+        observed.push(
+          `contentAdded:${block.type === 'text' ? block.text : block.type}`,
+        );
+      });
+      historyService.on('compressionLockReleased', () => {
+        observed.push('compressionLockReleased');
+      });
+      historyService.on('compressionEnded', () => {
+        observed.push('compressionEnded');
+      });
+
+      historyService.startCompression();
+      await enforcer.enforce(0, 'prompt-3338');
+      historyService.add(textContent('ai', 'late stream after enforce'));
+      historyService.endCompression(textContent('ai', 'truncation summary'), 3);
+
+      expect(observed).toStrictEqual([
+        'contentAdded:rebuilt-1',
+        'contentAdded:rebuilt-2',
+        'compressionLockReleased',
+        'compressionEnded',
+        'contentAdded:late stream after enforce',
+      ]);
+
+      const texts = historyService.getAll().map((entry) => {
+        const block = entry.blocks[0];
+        return block.type === 'text' ? block.text : `<${block.type}>`;
+      });
+      expect(texts).toStrictEqual([
+        'rebuilt-1',
+        'rebuilt-2',
+        'late stream after enforce',
+      ]);
+    });
+  });
 });

@@ -168,3 +168,74 @@ describe('applyCompressionWithAnchor — cacheAnchor marker (#3070)', () => {
     expect(historyService.getCacheAnchorSeq()).toBe(expectedSeq);
   });
 });
+
+describe('applyCompressionWithAnchor under an active compression lock (#3338)', () => {
+  it('flushes rebuild content before the lock release and keeps ordinary streaming adds on both sides streaming after it', () => {
+    const historyService = new HistoryService();
+    for (const c of [
+      human('original-1'),
+      ai('original-2'),
+      human('original-3'),
+    ]) {
+      historyService.add(c, 'test-model');
+    }
+    const stamped = historyService.getAll();
+    const newHistory = [
+      stamped[0],
+      stamped[1],
+      summary('compressed'),
+      stamped[2],
+    ];
+    const topPreserved = 2;
+
+    const observed: string[] = [];
+    historyService.on('contentAdded', (content) => {
+      const block = content.blocks[0];
+      observed.push(
+        `contentAdded:${block.type === 'text' ? block.text : block.type}`,
+      );
+    });
+    historyService.on('compressionLockReleased', () => {
+      observed.push('compressionLockReleased');
+    });
+    historyService.on('compressionEnded', () => {
+      observed.push('compressionEnded');
+    });
+
+    historyService.startCompression();
+    // An ordinary streaming add queued before the helper must not be treated as
+    // rebuild work: it lands in the streaming phase after the release events.
+    historyService.add(human('pre-helper-stream'));
+    apply(historyService, newHistory, topPreserved);
+    // A late ordinary streaming add queued after the helper must also stay in the
+    // streaming phase; it cannot be inferred from position relative to the rebuild.
+    historyService.add(ai('post-helper-stream'));
+    historyService.endCompression(summary('done'), stamped.length);
+
+    expect(observed).toStrictEqual([
+      // Rebuild (clear + re-add) fires inside the recording suppression window.
+      'contentAdded:original-1',
+      'contentAdded:original-2',
+      'contentAdded:compressed',
+      'contentAdded:original-3',
+      'compressionLockReleased',
+      'compressionEnded',
+      // Both streaming adds survive and fire after the release, in FIFO order.
+      'contentAdded:pre-helper-stream',
+      'contentAdded:post-helper-stream',
+    ]);
+
+    const texts = historyService.getAll().map((entry) => {
+      const block = entry.blocks[0];
+      return block.type === 'text' ? block.text : `<${block.type}>`;
+    });
+    expect(texts).toStrictEqual([
+      'original-1',
+      'original-2',
+      'compressed',
+      'original-3',
+      'pre-helper-stream',
+      'post-helper-stream',
+    ]);
+  });
+});

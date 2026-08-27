@@ -455,12 +455,14 @@ export class PendingContextWindowEnforcer {
     this.deps.applyFallbackCompressionResult(
       result,
       (newHistory, _summary, _topPreserved) => {
-        this.deps.historyService.clear();
-        // Post-truncation rebuild: the prefix is already destroyed (#3070).
-        this.deps.historyService.resetCacheAnchorSeq();
-        for (const content of newHistory) {
-          this.deps.historyService.add(content, this.deps.getRuntimeModel());
-        }
+        this.deps.historyService.rebuildWith(() => {
+          this.deps.historyService.clear();
+          // Post-truncation rebuild: the prefix is already destroyed (#3070).
+          this.deps.historyService.resetCacheAnchorSeq();
+          for (const content of newHistory) {
+            this.deps.historyService.add(content, this.deps.getRuntimeModel());
+          }
+        });
         this.deps.resetLastPromptTokenCount();
       },
     );
