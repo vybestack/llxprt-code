@@ -7,10 +7,12 @@
 import { render } from 'ink-testing-library';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 
-// Unmock ink to use real Ink with ink-testing-library
-// The global mock in test-setup.ts conflicts with renderer behavior here.
-// Under Bun, ink is redirected to a stub by a resolution plugin rather than a
-// module mock, so there is nothing to unmock.
+const { Text } = await import('ink');
+const realInkModule = {
+  ...(await import('../../../test-utils/real-ink.js')),
+};
+
+void vi.mock('ink', () => realInkModule);
 
 import { DefaultAppLayout } from './DefaultAppLayout.js';
 import { useUIState } from '../contexts/UIStateContext.js';
@@ -22,11 +24,6 @@ import {
   buildUiRuntimeFromSource,
 } from '../cliUiRuntime.js';
 
-const { dialogManagerRenderSpy, composerRenderSpy } = {
-  dialogManagerRenderSpy: vi.fn(() => null),
-  composerRenderSpy: vi.fn(() => null),
-};
-
 void vi.mock('../contexts/UIStateContext.js', () => ({
   useUIState: vi.fn(),
 }));
@@ -36,21 +33,19 @@ void vi.mock('../contexts/UIActionsContext.js', () => ({
 }));
 
 void vi.mock('../components/DialogManager.js', () => ({
-  DialogManager: dialogManagerRenderSpy,
+  DialogManager: () => <Text color="white">dialog content</Text>,
 }));
 
 void vi.mock('../components/Composer.js', () => ({
-  Composer: composerRenderSpy,
+  Composer: () => <Text color="white">composer content</Text>,
 }));
 
-// Mock all other child components as null so this test only verifies
-// dialog gating behavior in DefaultAppLayout.
 void vi.mock('../components/AppHeader.js', () => ({ AppHeader: () => null }));
 void vi.mock('../components/HistoryItemDisplay.js', () => ({
   HistoryItemDisplay: () => null,
 }));
 void vi.mock('../components/ShowMoreLines.js', () => ({
-  ShowMoreLines: () => null,
+  ShowMoreLines: () => <Text color="white">standard buffer history</Text>,
 }));
 void vi.mock('../components/Notifications.js', () => ({
   Notifications: () => null,
@@ -76,7 +71,7 @@ void vi.mock('../components/DetailedMessagesDisplay.js', () => ({
   DetailedMessagesDisplay: () => null,
 }));
 void vi.mock('../components/shared/ScrollableList.js', () => ({
-  ScrollableList: () => null,
+  ScrollableList: () => <Text color="white">alternate buffer history</Text>,
 }));
 void vi.mock('../components/shared/VirtualizedList.js', () => ({
   SCROLL_TO_ITEM_END: -1,
@@ -138,14 +133,16 @@ function createConfigStub() {
   };
 }
 
-function createSettingsStub() {
+function createSettingsStub({
+  useAlternateBuffer = true,
+}: { readonly useAlternateBuffer?: boolean } = {}) {
   return {
     merged: {
       ui: {
         showTodoPanel: false,
         hideFooter: false,
         hideContextSummary: false,
-        useAlternateBuffer: true,
+        useAlternateBuffer,
       },
       hideCWD: false,
       hideSandboxStatus: false,
@@ -241,11 +238,33 @@ function createBaseUIState() {
     isModelsDialogOpen: false,
     isSessionBrowserDialogOpen: false,
     isModelConfigDialogOpen: false,
+    isPoliciesDialogOpen: false,
     showPrivacyNotice: false,
 
     rootUiRef: { current: null },
     pendingHistoryItemRef: { current: null },
   };
+}
+
+function renderDefaultAppLayout(
+  settings = createSettingsStub(),
+): ReturnType<typeof render> {
+  return render(
+    <DefaultAppLayout
+      uiRuntime={buildUiRuntimeFromSource(createConfigStub() as never)}
+      slashCommandRuntime={buildSlashCommandRuntime(
+        createConfigStub() as never,
+      )}
+      settings={settings as never}
+      startupWarnings={[]}
+      version="0.0.0-test"
+      nightly={false}
+      mainControlsRef={{ current: null }}
+      availableTerminalHeight={40}
+      contextFileNames={[]}
+      updateInfo={null}
+    />,
+  );
 }
 
 describe('DefaultAppLayout', () => {
@@ -260,25 +279,10 @@ describe('DefaultAppLayout', () => {
       isSessionBrowserDialogOpen: true,
     } as never);
 
-    render(
-      <DefaultAppLayout
-        uiRuntime={buildUiRuntimeFromSource(createConfigStub() as never)}
-        slashCommandRuntime={buildSlashCommandRuntime(
-          createConfigStub() as never,
-        )}
-        settings={createSettingsStub() as never}
-        startupWarnings={[]}
-        version={'0.0.0-test'}
-        nightly={false}
-        mainControlsRef={{ current: null }}
-        availableTerminalHeight={40}
-        contextFileNames={[]}
-        updateInfo={null}
-      />,
-    );
+    const { lastFrame } = renderDefaultAppLayout();
 
-    expect(dialogManagerRenderSpy).toHaveBeenCalledTimes(1);
-    expect(composerRenderSpy).not.toHaveBeenCalled();
+    expect(lastFrame()).toContain('dialog content');
+    expect(lastFrame()).not.toContain('composer content');
   });
 
   it('renders DialogManager when model config dialog is the only active dialog', () => {
@@ -287,48 +291,32 @@ describe('DefaultAppLayout', () => {
       isModelConfigDialogOpen: true,
     } as never);
 
-    render(
-      <DefaultAppLayout
-        uiRuntime={buildUiRuntimeFromSource(createConfigStub() as never)}
-        slashCommandRuntime={buildSlashCommandRuntime(
-          createConfigStub() as never,
-        )}
-        settings={createSettingsStub() as never}
-        startupWarnings={[]}
-        version={'0.0.0-test'}
-        nightly={false}
-        mainControlsRef={{ current: null }}
-        availableTerminalHeight={40}
-        contextFileNames={[]}
-        updateInfo={null}
-      />,
-    );
+    const { lastFrame } = renderDefaultAppLayout();
 
-    expect(dialogManagerRenderSpy).toHaveBeenCalledTimes(1);
-    expect(composerRenderSpy).not.toHaveBeenCalled();
+    expect(lastFrame()).toContain('dialog content');
+    expect(lastFrame()).not.toContain('composer content');
   });
 
   it('renders Composer when no dialog is open', () => {
     mockUseUIState.mockReturnValue(createBaseUIState() as never);
 
-    render(
-      <DefaultAppLayout
-        uiRuntime={buildUiRuntimeFromSource(createConfigStub() as never)}
-        slashCommandRuntime={buildSlashCommandRuntime(
-          createConfigStub() as never,
-        )}
-        settings={createSettingsStub() as never}
-        startupWarnings={[]}
-        version={'0.0.0-test'}
-        nightly={false}
-        mainControlsRef={{ current: null }}
-        availableTerminalHeight={40}
-        contextFileNames={[]}
-        updateInfo={null}
-      />,
-    );
+    const { lastFrame } = renderDefaultAppLayout();
 
-    expect(composerRenderSpy).toHaveBeenCalledTimes(1);
-    expect(dialogManagerRenderSpy).not.toHaveBeenCalled();
+    expect(lastFrame()).toContain('composer content');
+    expect(lastFrame()).not.toContain('dialog content');
+  });
+
+  it('renders standard and alternate buffer layout branches according to settings', () => {
+    mockUseUIState.mockReturnValue(createBaseUIState() as never);
+
+    const alternateBufferFrame = renderDefaultAppLayout().lastFrame();
+    const standardBufferFrame = renderDefaultAppLayout(
+      createSettingsStub({ useAlternateBuffer: false }),
+    ).lastFrame();
+
+    expect(alternateBufferFrame).toContain('alternate buffer history');
+    expect(alternateBufferFrame).not.toContain('standard buffer history');
+    expect(standardBufferFrame).toContain('standard buffer history');
+    expect(standardBufferFrame).not.toContain('alternate buffer history');
   });
 });

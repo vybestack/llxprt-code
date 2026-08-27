@@ -9,9 +9,9 @@
  *
  * These read the REAL .github/workflows/interactive-ui.yml through existing
  * typed test helpers and assert:
- *   - direct tmux harness modules, the preload, the test file, its three
- *     executed scenario JSON files, and their referenced fixtures are
- *     included in the path filter
+ *   - direct tmux harness modules, the preload, the test file, all executed
+ *     scenario JSON files, and their referenced fixtures are included in the
+ *     path filter
  *   - unrelated broad script test/fixture/scenario globs are removed
  *   - conservative package/build/runtime inputs remain
  *   - PR and push path filters are symmetric
@@ -84,16 +84,19 @@ describe('interactive-ui.yml: direct harness inputs are included', () => {
     expect(prPaths).toContain('scripts/tests/interactive-ui.test.ts');
   });
 
-  it('includes the three executed scenario JSON files', () => {
+  it('includes all executed scenario JSON files', () => {
     expect(prPaths).toContain('scripts/tmux-script.slash-autocomplete.json');
     expect(prPaths).toContain('scripts/tmux-script.approval-ui.json');
     expect(prPaths).toContain(
       'scripts/tmux-script.issue2208-newlines.fake.json',
     );
+    expect(prPaths).toContain(
+      'scripts/tmux-script.issue2016-composer.fake.json',
+    );
   });
 
-  it('includes the scenario config fixtures referenced by all three scenarios', () => {
-    // All three executed scenarios set LLXPRT_CODE_WELCOME_CONFIG_PATH and
+  it('includes the scenario config fixtures referenced by all scenarios', () => {
+    // All executed scenarios set LLXPRT_CODE_WELCOME_CONFIG_PATH and
     // LLXPRT_SYSTEM_SETTINGS_PATH to these direct inputs.
     expect(prPaths).toContain('scripts/fixtures/welcome-completed.json');
     expect(prPaths).toContain('scripts/system-settings.interactive-ui.json');

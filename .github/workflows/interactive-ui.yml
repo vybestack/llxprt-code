@@ -16,11 +16,12 @@ on:
       # The interactive UI test and its Bun test preload
       - 'scripts/tests/test-setup.ts'
       - 'scripts/tests/interactive-ui.test.ts'
-      # The three scenario JSON files executed by the test
+      # The scenario JSON files executed by the test
       - 'scripts/tmux-script.slash-autocomplete.json'
       - 'scripts/tmux-script.approval-ui.json'
       - 'scripts/tmux-script.issue2208-newlines.fake.json'
-      # Scenario config referenced by ALL three scenarios (welcome banner +
+      - 'scripts/tmux-script.issue2016-composer.fake.json'
+      # Scenario config referenced by all scenarios (welcome banner +
       # system settings env paths set in each scenario)
       - 'scripts/fixtures/welcome-completed.json'
       - 'scripts/system-settings.interactive-ui.json'
@@ -61,6 +62,7 @@ on:
       - 'scripts/tmux-script.slash-autocomplete.json'
       - 'scripts/tmux-script.approval-ui.json'
       - 'scripts/tmux-script.issue2208-newlines.fake.json'
+      - 'scripts/tmux-script.issue2016-composer.fake.json'
       - 'scripts/fixtures/welcome-completed.json'
       - 'scripts/system-settings.interactive-ui.json'
       - 'scripts/fixtures/approval-ui.responses.jsonl'
@@ -145,14 +147,9 @@ jobs:
           head -n 5 /tmp/llxprt-cli-help.txt
 
       - name: 'Run interactive UI tests'
-        # CI is set to 'true' on purpose. The CLI used to be shipped as an
-        # esbuild/bun bundle whose build plugin stubbed `is-in-ci` to false so
-        # ink used its full interactive render path under CI. The bundle is now
-        # retired and the CLI runs from source/dist, so the real `is-in-ci`
-        # resolves (transitively via ink) and returns true here. This job is the
-        # validation that the unbundled runtime still renders correctly under
-        # CI; keeping it green is the replacement for the removed build-time
-        # stub. End users on developer machines resolve is-in-ci=false naturally.
+        # Keep the runner and harness in CI mode. Each tmux scenario disables
+        # CI detection only for its child CLI process so Ink takes the same
+        # interactive rendering path used in a developer terminal.
         env:
           CI: 'true'
           NO_COLOR: 'true'
