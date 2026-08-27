@@ -63,7 +63,7 @@ export function extractNonStreamingThinking(
     // The file variant shares no properties with the text variant, so an
     // optional-`text` object type would be rejected as a weak type. Accept
     // the array loosely and narrow each entry below.
-    reasoning?: string | ReadonlyArray<unknown>;
+    reasoning?: string | readonly unknown[];
   },
   rs: ReasoningSettings,
   logger: DebugLogger,

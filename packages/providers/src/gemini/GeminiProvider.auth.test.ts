@@ -8,10 +8,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { GeminiProvider } from './GeminiProvider.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 
+// These assertions are about the client OPTIONS the provider builds, not about
+// which SDK constructs the client. Mocking the factory keeps the assertions
+// pointed at our own code and survives the transport change.
 const googleGenAIConstructor = vi.fn();
 
-void vi.mock('@google/genai', () => ({
-  GoogleGenAI: googleGenAIConstructor,
+void vi.mock('./geminiClientFactory.js', () => ({
+  createGeminiClient: googleGenAIConstructor,
 }));
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({

@@ -32,7 +32,7 @@ const googleGenAIState = {
   streamPlans: [] as Array<Array<Record<string, unknown>>>,
 };
 
-void vi.mock('@google/genai', () => {
+void vi.mock('../geminiClientFactory.js', () => {
   class FakeGoogleGenAI {
     readonly models: {
       generateContentStream: ReturnType<typeof vi.fn>;
@@ -70,7 +70,11 @@ void vi.mock('@google/genai', () => {
   // Mirrors the real Gemini schema-type constant, which is uppercase.
   const Type = { OBJECT: 'OBJECT' };
 
-  return { GoogleGenAI: FakeGoogleGenAI, Type };
+  return {
+    createGeminiClient: async (opts: Record<string, unknown>) =>
+      new FakeGoogleGenAI(opts),
+    Type,
+  };
 });
 
 const queueGoogleStream = (responses: Array<Record<string, unknown>>): void => {

@@ -30,8 +30,7 @@ import type {
   Part,
   UrlMetadata,
 } from './geminiWireTypes.js';
-import { ApiError } from './geminiWireTypes.js';
-import { Language, Outcome } from './geminiWireTypes.js';
+import type { ApiError, Language, Outcome } from './geminiWireTypes.js';
 import type {
   ContentBlock,
   TextBlock,
