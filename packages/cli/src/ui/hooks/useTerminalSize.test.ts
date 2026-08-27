@@ -109,24 +109,25 @@ describe('useTerminalSize', () => {
   });
 
   it('debounces resize events and publishes the latest measured size', () => {
-    setDimension(process.stderr, 'columns', 80);
-    setDimension(process.stderr, 'rows', 24);
+    inkStdout = process.stdout;
+    setDimension(inkStdout, 'columns', 80);
+    setDimension(inkStdout, 'rows', 24);
 
     const hook = renderHook(() => useTerminalSize());
     unmount = hook.unmount;
 
-    setDimension(process.stderr, 'columns', 100);
-    setDimension(process.stderr, 'rows', 30);
+    setDimension(inkStdout, 'columns', 100);
+    setDimension(inkStdout, 'rows', 30);
     act(() => {
-      process.stdout.emit('resize');
+      inkStdout.emit('resize');
       vi.advanceTimersByTime(149);
     });
     expect(hook.result.current).toEqual({ columns: 80, rows: 24 });
 
-    setDimension(process.stderr, 'columns', 120);
-    setDimension(process.stderr, 'rows', 40);
+    setDimension(inkStdout, 'columns', 120);
+    setDimension(inkStdout, 'rows', 40);
     act(() => {
-      process.stdout.emit('resize');
+      inkStdout.emit('resize');
       vi.advanceTimersByTime(149);
     });
     expect(hook.result.current).toEqual({ columns: 80, rows: 24 });
@@ -138,32 +139,33 @@ describe('useTerminalSize', () => {
   });
 
   it('removes its resize listener and cancels pending measurement on unmount', () => {
-    const priorResizeListeners = new Set(process.stdout.listeners('resize'));
-    setDimension(process.stderr, 'columns', 80);
-    setDimension(process.stderr, 'rows', 24);
+    inkStdout = process.stdout;
+    const priorResizeListeners = new Set(inkStdout.listeners('resize'));
+    setDimension(inkStdout, 'columns', 80);
+    setDimension(inkStdout, 'rows', 24);
 
     const hook = renderHook(() => useTerminalSize());
     unmount = hook.unmount;
-    const resizeListener = process.stdout
+    const resizeListener = inkStdout
       .listeners('resize')
       .find((listener) => !priorResizeListeners.has(listener));
     if (resizeListener === undefined) {
       throw new Error('Expected useTerminalSize to register a resize listener');
     }
 
-    setDimension(process.stderr, 'columns', 140);
-    setDimension(process.stderr, 'rows', 50);
+    setDimension(inkStdout, 'columns', 140);
+    setDimension(inkStdout, 'rows', 50);
     act(() => {
-      process.stdout.emit('resize');
+      inkStdout.emit('resize');
     });
 
     hook.unmount();
     unmount = undefined;
-    expect(process.stdout.listeners('resize')).not.toContain(resizeListener);
+    expect(inkStdout.listeners('resize')).not.toContain(resizeListener);
 
     act(() => {
       vi.advanceTimersByTime(150);
-      process.stdout.emit('resize');
+      inkStdout.emit('resize');
       vi.advanceTimersByTime(150);
     });
     expect(hook.result.current).toEqual({ columns: 80, rows: 24 });
