@@ -308,3 +308,141 @@ describe('packages/cli/bin/llxprt.mjs node-shebang shim (issue #2978)', () => {
     expect(out?.argv).toEqual(['--oven']);
   });
 });
+
+/**
+ * Issue #3389: the shim SPAWNS Bun rather than exec'ing it, so descriptors are
+ * not inherited automatically the way they were under the `#!/bin/sh` launcher
+ * it replaced. The sandbox credential transport hands the capability token to
+ * the CLI on fd 3 (named by LLXPRT_CAPABILITY_FD) and never puts it in the
+ * environment, so dropping that descriptor made every container sandbox abort
+ * at startup.
+ *
+ * These tests open a REAL descriptor 3 through `bash` and run the REAL shim, so
+ * they observe what the CLI process actually receives.
+ */
+const CAPABILITY_TOKEN = 'a'.repeat(64);
+
+/**
+ * Entry body that reports the capability marker it was given and the bytes it
+ * can read from descriptor 3, mirroring what credential-store-factory does.
+ */
+const capabilityEntryBody = [
+  'import fs from "node:fs";',
+  'const out = { marker: process.env.LLXPRT_CAPABILITY_FD ?? null, raw: "", err: "" };',
+  'try {',
+  '  const buf = Buffer.alloc(128);',
+  '  const read = fs.readSync(3, buf, 0, 128, null);',
+  '  out.raw = buf.subarray(0, read).toString("utf8");',
+  '} catch (error) {',
+  '  out.err = error.code ?? String(error);',
+  '}',
+  'console.log(JSON.stringify(out));',
+].join('\n');
+
+interface CapabilityEntryOutput {
+  readonly marker: string | null;
+  readonly raw: string;
+  readonly err: string;
+}
+
+function parseCapabilityOutput(stdout: string): CapabilityEntryOutput | null {
+  const line = stdout
+    .split(/\r?\n/)
+    .find((candidate) => candidate.trim().startsWith('{'));
+  if (line === undefined) {
+    return null;
+  }
+  try {
+    return JSON.parse(line) as CapabilityEntryOutput;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Runs the shim with descriptor 3 already open on a file holding the token,
+ * exactly as the sandbox entrypoint arranges it before exec'ing the CLI.
+ */
+function runShimWithOpenFd3(
+  layout: Layout,
+  extraEnv: Record<string, string> = {},
+): RunResult {
+  const tokenFile = path.join(layout.root, 'capability-token');
+  writeFileSync(tokenFile, `${CAPABILITY_TOKEN}\n`);
+  const script = `exec 3<${JSON.stringify(tokenFile)}\nexec node ${JSON.stringify(layout.shim)}`;
+  const result = spawnSync('bash', ['--noprofile', '--norc', '-c', script], {
+    cwd: layout.root,
+    encoding: 'utf8',
+    timeout: LAUNCH_TIMEOUT_MS,
+    env: { ...process.env, ...extraEnv },
+  });
+  return {
+    status: result.status,
+    stdout: result.stdout ?? '',
+    stderr: result.stderr ?? '',
+  };
+}
+
+describe('packages/cli/bin/llxprt.mjs capability descriptor transport (issue #3389)', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(path.join(tmpdir(), 'llxprt-shim-cap-'));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it.skipIf(isWin)(
+    'forwards descriptor 3 to the Bun child when LLXPRT_CAPABILITY_FD names it',
+    () => {
+      const layout = makeLayout(tempDir);
+      placeBundledBun(layout.nodeModules);
+      writeSourceEntry(layout.pkgRoot, capabilityEntryBody);
+
+      const res = runShimWithOpenFd3(layout, { LLXPRT_CAPABILITY_FD: '3' });
+
+      expect(res.status, `stderr: ${res.stderr}`).toBe(0);
+      const out = parseCapabilityOutput(res.stdout);
+      expect(out, `stdout: ${res.stdout}`).not.toBeNull();
+      expect(out?.marker).toBe('3');
+      expect(out?.err).toBe('');
+      expect(out?.raw).toBe(`${CAPABILITY_TOKEN}\n`);
+    },
+  );
+
+  it.skipIf(isWin)(
+    'does not leak an open descriptor 3 to the child when no marker is set',
+    () => {
+      const layout = makeLayout(tempDir);
+      placeBundledBun(layout.nodeModules);
+      writeSourceEntry(layout.pkgRoot, capabilityEntryBody);
+
+      const res = runShimWithOpenFd3(layout);
+
+      expect(res.status, `stderr: ${res.stderr}`).toBe(0);
+      const out = parseCapabilityOutput(res.stdout);
+      expect(out, `stdout: ${res.stdout}`).not.toBeNull();
+      expect(out?.marker).toBeNull();
+      // Whatever descriptor 3 happens to be in the child, it must not be the
+      // host's capability file.
+      expect(out?.raw).not.toContain(CAPABILITY_TOKEN);
+    },
+  );
+
+  it.skipIf(isWin)(
+    'exits 43 without running the CLI when the marker names any descriptor but 3',
+    () => {
+      const layout = makeLayout(tempDir);
+      placeBundledBun(layout.nodeModules);
+      writeSourceEntry(layout.pkgRoot, 'console.log("CLI_RAN");');
+
+      const res = runShimWithOpenFd3(layout, { LLXPRT_CAPABILITY_FD: '4' });
+
+      expect(res.status).toBe(LAUNCHER_FAILURE_EXIT);
+      expect(res.stderr).toContain('LLXPRT_CAPABILITY_FD');
+      expect(res.stdout).not.toContain('CLI_RAN');
+    },
+  );
+});

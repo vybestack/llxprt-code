@@ -22,11 +22,19 @@
  * `@oven/bun-<variant>` optionalDependencies declared in packages/cli, resolves
  * the entry point, and execs Bun with stdio inherited. It deliberately does not
  * depend on the os-gated launcher packages, which may be retired independently.
+ *
+ * Unlike the `#!/bin/sh` launcher it replaced, this shim SPAWNS Bun instead of
+ * exec'ing it, so file descriptors are not inherited automatically. The sandbox
+ * credential transport hands the capability token to the CLI on fd 3 and names
+ * it with LLXPRT_CAPABILITY_FD, so that descriptor must be forwarded explicitly
+ * (issue #3389): a bare `stdio: 'inherit'` passes only fds 0-2, leaving the CLI
+ * with the marker set and fd 3 either closed or reused by the runtime for an
+ * unrelated file.
  */
 
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { closeSync, existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -34,6 +42,19 @@ import { fileURLToPath } from 'node:url';
 // asserted by the launcher suites. Used for both missing-runtime and
 // missing-entry failure modes.
 const LAUNCHER_FAILURE_EXIT = 43;
+
+// Marker naming the inherited capability descriptor. The sandbox entrypoint
+// opens the credential-proxy capability token on fd 3 and exports this before
+// exec'ing the CLI; the descriptor is the ONLY channel that carries the token
+// (it is never in the child environment). See sandbox-entrypoint.ts and
+// credential-store-factory.ts.
+const CAPABILITY_FD_ENV = 'LLXPRT_CAPABILITY_FD';
+
+// The only descriptor number the transport ever uses, and the only one
+// consumeFd3Capability() accepts. Anything else is a corrupted or forged
+// marker and must fail fast rather than cause an unrelated descriptor to be
+// read and closed.
+const CAPABILITY_FD_NUMBER = 3;
 
 // import.meta.url is the real path of this module (the published bin), so the
 // package root is exactly one directory above the bin/ directory. Node's module
@@ -392,6 +413,63 @@ function failLaunch(message) {
   process.exit(LAUNCHER_FAILURE_EXIT);
 }
 
+function failCapabilityMarker(marker) {
+  console.error(
+    `LLxprt Code: invalid ${CAPABILITY_FD_ENV} marker "${marker}".`,
+  );
+  console.error(
+    `The sandbox capability transport only uses descriptor ${CAPABILITY_FD_NUMBER}.`,
+  );
+  console.error(
+    'Unset the variable if you set it manually; otherwise the sandbox',
+  );
+  console.error('entrypoint is corrupt and the container should be rebuilt.');
+  process.exit(LAUNCHER_FAILURE_EXIT);
+}
+
+function failCapabilityForward(message) {
+  console.error(
+    'LLxprt Code: the sandbox capability descriptor could not be forwarded.',
+  );
+  console.error(`Descriptor ${CAPABILITY_FD_NUMBER} is unusable: ${message}`);
+  process.exit(LAUNCHER_FAILURE_EXIT);
+}
+
+/**
+ * Builds the child stdio layout. Without a capability marker this is a plain
+ * inherit of fds 0-2. With one, fd 3 is added so the descriptor carrying the
+ * credential-proxy capability token survives the hop into Bun; the marker in
+ * the child environment then names a descriptor that is genuinely there.
+ */
+function buildStdio() {
+  const marker = process.env[CAPABILITY_FD_ENV];
+  if (marker === undefined || marker === '') {
+    return { stdio: 'inherit', forwardsCapability: false };
+  }
+  if (marker !== String(CAPABILITY_FD_NUMBER)) {
+    failCapabilityMarker(marker);
+  }
+  return {
+    stdio: ['inherit', 'inherit', 'inherit', CAPABILITY_FD_NUMBER],
+    forwardsCapability: true,
+  };
+}
+
+/**
+ * Drops this supervisor's copy of the capability descriptor once the child has
+ * inherited it, so the token is readable in exactly one live process. EBADF
+ * means it is already gone, which is the desired end state.
+ */
+function closeCapabilityFd() {
+  try {
+    closeSync(CAPABILITY_FD_NUMBER);
+  } catch (error) {
+    if (error?.code !== 'EBADF') {
+      throw error;
+    }
+  }
+}
+
 // Signals forwarded from this Node process to the Bun child. Because the child
 // shares the foreground process group (spawn is not detached), a terminal
 // Ctrl+C already reaches Bun directly; the explicit forwarding covers signals
@@ -411,9 +489,27 @@ function run() {
     return;
   }
 
-  const child = spawn(bunExe, [entry, ...process.argv.slice(2)], {
-    stdio: 'inherit',
-  });
+  const { stdio, forwardsCapability } = buildStdio();
+
+  let child;
+  try {
+    child = spawn(bunExe, [entry, ...process.argv.slice(2)], { stdio });
+  } catch (error) {
+    // A marked but unopened fd 3 makes spawn throw EBADF synchronously. Name
+    // the capability transport rather than blaming the Bun binary.
+    if (forwardsCapability) {
+      failCapabilityForward(error?.message ?? String(error));
+      return;
+    }
+    throw error;
+  }
+
+  if (forwardsCapability) {
+    closeCapabilityFd();
+    // The child already holds its own copy of the environment; deleting the
+    // marker here only narrows what this supervisor can observe.
+    delete process.env[CAPABILITY_FD_ENV];
+  }
 
   const forward = (signal) => {
     try {
