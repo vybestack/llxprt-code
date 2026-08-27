@@ -24,10 +24,46 @@ import {
   type InteractiveAuthReason,
 } from './interactive-auth-coordinator.js';
 import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
+import { rethrowIfStoreOutage } from './token-store-outage.js';
+import type { TokenStore } from './types.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import {
   getActiveRuntimeIdentity,
   type RuntimeKind,
 } from '../runtime/active-runtime-identity.js';
+
+const logger = new DebugLogger('llxprt:oauth:interactive-auth-request');
+
+/**
+ * Classify why authentication is being requested.
+ *
+ * The reason is only a label on the challenge, so a transient store-read
+ * failure must not pre-empt the guarded disk check that runs next and may
+ * still find a usable token. Genuine store outages still propagate.
+ *
+ * @plan PLAN-20260827-ISSUE2562.P04
+ * @requirement REQ-2562-3
+ */
+export async function classifyInteractiveAuthReason(
+  tokenStore: Pick<TokenStore, 'getToken'>,
+  providerName: string,
+  bucket: string | undefined,
+): Promise<InteractiveAuthReason> {
+  try {
+    return (await tokenStore.getToken(providerName, bucket)) === null
+      ? 'authentication-required'
+      : 'reauthentication-required';
+  } catch (error) {
+    rethrowIfStoreOutage(error);
+    logger.debug(
+      () =>
+        `Could not classify the auth challenge reason for ${providerName}, defaulting to authentication-required: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+    );
+    return 'authentication-required';
+  }
+}
 
 function buildInteractiveAuthRequester(
   runtimeKind: RuntimeKind | undefined,

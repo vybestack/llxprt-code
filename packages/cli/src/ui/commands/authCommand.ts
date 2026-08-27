@@ -58,15 +58,22 @@ function cancelInteractiveAuthentication(): MessageActionReturn {
       content: 'No active authentication sessions.',
     };
   }
-  const retryCommands = [
+  const retryProviders = [
     ...new Set(activeSessions.map((session) => session.provider)),
-  ]
-    .map((provider) => `/auth ${provider}`)
-    .join(' or ');
+  ];
+  // The snapshot is taken before cancelling, so a session opened in between is
+  // cancelled without appearing here. Drop the retry clause rather than
+  // rendering an empty one.
+  const retrySuffix =
+    retryProviders.length === 0
+      ? ''
+      : ` Retry with ${retryProviders
+          .map((provider) => `/auth ${provider}`)
+          .join(' or ')}.`;
   return {
     type: 'message',
     messageType: 'info',
-    content: `Cancelled ${cancelledCount} active authentication session(s). Retry with ${retryCommands}.`,
+    content: `Cancelled ${cancelledCount} active authentication session(s).${retrySuffix}`,
   };
 }
 

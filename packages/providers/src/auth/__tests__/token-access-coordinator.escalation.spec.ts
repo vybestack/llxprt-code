@@ -377,7 +377,7 @@ describe('TokenAccessCoordinator host-owned authentication escalation', () => {
       getProviderManager: () => undefined,
       getRuntimeContext: () => undefined,
       getCurrentProfileName: () => null,
-      getInteractiveAuthTimeoutMs: () => 10,
+      getInteractiveAuthTimeoutMs: () => 200,
     });
     interactiveAuthCoordinator.bindHost(
       () => new Promise<void>(() => undefined),

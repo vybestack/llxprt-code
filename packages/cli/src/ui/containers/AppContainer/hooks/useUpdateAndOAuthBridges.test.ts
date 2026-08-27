@@ -288,13 +288,18 @@ describe('useUpdateAndOAuthBridges interactive authentication integration', () =
         }),
     );
     const { renderResult } = createHookHarness(manager);
-    const waiter = interactiveAuthCoordinator.requestAuth({
-      provider: 'codex',
-      bucket: 'work',
-      requester: { runtimeKind: 'subagent' },
-      reason: 'authentication-required',
-      correlationId: 'host-cleanup-correlation',
-    });
+    const waiter = interactiveAuthCoordinator.requestAuth(
+      {
+        provider: 'codex',
+        bucket: 'work',
+        requester: { runtimeKind: 'subagent' },
+        reason: 'authentication-required',
+        correlationId: 'host-cleanup-correlation',
+      },
+      // Bounds a cleanup regression to a fast timeout instead of hanging for
+      // the production default.
+      { timeoutMs: 2000 },
+    );
     await Promise.resolve();
     await Promise.resolve();
 

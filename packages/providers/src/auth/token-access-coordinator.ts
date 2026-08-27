@@ -45,11 +45,14 @@ import type { ProactiveRenewalManager } from './proactive-renewal-manager.js';
 import type { OAuthBucketManager } from './OAuthBucketManager.js';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import { rethrowIfStoreOutage } from './token-store-outage.js';
-import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
-import { requestInteractiveAuthentication } from './interactive-auth-request.js';
+import {
+  classifyInteractiveAuthReason,
+  requestInteractiveAuthentication,
+} from './interactive-auth-request.js';
 import { interactiveAuthCoordinator } from './interactive-auth-coordinator.js';
 import {
   extractRequestMetadata,
+  readAuthBucketPromptSetting,
   resolveImplicitBucketToCheck,
 } from './token-request-args.js';
 import { getActiveRuntimeKind } from '../runtime/active-runtime-identity.js';
@@ -615,10 +618,11 @@ export class TokenAccessCoordinator {
           resolvedProfileBuckets,
         );
 
-    const challengeReason =
-      (await this.tokenStore.getToken(providerName, bucketToCheck)) === null
-        ? 'authentication-required'
-        : 'reauthentication-required';
+    const challengeReason = await classifyInteractiveAuthReason(
+      this.tokenStore,
+      providerName,
+      bucketToCheck,
+    );
 
     // @fix issue1262 & issue1195: Before triggering OAuth, check disk with lock
     const diskCheckResult = await this.performDiskCheck(
@@ -773,18 +777,7 @@ export class TokenAccessCoordinator {
     explicitBucket: boolean,
     reason: 'authentication-required' | 'reauthentication-required',
   ): Promise<string | null> {
-    let showPrompt = false;
-    try {
-      const promptSetting = oauthRuntimeBridge.getEphemeralSetting(
-        'auth-bucket-prompt',
-      ) as boolean | null | undefined;
-      showPrompt = promptSetting ?? false;
-    } catch (runtimeError) {
-      logger.debug(
-        'Could not get ephemeral setting (runtime not initialized), using default',
-        runtimeError,
-      );
-    }
+    const showPrompt = readAuthBucketPromptSetting();
 
     // @plan PLAN-20260827-ISSUE2562.P04
     // @requirement REQ-2562-3

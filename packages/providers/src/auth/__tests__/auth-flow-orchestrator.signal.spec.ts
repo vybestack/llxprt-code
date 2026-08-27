@@ -218,6 +218,8 @@ class LockGatedTokenStore extends KeyringTokenStore {
     | { readonly resolve: (acquired: boolean) => void }
     | undefined;
 
+  private gateArmed = true;
+
   releaseLockAcquisition(acquired: boolean): void {
     this.pendingLock?.resolve(acquired);
     this.pendingLock = undefined;
@@ -227,11 +229,10 @@ class LockGatedTokenStore extends KeyringTokenStore {
     provider: string,
     options?: { waitMs?: number; bucket?: string },
   ): Promise<boolean> {
-    void provider;
-    void options;
-    if (this.pendingLock === undefined) {
+    if (!this.gateArmed) {
       return super.acquireAuthLock(provider, options);
     }
+    this.gateArmed = false;
     return new Promise<boolean>((resolve) => {
       this.pendingLock = { resolve };
     });

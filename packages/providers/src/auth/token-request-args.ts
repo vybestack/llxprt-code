@@ -11,6 +11,29 @@
  */
 
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-auth';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
+
+const logger = new DebugLogger('llxprt:oauth:token-request-args');
+
+/**
+ * Read the auth-bucket-prompt ephemeral setting, defaulting to false when the
+ * runtime is not initialized yet.
+ */
+export function readAuthBucketPromptSetting(): boolean {
+  try {
+    const promptSetting = oauthRuntimeBridge.getEphemeralSetting(
+      'auth-bucket-prompt',
+    ) as boolean | null | undefined;
+    return promptSetting ?? false;
+  } catch (runtimeError) {
+    logger.debug(
+      'Could not get ephemeral setting (runtime not initialized), using default',
+      runtimeError,
+    );
+    return false;
+  }
+}
 
 export function resolveImplicitBucketToCheck(
   sessionBucket: string | undefined,

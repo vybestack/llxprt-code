@@ -406,6 +406,14 @@ export class InteractiveAuthCoordinator {
       return;
     }
 
+    // settleWaiter emits synchronously, so a listener can settle the session
+    // re-entrantly. settleSession removes the session from the registry, so
+    // this identity check catches that without announcing that a terminal
+    // session is still waiting.
+    if (this.sessions.get(session.key) !== session) {
+      return;
+    }
+
     this.emitStateChange({
       type: 'waiting',
       provider: session.challenge.provider,
