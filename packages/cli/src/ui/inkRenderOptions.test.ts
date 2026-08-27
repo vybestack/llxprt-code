@@ -67,10 +67,14 @@ describe('inkRenderOptions', () => {
     );
   });
 
-  it('disables alternate buffer when ui.useAlternateBuffer is not true', () => {
+  it('disables incremental rendering on the standard-buffer path even when configured', () => {
     const options = inkRenderOptions(
       { getScreenReader: () => false },
-      { merged: { ui: { useAlternateBuffer: false } } },
+      {
+        merged: {
+          ui: { useAlternateBuffer: false, incrementalRendering: true },
+        },
+      },
     );
 
     expect(options).toStrictEqual(

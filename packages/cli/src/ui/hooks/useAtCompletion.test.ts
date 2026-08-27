@@ -378,6 +378,49 @@ describe('useAtCompletion', () => {
       expect(result.current.isLoadingSuggestions).toBe(false);
       expect(result.current.suggestions).toStrictEqual([]);
     });
+
+    it('recovers from an initialization error when the completion root changes', async (): Promise<void> => {
+      testRootDir = await createTmpDir({ 'recovered result.txt': '' });
+      const unavailableRoot = `${testRootDir}/unavailable`;
+      const failingFileSearch: FileSearch = {
+        initialize: async (): Promise<void> => {
+          throw new Error('File search unavailable');
+        },
+        search: async (): Promise<string[]> => [],
+      };
+      const recoveredFileSearch = FileSearchFactory.create({
+        projectRoot: testRootDir,
+        ignoreDirs: [],
+        useGitignore: false,
+        useExtensionIgnore: false,
+        cache: false,
+        enableRecursiveFileSearch: true,
+        enableFuzzySearch: true,
+      });
+      vi.spyOn(FileSearchFactory, 'create')
+        .mockReturnValueOnce(failingFileSearch)
+        .mockReturnValue(recoveredFileSearch);
+
+      const { result, rerender } = renderHook(
+        ({ cwd }: { readonly cwd: string }) =>
+          useTestHarnessForAtCompletion(true, 'recovered', mockConfig, cwd),
+        { initialProps: { cwd: unavailableRoot } },
+      );
+
+      await waitFor((): void => {
+        expect(result.current.isLoadingSuggestions).toBe(false);
+        expect(result.current.suggestions).toStrictEqual([]);
+      });
+
+      rerender({ cwd: testRootDir });
+
+      await waitFor((): void => {
+        expect(
+          result.current.suggestions.map((item) => item.value),
+        ).toStrictEqual(['recovered\\ result.txt']);
+      });
+      expect(result.current.isLoadingSuggestions).toBe(false);
+    });
   });
 
   describe('Filtering and Configuration', () => {
