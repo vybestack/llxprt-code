@@ -205,7 +205,7 @@ export class GeminiProvider extends BaseProvider {
   }
 
   override getDefaultModel(): string {
-    return 'gemini-2.5-pro';
+    return 'gemini-3.7-flash';
   }
 
   override getModelParams(): Record<string, unknown> | undefined {
