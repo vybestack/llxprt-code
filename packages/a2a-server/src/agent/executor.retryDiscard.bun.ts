@@ -5,67 +5,56 @@
  */
 
 /**
- * Issue #3048 (REQ-3048-006): the a2a executor must discard tool-call requests
- * collected during an abandoned model attempt when a Retry event arrives,
- * while the successful attempt's own tool calls must still be scheduled. The
- * existing informational logging of Retry through task.acceptAgentMessage is
- * unchanged.
+ * Issue #3048 (REQ-3048-006): when the provider retries an attempt, the
+ * a2a executor must discard buffered partial output published before the
+ * retry, while content from the replacement attempt still publishes. Under
+ * the public Agent facade the Agent owns tool scheduling, so the executor's
+ * retry responsibility is publication only: whatever was buffered for the
+ * abandoned attempt never reaches the task, and commit points after the
+ * retry publish normally.
  *
  * The executor's private #processAgentTurnLoop is driven through the public
  * execute() entry point by pre-seeding the executor's task cache with a
- * recording Task double. Assertions are on the recorded scheduleToolCalls
- * argument arrays and on the acceptAgentMessage event stream — observable
- * outputs, not collaborator call counts.
+ * recording Task double. Assertions are on recorded sendTextContent /
+ * setTaskStateAndPublishUpdate calls — observable publications, not
+ * collaborator call counts.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { CoderAgentExecutor } from './executor.js';
 import type { Task } from './task.js';
 import type { ExecutionEventBus, RequestContext } from '@a2a-js/sdk/server';
-import {
-  AgentEventType,
-  type ServerAgentStreamEvent,
-  type ToolCallRequestInfo,
-  type CompletedToolCall,
-} from '@vybestack/llxprt-code-core';
+import type { AgentEvent, AgentDoneEvent } from '@vybestack/llxprt-code-agents';
 
-function toolCallRequest(callId: string): ServerAgentStreamEvent {
-  const value: ToolCallRequestInfo = {
-    callId,
-    name: 'noop',
-    args: {},
-    isClientInitiated: false,
-    prompt_id: 'p',
-    agentId: 'default_agent',
+function textEvent(text: string): AgentEvent {
+  return { type: 'text', text };
+}
+
+const retryEvent: AgentEvent = { type: 'retry' };
+
+function toolCallEvent(callId: string): AgentEvent {
+  return {
+    type: 'tool-call',
+    call: { id: callId, name: 'noop', args: {} },
   };
-  return { type: AgentEventType.ToolCallRequest, value };
 }
 
-function retryEvent(): ServerAgentStreamEvent {
-  return { type: AgentEventType.Retry };
-}
-
-function contentEvent(text: string): ServerAgentStreamEvent {
-  return { type: AgentEventType.Content, value: text };
-}
-
-function finishedEvent(): ServerAgentStreamEvent {
-  return { type: AgentEventType.Finished, value: { reason: 'stop' } };
+function doneEvent(): AgentDoneEvent {
+  return { type: 'done', reason: 'stop' };
 }
 
 interface ScriptedTaskOptions {
-  firstTurnEvents: ServerAgentStreamEvent[];
+  firstTurnEvents: AgentEvent[];
 }
 
 function createScriptedTask(options: ScriptedTaskOptions): {
   task: Task;
-  scheduledRequests: ToolCallRequestInfo[][];
-  acceptedEvents: ServerAgentStreamEvent[];
+  publishedText: string[];
+  publishedStates: string[];
 } {
-  const scheduledRequests: ToolCallRequestInfo[][] = [];
-  const acceptedEvents: ServerAgentStreamEvent[] = [];
+  const publishedText: string[] = [];
+  const publishedStates: string[] = [];
   const firstTurnEvents = [...options.firstTurnEvents];
-  const completedTools: CompletedToolCall[] = [];
 
   const task = {
     id: 'retry-discard-task',
@@ -75,39 +64,33 @@ function createScriptedTask(options: ScriptedTaskOptions): {
     async *acceptUserMessage(
       _requestContext: RequestContext,
       _signal: AbortSignal,
-    ): AsyncGenerator<ServerAgentStreamEvent> {
+    ): AsyncGenerator<AgentEvent, void, unknown> {
       for (const event of firstTurnEvents) {
         yield event;
       }
     },
-    async acceptAgentMessage(event: ServerAgentStreamEvent): Promise<void> {
-      acceptedEvents.push(event);
+    async sendTextContent(text: string): Promise<void> {
+      publishedText.push(text);
     },
-    async scheduleToolCalls(
-      requests: ToolCallRequestInfo[],
-      _signal: AbortSignal,
-    ): Promise<void> {
-      scheduledRequests.push([...requests]);
+    async sendThought(): Promise<void> {},
+    async handleModelInfo(): Promise<void> {},
+    setTaskStateAndPublishUpdate(state: string): void {
+      publishedStates.push(state);
     },
-    async waitForPendingTools(): Promise<void> {},
-    getAndClearCompletedTools(): CompletedToolCall[] {
-      return completedTools.splice(0, completedTools.length);
-    },
-    setTaskStateAndPublishUpdate(): void {},
     cancelPendingTools(): void {},
   } as unknown as Task;
 
-  return { task, scheduledRequests, acceptedEvents };
+  return { task, publishedText, publishedStates };
 }
 
 function createRecordingEventBus(): ExecutionEventBus {
   return {
-    publish: vi.fn(),
-    on: vi.fn(),
-    off: vi.fn(),
-    once: vi.fn(),
-    removeAllListeners: vi.fn(),
-    finished: vi.fn(),
+    publish: () => {},
+    on: () => {},
+    off: () => {},
+    once: () => {},
+    removeAllListeners: () => {},
+    finished: () => {},
   } as unknown as ExecutionEventBus;
 }
 
@@ -145,7 +128,7 @@ function seedExecutor(executor: CoderAgentExecutor, task: Task): void {
   });
 }
 
-describe('a2a executor discards abandoned tool-call requests on Retry (issue 3048)', () => {
+describe('a2a executor discards abandoned output publications on Retry (issue 3048)', () => {
   let executor: CoderAgentExecutor;
   let eventBus: ExecutionEventBus;
 
@@ -157,98 +140,82 @@ describe('a2a executor discards abandoned tool-call requests on Retry (issue 304
   /**
    * @plan PLAN-20260806-ISSUE3048.P05
    * @requirement REQ-3048-006
-   * @scenario schedules only the successful attempt's tool calls
+   * @scenario publishes only the replacement attempt's content
    */
-  it("schedules only the successful attempt's tool calls", async () => {
-    const { task, scheduledRequests } = createScriptedTask({
+  it('publishes only the replacement attempt content', async () => {
+    const { task, publishedText } = createScriptedTask({
       firstTurnEvents: [
-        toolCallRequest('abandoned'),
-        retryEvent(),
-        toolCallRequest('kept'),
-        finishedEvent(),
+        textEvent('abandoned-1'),
+        textEvent('abandoned-2'),
+        retryEvent,
+        textEvent('kept'),
+        doneEvent(),
       ],
     });
     seedExecutor(executor, task);
 
     await executor.execute(createRequestContext(), eventBus);
 
-    expect(scheduledRequests).toHaveLength(1);
-    expect(scheduledRequests[0].map((r) => r.callId)).toEqual(['kept']);
+    expect(publishedText).toEqual(['kept']);
   });
 
   /**
    * @plan PLAN-20260806-ISSUE3048.P05
    * @requirement REQ-3048-006
-   * @scenario never schedules when the only tool calls belonged to an abandoned attempt
+   * @scenario never publishes when the only content belonged to an abandoned attempt
    */
-  it('never schedules when the only tool calls belonged to an abandoned attempt', async () => {
-    const { task, scheduledRequests } = createScriptedTask({
-      firstTurnEvents: [
-        toolCallRequest('abandoned'),
-        retryEvent(),
-        finishedEvent(),
-      ],
+  it('never publishes when the only content belonged to an abandoned attempt', async () => {
+    const { task, publishedText } = createScriptedTask({
+      firstTurnEvents: [textEvent('abandoned'), retryEvent, doneEvent()],
     });
     seedExecutor(executor, task);
 
     await executor.execute(createRequestContext(), eventBus);
 
-    expect(scheduledRequests).toHaveLength(0);
+    expect(publishedText).toEqual([]);
   });
 
   /**
+   * @plan PLAN-20260806-ISSUE3048.P05
    * @requirement REQ-3048-006
-   * @scenario abandoned model output and tools are discarded together
+   * @scenario a commit point before the retry stays published; only the
+   * post-retry attempt's later content is discarded then republished
    */
-  it('accepts and schedules only the replacement attempt state', async () => {
-    const { task, acceptedEvents, scheduledRequests } = createScriptedTask({
+  it('keeps content committed before the retry and discards only the abandoned tail', async () => {
+    const { task, publishedText } = createScriptedTask({
       firstTurnEvents: [
-        contentEvent('abandoned'),
-        toolCallRequest('abandoned'),
-        retryEvent(),
-        contentEvent('replacement'),
-        toolCallRequest('kept'),
-        finishedEvent(),
+        textEvent('committed-at-tool-call'),
+        toolCallEvent('kept'),
+        textEvent('abandoned'),
+        retryEvent,
+        textEvent('kept-after-retry'),
+        doneEvent(),
       ],
     });
     seedExecutor(executor, task);
 
     await executor.execute(createRequestContext(), eventBus);
 
-    expect(
-      acceptedEvents
-        .filter((event) => event.type === AgentEventType.Content)
-        .map((event) => event.value),
-    ).toEqual(['replacement']);
-    expect(
-      acceptedEvents.some((event) => event.type === AgentEventType.Retry),
-    ).toBe(true);
-    expect(scheduledRequests).toHaveLength(1);
-    expect(scheduledRequests[0].map((request) => request.callId)).toEqual([
-      'kept',
+    expect(publishedText).toEqual([
+      'committed-at-tool-call',
+      'kept-after-retry',
     ]);
   });
 
   /**
    * @plan PLAN-20260806-ISSUE3048.P05
    * @requirement REQ-3048-006
-   * @scenario still logs the Retry event through acceptAgentMessage (informational classification unchanged)
+   * @scenario a retried turn still finishes to input-required
    */
-  it('still logs the Retry event through acceptAgentMessage', async () => {
-    const { task, acceptedEvents } = createScriptedTask({
-      firstTurnEvents: [
-        toolCallRequest('abandoned'),
-        retryEvent(),
-        toolCallRequest('kept'),
-        finishedEvent(),
-      ],
+  it('still finishes the turn to input-required after a retry', async () => {
+    const { task, publishedStates } = createScriptedTask({
+      firstTurnEvents: [textEvent('abandoned'), retryEvent, doneEvent()],
     });
     seedExecutor(executor, task);
 
     await executor.execute(createRequestContext(), eventBus);
 
-    expect(acceptedEvents.some((e) => e.type === AgentEventType.Retry)).toBe(
-      true,
-    );
+    expect(publishedStates).toContain('input-required');
+    expect(publishedStates[publishedStates.length - 1]).toBe('input-required');
   });
 });

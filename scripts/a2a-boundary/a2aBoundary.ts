@@ -328,15 +328,29 @@ function isMockCall(node: ts.Node): boolean {
  * checker cannot read, so the caller rejects it fail-closed.
  */
 function nonLiteralImportLike(node: ts.Node): ts.CallExpression | null {
-  if (
-    ts.isCallExpression(node) &&
-    (isNonLiteralDynamicImport(node) ||
-      isNonLiteralMockCall(node) ||
-      (isRequireCall(node) && !ts.isStringLiteral(node.arguments[0]!)))
-  ) {
+  if (!ts.isCallExpression(node)) {
+    return null;
+  }
+  if (isNonLiteralDynamicImport(node) || isNonLiteralMockCall(node)) {
+    return node;
+  }
+  if (isRequireCall(node) && !ts.isStringLiteral(node.arguments[0]!)) {
     return node;
   }
   return null;
+}
+
+/** Kind for a rejected non-literal call, discriminated by call family. */
+function nonLiteralViolationKind(
+  call: ts.CallExpression,
+): A2aImportViolation['kind'] {
+  if (isMockCall(call)) {
+    return 'vi.mock-non-literal';
+  }
+  if (isRequireCall(call)) {
+    return 'require-non-literal';
+  }
+  return 'dynamic-import-non-literal';
 }
 
 function classifyKind(node: ts.Node): A2aImportViolation['kind'] {
@@ -510,16 +524,10 @@ export function scanSourceText(
     }
     const nonLiteral = nonLiteralImportLike(node);
     if (nonLiteral !== null) {
-      const isMock = isMockCall(nonLiteral);
-      const isRequire = isRequireCall(nonLiteral);
       push({
         file: relFile,
         line: getLine(sourceFile, nonLiteral.getStart()),
-        kind: isMock
-          ? 'vi.mock-non-literal'
-          : isRequire
-            ? 'require-non-literal'
-            : 'dynamic-import-non-literal',
+        kind: nonLiteralViolationKind(nonLiteral),
         detail: '<dynamic>',
         reason:
           'non-literal module specifiers cannot be analyzed and could hide a deep runtime import',
