@@ -136,12 +136,10 @@ function parseSearchBody(raw: string): SearchBody {
 }
 
 function isSearchBody(value: unknown): value is SearchBody {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'params' in value &&
-    typeof value.params === 'object'
-  );
+  if (typeof value !== 'object' || value === null || !('params' in value)) {
+    return false;
+  }
+  return typeof value.params === 'object' && value.params !== null;
 }
 
 function searchSse(text: string): string {

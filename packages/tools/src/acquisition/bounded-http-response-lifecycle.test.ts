@@ -146,6 +146,38 @@ function syntheticResponse(
   };
 }
 
+function streamWithFailingReaderRelease(): ReadableStream<Uint8Array> {
+  const stream = new ReadableStream<Uint8Array>();
+  return new Proxy(stream, {
+    get(target, property) {
+      if (property === 'getReader') {
+        return () => {
+          const reader = target.getReader();
+          return new Proxy(reader, {
+            get(readerTarget, readerProperty) {
+              if (readerProperty === 'releaseLock') {
+                return () => {
+                  throw new Error('reader release failed');
+                };
+              }
+              const value = Reflect.get(
+                readerTarget,
+                readerProperty,
+                readerTarget,
+              );
+              return typeof value === 'function'
+                ? value.bind(readerTarget)
+                : value;
+            },
+          });
+        };
+      }
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
 describe('acquireBoundedHttpBody: native fetch response lifecycle', () => {
   function startPacedServer(options?: { contentLength?: number }): Promise<{
     readonly server: http.Server;
@@ -323,7 +355,7 @@ describe('acquireBoundedHttpBody: native fetch response lifecycle', () => {
 
   it('settles with HttpBodyTooLargeError for declared overflow and cancels once', async () => {
     const { server, getState, getWriterDone, getSocketClosed } =
-      await startPacedServer({ contentLength: 999999 });
+      await startPacedServer({ contentLength: 100 * 128 });
     const requestController = new AbortController();
     const response = await fetch(loopback.serverUrl(server), {
       signal: requestController.signal,
@@ -420,6 +452,20 @@ describe('acquireBoundedHttpBody: synthetic cleanup failures', () => {
     expect(cancellations).toBe(1);
     expect(abortTracker.abortListenerCount).toBe(0);
     expectReaderLockReleased(stream);
+  });
+
+  it('keeps AbortError authoritative when reader release fails during cleanup', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      acquireBoundedHttpBody(
+        syntheticResponse(streamWithFailingReaderRelease()),
+        createByteBudget(1024),
+        controller.signal,
+        () => undefined,
+      ),
+    ).rejects.toMatchObject({ name: 'AbortError' });
   });
 
   it('settles abort promptly and releases its reader when cancellation never settles', async () => {

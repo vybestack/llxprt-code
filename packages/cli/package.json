@@ -94,7 +94,6 @@
     "lowlight": "^3.3.0",
     "mime-types": "^3.0.1",
     "mnemonist": "^0.40.3",
-    "node-fetch": "^3.3.2",
     "open": "^10.1.2",
     "openai": "^5.10.1",
     "react": "^19.2.0",

@@ -94,6 +94,14 @@ function attemptRequestCancellation(cancelRequest: () => void): void {
   }
 }
 
+function attemptReaderRelease(releaseReader: () => void): void {
+  try {
+    releaseReader();
+  } catch {
+    // Cleanup must not replace the authoritative acquisition error.
+  }
+}
+
 /**
  * Read a native {@link ReadableStream} through a {@link BoundedStreamCollector}
  * configured to retain the complete bounded response.
@@ -126,13 +134,13 @@ function streamBoundedBody(
     } catch {
       // Cleanup must not replace the authoritative acquisition error.
     }
-    releaseReader();
+    attemptReaderRelease(releaseReader);
   };
 
   return new Promise<BoundedHttpBody>((resolve, reject) => {
     const rejectAfterCancellation = (error: unknown): void => {
-      cancelAcquisition();
       reject(error);
+      cancelAcquisition();
     };
 
     const settle = (action: () => void): void => {

@@ -237,7 +237,6 @@ class DirectWebFetchToolInvocation extends BaseToolInvocation<
             // previously-retryable 401/403/429 statuses, so each 4xx error is
             // re-thrown locally as a plain Error without the status property.
             if (isTerminal4xx(resp.status)) {
-              error.name = 'TerminalHttpStatus';
               throw error;
             }
             error.status = resp.status;

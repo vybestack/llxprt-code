@@ -80,19 +80,19 @@ search tools.
 
 - GIVEN source and test scans show no accepted first-party consumer
 - WHEN manifests are updated
-- THEN `node-fetch` and Cheerio declarations are removed only from root,
+- THEN `node-fetch` and Cheerio declarations are removed from root,
   `packages/core`, and `packages/tools`
-- AND `package-lock.json` and `bun.lock` reflect those removals
-- AND `packages/cli` ownership is unchanged because it is outside this issue's
-  named manifest scope.
+- AND the unused CLI `node-fetch` declaration is removed because the published
+  root package must cover every mandatory workspace dependency
+- AND `package-lock.json` and `bun.lock` reflect those removals.
 
 ### AC5: Packed-base proof
 
 - GIVEN fresh package tarballs from the candidate tree
 - WHEN the packed root is installed into an empty directory with lifecycle
   scripts disabled for dependency inspection
-- THEN packed source and manifests contain no root/core/tools import or direct
-  edge for `node-fetch` or Cheerio
+- THEN packed source and manifests contain no root/core/tools/CLI import or
+  direct edge for `node-fetch` or Cheerio
 - AND `npm ls` and `npm explain` evidence covers `node-fetch`, `fetch-blob`,
   `node-domexception`, `cheerio`, `encoding-sniffer`, `whatwg-encoding`, and
   `whatwg-mimetype`
@@ -173,7 +173,9 @@ direct-value network stubs, or assertions about mock calls.
   remains unchanged for other consumers.
 - Do not introduce another acquisition subsystem, public endpoint abstraction,
   transport wrapper, or compatibility fallback.
-- Do not edit `packages/cli/package.json`.
+- Do not change CLI behavior. Removing its unused `node-fetch` declaration is
+  permitted only to satisfy the published root package's workspace dependency
+  contract.
 
 ## Non-goals
 
@@ -429,38 +431,52 @@ direct-value network stubs, or assertions about mock calls.
   claimed that this plan listed the wrong full-suite failures. The newer
   `tmp/issue2760/remediation/full-test-final-foreground.log` records the seven
   unchanged Agents failures described below. The plan uses the latest run.
-- The refreshed 2,715-file audit reports no finding in the seven affected tests,
-  so the null-body case adds no test-audit finding.
+- The final 2,711-file audit reports no finding in the touched tests, so the
+  added lifecycle case and null-body guard add no test-audit finding.
+
+### PR review and CI remediation
+
+- The scripts CI shard found that the published root package did not declare the
+  CLI workspace's mandatory `node-fetch` dependency. Repository search found no
+  CLI source use, so the unused CLI declaration and its lockfile ownership were
+  removed rather than restoring the root dependency or weakening the package
+  contract. The exact publish-integrity suite now passes 38 tests with 106
+  assertions.
+- A failing lifecycle test proved that a reader `releaseLock()` failure could
+  replace an authoritative abort error. Cancellation now settles the primary
+  error before best-effort reader cleanup, while normal successful reader release
+  remains strict.
+- Accepted review cleanup also aligns a paced server's declared length with its
+  emitted bytes, rejects null JSON-RPC `params` in the test type guard, and removes
+  an unused terminal-status error name without changing the all-4xx-terminal
+  contract.
 
 ### Final candidate verification
 
-- After rebasing onto `origin/main` at `354957220`, `npm run build`,
-  `npm run typecheck`, `npm run format`, `npm run format:check`,
-  `npm run check:lockfile`, and `git diff --check origin/main...HEAD` passed.
+- After PR remediation, `npm run build`, `npm run typecheck`, `npm run format`,
+  `npm run format:check`, `npm run check:lockfile`, and `git diff --check HEAD`
+  passed.
 - The post-rebase `npm run lint` exited 134 because its lint runner forced ESLint
   to a 12,288 MiB heap and V8 exhausted that heap. A direct run of the same
   full-tree `eslint .` command with a 24,576 MiB heap passed. The package-script
   result is an environment/resource blocker, not a reported lint violation.
-- Source and manifest scans found no `node-fetch` or Cheerio import, mock, or
-  direct declaration in the accepted root/core/tools scope. The existing
-  `packages/cli` declaration remains outside this issue's scope.
-- The post-rebase root archive contains 4,726 files, is 12,580,849 bytes, has an
-  unpacked size of 52,913,384 bytes, and has SHA-1
-  `383c6b347ce3769dc68dd67f2e1ed6460d6c34ff`. Current and packed hashes match
-  for the root, core, and tools manifests and every changed tools production,
+- Source and manifest scans found no first-party `node-fetch` or Cheerio import,
+  mock, or direct declaration in the root, core, tools, or CLI packages.
+- The final remediated root archive contains 4,726 files, is 12,581,097 bytes,
+  has an unpacked size of 52,914,985 bytes, and has SHA-1
+  `d6dbc1f969fc7034c30618218796fcbfb4053172`. Current and packed hashes match
+  for the root, CLI, core, and tools manifests and every changed tools production,
   test, and helper source file.
 - The archive installed 505 packages in an empty project with lifecycle scripts
-  disabled. Its root/core/tools manifests and source contain no forbidden direct
-  declaration or import. The CLI manifest is the only packed first-party
-  `node-fetch` declaration.
+  disabled. Its first-party manifests and source contain no forbidden direct
+  declaration or import.
 - Packed-install `npm ls` and `npm explain` attribute the remaining
   `node-fetch@3.3.2`, `node-fetch@2.7.0`, `fetch-blob`, and
   `node-domexception` paths to `@google/genai` or `google-auth-library` through
   `gaxios`. Cheerio, `encoding-sniffer`, `whatwg-encoding`, and
   `whatwg-mimetype` are absent.
-- The post-rebase serialized `npm run test` passed after refreshing generated
-  workspace artifacts. The seven affected tools suites also pass independently:
-  79 tests with 265 assertions.
+- The final complete `npm run test` passed after remediation. The seven affected
+  tools suites also pass independently: 80 tests with 266 assertions.
 - The StepFun smoke failed with HTTP 400, `you have no active step plan
   subscription`. The ollamakimi smoke failed with HTTP 404 because model
   `kimi-k2.7` was not found. Neither external smoke passed.
@@ -470,9 +486,8 @@ direct-value network stubs, or assertions about mock calls.
 - Every independent-review finding is classified. All accepted findings are
   remediated, stale OCR accounting is corrected above, and the proposal to
   restore 401, 403, and 429 retries is rejected against AC2's accepted contract.
-- Both allowed local Open Code Review rounds are complete. Every accepted
-  round-one finding is remediated, and every round-two comment is classified
-  above with no accepted candidate change.
-- The implementation is committed and rebased onto `origin/main` at
-  `354957220`. Push, PR review, CI, and CodeRabbit remain workflow gates. Merge
-  requires explicit user approval.
+- Both allowed pre-PR local Open Code Review rounds are complete. PR review
+  findings have also been classified, and every accepted finding is remediated.
+- The implementation is rebased onto `origin/main` at `354957220` and published
+  as PR #3370. CI, CodeRabbit, final PR review, and conflict-free status are
+  checked through PR automation. Merge requires explicit user approval.
