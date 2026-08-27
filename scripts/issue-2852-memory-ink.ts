@@ -94,16 +94,20 @@ function Frame({ seq }: FrameProps): React.ReactElement {
 }
 
 export type InkWorkload = {
-  /** Renders `count` frames through the live reconciler. */
+  /**
+   * Renders `count` frames through the live reconciler, and throws unless the
+   * renderer both produced every frame and wrote it out. Verifying rather than
+   * assuming is the point: a workload that silently renders nothing still
+   * produces a flat, passing plateau.
+   */
   renderFrames: (count: number) => void;
   /**
    * Frames the renderer actually produced, counted from Ink's `onRender`.
    * This is not the same as the number of `rerender` calls unless throttling
-   * is disabled, so the caller can verify the workload did the work it asked
-   * for rather than assuming it.
+   * is disabled.
    */
   framesRendered: () => number;
-  /** Total bytes the renderer emitted, for sanity-checking the run did work. */
+  /** Total bytes the renderer emitted. */
   bytesWritten: () => number;
   /** Unmounts the app. */
   dispose: () => void;
@@ -138,9 +142,30 @@ export function createInkWorkload(): InkWorkload {
   let seq = 0;
   return {
     renderFrames(count: number): void {
+      const framesBefore = rendered;
+      const bytesBefore = stdout.bytesWritten;
       for (let frame = 0; frame < count; frame += 1) {
         seq += 1;
         instance.rerender(React.createElement(Frame, { seq }));
+      }
+      const produced = rendered - framesBefore;
+      if (produced !== count) {
+        throw new Error(
+          `Ink produced ${produced} frames for ${count} rerenders; the render workload is not being measured`,
+        );
+      }
+      // Checked as well as counted, because a frame can be built and never
+      // written. Ink's `onRender` runs `render(rootNode)` and then returns
+      // early when `is-in-ci` sees CI or CONTINUOUS_INTEGRATION, skipping the
+      // log-update write path entirely. Measured on this module at 200 frames:
+      // 500,332 bytes with CI unset, 6 bytes with CI=true, `framesRendered`
+      // 201 either way. Without this the mode would report a clean plateau
+      // over a run whose write path did nothing.
+      if (stdout.bytesWritten === bytesBefore) {
+        throw new Error(
+          `Ink produced ${produced} frames but wrote no terminal output; ` +
+            'unset CI and CONTINUOUS_INTEGRATION so the write path is measured',
+        );
       }
     },
     framesRendered: () => rendered,
@@ -149,4 +174,35 @@ export function createInkWorkload(): InkWorkload {
       instance.unmount();
     },
   };
+}
+
+/**
+ * `bun scripts/issue-2852-memory-ink.ts [frames]` renders the workload once and
+ * prints its counters, or exits non-zero with whichever guard tripped.
+ *
+ * This exists so the workload can be exercised in a child process with a chosen
+ * environment. Ink decides whether to write at import time from `CI` and
+ * `CONTINUOUS_INTEGRATION`, so a test in the parent process cannot cover both
+ * cases, and on a CI runner it cannot cover the writing one at all.
+ */
+if (import.meta.main) {
+  const requested = Number(process.argv[2] ?? '200');
+  if (!Number.isSafeInteger(requested) || requested < 1) {
+    throw new Error(
+      `Frames must be a positive integer, got: ${process.argv[2]}`,
+    );
+  }
+  const workload = createInkWorkload();
+  try {
+    workload.renderFrames(requested);
+    process.stdout.write(
+      `${JSON.stringify({
+        requested,
+        framesRendered: workload.framesRendered(),
+        bytesWritten: workload.bytesWritten(),
+      })}\n`,
+    );
+  } finally {
+    workload.dispose();
+  }
 }

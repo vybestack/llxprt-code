@@ -24,6 +24,39 @@ function readScript(name: string): string {
   return readFileSync(resolve(repoRoot, 'scripts', name), 'utf8');
 }
 
+/**
+ * Runs the workload in a child process so the test controls Ink's CI
+ * detection. Ink reads `CI` and `CONTINUOUS_INTEGRATION` when it is imported,
+ * so the parent process is stuck with whatever it started with.
+ */
+function runWorkload(
+  frames: number,
+  overrides: Record<string, string | undefined>,
+): { exitCode: number | null; stdout: string; stderr: string } {
+  const env: Record<string, string | undefined> = { ...process.env };
+  delete env['CI'];
+  delete env['CONTINUOUS_INTEGRATION'];
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === undefined) {
+      delete env[key];
+    } else {
+      env[key] = value;
+    }
+  }
+  const spawned = Bun.spawnSync({
+    cmd: [process.execPath, 'scripts/issue-2852-memory-ink.ts', String(frames)],
+    cwd: repoRoot,
+    env,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  return {
+    exitCode: spawned.exitCode,
+    stdout: spawned.stdout.toString(),
+    stderr: spawned.stderr.toString(),
+  };
+}
+
 function series(
   rows: ReadonlyArray<[number, number, number]>,
 ): PostGcMetrics[] {
@@ -156,19 +189,118 @@ describe('issue-3365 ink memory mode', () => {
    * @plan PLAN-20260826-INKGUARD.P01
    * @requirement REQ-3365-04
    */
-  it('produces one rendered frame per rerender', async () => {
-    const { createInkWorkload } = await import('../issue-2852-memory-ink.ts');
-    const workload = createInkWorkload();
-    try {
-      const requested = 200;
-      workload.renderFrames(requested);
+  it('produces one rendered frame per rerender, and writes every one', () => {
+    const run = runWorkload(200, { CI: undefined });
 
-      // The initial mount renders once before any rerender.
-      expect(workload.framesRendered()).toBe(requested + 1);
-      expect(workload.bytesWritten()).toBeGreaterThan(0);
-    } finally {
-      workload.dispose();
-    }
+    expect(run.exitCode).toBe(0);
+    const counters = JSON.parse(run.stdout) as {
+      framesRendered: number;
+      bytesWritten: number;
+    };
+    // The initial mount renders once before any rerender.
+    expect(counters.framesRendered).toBe(201);
+    expect(counters.bytesWritten).toBeGreaterThan(200 * 1000);
+  });
+
+  /**
+   * Ink's `onRender` builds the frame and then returns early when `is-in-ci`
+   * sees `CI` or `CONTINUOUS_INTEGRATION`, skipping the log-update write path.
+   * Measured on this workload at 200 frames: 500,332 bytes with CI unset and 6
+   * bytes with `CI=true`, while `framesRendered` reads 201 either way. A frame
+   * counter alone therefore cannot see it, and without this guard the mode
+   * would report a clean plateau over a run whose write path did nothing.
+   *
+   * @plan PLAN-20260826-INKGUARD.P01
+   * @requirement REQ-3365-04
+   */
+  it('refuses a run whose frames never reached the terminal', () => {
+    const run = runWorkload(200, { CI: 'true' });
+
+    expect(run.exitCode).not.toBe(0);
+    expect(run.stderr).toContain('wrote no terminal output');
+  });
+
+  /**
+   * Dirty WebKit Malloc does not plateau under the render workload. Six runs on
+   * the pinned fork at 3,000 frames a turn over five turns, MB per run:
+   *
+   * ```
+   * 708, 380, 255, 230, 217     0%
+   * 824, 807, 330, 297, 275     0%
+   * 763, 708, 339, 302, 280     0%
+   * 752, 690, 650, 768, 589   +11.2%
+   * 623, 265, 784, 348, 310  +195.7%
+   * 781, 333, 625, 377, 464   +87.7%
+   * ```
+   *
+   * The series has no trend; it tracks when bmalloc last scavenged relative to
+   * the checkpoint. Half of those runs condemn a build that is not leaking, so
+   * `ink` measures the metric and reports it without gating on it. The fourth
+   * row is used here verbatim.
+   *
+   * @plan PLAN-20260826-INKGUARD.P01
+   * @requirement REQ-3365-01
+   */
+  it('reports dirty WebKit Malloc for ink without letting it fail the run', () => {
+    const scavengerNoise = series([
+      [124.2, 36.2, 752],
+      [124.2, 36.2, 690],
+      [124.2, 36.2, 650],
+      [124.3, 36.2, 768],
+      [124.2, 36.2, 589],
+    ]);
+
+    const gated = evaluateMultiMetricPlateau(
+      scavengerNoise,
+      PLATEAU_TOLERANCE,
+      ['jscHeap', 'external'],
+    );
+    const ungated = evaluateMultiMetricPlateau(
+      scavengerNoise,
+      PLATEAU_TOLERANCE,
+    );
+
+    expect(gated.overallWithinTolerance).toBe(true);
+    expect(ungated.overallWithinTolerance).toBe(false);
+
+    const dirty = gated.metrics.find((m) => m.name === 'webkitMallocDirty');
+    expect(dirty?.gatesVerdict).toBe(false);
+    expect(dirty?.withinTolerance).toBe(false);
+  });
+
+  /**
+   * A verdict gating on nothing would pass everything.
+   *
+   * @plan PLAN-20260826-INKGUARD.P01
+   * @requirement REQ-3365-01
+   */
+  it('refuses a verdict that gates on no metric at all', () => {
+    expect(() =>
+      evaluateMultiMetricPlateau(
+        series([
+          [100, 30, 100],
+          [100, 30, 100],
+          [100, 30, 100],
+        ]),
+        PLATEAU_TOLERANCE,
+        [],
+      ),
+    ).toThrow('must gate at least one metric');
+  });
+
+  /**
+   * The runner must apply the reduced gate to `ink` and the full one to
+   * `reasoning`, so a leak in reasoning's native retention still fails.
+   *
+   * @plan PLAN-20260826-INKGUARD.P01
+   * @requirement REQ-3365-02
+   */
+  it('gates ink on two metrics and reasoning on all three', () => {
+    const runner = readScript('issue-2852-memory-runner.ts');
+
+    expect(runner).toContain("ink: ['jscHeap', 'external']");
+    expect(runner).toContain('reasoning: PLATEAU_METRIC_NAMES');
+    expect(runner).toContain('GATING_METRICS_BY_MODE[mode]');
   });
 
   /**

@@ -172,8 +172,18 @@ export interface PostGcMetrics {
   readonly webkitMallocDirtyBytes: number;
 }
 
+export const PLATEAU_METRIC_NAMES = [
+  'jscHeap',
+  'external',
+  'webkitMallocDirty',
+] as const;
+
+export type PlateauMetricName = (typeof PLATEAU_METRIC_NAMES)[number];
+
 export interface MetricPlateauResult extends PlateauResult {
-  readonly name: string;
+  readonly name: PlateauMetricName;
+  /** Whether this metric can fail the overall verdict. */
+  readonly gatesVerdict: boolean;
 }
 
 export interface MultiMetricPlateauResult {
@@ -181,14 +191,27 @@ export interface MultiMetricPlateauResult {
   readonly metrics: readonly MetricPlateauResult[];
 }
 
+const METRIC_READERS: Readonly<
+  Record<PlateauMetricName, (sample: PostGcMetrics) => number>
+> = {
+  jscHeap: (sample) => sample.jscHeapBytes,
+  external: (sample) => sample.externalBytes,
+  webkitMallocDirty: (sample) => sample.webkitMallocDirtyBytes,
+};
+
 /**
- * Evaluates post-GC plateau for every required metric independently. The
- * overall verdict passes only when every metric plateaus within the tolerance;
- * the first post-GC sample is warm-up for each metric.
+ * Evaluates the post-GC plateau of every metric independently and reports all
+ * of them, failing the overall verdict only on the gating ones. The first
+ * post-GC sample is warm-up for each metric.
+ *
+ * Reporting a metric that does not gate keeps the reading in the run artifact
+ * for a human to look at, without a metric that is known not to plateau on a
+ * given workload being able to condemn a build that is not leaking.
  */
 export function evaluateMultiMetricPlateau(
   samples: readonly PostGcMetrics[],
   tolerance: number,
+  gatingMetrics: readonly PlateauMetricName[] = PLATEAU_METRIC_NAMES,
 ): MultiMetricPlateauResult {
   if (samples.length < 3) {
     throw new Error('Plateau needs at least three post-GC turns');
@@ -196,24 +219,20 @@ export function evaluateMultiMetricPlateau(
   if (!(tolerance > 0)) {
     throw new Error('Tolerance must be positive');
   }
+  if (gatingMetrics.length === 0) {
+    throw new Error('A verdict must gate at least one metric');
+  }
 
-  const extractors: ReadonlyArray<{
-    name: string;
-    read: (s: PostGcMetrics) => number;
-  }> = [
-    { name: 'jscHeap', read: (s) => s.jscHeapBytes },
-    { name: 'external', read: (s) => s.externalBytes },
-    { name: 'webkitMallocDirty', read: (s) => s.webkitMallocDirtyBytes },
-  ];
-
-  const metricResults = extractors.map(({ name, read }) => {
-    const series = samples.map(read);
-    const result = evaluatePostGcPlateau(series, tolerance);
-    return { name, ...result };
-  });
+  const metricResults = PLATEAU_METRIC_NAMES.map((name) => ({
+    name,
+    gatesVerdict: gatingMetrics.includes(name),
+    ...evaluatePostGcPlateau(samples.map(METRIC_READERS[name]), tolerance),
+  }));
 
   return {
-    overallWithinTolerance: metricResults.every((m) => m.withinTolerance),
+    overallWithinTolerance: metricResults
+      .filter((metric) => metric.gatesVerdict)
+      .every((metric) => metric.withinTolerance),
     metrics: metricResults,
   };
 }

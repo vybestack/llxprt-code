@@ -11,6 +11,7 @@ import process from 'node:process';
 import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import {
+  PLATEAU_METRIC_NAMES,
   evaluateMultiMetricPlateau,
   evaluatePostGcPlateau,
   parseFootprintBytes,
@@ -20,6 +21,7 @@ import {
   validateCheckpointOrder,
   validateExactPid,
   type CheckpointRecord,
+  type PlateauMetricName,
   type PostGcMetrics,
 } from './issue-2852-memory-benchmark.js';
 
@@ -164,17 +166,47 @@ const osByCheckpointName = new Map(checkpoints.map((cp) => [cp.name, cp]));
 writeFileSync(resolve(artifactDir, 'target.stdout'), Buffer.concat(stdout));
 writeFileSync(resolve(artifactDir, 'target.stderr'), Buffer.concat(stderr));
 
-// `reasoning` and `ink` gate every retention metric rather than the JSC heap
-// alone. For `reasoning`, bounding reasoning blocks must show up in external
-// and dirty WebKit Malloc too. For `ink`, a renderer that accumulates shows up
-// on all three at once: measuring the candidate upstream builds for #3365 found
-// growth in JSC heap, external and dirty WebKit Malloc simultaneously, while
-// the pinned fork held flat on every one.
+/**
+ * Metrics each multi-metric mode's verdict gates on. All three are measured
+ * and reported either way.
+ *
+ * `reasoning` gates all three: bounding reasoning blocks has to show up in
+ * external and dirty WebKit Malloc, not just the JSC heap.
+ *
+ * `ink` omits dirty WebKit Malloc. Post-GC vmmap readings of that region during
+ * the render workload track when bmalloc last scavenged rather than what is
+ * retained, and they do not plateau. Six runs on the pinned fork at 3000 frames
+ * a turn over five turns, MB per run:
+ *
+ * ```
+ * 708, 380, 255, 230, 217     0%
+ * 824, 807, 330, 297, 275     0%
+ * 763, 708, 339, 302, 280     0%
+ * 752, 690, 650, 768, 589   +11.2%
+ * 623, 265, 784, 348, 310  +195.7%
+ * 781, 333, 625, 377, 464   +87.7%
+ * ```
+ *
+ * The series has no trend, and this verdict compares the maximum of the settled
+ * turns to the first of them, so half of those runs condemn a build that is not
+ * leaking. JSC heap and external held between 0.02% and 0.09% across all six,
+ * and both #3365 regressions land in that pair: fork 7.1.0 takes the JSC heap
+ * from 94.8 MB to 878.2 MB, upstream 7.1.1 takes external from 36.75 MB to
+ * 90.57 MB.
+ */
+const GATING_METRICS_BY_MODE: Readonly<
+  Record<'reasoning' | 'ink', readonly PlateauMetricName[]>
+> = {
+  reasoning: PLATEAU_METRIC_NAMES,
+  ink: ['jscHeap', 'external'],
+};
+
 const plateau =
   mode === 'reasoning' || mode === 'ink'
     ? evaluateMultiMetricPlateau(
         readPostGcMetrics(targetOutput, osByCheckpointName),
         PLATEAU_TOLERANCE,
+        GATING_METRICS_BY_MODE[mode],
       )
     : evaluatePostGcPlateau(
         readPostGcHeapBytes(targetOutput),
@@ -190,7 +222,7 @@ process.stdout.write(`${artifactDir}\n`);
 if ('overallWithinTolerance' in plateau) {
   if (!plateau.overallWithinTolerance) {
     const failed = plateau.metrics
-      .filter((metric) => !metric.withinTolerance)
+      .filter((metric) => metric.gatesVerdict && !metric.withinTolerance)
       .map(
         (metric) =>
           `${metric.name} grew ${(metric.growthRatio * 100).toFixed(1)}%`,
