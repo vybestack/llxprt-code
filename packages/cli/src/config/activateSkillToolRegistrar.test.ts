@@ -199,4 +199,24 @@ describe('registerActivateSkillTool @issue:3379', () => {
 
     expect(enumeratedSkillNames(registry)).toEqual(['alpha']);
   });
+
+  it('keeps the previous tool registered when building the replacement fails', () => {
+    const registry = createRegistry();
+    const skillService = new FakeSkillService([skillInfo('alpha')]);
+    registerActivateSkillTool(registry, skillService, messageBus);
+
+    const exploding = new FakeSkillService([skillInfo('beta')]);
+    exploding.listSkills = () => {
+      throw new Error('discovery blew up');
+    };
+
+    expect(() =>
+      registerActivateSkillTool(registry, exploding, messageBus),
+    ).toThrow('discovery blew up');
+
+    // Config.reloadSkills() lets this propagate and never reaches setTools(),
+    // so the live chat session still advertises activate_skill. Removing it
+    // here would leave the model calling a tool the registry no longer has.
+    expect(enumeratedSkillNames(registry)).toEqual(['alpha']);
+  });
 });

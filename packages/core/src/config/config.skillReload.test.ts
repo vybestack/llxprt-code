@@ -226,15 +226,23 @@ describe('reloadSkills refreshes the model-facing skill surface @issue:3379', ()
     const skillManager = config.getSkillManager();
     const discovered = [skillDefinition('alpha'), skillDefinition('beta')];
     vi.spyOn(skillManager, 'discoverSkills').mockImplementation(async () => {
-      // Real discovery repopulates the manager; this stands in for that so
-      // setDisabledSkills has something to mark.
-      skillManager.getAllSkills().length = 0;
-      skillManager.getAllSkills().push(...discovered);
+      // Real discovery repopulates the manager's store; this stands in for it
+      // so the real setDisabledSkills has something to mark.
+      const store = skillManager.getAllSkills();
+      store.length = 0;
+      store.push(...discovered);
     });
     observations.length = 0;
 
     await config.reloadSkills();
 
+    // Guard: the stand-in above depends on getAllSkills exposing the live
+    // store. If that ever returns a copy, the manager stays empty and the
+    // assertion below would pass for the wrong reason.
+    expect(skillManager.getAllSkills().map((skill) => skill.name)).toEqual([
+      'alpha',
+      'beta',
+    ]);
     // The disabled list arrives via onReload and is applied before the tool is
     // rebuilt, so the registrar must never see the disabled skill.
     expect(observations).toEqual([{ skills: ['alpha'] }]);
