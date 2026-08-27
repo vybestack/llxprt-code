@@ -208,6 +208,24 @@ design smell. Making the declaration lazy would remove this class of staleness
 entirely, but it is a change to `BaseDeclarativeTool`'s contract and is tracked
 separately. Steps 1 through 3 fix the reported bug without it.
 
+Two adjacent defects were found while reviewing this change. Neither is the
+reported `/skills reload` failure and neither is fixed here.
+
+1. The standalone `createAgent` composition
+   (`packages/agents/src/api/createAgent.ts`) never supplies a
+   `postSkillDiscoveryToolRegistrar`, so an agent built through the public API
+   with `skillsSupport: true` gets no `activate_skill` tool at startup and
+   cannot gain one by reloading. The CLI, and anything built from a CLI
+   `Config` including the ACP path, is unaffected because it inherits the CLI
+   registrar. The end-to-end test in
+   `packages/agents/src/api/__tests__/skillReloadDeclaration.behavior.test.ts`
+   installs the registrar itself and says so in its header comment, so it does
+   not paper over this.
+2. `packages/core/src/utils/extensionLoader.ts` starts and stops extensions
+   without rediscovering extension-contributed skills, so hot-loading an
+   extension that ships skills leaves both `SkillManager` and the declaration
+   stale until an explicit `/skills reload`.
+
 ## Verification
 
 ```bash

@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { buildAgent, internalConfig } from './helpers/agentHarness.js';
+import { buildAgent } from './helpers/agentHarness.js';
 
 describe('agent.skills control @plan:PLAN-20260626-RUNTIMEBOUNDARY.P03', () => {
   it('list returns an array of SkillInfo (possibly empty) @scenario:list @given:an agent built normally @when:agent.skills.list() @then:the result is an array', async () => {
@@ -107,46 +107,6 @@ describe('agent.skills control @plan:PLAN-20260626-RUNTIMEBOUNDARY.P03', () => {
       expect(listed).not.toHaveProperty('body');
       expect(fetched).not.toHaveProperty('body');
       expect(JSON.stringify([listed, fetched])).not.toContain(secretBody);
-    } finally {
-      await cleanup();
-    }
-  });
-
-  it('reload rebuilds the skill activation tool from the current skill set @issue:3379 @scenario:reload-refreshes-tool @given:an agent with an active extension skill @when:agent.skills.reload() @then:the composition-root registrar is invoked with the reloaded skills', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
-      skillsSupport: true,
-      extensions: [
-        {
-          name: 'skill-extension',
-          version: '1.0.0',
-          isActive: true,
-          path: 'memory://skill-extension',
-          contextFiles: [],
-          skills: [
-            {
-              name: 'reloadable-skill',
-              description: 'A skill the model should be able to activate',
-              location: 'memory://reloadable-skill/SKILL.md',
-              body: 'instructions',
-            },
-          ],
-        },
-      ],
-    });
-    try {
-      const observedSkillNames: string[][] = [];
-      internalConfig(agent).setPostSkillDiscoveryToolRegistrar(
-        (_toolRegistry, skillService) => {
-          observedSkillNames.push(
-            skillService.listSkills().map((skill) => skill.name),
-          );
-        },
-      );
-
-      await agent.skills.reload();
-
-      expect(observedSkillNames).toHaveLength(1);
-      expect(observedSkillNames[0]).toContain('reloadable-skill');
     } finally {
       await cleanup();
     }

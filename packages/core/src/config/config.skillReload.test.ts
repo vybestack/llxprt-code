@@ -209,6 +209,42 @@ describe('reloadSkills refreshes the model-facing skill surface @issue:3379', ()
     expect(observations).toEqual([]);
   });
 
+  it('hides a skill that the reload disabled', async () => {
+    const observations: RegistrarObservation[] = [];
+    const config = new Config(
+      buildParams({
+        onReload: async () => ({ disabledSkills: ['beta'] }),
+        postSkillDiscoveryToolRegistrar: (_registry, skillService) => {
+          observations.push({
+            skills: skillService.listSkills().map((skill) => skill.name),
+          });
+        },
+      }),
+    );
+    await initializeTestConfig(config);
+
+    const skillManager = config.getSkillManager();
+    const discovered = [skillDefinition('alpha'), skillDefinition('beta')];
+    vi.spyOn(skillManager, 'discoverSkills').mockImplementation(async () => {
+      // Real discovery repopulates the manager; this stands in for that so
+      // setDisabledSkills has something to mark.
+      skillManager.getAllSkills().length = 0;
+      skillManager.getAllSkills().push(...discovered);
+    });
+    observations.length = 0;
+
+    await config.reloadSkills();
+
+    // The disabled list arrives via onReload and is applied before the tool is
+    // rebuilt, so the registrar must never see the disabled skill.
+    expect(observations).toEqual([{ skills: ['alpha'] }]);
+  });
+
+  /**
+   * Ordering only. That the refreshed registry actually reaches the model is
+   * asserted end to end against a real ChatSession in the agents package, in
+   * skillReloadDeclaration.behavior.test.ts.
+   */
   it('pushes refreshed declarations to the chat session after rebuilding the tool', async () => {
     const sequence: string[] = [];
     const config = new Config(
