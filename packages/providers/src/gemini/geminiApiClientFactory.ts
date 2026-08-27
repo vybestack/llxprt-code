@@ -29,10 +29,32 @@ import type {
  * geminiAiSdkConverters.ts, because this provider builds and reads the Gemini
  * generateContent wire format directly.
  */
+/**
+ * Adapt an llxprt base URL to what `@ai-sdk/google` expects.
+ *
+ * llxprt carries the bare origin (`https://generativelanguage.googleapis.com`)
+ * because `@google/genai` appended the API version itself. The AI SDK does not:
+ * its default is `<origin>/v1beta` and it joins the model path straight onto
+ * whatever it is given, so passing the bare origin produces
+ * `<origin>/models/...` and a 404.
+ */
+function toAiSdkBaseUrl(baseUrl: string | undefined): string | undefined {
+  if (baseUrl === undefined) {
+    return undefined;
+  }
+  let trimmed = baseUrl;
+  while (trimmed.endsWith('/')) {
+    trimmed = trimmed.slice(0, -1);
+  }
+  const lastSegment = trimmed.slice(trimmed.lastIndexOf('/') + 1);
+  const alreadyVersioned = lastSegment.startsWith('v1');
+  return alreadyVersioned ? trimmed : `${trimmed}/v1beta`;
+}
+
 export async function createGeminiApiClient(
   options: GeminiApiClientOptions,
 ): Promise<GeminiApiClient> {
-  const baseURL = options.httpOptions?.baseUrl;
+  const baseURL = toAiSdkBaseUrl(options.httpOptions?.baseUrl);
   const provider = createGoogleGenerativeAI({
     ...(options.apiKey !== undefined ? { apiKey: options.apiKey } : {}),
     ...(baseURL !== undefined ? { baseURL } : {}),

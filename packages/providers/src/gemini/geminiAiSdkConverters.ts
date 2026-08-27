@@ -237,6 +237,55 @@ function toUserPart(part: Part): UserPart {
 }
 
 /** Maps Gemini function declarations onto AI SDK function tools. */
+/**
+ * Gemini schema type names, as the `Type` constants tool authors use.
+ *
+ * Tool schemas in this repo are written with Gemini's uppercase spelling
+ * (`Type.STRING`, `Type.OBJECT`). That IS the Gemini wire form, so
+ * `@google/genai` took it verbatim. `@ai-sdk/google` does its own JSON Schema
+ * to Gemini conversion and therefore expects lowercase JSON Schema types, so
+ * the uppercase spelling has to be normalised at this boundary or the schema is
+ * converted twice.
+ *
+ * It surfaces first on enums, where the SDK rejects `type: 'STRING'` against
+ * string values outright, but every uppercase type is wrong here, not just the
+ * ones attached to an enum.
+ */
+const GEMINI_TYPE_NAMES: ReadonlySet<string> = new Set([
+  'STRING',
+  'NUMBER',
+  'INTEGER',
+  'BOOLEAN',
+  'ARRAY',
+  'OBJECT',
+  'NULL',
+]);
+
+function lowerGeminiType(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return GEMINI_TYPE_NAMES.has(value) ? value.toLowerCase() : value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(lowerGeminiType);
+  }
+  return value;
+}
+
+function normaliseSchemaTypes(node: unknown): unknown {
+  if (Array.isArray(node)) {
+    return node.map(normaliseSchemaTypes);
+  }
+  if (!isRecord(node)) {
+    return node;
+  }
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(node)) {
+    out[key] =
+      key === 'type' ? lowerGeminiType(value) : normaliseSchemaTypes(value);
+  }
+  return out;
+}
+
 export function toTools(
   config: GeminiGenerationConfig | undefined,
 ):
@@ -255,9 +304,9 @@ export function toTools(
         type: 'function',
         name: decl.name ?? '',
         description: decl.description,
-        inputSchema: (decl.parametersJsonSchema ??
-          decl.parameters ??
-          {}) as never,
+        inputSchema: normaliseSchemaTypes(
+          decl.parametersJsonSchema ?? decl.parameters ?? {},
+        ) as never,
       });
     }
     for (const [wireName, id] of Object.entries(SERVER_TOOL_IDS)) {
