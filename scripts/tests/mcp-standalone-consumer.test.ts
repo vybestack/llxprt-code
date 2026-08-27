@@ -35,6 +35,16 @@
  * The import is driven with the Bun runtime so the `bun` export condition
  * resolves to the packed TypeScript source. That keeps the test independent of
  * whether `dist/` has been built.
+ *
+ * Scope limit, deliberate: the declared dependencies are symlinked from the
+ * repository, and resolution follows realpaths, so once execution hops into one
+ * of them that package resolves its OWN imports against the repository's
+ * `node_modules`. This suite therefore pins that `mcp`'s direct imports are
+ * satisfiable from its declared dependencies; it does not pin that each of
+ * those dependencies is itself installable. That second property is covered
+ * statically for every published workspace by
+ * `scripts/check-runtime-dependency-declarations.ts`, so do not read a green
+ * result here as proof of the whole transitive closure.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';

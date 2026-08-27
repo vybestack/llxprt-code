@@ -37,7 +37,7 @@
 
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { builtinModules } from 'node:module';
-import { dirname, join, posix, resolve } from 'node:path';
+import { dirname, isAbsolute, join, posix, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { NON_NPM_RELEASE_PACKAGES } from './utils/release-packages.ts';
@@ -86,16 +86,10 @@ export interface RuntimeDependencyViolation {
 
 /**
  * Anchor the repo root to THIS script's location rather than `process.cwd()`,
- * so the guard is deterministic regardless of the invoking directory. The
- * `RUNTIME_DEPS_ROOT` override exists for the guard's own synthetic-fixture
- * suite, which builds throwaway workspace trees under temp dirs. Production and
- * CI invocations never set it.
+ * so the guard is deterministic regardless of the invoking directory. Tests
+ * pass their own root explicitly, so no environment override is needed.
  */
 export function defaultRepoRoot(): string {
-  const override = process.env.RUNTIME_DEPS_ROOT;
-  if (override !== undefined && override.length > 0) {
-    return resolve(override);
-  }
   return resolve(dirname(fileURLToPath(import.meta.url)), '..');
 }
 
@@ -183,9 +177,19 @@ function isImportOrRequireCall(node: ts.CallExpression): boolean {
   return ts.isIdentifier(node.expression) && node.expression.text === 'require';
 }
 
+/**
+ * The static text of a module specifier, or null when it is computed.
+ *
+ * No-substitution template literals count: `` import(`some-pkg`) `` resolves
+ * to a fixed package at runtime exactly like a quoted string, so excluding it
+ * would let a real dependency escape the guard.
+ */
 function literalSpecifierOf(node: ts.Expression | undefined): string | null {
   if (node === undefined) return null;
-  return ts.isStringLiteral(node) ? node.text : null;
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+    return node.text;
+  }
+  return null;
 }
 
 function collectFromImportDeclaration(
@@ -298,17 +302,15 @@ function collectBunConditionPaths(entry: ExportsEntry, paths: string[]): void {
     return;
   }
   // Prefer the `bun` condition: it points at TypeScript source, whereas
-  // `import`/`require` point at build output that may not exist yet.
-  if (entry.bun !== undefined) {
-    collectBunConditionPaths(entry.bun, paths);
-    return;
-  }
-  if (entry.import !== undefined) {
-    collectBunConditionPaths(entry.import, paths);
-    return;
-  }
-  if (entry.default !== undefined) {
-    collectBunConditionPaths(entry.default, paths);
+  // `import`/`require` point at build output that may not exist yet. The
+  // remaining conditions are a fallback chain so a subpath that exposes only
+  // `require` (or only `default`) still contributes an entrypoint rather than
+  // dropping out of the scan unnoticed.
+  for (const condition of ['bun', 'import', 'require', 'default'] as const) {
+    if (entry[condition] !== undefined) {
+      collectBunConditionPaths(entry[condition], paths);
+      return;
+    }
   }
 }
 
@@ -399,8 +401,20 @@ function toPosixRepoRelative(absPath: string, repoRoot: string): string {
     .join(posix.sep);
 }
 
+/**
+ * Whether `absPath` is `absDir` or lives beneath it.
+ *
+ * Compared via `relative` rather than a string prefix: on Windows `resolve`
+ * produces backslash-separated paths, so a hard-coded `/` prefix test would
+ * reject every file and the guard would silently scan nothing and pass.
+ */
 function isInsideDirectory(absPath: string, absDir: string): boolean {
-  return absPath === absDir || absPath.startsWith(`${absDir}/`);
+  const rel = relative(absDir, absPath);
+  if (rel === '') return true;
+  if (isAbsolute(rel)) return false;
+  return (
+    rel !== '..' && !rel.startsWith(`..${posix.sep}`) && !rel.startsWith('..\\')
+  );
 }
 
 function enqueueRelativeImports(
@@ -519,19 +533,24 @@ function violationMessage(
   );
 }
 
-/** Undeclared runtime imports of a single workspace. */
+/**
+ * Undeclared runtime imports of a single workspace.
+ *
+ * `productionSourceFiles` lets a caller that already walked the closure reuse
+ * it instead of re-reading and re-parsing every file.
+ */
 export function checkWorkspaceRuntimeDeclarations(
   workspaceDir: string,
   manifest: WorkspaceManifest,
   repoRoot: string,
+  productionSourceFiles?: readonly string[],
 ): RuntimeDependencyViolation[] {
   const violations: RuntimeDependencyViolation[] = [];
   const selfName = manifest.name;
-  for (const absFile of collectProductionSourceFiles(
-    workspaceDir,
-    manifest,
-    repoRoot,
-  )) {
+  const sourceFiles =
+    productionSourceFiles ??
+    collectProductionSourceFiles(workspaceDir, manifest, repoRoot);
+  for (const absFile of sourceFiles) {
     const source = readFileSync(absFile, 'utf8');
     const file = toPosixRepoRelative(absFile, repoRoot);
     const undeclared = extractBareRuntimeImports(absFile, source).filter(
@@ -659,13 +678,20 @@ function main(): void {
   let scannedFiles = 0;
   const violations: RuntimeDependencyViolation[] = [];
   for (const { workspaceDir, manifest } of workspaces) {
-    scannedFiles += collectProductionSourceFiles(
+    // Walk the closure once and reuse it for both the count and the check.
+    const sourceFiles = collectProductionSourceFiles(
       workspaceDir,
       manifest,
       repoRoot,
-    ).length;
+    );
+    scannedFiles += sourceFiles.length;
     violations.push(
-      ...checkWorkspaceRuntimeDeclarations(workspaceDir, manifest, repoRoot),
+      ...checkWorkspaceRuntimeDeclarations(
+        workspaceDir,
+        manifest,
+        repoRoot,
+        sourceFiles,
+      ),
     );
   }
 

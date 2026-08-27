@@ -260,6 +260,21 @@ describe('runtime import forms', () => {
     expect(violations[0].importedPackage).toBe('undeclared');
   });
 
+  it('reports a dynamic import written as a no-substitution template literal', () => {
+    // Resolves to a fixed package at runtime exactly like a quoted string, so
+    // accepting only ts.isStringLiteral would let a real dependency escape.
+    const violations = violationsFor({
+      files: {
+        'index.ts':
+          'export async function load() {\n' +
+          '  return await import(`undeclared`);\n' +
+          '}\n',
+      },
+    });
+    expect(violations).toHaveLength(1);
+    expect(violations[0].importedPackage).toBe('undeclared');
+  });
+
   it('ignores a dynamic import with a non-literal specifier', () => {
     expect(
       violationsFor({
@@ -411,6 +426,25 @@ describe('production source is defined by entrypoint reachability', () => {
     } finally {
       fixture.cleanup();
     }
+  });
+
+  it('follows a subpath that exposes only a require condition', () => {
+    // No current manifest has a require-only subpath, but if one is added its
+    // reachable sources must not silently drop out of the scan.
+    const violations = violationsFor({
+      files: {
+        'index.ts': 'export const x = 1;\n',
+        'src/legacy.ts': "import 'undeclared';\nexport const y = 2;\n",
+      },
+      manifest: {
+        exports: {
+          '.': { bun: './index.ts' },
+          './legacy.js': { require: './src/legacy.ts' },
+        },
+      },
+    });
+    expect(violations).toHaveLength(1);
+    expect(violations[0].file).toBe(`${WORKSPACE_DIR}/src/legacy.ts`);
   });
 
   it('falls back to main when the manifest declares no exports', () => {
