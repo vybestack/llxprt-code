@@ -23,6 +23,9 @@ import type {
   GeminiApiClientOptions,
 } from './geminiWireTypes.js';
 import { createGeminiApiClient } from './geminiApiClientFactory.js';
+
+/** The factory shape {@link GeminiProvider} depends on. */
+export type CreateGeminiApiClient = typeof createGeminiApiClient;
 import {
   getSettingOrEnv,
   getVertexAIAuthConfig,
@@ -62,7 +65,23 @@ import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacemen
  * package to keep the provider class thin and within lint budgets.
  */
 export class GeminiProvider extends BaseProvider {
-  constructor(apiKey?: string, baseURL?: string, config?: Config) {
+  /**
+   * How this provider obtains its API client.
+   *
+   * Injected rather than imported at the call sites so tests can supply a fake
+   * without `vi.mock`. Module mocks are registered process-wide and bun hoists
+   * them ahead of every test in the run, so a mock declared in one suite leaks
+   * into every suite loaded alongside it. That made the wire tests fail as a
+   * batch while passing per file.
+   */
+  private readonly createClient: CreateGeminiApiClient;
+
+  constructor(
+    apiKey?: string,
+    baseURL?: string,
+    config?: Config,
+    createClient: CreateGeminiApiClient = createGeminiApiClient,
+  ) {
     const baseConfig: BaseProviderConfig = {
       name: 'gemini',
       apiKey,
@@ -71,6 +90,7 @@ export class GeminiProvider extends BaseProvider {
     };
 
     super(baseConfig, config);
+    this.createClient = createClient;
   }
 
   private getLogger(): DebugLogger {
@@ -320,7 +340,7 @@ export class GeminiProvider extends BaseProvider {
     httpOptions: ReturnType<typeof this.createHttpOptions>,
     baseURL?: string,
   ): Promise<GeminiApiClient> {
-    return createGeminiApiClient(
+    return this.createClient(
       this.buildGoogleGenAIOptions(authToken, authMode, httpOptions, baseURL),
     );
   }
@@ -443,7 +463,7 @@ export class GeminiProvider extends BaseProvider {
       params: GenerateContentParameters,
     ) => Promise<AsyncIterable<GenerateContentResponse>>;
   }> {
-    const client = await createGeminiApiClient(
+    const client = await this.createClient(
       this.buildGoogleGenAIOptions(
         setup.authToken,
         setup.authMode,

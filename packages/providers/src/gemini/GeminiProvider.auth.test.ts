@@ -13,9 +13,12 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 // pointed at our own code and survives the transport change.
 const googleGenAIConstructor = vi.fn();
 
-void vi.mock('./geminiApiClientFactory.js', () => ({
-  createGeminiApiClient: googleGenAIConstructor,
-}));
+import type { CreateGeminiApiClient } from './GeminiProvider.js';
+// The factory is injected into GeminiProvider rather than module-mocked:
+// `vi.mock` registers process-wide and bun hoists it ahead of the whole
+// run, so the stub leaked into every suite loaded alongside this one.
+const injectedClientFactory =
+  googleGenAIConstructor as unknown as CreateGeminiApiClient;
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
@@ -63,7 +66,12 @@ function createGenAIClientViaProvider(
 }
 
 function createProviderWithRuntimeSettings(): GeminiProvider {
-  const provider = new GeminiProvider();
+  const provider = new GeminiProvider(
+    undefined,
+    undefined,
+    undefined,
+    injectedClientFactory,
+  );
   provider.setRuntimeSettingsService(
     mockSettingsService as unknown as SettingsService,
   );
