@@ -370,16 +370,16 @@ describe('useAtCompletion', () => {
       // Each fake delegates to a real searcher rooted at the projectRoot the
       // hook actually asked for, so recovery is proven by the suggestions
       // themselves: re-initializing against the wrong cwd yields no matches.
+      // Failure is keyed to the directory rather than to call order, so the
+      // failed root always fails however many times the hook initializes it.
       const createRealFileSearch =
         FileSearchFactory.create.bind(FileSearchFactory);
-      let initializeCalls = 0;
       vi.spyOn(FileSearchFactory, 'create').mockImplementation(
         (options: Parameters<typeof FileSearchFactory.create>[0]) => {
           const realFileSearch = createRealFileSearch(options);
           const fake: FileSearch = {
             initialize: vi.fn(async () => {
-              initializeCalls += 1;
-              if (initializeCalls === 1) {
+              if (options.projectRoot === failedCwd) {
                 throw new Error('Initialization failed');
               }
               return realFileSearch.initialize();
