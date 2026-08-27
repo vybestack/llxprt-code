@@ -282,7 +282,11 @@ export function decodeRetryFailure(error: unknown): RetryFailure {
   try {
     const classification = classifyRetryError(error);
     const providerCode = getProviderCode(error);
-    const identity = resolveFailureIdentity(error, classification, providerCode);
+    const identity = resolveFailureIdentity(
+      error,
+      classification,
+      providerCode,
+    );
     return buildRetryFailure(
       error,
       identity,
