@@ -29,7 +29,7 @@
             "maxOutputTokens": 8
           }
         },
-        "responseBodyPreview": "{\n  \"candidates\": [\n    {\n      \"content\": {\n        \"parts\": [\n          {\n            \"text\": \"ok\",\n            \"thoughtSignature\": \"EnEKbwERTTIPdmPPHM10rymtF",
+        "responseBodyPreview": "{\n  \"candidates\": [\n    {\n      \"content\": {\n        \"parts\": [\n          {\n            \"text\": \"ok\",\n            \"thoughtSignature\": \"EnEKbwERTTIPrmSTxhp2bFzPq",
         "contentType": "application/json; charset=UTF-8"
       },
       "customFetchHook": {
@@ -84,7 +84,7 @@
             }
           ]
         },
-        "responseBodyPreview": "{\n  \"candidates\": [\n    {\n      \"content\": {\n        \"parts\": [\n          {\n            \"text\": \"ok\",\n            \"thoughtSignature\": \"EnEKbwERTTIPEBLDtDCKnHRVv",
+        "responseBodyPreview": "{\n  \"candidates\": [\n    {\n      \"content\": {\n        \"parts\": [\n          {\n            \"text\": \"ok\",\n            \"thoughtSignature\": \"EnEKbwERTTIPmMU2r/NCo9vuR",
         "contentType": "application/json; charset=UTF-8"
       },
       "customFetch": {

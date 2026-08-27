@@ -94,11 +94,51 @@ interface CaseOutcome {
   readonly keywordsOnWire: string[];
 }
 
+/**
+ * Collects the JSON-Schema keywords that survived onto the wire.
+ *
+ * A substring scan of the serialized tools blob would count a PROPERTY named
+ * `title`, or a description that happens to contain the word `default`, as the
+ * schema keyword being present, and that feeds the verdict directly. This walks
+ * the parsed request body instead and only counts a keyword when it appears as
+ * an own key of a schema node, never as a property name under `properties`.
+ */
 function keywordsPresent(value: unknown): string[] {
-  const serialized = JSON.stringify(value ?? null);
-  return KEYWORDS_UNDER_TEST.filter((keyword) =>
-    serialized.includes(`"${keyword}"`),
-  );
+  const found = new Set<string>();
+
+  const walkSchema = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const entry of node) {
+        walkSchema(entry);
+      }
+      return;
+    }
+    if (node === null || typeof node !== 'object') {
+      return;
+    }
+    const record = node as Record<string, unknown>;
+    for (const keyword of KEYWORDS_UNDER_TEST) {
+      if (Object.prototype.hasOwnProperty.call(record, keyword)) {
+        found.add(keyword);
+      }
+    }
+    for (const [key, child] of Object.entries(record)) {
+      if (key === 'properties') {
+        // The keys here are property NAMES, not schema keywords. Descend into
+        // the values only.
+        if (child !== null && typeof child === 'object') {
+          for (const sub of Object.values(child as Record<string, unknown>)) {
+            walkSchema(sub);
+          }
+        }
+        continue;
+      }
+      walkSchema(child);
+    }
+  };
+
+  walkSchema(value);
+  return KEYWORDS_UNDER_TEST.filter((keyword) => found.has(keyword));
 }
 
 function summarizeRecord(record: WireRecord | undefined): {

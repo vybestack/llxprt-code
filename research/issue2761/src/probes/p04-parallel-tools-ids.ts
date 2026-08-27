@@ -231,10 +231,7 @@ export const p04ParallelToolsIds: Probe = {
             toolName: call.toolName,
             // doGenerate returns `input` as a JSON string; the request side
             // needs the parsed object.
-            input:
-              typeof call.input === 'string'
-                ? (JSON.parse(call.input) as unknown)
-                : call.input,
+            input: parseToolInput(call.input).value,
             ...(call.providerMetadata !== undefined
               ? { providerOptions: call.providerMetadata }
               : {}),
@@ -324,6 +321,25 @@ export const p04ParallelToolsIds: Probe = {
     };
   },
 };
+
+/**
+ * `doGenerate` hands back a tool call's `input` as a JSON string. Parsing it
+ * can throw, and an unguarded throw here would abort the adapter run and be
+ * recorded as the adapter rejecting the replay, which is a different finding.
+ */
+function parseToolInput(input: unknown): {
+  value: unknown;
+  parseError: string | null;
+} {
+  if (typeof input !== 'string') {
+    return { value: input, parseError: null };
+  }
+  try {
+    return { value: JSON.parse(input) as unknown, parseError: null };
+  } catch (error) {
+    return { value: {}, parseError: String(error) };
+  }
+}
 
 function numberOf(value: unknown): number {
   return typeof value === 'number' ? value : 0;

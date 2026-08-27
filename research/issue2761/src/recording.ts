@@ -274,20 +274,47 @@ export async function waitForRecord(
   return proxy.records[index];
 }
 
+/**
+ * Everything about a call that is known before the response body is read. The
+ * response-side fields are filled in once the body has drained, or on failure
+ * with whatever was collected.
+ */
+type WireRecordRequestSide = Pick<
+  WireRecord,
+  | 'method'
+  | 'url'
+  | 'requestHeaderNames'
+  | 'requestHeaders'
+  | 'authCarrier'
+  | 'requestBody'
+  | 'status'
+>;
+
 export interface RecordingFetch {
   readonly fetch: (
     input: string | URL | Request,
     init?: RequestInit,
   ) => Promise<Response>;
+  /**
+   * A record is pushed before the corresponding `fetch` promise resolves, so a
+   * caller may read this immediately after awaiting the call.
+   */
   readonly records: WireRecord[];
 }
 
 /**
  * A `fetch` middleware that records the outbound request and the inbound
- * response without consuming the response stream the caller needs.
- */
+ * response without consuming the response stream the caller needs. The returned
+ * `Response` is what the caller consumes; a tee'd copy is drained in the
+ * background and, once drained, becomes the `WireRecord`. A reader failure is
+ * caught, so it cannot become an unhandled rejection and the record is still
+ * pushed with whatever preview was collected.
+ *//** Synthetic status recorded when the request never reached the server. */
+const TRANSPORT_FAILURE_STATUS = 0;
+
 export function makeRecordingFetch(): RecordingFetch {
   const records: WireRecord[] = [];
+
   return {
     records,
     fetch: async (input, init) => {
@@ -297,45 +324,84 @@ export function makeRecordingFetch(): RecordingFetch {
           : input instanceof URL
             ? input.toString()
             : input.url;
-      const headerNames: string[] = [];
       const requestHeaders: Record<string, string> = {};
       new Headers(init?.headers ?? {}).forEach((value, name) => {
-        headerNames.push(name);
         requestHeaders[name] = value;
       });
+      const headerNames = Object.keys(requestHeaders);
       const bodyRaw = typeof init?.body === 'string' ? init.body : '';
-      const response = await fetch(input as RequestInfo, init);
-      const [forCaller, forRecord] =
-        response.body === null
-          ? [null, null]
-          : (response.body.tee() as [ReadableStream, ReadableStream]);
+      const requestSide = (status: number): WireRecordRequestSide => ({
+        method: init?.method ?? 'GET',
+        url,
+        requestHeaderNames: [...headerNames].sort(),
+        requestHeaders,
+        authCarrier: classifyAuthCarrier(headerNames, url),
+        requestBody: parseJsonOrText(bodyRaw),
+        status,
+      });
+
+      let response: Response;
+      try {
+        response = await fetch(input as RequestInfo, init);
+      } catch (error) {
+        // A transport failure still gets a record: the request side was fully
+        // known, and a caller waiting on the record must be able to tell a
+        // failed call apart from a call that never happened.
+        records.push({
+          ...requestSide(TRANSPORT_FAILURE_STATUS),
+          responseContentType: null,
+          responseBodyPreview: String(error).slice(0, 4000),
+          relayCompleted: false,
+        });
+        throw error;
+      }
+
+      if (response.body === null) {
+        records.push({
+          ...requestSide(response.status),
+          responseContentType: response.headers.get('content-type'),
+          responseBodyPreview: '',
+          relayCompleted: true,
+        });
+        return response;
+      }
+
+      // Tee once, drain the record copy to completion BEFORE returning, so a
+      // caller that reads `records` straight after awaiting this fetch always
+      // sees the record. Tee'd branches buffer independently, so the caller
+      // copy is untouched.
+      const [forCaller, forRecord] = response.body.tee() as [
+        ReadableStream<Uint8Array>,
+        ReadableStream<Uint8Array>,
+      ];
 
       let preview = '';
-      if (forRecord !== null) {
-        void (async () => {
-          const reader = forRecord.getReader();
-          for (;;) {
-            const { done, value } = await reader.read();
-            if (done) {
-              break;
-            }
-            if (preview.length < 4000) {
-              preview += Buffer.from(value as Uint8Array).toString('utf8');
-            }
+      let relayCompleted = false;
+      const reader = forRecord.getReader();
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) {
+            relayCompleted = true;
+            break;
           }
-          records.push({
-            method: init?.method ?? 'GET',
-            url,
-            requestHeaderNames: headerNames.sort(),
-            requestHeaders,
-            authCarrier: classifyAuthCarrier(headerNames, url),
-            requestBody: parseJsonOrText(bodyRaw),
-            status: response.status,
-            responseContentType: response.headers.get('content-type'),
-            responseBodyPreview: preview.slice(0, 4000),
-          });
-        })();
+          if (preview.length < 4000) {
+            preview += Buffer.from(value).toString('utf8');
+          }
+        }
+      } catch {
+        // Reader cancelled or errored: record what was collected rather than
+        // dropping the observation entirely.
+      } finally {
+        reader.releaseLock();
       }
+
+      records.push({
+        ...requestSide(response.status),
+        responseContentType: response.headers.get('content-type'),
+        responseBodyPreview: preview.slice(0, 4000),
+        relayCompleted,
+      });
 
       return new Response(forCaller, {
         status: response.status,

@@ -394,8 +394,13 @@ export const p08Media: Probe = {
       models: [ctx.modelGeneral],
       genai,
       aisdk,
-      verdict:
-        gUriTransported && aUriTransported ? 'parity' : 'partial',
+      // Transport is conclusive from the captured wire bodies, but the
+      // endpoint's verdict on an arbitrary fileUri is not, so the probe as a
+      // whole cannot claim parity. It keeps its own verdict rather than being
+      // blanked by the central quota guard, because the transport evidence is
+      // real.
+      transientHandled: true,
+      verdict: gUriTransported && aUriTransported ? 'partial' : 'gap',
       finding: buildFinding(
         g.inline,
         g.uri,

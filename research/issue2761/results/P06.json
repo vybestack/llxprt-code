@@ -10,12 +10,12 @@
     "ok": true,
     "observation": {
       "step1_capture": {
-        "toolCallId": "call_195766",
+        "toolCallId": "call_2048132",
         "toolName": "get_temp",
         "responseSignature": {
           "present": true,
-          "length": 380,
-          "prefix": "EpoCCpcCARFNMg9j",
+          "length": 372,
+          "prefix": "EpMCCpACARFNMg9z",
           "isSentinel": false
         }
       },
@@ -26,8 +26,8 @@
         "signaturesOnWire": [
           {
             "present": true,
-            "length": 380,
-            "prefix": "EpoCCpcCARFNMg9j",
+            "length": 372,
+            "prefix": "EpMCCpACARFNMg9z",
             "isSentinel": false
           }
         ]
@@ -58,15 +58,16 @@
     "ok": true,
     "observation": {
       "step1_capture": {
-        "toolCallId": "call_1845697",
+        "toolCallId": "call_2444213",
         "toolName": "get_temp",
         "responseSignature": {
           "present": true,
-          "length": 544,
-          "prefix": "EpUDCpIDARFNMg9D",
+          "length": 372,
+          "prefix": "EpICCo8CARFNMg/X",
           "isSentinel": false
         },
-        "replayRequiresInputParse": true
+        "replayRequiresInputParse": true,
+        "inputParseError": null
       },
       "step2_replayWithSignature": {
         "accepted": true,
@@ -75,8 +76,8 @@
         "signaturesOnWire": [
           {
             "present": true,
-            "length": 544,
-            "prefix": "EpUDCpIDARFNMg9D",
+            "length": 372,
+            "prefix": "EpICCo8CARFNMg/X",
             "isSentinel": false
           }
         ]
@@ -97,5 +98,5 @@
     }
   },
   "verdict": "parity",
-  "finding": "@ai-sdk/google surfaced the response signature (length 544) and the signed replay was accepted. On the unsigned replay it injected the same skip_thought_signature_validator sentinel llxprt injects, result accepted. Raw @google/genai with no injection: signed replay accepted, unsigned replay rejected (HTTP 400). The AI SDK ships the same workaround thoughtSignatures.ts implements, so that module would become redundant."
+  "finding": "@ai-sdk/google surfaced the response signature (length 372) and the signed replay was accepted. On the unsigned replay it injected the same skip_thought_signature_validator sentinel llxprt injects, result accepted. Raw @google/genai with no injection: signed replay accepted, unsigned replay rejected (HTTP 400). The AI SDK ships the same workaround thoughtSignatures.ts implements, so that module would become redundant."
 }

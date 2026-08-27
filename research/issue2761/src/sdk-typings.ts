@@ -35,10 +35,13 @@ export interface InterfaceFacts {
  * member names declared directly on the interface body. Returns null when the
  * declaration cannot be found.
  */
-export function interfaceMembersFromDts(name: string): InterfaceFacts | null {
+export function interfaceMembersFromDts(
+  name: string,
+  file: string = GENAI_DTS,
+): InterfaceFacts | null {
   let source: string;
   try {
-    source = readFileSync(GENAI_DTS, 'utf8');
+    source = readFileSync(file, 'utf8');
   } catch {
     return null;
   }
@@ -58,7 +61,7 @@ export function interfaceMembersFromDts(name: string): InterfaceFacts | null {
   if (body === null) {
     return null;
   }
-  return { file: GENAI_DTS, members: memberNamesOf(stripComments(body)) };
+  return { file, members: memberNamesOf(stripComments(body)) };
 }
 
 /** Returns the text inside the brace that opens at `open` in `source`. */

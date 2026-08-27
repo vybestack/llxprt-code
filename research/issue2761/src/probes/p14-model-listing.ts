@@ -18,14 +18,22 @@
  * that type the provider and the language model object.
  */
 
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { GoogleGenerativeAIProvider } from '@ai-sdk/google';
 import type { LanguageModelV2 } from '@ai-sdk/provider';
 
 import { createAISDK } from '../adapters/aisdk.ts';
+import { interfaceMembersFromDts } from '../sdk-typings.ts';
 import { createGenAI } from '../adapters/genai.ts';
-import { PROBE_ROOT, ADAPTER_AISDK, ADAPTER_GENAI, observe, type Probe, type ProbeResult } from '../harness.ts';
+import {
+  PROBE_ROOT,
+  ADAPTER_AISDK,
+  ADAPTER_GENAI,
+  captureError,
+  observe,
+  type Probe,
+  type ProbeResult,
+} from '../harness.ts';
 
 const AI_SDK_GOOGLE_DTS = join(
   PROBE_ROOT,
@@ -58,24 +66,12 @@ function ownPlusProtoKeys(value: object, depth = 6): string[] {
 }
 
 /** Reads every `...Model` / provider member name out of a declaration file. */
-function listingShapedMembers(
-  file: string,
-  tokens: readonly string[],
-): string[] {
-  const found = new Set<string>();
-  let source: string;
-  try {
-    source = readFileSync(file, 'utf8');
-  } catch {
-    return [];
-  }
-  for (const token of tokens) {
-    if (source.includes(token)) {
-      found.add(token);
-    }
-  }
-  return [...found].sort();
-}
+/**
+ * A member that would enumerate models. Anchored so it cannot match an
+ * unrelated identifier that merely contains the substring "list".
+ */
+const LISTING_MEMBER_PATTERN = /^(list|listModels?|models|fetchModels)$/i;
+
 
 /**
  * The provider surface at runtime (own + prototype keys) and the interfaces that
@@ -90,36 +86,65 @@ function providerSurfaceEvidence(provider: GoogleGenerativeAIProvider, model: La
   modelHasList: boolean;
   providerPrototypeName: string;
   modelPrototypeName: string;
+  runtimeListingMembers: string[];
   declarationCheck: {
-    file: string;
+    providerDeclarationFile: string | null;
     providerDeclarationFound: boolean;
+    providerDeclaredMembers: string[];
+    modelDeclarationFile: string | null;
     modelDeclarationFound: boolean;
-    listingShapedMembersFound: string[];
+    modelDeclaredMembers: string[];
+    declaredListingMembers: string[];
   };
 } {
   const providerProto = Object.getPrototypeOf(provider);
   const modelProto = Object.getPrototypeOf(model);
-  const listingTokens = [
-    'list', 'listModels', 'models()', 'listModel', 'fetchModels', 'listModelsV2',
-  ];
-  const listingShaped = listingShapedMembers(AI_SDK_GOOGLE_DTS, listingTokens);
-  const providerShaped = listingShapedMembers(AI_SDK_PROVIDER_DTS, listingTokens);
+
+  // Parse the declarations rather than substring-scanning them: the token
+  // "list" matches almost any declaration file, which would make an absence
+  // claim meaningless.
+  const providerFacts = interfaceMembersFromDts(
+    'GoogleGenerativeAIProvider',
+    AI_SDK_GOOGLE_DTS,
+  );
+  const modelFacts = interfaceMembersFromDts(
+    'LanguageModelV2',
+    AI_SDK_PROVIDER_DTS,
+  );
+  const declaredListingMembers = [
+    ...(providerFacts?.members ?? []),
+    ...(modelFacts?.members ?? []),
+  ].filter((member) => LISTING_MEMBER_PATTERN.test(member));
+
+  const runtimeListingMembers = [
+    ...ownPlusProtoKeys(provider),
+    ...ownPlusProtoKeys(model),
+  ].filter((member) => LISTING_MEMBER_PATTERN.test(member));
+
   return {
     providerOwnKeys: Object.keys(provider).sort(),
     providerPrototypeKeys: ownPlusProtoKeys(providerProto),
-    providerHasList: Object.keys(provider).includes('list'),
+    providerHasList: ownPlusProtoKeys(provider).some((member) =>
+      LISTING_MEMBER_PATTERN.test(member),
+    ),
     modelOwnKeys: Object.keys(model).sort(),
     modelPrototypeKeys: ownPlusProtoKeys(modelProto),
-    modelHasList: Object.keys(model).includes('list'),
+    modelHasList: ownPlusProtoKeys(model).some((member) =>
+      LISTING_MEMBER_PATTERN.test(member),
+    ),
+    runtimeListingMembers,
     providerPrototypeName:
       providerProto === null ? 'null' : Object.prototype.toString.call(providerProto),
     modelPrototypeName:
       modelProto === null ? 'null' : Object.prototype.toString.call(modelProto),
     declarationCheck: {
-      file: AI_SDK_GOOGLE_DTS,
-      providerDeclarationFound: true,
-      modelDeclarationFound: true,
-      listingShapedMembersFound: [...new Set([...listingShaped, ...providerShaped])],
+      providerDeclarationFile: providerFacts?.file ?? null,
+      providerDeclarationFound: providerFacts !== null,
+      providerDeclaredMembers: providerFacts?.members ?? [],
+      modelDeclarationFile: modelFacts?.file ?? null,
+      modelDeclarationFound: modelFacts !== null,
+      modelDeclaredMembers: modelFacts?.members ?? [],
+      declaredListingMembers,
     },
   };
 }
@@ -149,20 +174,37 @@ export const p14ModelListing: Probe = {
     // bare fetch against /v1beta/models with the key as a query parameter.
     // It is recorded on the AI SDK side because that is the side whose missing
     // listing API it would have to stand in for.
-    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${ctx.apiKey}`;
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    });
-    const json = (await res.json()) as { models?: Array<{ name?: string }> };
-    const bareFetch = {
-      status: res.status,
-      modelCount: (json.models ?? []).length,
-      firstIds: (json.models ?? [])
-        .map((m) => m.name)
-        .filter((n): n is string => typeof n === 'string')
-        .slice(0, 5),
-    };
+    // The `?key=` form is deliberate: this reproduces exactly what
+    // geminiModels.fetchModelsFromApi does. Because the key is therefore in the
+    // URL, a thrown network error would carry it in its message, so the failure
+    // path is caught here and pushed through the redactor before it is recorded.
+    const bareFetch = await (async (): Promise<Record<string, unknown>> => {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${ctx.apiKey}`;
+      try {
+        const res = await fetch(url, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const json = (await res.json()) as { models?: Array<{ name?: string }> };
+        return {
+          ok: res.ok,
+          status: res.status,
+          modelCount: (json.models ?? []).length,
+          firstIds: (json.models ?? [])
+            .map((m) => m.name)
+            .filter((n): n is string => typeof n === 'string')
+            .slice(0, 5),
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          status: null,
+          modelCount: 0,
+          firstIds: [],
+          error: ctx.redact(captureError(error)),
+        };
+      }
+    })();
 
     const aisdk = await observe(ADAPTER_AISDK, async () => {
       const provider = createAISDK(ctx.apiKey);
@@ -213,7 +255,7 @@ export const p14ModelListing: Probe = {
       genai,
       aisdk,
       verdict:
-        aisdkOffersListing || (inspectedWell && bareFetch.status === 200)
+        aisdkOffersListing || (inspectedWell && bareFetch.ok === true)
           ? 'parity'
           : 'gap',
       finding: `@google/genai exposes models.list (listed=${genaiListed}); ` +
@@ -233,7 +275,7 @@ export const p14ModelListing: Probe = {
         `). ` +
         `That costs llxprt nothing here: geminiModels.fetchModelsFromApi already ` +
         `lists with a bare fetch against /v1beta/models, which returned ` +
-        `${bareFetch.modelCount} models at status ${bareFetch.status} in this run, ` +
+        `${String(bareFetch.modelCount)} models at status ${String(bareFetch.status)} in this run, ` +
         `and the provider never calls the SDK for listing.`,
     };
   },

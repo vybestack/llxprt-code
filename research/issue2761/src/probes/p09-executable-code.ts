@@ -124,10 +124,11 @@ export const p09ExecutableCode: Probe = {
       // (id/name/args). The low-level drop-in therefore has to write the
       // provider-defined shape explicitly, which is adapter work this probe measures.
       const factory = provider.tools.codeExecution({});
-      const factoryType = (factory as { type?: unknown }).type ?? undefined;
-      const factoryToolName = (factory as { name?: unknown }).name ?? undefined;
-      void factoryType;
-      void factoryToolName;
+      const factoryShape = {
+        type: (factory as { type?: unknown }).type ?? null,
+        toolName: (factory as { name?: unknown }).name ?? null,
+        id: (factory as { id?: unknown }).id ?? null,
+      };
       const asProviderTool = {
         type: 'provider-defined',
         id: 'google.code_execution',
@@ -175,6 +176,10 @@ export const p09ExecutableCode: Probe = {
         }),
         finishReason: result.finishReason,
         warnings: result.warnings,
+        // The high-level factory's shape, recorded next to the hand-built
+        // provider-defined tool this probe actually sends, so the difference an
+        // adapter has to bridge is visible rather than implied.
+        providerToolFactoryShape: factoryShape,
       };
     });
 

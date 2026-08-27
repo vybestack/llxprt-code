@@ -18,10 +18,11 @@ bun run facts               # dependency-facts.json only, no API calls
 bunx tsc --noEmit -p tsconfig.json
 ```
 
-The probes are **live**. They call the real Gemini API. The key is read, in
-order, from `GEMINI_API_KEY`, then the file named by `LLXPRT_PROBE_KEY_FILE`,
-then `~/.keys/.google_key_from_e2720pjk`. A missing key aborts the run rather
-than producing a table full of failures that look like findings.
+The probes are **live**. They call the real Gemini API. The key comes from
+`GEMINI_API_KEY`, or from the file named by `LLXPRT_PROBE_KEY_FILE`. There is
+no default path, deliberately: a credential layout is not something to bake
+into a repository. When neither is set the run aborts with a message naming
+both, rather than producing a table full of failures that look like findings.
 
 Models are chosen with `LLXPRT_PROBE_MODEL_GENERAL` (default
 `gemini-3.1-flash-lite`) and `LLXPRT_PROBE_MODEL_GEMINI3` (default
@@ -46,11 +47,12 @@ the decision table is built from.
 
 Verdicts:
 
-| Verdict   | Meaning                                                                 |
-| --------- | ----------------------------------------------------------------------- |
-| `parity`  | The AI SDK delivers the behavior llxprt depends on.                      |
-| `partial` | It delivers it only with extra adapter-side work, or lossily.            |
-| `gap`     | It cannot deliver it at this pin.                                        |
+| Verdict        | Meaning                                                             |
+| -------------- | ------------------------------------------------------------------- |
+| `parity`       | The AI SDK delivers the behavior llxprt depends on.                  |
+| `partial`      | It delivers it only with extra adapter-side work, or lossily.        |
+| `gap`          | It cannot deliver it at this pin.                                    |
+| `inconclusive` | The provider never gave a usable answer (quota or capacity). Counted separately so a rate-limited run can never be read as a capability finding. |
 
 ## Reading the artifacts honestly
 

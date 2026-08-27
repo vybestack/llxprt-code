@@ -184,11 +184,36 @@ export const p01ApiKeyAuth: Probe = {
     // The bad-key sub-cases catch their own failure and fold it into the
     // observation, so rejection is proven by an `errorName` being present
     // (and `called` being absent), not by a top-level thrown error.
-    const rejectedBadKey = (result: {
-      error?: unknown;
+    // A DNS failure, a 429 or a 5xx is not evidence that the key was checked.
+    // Only an auth-shaped status, or a provider payload that names an API-key
+    // problem, counts as a rejection; a transient status is inconclusive.
+    const AUTH_STATUSES = new Set([400, 401, 403]);
+    const badKeyOutcome = (result: {
       observation: Record<string, unknown>;
-    }): boolean =>
-      result.error !== undefined || result.observation.errorName != null;
+    }): 'rejected' | 'accepted' | 'inconclusive' => {
+      const observation = result.observation;
+      if (observation.called === true) {
+        return 'accepted';
+      }
+      const status =
+        typeof observation.status === 'number'
+          ? observation.status
+          : typeof observation.statusCode === 'number'
+            ? observation.statusCode
+            : null;
+      if (status !== null && AUTH_STATUSES.has(status)) {
+        return 'rejected';
+      }
+      const message =
+        typeof observation.message === 'string' ? observation.message : '';
+      if (/API_KEY_INVALID|API key not valid/i.test(message)) {
+        return 'rejected';
+      }
+      return 'inconclusive';
+    };
+    const rejectedBadKey = (result: {
+      observation: Record<string, unknown>;
+    }): boolean => badKeyOutcome(result) === 'rejected';
     const genaiBadRejected = rejectedBadKey(genaiBadKey);
     const aisdkBadRejected = rejectedBadKey(aisdkBadKey);
 
@@ -255,8 +280,9 @@ export const p01ApiKeyAuth: Probe = {
         `ai-sdk=${aisdk.observation.userAgentCarriesLlxprtPrefix === true} ` +
         `(sent UA: genai "${String(genai.observation.userAgentValue)}", ai-sdk ` +
         `"${String(aisdk.observation.userAgentValue)}"). ` +
-        `A deliberately invalid key was rejected by genai=${genaiBadRejected} and ` +
-        `ai-sdk=${aisdkBadRejected}. ` +
+        `A deliberately invalid key produced genai=${badKeyOutcome(genaiBadKey)} and ` +
+        `ai-sdk=${badKeyOutcome(aisdkBadKey)} (rejection requires an auth-shaped ` +
+        `status or an API_KEY_INVALID payload; a transient status is inconclusive). ` +
         (headersPreserved && valuesPreserved
           ? 'The header stamping and custom-header merge in ' +
             'GeminiProvider.createHttpOptions carries over unchanged, values included.'

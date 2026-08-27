@@ -1,17 +1,20 @@
 {
-  "generatedAt": "2026-08-27T00:37:14.418Z",
+  "generatedAt": "2026-08-27T01:39:38.056Z",
   "models": {
     "general": "gemini-3.1-flash-lite",
     "gemini3": "gemini-3.5-flash"
   },
   "providerProtocolMatches": true,
   "ranThisInvocation": [
-    "P11"
+    "P08",
+    "P12",
+    "P13"
   ],
   "counts": {
     "parity": 7,
     "partial": 7,
-    "gap": 0
+    "gap": 0,
+    "inconclusive": 0
   },
   "rows": [
     {
@@ -22,7 +25,7 @@
         "gemini-3.1-flash-lite"
       ],
       "verdict": "parity",
-      "finding": "Auth carrier on the wire: genai used x-goog-api-key-header, the AI SDK used x-goog-api-key-header (same form). Custom header reached the wire: genai=true, ai-sdk=true; its VALUE matched what was sent (expected \"p01\"): genai=true, ai-sdk=true. llxprt User-Agent survived: genai=true, ai-sdk=true; the value carries the LLxprt-Code prefix: genai=true, ai-sdk=true (sent UA: genai \"LLxprt-Code/probe-2761 (darwin; arm64)\", ai-sdk \"LLxprt-Code/probe-2761 (darwin; arm64) ai-sdk/google/2.0.85 ai-sdk/provider-utils/3.0.30 runtime/bun/1.3.14\"). A deliberately invalid key was rejected by genai=true and ai-sdk=true. The header stamping and custom-header merge in GeminiProvider.createHttpOptions carries over unchanged, values included.",
+      "finding": "Auth carrier on the wire: genai used x-goog-api-key-header, the AI SDK used x-goog-api-key-header (same form). Custom header reached the wire: genai=true, ai-sdk=true; its VALUE matched what was sent (expected \"p01\"): genai=true, ai-sdk=true. llxprt User-Agent survived: genai=true, ai-sdk=true; the value carries the LLxprt-Code prefix: genai=true, ai-sdk=true (sent UA: genai \"LLxprt-Code/probe-2761 (darwin; arm64)\", ai-sdk \"LLxprt-Code/probe-2761 (darwin; arm64) ai-sdk/google/2.0.85 ai-sdk/provider-utils/3.0.30 runtime/bun/1.3.14\"). A deliberately invalid key produced genai=rejected and ai-sdk=rejected (rejection requires an auth-shaped status or an API_KEY_INVALID payload; a transient status is inconclusive). The header stamping and custom-header merge in GeminiProvider.createHttpOptions carries over unchanged, values included.",
       "genaiOk": true,
       "aisdkOk": true,
       "artifact": "results/P01.json"
@@ -48,7 +51,7 @@
         "gemini-3.1-flash-lite"
       ],
       "verdict": "partial",
-      "finding": "Text arrived in multiple increments: genai=true, ai-sdk=true. Usage placement: genai=per-chunk, ai-sdk=finish-part (present=true). The placements differ: geminiResponseMapper copies usage onto the text, tool-call and fallback chunks it emits for each mapped response, so on the AI SDK path an adapter would have to hold the terminal usage and attach it to the IContent metadata itself.",
+      "finding": "Text arrived in multiple increments: genai=true, ai-sdk=true. Usage placement: genai=per-chunk, ai-sdk=finish-part (finish usage present=true). The placements differ: geminiResponseMapper copies usage onto the text, tool-call and fallback chunks it emits for each mapped response, so on the AI SDK path an adapter would have to hold the terminal usage and attach it to the IContent metadata itself.",
       "genaiOk": true,
       "aisdkOk": true,
       "artifact": "results/P03.json"
@@ -87,7 +90,7 @@
         "gemini-3.5-flash"
       ],
       "verdict": "parity",
-      "finding": "@ai-sdk/google surfaced the response signature (length 544) and the signed replay was accepted. On the unsigned replay it injected the same skip_thought_signature_validator sentinel llxprt injects, result accepted. Raw @google/genai with no injection: signed replay accepted, unsigned replay rejected (HTTP 400). The AI SDK ships the same workaround thoughtSignatures.ts implements, so that module would become redundant.",
+      "finding": "@ai-sdk/google surfaced the response signature (length 372) and the signed replay was accepted. On the unsigned replay it injected the same skip_thought_signature_validator sentinel llxprt injects, result accepted. Raw @google/genai with no injection: signed replay accepted, unsigned replay rejected (HTTP 400). The AI SDK ships the same workaround thoughtSignatures.ts implements, so that module would become redundant.",
       "genaiOk": true,
       "aisdkOk": true,
       "artifact": "results/P06.json"
@@ -100,7 +103,7 @@
         "gemini-3.1-flash-lite"
       ],
       "verdict": "parity",
-      "finding": "Budget form: @google/genai surfaced 1 thought part(s) (151 thoughtsTokenCount); the AI SDK surfaced 1 reasoning part(s) (140 reasoningTokens). Level form: genai 1 thought part(s), AI SDK 1 reasoning part(s). On the wire, budget form: genai sent generationConfig.thinkingConfig={\"thinkingBudget\":512,\"includeThoughts\":true} and the AI SDK sent {\"thinkingBudget\":512,\"includeThoughts\":true}. Level form: genai sent generationConfig.thinkingConfig={\"thinkingLevel\":\"low\",\"includeThoughts\":true} and the AI SDK sent {\"includeThoughts\":true,\"thinkingLevel\":\"low\"}. Budget form reached generationConfig.thinkingConfig on both, so the budget translation still has a wire home. Level form reached generationConfig.thinkingConfig on both, so thinkingLevel transport is proven on the wire for both forms. Both surfaced thinking content and a thinking-token count, so the ThinkingBlock geminiResponseMapper emits can still be built.",
+      "finding": "Budget form: @google/genai surfaced 1 thought part(s) (136 thoughtsTokenCount); the AI SDK surfaced 1 reasoning part(s) (161 reasoningTokens). Level form: genai 1 thought part(s), AI SDK 1 reasoning part(s). On the wire, budget form: genai sent generationConfig.thinkingConfig={\"thinkingBudget\":512,\"includeThoughts\":true} and the AI SDK sent {\"thinkingBudget\":512,\"includeThoughts\":true}. Level form: genai sent generationConfig.thinkingConfig={\"thinkingLevel\":\"low\",\"includeThoughts\":true} and the AI SDK sent {\"includeThoughts\":true,\"thinkingLevel\":\"low\"}. Budget form reached generationConfig.thinkingConfig on both, so the budget translation still has a wire home. Level form reached generationConfig.thinkingConfig on both, so thinkingLevel transport is proven on the wire for both forms. Both surfaced thinking content and a thinking-token count, so the ThinkingBlock geminiResponseMapper emits can still be built.",
       "genaiOk": true,
       "aisdkOk": true,
       "artifact": "results/P07.json"
@@ -113,7 +116,7 @@
         "gemini-3.1-flash-lite"
       ],
       "verdict": "partial",
-      "finding": "INCONCLUSIVE (HTTP 429 from the provider, not a capability result): Inline base64: @google/genai accepted (wire part keys [inlineData]); AI SDK accepted (wire part keys [inlineData]). URI fileData TRANSPORT: @google/genai sent the URL on fileData.fileUri=true; AI SDK sent it on fileData.fileUri=true. URI fileData ENDPOINT-ACCEPTANCE: unproven in this run. Both sides got a 429 (genai) / 429 (ai-sdk), and a 429 cannot be attributed to the arbitrary fileUri host: the plain-text control call that succeeded afterwards (plainTextAccepted=true, HTTP 200) only rules out a general generate-content quota, never a separate media or file-URI quota. Control call (context only, not proof): plain text succeeded after the URI case genai=true (HTTP 200). The MediaBlock encoding:url -> fileData and encoding:base64 -> inlineData mapping in neutralConverters is transported unchanged by both adapters.",
+      "finding": "Inline base64: @google/genai accepted (wire part keys [inlineData]); AI SDK accepted (wire part keys [inlineData]). URI fileData TRANSPORT: @google/genai sent the URL on fileData.fileUri=true; AI SDK sent it on fileData.fileUri=true. URI fileData ENDPOINT-ACCEPTANCE: unproven in this run. Both sides got a 429 (genai) / 429 (ai-sdk), and a 429 cannot be attributed to the arbitrary fileUri host: the plain-text control call that succeeded afterwards (plainTextAccepted=true, HTTP 200) only rules out a general generate-content quota, never a separate media or file-URI quota. Control call (context only, not proof): plain text succeeded after the URI case genai=true (HTTP 200). The MediaBlock encoding:url -> fileData and encoding:base64 -> inlineData mapping in neutralConverters is transported unchanged by both adapters.",
       "genaiOk": true,
       "aisdkOk": true,
       "artifact": "results/P08.json"
@@ -126,7 +129,7 @@
         "gemini-3.1-flash-lite"
       ],
       "verdict": "parity",
-      "finding": "@google/genai emitted part sequence [executableCode,codeExecutionResult,text] with executableCode (PYTHON, 368 chars) and codeExecutionResult (OUTCOME_OK, 34 chars of output); the AI SDK emitted [tool-call,tool-result,text] with tool-call \"code_execution\" (providerExecuted: true) and a tool-result carrying the output. The executableCode -> CodeBlock and codeExecutionResult -> tool-response convention in neutralConverters is written against @google/genai Part shapes, so on the AI SDK path an adapter re-targets it at tool-call/tool-result parts and parses the JSON-string input. The payloads themselves are equivalent, and the SDK already stamps the code_execution name and the providerExecuted flag.",
+      "finding": "@google/genai emitted part sequence [executableCode,codeExecutionResult,text] with executableCode (PYTHON, 369 chars) and codeExecutionResult (OUTCOME_OK, 34 chars of output); the AI SDK emitted [tool-call,tool-result,text] with tool-call \"code_execution\" (providerExecuted: true) and a tool-result carrying the output. The executableCode -> CodeBlock and codeExecutionResult -> tool-response convention in neutralConverters is written against @google/genai Part shapes, so on the AI SDK path an adapter re-targets it at tool-call/tool-result parts and parses the JSON-string input. The payloads themselves are equivalent, and the SDK already stamps the code_execution name and the providerExecuted flag.",
       "genaiOk": true,
       "aisdkOk": true,
       "artifact": "results/P09.json"
@@ -134,7 +137,7 @@
     {
       "id": "P10",
       "area": "Errors, safety and finish reasons",
-      "question": "Do both adapters throw an identifyable unfurlable error, surface a raw finish reason after truncation, and expose the safety surface, so geminiApiErrorToProviderApiError and the rawStopReason passthrough still work?",
+      "question": "Do both adapters throw an identifiable unfurlable error, surface a raw finish reason after truncation, and expose the safety surface, so geminiApiErrorToProviderApiError and the rawStopReason passthrough still work?",
       "models": [
         "gemini-3.1-flash-lite"
       ],
@@ -152,7 +155,7 @@
         "gemini-3.1-flash-lite"
       ],
       "verdict": "partial",
-      "finding": "Pre-dispatch (signal already aborted): @google/genai threw nothing (returned) (abort-distinguishable=false, HTTP none, requests that left the process: yes); the AI SDK threw AbortError (abort-distinguishable=true, HTTP none, requests that left the process: no). Mid-stream: genai saw 1 chunk(s) and threw AbortError in 1ms; the AI SDK saw 1 chunk(s) and threw AbortError in 1ms. On the wire, genai relayCompleted=true, clientDisconnected=false, upstreamCutShort=false; the AI SDK relayCompleted=true, clientDisconnected=false, upstreamCutShort=false. The proxy did not observe a downstream disconnect for this run, so the wire cannot confirm upstream cancellation there; what is recorded is iteration terminating promptly after the abort. The AI SDK short-circuits an already-aborted signal on its own, at the fetch level, while @google/genai lets the call go out regardless. That is the behavior geminiAbort.throwIfAborted compensates for, though note its narrow use today: it is called from the server-tool and auth paths (GeminiProvider.resolveAuthWithAbortCheck and geminiServerTools), not from the ordinary chat generation path this probe exercises.",
+      "finding": "Pre-dispatch (signal already aborted): @google/genai threw nothing (returned) (abort-distinguishable=false, HTTP none, requests that left the process: yes); the AI SDK threw AbortError (abort-distinguishable=true, HTTP none, requests that left the process: no). Mid-stream: genai saw 1 chunk(s) and threw AbortError in 0ms; the AI SDK saw 1 chunk(s) and threw AbortError in 0ms. On the wire, genai relayCompleted=true, clientDisconnected=false, upstreamCutShort=false; the AI SDK relayCompleted=true, clientDisconnected=false, upstreamCutShort=false. The proxy did not observe a downstream disconnect for this run, so the wire cannot confirm upstream cancellation there; what is recorded is iteration terminating promptly after the abort. The AI SDK short-circuits an already-aborted signal on its own, at the fetch level, while @google/genai lets the call go out regardless. That is the behavior geminiAbort.throwIfAborted compensates for, though note its narrow use today: it is called from the server-tool and auth paths (GeminiProvider.resolveAuthWithAbortCheck and geminiServerTools), not from the ordinary chat generation path this probe exercises.",
       "genaiOk": true,
       "aisdkOk": true,
       "artifact": "results/P11.json"
@@ -189,7 +192,7 @@
       "question": "Do both adapters offer a listing path, and is the AI SDK missing one a real gap given llxprt lists models with a bare fetch?",
       "models": [],
       "verdict": "parity",
-      "finding": "@google/genai exposes models.list (listed=true); @ai-sdk/google exposes no listing method: provider own keys [chat,embedding,generativeAI,image,imageModel,languageModel,textEmbedding,textEmbeddingModel,tools], provider prototype keys [__defineGetter__,__defineSetter__,__lookupGetter__,__lookupSetter__,__proto__,apply,arguments,bind,call,caller,constructor,hasOwnProperty,isPrototypeOf,length,name,propertyIsEnumerable,toLocaleString,toString,valueOf], and a language-model instance own keys [config,generateId,modelId,specificationVersion] with prototype keys [__defineGetter__,__defineSetter__,__lookupGetter__,__lookupSetter__,__proto__,constructor,doGenerate,doStream,getArgs,hasOwnProperty,isPrototypeOf,propertyIsEnumerable,provider,supportedUrls,toLocaleString,toString,valueOf] show no listing member (providerHasList=false, modelHasList=false); the installed @ai-sdk/google and @ai-sdk/provider declarations contain no listing-shaped member ([list]). That costs llxprt nothing here: geminiModels.fetchModelsFromApi already lists with a bare fetch against /v1beta/models, which returned 50 models at status 200 in this run, and the provider never calls the SDK for listing.",
+      "finding": "@google/genai exposes models.list (listed=true); @ai-sdk/google exposes no listing method: provider own keys [chat,embedding,generativeAI,image,imageModel,languageModel,textEmbedding,textEmbeddingModel,tools], provider prototype keys [__defineGetter__,__defineSetter__,__lookupGetter__,__lookupSetter__,__proto__,apply,arguments,bind,call,caller,constructor,hasOwnProperty,isPrototypeOf,length,name,propertyIsEnumerable,toLocaleString,toString,valueOf], and a language-model instance own keys [config,generateId,modelId,specificationVersion] with prototype keys [__defineGetter__,__defineSetter__,__lookupGetter__,__lookupSetter__,__proto__,constructor,doGenerate,doStream,getArgs,hasOwnProperty,isPrototypeOf,propertyIsEnumerable,provider,supportedUrls,toLocaleString,toString,valueOf] show no listing member (providerHasList=false, modelHasList=false); the installed @ai-sdk/google and @ai-sdk/provider declarations contain no listing-shaped member ([]). That costs llxprt nothing here: geminiModels.fetchModelsFromApi already lists with a bare fetch against /v1beta/models, which returned 50 models at status 200 in this run, and the provider never calls the SDK for listing.",
       "genaiOk": true,
       "aisdkOk": true,
       "artifact": "results/P14.json"

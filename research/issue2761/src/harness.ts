@@ -14,7 +14,6 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -28,8 +27,10 @@ export type AdapterId = typeof ADAPTER_GENAI | typeof ADAPTER_AISDK;
  * `partial` — the AI SDK delivers it only with extra adapter-side work, or
  *             delivers a lossy version of it.
  * `gap`     — the AI SDK cannot deliver it at this pin.
+ * `inconclusive` — the probe never got a usable answer (quota or capacity),
+ *                  so no parity claim may be drawn from it.
  */
-export type Verdict = 'parity' | 'partial' | 'gap';
+export type Verdict = 'parity' | 'partial' | 'gap' | 'inconclusive';
 
 export interface CapturedError {
   readonly name: string;
@@ -96,14 +97,9 @@ export const PROBE_ROOT = resolve(HERE, '..');
 export const RESULTS_DIR = join(PROBE_ROOT, 'results');
 
 /**
- * Local default. Overridden with `LLXPRT_PROBE_KEY_FILE` or `GEMINI_API_KEY`.
- * The key behind this file has access to both a Gemini 2.x-generation model
- * and a Gemini 3-generation one, which the probe matrix needs.
- */
-const DEFAULT_KEY_FILE = join(homedir(), '.keys', '.google_key_from_e2720pjk');
-
-/**
- * Loads the live API key. Fails loudly: a probe run without credentials must
+ * Loads the live API key. Only `GEMINI_API_KEY` or the file named by
+ * `LLXPRT_PROBE_KEY_FILE` are honored; there is no embedded default path, so
+ * the harness is portable. Fails loudly: a probe run without credentials must
  * not be mistaken for a run that found gaps.
  */
 export function loadApiKey(): string {
@@ -111,8 +107,8 @@ export function loadApiKey(): string {
   if (fromEnv) {
     return fromEnv;
   }
-  const keyFile = process.env.LLXPRT_PROBE_KEY_FILE?.trim() ?? DEFAULT_KEY_FILE;
-  if (existsSync(keyFile)) {
+  const keyFile = process.env.LLXPRT_PROBE_KEY_FILE?.trim();
+  if (keyFile !== undefined && existsSync(keyFile)) {
     const fromFile = readFileSync(keyFile, 'utf8').trim();
     if (fromFile) {
       return fromFile;
@@ -120,7 +116,7 @@ export function loadApiKey(): string {
   }
   throw new Error(
     `No Gemini API key available. Set GEMINI_API_KEY, or point ` +
-      `LLXPRT_PROBE_KEY_FILE at a key file (tried ${keyFile}). ` +
+      `LLXPRT_PROBE_KEY_FILE at a key file. ` +
       `These probes are live by design and must not run credential-less.`,
   );
 }

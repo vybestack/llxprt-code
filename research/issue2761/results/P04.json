@@ -13,7 +13,7 @@
       "calls": [
         {
           "name": "get_weather",
-          "id": "call_720025",
+          "id": "call_2670315",
           "idLooksSynthetic": false,
           "args": {
             "city": "Paris"
@@ -21,7 +21,7 @@
         },
         {
           "name": "get_time",
-          "id": "call_720026",
+          "id": "call_2670316",
           "idLooksSynthetic": false,
           "args": {
             "city": "Paris"
@@ -46,13 +46,13 @@
       "calls": [
         {
           "name": "get_weather",
-          "id": "call_2172031",
+          "id": "call_2520123",
           "idLooksSynthetic": false,
           "args": "{\"city\":\"Paris\"}"
         },
         {
           "name": "get_time",
-          "id": "call_2172032",
+          "id": "call_2520124",
           "idLooksSynthetic": false,
           "args": "{\"city\":\"Paris\"}"
         }

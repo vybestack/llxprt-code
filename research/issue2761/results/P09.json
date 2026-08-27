@@ -15,11 +15,11 @@
         "text"
       ],
       "textParts": [
-        "To compute the 12th Fibonacci number, we use an iterative approach. Following the standard convention where $F_0 = 0$ and $F_1 = 1$, the 12th Fibonacci number i"
+        "To compute the 12th Fibonacci number, I used the following Python code. \n\nNote: This implementation follows the standard convention where $F_0 = 0$, $F_1 = 1$, "
       ],
       "executableCode": {
         "language": "PYTHON",
-        "codeLength": 368,
+        "codeLength": 369,
         "codePreview": "def fibonacci(n):\n    if n <= 0:\n        return 0\n    elif n == 1:\n        return 1\n    else:\n        a, b = 0, 1\n      "
       },
       "codeExecutionResult": {
@@ -42,14 +42,14 @@
       "content": [
         {
           "type": "tool-call",
-          "toolCallId": "LJreXTRnjaiLY0qF",
+          "toolCallId": "m0XLmJQSJ4DOIDQe",
           "toolName": "code_execution",
-          "input": "{\"language\":\"PYTHON\",\"code\":\"def fibonacci(n):\\n    a, b = 0, 1\\n    for _ in range(n):\\n        a, b = b, a + b\\n    return a\\n\\n# The Fibonacci sequence starts: F(0)=0, F(1)=1, F(2)=1, F(3)=2, ...\\n# Computing the 12th Fibonacci number (F(12))\\nresult = fibonacci(12)\\nprint(f\\\"The 12th Fibonacci number is: {result}\\\")\"}",
+          "input": "{\"language\":\"PYTHON\",\"code\":\"def fibonacci(n):\\n    a, b = 0, 1\\n    for _ in range(n):\\n        a, b = b, a + b\\n    return a\\n\\n# The Fibonacci sequence starts: F0=0, F1=1, F2=1, F3=2, ...\\n# To get the 12th Fibonacci number (F12), we call the function with 12.\\nresult = fibonacci(12)\\nprint(f\\\"The 12th Fibonacci number is: {result}\\\")\\n\"}",
           "providerExecuted": true
         },
         {
           "type": "tool-result",
-          "toolCallId": "LJreXTRnjaiLY0qF",
+          "toolCallId": "m0XLmJQSJ4DOIDQe",
           "toolName": "code_execution",
           "result": {
             "outcome": "OUTCOME_OK",
@@ -58,14 +58,14 @@
         },
         {
           "type": "text",
-          "length": 416,
-          "preview": "To compute the 12th Fibonacci number, I used the following Python code. The sequence is defined here as $F_0=0, F_1=1, F_2=1, \\dots$\n\n### Python Code\n```python\n",
+          "length": 348,
+          "preview": "To compute the 12th Fibonacci number, I used the following Python code:\n\n```python\ndef fibonacci(n):\n    a, b = 0, 1\n    for _ in range(n):\n        a, b = b, a ",
           "providerMetadata": {
             "google": {
               "thoughtSignature": {
                 "present": true,
                 "length": 156,
-                "prefix": "EnEKbwERTTIPJ4HU",
+                "prefix": "EnEKbwERTTIPvvD/",
                 "isSentinel": false
               }
             }
@@ -75,7 +75,7 @@
       "toolCalls": [
         {
           "toolName": "code_execution",
-          "toolCallId": "LJreXTRnjaiLY0qF",
+          "toolCallId": "m0XLmJQSJ4DOIDQe",
           "providerExecuted": true,
           "inputKind": "string",
           "inputPreview": "{\"language\":\"PYTHON\",\"code\":\"def fibonacci(n):\\n    a, b = 0, 1\\n    for _ in range(n):\\n        a, b = b, a + b\\n    return a\\n\\n# The Fibonacci sequence start"
@@ -84,15 +84,20 @@
       "toolResults": [
         {
           "toolName": "code_execution",
-          "toolCallId": "LJreXTRnjaiLY0qF",
+          "toolCallId": "m0XLmJQSJ4DOIDQe",
           "providerExecuted": true,
           "resultPreview": "{\"outcome\":\"OUTCOME_OK\",\"output\":\"The 12th Fibonacci number is: 144\\n\"}"
         }
       ],
       "finishReason": "tool-calls",
-      "warnings": []
+      "warnings": [],
+      "providerToolFactoryShape": {
+        "type": "provider-defined",
+        "toolName": "code_execution",
+        "id": "google.code_execution"
+      }
     }
   },
   "verdict": "parity",
-  "finding": "@google/genai emitted part sequence [executableCode,codeExecutionResult,text] with executableCode (PYTHON, 368 chars) and codeExecutionResult (OUTCOME_OK, 34 chars of output); the AI SDK emitted [tool-call,tool-result,text] with tool-call \"code_execution\" (providerExecuted: true) and a tool-result carrying the output. The executableCode -> CodeBlock and codeExecutionResult -> tool-response convention in neutralConverters is written against @google/genai Part shapes, so on the AI SDK path an adapter re-targets it at tool-call/tool-result parts and parses the JSON-string input. The payloads themselves are equivalent, and the SDK already stamps the code_execution name and the providerExecuted flag."
+  "finding": "@google/genai emitted part sequence [executableCode,codeExecutionResult,text] with executableCode (PYTHON, 369 chars) and codeExecutionResult (OUTCOME_OK, 34 chars of output); the AI SDK emitted [tool-call,tool-result,text] with tool-call \"code_execution\" (providerExecuted: true) and a tool-result carrying the output. The executableCode -> CodeBlock and codeExecutionResult -> tool-response convention in neutralConverters is written against @google/genai Part shapes, so on the AI SDK path an adapter re-targets it at tool-call/tool-result parts and parses the JSON-string input. The payloads themselves are equivalent, and the SDK already stamps the code_execution name and the providerExecuted flag."
 }

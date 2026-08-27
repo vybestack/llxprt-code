@@ -50,7 +50,10 @@ directory.
 
 Verdicts mean: `parity`, the AI SDK delivers what llxprt depends on; `partial`,
 it delivers it only with extra adapter-side work or lossily; `gap`, it cannot at
-this pin.
+this pin; `inconclusive`, the provider answered with a quota or capacity status
+and the probe learned nothing either way. `inconclusive` is counted separately,
+so a rate-limited run can never be mistaken for a capability finding. The run
+recorded here has none.
 
 ## Dependency and protocol facts
 
@@ -119,7 +122,7 @@ Gemini 3 thought-signature behavior.
 | P13 | Grounding and URL context   | `candidate.urlContextMetadata` with one `URL_RETRIEVAL_STATUS_SUCCESS` entry.                                                                                  | `providerMetadata.google.urlContextMetadata` with the same entry. Google Search grounding was refused for both adapters, so that dimension is unproven.                                                                                  | `partial` | [probe](../../research/issue2761/src/probes/p13-grounding-url-metadata.ts) / [result](../../research/issue2761/results/P13.json) |
 | P14 | Model listing               | `models.list` returns a page of model names.                                                                                                                   | No listing member on the provider or a language-model instance, own or inherited, and none in the installed declarations.                                                                                                                | `parity`  | [probe](../../research/issue2761/src/probes/p14-model-listing.ts) / [result](../../research/issue2761/results/P14.json)          |
 
-Totals: 7 `parity`, 7 `partial`, 0 `gap`.
+Totals: 7 `parity`, 7 `partial`, 0 `gap`, 0 `inconclusive`.
 
 P14 is `parity` despite the missing listing API because
 [`geminiModels.fetchModelsFromApi`](../../packages/providers/src/gemini/geminiModels.ts)

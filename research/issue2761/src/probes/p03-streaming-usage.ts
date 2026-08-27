@@ -111,6 +111,18 @@ export const p03StreamingUsage: Probe = {
       const finish = parts.find((part) => part.type === 'finish');
       const textDeltas = parts.filter((part) => part.type === 'text-delta');
       const finishObj = finish === undefined ? null : (finish as { usage?: unknown; finishReason?: unknown });
+      // Derive the placement from what was observed: 'finish-part' when usage
+      // appears only on the terminal finish part, 'per-chunk' when it also rides
+      // along on the text/stream parts before it, 'none' when it is absent.
+      const intermediateUsageParts = parts.filter(
+        (part) => part.type !== 'finish' && 'usage' in part,
+      );
+      const derivedUsageLocation =
+        intermediateUsageParts.length > 0
+          ? 'per-chunk'
+          : finishObj !== null && 'usage' in finishObj
+            ? 'finish-part'
+            : 'none';
       return {
         totalChunks: parts.length,
         partKindSequence: partTypes,
@@ -120,7 +132,7 @@ export const p03StreamingUsage: Probe = {
         assembledTextLength: textDeltas
           .map((p) => (p.type === 'text-delta' ? p.delta.length : 0))
           .reduce((a, b) => a + b, 0),
-        usageLocation: 'finish-part',
+        usageLocation: derivedUsageLocation,
         finishUsage:
           finishObj === null
             ? null
@@ -132,7 +144,10 @@ export const p03StreamingUsage: Probe = {
 
     const genaiUsage = (genai.observation as { usageAppears?: string })[
       'usageAppears'
-    ];
+    ] ?? 'none';
+    const aisdkUsage = (aisdk.observation as { usageLocation?: string })[
+      'usageLocation'
+    ] ?? 'none';
     const aisdkFinishUsage =
       (aisdk.observation as { finishUsage?: unknown })['finishUsage'] != null;
     const genaiIncremental =
@@ -162,8 +177,10 @@ export const p03StreamingUsage: Probe = {
 
     // Usage placement is the whole point here: geminiResponseMapper stamps
     // usage onto every chunk it maps. If the two adapters place usage
-    // differently, that is adapter work, not parity.
-    const usagePlacementMatches = genaiUsage === 'finish-part';
+    // differently, that is adapter work, not parity. Both labels are DERIVED
+    // from what each adapter observed, so parity means the two adapters place
+    // usage the same way and differing placements can never report parity.
+    const usagePlacementMatches = genaiUsage === aisdkUsage;
     const bothIncremental = genaiIncremental && aisdkIncremental;
 
     return {
@@ -180,7 +197,7 @@ export const p03StreamingUsage: Probe = {
       finding:
         `Text arrived in multiple increments: genai=${genaiIncremental}, ` +
         `ai-sdk=${aisdkIncremental}. Usage placement: genai=${String(genaiUsage)}, ` +
-        `ai-sdk=finish-part (present=${aisdkFinishUsage}). ` +
+        `ai-sdk=${String(aisdkUsage)} (finish usage present=${aisdkFinishUsage}). ` +
         (usagePlacementMatches
           ? 'Both place usage the same way, so the per-response usage stamping ' +
             'in geminiResponseMapper carries over directly.'

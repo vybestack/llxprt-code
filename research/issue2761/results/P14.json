@@ -87,12 +87,13 @@
       "modelPrototypeName": "[object Object]",
       "prototypeKeyCount": 20,
       "declarationCheck": {
-        "file": "/Users/acoliver/projects/llxprt/branch-6/llxprt-code/research/issue2761/node_modules/@ai-sdk/google/dist/index.d.ts",
-        "providerDeclarationFound": true,
-        "modelDeclarationFound": true,
-        "listingShapedMembersFound": [
-          "list"
-        ]
+        "providerDeclarationFile": null,
+        "providerDeclarationFound": false,
+        "providerDeclaredMembers": [],
+        "modelDeclarationFile": null,
+        "modelDeclarationFound": false,
+        "modelDeclaredMembers": [],
+        "declaredListingMembers": []
       },
       "languageModelFactory": true,
       "providerTools": [
@@ -105,6 +106,7 @@
         "vertexRagStore"
       ],
       "llxprtBareFetchListing": {
+        "ok": true,
         "status": 200,
         "modelCount": 50,
         "firstIds": [
@@ -119,5 +121,5 @@
     }
   },
   "verdict": "parity",
-  "finding": "@google/genai exposes models.list (listed=true); @ai-sdk/google exposes no listing method: provider own keys [chat,embedding,generativeAI,image,imageModel,languageModel,textEmbedding,textEmbeddingModel,tools], provider prototype keys [__defineGetter__,__defineSetter__,__lookupGetter__,__lookupSetter__,__proto__,apply,arguments,bind,call,caller,constructor,hasOwnProperty,isPrototypeOf,length,name,propertyIsEnumerable,toLocaleString,toString,valueOf], and a language-model instance own keys [config,generateId,modelId,specificationVersion] with prototype keys [__defineGetter__,__defineSetter__,__lookupGetter__,__lookupSetter__,__proto__,constructor,doGenerate,doStream,getArgs,hasOwnProperty,isPrototypeOf,propertyIsEnumerable,provider,supportedUrls,toLocaleString,toString,valueOf] show no listing member (providerHasList=false, modelHasList=false); the installed @ai-sdk/google and @ai-sdk/provider declarations contain no listing-shaped member ([list]). That costs llxprt nothing here: geminiModels.fetchModelsFromApi already lists with a bare fetch against /v1beta/models, which returned 50 models at status 200 in this run, and the provider never calls the SDK for listing."
+  "finding": "@google/genai exposes models.list (listed=true); @ai-sdk/google exposes no listing method: provider own keys [chat,embedding,generativeAI,image,imageModel,languageModel,textEmbedding,textEmbeddingModel,tools], provider prototype keys [__defineGetter__,__defineSetter__,__lookupGetter__,__lookupSetter__,__proto__,apply,arguments,bind,call,caller,constructor,hasOwnProperty,isPrototypeOf,length,name,propertyIsEnumerable,toLocaleString,toString,valueOf], and a language-model instance own keys [config,generateId,modelId,specificationVersion] with prototype keys [__defineGetter__,__defineSetter__,__lookupGetter__,__lookupSetter__,__proto__,constructor,doGenerate,doStream,getArgs,hasOwnProperty,isPrototypeOf,propertyIsEnumerable,provider,supportedUrls,toLocaleString,toString,valueOf] show no listing member (providerHasList=false, modelHasList=false); the installed @ai-sdk/google and @ai-sdk/provider declarations contain no listing-shaped member ([]). That costs llxprt nothing here: geminiModels.fetchModelsFromApi already lists with a bare fetch against /v1beta/models, which returned 50 models at status 200 in this run, and the provider never calls the SDK for listing."
 }

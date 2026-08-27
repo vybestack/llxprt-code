@@ -296,7 +296,7 @@ export const p10ErrorSafetyFinish: Probe = {
       id: 'P10',
       area: 'Errors, safety and finish reasons',
       question:
-        'Do both adapters throw an identifyable unfurlable error, surface a raw ' +
+        'Do both adapters throw an identifiable unfurlable error, surface a raw ' +
         'finish reason after truncation, and expose the safety surface, so ' +
         'geminiApiErrorToProviderApiError and the rawStopReason passthrough still work?',
       models: [ctx.modelGeneral],

@@ -286,9 +286,19 @@ export const p06ThoughtSignatures: Probe = {
         // output therefore requires an explicit parse — recorded below as
         // `replayRequiresInputParse`, because it is adapter work llxprt would
         // have to own.
-        const parsedInput: unknown =
-          typeof call.input === 'string' ? JSON.parse(call.input) : call.input;
         const replayRequiresInputParse = typeof call.input === 'string';
+        let parsedInput: unknown = call.input;
+        let inputParseError: string | null = null;
+        if (replayRequiresInputParse) {
+          try {
+            parsedInput = JSON.parse(call.input as string) as unknown;
+          } catch (error) {
+            // Record it rather than letting the throw abort the adapter run and
+            // masquerade as the adapter rejecting the replay.
+            parsedInput = {};
+            inputParseError = String(error);
+          }
+        }
 
         const buildPrompt = (withSignature: boolean): LanguageModelV2Prompt => {
           const toolCallPart: LanguageModelV2ToolCallPart = {
@@ -346,6 +356,7 @@ export const p06ThoughtSignatures: Probe = {
             toolName: call.toolName,
             responseSignature,
             replayRequiresInputParse,
+            inputParseError,
           },
           step2_replayWithSignature: {
             ...replayOutcome(withRecord, withSignature.accepted),
