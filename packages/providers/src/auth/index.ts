@@ -67,8 +67,35 @@ export {
 export { ClipboardService } from './ClipboardService.js';
 
 // ─── Runtime Accessor Bridge ─────────────────────────────────────────────────
-export { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
+/**
+ * @plan PLAN-20260827-ISSUE2562.P03
+ * @requirement REQ-2562-4
+ */
+export {
+  oauthRuntimeBridge,
+  DEFAULT_INTERACTIVE_AUTH_TIMEOUT_MS,
+} from './runtime-accessor-bridge.js';
 export type { OAuthRuntimeAccessors } from './runtime-accessor-bridge.js';
+
+// ─── Interactive Authentication Coordinator ──────────────────────────────────
+/**
+ * @plan PLAN-20260827-ISSUE2562.P05
+ * @requirement REQ-2562-4
+ */
+export {
+  InteractiveAuthCoordinator,
+  InteractiveAuthError,
+  InteractiveAuthUnavailableError,
+  InteractiveAuthHostUnavailableError,
+  InteractiveAuthCancelledError,
+  interactiveAuthCoordinator,
+} from './interactive-auth-coordinator.js';
+export type {
+  InteractiveAuthChallenge,
+  InteractiveAuthHostHandler,
+  InteractiveAuthOutcome,
+  InteractiveAuthOutcomeKind,
+} from './interactive-auth-coordinator.js';
 
 // ─── Sandbox Proxy Lifecycle ─────────────────────────────────────────────────
 export {

@@ -16,7 +16,10 @@ import type {
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import {
+  interactiveAuthCoordinator,
+  type OAuthManager,
+} from '@vybestack/llxprt-code-providers/auth.js';
 import { invalidateProviderRuntimeCache } from '@vybestack/llxprt-code-auth';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
@@ -36,6 +39,36 @@ import {
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 
 const logger = new DebugLogger('llxprt:ui:auth-command');
+
+function isCancelSubcommand(args: string | undefined): boolean {
+  return args?.trim().toLowerCase() === 'cancel';
+}
+
+/**
+ * @plan PLAN-20260827-ISSUE2562.P05
+ * @requirement REQ-2562-4
+ */
+function cancelInteractiveAuthentication(): MessageActionReturn {
+  const activeSessions = interactiveAuthCoordinator.getActiveSessions();
+  const cancelledCount = interactiveAuthCoordinator.cancelActiveSessions();
+  if (cancelledCount === 0) {
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: 'No active authentication sessions.',
+    };
+  }
+  const retryCommands = [
+    ...new Set(activeSessions.map((session) => session.provider)),
+  ]
+    .map((provider) => `/auth ${provider}`)
+    .join(' or ');
+  return {
+    type: 'message',
+    messageType: 'info',
+    content: `Cancelled ${cancelledCount} active authentication session(s). Retry with ${retryCommands}.`,
+  };
+}
 
 /**
  * Get the OAuth manager instance
@@ -213,6 +246,11 @@ const authCommandSchema: CommandArgumentSchema = [
       ...buildLockUnlockSchemaEntries(bucketCompleter),
     ],
   },
+  {
+    kind: 'literal',
+    value: 'cancel',
+    description: 'Cancel active interactive authentication sessions',
+  },
 ];
 
 interface BucketStatus {
@@ -262,6 +300,17 @@ function formatBucketStatusLine(bucket: BucketStatus): string {
   return `${marker}- ${bucket.bucket} (${activeStr}expires: ${expiryDate.toLocaleString()})`;
 }
 
+function anthropicRedirectMessage(): SlashCommandActionReturn {
+  return {
+    type: 'message',
+    messageType: 'info',
+    content:
+      'Anthropic API keys and Claude Code subscription OAuth are now separate.\n' +
+      'For Claude.ai subscription OAuth, run: /auth claudecode\n' +
+      'For Anthropic API-key access, run: /provider anthropic, then /key or /keyfile',
+  };
+}
+
 export class AuthCommandExecutor {
   constructor(private oauthManager: OAuthManager) {}
 
@@ -271,6 +320,9 @@ export class AuthCommandExecutor {
   ): Promise<SlashCommandActionReturn> {
     // Parse args while preserving original parts for error messages
     const trimmedArgs = args?.trim() ?? '';
+    if (isCancelSubcommand(trimmedArgs)) {
+      return cancelInteractiveAuthentication();
+    }
     const parts = trimmedArgs.split(/\s+/).filter((p) => p.length > 0);
     const rawProvider = parts[0];
     const rawAction = parts[1];
@@ -292,14 +344,7 @@ export class AuthCommandExecutor {
     // are configured via `/provider anthropic` + `/key`/`/keyfile`. Redirect
     // users instead of touching OAuth manager state.
     if (provider === 'anthropic') {
-      return {
-        type: 'message',
-        messageType: 'info',
-        content:
-          'Anthropic API keys and Claude Code subscription OAuth are now separate.\n' +
-          'For Claude.ai subscription OAuth, run: /auth claudecode\n' +
-          'For Anthropic API-key access, run: /provider anthropic, then /key or /keyfile',
-      };
+      return anthropicRedirectMessage();
     }
 
     // Check if provider is supported before processing actions
@@ -786,6 +831,9 @@ export const authCommand: SlashCommand = {
   autoExecute: true,
   schema: authCommandSchema,
   action: async (context, args) => {
+    if (isCancelSubcommand(args)) {
+      return cancelInteractiveAuthentication();
+    }
     const oauthManager = getOAuthManager();
 
     const executor = new AuthCommandExecutor(oauthManager);

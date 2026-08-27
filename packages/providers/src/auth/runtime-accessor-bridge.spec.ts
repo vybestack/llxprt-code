@@ -7,9 +7,14 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   oauthRuntimeBridge,
+  DEFAULT_INTERACTIVE_AUTH_TIMEOUT_MS,
   type OAuthRuntimeAccessors,
 } from './runtime-accessor-bridge.js';
 
+/**
+ * @plan PLAN-20260827-ISSUE2562.P03
+ * @requirement REQ-2562-4
+ */
 describe('oauthRuntimeBridge', () => {
   afterEach(() => {
     // Always clean up so tests don't leak accessor state.
@@ -49,6 +54,11 @@ describe('oauthRuntimeBridge', () => {
         /not registered/,
       );
     });
+
+    it('returns the default interactive authentication timeout', () => {
+      expect(oauthRuntimeBridge.getInteractiveAuthTimeoutMs()).toBe(1_200_000);
+      expect(DEFAULT_INTERACTIVE_AUTH_TIMEOUT_MS).toBe(1_200_000);
+    });
   });
 
   describe('delegation when accessors are registered', () => {
@@ -59,6 +69,7 @@ describe('oauthRuntimeBridge', () => {
         getProviderManager: () => undefined,
         getRuntimeContext: () => undefined,
         getCurrentProfileName: () => null,
+        getInteractiveAuthTimeoutMs: () => 1_200_000,
       };
       oauthRuntimeBridge.setAccessors(accessors);
 
@@ -79,6 +90,7 @@ describe('oauthRuntimeBridge', () => {
         getProviderManager: () => manager,
         getRuntimeContext: () => undefined,
         getCurrentProfileName: () => null,
+        getInteractiveAuthTimeoutMs: () => 1_200_000,
       };
       oauthRuntimeBridge.setAccessors(accessors);
 
@@ -95,6 +107,7 @@ describe('oauthRuntimeBridge', () => {
         getProviderManager: () => undefined,
         getRuntimeContext: () => ctx,
         getCurrentProfileName: () => null,
+        getInteractiveAuthTimeoutMs: () => 1_200_000,
       };
       oauthRuntimeBridge.setAccessors(accessors);
 
@@ -108,10 +121,35 @@ describe('oauthRuntimeBridge', () => {
         getProviderManager: () => undefined,
         getRuntimeContext: () => undefined,
         getCurrentProfileName: () => 'my-profile',
+        getInteractiveAuthTimeoutMs: () => 1_200_000,
       };
       oauthRuntimeBridge.setAccessors(accessors);
 
       expect(oauthRuntimeBridge.getCurrentProfileName()).toBe('my-profile');
+    });
+
+    it('getInteractiveAuthTimeoutMs delegates to the registered accessor', () => {
+      const accessors: OAuthRuntimeAccessors = {
+        getEphemeralSetting: () => undefined,
+        getProviderManager: () => undefined,
+        getRuntimeContext: () => undefined,
+        getCurrentProfileName: () => null,
+        getInteractiveAuthTimeoutMs: () => 45_000,
+      };
+      oauthRuntimeBridge.setAccessors(accessors);
+
+      expect(oauthRuntimeBridge.getInteractiveAuthTimeoutMs()).toBe(45_000);
+    });
+
+    it('uses the default for older accessor registrations', () => {
+      oauthRuntimeBridge.setAccessors({
+        getEphemeralSetting: () => undefined,
+        getProviderManager: () => undefined,
+        getRuntimeContext: () => undefined,
+        getCurrentProfileName: () => null,
+      });
+
+      expect(oauthRuntimeBridge.getInteractiveAuthTimeoutMs()).toBe(1_200_000);
     });
   });
 
@@ -122,6 +160,7 @@ describe('oauthRuntimeBridge', () => {
         getProviderManager: () => ({ getProviderByName: () => null }),
         getRuntimeContext: () => ({ runtimeId: 'x' }),
         getCurrentProfileName: () => 'p',
+        getInteractiveAuthTimeoutMs: () => 1_200_000,
       };
       oauthRuntimeBridge.setAccessors(accessors);
 
@@ -157,6 +196,7 @@ describe('oauthRuntimeBridge', () => {
           throw error;
         },
         getCurrentProfileName: () => null,
+        getInteractiveAuthTimeoutMs: () => 1_200_000,
       };
       oauthRuntimeBridge.setAccessors(accessors);
 
@@ -177,6 +217,7 @@ describe('oauthRuntimeBridge', () => {
         getProviderManager: () => undefined,
         getRuntimeContext: () => undefined,
         getCurrentProfileName: () => null,
+        getInteractiveAuthTimeoutMs: () => 1_200_000,
       };
       oauthRuntimeBridge.setAccessors(accessors);
 

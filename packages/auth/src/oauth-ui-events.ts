@@ -17,8 +17,24 @@
  * in `@vybestack/llxprt-code-auth` without importing UI types.
  */
 
+/**
+ * @plan PLAN-20260827-ISSUE2562.P05
+ * @requirement REQ-2562-4
+ */
 /** The set of OAuth UI event discriminator values. */
-export type OAuthUIEventType = 'info' | 'warning' | 'error' | 'oauth_url';
+export type OAuthUIEventType =
+  | 'info'
+  | 'warning'
+  | 'error'
+  | 'oauth_url'
+  | 'oauth_waiting'
+  | 'oauth_settled';
+
+export type OAuthInteractiveAuthOutcomeKind =
+  | 'succeeded'
+  | 'cancelled'
+  | 'failed'
+  | 'timed_out';
 
 /**
  * Discriminated union of all OAuth UI events.
@@ -27,6 +43,8 @@ export type OAuthUIEventType = 'info' | 'warning' | 'error' | 'oauth_url';
  * - `warning`: a non-fatal warning message (e.g. a recoverable fallback).
  * - `error`: a non-fatal error message.
  * - `oauth_url`: an authorization URL the user must visit.
+ * - `oauth_waiting`: a host-owned interactive authentication session is waiting.
+ * - `oauth_settled`: a host-owned interactive authentication session settled.
  */
 export type OAuthUIEvent =
   | {
@@ -37,7 +55,24 @@ export type OAuthUIEvent =
     }
   | { readonly type: 'warning'; readonly text: string }
   | { readonly type: 'error'; readonly text: string }
-  | { readonly type: 'oauth_url'; readonly text: string; readonly url: string };
+  | { readonly type: 'oauth_url'; readonly text: string; readonly url: string }
+  | {
+      readonly type: 'oauth_waiting';
+      readonly provider: string;
+      readonly bucket?: string;
+      readonly requesterRuntimeKind: string;
+      readonly correlationId: string;
+      readonly waiterCount: number;
+    }
+  | {
+      readonly type: 'oauth_settled';
+      readonly provider: string;
+      readonly bucket?: string;
+      readonly requesterRuntimeKind: string;
+      readonly correlationId: string;
+      readonly waiterCount: number;
+      readonly kind: OAuthInteractiveAuthOutcomeKind;
+    };
 
 /**
  * Callback invoked when an {@link OAuthUIEvent} is emitted to a handler.
