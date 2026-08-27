@@ -319,6 +319,14 @@ jobs:
             --no-git-tag-version \
             --allow-same-version
 
+      # VSCE is release-only packaging tooling (issue #2754): it is deliberately
+      # absent from the workspace install, so the pinned packaging context is
+      # installed here. It also needs its own node_modules because vsce requires
+      # the legacy mime@1 API that the repo-hoisted mime@3 does not provide.
+      - name: Install VS Code packaging tooling
+        if: ${{ steps.vars.outputs.should_publish_vscode == 'true' }}
+        run: npm ci --prefix packaging/vscode-ide-companion
+
       - name: Package VS Code extension
         id: vscode_package
         if: ${{ steps.vars.outputs.should_publish_vscode == 'true' }}
@@ -370,7 +378,7 @@ jobs:
             echo "VSIX package not found at ${VSIX_PATH}." >&2
             exit 1
           fi
-          npx @vscode/vsce publish --packagePath "${VSIX_PATH}" --azure-credential --skip-duplicate
+          node packaging/vscode-ide-companion/node_modules/@vscode/vsce/vsce publish --packagePath "${VSIX_PATH}" --azure-credential --skip-duplicate
 
       - name: Publish @vybestack/llxprt-code-tools
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}

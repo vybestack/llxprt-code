@@ -112,9 +112,10 @@ trusted. These are the 16 entries in `trustedDependencies`:
   install. This is an intentional trade-off: if `@lydell/node-pty` were ever
   unavailable on a platform, the `node-pty` fallback would not have a freshly
   built binary under Bun.
-- **`keytar`** — not trusted because it is transitive release/VSCE tooling, not
-  a package the CLI runtime depends on; its credential-store binary is not
-  required for installing or running this repository.
+- **`keytar`** — transitive release/VSCE tooling; not trusted. It entered the
+  tree only via the VSCE dev dependency that was removed when VSCE became
+  release-only packaging (issue #2754), so no workspace depends on it here; its
+  credential-store binary is not required for installing or running this repository.
 - **`msw`, `vscode-ide-companion` prepare** — build/dev-only lifecycle scripts
   that do not produce a runtime-required artifact, so they do not need to run
   during install.
