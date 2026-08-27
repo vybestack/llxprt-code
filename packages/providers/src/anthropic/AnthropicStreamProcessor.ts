@@ -193,6 +193,13 @@ function* applyStreamEvent(
       return;
     }
     case 'message_delta': {
+      // A final stop_reason is a terminal signal: gateways that omit
+      // message_stop still end their streams with stop_reason set, and
+      // truncation detection must treat that as a completed message.
+      if (readMessageDeltaStopReason(chunk) != null) {
+        state.terminalSeen = true;
+        options.commitState?.markTerminalSeen();
+      }
       yield* handleMessageDelta(chunk, options.logger);
       return;
     }

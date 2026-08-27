@@ -198,6 +198,20 @@ describe('decodeRetryFailure', () => {
     expect(decodeRetryFailure(error).retryAfterMs).toBe(300_000);
   });
 
+  it('reports retryAfterMs 0 for an explicit Retry-After: 0', () => {
+    const error = Object.assign(errorWithStatus(429), {
+      response: { headers: { 'retry-after': '0' } },
+    });
+
+    expect(decodeRetryFailure(error).retryAfterMs).toBe(0);
+  });
+
+  it('omits retryAfterMs when no Retry-After header exists', () => {
+    expect(
+      decodeRetryFailure(errorWithStatus(429)).retryAfterMs,
+    ).toBeUndefined();
+  });
+
   it.each(mappingCases)(
     'attaches the original $label as its cause',
     ({ error }) => {

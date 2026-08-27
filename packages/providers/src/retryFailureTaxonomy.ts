@@ -10,7 +10,10 @@ import {
   isMalformedStreamEventError,
   isStreamTruncatedError,
 } from './streamProtocolErrors.js';
-import { getDelayDuration, getRetryAfterDelayMs } from './retryAfterHeader.js';
+import {
+  MAX_RETRY_AFTER_MS,
+  getRetryAfterDelayMs,
+} from './retryAfterHeader.js';
 import { isQuotaExhaustionError } from './utils/quotaExhaustion.js';
 import {
   classifyRetryError,
@@ -130,8 +133,10 @@ function hasErrorName(error: unknown, expected: string): boolean {
 }
 
 function getCappedRetryAfterMs(error: unknown): number | undefined {
-  if (getRetryAfterDelayMs(error) <= 0) return undefined;
-  return getDelayDuration(error, 0);
+  const retryAfterMs = getRetryAfterDelayMs(error);
+  return retryAfterMs === undefined
+    ? undefined
+    : Math.min(retryAfterMs, MAX_RETRY_AFTER_MS);
 }
 
 interface FailureIdentity {

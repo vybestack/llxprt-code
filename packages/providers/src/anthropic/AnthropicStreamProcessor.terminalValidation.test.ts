@@ -211,7 +211,7 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
       expect(state.committed).toBe(false);
     });
 
-    it('throws a truncated failure when the stream ends without message_stop after output', async () => {
+    it('throws a truncated failure when the stream is cut mid-block after output', async () => {
       const { chunks, error } = await collect(
         processAnthropicStream(
           sse(
@@ -219,7 +219,7 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
             textStart,
             textDelta('Hello'),
             textStop,
-            messageDeltaStop,
+            // Cut before any terminal signal: no stop_reason, no message_stop.
           ),
           baseProcessorOptions,
         ),
@@ -230,6 +230,28 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
       const failure = decodeRetryFailure(error);
       expect(failure.kind).toBe('truncated');
       expect(failure.phase).toBe('stream');
+    });
+
+    it('accepts a final stop_reason message_delta as terminal when message_stop is absent', async () => {
+      const request = freshRequestContext();
+      const { chunks, error } = await collect(
+        processAnthropicStream(
+          sse(
+            messageStart,
+            textStart,
+            textDelta('Hello'),
+            textStop,
+            messageDeltaStop,
+          ),
+          { ...baseProcessorOptions, commitState: request },
+        ),
+      );
+
+      // Gateways that end after the final stop_reason (instead of the
+      // first-party message_stop) completed their message: not truncated.
+      expect(error).toBeUndefined();
+      expect(chunks.length).toBeGreaterThan(0);
+      expect(getRequestCommitState(request).terminalSeen).toBe(true);
     });
 
     it('treats an empty stream as truncated, not a successful turn', async () => {
@@ -353,6 +375,31 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
       expect(chunks[0]?.blocks).toStrictEqual([]);
       expect(chunks[0]?.metadata?.usage).toBeDefined();
       expect(error).toBeDefined();
+      expect(isTerminalRetryError(error)).toBe(true);
+    });
+
+    it('malformed event after partial output: terminal, never replayed', async () => {
+      const { provider, calls } = scriptedAnthropicTransport({
+        // Text escapes, then a protocol violation (json delta with no open
+        // tool block) arrives; the malformed error is terminal because the
+        // request already committed.
+        scripts: [
+          () =>
+            sse(messageStart, textStart, textDelta('Hi'), jsonDelta('{"oops"')),
+        ],
+      });
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 3,
+        initialDelayMs: 1,
+      });
+
+      const { chunks, error } = await collect(
+        orchestrator.generateChatCompletion({ contents: [] }),
+      );
+
+      expect(calls()).toBe(1);
+      expect(chunks.length).toBeGreaterThan(0);
+      expect(error).toBeInstanceOf(MalformedStreamEventError);
       expect(isTerminalRetryError(error)).toBe(true);
     });
 

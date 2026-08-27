@@ -148,6 +148,19 @@ describe('retry request commit state', () => {
     outer.releaseBudget();
   });
 
+  it('re-arms the auth repair slot for a new request on released options', () => {
+    const first = createContext();
+    expect(claimRequestAuthRepair(first.options)).toBe(true);
+    first.releaseBudget();
+
+    // A new logical request resolving a fresh budget on the same options
+    // (attachTransportAttemptBudget spreads the prior record) must not
+    // inherit the previous request's consumed repair slot.
+    const second = createContext(first.options);
+    expect(claimRequestAuthRepair(second.options)).toBe(true);
+    second.releaseBudget();
+  });
+
   it('does not leak the auth repair slot into the next request', () => {
     const first = createContext();
     const second = createContext();

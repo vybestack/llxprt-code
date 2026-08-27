@@ -5,10 +5,10 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import Anthropic from '@anthropic-ai/sdk';
 import {
   shouldRetryError,
   getDelayDuration,
+  getRetryAfterDelayMs,
   hasRetryAfterHeader,
 } from './retryDelayPolicy.js';
 
@@ -96,13 +96,13 @@ describe('getDelayDuration / hasRetryAfterHeader @issue:3140', () => {
     expect(delayMs).toBeLessThanOrEqual(5200);
   });
 
-  it('reads Retry-After from a real Anthropic SDK APIError', () => {
-    const error = new Anthropic.APIError(
-      429,
-      { message: 'rate limited' },
-      'rate limited',
-      new Headers({ 'retry-after': '2' }),
-    );
+  it('reads Retry-After from an Anthropic-shaped error with Fetch Headers', () => {
+    // Mirrors Anthropic.APIError's surface (status + top-level headers)
+    // without constructing the SDK class in tests.
+    const error = {
+      status: 429,
+      headers: new Headers({ 'retry-after': '2' }),
+    };
     expect(hasRetryAfterHeader(error)).toBe(true);
     expect(getDelayDuration(error, 5000)).toBe(2000);
   });
@@ -121,5 +121,37 @@ describe('getDelayDuration / hasRetryAfterHeader @issue:3140', () => {
       headers: { 'Retry-After': '4' },
     };
     expect(getDelayDuration(error, 5000)).toBe(4000);
+  });
+
+  it('honors an explicit Retry-After: 0 as an immediate retry', () => {
+    const error = {
+      status: 429,
+      headers: { 'retry-after': '0' },
+    };
+    expect(hasRetryAfterHeader(error)).toBe(true);
+    expect(getRetryAfterDelayMs(error)).toBe(0);
+    expect(getDelayDuration(error, 5000)).toBe(0);
+  });
+
+  it('treats a past Retry-After HTTP-date as present with zero delay', () => {
+    const past = new Date(Date.now() - 60_000).toUTCString();
+    const error = {
+      status: 503,
+      headers: { 'retry-after': past },
+    };
+    expect(hasRetryAfterHeader(error)).toBe(true);
+    expect(getRetryAfterDelayMs(error)).toBe(0);
+    expect(getDelayDuration(error, 5000)).toBe(0);
+  });
+
+  it('treats a missing or unparseable Retry-After as absent', () => {
+    expect(getRetryAfterDelayMs({ status: 429 })).toBeUndefined();
+    expect(hasRetryAfterHeader({ status: 429 })).toBe(false);
+    const unparseable = { status: 429, headers: { 'retry-after': 'soon' } };
+    expect(getRetryAfterDelayMs(unparseable)).toBeUndefined();
+    expect(hasRetryAfterHeader(unparseable)).toBe(false);
+    const absentDelay = getDelayDuration({ status: 429 }, 4000);
+    expect(absentDelay).toBeGreaterThanOrEqual(2800);
+    expect(absentDelay).toBeLessThanOrEqual(5200);
   });
 });

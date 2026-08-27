@@ -515,12 +515,21 @@ export class RetryOrchestrator implements IProvider {
     if (error === undefined) {
       return budgetFacts;
     }
-    const failure = decodeRetryFailure(error);
-    return {
-      kind: failure.kind,
-      phase: failure.phase,
-      ...budgetFacts,
-    };
+    // Telemetry must never mask the attempt error: a decoding failure
+    // degrades the report to budget facts only.
+    try {
+      const failure = decodeRetryFailure(error);
+      return {
+        kind: failure.kind,
+        phase: failure.phase,
+        ...budgetFacts,
+      };
+    } catch (decodeError) {
+      this.logger.debug(
+        () => `Failure decode for telemetry threw: ${String(decodeError)}`,
+      );
+      return budgetFacts;
+    }
   }
 
   private createAttemptNotification(
@@ -584,12 +593,20 @@ export class RetryOrchestrator implements IProvider {
       request,
       failure,
       (authError, authOptions, errorStatus, authSignal) =>
+        // The gate swallows repair failures by design (the committed
+        // error surfaces either way); log them so the silent catch is
+        // observable in debug output.
         this.invokeAuthErrorHandler(
           authError,
           authOptions,
           errorStatus,
           authSignal,
-        ),
+        ).catch((repairError: unknown) => {
+          this.logger.debug(
+            () => `Post-commitment auth repair failed: ${String(repairError)}`,
+          );
+          throw repairError;
+        }),
     );
   }
 

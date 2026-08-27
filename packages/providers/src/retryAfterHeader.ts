@@ -14,16 +14,18 @@
  */
 
 /** Maximum allowable Retry-After delay (5 minutes) to prevent stalling. */
-const MAX_RETRY_AFTER_MS = 300_000;
+export const MAX_RETRY_AFTER_MS = 300_000;
 
 /**
  * Gets the delay duration for a retry, respecting Retry-After header.
  * The Retry-After value is capped at MAX_RETRY_AFTER_MS to prevent an
- * unbounded sleep from a misbehaving server.
+ * unbounded sleep from a misbehaving server. An explicit `Retry-After: 0`
+ * (or a past date) is honored as an immediate retry; only a missing or
+ * unparseable header falls back to the jittered default.
  */
 export function getDelayDuration(error: unknown, defaultDelay: number): number {
   const retryAfterMs = getRetryAfterDelayMs(error);
-  if (retryAfterMs > 0) {
+  if (retryAfterMs !== undefined) {
     return Math.min(retryAfterMs, MAX_RETRY_AFTER_MS);
   }
   const jitter = defaultDelay * 0.3 * (Math.random() * 2 - 1);
@@ -72,25 +74,30 @@ function readHeader(headers: unknown): string | undefined {
 
 /**
  * Extracts Retry-After delay from error headers.
+ *
+ * @returns The normalized delay in ms (>= 0; `0` for an explicit
+ * `Retry-After: 0` or a past date), or `undefined` when no parseable
+ * Retry-After header is present. Callers must distinguish `undefined`
+ * (absent — use default backoff) from `0` (server said retry now).
  */
-export function getRetryAfterDelayMs(error: unknown): number {
+export function getRetryAfterDelayMs(error: unknown): number | undefined {
   const retryAfter = readRetryAfterHeader(error);
   if (retryAfter !== undefined && retryAfter !== '') {
     const seconds = parseInt(retryAfter, 10);
     if (!isNaN(seconds)) {
-      return seconds * 1000;
+      return Math.max(0, seconds * 1000);
     }
     const date = new Date(retryAfter);
     if (!isNaN(date.getTime())) {
       return Math.max(0, date.getTime() - Date.now());
     }
   }
-  return 0;
+  return undefined;
 }
 
 /**
- * Checks if error has a Retry-After header.
+ * Checks if error has a Retry-After header (including `Retry-After: 0`).
  */
 export function hasRetryAfterHeader(error: unknown): boolean {
-  return getRetryAfterDelayMs(error) > 0;
+  return getRetryAfterDelayMs(error) !== undefined;
 }

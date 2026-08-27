@@ -155,6 +155,11 @@ function resolveRequestCommitState(
   context.committed = false;
   context.exposure = 'none';
   context.terminalSeen = false;
+  // The one-shot auth-repair flag must reset with the rest of the state:
+  // a new budget on a reused metadata record (attachTransportAttemptBudget
+  // spreads the existing record) must not inherit the prior request's
+  // repair, or a fresh auth failure would skip repair entirely.
+  context.authRepairAttempted = false;
   if (!isMutableRequestCommitState(context)) {
     throw new TypeError('Retry request commit state could not be initialized');
   }

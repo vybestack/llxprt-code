@@ -84,6 +84,8 @@ function statusError(status: number): Error {
 
 const handlerStub: BucketFailoverHandler = {
   getBuckets: () => ['bucket-a'],
+  getCurrentBucket: () => 'bucket-a',
+  isEnabled: () => true,
   tryFailover: () => Promise.resolve(true),
   resetSession: () => {},
 };

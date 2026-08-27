@@ -55,14 +55,19 @@ const metadataChunk: IContent = {
 function makeScriptedProvider(
   name: string,
   scripts: Array<() => AsyncGenerator<IContent>>,
-): { provider: IProvider; calls: { value: number } } {
+): {
+  provider: IProvider;
+  calls: { value: number };
+  seenOptions: Array<GenerateChatOptions | IContent[]>;
+} {
   const calls = { value: 0 };
+  const seenOptions: Array<GenerateChatOptions | IContent[]> = [];
   const provider: IProvider = {
     name,
     generateChatCompletion(
       optionsOrContents: GenerateChatOptions | IContent[],
     ) {
-      void optionsOrContents;
+      seenOptions.push(optionsOrContents);
       const script = scripts[Math.min(calls.value, scripts.length - 1)];
       calls.value++;
       return script();
@@ -72,7 +77,7 @@ function makeScriptedProvider(
     getServerTools: () => [],
     invokeServerTool: async () => null,
   };
-  return { provider, calls };
+  return { provider, calls, seenOptions };
 }
 
 function failBeforeOutput(status: number): () => AsyncGenerator<IContent> {
@@ -218,5 +223,50 @@ describe('LoadBalancingProvider attempt telemetry (issue #2532)', () => {
     expect(failed.failureKind).toBe('rate_limit');
     expect(failed.committed).toBe(true);
     expect(failed.exposure).toBe('metadata');
+  });
+
+  it('passes the attempt lifecycle observer metadata through to backend providers', async () => {
+    const capture = new LifecycleCapture();
+    const backendA = makeScriptedProvider('provider-a', [successText('ok')]);
+    const backendB = makeScriptedProvider('provider-b', [successText('ok')]);
+    providerManager.registerProvider(backendA.provider);
+    providerManager.registerProvider(backendB.provider);
+
+    const composed = new RetryOrchestrator(
+      new LoadBalancingProvider(
+        makeFailoverConfig(['provider-a', 'provider-b']),
+        providerManager,
+      ),
+    );
+
+    for await (const _chunk of composed.generateChatCompletion({
+      contents: [],
+      metadata: { [ATTEMPT_LIFECYCLE_KEY]: capture },
+    })) {
+      // Drain the stream; the assertion is on captured options below.
+    }
+
+    // Failover hits backend-a first; it succeeded, so exactly one backend
+    // call carried the caller's metadata through both wrapper layers.
+    expect(backendA.calls.value).toBe(1);
+    expect(backendB.calls.value).toBe(0);
+    const backendOptions = backendA.seenOptions.find(
+      (options): options is GenerateChatOptions => !Array.isArray(options),
+    );
+    expect(backendOptions).toBeDefined();
+    // The lifecycle key survives the orchestrator → load-balancer →
+    // provider-manager wrapper chain. The provider manager wraps every
+    // registered backend in LoggingProviderWrapper(RetryOrchestrator(...)),
+    // and the logging wrapper legitimately installs its own AttemptRecorder
+    // under the same key, so assert a live observer (the recorder) rather
+    // than the caller's instance.
+    const backendObserver = backendOptions?.metadata?.[ATTEMPT_LIFECYCLE_KEY];
+    expect(backendObserver).toBeDefined();
+    expect(
+      typeof (backendObserver as { onAttemptStart?: unknown }).onAttemptStart,
+    ).toBe('function');
+    expect(
+      typeof (backendObserver as { onAttemptEnd?: unknown }).onAttemptEnd,
+    ).toBe('function');
   });
 });
