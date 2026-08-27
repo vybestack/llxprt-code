@@ -496,6 +496,10 @@ export abstract class DeclarativeTool<
 {
   protected readonly messageBus?: IToolMessageBus;
 
+  /** Memoised `schema` result and the `parameterSchema` it was derived from. */
+  private cachedSchema?: FunctionDeclaration;
+  private cachedSchemaSource?: unknown;
+
   constructor(
     readonly name: string,
     readonly displayName: string,
@@ -525,6 +529,27 @@ export abstract class DeclarativeTool<
   }
 
   get schema(): FunctionDeclaration {
+    // Memoised because this getter is read on every tool invocation (see
+    // validateToolParams) and Ajv keys its compiled-validator cache on schema
+    // object identity. Returning a fresh clone each time made every tool call
+    // compile and retain a new validator (issue #3361).
+    //
+    // Keyed on `parameterSchema` identity so a tool that swaps its schema
+    // rebuilds rather than serving a stale one.
+    if (
+      this.cachedSchema !== undefined &&
+      this.cachedSchemaSource === this.parameterSchema
+    ) {
+      return this.cachedSchema;
+    }
+
+    const schema = this.buildSchema();
+    this.cachedSchemaSource = this.parameterSchema;
+    this.cachedSchema = schema;
+    return schema;
+  }
+
+  private buildSchema(): FunctionDeclaration {
     // Strip requireOne from the schema before sending to the model
     // The requireOne property is used internally for validation but not sent to the model
     if (

@@ -246,6 +246,56 @@ interface ExtendedSchema {
   [key: string]: unknown;
 }
 
+/**
+ * Ajv keys its compiled-validator cache on schema **object identity**. Deriving
+ * a fresh object per validation therefore misses the cache every time and
+ * retains one compiled validator, plus its generated code, for the life of the
+ * process (issue #3361). Memoising the derived schema on the source object
+ * restores the cache hit.
+ *
+ * A WeakMap keeps this bounded: entries disappear with the source schema, so a
+ * caller that legitimately builds schemas dynamically does not accumulate.
+ * Tool schemas are declared once and treated as immutable, so a later mutation
+ * of a source schema is not reflected. That matches how Ajv itself caches.
+ */
+const ajvSchemaCache = new WeakMap<ExtendedSchema, ExtendedSchema>();
+
+/** Strips the internal keywords Ajv must not see. */
+function deriveAjvSchema(schema: unknown): ExtendedSchema {
+  // Spreading a primitive yields `{}`, which is what this code has always
+  // produced for a boolean schema. Preserved deliberately.
+  const ajvSchema = { ...(schema as ExtendedSchema) };
+  delete ajvSchema.requireOne;
+  delete ajvSchema.$schema;
+  return ajvSchema;
+}
+
+/**
+ * Returns the Ajv-ready schema for a source schema, deriving it once.
+ *
+ * Takes `unknown` rather than `ExtendedSchema` because the caller reaches this
+ * through a cast from `unknown`; the declared type cannot be trusted to exclude
+ * primitives at runtime.
+ */
+function toAjvSchema(schema: unknown): ExtendedSchema {
+  // `true` and `false` are valid JSON Schema, and a WeakMap key must be an
+  // object, so primitives cannot be cached. Derive without caching rather than
+  // throwing `Invalid value used as weak map key`.
+  if (typeof schema !== 'object' || schema === null) {
+    return deriveAjvSchema(schema);
+  }
+
+  const source = schema as ExtendedSchema;
+  const cached = ajvSchemaCache.get(source);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const ajvSchema = deriveAjvSchema(source);
+  ajvSchemaCache.set(source, ajvSchema);
+  return ajvSchema;
+}
+
 /** Resolves the error path from AJV instancePath or dataPath. */
 function resolveErrorPath(instancePath: unknown, dataPath: unknown): string {
   if (typeof instancePath === 'string' && instancePath !== '') {
@@ -290,11 +340,7 @@ export class SchemaValidator {
       ? ajValidator07
       : ajValidator2020;
 
-    const ajvSchema = { ...extSchema };
-    delete ajvSchema.requireOne;
-    delete ajvSchema.$schema;
-
-    const validate = instance.compile(ajvSchema);
+    const validate = instance.compile(toAjvSchema(extSchema));
     const valid = validate(data);
 
     if (
