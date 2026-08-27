@@ -85,6 +85,23 @@ export const p03StreamingUsage: Probe = {
         .map((c, i) => i)
         .filter((i) => chunks[i].hasUsage);
       const finalFinish = chunks[chunks.length - 1]?.finishReason ?? null;
+      // A stream that reports usage only on its terminal chunk is NOT per-chunk
+      // placement. Classify by construction: usage on the terminal chunk only is
+      // `finish-part`, on non-terminal chunks too is `per-chunk`, on both is
+      // `mixed`.
+      const terminalIndex = chunks.length - 1;
+      const usageOnNonTerminal =
+        chunksWithUsage.length > 0 &&
+        chunksWithUsage.some((index) => index !== terminalIndex);
+      const usageOnTerminal = chunksWithUsage.includes(terminalIndex);
+      const usageLocation =
+        usageOnNonTerminal && usageOnTerminal
+          ? 'mixed'
+          : usageOnNonTerminal
+            ? 'per-chunk'
+            : usageOnTerminal
+              ? 'finish-part'
+              : 'none';
       return {
         totalChunks: chunks.length,
         chunkKinds: chunks.map((c) => c.partKinds),
@@ -93,6 +110,7 @@ export const p03StreamingUsage: Probe = {
         textArrivedInMultipleIncrements:
           chunks.filter((c) => c.textLength > 0).length > 1,
         assembledTextLength: totalText.length,
+        usageLocation,
         usageAppears: chunksWithUsage.length > 0 ? 'per-chunk' : 'none',
         chunkIndicesWithUsage: chunksWithUsage,
         finalFinishReason: finalFinish,
@@ -111,18 +129,24 @@ export const p03StreamingUsage: Probe = {
       const finish = parts.find((part) => part.type === 'finish');
       const textDeltas = parts.filter((part) => part.type === 'text-delta');
       const finishObj = finish === undefined ? null : (finish as { usage?: unknown; finishReason?: unknown });
-      // Derive the placement from what was observed: 'finish-part' when usage
-      // appears only on the terminal finish part, 'per-chunk' when it also rides
-      // along on the text/stream parts before it, 'none' when it is absent.
-      const intermediateUsageParts = parts.filter(
-        (part) => part.type !== 'finish' && 'usage' in part,
-      );
+      const nonTerminalParts = parts.slice(0, parts.length - 1);
+      const terminalPart = parts[parts.length - 1];
+      // Classify by construction, mirroring the genai side: usage on the
+      // terminal part only is `finish-part`, on non-terminal parts too is
+      // `per-chunk`, on both is `mixed`. These count usage-carrying stream
+      // parts wherever they occur, not the first non-finish part, which is what
+      // mislabeled a finish-part-only stream as per-chunk.
+      const usageOnNonTerminal = nonTerminalParts.some((part) => 'usage' in part);
+      const usageOnTerminal =
+        terminalPart !== undefined && 'usage' in terminalPart;
       const derivedUsageLocation =
-        intermediateUsageParts.length > 0
-          ? 'per-chunk'
-          : finishObj !== null && 'usage' in finishObj
-            ? 'finish-part'
-            : 'none';
+        usageOnNonTerminal && usageOnTerminal
+          ? 'mixed'
+          : usageOnNonTerminal
+            ? 'per-chunk'
+            : usageOnTerminal
+              ? 'finish-part'
+              : 'none';
       return {
         totalChunks: parts.length,
         partKindSequence: partTypes,
@@ -142,14 +166,17 @@ export const p03StreamingUsage: Probe = {
       };
     });
 
-    const genaiUsage = (genai.observation as { usageAppears?: string })[
-      'usageAppears'
+    const genaiUsage = (genai.observation as { usageLocation?: string })[
+      'usageLocation'
     ] ?? 'none';
     const aisdkUsage = (aisdk.observation as { usageLocation?: string })[
       'usageLocation'
     ] ?? 'none';
     const aisdkFinishUsage =
       (aisdk.observation as { finishUsage?: unknown })['finishUsage'] != null;
+    // Usage placement is judged on the classified location (`finish-part`,
+    // `per-chunk`, `mixed`, `none`), where a stream carrying usage only on
+    // its terminal chunk is `finish-part`, not `per-chunk`.
     const genaiIncremental =
       (genai.observation as { textArrivedInMultipleIncrements?: unknown })
         .textArrivedInMultipleIncrements === true;
@@ -176,10 +203,10 @@ export const p03StreamingUsage: Probe = {
     }
 
     // Usage placement is the whole point here: geminiResponseMapper stamps
-    // usage onto every chunk it maps. If the two adapters place usage
-    // differently, that is adapter work, not parity. Both labels are DERIVED
-    // from what each adapter observed, so parity means the two adapters place
-    // usage the same way and differing placements can never report parity.
+    // usage onto every chunk it maps. Each side is classified as `finish-part`,
+    // `per-chunk`, `mixed` or `none` by construction; parity means the two
+    // adapters place usage the same way, and differing placements can never report
+    // parity.
     const usagePlacementMatches = genaiUsage === aisdkUsage;
     const bothIncremental = genaiIncremental && aisdkIncremental;
 

@@ -46,13 +46,20 @@ export function interfaceMembersFromDts(
     return null;
   }
 
-  // The `declare` prefix is optional and index signatures are never member names, so
-  // match the plain declaration form.
-  const declaration = source.indexOf(`interface ${name} {`);
-  if (declaration === -1) {
+  // Declaration files use several shapes for the same thing:
+  //   interface X {                     (@google/genai options)
+  //   interface X extends Y {           (GoogleGenerativeAIProvider)
+  //   type X = { ... }                  (LanguageModelV2)
+  // Matching only the first form silently returns null for the other two,
+  // which would make an "absence" claim rest on a failed lookup.
+  const pattern = new RegExp(
+    `(?:interface\\s+${name}\\b[^{;]*\\{)|(?:type\\s+${name}\\s*=\\s*\\{)`,
+  );
+  const match = pattern.exec(source);
+  if (match === null) {
     return null;
   }
-  const open = source.indexOf('{', declaration);
+  const open = source.indexOf('{', match.index);
   if (open === -1) {
     return null;
   }

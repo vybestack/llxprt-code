@@ -290,6 +290,17 @@ export const p04ParallelToolsIds: Probe = {
     const bothRoundTripped =
       gTrip?.accepted === true && aTrip?.accepted === true;
 
+    // A successful replay alone cannot prove usable ids: both adapters must give
+    // EVERY observed call an id and those ids must be DISTINCT, or a replay that
+    // merely round-tripped unlabeled calls could still report parity.
+    const genaiIds = callsOf(genai.observation.calls).map((call) => call.id);
+    const aisdkIds = callsOf(aisdk.observation.calls).map((call) => call.id);
+    const bothIdsUsable =
+      staysAllDefined(genaiIds) &&
+      staysAllDefined(aisdkIds) &&
+      staysDistinct(genaiIds) &&
+      staysDistinct(aisdkIds);
+
     return {
       id: 'P04',
       area: 'Parallel tool calls and tool-call IDs',
@@ -300,27 +311,50 @@ export const p04ParallelToolsIds: Probe = {
       genai,
       aisdk,
       verdict:
-        genai.ok && aisdk.ok && bothParallel && bothRoundTripped
+        genai.ok && aisdk.ok && bothParallel && bothRoundTripped && bothIdsUsable
           ? 'parity'
           : genai.ok && aisdk.ok && bothRoundTripped
             ? 'partial'
             : 'gap',
       finding:
         `@google/genai surfaced ${gCount} call(s) in one turn ` +
-        `(ids present: ${genai.observation.idsPresent === true}); ` +
+        `(ids present: ${genai.observation.idsPresent === true}, ids usable ` +
+        `(all present and distinct): ${staysAllDefined(genaiIds) && staysDistinct(genaiIds)}); ` +
         `@ai-sdk/google surfaced ${aCount} ` +
-        `(ids present: ${aisdk.observation.idsPresent === true}). ` +
+        `(ids present: ${aisdk.observation.idsPresent === true}, ids usable ` +
+        `(all present and distinct): ${staysAllDefined(aisdkIds) && staysDistinct(aisdkIds)}). ` +
         `Replaying the ids on the tool-response turn was ` +
         `${gTrip?.accepted === true ? 'accepted' : 'not accepted'} for genai and ` +
         `${aTrip?.accepted === true ? 'accepted' : 'not accepted'} for the AI SDK. ` +
-        (bothParallel
-          ? 'Both give every call a stable id, so geminiResponseMapper would no ' +
+        (bothParallel && bothIdsUsable
+          ? 'Both give every call a stable, distinct id, so geminiResponseMapper would no ' +
             'longer need its synthetic `call_<ts>_<rand>` fallback on the AI SDK path.'
-          : 'The model did not emit parallel calls on both sides in this run, so ' +
-            'the parallel dimension is unproven; the id and round-trip dimensions still hold.'),
+          : bothParallel
+            ? 'Both emitted parallel calls, but at least one adapter did not give ' +
+              'every call a distinct id, so the id dimension is not parity.'
+            : 'The model did not emit parallel calls on both sides in this run, so ' +
+              'the parallel dimension is unproven; the id and round-trip dimensions still hold.'),
     };
   },
 };
+
+/** Normalizes the recorded call list into ids (with `null` for missing ids). */
+function callsOf(calls: unknown): Array<{ id: string | null }> {
+  if (!Array.isArray(calls)) {
+    return [];
+  }
+  return calls.map((call) => ({
+    id: typeof (call as { id?: unknown }).id === 'string' ? (call as { id: string }).id : null,
+  }));
+}
+
+function staysAllDefined(ids: Array<string | null>): boolean {
+  return ids.length > 0 && ids.every((id) => id !== null);
+}
+
+function staysDistinct(ids: Array<string | null>): boolean {
+  return ids.length > 0 && new Set(ids).size === ids.length;
+}
 
 /**
  * `doGenerate` hands back a tool call's `input` as a JSON string. Parsing it

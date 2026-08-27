@@ -18,7 +18,8 @@
         "wirePartKeys": [
           "inlineData"
         ],
-        "wireUriForwarded": false
+        "wireUriForwarded": false,
+        "wireInlineData": true
       },
       "uri": {
         "attempted": true,
@@ -29,7 +30,8 @@
         "wirePartKeys": [
           "fileData"
         ],
-        "wireUriForwarded": true
+        "wireUriForwarded": true,
+        "wireInlineData": false
       },
       "quotaControl": {
         "ranAfterUriCase": true,
@@ -48,11 +50,12 @@
         "ok": true,
         "httpStatus": 200,
         "providerError": null,
-        "textPreview": "Black and white.",
+        "textPreview": "Black white pattern.",
         "wirePartKeys": [
           "inlineData"
         ],
         "wireUriForwarded": false,
+        "wireInlineData": true,
         "sentDataKind": "base64"
       },
       "uri": {
@@ -65,6 +68,7 @@
           "fileData"
         ],
         "wireUriForwarded": true,
+        "wireInlineData": false,
         "sentDataKind": "url"
       },
       "supportedUrlsSummary": [
@@ -83,5 +87,5 @@
   },
   "transientHandled": true,
   "verdict": "partial",
-  "finding": "Inline base64: @google/genai accepted (wire part keys [inlineData]); AI SDK accepted (wire part keys [inlineData]). URI fileData TRANSPORT: @google/genai sent the URL on fileData.fileUri=true; AI SDK sent it on fileData.fileUri=true. URI fileData ENDPOINT-ACCEPTANCE: unproven in this run. Both sides got a 429 (genai) / 429 (ai-sdk), and a 429 cannot be attributed to the arbitrary fileUri host: the plain-text control call that succeeded afterwards (plainTextAccepted=true, HTTP 200) only rules out a general generate-content quota, never a separate media or file-URI quota. Control call (context only, not proof): plain text succeeded after the URI case genai=true (HTTP 200). The MediaBlock encoding:url -> fileData and encoding:base64 -> inlineData mapping in neutralConverters is transported unchanged by both adapters."
+  "finding": "Inline base64: @google/genai accepted (wire part keys [inlineData], inlineData on the wire=true); AI SDK accepted (wire part keys [inlineData], inlineData on the wire=true). URI fileData TRANSPORT: @google/genai sent the URL on fileData.fileUri=true; AI SDK sent it on fileData.fileUri=true. URI fileData ENDPOINT-ACCEPTANCE: unproven in this run. Both sides got a 429 (genai) / 429 (ai-sdk), and a 429 cannot be attributed to the arbitrary fileUri host: the plain-text control call that succeeded afterwards (plainTextAccepted=true, HTTP 200) only rules out a general generate-content quota, never a separate media or file-URI quota. Control call (context only, not proof): plain text succeeded after the URI case genai=true (HTTP 200). The MediaBlock encoding:url -> fileData mapping carries over only if the URL reached fileData.fileUri on both (genai=true, ai-sdk=true) and encoding:base64 -> inlineData only if inlineData is on the wire for both (genai=true, ai-sdk=true). The neutralConverters media mapping is transported unchanged by both adapters only when both inlineData and fileData.fileUri are on the wire for both sides."
 }

@@ -18,12 +18,12 @@
         "requestsLeftProcess": true
       },
       "midStream": {
-        "chunksSeen": 1,
+        "chunksSeen": 0,
         "endedCleanly": false,
         "threw": true,
         "name": "AbortError",
         "message": "The operation was aborted.",
-        "msAbortToEnd": 0,
+        "msAbortToEnd": 1,
         "relayCompleted": true,
         "clientDisconnected": false,
         "upstreamCutShort": false
@@ -44,7 +44,7 @@
         "requestsLeftProcess": false
       },
       "midStream": {
-        "chunksSeen": 1,
+        "chunksSeen": 2,
         "endedCleanly": false,
         "threw": true,
         "name": "AbortError",
@@ -58,5 +58,5 @@
     }
   },
   "verdict": "partial",
-  "finding": "Pre-dispatch (signal already aborted): @google/genai threw nothing (returned) (abort-distinguishable=false, HTTP none, requests that left the process: yes); the AI SDK threw AbortError (abort-distinguishable=true, HTTP none, requests that left the process: no). Mid-stream: genai saw 1 chunk(s) and threw AbortError in 0ms; the AI SDK saw 1 chunk(s) and threw AbortError in 0ms. On the wire, genai relayCompleted=true, clientDisconnected=false, upstreamCutShort=false; the AI SDK relayCompleted=true, clientDisconnected=false, upstreamCutShort=false. The proxy did not observe a downstream disconnect for this run, so the wire cannot confirm upstream cancellation there; what is recorded is iteration terminating promptly after the abort. The AI SDK short-circuits an already-aborted signal on its own, at the fetch level, while @google/genai lets the call go out regardless. That is the behavior geminiAbort.throwIfAborted compensates for, though note its narrow use today: it is called from the server-tool and auth paths (GeminiProvider.resolveAuthWithAbortCheck and geminiServerTools), not from the ordinary chat generation path this probe exercises."
+  "finding": "Pre-dispatch (signal already aborted): @google/genai threw nothing (returned) (abort-distinguishable=false, HTTP none, requests that left the process: yes); the AI SDK threw AbortError (abort-distinguishable=true, HTTP none, requests that left the process: no). Mid-stream: genai saw 0 chunk(s) and threw AbortError in 1ms; the AI SDK saw 2 chunk(s) and threw AbortError in 0ms. On the wire, genai relayCompleted=true, clientDisconnected=false, upstreamCutShort=false; the AI SDK relayCompleted=true, clientDisconnected=false, upstreamCutShort=false. The proxy did not observe a downstream disconnect for this run, so the wire cannot confirm upstream cancellation there; what is recorded is iteration terminating promptly after the abort. The AI SDK short-circuits an already-aborted signal on its own, at the fetch level, while @google/genai lets the call go out regardless. That is the behavior geminiAbort.throwIfAborted compensates for, though note its narrow use today: it is called from the server-tool and auth paths (GeminiProvider.resolveAuthWithAbortCheck and geminiServerTools), not from the ordinary chat generation path this probe exercises."
 }

@@ -364,6 +364,26 @@ function judge(
   const parity =
     bothThrew && genaiRawFinish && aisdkRawFinish && genaiSafety && aisdkSafety;
 
+  // The buildable sentence must follow the recorded flags: buildable only when
+  // message, status and the raw body are all present on the AI SDK error,
+  // otherwise say plainly which one is missing.
+  const buildableFlags = (shape: NeutralErrorShape | undefined): string => {
+    const missing: string[] = [];
+    if (shape?.hasMessage !== true) {
+      missing.push('message');
+    }
+    if (shape?.hasStatus !== true) {
+      missing.push('status');
+    }
+    if (shape?.hasRawBody !== true) {
+      missing.push('raw body');
+    }
+    return missing.length === 0
+      ? 'geminiApiErrorToProviderApiError is buildable from it.'
+      : `geminiApiErrorToProviderApiError is NOT fully buildable from it: the ` +
+        `needed ${missing.join(', ')} is missing.`;
+  };
+
   return {
     verdict: parity ? 'parity' : 'partial',
     finding:
@@ -380,8 +400,7 @@ function judge(
       `${String(aNeutral?.hasRetryabilitySignal)} rawBody=` +
       `${String(aNeutral?.hasRawBody)} (error-body keys ` +
       `[${(aNeutral?.bodyKeys ?? []).join(',')}]), so ` +
-      `geminiApiErrorToProviderApiError is buildable from it ` +
-      `(status via statusCode, flags from statusCode/isRetryable, raw via responseBody). ` +
+      `${buildableFlags(aNeutral)} ` +
       `Truncation: genai finishReason=${gTrunc.finishReasonRaw ?? 'null'} at ` +
       `${gTrunc.textLength ?? 0} chars; AI SDK normalized ` +
       `${aTrunc.finishReasonNormalized ?? 'null'} and the RAW provider value is ` +

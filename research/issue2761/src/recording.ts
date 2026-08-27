@@ -100,6 +100,26 @@ async function readBody(req: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+/**
+ * Rebuilds an inbound request path against the fixed Gemini origin.
+ *
+ * Only the pathname and query survive, so a protocol-relative or absolute path
+ * cannot redirect the forwarded request at another host. Returns null when the
+ * result would leave the pinned origin, which the caller refuses outright.
+ */
+function pinnedUpstreamUrl(path: string): string | null {
+  let requested: URL;
+  try {
+    requested = new URL(path, UPSTREAM_ORIGIN);
+  } catch {
+    return null;
+  }
+  const target = new URL(UPSTREAM_ORIGIN);
+  target.pathname = requested.pathname;
+  target.search = requested.search;
+  return target.origin === UPSTREAM_ORIGIN ? target.toString() : null;
+}
+
 export interface RecordingProxy {
   /** Base URL to hand to an adapter, e.g. `http://127.0.0.1:1234`. */
   readonly origin: string;
@@ -131,7 +151,18 @@ export async function startRecordingProxy(): Promise<RecordingProxy> {
         forwardHeaders[name] = value;
       }
 
-      const upstream = await fetch(`${UPSTREAM_ORIGIN}${path}`, {
+      // The inbound path is attacker-controllable in principle, so only its
+      // pathname and query are reused and the origin is always pinned to the
+      // Gemini endpoint. The explicit origin check makes the invariant hold
+      // even if URL parsing ever surprises us.
+      const targetUrl = pinnedUpstreamUrl(path);
+      if (targetUrl === null) {
+        res.writeHead(400, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ proxyError: 'refused off-origin path' }));
+        return;
+      }
+
+      const upstream = await fetch(targetUrl, {
         method: req.method ?? 'GET',
         headers: forwardHeaders,
         ...(requestBodyRaw.length > 0 ? { body: requestBodyRaw } : {}),

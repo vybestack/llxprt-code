@@ -23,7 +23,8 @@
       ],
       "textIncrements": 2,
       "textArrivedInMultipleIncrements": true,
-      "assembledTextLength": 159,
+      "assembledTextLength": 135,
+      "usageLocation": "mixed",
       "usageAppears": "per-chunk",
       "chunkIndicesWithUsage": [
         0,
@@ -56,7 +57,7 @@
       ],
       "textDeltaCount": 3,
       "textArrivedInMultipleIncrements": true,
-      "assembledTextLength": 140,
+      "assembledTextLength": 117,
       "usageLocation": "finish-part",
       "finishUsage": {
         "inputTokens": 12,
@@ -68,5 +69,5 @@
     }
   },
   "verdict": "partial",
-  "finding": "Text arrived in multiple increments: genai=true, ai-sdk=true. Usage placement: genai=per-chunk, ai-sdk=finish-part (finish usage present=true). The placements differ: geminiResponseMapper copies usage onto the text, tool-call and fallback chunks it emits for each mapped response, so on the AI SDK path an adapter would have to hold the terminal usage and attach it to the IContent metadata itself."
+  "finding": "Text arrived in multiple increments: genai=true, ai-sdk=true. Usage placement: genai=mixed, ai-sdk=finish-part (finish usage present=true). The placements differ: geminiResponseMapper copies usage onto the text, tool-call and fallback chunks it emits for each mapped response, so on the AI SDK path an adapter would have to hold the terminal usage and attach it to the IContent metadata itself."
 }

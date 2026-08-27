@@ -235,9 +235,62 @@ export const p09ExecutableCode: Probe = {
   },
 };
 
+/**
+ * The AI SDK part sequence is parity only when it is the exact ordered contract a
+ * `code_execution` tool-call and its result satisfy: a text part, then a
+ * `tool-call` and `tool-result` sharing one `toolCallId`, both carrying
+ * `toolName: 'code_execution'` and `providerExecuted: true`. Anything shorter,
+ * reordered, unmatched, or with a different tool name fails.
+ */
 function aisdkPartSequenceMatches(obs: {
   partKindSequence?: unknown;
 }): boolean {
   const seq = obs.partKindSequence;
-  return Array.isArray(seq) && seq.length >= 3;
+  if (!Array.isArray(seq) || seq.length < 2) {
+    return false;
+  }
+  // The provider-executed shape is tool-call, then its tool-result, then the
+  // model's prose. Requiring text FIRST would make this unsatisfiable, and an
+  // unsatisfiable check is indistinguishable from a real difference.
+  const toolCallIndex = seq.indexOf('tool-call');
+  const toolResultIndex = seq.lastIndexOf('tool-result');
+  const textIndex = seq.indexOf('text');
+  if (
+    toolCallIndex === -1 ||
+    toolResultIndex === -1 ||
+    toolResultIndex < toolCallIndex ||
+    textIndex === -1 ||
+    textIndex < toolResultIndex
+  ) {
+    return false;
+  }
+  const recordSeq = obs as {
+    toolCalls?: Array<{
+      toolCallId: string;
+      toolName: string;
+      providerExecuted?: boolean;
+    }>;
+    toolResults?: Array<{
+      toolCallId: string;
+      toolName: string;
+      providerExecuted?: boolean;
+    }>;
+  };
+  const calls = recordSeq.toolCalls ?? [];
+  const results = recordSeq.toolResults ?? [];
+  if (calls.length === 0 || results.length === 0) {
+    return false;
+  }
+  const call = calls[0];
+  const result = results[0];
+  const sharedId = call.toolCallId !== '' && call.toolCallId === result.toolCallId;
+  const allProviderExecuted =
+    calls.every((c) => c.providerExecuted === true) &&
+    results.every((r) => r.providerExecuted === true);
+  return (
+    sharedId &&
+    allProviderExecuted &&
+    calls.every((c) => c.toolName === 'code_execution') &&
+    results.every((r) => r.toolName === 'code_execution')
+  );
 }

@@ -365,9 +365,12 @@ function judge(
         : 'gap';
 
   const searchText = searchInconclusive
-    ? `Google Search grounding was NOT exercised: the key has no Search-grounding ` +
-      `quota (genai transient=${gSearch.transient}, ai-sdk transient=${aSearch.transient}), ` +
-      `so this dimension is unproven.`
+    ? `Google Search grounding was NOT exercised: the Search call returned ` +
+      `HTTP 429 (genai transient=${gSearch.transient}, ai-sdk transient=` +
+      `${aSearch.transient}), a transient quota result that proves nothing ` +
+      `about grounding parity, so this dimension is unproven. The recorded ` +
+      `error is a transient status, not evidence that the key has no ` +
+      `Search-grounding quota.`
     : `Google Search: @google/genai surfaced candidate.groundingMetadata ` +
       `(${String(genaiSearchReached)}) with ` +
       `${gSearch.value?.webSearchQueries.length ?? 0} webSearchQueries, ` +

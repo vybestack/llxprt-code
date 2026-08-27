@@ -300,13 +300,56 @@ export const p05Schemas: Probe = {
 
     const aisdkCleansDialect =
       dAisdk.accepted && dAisdk.keywordsOnWire.length === 0;
+
+    // The untyped-schema sub-schema is the case `buildGeminiTools` patches by
+    // hand: it sends `{ properties }` with no `type`, and buildGeminiTools
+    // adds the missing top-level `type: object`. Which adapter adds that object
+    // type on the wire? (The `properties` sub-schema is REJECTED by the API
+    // when it has no `type`, but that is a separate fact from whether the adapter
+    // added the type.)
+    const untypedWire = (outcome: CaseOutcome | undefined): unknown => {
+      const tools = outcome?.wireTools;
+      if (!Array.isArray(tools)) {
+        return null;
+      }
+      const decl = tools[0] as { functionDeclarations?: unknown } | undefined;
+      const decls = decl?.functionDeclarations;
+      if (!Array.isArray(decls) || decls.length === 0) {
+        return null;
+      }
+      return (decls[0] as { parameters?: unknown }).parameters ?? null;
+    };
+    const topLevelType = (parameters: unknown): 'object' | 'absent' | 'unavailable' => {
+      if (parameters === null || typeof parameters !== 'object') {
+        return 'unavailable';
+      }
+      return (parameters as { type?: unknown }).type === 'object'
+        ? 'object'
+        : 'absent';
+    };
+    const genaiUntypedTypeAdded =
+      topLevelType(untypedWire(cases.untypedGenai)) === 'object';
+    const aisdkUntypedTypeAdded =
+      topLevelType(untypedWire(cases.untypedAisdk)) === 'object';
+
+    // If an adapter starts adding the missing top-level `type: object` (so
+    // buildGeminiTools' hand patch becomes redundant there), that is real adapter
+    // behavior and must change the verdict; otherwise the probe would keep reporting
+    // the same result as the day buildGeminiTools was written.
+    const typePatchUnneededOnBoth =
+      genaiUntypedTypeAdded && aisdkUntypedTypeAdded;
+    const typePatchUnneeded =
+      aisdkUntypedTypeAdded || genaiUntypedTypeAdded;
+
     const verdict: ProbeResult['verdict'] = inconclusive
       ? 'partial'
-      : aisdkCleansDialect
+      : aisdkCleansDialect && !typePatchUnneededOnBoth
         ? 'parity'
-        : dAisdk.accepted
+        : aisdkCleansDialect && typePatchUnneeded
           ? 'partial'
-          : 'gap';
+          : dAisdk.accepted
+            ? 'partial'
+            : 'gap';
 
     return {
       id: 'P05',
@@ -322,17 +365,27 @@ export const p05Schemas: Probe = {
         `@ai-sdk/google put ${describeKeywords(dAisdk)} on the wire, API ${describeOutcome(dAisdk)}. ` +
         `Untyped-object sub-schema: genai ${describeOutcome(cases.untypedGenai)}, ` +
         `ai-sdk ${describeOutcome(cases.untypedAisdk)}. ` +
+        `Missing top-level type on the untyped wire body: genai ` +
+        `top-level type is ${topLevelType(untypedWire(cases.untypedGenai))} ` +
+        `(adapter added type:object=${String(genaiUntypedTypeAdded)}), ` +
+        `ai-sdk ${topLevelType(untypedWire(cases.untypedAisdk))} ` +
+        `(adapter added type:object=${String(aisdkUntypedTypeAdded)}). ` +
         (inconclusive
           ? 'At least one case came back rate-limited (HTTP 429), so that case ' +
             'proves nothing about schema handling and the run needs repeating.'
-          : aisdkCleansDialect
-            ? 'The AI SDK performs the Gemini-dialect conversion itself, so ' +
-              'cleanGeminiSchema would become redundant.'
-            : 'The AI SDK strips a subset of what cleanGeminiSchema strips and ' +
-              'leaves others, and the API accepted both wire bodies, so this run ' +
-              'does not show the remaining keywords to be incompatible. What it ' +
-              'does show is that neither adapter supplies the missing top-level ' +
-              'object type that buildGeminiTools patches by hand.'),
+          : genaiUntypedTypeAdded || aisdkUntypedTypeAdded
+            ? `At least one adapter added the top-level type:object that ` +
+              `buildGeminiTools patches by hand (genai=${String(genaiUntypedTypeAdded)}, ` +
+              `ai-sdk=${String(aisdkUntypedTypeAdded)}), so that hand patch is ` +
+              `partially redundant.`
+            : aisdkCleansDialect
+              ? 'The AI SDK performs the Gemini-dialect conversion itself, so ' +
+                'cleanGeminiSchema would become redundant.'
+              : 'The AI SDK strips a subset of what cleanGeminiSchema strips and ' +
+                'leaves others, and the API accepted both wire bodies, so this run ' +
+                'does not show the remaining keywords to be incompatible. What it ' +
+                'does show is that neither adapter supplies the missing top-level ' +
+                'object type that buildGeminiTools patches by hand.'),
     };
   },
 };

@@ -229,9 +229,13 @@ its `google-auth-library` dependency. Both server tools in
 functionality, not a stub.
 
 **What `@ai-sdk/google@2.0.85` provides.** No integrated Vertex endpoint and no
-credential resolution. `dependency-facts.json` records its declared runtime
-dependencies as `@ai-sdk/provider` and `@ai-sdk/provider-utils`, with
-`aiSdkGoogleDeclaresGoogleAuthLibrary: false`. Its
+credential resolution. `dependency-facts.json` walks the installed manifests
+transitively from `@ai-sdk/google` and records the whole reachable set:
+`@ai-sdk/provider`, `@ai-sdk/provider-utils`, `@standard-schema/spec`,
+`eventsource-parser` and `json-schema`, with `zod` as the one declared peer.
+`google-auth-library` appears nowhere in it
+(`aiSdkGoogleDeclaresGoogleAuthLibrary: false`), while `@google/genai` declares
+it directly. Its
 `GoogleGenerativeAIProviderSettings` exposes only `baseURL`, `apiKey`,
 `headers`, `fetch`, `generateId` and `name`: no project, no location, no ADC.
 The package does contain Vertex-aware pieces, such as the `vertexRagStore` and

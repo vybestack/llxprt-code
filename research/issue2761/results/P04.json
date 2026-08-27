@@ -13,7 +13,7 @@
       "calls": [
         {
           "name": "get_weather",
-          "id": "call_2670315",
+          "id": "call_3528297",
           "idLooksSynthetic": false,
           "args": {
             "city": "Paris"
@@ -21,7 +21,7 @@
         },
         {
           "name": "get_time",
-          "id": "call_2670316",
+          "id": "call_3528298",
           "idLooksSynthetic": false,
           "args": {
             "city": "Paris"
@@ -46,13 +46,13 @@
       "calls": [
         {
           "name": "get_weather",
-          "id": "call_2520123",
+          "id": "call_3558246",
           "idLooksSynthetic": false,
           "args": "{\"city\":\"Paris\"}"
         },
         {
           "name": "get_time",
-          "id": "call_2520124",
+          "id": "call_3558247",
           "idLooksSynthetic": false,
           "args": "{\"city\":\"Paris\"}"
         }
@@ -69,5 +69,5 @@
     }
   },
   "verdict": "parity",
-  "finding": "@google/genai surfaced 2 call(s) in one turn (ids present: true); @ai-sdk/google surfaced 2 (ids present: true). Replaying the ids on the tool-response turn was accepted for genai and accepted for the AI SDK. Both give every call a stable id, so geminiResponseMapper would no longer need its synthetic `call_<ts>_<rand>` fallback on the AI SDK path."
+  "finding": "@google/genai surfaced 2 call(s) in one turn (ids present: true, ids usable (all present and distinct): true); @ai-sdk/google surfaced 2 (ids present: true, ids usable (all present and distinct): true). Replaying the ids on the tool-response turn was accepted for genai and accepted for the AI SDK. Both give every call a stable, distinct id, so geminiResponseMapper would no longer need its synthetic `call_<ts>_<rand>` fallback on the AI SDK path."
 }

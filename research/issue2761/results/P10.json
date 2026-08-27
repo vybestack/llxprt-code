@@ -88,7 +88,7 @@
                 "thoughtSignature": {
                   "present": true,
                   "length": 156,
-                  "prefix": "EnEKbwERTTIPoUGk",
+                  "prefix": "EnEKbwERTTIPk9qb",
                   "isSentinel": false
                 }
               }
@@ -99,5 +99,5 @@
     }
   },
   "verdict": "partial",
-  "finding": "Nonexistent model: @google/genai threw ApiError (HTTP 404), neutral fields reachable: message=true status=true retryable=false rawBody=false. The AI SDK threw AI_APICallError (HTTP 404), neutral-relevant fields: message=true status=true retryable=false rawBody=true (error-body keys [error]), so geminiApiErrorToProviderApiError is buildable from it (status via statusCode, flags from statusCode/isRetryable, raw via responseBody). Truncation: genai finishReason=MAX_TOKENS at 0 chars; AI SDK normalized length and the RAW provider value is reachable in response.body (providerMetadata.google has no per-candidate finishReason field, so rawStopReason needs response.body). Safety: genai candidate safetyRatings=4; AI SDK safetyRatingsPresent=true, the promptFeedback key is declared under providerMetadata.google (true) and carried a non-null value (false) on this non-blocked response. Whether non-null prompt feedback survives a real block is not established here, because no block was forced."
+  "finding": "Nonexistent model: @google/genai threw ApiError (HTTP 404), neutral fields reachable: message=true status=true retryable=false rawBody=false. The AI SDK threw AI_APICallError (HTTP 404), neutral-relevant fields: message=true status=true retryable=false rawBody=true (error-body keys [error]), so geminiApiErrorToProviderApiError is buildable from it. Truncation: genai finishReason=MAX_TOKENS at 0 chars; AI SDK normalized length and the RAW provider value is reachable in response.body (providerMetadata.google has no per-candidate finishReason field, so rawStopReason needs response.body). Safety: genai candidate safetyRatings=4; AI SDK safetyRatingsPresent=true, the promptFeedback key is declared under providerMetadata.google (true) and carried a non-null value (false) on this non-blocked response. Whether non-null prompt feedback survives a real block is not established here, because no block was forced."
 }

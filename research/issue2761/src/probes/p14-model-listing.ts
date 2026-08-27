@@ -18,7 +18,7 @@
  * that type the provider and the language model object.
  */
 
-import { join } from 'node:path';
+import { relative, join } from 'node:path';
 import type { GoogleGenerativeAIProvider } from '@ai-sdk/google';
 import type { LanguageModelV2 } from '@ai-sdk/provider';
 
@@ -51,6 +51,14 @@ const AI_SDK_PROVIDER_DTS = join(
   'dist',
   'index.d.ts',
 );
+
+/** Absolute declaration paths are machine noise; record them relative. */
+function relativeToProbeRoot(file: string | null): string | null {
+  if (file === null) {
+    return null;
+  }
+  return relative(PROBE_ROOT, file);
+}
 
 /** Own enumerable string keys plus inherited (prototype-chain) string keys. */
 function ownPlusProtoKeys(value: object, depth = 6): string[] {
@@ -138,10 +146,10 @@ function providerSurfaceEvidence(provider: GoogleGenerativeAIProvider, model: La
     modelPrototypeName:
       modelProto === null ? 'null' : Object.prototype.toString.call(modelProto),
     declarationCheck: {
-      providerDeclarationFile: providerFacts?.file ?? null,
+      providerDeclarationFile: relativeToProbeRoot(providerFacts?.file ?? null),
       providerDeclarationFound: providerFacts !== null,
       providerDeclaredMembers: providerFacts?.members ?? [],
-      modelDeclarationFile: modelFacts?.file ?? null,
+      modelDeclarationFile: relativeToProbeRoot(modelFacts?.file ?? null),
       modelDeclarationFound: modelFacts !== null,
       modelDeclaredMembers: modelFacts?.members ?? [],
       declaredListingMembers,
@@ -255,7 +263,8 @@ export const p14ModelListing: Probe = {
       genai,
       aisdk,
       verdict:
-        aisdkOffersListing || (inspectedWell && bareFetch.ok === true)
+        genaiListed &&
+        (aisdkOffersListing || (inspectedWell && bareFetch.ok === true))
           ? 'parity'
           : 'gap',
       finding: `@google/genai exposes models.list (listed=${genaiListed}); ` +
@@ -268,11 +277,15 @@ export const p14ModelListing: Probe = {
         `with prototype keys ` +
         `[${(aisdk.observation.modelPrototypeKeys as string[] | undefined ?? []).join(',')}] ` +
         `show no listing member (providerHasList=${String(aisdk.observation.providerHasList)}, ` +
-        `modelHasList=${String(aisdk.observation.modelHasList)}); the installed ` +
-        `@ai-sdk/google and @ai-sdk/provider declarations contain no listing-shaped ` +
-        `member (` +
-        `[${(aisdk.observation.declarationCheck as { listingShapedMembersFound?: string[] } | undefined)?.listingShapedMembersFound?.join(',') ?? ''}]` +
-        `). ` +
+        `modelHasList=${String(aisdk.observation.modelHasList)}). Declaration ` +
+        `evidence of a listing-shaped member: provider declaration found=` +
+        `${String(declaredCheck(aisdk.observation.declarationCheck)?.providerDeclarationFound)}, ` +
+        `model declaration found=` +
+        `${String(declaredCheck(aisdk.observation.declarationCheck)?.modelDeclarationFound)}, ` +
+        `declared listing members ` +
+        `[${String(declaredCheck(aisdk.observation.declarationCheck)?.declaredListingMembers)}]` +
+        ` (evidenced-nonempty only when both declarations were found: ` +
+        `${String(providerAndModelDeclared(aisdk.observation.declarationCheck))}). ` +
         `That costs llxprt nothing here: geminiModels.fetchModelsFromApi already ` +
         `lists with a bare fetch against /v1beta/models, which returned ` +
         `${String(bareFetch.modelCount)} models at status ${String(bareFetch.status)} in this run, ` +
@@ -280,3 +293,30 @@ export const p14ModelListing: Probe = {
     };
   },
 };
+
+/**
+ * Reads `declarationCheck` off a raw observation (it is a plain object on the
+ * artifact after JSON round-tripping).
+ */
+function declaredCheck(value: unknown): {
+  declaredListingMembers?: unknown;
+  providerDeclarationFound?: unknown;
+  modelDeclarationFound?: unknown;
+} | undefined {
+  if (typeof value !== 'object' || value === null) {
+    return undefined;
+  }
+  return value as {
+    declaredListingMembers?: unknown;
+    providerDeclarationFound?: unknown;
+    modelDeclarationFound?: unknown;
+  };
+}
+
+function providerAndModelDeclared(value: unknown): boolean {
+  const check = declaredCheck(value);
+  return (
+    check?.providerDeclarationFound === true &&
+    check?.modelDeclarationFound === true
+  );
+}

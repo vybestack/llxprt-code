@@ -29,7 +29,7 @@
         ],
         "serviceTier": "standard"
       },
-      "responseId": "NZKPaoToHJKDqtsPj8GJ4AY",
+      "responseId": "oamPapDZLKqsqtsPk_nh2Qk",
       "modelVersion": "gemini-3.1-flash-lite",
       "promptFeedback": null
     }
@@ -48,7 +48,7 @@
               "thoughtSignature": {
                 "present": true,
                 "length": 156,
-                "prefix": "EnEKbwERTTIPcIoV",
+                "prefix": "EnEKbwERTTIPVclJ",
                 "isSentinel": false
               }
             }
@@ -89,5 +89,5 @@
     }
   },
   "verdict": "partial",
-  "finding": "Text, finish reason and usage match, but response-id availability differs (genai=true, ai-sdk=false). Core models responseId as a first-class ModelOutput field, but geminiResponseMapper does not propagate it today either, so this is not a loss against current behavior; recovering it from the AI SDK raw response body would be an improvement rather than a repair."
+  "finding": "Text on both sides: genai=true, ai-sdk=true. Finish reason: genai=\"STOP\", ai-sdk=\"stop\" (normalized match: true). Usage structure (input/output/total as numbers): genai=true (input 25, output 1, total 26), ai-sdk=true (input 24, output 1, total 25). The two adapters frame the request differently, so their prompt token counts differ by the framing tokens; parity here means both report all three counters as numbers, which is what the response mapper needs. Response-id availability differs (genai=true, ai-sdk=false). Core models responseId as a first-class ModelOutput field, but geminiResponseMapper does not propagate it today either, so this is not a loss against current behavior; recovering it from the AI SDK raw response body would be an improvement rather than a repair."
 }

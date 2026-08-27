@@ -74,6 +74,8 @@ interface MediaSubCase {
   readonly textPreview: string;
   readonly wirePartKeys: string[] | null;
   readonly wireUriForwarded: boolean | null;
+  /** True when the inline sub-case actually sent `inlineData` on the wire part. */
+  readonly wireInlineData: boolean | null;
 }
 
 function makeSubCase(): MediaSubCase {
@@ -85,12 +87,13 @@ function makeSubCase(): MediaSubCase {
     textPreview: '',
     wirePartKeys: null,
     wireUriForwarded: null,
+    wireInlineData: null,
   };
 }
 
 function recordAccepted(
   preview: string,
-  wire: { partKeys: string[] | null; uriForwarded: boolean | null },
+  wire: { partKeys: string[] | null; uriForwarded: boolean | null; inlineData: boolean | null },
 ): MediaSubCase {
   return {
     ...makeSubCase(),
@@ -99,12 +102,13 @@ function recordAccepted(
     textPreview: preview.slice(0, 120),
     wirePartKeys: wire.partKeys,
     wireUriForwarded: wire.uriForwarded,
+    wireInlineData: wire.inlineData,
   };
 }
 
 function recordRejected(
   error: unknown,
-  wire: { partKeys: string[] | null; uriForwarded: boolean | null },
+  wire: { partKeys: string[] | null; uriForwarded: boolean | null; inlineData: boolean | null },
 ): MediaSubCase {
   const captured = captureError(error);
   return {
@@ -113,6 +117,7 @@ function recordRejected(
     providerError: captured.message.slice(0, 400),
     wirePartKeys: wire.partKeys,
     wireUriForwarded: wire.uriForwarded,
+    wireInlineData: wire.inlineData,
   };
 }
 
@@ -120,9 +125,10 @@ function recordRejected(
 function inspectRequest(record: WireRecord | undefined): {
   partKeys: string[] | null;
   uriForwarded: boolean | null;
+  inlineData: boolean | null;
 } {
   if (record === undefined) {
-    return { partKeys: null, uriForwarded: null };
+    return { partKeys: null, uriForwarded: null, inlineData: null };
   }
   const body = record.requestBody as
     | { contents?: Array<{ role?: string; parts?: Array<Record<string, unknown>> }> }
@@ -130,7 +136,7 @@ function inspectRequest(record: WireRecord | undefined): {
   const firstUser = (body?.contents ?? []).find((turn) => turn.role === 'user');
   const part = firstUser?.parts?.[1];
   if (part === undefined) {
-    return { partKeys: null, uriForwarded: null };
+    return { partKeys: null, uriForwarded: null, inlineData: null };
   }
   const fileData = part.fileData;
   const uri =
@@ -140,15 +146,22 @@ function inspectRequest(record: WireRecord | undefined): {
   return {
     partKeys: Object.keys(part).sort(),
     uriForwarded: typeof uri === 'string' && uri.length > 0 ? true : false,
+    inlineData: part.inlineData !== undefined ? true : false,
   };
 }
 
-/** The wire evidence for the most recently captured request of a sub-case. */
+/**
+ * The wire evidence for THIS sub-case, not an earlier one: a record is used
+ * only when the record count grew during the sub-case. If it did not (the
+ * request never reached the proxy), `null` is recorded instead of borrowing the
+ * previous request's wire body.
+ */
 function inspectLatest(
+  recordsBefore: number,
   records: readonly WireRecord[],
-): { partKeys: string[] | null; uriForwarded: boolean | null } {
-  if (records.length === 0) {
-    return { partKeys: null, uriForwarded: null };
+): { partKeys: string[] | null; uriForwarded: boolean | null; inlineData: boolean | null } {
+  if (records.length <= recordsBefore) {
+    return { partKeys: null, uriForwarded: null, inlineData: null };
   }
   // A sub-case can leave more than one proxy record behind when it had to retry a
   // transient status; take the last one so it is the attempt whose outcome the
@@ -197,6 +210,9 @@ export const p08Media: Probe = {
           inlineData: { mimeType: 'image/png', data: TINY_PNG_BASE64 },
         };
         let inline: MediaSubCase;
+        // Captured before the try: re-reading it inside catch would measure a
+        // window that the failed request has already been added to.
+        const inlineRecordsBefore = proxy.records.length;
         try {
           const response = await client.models.generateContent({
             model: ctx.modelGeneral,
@@ -215,12 +231,12 @@ export const p08Media: Probe = {
           });
           inline = recordAccepted(
             response.text ?? '',
-            inspectLatest(proxy.records),
+            inspectLatest(inlineRecordsBefore, proxy.records),
           );
         } catch (error) {
           inline = recordRejected(
             error,
-            inspectLatest(proxy.records),
+            inspectLatest(inlineRecordsBefore, proxy.records),
           );
         }
 
@@ -230,6 +246,7 @@ export const p08Media: Probe = {
           fileData: { fileUri: PUBLIC_IMAGE_URL, mimeType: 'image/png' },
         };
         let uri: MediaSubCase;
+        const uriRecordsBefore = proxy.records.length;
         try {
           const response = await client.models.generateContent({
             model: ctx.modelGeneral,
@@ -247,12 +264,12 @@ export const p08Media: Probe = {
           });
           uri = recordAccepted(
             response.text ?? '',
-            inspectLatest(proxy.records),
+            inspectLatest(uriRecordsBefore, proxy.records),
           );
         } catch (error) {
           uri = recordRejected(
             error,
-            inspectLatest(proxy.records),
+            inspectLatest(uriRecordsBefore, proxy.records),
           );
         }
 
@@ -307,6 +324,10 @@ export const p08Media: Probe = {
               ],
             },
           ];
+          // Same reason as the genai block: capturing this inside catch would
+          // measure a window the failed request has already been added to, which
+          // is why the AI SDK wire evidence came back null on a rejected call.
+          const recordsBefore = proxy.records.length;
           try {
             const result = await model.doGenerate({
               prompt,
@@ -318,12 +339,12 @@ export const p08Media: Probe = {
               .join('')
               .slice(0, 120);
             return {
-              ...recordAccepted(preview, inspectLatest(proxy.records)),
+              ...recordAccepted(preview, inspectLatest(recordsBefore, proxy.records)),
               sentDataKind: dataKind,
             };
           } catch (error) {
             return {
-              ...recordRejected(error, inspectLatest(proxy.records)),
+              ...recordRejected(error, inspectLatest(recordsBefore, proxy.records)),
               sentDataKind: dataKind,
             };
           }
@@ -384,6 +405,10 @@ export const p08Media: Probe = {
     // TRANSPORT: did each adapter actually put the URL on fileData.fileUri?
     const gUriTransported = g.uri?.wireUriForwarded === true;
     const aUriTransported = a.uri?.wireUriForwarded === true;
+    // TRANSPORT (inline): the base64 encoding:base64 -> inlineData mapping only
+    // carries over if BOTH adapters actually sent inlineData on the wire part.
+    const gInlineTransported = g.inline?.wireInlineData === true;
+    const aInlineTransported = a.inline?.wireInlineData === true;
 
     return {
       id: 'P08',
@@ -400,7 +425,13 @@ export const p08Media: Probe = {
       // blanked by the central quota guard, because the transport evidence is
       // real.
       transientHandled: true,
-      verdict: gUriTransported && aUriTransported ? 'partial' : 'gap',
+      verdict:
+        gUriTransported &&
+        aUriTransported &&
+        gInlineTransported &&
+        aInlineTransported
+          ? 'partial'
+          : 'gap',
       finding: buildFinding(
         g.inline,
         g.uri,
@@ -413,6 +444,8 @@ export const p08Media: Probe = {
           uriEndpointUnproven,
           gUriTransported,
           aUriTransported,
+          gInlineTransported,
+          aInlineTransported,
         },
       ),
     };
@@ -431,12 +464,16 @@ function buildFinding(
     uriEndpointUnproven: boolean;
     gUriTransported: boolean;
     aUriTransported: boolean;
+    gInlineTransported: boolean;
+    aInlineTransported: boolean;
   },
 ): string {
   const inline = `Inline base64: @google/genai ${outcomeWord(gInline?.ok)} ` +
-    `(wire part keys [${(gInline?.wirePartKeys ?? []).join(',')}]); ` +
+    `(wire part keys [${(gInline?.wirePartKeys ?? []).join(',')}], ` +
+    `inlineData on the wire=${String(dims.gInlineTransported)}); ` +
     `AI SDK ${outcomeWord(aInline?.ok)} ` +
-    `(wire part keys [${(aInline?.wirePartKeys ?? []).join(',')}]). `;
+    `(wire part keys [${(aInline?.wirePartKeys ?? []).join(',')}], ` +
+    `inlineData on the wire=${String(dims.aInlineTransported)}). `;
 
   const transport = `URI fileData TRANSPORT: @google/genai sent the URL on ` +
     `fileData.fileUri=${dims.gUriTransported}; AI SDK sent it on ` +
@@ -471,8 +508,13 @@ function buildFinding(
   }
 
   const mapping =
-    `The MediaBlock encoding:url -> fileData and encoding:base64 -> inlineData ` +
-    `mapping in neutralConverters is transported unchanged by both adapters.`;
+    `The MediaBlock encoding:url -> fileData mapping carries over only if the URL ` +
+    `reached fileData.fileUri on both ` +
+    `(genai=${String(dims.gUriTransported)}, ai-sdk=${String(dims.aUriTransported)}) ` +
+    `and encoding:base64 -> inlineData only if inlineData is on the wire for both ` +
+    `(genai=${String(dims.gInlineTransported)}, ai-sdk=${String(dims.aInlineTransported)}). ` +
+    `The neutralConverters media mapping is transported unchanged by both adapters only ` +
+    `when both inlineData and fileData.fileUri are on the wire for both sides.`;
 
   const context =
     `Control call (context only, not proof): plain text succeeded after the URI case ` +

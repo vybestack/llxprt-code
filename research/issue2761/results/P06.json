@@ -3,19 +3,19 @@
   "area": "Thought signatures (request and response)",
   "question": "On Gemini 3, does each adapter surface the response thought signature, send it back on replay, and cover the missing-signature case that thoughtSignatures.ts handles by hand today?",
   "models": [
-    "gemini-3.5-flash"
+    "gemini-3-flash-preview"
   ],
   "genai": {
     "adapter": "google-genai@1.30.0",
     "ok": true,
     "observation": {
       "step1_capture": {
-        "toolCallId": "call_2048132",
+        "toolCallId": "call_3094426",
         "toolName": "get_temp",
         "responseSignature": {
           "present": true,
           "length": 372,
-          "prefix": "EpMCCpACARFNMg9z",
+          "prefix": "EpICCo8CARFNMg82",
           "isSentinel": false
         }
       },
@@ -27,7 +27,7 @@
           {
             "present": true,
             "length": 372,
-            "prefix": "EpMCCpACARFNMg9z",
+            "prefix": "EpICCo8CARFNMg82",
             "isSentinel": false
           }
         ]
@@ -58,12 +58,12 @@
     "ok": true,
     "observation": {
       "step1_capture": {
-        "toolCallId": "call_2444213",
+        "toolCallId": "call_2125459",
         "toolName": "get_temp",
         "responseSignature": {
           "present": true,
           "length": 372,
-          "prefix": "EpICCo8CARFNMg/X",
+          "prefix": "EpICCo8CARFNMg9o",
           "isSentinel": false
         },
         "replayRequiresInputParse": true,
@@ -77,7 +77,7 @@
           {
             "present": true,
             "length": 372,
-            "prefix": "EpICCo8CARFNMg/X",
+            "prefix": "EpICCo8CARFNMg9o",
             "isSentinel": false
           }
         ]

@@ -261,16 +261,39 @@ export const p07ThinkingConfig: Probe = {
     const aBudgetWire = nestedWire(a.budgetForm);
     const gLevelWire = nestedWire(g.levelForm);
     const aLevelWire = nestedWire(a.levelForm);
-    const budgetWireParity = gBudgetWire !== null && aBudgetWire !== null;
-    const levelWireParity = gLevelWire !== null && aLevelWire !== null;
 
-    const bothProducedThoughts =
+    // Presence of a thinkingConfig object is not enough: an adapter that
+    // silently rewrote thinkingBudget / thinkingLevel / includeThoughts would
+    // still be parity. Validate the wire object actually carries the expected
+    // values for each form.
+    const budgetWireCarries = (wire: Record<string, unknown> | null): boolean =>
+      wire !== null &&
+      wire['thinkingBudget'] === 512 &&
+      wire['includeThoughts'] === true;
+    const levelWireCarries = (wire: Record<string, unknown> | null): boolean =>
+      wire !== null &&
+      wire['thinkingLevel'] === 'low' &&
+      wire['includeThoughts'] === true;
+    const budgetWireParity =
+      budgetWireCarries(gBudgetWire) && budgetWireCarries(aBudgetWire);
+    const levelWireParity =
+      levelWireCarries(gLevelWire) && levelWireCarries(aLevelWire);
+
+    // Producing reasoning parts is not transport or accounting proof: each
+    // adapter must also report a NUMBER for its thinking-token count.
+    const genaiThoughtsOk =
       genai.ok &&
-      aisdk.ok &&
       numberOf(g.budgetForm?.thoughtPartCount) > 0 &&
-      numberOf(a.budgetForm?.reasoningPartCount) > 0 &&
+      typeof g.budgetForm?.thoughtsTokenCount === 'number' &&
       numberOf(g.levelForm?.thoughtPartCount) > 0 &&
-      numberOf(a.levelForm?.reasoningPartCount) > 0;
+      typeof g.levelForm?.thoughtsTokenCount === 'number';
+    const aisdkThoughtsOk =
+      aisdk.ok &&
+      numberOf(a.budgetForm?.reasoningPartCount) > 0 &&
+      typeof a.budgetForm?.usageReasoningTokens === 'number' &&
+      numberOf(a.levelForm?.reasoningPartCount) > 0 &&
+      typeof a.levelForm?.usageReasoningTokens === 'number';
+    const bothProducedThoughts = genaiThoughtsOk && aisdkThoughtsOk;
 
     // Wire evidence for the relevant form decides the verdict: outputting thinking
     // content is not transport proof, because Gemini 3 reasons by default.
@@ -307,32 +330,35 @@ export const p07ThinkingConfig: Probe = {
       finding:
         `Budget form: @google/genai surfaced ` +
         `${numberOf(g.budgetForm?.thoughtPartCount)} thought part(s) ` +
-        `(${numberOf(g.budgetForm?.thoughtsTokenCount)} thoughtsTokenCount); the AI SDK ` +
+        `(thoughtsTokenCount numeric=${String(typeof g.budgetForm?.thoughtsTokenCount === 'number')} ` +
+        `(${typeof g.budgetForm?.thoughtsTokenCount === 'number' ? String(g.budgetForm?.thoughtsTokenCount) : 'no count'})); the AI SDK ` +
         `surfaced ${numberOf(a.budgetForm?.reasoningPartCount)} reasoning part(s) ` +
-        `(${numberOf(a.budgetForm?.usageReasoningTokens)} reasoningTokens). ` +
+        `(reasoningTokens numeric=${String(typeof a.budgetForm?.usageReasoningTokens === 'number')} ` +
+        `(${typeof a.budgetForm?.usageReasoningTokens === 'number' ? String(a.budgetForm?.usageReasoningTokens) : 'no count'})). ` +
         `Level form: genai ${numberOf(g.levelForm?.thoughtPartCount)} thought part(s), ` +
         `AI SDK ${numberOf(a.levelForm?.reasoningPartCount)} reasoning part(s). ` +
         `On the wire, budget form: genai sent ` +
         `generationConfig.thinkingConfig=${jsonOfNested(gBudgetWire)} and the AI SDK ` +
-        `sent ${jsonOfNested(aBudgetWire)}. ` +
+        `sent ${jsonOfNested(aBudgetWire)} ` +
+        `(expected {thinkingBudget:512, includeThoughts:true}: ` +
+        `genai=${String(budgetWireCarries(gBudgetWire))}, ` +
+        `ai-sdk=${String(budgetWireCarries(aBudgetWire))}), so budget-form ` +
+        `wire parity is ${String(budgetWireParity)}. ` +
         `Level form: genai sent generationConfig.thinkingConfig=` +
         `${jsonOfNested(gLevelWire)} and the AI SDK sent ` +
-        `${jsonOfNested(aLevelWire)}. ` +
-        (budgetWireParity
-          ? 'Budget form reached generationConfig.thinkingConfig on both, so the ' +
-            'budget translation still has a wire home. '
-          : 'Budget-form wire capture did not show the config on both sides, so ' +
-            'budget transport is unproven for this run. ') +
-        (levelWireParity
-          ? 'Level form reached generationConfig.thinkingConfig on both, so ' +
-            'thinkingLevel transport is proven on the wire for both forms. '
-          : 'Level-form wire capture did not show the config on both sides, so ' +
-            'thinkingLevel transport is unproven for this run. ') +
+        `${jsonOfNested(aLevelWire)} ` +
+        `(expected {thinkingLevel:'low', includeThoughts:true}: ` +
+        `genai=${String(levelWireCarries(gLevelWire))}, ` +
+        `ai-sdk=${String(levelWireCarries(aLevelWire))}), ` +
+        `so level-form wire parity is ${String(levelWireParity)}. ` +
         (bothProducedThoughts
-          ? 'Both surfaced thinking content and a thinking-token count, so the ' +
-            'ThinkingBlock geminiResponseMapper emits can still be built.'
-          : 'At least one side returned no thinking content in this run, so the ' +
-            'ThinkingBlock path is not fully demonstrated here.'),
+          ? 'Both forms also produced thinking content with a numeric ' +
+            'thinking-token count on both adapters, so the accounting ' +
+            'geminiUsageToUsageStats reads is demonstrated.'
+          : 'At least one adapter did not surface thinking content with a numeric ' +
+            'thinking-token count for one form, so the accounting evidence is ' +
+            'incomplete; an adapter that dropped includeThoughts or omitted its ' +
+            'thinking-token count would fail this check.'),
     };
   },
 };

@@ -25,9 +25,12 @@ import { createGenAI } from '../adapters/genai.ts';
 import {
   ADAPTER_AISDK,
   ADAPTER_GENAI,
+  findTransientStatusInObservation,
+  isTransientError,
   observe,
   type Probe,
   type ProbeResult,
+  type Verdict,
 } from '../harness.ts';
 import { startRecordingProxy } from '../recording.ts';
 
@@ -249,6 +252,40 @@ export const p01ApiKeyAuth: Probe = {
       aisdk.observation.userAgentCarriesLlxprtPrefix === true &&
       aisdk.observation.customHeaderValueMatches === true;
 
+    // A transient status (429 / 5xx) proves nothing about key handling, so a
+    // rate-limited normal request or a bad-key sub-case that came back transient
+    // must yield `inconclusive`, never `gap`. `gap` is reserved for a proven
+    // failure: a normal request that was not accepted, or a bad key that was.
+    const genaiNormalResult = {
+      ok: genaiOk,
+      error: genai.error,
+      observation: genai.observation,
+    };
+    const aisdkNormalResult = {
+      ok: aisdkOk,
+      error: aisdk.error,
+      observation: aisdk.observation,
+    };
+    const normalTransient = [genaiNormalResult, aisdkNormalResult].some(
+      (result) =>
+        isTransientError(result.error) ||
+        findTransientStatusInObservation(result.observation) !== undefined,
+    );
+    const badKeyTransient = [genaiBadKey, aisdkBadKey].some(
+      (result) =>
+        badKeyOutcome(result) === 'inconclusive' &&
+        findTransientStatusInObservation(result.observation) !== undefined,
+    );
+
+    const verdict: Verdict =
+      normalTransient || badKeyTransient
+        ? 'inconclusive'
+        : genaiOk && aisdkOk && genaiBadRejected && aisdkBadRejected
+          ? carriersMatch && headersPreserved && valuesPreserved
+            ? 'parity'
+            : 'partial'
+          : 'gap';
+
     return {
       id: 'P01',
       area: 'API-key auth',
@@ -258,13 +295,13 @@ export const p01ApiKeyAuth: Probe = {
       models: [ctx.modelGeneral],
       genai: genaiResult,
       aisdk: aisdkResult,
-      verdict:
-        genaiOk && aisdkOk && genaiBadRejected && aisdkBadRejected
-          ? carriersMatch && headersPreserved && valuesPreserved
-            ? 'parity'
-            : 'partial'
-          : 'gap',
+      verdict,
       finding:
+        (verdict === 'inconclusive'
+          ? 'At least one request or bad-key sub-case hit a transient provider ' +
+            'status (429 or 5xx), which proves nothing about key handling; ' +
+            'retry the probe. '
+          : '') +
         `Auth carrier on the wire: genai used ${String(genai.observation.authCarrier)}, ` +
         `the AI SDK used ${String(aisdk.observation.authCarrier)}` +
         (carriersMatch ? ' (same form). ' : ' (different forms). ') +

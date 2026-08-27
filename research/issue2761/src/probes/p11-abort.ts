@@ -134,12 +134,17 @@ async function driveAbortedStream(
   let threw = false;
   let name = '';
   let message = '';
+  let chunksSeen = 0;
   try {
     for (;;) {
       const more = await readNext();
       if (!more) {
         break;
       }
+      // Count each successful post-abort read, so `chunksSeen` distinguishes
+      // prompt termination (few reads, threw) from a fully buffered stream
+      // drained after the abort (many reads, clean).
+      chunksSeen += 1;
     }
   } catch (error) {
     threw = true;
@@ -148,7 +153,7 @@ async function driveAbortedStream(
   }
   const terminatedAt = Date.now();
   return {
-    chunksSeen: 1,
+    chunksSeen,
     endedCleanly: !threw,
     threw,
     name,

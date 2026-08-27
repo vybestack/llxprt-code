@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-27T01:38:34.154Z",
+  "generatedAt": "2026-08-27T03:19:24.121Z",
   "probeContext": {
     "aiSdkGoogle": {
       "name": "@ai-sdk/google",
@@ -178,6 +178,16 @@
     "aiSdkGoogleDependencyClosure": [
       "@ai-sdk/provider",
       "@ai-sdk/provider-utils"
+    ],
+    "aiSdkGoogleDependencyClosureTransitive": [
+      "@ai-sdk/provider",
+      "@ai-sdk/provider-utils",
+      "@standard-schema/spec",
+      "eventsource-parser",
+      "json-schema"
+    ],
+    "aiSdkGooglePeerDependencies": [
+      "zod"
     ],
     "aiSdkGoogleDeclaresGoogleAuthLibrary": false,
     "googleGenaiDeclaresGoogleAuthLibrary": true,

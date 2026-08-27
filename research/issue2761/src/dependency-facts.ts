@@ -63,6 +63,70 @@ function readInstalled(
   };
 }
 
+interface DependencyClosure {
+  /** Every package reachable from the root through `dependencies` edges. */
+  readonly closure: string[];
+  /** The root's own declared `dependencies`. */
+  readonly direct: string[];
+  /** The root's declared `peerDependencies`, which are not walked. */
+  readonly peer: string[];
+}
+
+/**
+ * Walks installed manifests transitively from `packageName`.
+ *
+ * The Vertex argument rests on `google-auth-library` being absent from
+ * everything `@ai-sdk/google` pulls in, and a direct-dependency list cannot
+ * support that claim, so the whole reachable set is recorded.
+ */
+function readDependencyClosure(
+  root: string,
+  packageName: string,
+): DependencyClosure {
+  const queue: string[] = [packageName];
+  const visited = new Set<string>();
+  while (queue.length > 0) {
+    const next = queue.shift() ?? '';
+    if (visited.has(next)) {
+      continue;
+    }
+    visited.add(next);
+    const manifestPath = join(
+      root,
+      'node_modules',
+      ...next.split('/'),
+      'package.json',
+    );
+    if (!existsSync(manifestPath)) {
+      continue;
+    }
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+      dependencies?: Record<string, string>;
+    };
+    for (const dep of Object.keys(manifest.dependencies ?? {})) {
+      queue.push(dep);
+    }
+  }
+  visited.delete(packageName);
+  const rootManifestPath = join(
+    root,
+    'node_modules',
+    ...packageName.split('/'),
+    'package.json',
+  );
+  const rootManifest = existsSync(rootManifestPath)
+    ? (JSON.parse(readFileSync(rootManifestPath, 'utf8')) as {
+        dependencies?: Record<string, string>;
+        peerDependencies?: Record<string, string>;
+      })
+    : null;
+  return {
+    closure: [...visited].sort(),
+    direct: Object.keys(rootManifest?.dependencies ?? {}).sort(),
+    peer: Object.keys(rootManifest?.peerDependencies ?? {}).sort(),
+  };
+}
+
 function majorOf(version: string | null): number | null {
   if (version === null) {
     return null;
@@ -130,6 +194,8 @@ export interface DependencyFacts {
   };
   readonly vertex: {
     readonly aiSdkGoogleDependencyClosure: string[];
+    readonly aiSdkGoogleDependencyClosureTransitive: string[];
+    readonly aiSdkGooglePeerDependencies: string[];
     readonly aiSdkGoogleDeclaresGoogleAuthLibrary: boolean;
     readonly googleGenaiDeclaresGoogleAuthLibrary: boolean;
     /**
@@ -187,13 +253,13 @@ async function readVertexPackageFacts(
       matching === null ? null : (versions[matching]?.dependencies ?? null),
   };
 }
-
 export async function collectDependencyFacts(): Promise<DependencyFacts> {
   const aiSdkGoogle = readInstalled(PROBE_ROOT, '@ai-sdk/google');
   const probeProvider = readInstalled(PROBE_ROOT, '@ai-sdk/provider');
   const rootProvider = readInstalled(REPO_ROOT, '@ai-sdk/provider');
   const googleGenaiProbe = readInstalled(PROBE_ROOT, '@google/genai');
   const registry = await readRegistry('@ai-sdk/google');
+  const closure = readDependencyClosure(PROBE_ROOT, '@ai-sdk/google');
 
   const probeMajor = majorOf(probeProvider.resolvedVersion);
   const rootMajor = majorOf(rootProvider.resolvedVersion);
@@ -201,6 +267,14 @@ export async function collectDependencyFacts(): Promise<DependencyFacts> {
   const latestProviderMajor = majorOf(
     latestProviderRange === null ? null : latestProviderRange.replace(/^[^\d]*/, ''),
   );
+
+  // True only if google-auth-library is reachable anywhere beneath
+  // @ai-sdk/google, directly, transitively, or as a declared peer. That is what
+  // the Vertex argument needs, and a direct-dependency list cannot show it.
+  const hasGoogleAuth =
+    closure.closure.includes('google-auth-library') ||
+    closure.direct.includes('google-auth-library') ||
+    closure.peer.includes('google-auth-library');
 
   return {
     generatedAt: new Date().toISOString(),
@@ -240,9 +314,10 @@ export async function collectDependencyFacts(): Promise<DependencyFacts> {
         'v2-protocol providers, so it is rejected for this decision.',
     },
     vertex: {
-      aiSdkGoogleDependencyClosure: Object.keys(aiSdkGoogle.dependencies ?? {}),
-      aiSdkGoogleDeclaresGoogleAuthLibrary:
-        'google-auth-library' in (aiSdkGoogle.dependencies ?? {}),
+      aiSdkGoogleDependencyClosure: closure.direct,
+      aiSdkGoogleDependencyClosureTransitive: closure.closure,
+      aiSdkGooglePeerDependencies: closure.peer,
+      aiSdkGoogleDeclaresGoogleAuthLibrary: hasGoogleAuth,
       googleGenaiDeclaresGoogleAuthLibrary:
         'google-auth-library' in (googleGenaiProbe.dependencies ?? {}),
       aiSdkGoogleVertex: await readVertexPackageFacts(probeMajor),
@@ -255,3 +330,4 @@ if (import.meta.main) {
   const path = writeArtifact('dependency-facts.json', facts, makeRedactor(''));
   process.stdout.write(`wrote ${path}\n`);
 }
+

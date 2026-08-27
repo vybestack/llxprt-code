@@ -210,6 +210,11 @@ export const p06ThoughtSignatures: Probe = {
         };
 
         await pause();
+        // Only a record that was appended BY this request is evidence for it. If
+        // the request never reached the proxy (e.g. it threw before dispatch),
+        // `proxy.records.length` did not grow, and using the previous record would
+        // attribute an older request's wire body to this sub-case.
+        const withBefore = proxy.records.length;
         const withSignature = await replay(
           typeof (callPart as Part & { thoughtSignature?: unknown })
             .thoughtSignature === 'string'
@@ -217,11 +222,18 @@ export const p06ThoughtSignatures: Probe = {
                 .thoughtSignature as string)
             : undefined,
         );
-        const withRecord = proxy.records[proxy.records.length - 1];
+        const withRecord =
+          proxy.records.length > withBefore
+            ? proxy.records[proxy.records.length - 1]
+            : undefined;
 
         await pause();
+        const withoutBefore = proxy.records.length;
         const withoutSignature = await replay(undefined);
-        const withoutRecord = proxy.records[proxy.records.length - 1];
+        const withoutRecord =
+          proxy.records.length > withoutBefore
+            ? proxy.records[proxy.records.length - 1]
+            : undefined;
 
         return {
           step1_capture: {
@@ -231,12 +243,18 @@ export const p06ThoughtSignatures: Probe = {
           },
           step2_replayWithSignature: {
             ...replayOutcome(withRecord, withSignature.accepted),
+            ...(withRecord === undefined
+              ? { wireEvidence: 'none (no proxy record grew for this sub-case)' }
+              : {}),
             ...(withSignature.error !== null
               ? { thrown: captureError(withSignature.error) }
               : {}),
           },
           step3_replayWithoutSignature: {
             ...replayOutcome(withoutRecord, withoutSignature.accepted),
+            ...(withoutRecord === undefined
+              ? { wireEvidence: 'none (no proxy record grew for this sub-case)' }
+              : {}),
             ...(withoutSignature.error !== null
               ? { thrown: captureError(withoutSignature.error) }
               : {}),
@@ -343,12 +361,22 @@ export const p06ThoughtSignatures: Probe = {
         };
 
         await pause();
+        // Only a record that grew during this sub-case is evidence for it; see
+        // the genai side for why the count is captured before the request.
+        const withBefore = proxy.records.length;
         const withSignature = await replay(true);
-        const withRecord = proxy.records[proxy.records.length - 1];
+        const withRecord =
+          proxy.records.length > withBefore
+            ? proxy.records[proxy.records.length - 1]
+            : undefined;
 
         await pause();
+        const withoutBefore = proxy.records.length;
         const withoutSignature = await replay(false);
-        const withoutRecord = proxy.records[proxy.records.length - 1];
+        const withoutRecord =
+          proxy.records.length > withoutBefore
+            ? proxy.records[proxy.records.length - 1]
+            : undefined;
 
         return {
           step1_capture: {
@@ -360,12 +388,18 @@ export const p06ThoughtSignatures: Probe = {
           },
           step2_replayWithSignature: {
             ...replayOutcome(withRecord, withSignature.accepted),
+            ...(withRecord === undefined
+              ? { wireEvidence: 'none (no proxy record grew for this sub-case)' }
+              : {}),
             ...(withSignature.error !== null
               ? { thrown: captureError(withSignature.error) }
               : {}),
           },
           step3_replayWithoutSignature: {
             ...replayOutcome(withoutRecord, withoutSignature.accepted),
+            ...(withoutRecord === undefined
+              ? { wireEvidence: 'none (no proxy record grew for this sub-case)' }
+              : {}),
             ...(withoutSignature.error !== null
               ? { thrown: captureError(withoutSignature.error) }
               : {}),
