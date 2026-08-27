@@ -276,30 +276,22 @@ function buildRetryFailure(
  */
 export function decodeRetryFailure(error: unknown): RetryFailure {
   // Decoding must be total: a hostile getter on an arbitrary error object
-  // degrades to an unknown classification instead of propagating outward
-  // and masking the real failure.
-  let classification: RetryErrorClassification;
+  // (classification reads, provider-code probes, identity resolution, or the
+  // Retry-After header walk) degrades to an unknown failure instead of
+  // propagating outward and masking the real error.
   try {
-    classification = classifyRetryError(error);
+    const classification = classifyRetryError(error);
+    const providerCode = getProviderCode(error);
+    const identity = resolveFailureIdentity(error, classification, providerCode);
+    return buildRetryFailure(
+      error,
+      identity,
+      classification.status,
+      providerCode,
+    );
   } catch {
-    classification = {
-      status: undefined,
-      category: undefined,
-      is429: false,
-      is402: false,
-      isAuthError: false,
-      isNetworkError: false,
-      is5xxServerError: false,
-    };
+    return { phase: 'protocol', kind: 'unknown', cause: error };
   }
-  const providerCode = getProviderCode(error);
-  const identity = resolveFailureIdentity(error, classification, providerCode);
-  return buildRetryFailure(
-    error,
-    identity,
-    classification.status,
-    providerCode,
-  );
 }
 
 /**

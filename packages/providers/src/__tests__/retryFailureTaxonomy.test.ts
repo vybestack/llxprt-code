@@ -252,6 +252,18 @@ describe('decodeRetryFailure', () => {
       },
     };
     expect(() => decodeRetryFailure(hostile)).not.toThrow();
+
+    // The Retry-After header walk must be equally total: a throwing
+    // headers getter escapes through buildRetryFailure otherwise.
+    const hostileHeaders = {
+      name: 'APIError',
+      get headers(): unknown {
+        throw new Error('getter exploded');
+      },
+    };
+    const failure = decodeRetryFailure(hostileHeaders);
+    expect(failure.cause).toBe(hostileHeaders);
+    expect(failure.retryAfterMs).toBeUndefined();
   });
 });
 
