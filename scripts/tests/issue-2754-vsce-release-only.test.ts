@@ -11,14 +11,8 @@ import { parse as parseJsonc, type ParseError } from 'jsonc-parser';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 
-const COMPANION_PACKAGE_PATH = path.join(
-  ROOT,
-  'packages/vscode-ide-companion/package.json',
-);
-const ROOT_PACKAGE_PATH = path.join(ROOT, 'package.json');
 const PACKAGE_LOCK_PATH = path.join(ROOT, 'package-lock.json');
 const BUN_LOCK_PATH = path.join(ROOT, 'bun.lock');
-const RELEASE_YML_PATH = path.join(ROOT, '.github/workflows/release.yml');
 const BUILD_VSCODE_COMPANION_PATH = path.join(
   ROOT,
   'scripts/build_vscode_companion.ts',
