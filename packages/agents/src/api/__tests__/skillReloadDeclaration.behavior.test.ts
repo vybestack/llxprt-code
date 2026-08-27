@@ -46,6 +46,12 @@ interface ProviderToolDeclaration {
  * Reads the tool declarations ChatSession will send with the next provider
  * request. `generationConfig` is the object handed to the provider, so this is
  * the model's actual view rather than a proxy for it.
+ *
+ * There is no public read seam for this, so the shape is reached directly.
+ * Every step is checked and throws on a mismatch rather than returning an
+ * empty list, because a silent `?? []` here would let a refactor of
+ * `ChatSession.setTools` turn these assertions green while the model saw
+ * nothing.
  */
 function providerToolDeclarations(config: Config): ProviderToolDeclaration[] {
   const chat = config.getAgentClient().getChat() as unknown as {
@@ -53,7 +59,19 @@ function providerToolDeclarations(config: Config): ProviderToolDeclaration[] {
       tools?: Array<{ functionDeclarations?: ProviderToolDeclaration[] }>;
     };
   };
-  return chat.generationConfig?.tools?.[0]?.functionDeclarations ?? [];
+  const toolGroups = chat.generationConfig?.tools;
+  if (!Array.isArray(toolGroups) || toolGroups.length === 0) {
+    throw new Error(
+      'ChatSession carries no tool groups; ChatSession.setTools may have changed shape',
+    );
+  }
+  const declarations = toolGroups[0]?.functionDeclarations;
+  if (!Array.isArray(declarations)) {
+    throw new Error(
+      'ChatSession tool group has no functionDeclarations; ChatSession.setTools may have changed shape',
+    );
+  }
+  return declarations;
 }
 
 function activateSkillDeclaration(

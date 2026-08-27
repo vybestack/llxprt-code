@@ -106,8 +106,10 @@ function enumeratedSkillNames(registry: ToolRegistry): string[] {
   if (!declaration) {
     throw new Error(`${ACTIVATE_SKILL_TOOL_NAME} is not registered`);
   }
-  const schema = (declaration.parametersJsonSchema ??
-    declaration.parameters) as {
+  // Read only parametersJsonSchema. Falling back to the legacy `parameters`
+  // field would let this pass for a declaration that does not satisfy the
+  // provider contract.
+  const schema = declaration.parametersJsonSchema as {
     properties?: { name?: { enum?: string[] } };
   };
   return schema.properties?.name?.enum ?? [];
