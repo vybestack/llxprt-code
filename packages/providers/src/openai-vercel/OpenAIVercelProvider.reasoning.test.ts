@@ -33,7 +33,14 @@ void vi.mock('ai', () => {
 
 void vi.mock('@ai-sdk/openai', () => ({
   createOpenAI: vi.fn(() => ({
-    chat: vi.fn(() => 'mock-model'),
+    // ai@7's wrapLanguageModel proxies the model to normalize spec versions,
+    // so the mock has to be an object that already declares v4 rather than a
+    // bare string.
+    chat: vi.fn(() => ({
+      specificationVersion: 'v4',
+      provider: 'mock',
+      modelId: 'mock-model',
+    })),
   })),
 }));
 

@@ -39,13 +39,15 @@ function toolContent(...blocks: ToolResponseBlock[]): IContent {
 /** Run convertToVercelMessages and return the parts of the (single) tool message. */
 function toolResultParts(contents: IContent[]): ToolResultPart[] {
   const messages = convertToVercelMessages(contents);
-  // The find predicate narrows the message to CoreToolMessage (TS find
-  // inference), so toolMessage.content is already ToolResultPart[].
+  // ai@7 widened ToolContent to Array<ToolResultPart | ToolApprovalResponse>,
+  // so the tool-result parts have to be selected rather than assumed.
   const toolMessage = messages.find((m) => m.role === 'tool');
   if (!toolMessage) {
     throw new Error('expected a tool message');
   }
-  return toolMessage.content;
+  return toolMessage.content.filter(
+    (part): part is ToolResultPart => part.type === 'tool-result',
+  );
 }
 
 /** Drive convertToVercelMessages and return the first tool-result part's output. */

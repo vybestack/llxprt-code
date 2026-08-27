@@ -16,16 +16,16 @@
 
 /**
  * @plan PLAN-20251127-OPENAIVERCEL.P06
- * @requirement REQ-OAV-MC-001 - Convert IContent to Vercel CoreMessage
- * @requirement REQ-OAV-MC-002 - Convert CoreMessage to IContent
+ * @requirement REQ-OAV-MC-001 - Convert IContent to Vercel ModelMessage
+ * @requirement REQ-OAV-MC-002 - Convert ModelMessage to IContent
  * @requirement REQ-OAV-MC-003 - Handle all message types (user, assistant, tool, system)
  * @requirement REQ-OAV-MC-004 - Handle tool calls and tool responses
  * @requirement REQ-OAV-MC-005 - Handle mixed content blocks
  */
 
 import type {
-  CoreMessage,
-  CoreToolMessage,
+  ModelMessage,
+  ToolModelMessage,
   ToolCallPart,
   ToolResultPart,
 } from 'ai';
@@ -83,9 +83,9 @@ function inferMediaEncoding(imageData: string): {
   return { encoding: 'base64', mimeType: 'image/*' };
 }
 
-type CoreMessageWithReasoning = CoreMessage & { reasoning_content?: string };
+type ModelMessageWithReasoning = ModelMessage & { reasoning_content?: string };
 
-type MessageWithToolInvocations = CoreMessage & {
+type MessageWithToolInvocations = ModelMessage & {
   toolInvocations?: Array<{
     state: string;
     toolCallId: string;
@@ -95,8 +95,8 @@ type MessageWithToolInvocations = CoreMessage & {
 };
 
 function pushWithReasoning(
-  messages: CoreMessage[],
-  baseMessage: CoreMessage,
+  messages: ModelMessage[],
+  baseMessage: ModelMessage,
   options: { includeReasoningInContext?: boolean } | undefined,
   thinkingBlocks: ThinkingBlock[],
 ): void {
@@ -106,7 +106,7 @@ function pushWithReasoning(
   ) {
     const reasoningText = thinkingToReasoningField(thinkingBlocks);
     if (reasoningText) {
-      const messageWithReasoning: CoreMessageWithReasoning = {
+      const messageWithReasoning: ModelMessageWithReasoning = {
         ...baseMessage,
         reasoning_content: cleanKimiTokensFromThinking(reasoningText),
       };
@@ -128,7 +128,7 @@ function hasReasoningForContext(
   );
 }
 
-function convertSystemContent(content: IContent): CoreMessage | null {
+function convertSystemContent(content: IContent): ModelMessage | null {
   const textBlocks = content.blocks.filter(
     (b: ContentBlock) => b.type === 'text',
   );
@@ -139,7 +139,7 @@ function convertSystemContent(content: IContent): CoreMessage | null {
   return text ? { role: 'system', content: text } : null;
 }
 
-function convertHumanContent(content: IContent): CoreMessage | null {
+function convertHumanContent(content: IContent): ModelMessage | null {
   const textBlocks = content.blocks.filter(
     (b: ContentBlock) => b.type === 'text',
   );
@@ -182,7 +182,7 @@ function convertHumanContent(content: IContent): CoreMessage | null {
 }
 
 function convertAiContent(
-  messages: CoreMessage[],
+  messages: ModelMessage[],
   content: IContent,
   resolveToolCallId: (block: ToolCallBlock) => string,
   options: { includeReasoningInContext?: boolean } | undefined,
@@ -250,7 +250,7 @@ function buildToolResultOutput(
 }
 
 function convertToolContent(
-  messages: CoreMessage[],
+  messages: ModelMessage[],
   content: IContent,
   resolveToolResponseId: (block: ToolResponseBlock) => string,
 ): void {
@@ -276,7 +276,7 @@ function convertToolContent(
     };
   });
 
-  const toolMessage: CoreToolMessage = {
+  const toolMessage: ToolModelMessage = {
     role: 'tool',
     content: toolContent,
   };
@@ -287,8 +287,8 @@ export function convertToVercelMessages(
   contents: IContent[],
   toolIdMapper?: ToolIdMapper,
   options?: { includeReasoningInContext?: boolean },
-): CoreMessage[] {
-  const messages: CoreMessage[] = [];
+): ModelMessage[] {
+  const messages: ModelMessage[] = [];
 
   const resolveToolCallId = (block: ToolCallBlock): string => {
     if (toolIdMapper) {
@@ -393,7 +393,7 @@ function parseAssistantContentPart(
   }
 }
 
-function convertFromVercelUser(message: CoreMessage): IContent | null {
+function convertFromVercelUser(message: ModelMessage): IContent | null {
   if (Array.isArray(message.content)) {
     const blocks: ContentBlock[] = [];
     for (const part of message.content) {
@@ -414,7 +414,7 @@ function convertFromVercelUser(message: CoreMessage): IContent | null {
   return null;
 }
 
-function convertFromVercelAssistant(message: CoreMessage): IContent | null {
+function convertFromVercelAssistant(message: ModelMessage): IContent | null {
   const blocks: Array<TextBlock | ToolCallBlock | MediaBlock> = [];
 
   if (typeof message.content === 'string') {
@@ -500,7 +500,7 @@ function parseToolResultPart(part: ToolResultPart): ToolResponseBlock | null {
   return toolResponseBlock;
 }
 
-function convertFromVercelTool(message: CoreMessage): IContent | null {
+function convertFromVercelTool(message: ModelMessage): IContent | null {
   const blocks: ToolResponseBlock[] = [];
   for (const part of message.content as ToolResultPart[]) {
     const trBlock = parseToolResultPart(part);
@@ -526,7 +526,7 @@ function extractSystemText(systemContent: unknown): string {
     .join('\n');
 }
 
-function convertFromVercelSystem(message: CoreMessage): IContent | null {
+function convertFromVercelSystem(message: ModelMessage): IContent | null {
   const text = extractSystemText(message.content);
 
   if (text) {
@@ -540,7 +540,7 @@ function convertFromVercelSystem(message: CoreMessage): IContent | null {
   return null;
 }
 
-export function convertFromVercelMessages(messages: CoreMessage[]): IContent[] {
+export function convertFromVercelMessages(messages: ModelMessage[]): IContent[] {
   const contents: IContent[] = [];
 
   for (const message of messages) {

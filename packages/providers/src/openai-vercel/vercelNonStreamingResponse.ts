@@ -59,7 +59,11 @@ export function extractToolCallInput(call: {
 export function extractNonStreamingThinking(
   result: {
     text?: string;
-    reasoning?: string | Array<{ text: string }>;
+    // ai@7 widened `reasoning` to (ReasoningOutput | ReasoningFileOutput)[].
+    // The file variant shares no properties with the text variant, so an
+    // optional-`text` object type would be rejected as a weak type. Accept
+    // the array loosely and narrow each entry below.
+    reasoning?: string | ReadonlyArray<unknown>;
   },
   rs: ReasoningSettings,
   logger: DebugLogger,
@@ -82,7 +86,11 @@ export function extractNonStreamingThinking(
       reasoning = reasoningField;
     } else if (Array.isArray(reasoningField)) {
       reasoning = reasoningField
-        .map((r) => r.text)
+        .map((entry) =>
+          typeof entry === 'object' && entry !== null && 'text' in entry
+            ? (entry as { text?: unknown }).text
+            : undefined,
+        )
         .filter(
           (text): text is string => typeof text === 'string' && text !== '',
         )
