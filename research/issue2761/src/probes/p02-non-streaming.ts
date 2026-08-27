@@ -35,7 +35,7 @@ const QUESTION =
   'Does a single-shot generate return equivalent text, finish reason, usage, ' +
   'response id and system-instruction transport through both adapters?';
 
-/** True when every content part is a TEXT part with non-empty text. */
+/** True when at least one content part is a TEXT part with non-empty text. */
 function hasNonEmptyText(parts: unknown): boolean {
   if (!Array.isArray(parts) || parts.length === 0) {
     return false;
@@ -139,8 +139,8 @@ export const p02NonStreaming: Probe = {
     // Summarized content is an array of { type: 'text', length, preview }.
     const genaiContentOk = genaiProducedText;
 
-    // The AI SDK content was expanded into an array of { type: 'text', ... }
-    // parts; every part must be a non-empty text part, not just any content.
+    // The AI SDK content is an array of summarized parts; at least one must be
+    // a non-empty text part, so a response of pure tool calls does not pass.
     const aisdkTextOk = hasNonEmptyText(aisdk.observation.content);
 
     // Finish reasons: `STOP` (genai) vs `stop` (AI SDK) normalize equal.

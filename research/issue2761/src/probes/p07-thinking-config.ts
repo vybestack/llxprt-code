@@ -353,8 +353,10 @@ export const p07ThinkingConfig: Probe = {
         `so level-form wire parity is ${String(levelWireParity)}. ` +
         (bothProducedThoughts
           ? 'Both forms also produced thinking content with a numeric ' +
-            'thinking-token count on both adapters, so the accounting ' +
-            'geminiUsageToUsageStats reads is demonstrated.'
+            'thinking-token count on both adapters: genai reports ' +
+            'thoughtsTokenCount and the AI SDK exposes usage.reasoningTokens. ' +
+            'This probe reads those fields directly; it does not exercise ' +
+            'geminiUsageToUsageStats.'
           : 'At least one adapter did not surface thinking content with a numeric ' +
             'thinking-token count for one form, so the accounting evidence is ' +
             'incomplete; an adapter that dropped includeThoughts or omitted its ' +

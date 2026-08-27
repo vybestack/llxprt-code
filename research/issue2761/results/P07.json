@@ -11,14 +11,14 @@
     "observation": {
       "budgetForm": {
         "thoughtPartCount": 1,
-        "thoughtPartLength": 653,
-        "thoughtTextPreview": "**My Analytical Process for the Bat and Ball Problem**\n\nOkay, so the prompt is straightforward enough. We've got a class",
+        "thoughtPartLength": 646,
+        "thoughtTextPreview": "**My Initial Approach to the Problem**\n\nOkay, so here's what I'm looking at: a bat and a ball, costing a total of $1.10.",
         "partKinds": [
           "text",
           "text"
         ],
         "finishReason": "MAX_TOKENS",
-        "thoughtsTokenCount": 135,
+        "thoughtsTokenCount": 138,
         "wire": {
           "httpStatus": 200,
           "providerError": null,
@@ -30,14 +30,14 @@
       },
       "levelForm": {
         "thoughtPartCount": 1,
-        "thoughtPartLength": 726,
-        "thoughtTextPreview": "**My Analytical Journey to the Baseball Mystery**\n\nAlright, let's break this down. First, I need to understand what's be",
+        "thoughtPartLength": 607,
+        "thoughtTextPreview": "**My Approach to the Bat and Ball Problem**\n\nOkay, here's how I'd break down this classic problem. First, I need to real",
         "partKinds": [
           "text",
           "text"
         ],
         "finishReason": "MAX_TOKENS",
-        "thoughtsTokenCount": 146,
+        "thoughtsTokenCount": 156,
         "wire": {
           "httpStatus": 200,
           "providerError": null,
@@ -56,24 +56,24 @@
     "observation": {
       "budgetForm": {
         "reasoningPartCount": 1,
-        "reasoningPartLength": 644,
-        "reasoningTextPreview": "**My Analytical Process for the Bat and Ball Riddle**\n\nOkay, so the user wants me to break down this classic riddle: bat",
+        "reasoningPartLength": 615,
+        "reasoningTextPreview": "**My Thought Process on the Bat and Ball Riddle**\n\nOkay, let's break this down. First, I need to understand what's being",
         "content": [
           {
             "type": "reasoning",
-            "length": 644,
-            "preview": "**My Analytical Process for the Bat and Ball Riddle**\n\nOkay, so the user wants me to break down this classic riddle: bat and ball, $1.10 total, bat is $1.00 mor"
+            "length": 615,
+            "preview": "**My Thought Process on the Bat and Ball Riddle**\n\nOkay, let's break this down. First, I need to understand what's being asked. My goal is to find the cost of t"
           },
           {
             "type": "text",
-            "length": 369,
-            "preview": "To find the answer, let's break it down using a little bit of algebra to avoid the common intuitive trap.\n\n**1. Define your variables:**\n*   Let **$B$** be the ",
+            "length": 316,
+            "preview": "To find the answer, let’s break it down with simple algebra.\n\n1.  **Set up the variables:**\n    *   Let the cost of the ball be **$x$**.\n    *   Since the bat c",
             "providerMetadata": {
               "google": {
                 "thoughtSignature": {
                   "present": true,
-                  "length": 840,
-                  "prefix": "EvMECvAEARFNMg+D",
+                  "length": 796,
+                  "prefix": "EtIECs8EARFNMg9Y",
                   "isSentinel": false
                 }
               }
@@ -81,7 +81,7 @@
           }
         ],
         "finishReason": "length",
-        "usageReasoningTokens": 138,
+        "usageReasoningTokens": 144,
         "warnings": [],
         "providerMetadataGoogle": {
           "promptFeedback": null,
@@ -90,9 +90,9 @@
           "safetyRatings": null,
           "serviceTier": null,
           "usageMetadata": {
-            "thoughtsTokenCount": 138,
+            "thoughtsTokenCount": 144,
             "promptTokenCount": 37,
-            "candidatesTokenCount": 114,
+            "candidatesTokenCount": 108,
             "totalTokenCount": 289,
             "promptTokensDetails": [
               {
@@ -114,24 +114,24 @@
       },
       "levelForm": {
         "reasoningPartCount": 1,
-        "reasoningPartLength": 703,
-        "reasoningTextPreview": "**My Initial Thoughts on the Bat and Ball Problem**\n\nOkay, so the prompt is pretty straightforward: a bat and ball combi",
+        "reasoningPartLength": 549,
+        "reasoningTextPreview": "**My Approach to the Bat and Ball Riddle**\n\nOkay, here's how I'd tackle this classic problem. The user's given me a ridd",
         "content": [
           {
             "type": "reasoning",
-            "length": 703,
-            "preview": "**My Initial Thoughts on the Bat and Ball Problem**\n\nOkay, so the prompt is pretty straightforward: a bat and ball combined cost $1.10, and the bat's a buck mor"
+            "length": 549,
+            "preview": "**My Approach to the Bat and Ball Riddle**\n\nOkay, here's how I'd tackle this classic problem. The user's given me a riddle, a common one at that. They've asked "
           },
           {
             "type": "text",
-            "length": 295,
-            "preview": "To find the answer, let's break it down using a simple equation.\n\nLet **$x$** be the cost of the ball.\n\nSince the bat costs $1.00 more than the ball, the cost o",
+            "length": 311,
+            "preview": "To find the answer, let's break it down using basic algebra.\n\n**1. Set up the equations:**\n*   Let $x$ be the cost of the ball.\n*   The bat costs $1.00 more tha",
             "providerMetadata": {
               "google": {
                 "thoughtSignature": {
                   "present": true,
-                  "length": 832,
-                  "prefix": "Eu0ECuoEARFNMg8v",
+                  "length": 824,
+                  "prefix": "EucECuQEARFNMg/X",
                   "isSentinel": false
                 }
               }
@@ -139,7 +139,7 @@
           }
         ],
         "finishReason": "length",
-        "usageReasoningTokens": 143,
+        "usageReasoningTokens": 140,
         "warnings": [],
         "providerMetadataGoogle": {
           "promptFeedback": null,
@@ -148,9 +148,9 @@
           "safetyRatings": null,
           "serviceTier": null,
           "usageMetadata": {
-            "thoughtsTokenCount": 143,
+            "thoughtsTokenCount": 140,
             "promptTokenCount": 37,
-            "candidatesTokenCount": 109,
+            "candidatesTokenCount": 112,
             "totalTokenCount": 289,
             "promptTokensDetails": [
               {
@@ -174,5 +174,5 @@
     }
   },
   "verdict": "parity",
-  "finding": "Budget form: @google/genai surfaced 1 thought part(s) (thoughtsTokenCount numeric=true (135)); the AI SDK surfaced 1 reasoning part(s) (reasoningTokens numeric=true (138)). Level form: genai 1 thought part(s), AI SDK 1 reasoning part(s). On the wire, budget form: genai sent generationConfig.thinkingConfig={\"thinkingBudget\":512,\"includeThoughts\":true} and the AI SDK sent {\"thinkingBudget\":512,\"includeThoughts\":true} (expected {thinkingBudget:512, includeThoughts:true}: genai=true, ai-sdk=true), so budget-form wire parity is true. Level form: genai sent generationConfig.thinkingConfig={\"thinkingLevel\":\"low\",\"includeThoughts\":true} and the AI SDK sent {\"includeThoughts\":true,\"thinkingLevel\":\"low\"} (expected {thinkingLevel:'low', includeThoughts:true}: genai=true, ai-sdk=true), so level-form wire parity is true. Both forms also produced thinking content with a numeric thinking-token count on both adapters, so the accounting geminiUsageToUsageStats reads is demonstrated."
+  "finding": "Budget form: @google/genai surfaced 1 thought part(s) (thoughtsTokenCount numeric=true (138)); the AI SDK surfaced 1 reasoning part(s) (reasoningTokens numeric=true (144)). Level form: genai 1 thought part(s), AI SDK 1 reasoning part(s). On the wire, budget form: genai sent generationConfig.thinkingConfig={\"thinkingBudget\":512,\"includeThoughts\":true} and the AI SDK sent {\"thinkingBudget\":512,\"includeThoughts\":true} (expected {thinkingBudget:512, includeThoughts:true}: genai=true, ai-sdk=true), so budget-form wire parity is true. Level form: genai sent generationConfig.thinkingConfig={\"thinkingLevel\":\"low\",\"includeThoughts\":true} and the AI SDK sent {\"includeThoughts\":true,\"thinkingLevel\":\"low\"} (expected {thinkingLevel:'low', includeThoughts:true}: genai=true, ai-sdk=true), so level-form wire parity is true. Both forms also produced thinking content with a numeric thinking-token count on both adapters: genai reports thoughtsTokenCount and the AI SDK exposes usage.reasoningTokens. This probe reads those fields directly; it does not exercise geminiUsageToUsageStats."
 }

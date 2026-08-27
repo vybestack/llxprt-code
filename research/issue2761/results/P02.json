@@ -29,7 +29,7 @@
         ],
         "serviceTier": "standard"
       },
-      "responseId": "oamPapDZLKqsqtsPk_nh2Qk",
+      "responseId": "xbWPat_qGNSzqtsP_P-p8Ac",
       "modelVersion": "gemini-3.1-flash-lite",
       "promptFeedback": null
     }
@@ -48,7 +48,7 @@
               "thoughtSignature": {
                 "present": true,
                 "length": 156,
-                "prefix": "EnEKbwERTTIPVclJ",
+                "prefix": "EnEKbwERTTIPPLU9",
                 "isSentinel": false
               }
             }

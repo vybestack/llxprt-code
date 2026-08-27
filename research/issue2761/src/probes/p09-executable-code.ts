@@ -281,16 +281,22 @@ function aisdkPartSequenceMatches(obs: {
   if (calls.length === 0 || results.length === 0) {
     return false;
   }
-  const call = calls[0];
-  const result = results[0];
-  const sharedId = call.toolCallId !== '' && call.toolCallId === result.toolCallId;
-  const allProviderExecuted =
-    calls.every((c) => c.providerExecuted === true) &&
-    results.every((r) => r.providerExecuted === true);
-  return (
-    sharedId &&
-    allProviderExecuted &&
-    calls.every((c) => c.toolName === 'code_execution') &&
-    results.every((r) => r.toolName === 'code_execution')
-  );
+  // Checking only the first pair would let a valid first pair carry an
+  // unmatched later one. Every call must have exactly one result with the same
+  // id, and there must be no surplus results.
+  if (calls.length !== results.length) {
+    return false;
+  }
+  const everyPairMatches = calls.every((call, index) => {
+    const result = results[index];
+    return (
+      call.toolCallId !== '' &&
+      call.toolCallId === result.toolCallId &&
+      call.toolName === 'code_execution' &&
+      result.toolName === 'code_execution' &&
+      call.providerExecuted === true &&
+      result.providerExecuted === true
+    );
+  });
+  return everyPairMatches;
 }

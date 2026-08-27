@@ -1,12 +1,15 @@
 {
-  "generatedAt": "2026-08-27T03:19:44.927Z",
+  "generatedAt": "2026-08-27T03:59:09.826Z",
   "models": {
     "general": "gemini-3.1-flash-lite",
     "gemini3": "gemini-3-flash-preview"
   },
   "providerProtocolMatches": true,
   "ranThisInvocation": [
-    "P06"
+    "P01",
+    "P02",
+    "P07",
+    "P09"
   ],
   "counts": {
     "parity": 7,
@@ -101,7 +104,7 @@
         "gemini-3.1-flash-lite"
       ],
       "verdict": "parity",
-      "finding": "Budget form: @google/genai surfaced 1 thought part(s) (thoughtsTokenCount numeric=true (135)); the AI SDK surfaced 1 reasoning part(s) (reasoningTokens numeric=true (138)). Level form: genai 1 thought part(s), AI SDK 1 reasoning part(s). On the wire, budget form: genai sent generationConfig.thinkingConfig={\"thinkingBudget\":512,\"includeThoughts\":true} and the AI SDK sent {\"thinkingBudget\":512,\"includeThoughts\":true} (expected {thinkingBudget:512, includeThoughts:true}: genai=true, ai-sdk=true), so budget-form wire parity is true. Level form: genai sent generationConfig.thinkingConfig={\"thinkingLevel\":\"low\",\"includeThoughts\":true} and the AI SDK sent {\"includeThoughts\":true,\"thinkingLevel\":\"low\"} (expected {thinkingLevel:'low', includeThoughts:true}: genai=true, ai-sdk=true), so level-form wire parity is true. Both forms also produced thinking content with a numeric thinking-token count on both adapters, so the accounting geminiUsageToUsageStats reads is demonstrated.",
+      "finding": "Budget form: @google/genai surfaced 1 thought part(s) (thoughtsTokenCount numeric=true (138)); the AI SDK surfaced 1 reasoning part(s) (reasoningTokens numeric=true (144)). Level form: genai 1 thought part(s), AI SDK 1 reasoning part(s). On the wire, budget form: genai sent generationConfig.thinkingConfig={\"thinkingBudget\":512,\"includeThoughts\":true} and the AI SDK sent {\"thinkingBudget\":512,\"includeThoughts\":true} (expected {thinkingBudget:512, includeThoughts:true}: genai=true, ai-sdk=true), so budget-form wire parity is true. Level form: genai sent generationConfig.thinkingConfig={\"thinkingLevel\":\"low\",\"includeThoughts\":true} and the AI SDK sent {\"includeThoughts\":true,\"thinkingLevel\":\"low\"} (expected {thinkingLevel:'low', includeThoughts:true}: genai=true, ai-sdk=true), so level-form wire parity is true. Both forms also produced thinking content with a numeric thinking-token count on both adapters: genai reports thoughtsTokenCount and the AI SDK exposes usage.reasoningTokens. This probe reads those fields directly; it does not exercise geminiUsageToUsageStats.",
       "genaiOk": true,
       "aisdkOk": true,
       "artifact": "results/P07.json"
@@ -127,7 +130,7 @@
         "gemini-3.1-flash-lite"
       ],
       "verdict": "parity",
-      "finding": "@google/genai emitted part sequence [executableCode,codeExecutionResult,text] with executableCode (PYTHON, 352 chars) and codeExecutionResult (OUTCOME_OK, 34 chars of output); the AI SDK emitted [tool-call,tool-result,text] with tool-call \"code_execution\" (providerExecuted: true) and a tool-result carrying the output. The executableCode -> CodeBlock and codeExecutionResult -> tool-response convention in neutralConverters is written against @google/genai Part shapes, so on the AI SDK path an adapter re-targets it at tool-call/tool-result parts and parses the JSON-string input. The payloads themselves are equivalent, and the SDK already stamps the code_execution name and the providerExecuted flag.",
+      "finding": "@google/genai emitted part sequence [executableCode,codeExecutionResult,text] with executableCode (PYTHON, 377 chars) and codeExecutionResult (OUTCOME_OK, 34 chars of output); the AI SDK emitted [tool-call,tool-result,text] with tool-call \"code_execution\" (providerExecuted: true) and a tool-result carrying the output. The executableCode -> CodeBlock and codeExecutionResult -> tool-response convention in neutralConverters is written against @google/genai Part shapes, so on the AI SDK path an adapter re-targets it at tool-call/tool-result parts and parses the JSON-string input. The payloads themselves are equivalent, and the SDK already stamps the code_execution name and the providerExecuted flag.",
       "genaiOk": true,
       "aisdkOk": true,
       "artifact": "results/P09.json"

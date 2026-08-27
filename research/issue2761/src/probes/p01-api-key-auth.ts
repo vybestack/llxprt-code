@@ -271,14 +271,15 @@ export const p01ApiKeyAuth: Probe = {
         isTransientError(result.error) ||
         findTransientStatusInObservation(result.observation) !== undefined,
     );
-    const badKeyTransient = [genaiBadKey, aisdkBadKey].some(
-      (result) =>
-        badKeyOutcome(result) === 'inconclusive' &&
-        findTransientStatusInObservation(result.observation) !== undefined,
+    // Any inconclusive bad-key outcome counts, not only one that carried a
+    // transient STATUS. A connection or DNS failure proves just as little about
+    // whether the key was checked, and must not fall through to `gap`.
+    const badKeyInconclusive = [genaiBadKey, aisdkBadKey].some(
+      (result) => badKeyOutcome(result) === 'inconclusive',
     );
 
     const verdict: Verdict =
-      normalTransient || badKeyTransient
+      normalTransient || badKeyInconclusive
         ? 'inconclusive'
         : genaiOk && aisdkOk && genaiBadRejected && aisdkBadRejected
           ? carriersMatch && headersPreserved && valuesPreserved
