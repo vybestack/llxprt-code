@@ -239,6 +239,7 @@
     "@vybestack/llxprt-code-auth": "file:../auth",
     "@vybestack/llxprt-code-core": "file:../core",
     "@vybestack/llxprt-code-settings": "file:../settings",
+    "@vybestack/llxprt-code-telemetry": "file:../telemetry",
     "@vybestack/llxprt-code-tools": "file:../tools",
     "ai": "^5.0.104",
     "comment-json": "^4.5.0",

@@ -39,9 +39,10 @@
     "dist"
   ],
   "dependencies": {
-    "@vybestack/llxprt-code-storage": "file:../storage",
     "@modelcontextprotocol/sdk": "^1.25.2",
+    "@vybestack/llxprt-code-core": "file:../core",
     "@vybestack/llxprt-code-settings": "file:../settings",
+    "@vybestack/llxprt-code-storage": "file:../storage",
     "@vybestack/llxprt-code-tools": "file:../tools",
     "google-auth-library": "^9.11.0",
     "shell-quote": "^1.10.0",
@@ -49,7 +50,6 @@
   },
   "devDependencies": {
     "@types/node": "^24.2.1",
-    "@vybestack/llxprt-code-core": "file:../core",
     "fast-check": "^4.2.0",
     "typescript": "^5.3.3"
   },

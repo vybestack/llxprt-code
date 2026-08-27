@@ -216,6 +216,9 @@ export const BUN_TEST_ROOTS: readonly BunTestRoot[] = [
     ],
     timeoutOverrides: [
       { pattern: /issue-2603-release-install\.test\.ts$/, timeout: 300_000 },
+      // npm pack of packages/mcp writes ~1800 files, then the entrypoint is
+      // imported twice in sandboxed temp trees (#3305).
+      { pattern: /mcp-standalone-consumer\.test\.ts$/, timeout: 300_000 },
     ],
   },
   {
