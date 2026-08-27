@@ -10,6 +10,7 @@ import type {
   LanguageModelV4FilePart,
   LanguageModelV4FunctionTool,
   LanguageModelV4Prompt,
+  LanguageModelV4ProviderTool,
   LanguageModelV4ReasoningPart,
   LanguageModelV4TextPart,
   LanguageModelV4ToolCallPart,
@@ -48,9 +49,28 @@ interface GeminiGenerationConfig {
   topP?: number;
   topK?: number;
   stopSequences?: string[];
-  tools?: Array<{ functionDeclarations?: FunctionDeclarationLike[] }>;
+  tools?: Array<{
+    functionDeclarations?: FunctionDeclarationLike[];
+    googleSearch?: Record<string, unknown>;
+    urlContext?: Record<string, unknown>;
+    codeExecution?: Record<string, unknown>;
+  }>;
   [key: string]: unknown;
 }
+
+/**
+ * Gemini server tools, keyed by their wire name.
+ *
+ * These arrive as bare markers such as `{ googleSearch: {} }` rather than as
+ * function declarations, and the AI SDK expects provider tools with a
+ * namespaced id. web_search and web_fetch depend on this mapping: without it
+ * the markers are dropped and the request carries no tools at all.
+ */
+const SERVER_TOOL_IDS: Readonly<Record<string, `${string}.${string}`>> = {
+  googleSearch: 'google.google_search',
+  urlContext: 'google.url_context',
+  codeExecution: 'google.code_execution',
+};
 
 interface FunctionDeclarationLike {
   name?: string;
@@ -219,12 +239,16 @@ function toUserPart(part: Part): UserPart {
 /** Maps Gemini function declarations onto AI SDK function tools. */
 export function toTools(
   config: GeminiGenerationConfig | undefined,
-): LanguageModelV4FunctionTool[] | undefined {
+):
+  | Array<LanguageModelV4FunctionTool | LanguageModelV4ProviderTool>
+  | undefined {
   const groups = config?.tools;
   if (!Array.isArray(groups)) {
     return undefined;
   }
-  const tools: LanguageModelV4FunctionTool[] = [];
+  const tools: Array<
+    LanguageModelV4FunctionTool | LanguageModelV4ProviderTool
+  > = [];
   for (const group of groups) {
     for (const decl of group.functionDeclarations ?? []) {
       tools.push({
@@ -235,6 +259,17 @@ export function toTools(
           decl.parameters ??
           {}) as never,
       });
+    }
+    for (const [wireName, id] of Object.entries(SERVER_TOOL_IDS)) {
+      const args = (group as Record<string, unknown>)[wireName];
+      if (args !== undefined) {
+        tools.push({
+          type: 'provider',
+          id,
+          name: wireName,
+          args: isRecord(args) ? args : {},
+        });
+      }
     }
   }
   return tools.length > 0 ? tools : undefined;
@@ -456,10 +491,12 @@ export function toGenerateContentResponse(result: {
       {
         content: { role: 'model', parts: toParts(result.content) },
         ...(finishReason !== undefined ? { finishReason } : {}),
-        ...(grounding !== undefined
+        ...(grounding !== undefined && grounding !== null
           ? { groundingMetadata: grounding as never }
           : {}),
-        ...(urlContext !== undefined
+        // Null, not undefined, when the provider reports the key without
+        // content; carrying that through would fabricate empty metadata.
+        ...(urlContext !== undefined && urlContext !== null
           ? { urlContextMetadata: urlContext as never }
           : {}),
       },
