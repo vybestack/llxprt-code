@@ -19,7 +19,11 @@ const BUILD_VSCODE_COMPANION_PATH = path.join(
 );
 
 const VSCE_VERSION = '3.9.2';
-const PACKAGING_DIR = 'packaging/vscode-ide-companion';
+const RUN_VSCE_PATH = 'scripts/run_vsce.ts';
+
+function runnerSource(): string {
+  return readFile(RUN_VSCE_PATH);
+}
 
 function readFile(relPath: string): string {
   return fs.readFileSync(path.join(ROOT, relPath), 'utf8');
@@ -183,68 +187,46 @@ describe('issue #2754 — VSCE is release-only packaging tooling', () => {
     expect(companionScript('generate:notices')).not.toContain('vsce');
   });
 
-  it('A4: packaging context pins the exact VSCE version in its manifest', () => {
-    const manifest = readJsonObject(`${PACKAGING_DIR}/package.json`);
-    const deps = manifest['dependencies'] as Record<string, unknown>;
-    // An exact pin, not a range: a caret/tilde would let the packaging
-    // context drift to an unreviewed VSCE at release time.
-    expect(deps['@vscode/vsce']).toBe(VSCE_VERSION);
+  it('A4: the runner pins an exact VSCE version, not a range', () => {
+    // A caret/tilde would let an unreviewed VSCE ship the extension.
+    expect(VSCE_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(runnerSource()).toContain(
+      `export const VSCE_VERSION = '${VSCE_VERSION}'`,
+    );
   });
 
-  it('A4: packaging lockfile resolves the same pinned VSCE version', () => {
-    const lock = readJsonObject(`${PACKAGING_DIR}/package-lock.json`);
-    const packages = lock['packages'] as Record<string, unknown>;
-    const entry = packages['node_modules/@vscode/vsce'] as Record<
-      string,
-      unknown
-    >;
-    expect(entry).toBeDefined();
-    expect(entry['version']).toBe(VSCE_VERSION);
+  it('A4: the runner installs the pinned version and never a floating one', () => {
+    const source = runnerSource();
+    expect(source).toContain('`@vscode/vsce@${VSCE_VERSION}`');
+    // No lifecycle scripts: VSCE's transitive install scripts build
+    // signing/credential binaries that packaging does not use.
+    expect(source).toContain('--ignore-scripts');
   });
 
-  it('A4/A7: the packaging context is NOT a root workspace', () => {
-    // This is the property that keeps VSCE out of an ordinary install: if the
-    // packaging directory were ever declared as a workspace, `npm install` /
-    // `bun install` at the root would resolve VSCE again.
-    const root = readJsonObject('package.json');
-    const workspaces = root['workspaces'] as string[];
-    expect(workspaces).not.toContain(PACKAGING_DIR);
-    for (const workspace of workspaces) {
-      expect(workspace.startsWith('packaging/')).toBe(false);
-    }
+  it('A4/A6: the runner caches VSCE under node_modules so it never ships', () => {
+    // node_modules is gitignored and is excluded by the repo-copy filters used
+    // by the release tooling, so the packaging tool cannot leak into an
+    // artifact or perturb a packed tree.
+    const source = runnerSource();
+    expect(source).toContain("join(root, 'node_modules', '.cache'");
   });
 
-  it('A4: companion package script runs vsce from the pinned packaging context', () => {
+  it('A4: companion package script packages through the pinned runner', () => {
     const command = companionScript('package');
-    // Resolving the binary inside the packaging context (rather than via
-    // `npm exec`) is what gives vsce its own dependency root, so it loads the
-    // mime@1 API it requires instead of the repo-hoisted mime@3.
-    expect(command).toContain('packaging/vscode-ide-companion/node_modules');
-    expect(command).toContain('vsce package --no-dependencies');
+    expect(command).toContain('scripts/run_vsce.ts');
+    expect(command).toContain('package --no-dependencies');
   });
 
-  it('A5: release.yml Publish VS Code extension step uses the pinned packaging context and preserves publishing flags', () => {
+  it('A5: release.yml Publish VS Code extension step uses the pinned runner and preserves publishing flags', () => {
     const releaseYml = readFile('.github/workflows/release.yml');
     const publishStep = releaseYml.slice(
       releaseYml.indexOf('Publish VS Code extension'),
       releaseYml.indexOf('\n      - name: Publish @vybestack'),
     );
-    expect(publishStep).toContain(
-      'packaging/vscode-ide-companion/node_modules',
-    );
+    expect(publishStep).toContain('scripts/run_vsce.ts publish');
     expect(publishStep).toContain('--packagePath');
     expect(publishStep).toContain('--azure-credential');
     expect(publishStep).toContain('--skip-duplicate');
-  });
-
-  it('A5: release.yml installs the packaging context before packaging', () => {
-    const releaseYml = readFile('.github/workflows/release.yml');
-    const installIndex = releaseYml.indexOf(
-      'npm ci --prefix packaging/vscode-ide-companion',
-    );
-    const packageIndex = releaseYml.indexOf('npm run build:vscode');
-    expect(installIndex).toBeGreaterThan(-1);
-    expect(packageIndex).toBeGreaterThan(installIndex);
   });
 
   it('A5: no unpinned npx @vscode/vsce invocation appears anywhere', () => {

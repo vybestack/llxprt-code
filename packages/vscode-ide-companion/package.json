@@ -127,7 +127,7 @@
     "watch": "npm-run-all2 -p watch:*",
     "watch:esbuild": "bun esbuild.ts --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "package": "node ../../packaging/vscode-ide-companion/node_modules/@vscode/vsce/vsce package --no-dependencies",
+    "package": "bun ../../scripts/run_vsce.ts package --no-dependencies",
     "test": "bun ../../scripts/run_bun_tests.ts --workspace vscode-ide-companion --junit junit.xml",
     "test:ci": "bun ../../scripts/run_bun_tests.ts --workspace vscode-ide-companion --junit junit.xml",
     "validate:notices": "node ./scripts/validate-notices.js",
