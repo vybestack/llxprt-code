@@ -30,6 +30,15 @@ import {
 const WORKSPACE_DIR = 'packages/fixture';
 const FIXTURE_NAME = '@fixture/pkg';
 
+/**
+ * `collectProductionSourceFiles` returns absolute paths from `path.resolve`,
+ * which are backslash-separated on Windows. Normalize before asserting on path
+ * fragments so these assertions describe the guard rather than the host.
+ */
+function toPosixPath(filePath: string): string {
+  return filePath.split('\\').join('/');
+}
+
 interface FixtureSpec {
   /** Files relative to the workspace directory. */
   readonly files: Record<string, string>;
@@ -359,7 +368,9 @@ describe('production source is defined by entrypoint reachability', () => {
         fixture.manifest,
         fixture.repoRoot,
       );
-      expect(files.some((file) => file.endsWith('orphan.ts'))).toBe(false);
+      expect(
+        files.some((file) => toPosixPath(file).endsWith('src/orphan.ts')),
+      ).toBe(false);
     } finally {
       fixture.cleanup();
     }
@@ -415,7 +426,9 @@ describe('production source is defined by entrypoint reachability', () => {
         fixture.manifest,
         fixture.repoRoot,
       );
-      expect(files.some((file) => file.includes('/dist/'))).toBe(false);
+      expect(files.some((file) => toPosixPath(file).includes('/dist/'))).toBe(
+        false,
+      );
       expect(
         checkWorkspaceRuntimeDeclarations(
           WORKSPACE_DIR,
@@ -469,7 +482,9 @@ describe('production source is defined by entrypoint reachability', () => {
         fixture.manifest,
         fixture.repoRoot,
       );
-      expect(files.some((file) => file.endsWith('src/impl.ts'))).toBe(true);
+      expect(
+        files.some((file) => toPosixPath(file).endsWith('src/impl.ts')),
+      ).toBe(true);
     } finally {
       fixture.cleanup();
     }

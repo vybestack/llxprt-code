@@ -163,7 +163,9 @@ function materializeConsumer(
   const nodeModules = join(consumerRoot, 'node_modules');
   const packageTarget = join(nodeModules, ...MCP_PACKAGE_NAME.split('/'));
   mkdirSync(dirname(packageTarget), { recursive: true });
-  cpSync(packageDir, packageTarget, { recursive: true });
+  // dereference: a preserved symlink would resolve outside the sandbox and
+  // silently defeat the isolation this copy exists to create.
+  cpSync(packageDir, packageTarget, { recursive: true, dereference: true });
 
   const declared = [
     ...Object.keys(manifest.dependencies ?? {}),
@@ -234,8 +236,21 @@ describeStandalone('published mcp package installs standalone (#3305)', () => {
   }, TEST_TIMEOUT_MS);
 
   afterAll(() => {
+    // Per-directory try/catch: one undeletable sandbox (a Windows file lock, a
+    // CI cleanup race) must not strand the others, since the array has already
+    // been drained.
+    const failures: string[] = [];
     for (const directory of temporaryDirectories.splice(0)) {
-      rmSync(directory, { recursive: true, force: true });
+      try {
+        rmSync(directory, { recursive: true, force: true });
+      } catch (error) {
+        failures.push(`${directory}: ${String(error)}`);
+      }
+    }
+    if (failures.length > 0) {
+      console.warn(
+        `Failed to remove temp directories:\n${failures.join('\n')}`,
+      );
     }
   });
 
