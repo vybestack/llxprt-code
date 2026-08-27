@@ -30,6 +30,7 @@ import { heapStats } from 'bun:jsc';
 import { EmojiFilter } from '../packages/core/src/filters/EmojiFilter.js';
 import { PendingResponseBuffer } from '../packages/cli/src/ui/hooks/agentStream/pendingResponseBuffer.js';
 import { StreamOutputAccumulator } from '../packages/agents/src/core/streamOutputAccumulator.js';
+import { createInkWorkload } from './issue-2852-memory-ink.ts';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ThinkingBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
@@ -39,11 +40,18 @@ if (
   process.env['LLXPRT_MEMORY_PORT'] === undefined
 ) {
   throw new Error(
-    'Usage: LLXPRT_MEMORY_PORT=PORT bun issue-2852-memory-target.ts OUTPUT [text|media|reasoning] [turns]',
+    'Usage: LLXPRT_MEMORY_PORT=PORT bun issue-2852-memory-target.ts OUTPUT [text|media|reasoning|ink] [turns]',
   );
 }
-if (mode !== 'text' && mode !== 'media' && mode !== 'reasoning') {
-  throw new Error(`Mode must be 'text', 'media', or 'reasoning', got: ${mode}`);
+if (
+  mode !== 'text' &&
+  mode !== 'media' &&
+  mode !== 'reasoning' &&
+  mode !== 'ink'
+) {
+  throw new Error(
+    `Mode must be 'text', 'media', 'reasoning', or 'ink', got: ${mode}`,
+  );
 }
 const port = process.env['LLXPRT_MEMORY_PORT'];
 if (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65_535) {
@@ -258,6 +266,16 @@ function runReasoningTurn(turn: number): number {
 
 const deltas = toDeltas(buildResponse());
 
+/**
+ * Frames per turn for `ink`. Large enough that the allocator high-water settles
+ * inside the first turn, so later turns measure accumulation rather than
+ * warm-up.
+ */
+const INK_FRAMES_PER_TURN = 3_000;
+
+// Mounted once and reused across turns; see createInkWorkload.
+const inkWorkload = mode === 'ink' ? createInkWorkload() : undefined;
+
 checkpoint('baseline');
 await awaitSample('baseline');
 
@@ -266,6 +284,8 @@ for (let turn = 1; turn <= turns; turn += 1) {
     runMediaTurn();
   } else if (mode === 'reasoning') {
     runReasoningTurn(turn);
+  } else if (mode === 'ink') {
+    inkWorkload?.renderFrames(INK_FRAMES_PER_TURN);
   } else {
     runTurn(deltas);
   }
@@ -275,3 +295,5 @@ for (let turn = 1; turn <= turns; turn += 1) {
   checkpoint(`turn-${turn}-post-gc`);
   await awaitSample(`turn-${turn}-post-gc`);
 }
+
+inkWorkload?.dispose();

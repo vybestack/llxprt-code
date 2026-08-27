@@ -27,8 +27,13 @@ const artifactDir = resolve(
   process.argv[2] ?? `/tmp/llxprt-issue-2852-${Date.now()}`,
 );
 const mode = process.argv[3] ?? 'text';
-if (mode !== 'text' && mode !== 'media' && mode !== 'reasoning') {
-  throw new Error('Mode must be text, media, or reasoning');
+if (
+  mode !== 'text' &&
+  mode !== 'media' &&
+  mode !== 'reasoning' &&
+  mode !== 'ink'
+) {
+  throw new Error('Mode must be text, media, reasoning, or ink');
 }
 const turns = Number.parseInt(process.argv[4] ?? '4', 10);
 if (!Number.isInteger(turns) || turns < 3) {
@@ -159,10 +164,14 @@ const osByCheckpointName = new Map(checkpoints.map((cp) => [cp.name, cp]));
 writeFileSync(resolve(artifactDir, 'target.stdout'), Buffer.concat(stdout));
 writeFileSync(resolve(artifactDir, 'target.stderr'), Buffer.concat(stderr));
 
-// `reasoning` gates every retention metric because bounding reasoning blocks
-// must show up in external and dirty WebKit Malloc, not just the JSC heap.
+// `reasoning` and `ink` gate every retention metric rather than the JSC heap
+// alone. For `reasoning`, bounding reasoning blocks must show up in external
+// and dirty WebKit Malloc too. For `ink`, a renderer that accumulates shows up
+// on all three at once: measuring the candidate upstream builds for #3365 found
+// growth in JSC heap, external and dirty WebKit Malloc simultaneously, while
+// the pinned fork held flat on every one.
 const plateau =
-  mode === 'reasoning'
+  mode === 'reasoning' || mode === 'ink'
     ? evaluateMultiMetricPlateau(
         readPostGcMetrics(targetOutput, osByCheckpointName),
         PLATEAU_TOLERANCE,
