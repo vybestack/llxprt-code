@@ -146,10 +146,12 @@ describe('issue-3365 ink memory mode', () => {
    * Ink throttles frame production to `maxFps ?? 30` while reconciliation stays
    * synchronous, so a tight rerender loop at the default reconciles thousands
    * of times and produces almost nothing. Measured on the pinned fork: 3,000
-   * rerenders yielded **39** rendered frames. The workload disables the
-   * throttle, and this asserts it, because a silent regression here would leave
-   * the mode measuring reconciliation instead of the render path it exists to
-   * guard.
+   * rerenders yielded **39** rendered frames.
+   *
+   * This is the behavioural check that the throttle is off. Asserting the
+   * option literal in the source would be brittle and would not prove anything
+   * this does not: if throttling returns by any means, the count collapses by
+   * roughly two orders of magnitude and this fails.
    *
    * @plan PLAN-20260826-INKGUARD.P01
    * @requirement REQ-3365-04
@@ -167,16 +169,6 @@ describe('issue-3365 ink memory mode', () => {
     } finally {
       workload.dispose();
     }
-  });
-
-  /**
-   * The throttle must be disabled explicitly rather than relied on by accident.
-   *
-   * @plan PLAN-20260826-INKGUARD.P01
-   * @requirement REQ-3365-04
-   */
-  it('disables the frame throttle explicitly', () => {
-    expect(readScript('issue-2852-memory-ink.ts')).toContain('maxFps: 0');
   });
 
   /**
