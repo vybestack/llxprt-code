@@ -77,9 +77,12 @@ export abstract class ExtensionLoader {
       completed: this.startCompletedCount,
     });
     try {
-      // Before the await: loadExtension/unloadExtension have already mutated
-      // the collection discoverSkills reads, so if the MCP transition rejects
-      // the skill surface is stale and still needs reconciling.
+      // Mark before the await, not after. By the time we get here the caller
+      // has already changed what getExtensions() returns: SimpleExtensionLoader
+      // pushes in loadExtension and splices in unloadExtension, both before
+      // this runs. So if the MCP transition below rejects, the skill surface is
+      // already stale and still needs reconciling. Moving this after the await
+      // reintroduces issue #3383 for the failure path.
       this.markSkillsDirty(extension);
       await this.config.getMcpClientManager()!.startExtension(extension);
       await this.maybeRefreshAgentTools(extension);
@@ -249,8 +252,9 @@ export abstract class ExtensionLoader {
     });
 
     try {
-      // See startExtension: mark before the await so a rejected transition
-      // does not leave the skill surface stale.
+      // See startExtension: the caller has already removed the extension from
+      // the collection getExtensions() reads, so mark before the await or a
+      // rejected transition leaves the skill surface stale.
       this.markSkillsDirty(extension);
       await this.config.getMcpClientManager()!.stopExtension(extension);
       await this.maybeRefreshAgentTools(extension);
