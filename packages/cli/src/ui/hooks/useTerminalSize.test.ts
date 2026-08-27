@@ -109,7 +109,7 @@ describe('useTerminalSize', () => {
   });
 
   it('debounces resize events and publishes the latest measured size', () => {
-    inkStdout = process.stdout;
+    inkStdout = process.stderr;
     setDimension(inkStdout, 'columns', 80);
     setDimension(inkStdout, 'rows', 24);
 
@@ -139,7 +139,7 @@ describe('useTerminalSize', () => {
   });
 
   it('removes its resize listener and cancels pending measurement on unmount', () => {
-    inkStdout = process.stdout;
+    inkStdout = process.stderr;
     const priorResizeListeners = new Set(inkStdout.listeners('resize'));
     setDimension(inkStdout, 'columns', 80);
     setDimension(inkStdout, 'rows', 24);

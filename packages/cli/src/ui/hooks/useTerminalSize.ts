@@ -70,11 +70,11 @@ export function useTerminalSize(): TerminalSize {
       }, 150); // 150ms debounce delay
     }
 
-    // Listen to resize events on process.stdout
-    process.stdout.on('resize', updateSize);
+    // Listen to resize events on the same stream Ink uses for layout.
+    stdout.on('resize', updateSize);
 
     return () => {
-      process.stdout.off('resize', updateSize);
+      stdout.off('resize', updateSize);
       if (resizeTimeout !== undefined) {
         clearTimeout(resizeTimeout);
       }
