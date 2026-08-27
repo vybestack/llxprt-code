@@ -33,7 +33,7 @@
         "x-llxprt-probe": "p01",
         "connection": "keep-alive",
         "accept": "*/*",
-        "host": "127.0.0.1:53801",
+        "host": "127.0.0.1:63995",
         "accept-encoding": "gzip, deflate, br, zstd",
         "content-length": "123"
       },
@@ -77,7 +77,7 @@
         "x-llxprt-probe": "p01",
         "connection": "keep-alive",
         "accept": "*/*",
-        "host": "127.0.0.1:53818",
+        "host": "127.0.0.1:64009",
         "accept-encoding": "gzip, deflate, br, zstd",
         "content-length": "123"
       },
@@ -97,7 +97,7 @@
               "thoughtSignature": {
                 "present": true,
                 "length": 156,
-                "prefix": "EnEKbwERTTIPUj5d",
+                "prefix": "EnEKbwERTTIP8nps",
                 "isSentinel": false
               }
             }

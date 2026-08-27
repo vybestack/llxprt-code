@@ -1,15 +1,12 @@
 {
-  "generatedAt": "2026-08-27T03:59:09.826Z",
+  "generatedAt": "2026-08-27T04:19:11.723Z",
   "models": {
     "general": "gemini-3.1-flash-lite",
-    "gemini3": "gemini-3-flash-preview"
+    "gemini3": "gemini-3.5-flash"
   },
   "providerProtocolMatches": true,
   "ranThisInvocation": [
-    "P01",
-    "P02",
-    "P07",
-    "P09"
+    "P01"
   ],
   "counts": {
     "parity": 7,

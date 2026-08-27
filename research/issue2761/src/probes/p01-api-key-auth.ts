@@ -278,6 +278,19 @@ export const p01ApiKeyAuth: Probe = {
       (result) => badKeyOutcome(result) === 'inconclusive',
     );
 
+    // Only name a status the probe actually saw. An inconclusive result with no
+    // status means the call may never have reached the provider at all, which is
+    // a different thing from being throttled by it.
+    const inconclusiveStatuses = [
+      genaiResult,
+      aisdkResult,
+      genaiBadKey,
+      aisdkBadKey,
+    ]
+      .map((result) => findTransientStatusInObservation(result.observation))
+      .filter((status): status is number => status !== undefined)
+      .map((status) => String(status));
+
     const verdict: Verdict =
       normalTransient || badKeyInconclusive
         ? 'inconclusive'
@@ -299,9 +312,12 @@ export const p01ApiKeyAuth: Probe = {
       verdict,
       finding:
         (verdict === 'inconclusive'
-          ? 'At least one request or bad-key sub-case hit a transient provider ' +
-            'status (429 or 5xx), which proves nothing about key handling; ' +
-            'retry the probe. '
+          ? `At least one request or bad-key sub-case was inconclusive` +
+            (inconclusiveStatuses.length > 0
+              ? ` (provider status ${inconclusiveStatuses.join(', ')})`
+              : ' with no provider status, so the call may never have reached ' +
+                'the provider') +
+            ', which proves nothing about key handling; retry the probe. '
           : '') +
         `Auth carrier on the wire: genai used ${String(genai.observation.authCarrier)}, ` +
         `the AI SDK used ${String(aisdk.observation.authCarrier)}` +
