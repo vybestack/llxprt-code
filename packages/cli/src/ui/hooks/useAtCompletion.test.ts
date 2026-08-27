@@ -367,27 +367,28 @@ describe('useAtCompletion', () => {
       const failedCwd = path.join(testRootDir, 'failed');
       const recoveredCwd = path.join(testRootDir, 'recovered');
 
-      const realFileSearch = FileSearchFactory.create({
-        projectRoot: recoveredCwd,
-        ignoreDirs: [],
-        useGitignore: false,
-        useExtensionIgnore: false,
-        cache: false,
-        enableRecursiveFileSearch: true,
-        enableFuzzySearch: true,
-      });
-      const mockFileSearch: FileSearch = {
-        initialize: vi
-          .fn()
-          .mockRejectedValueOnce(new Error('Initialization failed'))
-          .mockImplementation(async () => realFileSearch.initialize()),
-        search: vi
-          .fn()
-          .mockImplementation(async (...args) =>
-            realFileSearch.search(...args),
-          ),
-      };
-      vi.spyOn(FileSearchFactory, 'create').mockReturnValue(mockFileSearch);
+      // Each fake delegates to a real searcher rooted at the projectRoot the
+      // hook actually asked for, so recovery is proven by the suggestions
+      // themselves: re-initializing against the wrong cwd yields no matches.
+      const createRealFileSearch =
+        FileSearchFactory.create.bind(FileSearchFactory);
+      let initializeCalls = 0;
+      vi.spyOn(FileSearchFactory, 'create').mockImplementation(
+        (options: Parameters<typeof FileSearchFactory.create>[0]) => {
+          const realFileSearch = createRealFileSearch(options);
+          const fake: FileSearch = {
+            initialize: vi.fn(async () => {
+              initializeCalls += 1;
+              if (initializeCalls === 1) {
+                throw new Error('Initialization failed');
+              }
+              return realFileSearch.initialize();
+            }),
+            search: vi.fn(async (...args) => realFileSearch.search(...args)),
+          };
+          return fake;
+        },
+      );
 
       const { result, rerender } = renderHook(
         ({ cwd, pattern }) =>

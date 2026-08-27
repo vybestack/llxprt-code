@@ -318,8 +318,13 @@ describe('<SuggestionsDisplay /> rendering contract', () => {
         />,
       );
       const rows = frameOf(lastFrame).split('\n');
-      const inactiveRow = rows.find((row) => row.includes('idle')) ?? '';
-      const activeRow = rows.find((row) => row.includes('selected')) ?? '';
+      const inactiveRow = rows.find((row) => row.includes('idle'));
+      const activeRow = rows.find((row) => row.includes('selected'));
+
+      // Both rows must actually render, otherwise the negative assertion
+      // below would hold vacuously for a missing row.
+      expect(inactiveRow).toBeDefined();
+      expect(activeRow).toBeDefined();
       const activeColorSample = chalk.hex('#00ff00')('sample');
       const sampleIndex = activeColorSample.indexOf('sample');
 
