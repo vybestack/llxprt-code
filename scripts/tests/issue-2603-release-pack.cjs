@@ -225,6 +225,13 @@ function packReleaseLikeCli(repoRoot) {
 function shouldCopyRepoEntry(src, repoRoot) {
   const rel = src.slice(repoRoot.length).replace(/\\/g, '/');
   if (rel === '') return true;
+  // The release-only VSCE packaging context (issue #2754) is a nested,
+  // non-workspace npm project. Its node_modules is excluded by the rules
+  // below, so copying its manifest/lockfile would leave npm an uninstalled
+  // nested project inside the temp repo — which breaks dependency resolution
+  // for the CLI `prepack` hook. It has nothing to do with packing the CLI, so
+  // it is skipped entirely.
+  if (rel === '/packaging' || rel.startsWith('/packaging/')) return false;
   const skipSubstrings = [
     '/node_modules/',
     '/.git/',
