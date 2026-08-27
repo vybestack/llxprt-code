@@ -400,10 +400,11 @@ direct-value network stubs, or assertions about mock calls.
 - `Reject` 9: the explicit `return` in the cancellation catch is behaviorally
   neutral and documents that a cleanup failure ends the best-effort attempt.
   Replacing it with an empty catch is a style-only change.
-- `Reject` 10: `collectRequestBody` intentionally resolves buffered content on
-  `end`, `error`, or `aborted` so fire-and-forget drain callers cannot produce an
-  unhandled rejection. Contract tests still fail on truncated JSON or an exact
-  body mismatch. Rejecting would break the helper's other intentional callers.
+- `Reject` 10 was superseded by the final PR review. The earlier round treated
+  partial buffered content as intentional on request failure. The later review
+  traced every caller and found that resolving partial input could make a failed
+  transport look complete. The helper now rejects request errors and aborts, and
+  server handlers explicitly settle expected rejections.
 - `Reject` 11: teardown closes servers before awaiting tracked writers so a
   forgotten or blocked writer cannot hang cleanup. Tests that assert writer
   behavior call `settleWriters` before teardown. Reversing the order would make
@@ -451,22 +452,52 @@ direct-value network stubs, or assertions about mock calls.
   an unused terminal-status error name without changing the all-4xx-terminal
   contract.
 
+### Final PR Open Code Review
+
+- The second and final PR review completed all 16 selected files with seven
+  findings and no tool failure or stderr output.
+- `In-scope-Fix`: request-body collection resolved buffered partial input when
+  the incoming request errored or aborted. It now rejects with the originating
+  error or a specific abort error, removes every listener on settlement, and
+  treats an incomplete close as an abort. Actual loopback `IncomingMessage`
+  instances prove both failure events.
+- `In-scope-Fix`: the fetch router delegated an unexpected origin to saved native
+  fetch, allowing a test mistake to perform real network I/O. It now rejects an
+  unrouted origin before transport. Two loopback servers prove the unexpected
+  origin receives no request.
+- `In-scope-Fix`: routing a `Request` forwarded only its rewritten URL and the
+  call-site `init`, discarding method, headers, body, and signal carried by the
+  request. The router now reconstructs the request against the loopback URL and
+  preserves ordinary Fetch `init` overrides. Loopback requests prove the POST
+  body, custom header, path, query, and abort signal.
+- `Reject`: changing `htmlToText` defaults merely to resemble Cheerio conflicts
+  with issue #2760's accepted converter requirement and the tested output.
+- `Reject`: fabricated malformed or understated `Content-Length` network
+  responses conflict with the native-transport test constraint. Native fetch
+  rejects wire-invalid headers before bounded acquisition can inspect them.
+- `Defer`: consolidating connection tracking and paced-write fixtures, or merging
+  response-disposal helpers, would be a broader test-maintenance refactor without
+  a candidate correctness change.
+
 ### Final candidate verification
 
-- After PR remediation, `npm run build`, `npm run typecheck`, `npm run format`,
-  `npm run format:check`, `npm run check:lockfile`, and `git diff --check HEAD`
-  passed.
+- After final PR review remediation, `npm run build`, `npm run typecheck`,
+  `npm run format`, `npm run format:check`, `npm run check:lockfile`, and
+  `git diff --check HEAD` passed. The publish-integrity suite passes 38 tests with
+  106 assertions.
 - The post-rebase `npm run lint` exited 134 because its lint runner forced ESLint
-  to a 12,288 MiB heap and V8 exhausted that heap. A direct run of the same
+  to a 12,288 MiB heap and V8 exhausted that heap. A final direct run of the same
   full-tree `eslint .` command with a 24,576 MiB heap passed. The package-script
   result is an environment/resource blocker, not a reported lint violation.
 - Source and manifest scans found no first-party `node-fetch` or Cheerio import,
   mock, or direct declaration in the root, core, tools, or CLI packages.
-- The final remediated root archive contains 4,726 files, is 12,581,097 bytes,
-  has an unpacked size of 52,914,985 bytes, and has SHA-1
-  `d6dbc1f969fc7034c30618218796fcbfb4053172`. Current and packed hashes match
+- The final archive was generated from helper code commit
+  `817429c0561f21b2be2ce02d57807a51f4503140`. It contains 4,727 files, is
+  12,582,326 bytes, has an unpacked size of 52,919,977 bytes, and has SHA-1
+  `5297b73c9aa7020369a173bc1f62430eef30ebc3`. Current and packed hashes match
   for the root, CLI, core, and tools manifests and every changed tools production,
-  test, and helper source file.
+  test, and helper source file, including the added helper behavior suite. The
+  later evidence-only plan commit is excluded from the archive.
 - The archive installed 505 packages in an empty project with lifecycle scripts
   disabled. Its first-party manifests and source contain no forbidden direct
   declaration or import.
@@ -475,8 +506,9 @@ direct-value network stubs, or assertions about mock calls.
   `node-domexception` paths to `@google/genai` or `google-auth-library` through
   `gaxios`. Cheerio, `encoding-sniffer`, `whatwg-encoding`, and
   `whatwg-mimetype` are absent.
-- The final complete `npm run test` passed after remediation. The seven affected
-  tools suites also pass independently: 80 tests with 266 assertions.
+- The final complete `npm run test` passed after remediation. The eight affected
+  tools suites also pass independently: 85 tests with 272 assertions. The final
+  2,725-file test audit reports no finding in the added helper behavior suite.
 - The StepFun smoke failed with HTTP 400, `you have no active step plan
   subscription`. The ollamakimi smoke failed with HTTP 404 because model
   `kimi-k2.7` was not found. Neither external smoke passed.
