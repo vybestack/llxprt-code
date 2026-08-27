@@ -83,13 +83,21 @@ function readHeader(headers: unknown): string | undefined {
 export function getRetryAfterDelayMs(error: unknown): number | undefined {
   const retryAfter = readRetryAfterHeader(error);
   if (retryAfter !== undefined && retryAfter !== '') {
-    const seconds = parseInt(retryAfter, 10);
-    if (!isNaN(seconds)) {
-      return Math.max(0, seconds * 1000);
+    const trimmed = retryAfter.trim();
+    // RFC 9110 delta-seconds is 1*DIGIT: the whole value must be digits.
+    // Partial prefixes ('5seconds'), fractions ('1.5'), and signed values
+    // ('-1') are not delta-seconds. Lenient date parsers would accept such
+    // junk as ancient dates, so only attempt the HTTP-date form when the
+    // value contains letters (every HTTP-date has alphabetic month/day
+    // tokens).
+    if (/^\d+$/.test(trimmed)) {
+      return Math.min(Number(trimmed) * 1000, MAX_RETRY_AFTER_MS);
     }
-    const date = new Date(retryAfter);
-    if (!isNaN(date.getTime())) {
-      return Math.max(0, date.getTime() - Date.now());
+    if (/[a-zA-Z]/.test(trimmed)) {
+      const date = new Date(trimmed);
+      if (!isNaN(date.getTime())) {
+        return Math.max(0, date.getTime() - Date.now());
+      }
     }
   }
   return undefined;

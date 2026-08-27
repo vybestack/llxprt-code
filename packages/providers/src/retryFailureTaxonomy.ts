@@ -79,7 +79,14 @@ function readRecordProperty(
   property: string,
 ): Record<string, unknown> | undefined {
   if (!isRecord(value)) return undefined;
-  const propertyValue = value[property];
+  // Property access on arbitrary provider errors must never throw
+  // (throwing getters/proxies degrade to "absent", matching hasErrorName).
+  let propertyValue: unknown;
+  try {
+    propertyValue = value[property];
+  } catch {
+    return undefined;
+  }
   return isRecord(propertyValue) ? propertyValue : undefined;
 }
 
@@ -88,7 +95,12 @@ function readStringProperty(
   property: string,
 ): string | undefined {
   if (!isRecord(value)) return undefined;
-  const propertyValue = value[property];
+  let propertyValue: unknown;
+  try {
+    propertyValue = value[property];
+  } catch {
+    return undefined;
+  }
   return typeof propertyValue === 'string' ? propertyValue : undefined;
 }
 
@@ -263,7 +275,23 @@ function buildRetryFailure(
  * @returns A normalized failure retaining the original value as its cause.
  */
 export function decodeRetryFailure(error: unknown): RetryFailure {
-  const classification = classifyRetryError(error);
+  // Decoding must be total: a hostile getter on an arbitrary error object
+  // degrades to an unknown classification instead of propagating outward
+  // and masking the real failure.
+  let classification: RetryErrorClassification;
+  try {
+    classification = classifyRetryError(error);
+  } catch {
+    classification = {
+      status: undefined,
+      category: undefined,
+      is429: false,
+      is402: false,
+      isAuthError: false,
+      isNetworkError: false,
+      is5xxServerError: false,
+    };
+  }
   const providerCode = getProviderCode(error);
   const identity = resolveFailureIdentity(error, classification, providerCode);
   return buildRetryFailure(

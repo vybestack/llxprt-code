@@ -8,6 +8,7 @@ import { describe, expect, it } from 'bun:test';
 import { shouldRetryError } from '../retryDelayPolicy.js';
 import { RequestTimeoutError } from '../loadBalancing/streamTimeout.js';
 import {
+  isStreamTruncatedError,
   MalformedStreamEventError,
   StreamTruncatedError,
 } from '../streamProtocolErrors.js';
@@ -225,6 +226,32 @@ describe('decodeRetryFailure', () => {
 
     expect(isTimeoutFailure(timeout)).toBe(true);
     expect(isTimeoutFailure(server)).toBe(false);
+  });
+
+  it('requires name and code markers to classify protocol stream errors', () => {
+    // Only a shared name is not enough: an unrelated error that happens to
+    // be named StreamTruncatedError must not decode as a truncated stream.
+    const nameOnly = { name: 'StreamTruncatedError' };
+    expect(isStreamTruncatedError(nameOnly)).toBe(false);
+    expect(decodeRetryFailure(nameOnly).kind).toBe('unknown');
+
+    // Cross-realm duck-typed instances carry both markers.
+    const duckTyped = {
+      name: 'StreamTruncatedError',
+      code: 'LLXPRT_STREAM_TRUNCATED',
+    };
+    expect(isStreamTruncatedError(duckTyped)).toBe(true);
+    expect(decodeRetryFailure(duckTyped).kind).toBe('truncated');
+  });
+
+  it('decodes through throwing getters without propagating them', () => {
+    const hostile = {
+      name: 'APIError',
+      get error(): unknown {
+        throw new Error('getter exploded');
+      },
+    };
+    expect(() => decodeRetryFailure(hostile)).not.toThrow();
   });
 });
 

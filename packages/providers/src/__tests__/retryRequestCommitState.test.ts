@@ -43,6 +43,7 @@ describe('retry request commit state', () => {
       exposure: 'none',
       terminalSeen: false,
     });
+    context.releaseBudget();
   });
 
   it('allows an idempotent metadata commitment', () => {
@@ -56,6 +57,7 @@ describe('retry request commit state', () => {
       exposure: 'metadata',
       terminalSeen: false,
     });
+    context.releaseBudget();
   });
 
   it('upgrades exposure from metadata to content', () => {
@@ -65,6 +67,7 @@ describe('retry request commit state', () => {
     markRequestCommitted(context, 'content');
 
     expect(getRequestCommitState(context).exposure).toBe('content');
+    context.releaseBudget();
   });
 
   it('does not downgrade exposure from content to metadata', () => {
@@ -77,6 +80,7 @@ describe('retry request commit state', () => {
       committed: true,
       exposure: 'content',
     });
+    context.releaseBudget();
   });
 
   it('keeps commitment irreversible when re-marked with no exposure', () => {
@@ -89,6 +93,7 @@ describe('retry request commit state', () => {
       committed: true,
       exposure: 'tool_call',
     });
+    context.releaseBudget();
   });
 
   it('records a terminal protocol event', () => {
@@ -97,6 +102,7 @@ describe('retry request commit state', () => {
     markTerminalSeen(context);
 
     expect(getRequestCommitState(context).terminalSeen).toBe(true);
+    context.releaseBudget();
   });
 
   it('keeps independently resolved request states isolated', () => {
@@ -209,6 +215,7 @@ describe('retry request commit state', () => {
     expect(context.visitedTargets).toStrictEqual(['provider-a', 'provider-b']);
     expect(context.visitedCredentialCount).toBe(2);
     expect(context.deadlineRemainingMs).toBeUndefined();
+    context.releaseBudget();
   });
 
   it('tracks an optional request deadline from the retry-deadline-ms ephemeral', () => {
@@ -222,6 +229,7 @@ describe('retry request commit state', () => {
     expect(remaining).toBeDefined();
     expect(remaining as number).toBeGreaterThan(59_000);
     expect(remaining as number).toBeLessThanOrEqual(60_000);
+    context.releaseBudget();
   });
 
   it('shares recovery tracking with a nested context while the request budget is live', () => {

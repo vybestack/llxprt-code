@@ -321,7 +321,11 @@ describe('LoadBalancingProvider commit boundary (issue #2532)', () => {
       alwaysThrow(networkError()),
     ]);
     const backendB = makeScriptedProvider('provider-b', [successStream('ok')]);
-    const lb = registerAndCreate(backendA, backendB, makeConfig());
+    const lb = registerAndCreate(
+      backendA,
+      backendB,
+      makeConfig({ failover_retry_count: 2 }),
+    );
 
     const first = await pullFirst(lb, makeOptions());
 
@@ -329,8 +333,8 @@ describe('LoadBalancingProvider commit boundary (issue #2532)', () => {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'ok' }],
     });
-    // Default failover_retry_count is 2: backend A exhausts its own retries
-    // before the rotation advances to backend B.
+    // failover_retry_count is 2: backend A exhausts its own retries before
+    // the rotation advances to backend B.
     expect(backendA.calls.value).toBe(2);
     expect(backendB.calls.value).toBe(1);
   });

@@ -444,6 +444,13 @@ export function markTerminalSeen(context: RetryRequestContext): void {
  * once per request regardless of how many layers observe the committed
  * auth failure.
  *
+ * Invariant: unlike the `find*` accessors (which probe for optional
+ * decoration), this MUST be called only from paths that run after
+ * `resolveRetryRequestContext` attached the metadata record — the
+ * orchestrator's error handling always satisfies this. A missing record is
+ * a programming error and throws (fail fast) rather than silently
+ * granting a repair slot.
+ *
  * @returns True when this call won the slot; false when repair already ran.
  */
 export function claimRequestAuthRepair(options: GenerateChatOptions): boolean {

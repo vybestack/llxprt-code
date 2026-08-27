@@ -16,6 +16,8 @@
 
 /** A stream ended without delivering its terminal protocol event. */
 export class StreamTruncatedError extends Error {
+  readonly code = 'LLXPRT_STREAM_TRUNCATED';
+
   constructor(
     message = 'Provider stream ended without a terminal event',
     options?: ErrorOptions,
@@ -31,6 +33,8 @@ export class StreamTruncatedError extends Error {
  * tool block).
  */
 export class MalformedStreamEventError extends Error {
+  readonly code = 'LLXPRT_MALFORMED_STREAM_EVENT';
+
   constructor(
     message = 'Provider stream delivered a structurally invalid event',
     options?: ErrorOptions,
@@ -40,20 +44,35 @@ export class MalformedStreamEventError extends Error {
   }
 }
 
+/**
+ * Guards match `instanceof` first, then a name+code duck check for
+ * cross-realm/module-duplicate instances. The code marker prevents
+ * unrelated errors that merely share a name from being misclassified.
+ */
+function hasDuckErrorMarker(
+  error: unknown,
+  name: string,
+  code: string,
+): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const candidate = error as { name?: unknown; code?: unknown };
+  return candidate.name === name && candidate.code === code;
+}
+
 export function isStreamTruncatedError(error: unknown): boolean {
   return (
     error instanceof StreamTruncatedError ||
-    (typeof error === 'object' &&
-      error !== null &&
-      (error as { name?: unknown }).name === 'StreamTruncatedError')
+    hasDuckErrorMarker(error, 'StreamTruncatedError', 'LLXPRT_STREAM_TRUNCATED')
   );
 }
 
 export function isMalformedStreamEventError(error: unknown): boolean {
   return (
     error instanceof MalformedStreamEventError ||
-    (typeof error === 'object' &&
-      error !== null &&
-      (error as { name?: unknown }).name === 'MalformedStreamEventError')
+    hasDuckErrorMarker(
+      error,
+      'MalformedStreamEventError',
+      'LLXPRT_MALFORMED_STREAM_EVENT',
+    )
   );
 }

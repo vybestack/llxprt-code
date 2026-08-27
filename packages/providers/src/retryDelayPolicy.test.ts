@@ -154,4 +154,42 @@ describe('getDelayDuration / hasRetryAfterHeader @issue:3140', () => {
     expect(absentDelay).toBeGreaterThanOrEqual(2800);
     expect(absentDelay).toBeLessThanOrEqual(5200);
   });
+
+  it('rejects partially parsed delta-seconds values', () => {
+    // RFC 9110 delta-seconds must be entirely digits: prefixes, fractions,
+    // and signed values must fall back to the default backoff, never
+    // produce a delay from the numeric prefix.
+    for (const malformed of ['5seconds', '1.5', '-1', '+5', ' ']) {
+      const error = {
+        status: 429,
+        headers: { 'retry-after': malformed },
+      };
+      expect(getRetryAfterDelayMs(error)).toBeUndefined();
+      expect(hasRetryAfterHeader(error)).toBe(false);
+      const delay = getDelayDuration(error, 4000);
+      expect(delay).toBeGreaterThanOrEqual(2800);
+      expect(delay).toBeLessThanOrEqual(5200);
+    }
+  });
+
+  it('accepts a fully numeric delta-seconds value with surrounding whitespace', () => {
+    const error = {
+      status: 429,
+      headers: { 'retry-after': ' 7 ' },
+    };
+    expect(getRetryAfterDelayMs(error)).toBe(7000);
+    expect(getDelayDuration(error, 5000)).toBe(7000);
+  });
+
+  it('accepts a future Retry-After HTTP-date', () => {
+    const future = new Date(Date.now() + 30_000).toUTCString();
+    const error = {
+      status: 503,
+      headers: { 'retry-after': future },
+    };
+    expect(hasRetryAfterHeader(error)).toBe(true);
+    const delay = getRetryAfterDelayMs(error);
+    expect(delay).toBeGreaterThan(25_000);
+    expect(delay).toBeLessThanOrEqual(30_000);
+  });
 });
