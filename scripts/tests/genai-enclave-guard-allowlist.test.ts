@@ -115,15 +115,14 @@ describe('check-genai-enclave — allowlist consistency', () => {
     }
   });
 
-  it('GENAI_DEPENDENCY_MANIFESTS includes the packaging bridge and implementation workspaces', async () => {
+  it('GENAI_DEPENDENCY_MANIFESTS is empty: no workspace may declare the SDK', async () => {
+    // The guard used to contain @google/genai to sanctioned workspaces. The
+    // SDK is now gone entirely, so the invariant is stronger: nothing may
+    // declare it, and any reappearance is a violation.
     const { GENAI_DEPENDENCY_MANIFESTS, SANCTIONED_GENAI_VERSION } =
       await import('../genai-enclave/config.ts');
-    const dirs = GENAI_DEPENDENCY_MANIFESTS.map((e) => e.workspaceDir).sort();
-    expect(dirs).toEqual(['.', 'packages/providers']);
-    for (const entry of GENAI_DEPENDENCY_MANIFESTS) {
-      expect(entry.version).toBe(SANCTIONED_GENAI_VERSION);
-      expect(entry.justification.length).toBeGreaterThan(0);
-    }
+    expect(GENAI_DEPENDENCY_MANIFESTS).toEqual([]);
+    expect(SANCTIONED_GENAI_VERSION.length).toBeGreaterThan(0);
   });
 
   it('GENAI_IMPORT_ENCLAVES has exactly the gemini enclave with justification', async () => {

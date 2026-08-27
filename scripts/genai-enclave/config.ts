@@ -45,7 +45,9 @@ export const GENAI_IMPORT_ENCLAVES: readonly ImportEnclave[] = [
   {
     prefix: 'packages/providers/src/gemini/',
     justification:
-      'Gemini provider implementation — needs the SDK for API calls.',
+      'Gemini provider implementation — owns the Gemini wire types and the ' +
+      'Gemini-named exports. No longer imports an SDK; the dependency ' +
+      'allowlist below is empty.',
   },
 ];
 
@@ -84,22 +86,7 @@ export interface DependencyManifestAllowlistEntry {
 export const SANCTIONED_GENAI_VERSION = '1.30.0';
 
 export const GENAI_DEPENDENCY_MANIFESTS: readonly DependencyManifestAllowlistEntry[] =
-  [
-    {
-      workspaceDir: '.',
-      version: SANCTIONED_GENAI_VERSION,
-      justification:
-        'The published root artifact ships core/provider source, so npm must ' +
-        'install the SDK even though root source may not import it.',
-    },
-    {
-      workspaceDir: 'packages/providers',
-      version: SANCTIONED_GENAI_VERSION,
-      justification:
-        'Gemini provider implementation (packages/providers/src/gemini/) ' +
-        'requires the SDK at runtime for API calls.',
-    },
-  ];
+  [];
 
 /** The exact package name the guard checks for. */
 export const GENAI_PACKAGE = '@google/genai';
