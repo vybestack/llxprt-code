@@ -122,7 +122,10 @@ describe('run-lint runner — a full run is partitioned per package (#3387)', ()
     expect([...targetsOf(rest)]).toEqual(['.']);
     const patternIndex = rest.args.indexOf('--ignore-pattern');
     expect(patternIndex).toBeGreaterThan(-1);
-    expect(rest.args[patternIndex + 1]).toBe('packages/**');
+    // `packages/*/**`, not `packages/**`: the latter would also drop a file
+    // sitting directly in packages/, which no package group covers. See
+    // scripts/tests/run-lint-partition.test.ts for the end-to-end proof.
+    expect(rest.args[patternIndex + 1]).toBe('packages/*/**');
   });
 
   it('does not exclude packages from the per-package groups', async () => {
@@ -195,7 +198,7 @@ describe('run-lint runner — a full run is partitioned per package (#3387)', ()
     expect(standaloneIntegration.length).toBe(0);
   });
 
-  it('tolerates targets that match only ignored files, which packages/lsp does', async () => {
+  it('tolerates package targets that match only ignored files, which packages/lsp does', async () => {
     const { buildLintCommands } = await loadRunner();
     const commands = buildLintCommands({
       targets: null,
@@ -203,9 +206,21 @@ describe('run-lint runner — a full run is partitioned per package (#3387)', ()
       cache: false,
       packageDirs: TWO_PACKAGES,
     });
-    for (const command of commands) {
+    for (const command of commands.slice(0, 2)) {
       expect(command.args).toContain('--no-error-on-unmatched-pattern');
     }
+  });
+
+  it('still fails loudly when the rest-of-tree group matches nothing', async () => {
+    const { buildLintCommands } = await loadRunner();
+    const commands = buildLintCommands({
+      targets: null,
+      forwardedArgs: [],
+      cache: false,
+      packageDirs: TWO_PACKAGES,
+    });
+    const rest = commands[commands.length - 1];
+    expect(rest.args).not.toContain('--no-error-on-unmatched-pattern');
   });
 });
 
@@ -335,7 +350,7 @@ describe('run-lint runner — cache is opt-in only (A3)', () => {
     expect(commands[0].args.join(' ')).toContain('node_modules/.cache/eslint');
   });
 
-  it('gives every group its own cache file so groups do not clobber each other', async () => {
+  it('points every group at the one cache location CI saves and restores', async () => {
     const { buildLintCommands } = await loadRunner();
     const commands = buildLintCommands({
       targets: null,
@@ -347,21 +362,14 @@ describe('run-lint runner — cache is opt-in only (A3)', () => {
       (c) => c.args[c.args.indexOf('--cache-location') + 1],
     );
     expect(locations.length).toBe(3);
-    expect(new Set(locations).size).toBe(3);
-    expect(locations).toContain('node_modules/.cache/eslint-packages-cli');
-  });
-
-  it('gives every scoped target its own cache file too', async () => {
-    const { buildLintCommands } = await loadRunner();
-    const commands = buildLintCommands({
-      targets: ['packages/cli', 'packages/core'],
-      forwardedArgs: [],
-      cache: true,
-    });
-    const locations = commands.map(
-      (c) => c.args[c.args.indexOf('--cache-location') + 1],
-    );
-    expect(new Set(locations).size).toBe(commands.length);
+    // .github/workflows/ci.yml caches this exact path. Per-group cache files
+    // would silently fall outside it, and ESLint merges into an existing
+    // cache rather than pruning, so sharing one file is safe.
+    expect(locations).toEqual([
+      'node_modules/.cache/eslint',
+      'node_modules/.cache/eslint',
+      'node_modules/.cache/eslint',
+    ]);
   });
 });
 

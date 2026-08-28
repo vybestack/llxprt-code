@@ -121,13 +121,40 @@ cover exactly the files under `packages/`, and the final target covers `.`
 with those same files removed. The partition is derived from the filesystem,
 so a new package is picked up without editing the runner.
 
-`--no-error-on-unmatched-pattern` is added to the derived commands because
-`eslint.config.js` ignores `packages/lsp` wholesale, and a target that
-matches only ignored files is otherwise a hard error. The targets are derived
-rather than user-supplied, so there is no unmatched-pattern signal to lose.
+`--no-error-on-unmatched-pattern` is added to the per-package groups only,
+because `eslint.config.js` ignores `packages/lsp` wholesale and a target that
+matches only ignored files is otherwise a hard error. Those targets are read
+from the filesystem, so there is no unmatched-pattern signal to lose. Scoped
+targets come from CI's affected-target selector and the rest-of-tree group is
+a fixed `.`, so both keep the error: an unmatched target there is a stale or
+mistyped selection that should fail loudly.
+
+All groups share the single cache location `node_modules/.cache/eslint`,
+which is the exact path `.github/workflows/ci.yml` saves and restores. This
+is safe because ESLint merges into an existing cache rather than pruning
+entries for files the current run did not visit, confirmed by running two
+package groups against one cache file and checking both packages' entries
+survived. Per-group cache files would have fallen outside the CI cache path.
 
 Scoped runs (CI, `lint:scoped`) are partitioned the same way, one invocation
 per target, so the lowered heap default is safe on that path too.
+
+### Coverage is verified, not argued
+
+The partition was checked against the thing it replaces by collecting
+`--format json` output from `eslint .` and from every partitioned command,
+then comparing the `filePath` sets:
+
+```
+eslint .          : 5386 files
+partitioned union : 5386 files
+files linted before but not after : 0
+files linted after but not before : 0
+files linted by more than one group: 0
+```
+
+Same set, no gaps, no double work. The script that produced this is
+`tmp/verify3387/coverage.sh`.
 
 Ordinary lint failures no longer stop the run: every group is linted and the
 first failing exit code is returned at the end, so one broken package does
@@ -142,9 +169,9 @@ on the same machine as the baseline:
 | | peak RSS | wall |
 | --- | --- | --- |
 | before (`eslint .`, 12 GB heap requested) | 16,586,620,928 B (15.45 GiB) | 242.74 s |
-| after (17 groups, 6 GB heap each) | 4,610,539,520 B (4.29 GiB) | 161.62 s |
+| after (17 groups, 6 GB heap each) | 4,565,237,760 B (4.25 GiB) | 149.25 s |
 
-Peak drops 3.6x and wall clock drops 33%, so there is no wall-clock
+Peak drops 3.6x and wall clock drops 38%, so there is no wall-clock
 regression to trade against the memory win. The after-peak is lower than the
 5.64 GiB `packages/cli` figure measured under a 24 GB ceiling because a 6 GB
 ceiling makes V8 collect harder for the same work.
@@ -155,6 +182,29 @@ needs. `packages/cli` at a 4 GB ceiling does not complete.
 The issue's stretch goal of 4 GB is not reached. `packages/cli/tsconfig.json`
 pulls `providers`, `auth`, `mcp`, `settings` and `ide-integration` sources
 into one program; splitting that is a separate change.
+
+## Reviewed and rejected: pinning the moved files to the root `lib`/`types`
+
+Review raised that the ~999 moved test files previously saw the root project's
+`lib: ES2023` and root `types`, and now see their package's settings (agents
+is `ES2021`, telemetry `ES2021` plus `ES2022.Error`, cli adds `DOM`). A probe
+showed `[1, 2].toSorted()` typed under the root project but not under the
+agents project, so a `no-unnecessary-condition` diagnostic that fired before
+would not fire after. The suggested fix was to keep the root `lib`/`types` for
+ESLint.
+
+Rejected, because it would rebuild the defect. A test file in
+`packages/agents` is compiled and run under agents' settings; `toSorted` is
+genuinely unavailable there. Linting it as though `ES2023` were available
+reports on a program that does not exist. Every file in a package that was
+NOT excluded already linted under its package's settings, so the change makes
+the excluded files behave like their siblings rather than giving any file
+weaker treatment than its neighbours.
+
+Nothing was suppressed in the current tree either: lint is clean before and
+after over the identical 5386-file set, so there was no diagnostic to lose.
+The residual risk is that these files are still outside `tsc`, which is
+pre-existing and recorded below.
 
 ## Follow-ups, not done here
 

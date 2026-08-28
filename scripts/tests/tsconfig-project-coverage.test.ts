@@ -27,7 +27,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ESLint } from 'eslint';
@@ -65,40 +65,108 @@ function packageDirs(): string[] {
 }
 
 /**
- * Exclude entries that name a concrete existing file inside the package
- * itself. Directory entries (node_modules, dist) and glob patterns are not
- * concrete file exclusions, and entries reaching outside the package belong to
- * another package's project.
+ * The file set TypeScript resolves for a package's tsconfig.json, as absolute
+ * paths. This is the real question: not what the `exclude` array happens to
+ * say, but which files the project actually contains after `extends`,
+ * `include`, `exclude` and `files` have all been applied.
  */
-function ownFileExclusions(pkg: string): string[] {
+function projectFiles(pkg: string): Set<string> {
   const configPath = join(PACKAGES_ROOT, pkg, 'tsconfig.json');
-  if (!existsSync(configPath)) {
+  const host: ts.ParseConfigFileHost = {
+    ...ts.sys,
+    onUnRecoverableConfigFileDiagnostic: (diagnostic) => {
+      throw new Error(
+        `${configPath}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, ' ')}`,
+      );
+    },
+  };
+  const parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, host);
+  if (parsed === undefined) {
+    throw new Error(`${configPath}: could not be parsed`);
+  }
+  return new Set(parsed.fileNames.map((file) => resolve(file)));
+}
+
+/**
+ * The files in a package that the type-aware ESLint layer applies to. The
+ * config in eslint.config.js scopes `projectService` to the TS and TSX
+ * sources under `packages/<pkg>/src`, so only those files need a project.
+ */
+function typeAwareSources(pkg: string): string[] {
+  const srcRoot = join(PACKAGES_ROOT, pkg, 'src');
+  if (!existsSync(srcRoot)) {
     return [];
   }
-  const pkgRoot = join(PACKAGES_ROOT, pkg);
-  return excludeEntries(parseTsconfig(configPath))
-    .filter((entry) => !entry.includes('*'))
-    .map((entry) => resolve(pkgRoot, entry))
-    .filter((path) => !relative(pkgRoot, path).startsWith('..'))
-    .filter((path) => existsSync(path) && statSync(path).isFile());
+  const found: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name !== 'node_modules' && entry.name !== 'dist') {
+          walk(path);
+        }
+      } else if (/\.tsx?$/.test(entry.name)) {
+        found.push(path);
+      }
+    }
+  };
+  walk(srcRoot);
+  return found;
 }
+
+/**
+ * Files eslint.config.js explicitly hands to the fallback project via
+ * `parserOptions.projectService.allowDefaultProject`. They are the one
+ * sanctioned exception to the invariant below.
+ */
+const ALLOW_DEFAULT_PROJECT = /packages\/core\/src\/prompts\/[^/]+\.d\.ts$/;
 
 describe('tsconfig project coverage (#3387)', () => {
   it('finds package directories to check, so the suite cannot pass vacuously', () => {
     expect(packageDirs().length).toBeGreaterThan(1);
   });
 
-  it('no package tsconfig.json excludes a source file that ESLint still lints', async () => {
+  it('every type-aware-linted source file belongs to its own package project', async () => {
+    // The invariant, checked against the resolved project rather than the
+    // shape of the `exclude` array, so a narrowed `include`, a glob, or a
+    // `files` list cannot slip past it.
     const eslint = new ESLint({ cwd: REPO_ROOT });
     const orphans: string[] = [];
     for (const pkg of packageDirs()) {
-      for (const file of ownFileExclusions(pkg)) {
+      const sources = typeAwareSources(pkg);
+      if (sources.length === 0) {
+        continue;
+      }
+      const owned = projectFiles(pkg);
+      for (const file of sources) {
+        if (owned.has(file) || ALLOW_DEFAULT_PROJECT.test(file)) {
+          continue;
+        }
         if (!(await eslint.isPathIgnored(file))) {
           orphans.push(relative(REPO_ROOT, file));
         }
       }
     }
     expect(orphans).toEqual([]);
+  });
+
+  it('checks a meaningful number of source files, so the invariant is not vacuous', () => {
+    const total = packageDirs().reduce(
+      (sum, pkg) => sum + typeAwareSources(pkg).length,
+      0,
+    );
+    expect(total).toBeGreaterThan(1000);
+  });
+
+  it('sets noEmit in every noemit config so a bare tsc -p cannot write output', () => {
+    for (const pkg of packageDirs()) {
+      const noemitPath = join(PACKAGES_ROOT, pkg, 'tsconfig.noemit.json');
+      if (!existsSync(noemitPath)) {
+        continue;
+      }
+      const options = parseTsconfig(noemitPath)['compilerOptions'];
+      expect(options).toMatchObject({ noEmit: true });
+    }
   });
 
   it('keeps the typecheck exclusions of every package that has a noemit config', () => {
