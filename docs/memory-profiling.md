@@ -2,9 +2,34 @@
 
 LLxprt Code ships with opt-in tooling to investigate long-running session memory growth. It records JavaScriptCore (JSC) heap samples while a session runs and can analyze full heap snapshots — all through a portable file-based channel that works on macOS, Linux, and Windows without signals, TCP ports, or shell commands.
 
-The tooling is Bun-only: it launches the CLI with the current Bun executable (`process.execPath`) and preloads the probe, so the child process is definitely Bun.
+The tooling is Bun-only. An installed `llxprt` command uses its packaged Bun runtime. A source-checkout command uses the current Bun executable (`process.execPath`). Both preload the same probe implementation.
 
-## Start a profiled session
+## Profile an installed command
+
+Use the ordinary installed command with an exact profile activation flag:
+
+```bash
+llxprt --memprofile [llxprt args...]
+llxprt --memprofile=15000 [llxprt args...]
+llxprt --memprofile --memprofile-dir <run-dir> [llxprt args...]
+llxprt --memprofile --memprofile-snapshots --memprofile-max-heap-mb 256 [llxprt args...]
+```
+
+`--memprofile=<interval-ms>` sets the sampling interval. The other profile controls select a run directory, arm snapshots, and set the snapshot heap guard. They are consumed only when the arguments contain the exact `--memprofile` or `--memprofile=<interval-ms>` activation. Similar names such as `--memprofiled`, and profile-control arguments without activation, remain ordinary LLxprt arguments. Non-profile LLxprt arguments retain their original order. Installed profile activation and controls are recognized only before the first user `--`; that boundary and every following argument are passed literally to LLxprt.
+
+Installed runs write under the platform application-data directory's `memprofile/` child by default. `LLXPRT_DATA_HOME` overrides the application-data directory, and `LLXPRT_CONFIG_HOME` remains its backward-compatible fallback. An explicit `--memprofile-dir` selects the complete run directory instead. The launcher prints the selected path when it starts.
+
+The installed utilities use the same packaged profiler implementation:
+
+```bash
+llxprt memprofile request [--heap] [--dir <run>] [--wait]
+llxprt memprofile report [<samples-path-or-run-dir>]
+llxprt memprofile analyze <snapshot> [--top <n>] [--min-mb <n>]
+```
+
+The published Node shim preserves normal argument handling, inherited stdio, signals, child exit status, and the sandbox capability descriptor while adding the profiler supervisor. A missing profiler bundle is treated as a corrupt installation and fails with the launcher failure status instead of falling back to repository scripts.
+
+## Start a source-checkout profiled session
 
 ```bash
 npm run mem:profile -- [memprofile options] -- [llxprt args...]
@@ -50,15 +75,32 @@ Run directory layout:
 
 On POSIX systems the run directory is created with `0700` permissions and the probe's files (`samples.jsonl`, `probe.log`, snapshots) with `0600` (owner-only), because these artifacts can contain sensitive data. Directories and files **reused from an earlier run are tightened** to those modes as well, not merely created with them; a path that cannot be tightened fails fast rather than staying world-readable. On Windows, mode bits are not part of the security model and are not applied. Partial snapshot temporaries (`*.heapsnapshot.tmp`) are also git-ignored.
 
+## Run a profiled tmux workload
+
+The tmux harness accepts an arbitrary `startCommand`, including the source profiler launcher. `${bun}` resolves to the harness's Bun executable, and `LLXPRT_TMUX_ARTIFACT_DIR` gives the launched command an isolated artifact directory. See `scripts/tmux-script.issue3386-memory-retention.fake.json` for a complete no-network example with fixed terminal dimensions, manual forced-GC checkpoints, `/clear`, and a clean exit.
+
+Run that scenario with:
+
+```bash
+bun scripts/tmux-harness.ts \
+  --script scripts/tmux-script.issue3386-memory-retention.fake.json \
+  --out-dir tmp/memory-profile-run \
+  --assert
+bun scripts/memory/report.ts tmp/memory-profile-run/memprofile
+```
+
+The example uses the fake provider and writes beneath the selected harness output directory. Use a unique ignored directory for each comparison, and keep the scenario unchanged between baseline and candidate runs.
+
 ## Request a sample or snapshot from another terminal
 
 ```bash
 npm run mem:request                  # queue a sample
 npm run mem:request -- --heap        # queue a heap snapshot (requires --snapshots)
 npm run mem:request -- --dir <run>   # target a specific run directory
+npm run mem:request -- --wait        # wait for durable processing
 ```
 
-This writes a JSON request file into the run's `requests/` directory. The probe's poller picks it up within its poll interval. The command reports where the request was queued and where to inspect the probe log — it does **not** claim the request has already been processed. Check `probe.log` for completion or refusal messages. Unknown options and missing/invalid values fail fast with an error.
+This writes a JSON request file into the run's `requests/` directory. The probe's poller picks it up within its poll interval. By default, the command returns after queueing and reports where to inspect the probe log. `--wait` waits up to 30 seconds for the durable completion marker for that request. A marker can mean the probe processed a policy refusal, such as a snapshot request when snapshots are disabled, so inspect `probe.log` for the result. Unknown options and missing or invalid values fail fast with an error.
 
 **Only live runs accept requests.** The request CLI checks the run directory's lease: if no probe holds a fresh lease (the session exited, crashed, or never started), queueing is refused with an actionable error instead of silently writing a request that nothing will ever process.
 
@@ -125,8 +167,8 @@ Snapshots are strictly opt-in. The launcher always writes an explicit `LLXPRT_ME
 
 ## Privacy and security
 
-Samples, reports, and `.heapsnapshot` files can capture **full prompts, provider payloads, tool output, source code, and credentials**.
+Samples, reports, and `.heapsnapshot` files can capture **source code, full prompts, prior input, tool output, provider data, and credentials**.
 
-- **Never commit or upload** these artifacts. `.memprofile/`, `*.heapsnapshot`, and snapshot temporaries (`*.heapsnapshot.tmp`) are in `.gitignore`. If you direct runs at a custom `--dir` outside `.memprofile/`, exclude it from version control yourself — the launcher warns about this.
+- **Never commit or upload** these artifacts. Source-checkout `.memprofile/`, `*.heapsnapshot`, and snapshot temporaries (`*.heapsnapshot.tmp`) are in `.gitignore`. Installed runs default to the platform application-data directory, outside the repository. If you select a custom directory, protect it deliberately and exclude it from version control yourself; the launcher warns about custom paths.
 - On POSIX, the tooling creates its directories `0700` and files `0600` (owner-only), and **tightens reused directories/files to those modes**, to limit local exposure.
 - The tooling **never inspects or uploads** captures automatically. Heap snapshots are analyzed locally and only when you explicitly point `mem:analyze` at a file.

@@ -1,0 +1,207 @@
+diff --git a/node_modules/ink/build/data-limited-lru-map.d.ts b/node_modules/ink/build/data-limited-lru-map.d.ts
+index 9582c49..dd8f07e 100644
+--- a/node_modules/ink/build/data-limited-lru-map.d.ts
++++ b/node_modules/ink/build/data-limited-lru-map.d.ts
+@@ -1,19 +1,25 @@
+ /**
+  * A specialized LRU map that enforces limits on both the number of entries and
+- * the total character length of the keys.
++ * the total size of keys and values.
+  *
+- * When adding a new item, if the new key's length would exceed `maxDataSize`,
+- * it evicts the least recently used items until space is available.
++ * When adding a new item, if the entry would exceed `maxDataSize`, it evicts
++ * the least recently used items until space is available.
+  *
+  * @template V - The type of the values stored in the map.
+  */
+ export declare class DataLimitedLruMap<V> {
+     private readonly map;
++    private readonly maxKeys;
+     private readonly maxDataSize;
++    private readonly valueSize;
+     private currentDataSize;
+-    constructor(maxKeys: number, maxDataSize: number);
++    private currentValueSize;
++    constructor(maxKeys: number, maxDataSize: number, valueSize?: (value: V) => number);
+     get(key: string): V | undefined;
+     set(key: string, value: V): void;
++    delete(key: string): boolean;
++    clear(): void;
+     get size(): number;
+     get currentDataSizeValue(): number;
++    get currentValueSizeValue(): number;
+ }
+diff --git a/node_modules/ink/build/data-limited-lru-map.js b/node_modules/ink/build/data-limited-lru-map.js
+index 80485a6..40c69c8 100644
+--- a/node_modules/ink/build/data-limited-lru-map.js
++++ b/node_modules/ink/build/data-limited-lru-map.js
+@@ -1,55 +1,63 @@
+-import { LRUMapWithDelete } from 'mnemonist';
+ /**
+  * A specialized LRU map that enforces limits on both the number of entries and
+- * the total character length of the keys.
++ * the total size of keys and values.
+  *
+- * When adding a new item, if the new key's length would exceed `maxDataSize`,
+- * it evicts the least recently used items until space is available.
++ * When adding a new item, if the entry would exceed `maxDataSize`, it evicts
++ * the least recently used items until space is available.
+  *
+  * @template V - The type of the values stored in the map.
+  */
+ export class DataLimitedLruMap {
+-    map;
++    map = new Map();
++    maxKeys;
+     maxDataSize;
++    valueSize;
+     currentDataSize = 0;
+-    constructor(maxKeys, maxDataSize) {
+-        this.map = new LRUMapWithDelete(maxKeys);
++    currentValueSize = 0;
++    constructor(maxKeys, maxDataSize, valueSize = () => 0) {
++        this.maxKeys = maxKeys;
+         this.maxDataSize = maxDataSize;
++        this.valueSize = valueSize;
+     }
+     get(key) {
+-        return this.map.get(key);
++        const entry = this.map.get(key);
++        if (entry === undefined) {
++            return undefined;
++        }
++        this.map.delete(key);
++        this.map.set(key, entry);
++        return entry.value;
+     }
+     set(key, value) {
+-        const size = key.length;
+-        const hasKey = this.map.has(key);
+-        while (this.currentDataSize + size > this.maxDataSize &&
+-            this.map.size > 0) {
+-            const map = this.map;
+-            const lruKey = map.K[map.tail];
+-            if (lruKey === undefined) {
+-                break;
+-            }
+-            // If the key is not found in the map, we can't evict it.
+-            // This can happen if the map is in an inconsistent state.
+-            // To avoid an infinite loop, we break here.
+-            // The LRUMap still has its own size limit so it is acceptable
+-            // for us to make a best effort to stay within the data size limit.
+-            // The alternative would be to continue searching for a valid key
+-            // to delete but that would risk making calling set O(n) instead of
+-            // O(1).
+-            if (!this.map.delete(lruKey)) {
+-                break;
+-            }
+-            this.currentDataSize -= lruKey.length;
++        this.delete(key);
++        const valueSize = this.valueSize(value);
++        const dataSize = key.length + valueSize;
++        if (dataSize > this.maxDataSize) {
++            return;
+         }
+-        const result = this.map.setpop(key, value);
+-        if (result?.evicted) {
+-            this.currentDataSize -= result.key.length;
++        while (this.map.size >= this.maxKeys ||
++            this.currentDataSize + dataSize > this.maxDataSize) {
++            const lruKey = this.map.keys().next().value;
++            this.delete(lruKey);
+         }
+-        if (hasKey) {
+-            this.currentDataSize -= size;
++        this.map.set(key, { value, dataSize, valueSize });
++        this.currentDataSize += dataSize;
++        this.currentValueSize += valueSize;
++    }
++    delete(key) {
++        const entry = this.map.get(key);
++        if (entry === undefined) {
++            return false;
+         }
+-        this.currentDataSize += size;
++        this.map.delete(key);
++        this.currentDataSize -= entry.dataSize;
++        this.currentValueSize -= entry.valueSize;
++        return true;
++    }
++    clear() {
++        this.map.clear();
++        this.currentDataSize = 0;
++        this.currentValueSize = 0;
+     }
+     get size() {
+         return this.map.size;
+@@ -57,5 +65,8 @@ export class DataLimitedLruMap {
+     get currentDataSizeValue() {
+         return this.currentDataSize;
+     }
++    get currentValueSizeValue() {
++        return this.currentValueSize;
++    }
+ }
+ //# sourceMappingURL=data-limited-lru-map.js.map
+diff --git a/node_modules/ink/build/measure-text.d.ts b/node_modules/ink/build/measure-text.d.ts
+index 5619c54..993cd37 100644
+--- a/node_modules/ink/build/measure-text.d.ts
++++ b/node_modules/ink/build/measure-text.d.ts
+@@ -1,6 +1,11 @@
+ import { type StyledChar } from '@alcalzone/ansi-tokenize';
+ import { type DOMNode } from './dom.js';
+ export type StringWidth = (text: string) => number;
++export type StyledCharactersCacheStats = {
++    readonly entryCount: number;
++    readonly dataSize: number;
++    readonly styledCharacterCells: number;
++};
+ /**
+  * Character offset range within a text sequence.
+  * Used for mapping DOM nodes to their character positions.
+@@ -17,6 +22,8 @@ export type CharOffsetRange = {
+ export type CharOffsetMap = Map<DOMNode, CharOffsetRange>;
+ export declare function setStringWidthFunction(fn: StringWidth): void;
+ export declare function clearStringWidthCache(): void;
++export declare function internal_resetToStyledCharactersCache(): void;
++export declare function internal_getToStyledCharactersCacheStats(): Readonly<StyledCharactersCacheStats>;
+ export declare function toStyledCharacters(text: string): StyledChar[];
+ export declare function styledCharsWidth(styledChars: StyledChar[]): number;
+ export declare function inkCharacterWidth(text: string): number;
+diff --git a/node_modules/ink/build/measure-text.js b/node_modules/ink/build/measure-text.js
+index 94955b7..e398353 100644
+--- a/node_modules/ink/build/measure-text.js
++++ b/node_modules/ink/build/measure-text.js
+@@ -9,10 +9,10 @@ let currentStringWidth = defaultStringWidth;
+ // characters.
+ const widthCache = new Map();
+ // This cache can persist for the lifetime of the application.
+-// The keys for this cache can be very large so we need to limit the size
+-// of the data cached as well as the number of keys cached to prevent
+-// memory issues.
+-const toStyledCharactersCache = new DataLimitedLruMap(10_000, 1_000_000);
++// Both the source strings and styled-character arrays can be very large, so
++// include both in the data limit to prevent the retained value graph from
++// growing without bound.
++const toStyledCharactersCache = new DataLimitedLruMap(10_000, 65_536, characters => characters.length);
+ export function setStringWidthFunction(fn) {
+     currentStringWidth = fn;
+     // Clear the width cache to avoid stale values.
+@@ -21,6 +21,16 @@ export function setStringWidthFunction(fn) {
+ export function clearStringWidthCache() {
+     widthCache.clear();
+ }
++export function internal_resetToStyledCharactersCache() {
++    toStyledCharactersCache.clear();
++}
++export function internal_getToStyledCharactersCacheStats() {
++    return Object.freeze({
++        entryCount: toStyledCharactersCache.size,
++        dataSize: toStyledCharactersCache.currentDataSizeValue,
++        styledCharacterCells: toStyledCharactersCache.currentValueSizeValue,
++    });
++}
+ export function toStyledCharacters(text) {
+     const cached = toStyledCharactersCache.get(text);
+     if (cached !== undefined) {

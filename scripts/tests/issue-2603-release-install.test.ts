@@ -50,28 +50,21 @@ const releasePackHelper = join(
 );
 
 /**
- * Spawns the standalone smoke script as an async child process with a hard
- * timeout that SIGKILLs the child to prevent hangs/leaks. Using `spawn` (not
- * `spawnSync`) keeps the event loop responsive to Vitest's worker RPC.
+ * Spawns the standalone smoke script through a detached Node wrapper with a
+ * hard timeout. The wrapper opens ordinary files for output before it starts
+ * the nested npm/Bun process tree. This avoids Bun forwarding a high-numbered
+ * test-runner pipe descriptor that macOS posix_spawn cannot reliably capture.
  *
- * Cleanup design (no process-global listener leaks):
- *   - The child IS spawned detached (detached: true) so the entire process
- *     group can be killed via kill(-pid) on POSIX or taskkill /T on Windows,
- *     reaping grandchildren (npm, tar, bun) safely. Despite detachment, the
- *     dispose() function explicitly kills the group and destroys stdio
- *     streams so no event-loop handles or orphan processes remain.
- *   - The only timers/listeners are attached to the `child` object itself
- *     (close/error events + a timeout timer), and are all removed in
- *     `dispose()` so no event-loop handles remain after the test settles.
- *   - NO `process.on('SIGINT'/'SIGTERM'/'exit'/'beforeExit')` listeners are
- *     registered: those keep the Vitest worker alive and caused the aggregate
- *     suite hang. Scoped cleanup is the caller's responsibility via the
- *     returned `dispose()` (invoked from try/finally + onTestFinished).
+ * Using async `spawn` keeps the event loop responsive to test-runner RPC. The
+ * detached process group lets dispose() reap npm, tar, and Bun grandchildren
+ * through kill(-pid) on POSIX or taskkill /T on Windows. All listeners and the
+ * capture directory are scoped to the returned handle. No process-global
+ * signal or exit listeners are registered.
  */
 /**
  * Env-overridable timeout constants with a comfortable margin. The smoke
  * timeout must be strictly less than the test timeout so the kill+dispose
- * completes before Vitest's test timeout fires.
+ * completes before the test timeout fires.
  *
  * Override via env for per-CI tuning:
  *   LLXPRT_SMOKE_TIMEOUT_MS — the hard kill timer for the smoke child.
@@ -92,22 +85,55 @@ interface SmokeHandle {
   dispose: () => void;
 }
 
+const captureSmokeOutput = [
+  'const { closeSync, openSync, writeSync } = require("node:fs");',
+  'const { spawn } = require("node:child_process");',
+  'const [stdoutPath, stderrPath, script, root] = process.argv.slice(1);',
+  'const stdoutFd = openSync(stdoutPath, "w");',
+  'const stderrFd = openSync(stderrPath, "w");',
+  'let settled = false;',
+  'const finish = (status, error) => {',
+  '  if (settled) return;',
+  '  settled = true;',
+  '  if (error) writeSync(stderrFd, `${error.stack || error}\\n`);',
+  '  closeSync(stdoutFd);',
+  '  closeSync(stderrFd);',
+  '  process.exit(status);',
+  '};',
+  'const smoke = spawn(process.execPath, [script, root], {',
+  '  cwd: root,',
+  '  env: process.env,',
+  '  stdio: ["ignore", stdoutFd, stderrFd],',
+  '});',
+  'smoke.on("error", (error) => finish(1, error));',
+  'smoke.on("close", (status) => finish(status ?? 1));',
+].join('\n');
+
 function runSmokeAsync(): SmokeHandle {
-  let child: ChildProcess | null = spawn('node', [smokeScript, repoRoot], {
-    cwd: repoRoot,
-    env: { ...process.env },
-    stdio: ['ignore', 'pipe', 'pipe'],
-    // Spawn detached on POSIX so we can kill the entire process group
-    // (grandchildren: npm, tar, bun, etc. inside the smoke script). On
-    // Windows, detached creates a new process group that taskkill /T can reap.
-    detached: true,
-  });
-  let stdout = '';
-  let stderr = '';
+  const captureDir = mkdtempSync(join(tmpdir(), 'llxprt-release-smoke-'));
+  const stdoutPath = join(captureDir, 'stdout.log');
+  const stderrPath = join(captureDir, 'stderr.log');
+  writeFileSync(stdoutPath, '');
+  writeFileSync(stderrPath, '');
+
+  const runningChild = spawn(
+    'node',
+    ['-e', captureSmokeOutput, stdoutPath, stderrPath, smokeScript, repoRoot],
+    {
+      cwd: repoRoot,
+      env: { ...process.env },
+      stdio: 'ignore',
+      // Spawn detached on POSIX so we can kill the entire process group
+      // (grandchildren: npm, tar, bun, etc. inside the smoke script). On
+      // Windows, detached creates a new process group that taskkill /T can reap.
+      detached: true,
+    },
+  );
+  let child: ChildProcess | null = runningChild;
   let settled = false;
   let timer: NodeJS.Timeout | null = null;
   let disposed = false;
-  let streamTeardown: (() => void) | null = null;
+  let listenerTeardown: (() => void) | null = null;
 
   const promise = new Promise<{
     status: number | null;
@@ -126,52 +152,38 @@ function runSmokeAsync(): SmokeHandle {
         timer = null;
       }
       if (outcome.ok) {
-        resolvePromise({ status: outcome.status, stdout, stderr });
+        resolvePromise({
+          status: outcome.status,
+          stdout: readFileSync(stdoutPath, 'utf8'),
+          stderr: readFileSync(stderrPath, 'utf8'),
+        });
       } else {
         reject(outcome.error);
       }
     }
 
     timer = setTimeout(() => {
-      dispose();
       finish({
         ok: false,
         error: new Error(
           `smoke script exceeded ${SMOKE_TIMEOUT_MS}ms and was killed to prevent a hang/leak`,
         ),
       });
+      dispose();
     }, SMOKE_TIMEOUT_MS);
 
-    function onStdout(chunk: Buffer): void {
-      stdout += chunk.toString();
-    }
-    function onStderr(chunk: Buffer): void {
-      stderr += chunk.toString();
-    }
-    function onError(err: Error): void {
-      finish({ ok: false, error: err });
+    function onError(error: Error): void {
+      finish({ ok: false, error });
     }
     function onClose(status: number | null): void {
       finish({ ok: true, status });
     }
 
-    const c = child!;
-    const { stdout: out, stderr: err } = c;
-    if (!out || !err) {
-      // With stdio 'pipe' both streams exist; guard for type narrowing only.
-      finish({ ok: false, error: new Error('child streams unavailable') });
-      return;
-    }
-    out.on('data', onStdout);
-    err.on('data', onStderr);
-    c.on('error', onError);
-    c.on('close', onClose);
-
-    streamTeardown = () => {
-      out.removeListener('data', onStdout);
-      err.removeListener('data', onStderr);
-      c.removeListener('error', onError);
-      c.removeListener('close', onClose);
+    runningChild.on('error', onError);
+    runningChild.on('close', onClose);
+    listenerTeardown = () => {
+      runningChild.removeListener('error', onError);
+      runningChild.removeListener('close', onClose);
     };
   });
 
@@ -225,30 +237,17 @@ function runSmokeAsync(): SmokeHandle {
         }
       }
     }
-    // Explicitly destroy the child's stdio streams so their file descriptors
-    // do not keep the Vitest worker event loop alive. child.unref() alone does
-    // not close the underlying pipe FDs; destroying the streams ensures
-    // prompt worker exit after the test settles.
     if (child) {
-      try {
-        child.stdout?.destroy();
-      } catch {
-        // best effort; stream may already be destroyed
-      }
-      try {
-        child.stderr?.destroy();
-      } catch {
-        // best effort; stream may already be destroyed
-      }
       try {
         child.unref();
       } catch {
         // best effort
       }
     }
-    streamTeardown?.();
-    streamTeardown = null;
+    listenerTeardown?.();
+    listenerTeardown = null;
     child = null;
+    rmSync(captureDir, { recursive: true, force: true });
   }
 
   return { promise, dispose };

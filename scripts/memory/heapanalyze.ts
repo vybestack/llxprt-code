@@ -29,8 +29,7 @@
  */
 
 import { readFileSync, statSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { isSourceMemoryEntrypoint } from './entrypoint.ts';
 
 type MetaTypes = ReadonlyArray<readonly string[] | string>;
 
@@ -797,21 +796,23 @@ export interface AnalyzeCliOptions {
   readonly maxRetainerDepth: number;
 }
 
-const USAGE = `Usage: mem:analyze -- <file.heapsnapshot> [--top N] [--min-mb N]`;
+export const SOURCE_ANALYZE_USAGE = `Usage: mem:analyze -- <file.heapsnapshot> [--top N] [--min-mb N]`;
+export const INSTALLED_ANALYZE_USAGE = `Usage: llxprt memprofile analyze <file.heapsnapshot> [--top N] [--min-mb N]`;
 
 /** Requires the next argv slot after `index` to be a non-flag value. */
 function expectNonFlagValue(
   argv: readonly string[],
   index: number,
   name: string,
+  usage: string,
 ): string {
   const raw = argv[index + 1];
   if (raw === undefined) {
-    throw new AnalyzerParseError(`missing value for ${name}. ${USAGE}`);
+    throw new AnalyzerParseError(`missing value for ${name}. ${usage}`);
   }
   if (raw.length === 0 || raw.startsWith('-')) {
     throw new AnalyzerParseError(
-      `invalid value for ${name}: ${raw} (expected a non-flag value). ${USAGE}`,
+      `invalid value for ${name}: ${raw} (expected a non-flag value). ${usage}`,
     );
   }
   return raw;
@@ -822,12 +823,13 @@ function parsePositiveNumberOption(
   argv: readonly string[],
   index: number,
   name: string,
+  usage: string,
 ): number {
-  const raw = expectNonFlagValue(argv, index, name);
+  const raw = expectNonFlagValue(argv, index, name, usage);
   const value = Number(raw);
   if (!Number.isFinite(value) || value <= 0) {
     throw new AnalyzerParseError(
-      `invalid value for ${name}: ${raw} (expected a positive finite number). ${USAGE}`,
+      `invalid value for ${name}: ${raw} (expected a positive finite number). ${usage}`,
     );
   }
   return value;
@@ -838,11 +840,12 @@ function parsePositiveIntOption(
   argv: readonly string[],
   index: number,
   name: string,
+  usage: string,
 ): number {
-  const value = parsePositiveNumberOption(argv, index, name);
+  const value = parsePositiveNumberOption(argv, index, name, usage);
   if (!Number.isInteger(value)) {
     throw new AnalyzerParseError(
-      `invalid value for ${name}: ${String(argv[index + 1])} (expected an integer). ${USAGE}`,
+      `invalid value for ${name}: ${String(argv[index + 1])} (expected an integer). ${usage}`,
     );
   }
   return value;
@@ -854,7 +857,10 @@ function parsePositiveIntOption(
  * snapshot file argument. Defaults come exclusively from
  * DEFAULT_ANALYZE_OPTIONS. Exported for testing.
  */
-export function parseAnalyzeArgs(argv: readonly string[]): AnalyzeCliOptions {
+export function parseAnalyzeArgs(
+  argv: readonly string[],
+  usage = SOURCE_ANALYZE_USAGE,
+): AnalyzeCliOptions {
   let file: string | undefined;
   let top: number | undefined;
   let minMb: number | undefined;
@@ -863,16 +869,16 @@ export function parseAnalyzeArgs(argv: readonly string[]): AnalyzeCliOptions {
   while (i < argv.length) {
     const arg = argv[i];
     if (arg === '--top') {
-      top = parsePositiveIntOption(argv, i, arg);
+      top = parsePositiveIntOption(argv, i, arg, usage);
       i += 2;
     } else if (arg === '--min-mb') {
-      minMb = parsePositiveNumberOption(argv, i, arg);
+      minMb = parsePositiveNumberOption(argv, i, arg, usage);
       i += 2;
     } else if (arg.startsWith('-')) {
-      throw new AnalyzerParseError(`unknown option: ${arg}. ${USAGE}`);
+      throw new AnalyzerParseError(`unknown option: ${arg}. ${usage}`);
     } else if (file !== undefined) {
       throw new AnalyzerParseError(
-        `unexpected extra argument: ${arg}. ${USAGE}`,
+        `unexpected extra argument: ${arg}. ${usage}`,
       );
     } else {
       file = arg;
@@ -881,7 +887,7 @@ export function parseAnalyzeArgs(argv: readonly string[]): AnalyzeCliOptions {
   }
 
   if (file === undefined) {
-    throw new AnalyzerParseError(`missing snapshot file argument. ${USAGE}`);
+    throw new AnalyzerParseError(`missing snapshot file argument. ${usage}`);
   }
 
   return {
@@ -893,10 +899,10 @@ export function parseAnalyzeArgs(argv: readonly string[]): AnalyzeCliOptions {
   };
 }
 
-function main(): void {
+export function runAnalyzeCli(usage = SOURCE_ANALYZE_USAGE): void {
   let options: AnalyzeCliOptions;
   try {
-    options = parseAnalyzeArgs(process.argv.slice(2));
+    options = parseAnalyzeArgs(process.argv.slice(2), usage);
   } catch (error) {
     process.stderr.write(
       `${error instanceof Error ? error.message : String(error)}\n`,
@@ -915,9 +921,6 @@ function main(): void {
   }
 }
 
-const isMain =
-  process.argv[1] !== undefined &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-if (isMain) {
-  main();
+if (isSourceMemoryEntrypoint(import.meta.url)) {
+  runAnalyzeCli();
 }

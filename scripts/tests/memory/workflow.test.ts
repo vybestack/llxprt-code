@@ -41,6 +41,7 @@ import { fileURLToPath } from 'node:url';
 import { checkLease } from '../../memory/lease.ts';
 import { REQUEST_DIR_NAME, queueRequest } from '../../memory/request.ts';
 import { parseSamples } from '../../memory/sample.ts';
+import { spawnSyncWithFileCapture } from './sync-process.ts';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..', '..', '..');
@@ -120,21 +121,16 @@ function startProbeChild(
 function runCli(
   args: readonly string[],
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
-  return new Promise((resolvePromise, reject) => {
-    const child = spawn(process.execPath, args, {
-      cwd: repoRoot,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (chunk) => {
-      stdout += String(chunk);
-    });
-    child.stderr.on('data', (chunk) => {
-      stderr += String(chunk);
-    });
-    child.once('error', reject);
-    child.once('close', (code) => resolvePromise({ code, stdout, stderr }));
+  const result = spawnSyncWithFileCapture(
+    join(repoRoot, 'tmp'),
+    process.execPath,
+    args,
+    { cwd: repoRoot },
+  );
+  return Promise.resolve({
+    code: result.status,
+    stdout: result.stdout,
+    stderr: result.stderr,
   });
 }
 
@@ -209,6 +205,52 @@ describe('memory-tool workflow — probe lease lifecycle', () => {
       await probe.closed;
       await waitFor('lease released', () => !existsSync(leaseFile));
       expect(checkLease(runDir).status).toBe('missing');
+    } finally {
+      await probe.stop();
+      rmSync(runDir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it('fails before application startup when another probe owns the run directory', async () => {
+    const runDir = mkdtempSync(join(tmpdir(), 'memflow-lease-refused-'));
+    const markerPath = join(runDir, 'application-started');
+    const probe = startProbeChild(runDir, 60_000);
+    try {
+      await waitFor(
+        'active lease',
+        () => checkLease(runDir).status === 'active',
+      );
+
+      const contender = spawn(
+        process.execPath,
+        [
+          '--preload',
+          probePath,
+          '-e',
+          `require('node:fs').writeFileSync(${JSON.stringify(markerPath)}, 'started')`,
+        ],
+        {
+          cwd: repoRoot,
+          env: {
+            ...process.env,
+            LLXPRT_MEM_DIR: runDir,
+            LLXPRT_MEM_INTERVAL_MS: '60000',
+          },
+          stdio: 'ignore',
+        },
+      );
+      const code = await new Promise<number | null>(
+        (resolvePromise, reject) => {
+          contender.once('error', reject);
+          contender.once('close', resolvePromise);
+        },
+      );
+
+      expect(code).not.toBe(0);
+      expect(readFileSync(join(runDir, 'probe.log'), 'utf8')).toContain(
+        'REFUSED startup: run directory lease not acquired',
+      );
+      expect(existsSync(markerPath)).toBe(false);
     } finally {
       await probe.stop();
       rmSync(runDir, { recursive: true, force: true });

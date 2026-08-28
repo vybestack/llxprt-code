@@ -56,6 +56,7 @@ interface RunResult {
   status: number | null;
   stderr: string;
   npmCommands: string[];
+  patchEvents: string[];
   lockfile: string;
   legacyBundleExists: boolean;
 }
@@ -65,7 +66,30 @@ interface Fixture {
   run(userAgent: string): RunResult;
 }
 
+interface FixtureOptions {
+  readonly patchExitCode?: number;
+}
+
 const fixtures: string[] = [];
+
+const captureChildStderr = [
+  'const { closeSync, openSync, writeSync } = require("node:fs");',
+  'const { spawnSync } = require("node:child_process");',
+  'const [stderrPath, command, ...args] = process.argv.slice(1);',
+  'const stderrFd = openSync(stderrPath, "w");',
+  'let status = 1;',
+  'try {',
+  '  const result = spawnSync(command, args, { stdio: ["ignore", "ignore", stderrFd] });',
+  '  if (result.error) {',
+  '    writeSync(stderrFd, "spawn failed: " + result.error.message + "\\n");',
+  '  } else {',
+  '    status = result.status ?? 1;',
+  '  }',
+  '} finally {',
+  '  closeSync(stderrFd);',
+  '}',
+  'process.exit(status);',
+].join('\n');
 
 /**
  * Spawns the fixture's postinstall under the given user agent (npm_config_user_agent),
@@ -81,25 +105,54 @@ function spawnPostinstall(
   status: number | null;
   stderr: string;
   npmCommands: string[];
+  patchEvents: string[];
 } {
+  const patchSentinel = join(dir, 'patch-invoked.sentinel');
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     npm_config_user_agent: userAgent,
     PATH: `${binDir}${delimiter}${process.env.PATH ?? ''}`,
     NPM_SENTINEL: sentinel,
+    PATCH_SENTINEL: patchSentinel,
   };
   // Ensure the recursion guard is unset so the npm path reaches bootstrap.
   delete env.LLXPRT_POSTINSTALL_RUNNING;
 
+  // Bun 1.3.14's test runner can allocate descriptors above macOS posix_spawn's
+  // OPEN_MAX. Open the capture file in a Node wrapper so its descriptor is valid
+  // when Node spawns postinstall and its nested patch-package process.
+  const stderrPath = join(dir, 'postinstall.stderr');
   const result = spawnSync(
-    process.execPath,
-    [join(dir, 'scripts', 'postinstall.cjs')],
-    { encoding: 'utf8', env },
+    'node',
+    [
+      '-e',
+      captureChildStderr,
+      stderrPath,
+      'node',
+      join(dir, 'scripts', 'postinstall.cjs'),
+    ],
+    { env, stdio: 'ignore' },
   );
+  const stderrParts: string[] = [];
+  if (result.error !== undefined) {
+    stderrParts.push(`wrapper spawn failed: ${result.error.message}`);
+  }
+  if (existsSync(stderrPath)) {
+    stderrParts.push(readFileSync(stderrPath, 'utf8'));
+  } else {
+    stderrParts.push(`stderr capture was not created: ${stderrPath}`);
+  }
+  const stderr = stderrParts.join('\n');
   const npmCommands = existsSync(sentinel)
     ? readFileSync(sentinel, 'utf8')
         .split('\n')
         .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+    : [];
+
+  const patchEvents = existsSync(patchSentinel)
+    ? readFileSync(patchSentinel, 'utf8')
+        .split('\n')
         .filter((line) => line.length > 0)
     : [];
 
@@ -109,12 +162,38 @@ function spawnPostinstall(
     // such a failure status is null and stderr is empty, which would otherwise
     // assert as an opaque "expected null to be 0".
     stderr:
-      (result.error
-        ? `spawn failed: ${result.error.message}
-`
-        : '') + (result.stderr ?? ''),
+      (result.error ? `spawn failed: ${result.error.message}\n` : '') + stderr,
     npmCommands,
+    patchEvents,
   };
+}
+
+function addTrackedPatchFixture(dir: string, exitCode: number): void {
+  mkdirSync(join(dir, 'patches'));
+  writeFileSync(join(dir, 'patches', 'ink+6.4.8.patch'), 'fixture patch\n');
+
+  const packageDir = join(dir, 'node_modules', 'patch-package');
+  mkdirSync(join(packageDir, 'dist'), { recursive: true });
+  writeFileSync(
+    join(packageDir, 'package.json'),
+    `${JSON.stringify({ name: 'patch-package', main: 'dist/index.js' })}\n`,
+  );
+  writeFileSync(
+    join(packageDir, 'dist', 'index.js'),
+    `const fs = require('fs');
+const path = require('path');
+const root = process.cwd();
+const lockfile = path.join(root, 'package-lock.json');
+const topLink = path.join(root, 'node_modules', '@vybestack', 'dummy');
+const staticCopy = path.join(root, 'packages', 'bar', 'node_modules', '@vybestack', 'foo');
+const peerPresent = fs.existsSync(lockfile) && fs.readFileSync(lockfile, 'utf8').includes('"peer": true');
+const topLinkPresent = fs.existsSync(topLink);
+const staticLinkPresent = fs.existsSync(staticCopy) && fs.lstatSync(staticCopy).isSymbolicLink();
+fs.appendFileSync(process.env.PATCH_SENTINEL, 'peer=' + peerPresent + ';topLink=' + topLinkPresent + ';staticLink=' + staticLinkPresent + '\\n');
+const errorOnFail = process.argv.includes('--error-on-fail');
+process.exit(errorOnFail ? ${exitCode} : 0);
+`,
+  );
 }
 
 /**
@@ -131,7 +210,7 @@ const staticCopyPath = (dir: string) =>
  * postinstall, under Bun, replaces that static copy with a symlink to the real
  * workspace directory.
  */
-function makeSymlinkFixture(): Fixture {
+function makeSymlinkFixture(options: FixtureOptions = {}): Fixture {
   const dir = mkdtempSync(join(tmpdir(), 'postinstall-symlink-'));
   fixtures.push(dir);
 
@@ -214,6 +293,10 @@ exit 0
   );
   chmodSync(npmStub, 0o755);
 
+  if (options.patchExitCode !== undefined) {
+    addTrackedPatchFixture(dir, options.patchExitCode);
+  }
+
   return {
     dir,
     run(userAgent: string): RunResult {
@@ -242,7 +325,7 @@ afterEach(() => {
  * invocation into a sentinel file, so tests can assert that source-link hydration
  * runs without invoking npm or compiling the TypeScript application to JavaScript.
  */
-function makeFixture(): Fixture {
+function makeFixture(options: FixtureOptions = {}): Fixture {
   const dir = mkdtempSync(join(tmpdir(), 'postinstall-manager-'));
   fixtures.push(dir);
 
@@ -292,6 +375,10 @@ function makeFixture(): Fixture {
     '#!/bin/sh\nprintf \'%s\\n\' "$*" >> "$NPM_SENTINEL"\nexit 0\n',
   );
   chmodSync(npmStub, 0o755);
+
+  if (options.patchExitCode !== undefined) {
+    addTrackedPatchFixture(dir, options.patchExitCode);
+  }
 
   return {
     dir,
@@ -393,6 +480,41 @@ describe.skipIf(isWindows)('postinstall package-manager awareness', () => {
     expect(result.status, result.stderr).toBe(0);
     expect(result.npmCommands).toEqual([]);
   });
+
+  it('applies tracked dependency patches before npm-specific work', () => {
+    const fixture = makeFixture({ patchExitCode: 0 });
+
+    const result = fixture.run(NPM_USER_AGENT);
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.patchEvents).toEqual([
+      'peer=true;topLink=false;staticLink=false',
+    ]);
+    expect(result.lockfile).not.toContain('"peer": true');
+    expect(
+      lstatSync(
+        join(fixture.dir, 'node_modules', '@vybestack', 'dummy'),
+      ).isSymbolicLink(),
+    ).toBe(true);
+  });
+
+  it('fails before npm-specific work when a tracked patch cannot be applied', () => {
+    const fixture = makeFixture({ patchExitCode: 19 });
+
+    const result = fixture.run(NPM_USER_AGENT);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr, JSON.stringify(result)).toContain(
+      'Failed to apply dependency patches',
+    );
+    expect(result.patchEvents).toEqual([
+      'peer=true;topLink=false;staticLink=false',
+    ]);
+    expect(result.lockfile).toContain('"peer": true');
+    expect(
+      existsSync(join(fixture.dir, 'node_modules', '@vybestack', 'dummy')),
+    ).toBe(false);
+  });
 });
 
 describe.skipIf(isWindows)('postinstall Bun workspace symlinking', () => {
@@ -449,6 +571,19 @@ describe.skipIf(isWindows)('postinstall Bun workspace symlinking', () => {
         join(fixture.dir, 'node_modules', '@vybestack', 'foo'),
       ).isSymbolicLink(),
     ).toBe(true);
+  });
+
+  it('applies tracked dependency patches before the Bun early branch', () => {
+    const fixture = makeSymlinkFixture({ patchExitCode: 0 });
+    const copyPath = staticCopyPath(fixture.dir);
+
+    const result = fixture.run(BUN_USER_AGENT);
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.patchEvents).toEqual([
+      'peer=false;topLink=false;staticLink=false',
+    ]);
+    expect(lstatSync(copyPath).isSymbolicLink()).toBe(true);
   });
 });
 
