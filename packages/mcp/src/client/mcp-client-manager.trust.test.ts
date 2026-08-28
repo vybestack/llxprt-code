@@ -12,11 +12,11 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type { Mock } from 'bun:test';
 import { McpClientManager } from './mcp-client-manager.js';
 import { McpClient, MCPDiscoveryState } from './mcp-client.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { Config } from './test-support/mcpClientTestSupport.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
-import { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
-import type { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
+import { PromptRegistry } from './test-support/mcpClientTestSupport.js';
+import { ResourceRegistry } from './test-support/mcpClientTestSupport.js';
+import type { WorkspaceContext } from './test-support/mcpClientTestSupport.js';
 void vi.mock('./mcp-client.js', () => ({
   McpClient: vi.fn(),
   MCPDiscoveryState: {

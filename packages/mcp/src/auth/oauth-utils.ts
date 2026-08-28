@@ -5,8 +5,8 @@
  */
 
 import { type MCPOAuthConfig } from './oauth-provider.js';
-import { getErrorMessage } from '@vybestack/llxprt-code-core/utils/errors.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { getErrorMessage } from '@vybestack/llxprt-code-tools/utils/errors.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 
 const debugLogger = new DebugLogger('llxprt:mcp:oauth');
 

@@ -10,14 +10,14 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import type { StreamableHTTPClientTransportOptions } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
-import { AuthProviderType } from '@vybestack/llxprt-code-core/config/configTypes.js';
-import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import { AuthProviderType } from '@vybestack/llxprt-code-auth/mcp-auth-provider-type.js';
+import type { MCPServerConfig } from '../config/mcpServerConfig.js';
 import { GoogleCredentialProvider } from '../auth/google-auth-provider.js';
 import { ServiceAccountImpersonationProvider } from '../auth/sa-impersonation-provider.js';
 import type { McpAuthProvider } from '../auth/auth-provider.js';
 import { MCPOAuthProvider } from '../auth/oauth-provider.js';
 import { MCPOAuthTokenStorage } from '../auth/oauth-token-storage.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:tools:mcp-client');
 

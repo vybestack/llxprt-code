@@ -1,250 +1,142 @@
-# Issue #3305 — `@vybestack/llxprt-code-mcp` value-imports core at runtime but declares it only as a devDependency
+# Issue #3305: make `@vybestack/llxprt-code-mcp` standalone
 
-## Problem (verified on `main`, commit `354957220`)
+## Problem
 
-`packages/mcp/package.json` lists `@vybestack/llxprt-code-core` in `devDependencies`
-only, while production source performs value imports from it. Verified evidence:
+The published MCP package imported core at runtime while declaring core only as
+a development dependency. Workspace hoisting and TypeScript path mappings hid
+the defect in the repository. A standalone consumer could install the MCP
+tarball and then fail to resolve its imports.
 
-1. Value (non-type) imports from core in `packages/mcp/src` production files:
-   `getErrorMessage`, `debugLogger`, `DebugLogger`, `coreEvents`,
-   `openBrowserSecurely`, `AuthProviderType`, `safeJsonStringify`.
-   Most of the "19 files" in the issue body already use `import type`; the
-   remaining value imports are genuine runtime imports and cannot be converted.
-2. `npm pack` of `packages/mcp` produces a tarball whose shipped
-   `dist/mcp/**` contains bare runtime specifiers:
-   `@vybestack/llxprt-code-core/utils/errors.js`,
-   `.../utils/debugLogger.js`, `.../utils/events.js`,
-   `.../debug/DebugLogger.js`, `.../debug/index.js`,
-   `.../utils/safeJsonStringify.js`, `.../utils/secure-browser-launcher.js`,
-   `.../config/configTypes.js`, and more.
-3. `scripts/bind-release-deps.ts` rewrites `file:` specifiers in *all* dependency
-   sections, including `devDependencies`. So the published manifest ends up with
-   `devDependencies: { "@vybestack/llxprt-code-core": "0.11.0" }` — never
-   installed by a consumer running `npm i @vybestack/llxprt-code-mcp`.
-4. Reproduced the consumer failure hermetically: extracting the packed tarball
-   into an OS-temp `node_modules` populated only from the manifest's declared
-   `dependencies` fails with
-   `Cannot find module '@vybestack/llxprt-code-core/utils/debugLogger.js'`.
+Declaring core as an MCP runtime dependency would make installation succeed, but
+it would preserve a package cycle. Core already depends on MCP. The required
+repair is an acyclic package graph in which MCP owns MCP contracts and receives
+host capabilities from application composition roots.
 
-## Decision on the cycle
+## Accepted behavior
 
-`core` already declares `@vybestack/llxprt-code-mcp` in `dependencies` and
-value-imports it (`config/config.ts`, `code_assist/oauth-credential-storage.ts`,
-`config/lspIntegration.ts`, `src/index.ts` re-exports). Extracting the shared
-leaf utilities into a new package is a large cross-package refactor that is out
-of scope for this issue.
+1. MCP has no reference to `@vybestack/llxprt-code-core` in production source,
+   tests, manifests, TypeScript paths, or included files.
+2. Core continues to depend on MCP and structurally satisfies MCP-owned ports.
+3. `MCPServerConfig` is owned by MCP. Core may re-export the type for source
+   compatibility.
+4. MCP host registration is available only from the explicit
+   `@vybestack/llxprt-code-mcp/host/hostServices.js` subpath.
+5. The CLI, A2A server, and Agent API entrypoints (`createAgent` and
+   `fromConfig`) register these implementations during startup:
 
-**Chosen option: declare the cycle.** Move `@vybestack/llxprt-code-core` into
-`packages/mcp` `dependencies` so the declared graph matches the real runtime
-graph, and document the cycle as deliberate. Verified that
-`npm install --package-lock-only --ignore-scripts` succeeds with the cycle
-declared (npm resolves workspace cycles), and `scripts/check-storage-package-cycle.ts`
-is unaffected (storage has no workspace dependencies).
+   ```typescript
+   {
+     emitFeedback: (...args) => coreEvents.emitFeedback(...args),
+     openBrowser: openBrowserSecurely,
+   }
+   ```
 
----
+6. Registered feedback preserves caller argument count. A host feedback failure
+   does not interrupt the MCP operation that reported it.
+7. Without registration, feedback reaches the debug logger and browser opening
+   rejects. The rejection does not expose an OAuth URL.
+8. `MCP_CLIENT_UPDATE_EVENT` remains equal to
+   `CoreEvent.McpClientUpdate` without an MCP-to-core import.
+9. The packed package imports from an isolated consumer containing only its
+   declared dependencies.
+10. A repository guard continues to reject undeclared runtime dependencies in
+    every published workspace.
 
-## Accepted behavior (acceptance criteria)
+## Design
 
-### AC1 — `packages/mcp` declares its runtime dependency on core
+### MCP-owned contracts
 
-`packages/mcp/package.json` declares `@vybestack/llxprt-code-core` in
-`dependencies` (with the `file:../core` workspace protocol, matching its
-siblings) and no longer declares it in `devDependencies`.
+`packages/mcp/src/config/mcpServerConfig.ts` owns the server and extension
+configuration shapes.
 
-### AC2 — Repo-wide packaging guard
+`packages/mcp/src/host/hostInterfaces.ts` owns narrow structural ports for:
 
-A guard verifies that, for **every NPM-published workspace package**, no
-production source file imports a package that is absent from that package's
-`dependencies` / `peerDependencies` / `optionalDependencies`.
+- folder trust
+- workspace directories and change notifications
+- prompt registration and removal
+- resource publication and removal
+- the subset of host configuration used by `McpClientManager`
 
-Definitions the guard must use:
+MCP uses `IToolMessageBus` from tools. Core's concrete classes satisfy the MCP
+ports structurally.
 
-- **Published workspace package**: a directory listed in root `workspaces` whose
-  manifest is not `private: true` and whose name is not in
-  `NON_NPM_RELEASE_PACKAGES` (`scripts/utils/release-packages.ts`).
-- **Production source file**: a file reachable by transitive *relative* import
-  from the package's published entrypoints, derived from the manifest
-  (`main` / `module` / `types` / `exports`, preferring the `bun` source
-  condition). Reuse `deriveAllEntryPaths` / `resolveRelativeModule` from
-  `scripts/tests/workspace-source-helpers.ts`. Reachability is the definition —
-  do **not** introduce an ad-hoc "looks like a test" path allowlist to make
-  violations disappear.
-- **Runtime import**: a bare specifier from a static `import`/`export ... from`,
-  a bare `import()` call, or a bare `require()` call, excluding `import type` /
-  `export type` and excluding type-only named bindings
-  (`import { type X } from ...`). Use the TypeScript AST, not regex
-  (`scripts/check-storage-import-boundary.ts` is the model).
-- **Exempt specifiers**: Node builtins (with or without the `node:` prefix),
-  `bun:` specifiers, relative/absolute paths, and self-references to the
-  package's own name.
-- **Package name extraction**: `@scope/name` for scoped specifiers, first path
-  segment otherwise; subpaths are stripped.
+### Leaf-package imports
 
-### AC3 — Every violation the guard reports is fixed
+Runtime utilities are imported from packages below MCP:
 
-Running the guard on the current tree surfaces undeclared runtime imports beyond
-`mcp`. Probe results (regex pre-scan; final list is whatever the AST + entrypoint
-reachability guard actually reports):
+- telemetry supplies debug logging and safe JSON serialization
+- tools supplies error formatting and the tool message-bus contract
+- auth supplies `AuthProviderType`
 
-| Package | Undeclared specifier | Source |
-|---|---|---|
-| `packages/telemetry` | `zod` | `src/perf/perfRecords.ts` |
-| `packages/telemetry` | `@opentelemetry/context-async-hooks` | `src/telemetry/sdk.ts` |
-| `packages/providers` | `@vybestack/llxprt-code-telemetry` | `src/logging/telemetryEmitter.ts` |
-| `packages/agents` | `typescript` | `src/api/apiSurfaceParser.ts` |
-| `packages/cli` | `semver` | `src/commands/extensions/validate.ts`, `src/ui/utils/updateCheck.ts` |
-| `packages/cli` | `strip-json-comments` | `src/auth/oauth-settings-adapter.ts`, `src/config/trustedFolders.ts`, `src/config/settingsLoader.ts` |
+This removes both runtime and type-only MCP imports from core.
 
-Fixes are **declaration-only** `package.json` edits: add each specifier to the
-owning package's `dependencies` with a range consistent with the root manifest
-(`publish-integrity.test.ts` requires the root range to be a *subset* of the
-workspace range, so reuse the root's range verbatim). Do not change any
-production code to make the guard pass.
+### Host inversion
 
-Special case: `@vybestack/llxprt-code-test-utils` is in
-`NON_NPM_RELEASE_PACKAGES` and can never be a runtime dependency of a published
-package. If entrypoint reachability still reaches a file importing it
-(`packages/agents/src/core/coreToolScheduler-test-helpers.ts`,
-`packages/cli/src/test-utils/render.tsx`), **stop and report** rather than
-inventing an exclusion — that would be a genuine published-surface bug needing
-its own decision.
+`packages/mcp/src/host/hostServices.ts` stores the registered feedback sink and
+browser launcher. Application roots explicitly register core's implementations.
+Registration replaces the current implementations and supports partial updates
+for hosts that provide capabilities separately.
 
-### AC4 — The `core` ↔ `mcp` cycle is documented as deliberate
+The MCP root barrel does not export host registration. Explicit subpaths make
+the composition boundary visible in imports and prevent accidental expansion of
+the package root API.
 
-A short document records that the cycle is declared on purpose, why the
-alternative (extracting shared leaf utilities into a new package) was not taken,
-and what would remove it. Both manifests declare their side of the edge.
+## Enforcement and tests
 
-### AC5 — The published `mcp` tarball installs standalone and imports cleanly
+### Runtime declaration guard
 
-A test packs `packages/mcp`, materializes a consumer whose module resolution is
-constrained to the packed manifest's declared dependencies, imports the package
-entrypoint, and asserts it loads.
+`scripts/check-runtime-dependency-declarations.ts` uses TypeScript AST parsing
+and published-entrypoint reachability. It checks runtime imports for every
+published workspace and excludes type-only imports.
 
----
+### Acyclic boundary test
 
-## Tests that prove the behavior
+`scripts/tests/runtime-dependency-declarations.repo.test.ts` checks all MCP
+TypeScript files, including tests, for static imports, re-exports, dynamic
+imports, `require`, import-equals declarations, and import types that reference
+core. It also checks every manifest dependency section and MCP's TypeScript
+configuration.
 
-All tests are Bun tests (`bun:test`), TypeScript, under `scripts/tests/`.
+### Host behavior tests
 
-### T1 — `scripts/tests/runtime-dependency-declarations.test.ts` (AC2)
+`packages/mcp/src/host/hostServices.test.ts` covers exact argument forwarding,
+partial registration, reset behavior, sink failures, browser delegation, and
+sanitized standalone fallback errors.
 
-Behavioral unit tests for the guard's exported functions against **synthetic
-temp-dir fixtures** (mirroring `published-closure-regressions.test.ts`):
+`scripts/tests/mcp-host-wiring.test.ts` executes each application's wiring,
+observes feedback through core events, verifies use of the secure browser
+launcher, pins event-name compatibility, and checks that each startup function
+calls the wiring before asynchronous startup work.
 
-1. A fixture package whose entrypoint value-imports an undeclared bare package →
-   one violation naming the file, line, specifier, and package.
-2. The same fixture with the package declared in `dependencies` → no violation.
-3. Declared in `peerDependencies` → no violation.
-4. Declared in `optionalDependencies` → no violation.
-5. Declared **only** in `devDependencies` → violation (this is the #3305 shape).
-6. `import type { X } from 'undeclared'` → no violation.
-7. `export type { X } from 'undeclared'` → no violation.
-8. `import { type X } from 'undeclared'` (inline type-only binding) → no violation.
-9. `import 'undeclared'` (bare side-effect import) → violation.
-10. `await import('undeclared')` with a literal specifier → violation.
-11. `require('undeclared')` → violation.
-12. Node builtins `fs`, `node:fs`, and `bun:test` → no violation.
-13. A subpath specifier `undeclared/sub/path.js` → violation reported against
-    package `undeclared`; `@scope/pkg/sub.js` → reported against `@scope/pkg`.
-14. Self-reference to the package's own name → no violation.
-15. A file that exists in the package but is **not reachable** from any
-    entrypoint → its imports are not scanned.
-16. `private: true` and `NON_NPM_RELEASE_PACKAGES` workspaces are skipped.
+### Standalone consumer test
 
-### T2 — `scripts/tests/runtime-dependency-declarations.repo.test.ts` (AC1, AC3)
+`scripts/tests/mcp-standalone-consumer.test.ts` packs MCP into an isolated
+directory and imports it with only declared dependencies available. The test
+must not depend on repository `node_modules` traversal to pass.
 
-Runs the guard against the **real repository** and asserts zero violations, with
-the failure message listing every offender. Plus a targeted, self-documenting
-assertion that `packages/mcp/package.json` declares
-`@vybestack/llxprt-code-core` in `dependencies` and not in `devDependencies`
-(so a regression names #3305 directly).
+## Changed areas
 
-### T3 — `scripts/tests/mcp-standalone-consumer.test.ts` (AC5)
+- MCP configuration, host interfaces, host services, clients, authentication,
+  tests, package exports, manifest, and TypeScript configuration
+- Core configuration type ownership and compatibility re-export
+- CLI, A2A, and Agent API composition-root wiring
+- Auth and tools explicit subpath exports
+- Repository dependency guards and package-boundary tests
+- npm and Bun lockfiles
+- Architecture documentation and PR evidence
 
-Hermetic, no network:
+## Verification gates
 
-1. `npm pack packages/mcp --pack-destination <tmp>` (OS temp dir via
-   `mkdtempSync(join(tmpdir(), ...))`, **outside the repo** — a temp dir inside
-   the repo lets Node/Bun walk up into the repo's own `node_modules` and the
-   test silently passes; this was observed during investigation).
-2. Extract the tarball; copy `package/` to
-   `<tmp>/node_modules/@vybestack/llxprt-code-mcp` (copy, not symlink, so the
-   package's realpath is inside the sandbox and its resolution is constrained).
-3. For each name in the *packed manifest's* `dependencies` + `peerDependencies`,
-   symlink `<repoRoot>/node_modules/<name>` into `<tmp>/node_modules/<name>`.
-   Nothing else is linked.
-4. Run `bun -e "await import('@vybestack/llxprt-code-mcp')"` with `cwd: <tmp>`;
-   assert exit code 0 and that stderr contains no `Cannot find module`.
-   The `bun` export condition resolves to the packed `index.ts` source, so the
-   test does not depend on `dist/` having been built.
-5. Negative control in the same file: rebuild the sandbox omitting
-   `@vybestack/llxprt-code-core` from the linked set and assert the import
-   fails with `Cannot find module '@vybestack/llxprt-code-core/...`. This proves
-   the sandbox actually constrains resolution rather than leaking to the repo.
+Before completion:
 
-Give the test a generous explicit timeout (`npm pack` of `mcp` writes ~1815
-files) and always clean up the temp dir in a `finally`.
-
----
-
-## Implementation
-
-### Files added
-
-- `scripts/check-runtime-dependency-declarations.ts` — executable guard
-  (`#!/usr/bin/env bun`), exporting the pure analysis functions used by T1/T2
-  and a `main()` that prints diagnostics and exits non-zero on violations.
-  Follow the structure and reporting style of
-  `scripts/check-cli-import-boundary.ts`; anchor the repo root to
-  `import.meta.url`, not `process.cwd()`.
-- `scripts/tests/runtime-dependency-declarations.test.ts` (T1)
-- `scripts/tests/runtime-dependency-declarations.repo.test.ts` (T2)
-- `scripts/tests/mcp-standalone-consumer.test.ts` (T3)
-- `dev-docs/architecture/package-dependency-cycles.md` (AC4)
-
-### Files changed
-
-- `packages/mcp/package.json` — move `@vybestack/llxprt-code-core` from
-  `devDependencies` to `dependencies` (AC1).
-- `packages/telemetry/package.json`, `packages/providers/package.json`,
-  `packages/agents/package.json`, `packages/cli/package.json` — add the
-  undeclared runtime dependencies the guard reports (AC3).
-- `package-lock.json` / `bun.lock` — regenerate.
-- Root `package.json` — add `"lint:runtime-deps": "bun scripts/check-runtime-dependency-declarations.ts"`.
-- `scripts/lint-all.sh` — run the new guard alongside the other guards.
-- `.github/workflows/ci.yml` — add a `Run runtime-dependency declaration guard (#3305)`
-  step next to the other `lint:*` guard steps.
-
-### Constraints
-
-- No new `.js` files; TypeScript + Bun only.
-- No new `eslint-disable*`, `@ts-ignore`, `@ts-expect-error`, `@ts-nocheck`.
-- No ESLint severity downgrades, no new `ignores:` blocks, no complexity or
-  file-size threshold increases.
-- Copyright year on new files must be the current year (2026).
-- No production code changes in `packages/*/src` — this issue is about
-  declarations, guards, and documentation.
-
-### Out of scope
-
-- Extracting `getErrorMessage` / `DebugLogger` / `coreEvents` /
-  `openBrowserSecurely` / `AuthProviderType` into a new shared leaf package.
-- Converting the already-correct `import type` usages.
-- Any change to `packages/*/src` production behavior.
-- Removing the `core` ↔ `mcp` cycle.
-
----
-
-## Verification
-
-```
-npm run test
-npm run lint
-npm run typecheck
-npm run format
-npm run build
-bun scripts/start.ts --profile-load stepfun-37 "write me a haiku and nothing else"
-```
-
-Plus the new guard directly: `npm run lint:runtime-deps`.
+1. Format and lint all changed files.
+2. Typecheck MCP, core, CLI, A2A, agents, scripts, and the full repository.
+3. Run the complete MCP suite and focused host and boundary suites.
+4. Run the packed standalone-consumer test.
+5. Run the runtime-dependency and lockfile guards.
+6. Build the full repository from the intended package order.
+7. Run the full test suite and investigate any timeout or nondeterministic
+   failure with repeatable evidence.
+8. Smoke test the CLI and other application startup paths.
+9. Run final code review, fix in-scope findings, push the candidate head, and
+   require green CI before reporting merge readiness.

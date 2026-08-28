@@ -1,84 +1,93 @@
-# Declared package dependency cycles
+# Package dependency direction
 
-This page records dependency cycles between workspace packages that exist on
-purpose. A cycle listed here is declared in both directions in `package.json`,
-so the dependency graph you can read from the manifests matches the graph that
-exists at runtime.
+Workspace manifests must describe the package graph that production code uses.
+A published package must also install and load without relying on workspace
+hoisting or TypeScript path aliases.
 
-An undeclared cycle is worse than a declared one. It breaks published packages
-for external consumers, and it makes any audit that reads `package.json` files
-conclude the workspace is acyclic when it is not.
+The runtime dependency guard checks declarations. Package-specific boundary
+tests check architectural constraints that are stricter than declaration
+correctness.
 
-## `@vybestack/llxprt-code-core` ↔ `@vybestack/llxprt-code-mcp`
+## Core and MCP are acyclic
 
-Both directions are declared in `dependencies`.
+The dependency direction is:
 
-### core → mcp
+```text
+application composition root
+  ├── core
+  └── mcp
 
-`core` consumes the MCP client surface directly:
+core ──> mcp
+mcp  ──> auth, settings, storage, telemetry, tools
+```
 
-| Source                                                      | Imported value                                        |
-| ----------------------------------------------------------- | ----------------------------------------------------- |
-| `packages/core/src/config/config.ts`                        | `McpClientManager`                                    |
-| `packages/core/src/code_assist/oauth-credential-storage.ts` | `KeychainTokenStorage`, `MCPOAuthToken`               |
-| `packages/core/src/config/lspIntegration.ts`                | `DiscoveredMCPTool`                                   |
-| `packages/core/src/index.ts`                                | re-exports of the MCP client, tool, and OAuth surface |
+`@vybestack/llxprt-code-core` consumes MCP clients, tools, and token storage.
+`@vybestack/llxprt-code-mcp` does not import or declare core in any dependency
+section. This applies to runtime imports, type-only imports, dynamic imports,
+requires, re-exports, tests, and TypeScript path mappings.
 
-### mcp → core
+### Contract ownership
 
-`mcp` consumes leaf utilities and configuration types that live in `core`:
+MCP owns contracts that describe MCP data and the host capabilities it needs:
 
-| Imported value        | Module                                                         |
-| --------------------- | -------------------------------------------------------------- |
-| `getErrorMessage`     | `@vybestack/llxprt-code-core/utils/errors.js`                  |
-| `debugLogger`         | `@vybestack/llxprt-code-core/utils/debugLogger.js`             |
-| `DebugLogger`         | `@vybestack/llxprt-code-core/debug/index.js`                   |
-| `coreEvents`          | `@vybestack/llxprt-code-core/utils/events.js`                  |
-| `openBrowserSecurely` | `@vybestack/llxprt-code-core/utils/secure-browser-launcher.js` |
-| `safeJsonStringify`   | `@vybestack/llxprt-code-core/utils/safeJsonStringify.js`       |
-| `AuthProviderType`    | `@vybestack/llxprt-code-core/config/configTypes.js`            |
+| Contract                                                  | Owner     | Reason                                                                      |
+| --------------------------------------------------------- | --------- | --------------------------------------------------------------------------- |
+| `MCPServerConfig`                                         | MCP       | It describes MCP server transports and authentication.                      |
+| Trust, workspace, prompt, resource, and host-config ports | MCP       | MCP consumes narrow structural interfaces instead of concrete core classes. |
+| Feedback and browser host services                        | MCP       | MCP declares the capabilities. Applications provide the implementations.    |
+| `AuthProviderType`                                        | auth      | Authentication is used below both core and MCP.                             |
+| Tool message bus                                          | tools     | MCP tools depend on the tools package contract, not core's concrete bus.    |
+| Debug logging and JSON serialization                      | telemetry | These are telemetry concerns shared by higher-level packages.               |
+| Error formatting                                          | tools     | MCP already depends on tools and uses its public error subpath.             |
 
-Type-only imports from `core` (`Config`, `MCPServerConfig`, `PromptRegistry`,
-`ResourceRegistry`, `WorkspaceContext`, `MessageBus`) use `import type` and are
-erased at compile time, so they do not contribute to the runtime graph.
+Core can keep concrete `Config`, `WorkspaceContext`, `PromptRegistry`, and
+`ResourceRegistry` implementations. TypeScript structural typing lets those
+classes satisfy MCP's ports without moving them or adding an MCP-to-core edge.
+Core re-exports the `MCPServerConfig` type for source compatibility.
 
-### Why the cycle is declared rather than removed
+### Host services
 
-`mcp` declared `core` in `devDependencies` until issue #3305. Because
-`scripts/bind-release-deps.ts` rewrites `file:` specifiers in every dependency
-section, the published manifest carried `core` in `devDependencies` — a section
-`npm install` never installs for a consumer. The shipped `dist/mcp/**` still
-emitted bare `@vybestack/llxprt-code-core/...` specifiers, so
-`npm i @vybestack/llxprt-code-mcp` produced a package that could not resolve its
-own imports.
+MCP exposes host registration only through
+`@vybestack/llxprt-code-mcp/host/hostServices.js`. It is not re-exported from
+the package root.
 
-Two fixes were available: declare the cycle, or break it by moving the shared
-leaf utilities into a lower-level package that both `core` and `mcp` depend on.
-The second is the better end state but is a cross-package refactor touching
-`core`, `mcp`, and every consumer of those utilities. #3305 chose the first so
-that the published package stops being broken, and left the extraction for
-separate work.
+Each application composition root registers both required capabilities before
+starting asynchronous application work:
 
-npm resolves this cycle without complaint: `npm install --package-lock-only`
-succeeds, and the standalone-install contract is pinned by
-`scripts/tests/mcp-standalone-consumer.test.ts`.
+```typescript
+registerMcpHostServices({
+  emitFeedback: (...args) => coreEvents.emitFeedback(...args),
+  openBrowser: openBrowserSecurely,
+});
+```
 
-### What would remove it
+The CLI, A2A server, and both public Agent API startup functions (`createAgent`
+and `fromConfig`) perform this registration. MCP's standalone defaults remain
+usable when no application host is present:
+feedback goes to the debug logger, and browser opening rejects so the existing
+manual OAuth URL flow can continue. The fallback rejection does not include the
+URL because OAuth query parameters can contain sensitive values.
 
-Move `getErrorMessage`, `DebugLogger` / `debugLogger`, `coreEvents`,
-`openBrowserSecurely`, `safeJsonStringify`, and `AuthProviderType` into a
-package below both `core` and `mcp`, then drop `@vybestack/llxprt-code-core`
-from `packages/mcp/package.json`. Several of these are already leaf concerns;
-`AuthProviderType` and the configuration types are the ones that need a home
-decision.
+### Event compatibility
+
+MCP owns the `mcp-client-update` event name because MCP emits it. Core retains
+`CoreEvent.McpClientUpdate` because core listens for it. A composition-boundary
+test asserts that both constants have the same wire value without adding a
+package edge from MCP to core.
 
 ## Enforcement
 
-`scripts/check-runtime-dependency-declarations.ts` (`npm run lint:runtime-deps`)
-fails if any published workspace package imports, at runtime, a package it does
-not declare in `dependencies`, `peerDependencies`, or `optionalDependencies`. A
-package declared only in `devDependencies` is a failure, because that is exactly
-the shape that shipped the broken `mcp` tarball.
+`scripts/check-runtime-dependency-declarations.ts`, exposed as
+`npm run lint:runtime-deps`, checks every published workspace. It follows
+published entrypoints, parses imports with the TypeScript AST, and reports a
+runtime package import that is absent from `dependencies`,
+`peerDependencies`, or `optionalDependencies`.
 
-Adding a cycle therefore requires declaring it, and declaring it means it shows
-up in the graph and belongs on this page.
+`scripts/tests/runtime-dependency-declarations.repo.test.ts` adds the stricter
+MCP boundary. It scans every TypeScript import form, checks all dependency
+sections, and verifies that MCP's TypeScript configuration does not map or
+include core.
+
+`scripts/tests/mcp-standalone-consumer.test.ts` packs MCP and imports it from an
+isolated consumer containing only declared dependencies. This catches package
+exports and module-resolution failures that source checks cannot detect.

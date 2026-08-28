@@ -46,6 +46,11 @@
       "bun": "./src/formatters/toolNameUtils.ts",
       "import": "./dist/src/formatters/toolNameUtils.js"
     },
+    "./utils/errors.js": {
+      "types": "./dist/src/utils/errors.d.ts",
+      "bun": "./src/utils/errors.ts",
+      "import": "./dist/src/utils/errors.js"
+    },
     "./utils/fetch.js": {
       "types": "./dist/src/utils/fetch.d.ts",
       "bun": "./src/utils/fetch.ts",

@@ -5,10 +5,10 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
-import { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
-import { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
+import type { Config } from './test-support/mcpClientTestSupport.js';
+import { PromptRegistry } from './test-support/mcpClientTestSupport.js';
+import { ResourceRegistry } from './test-support/mcpClientTestSupport.js';
+import { WorkspaceContext } from './test-support/mcpClientTestSupport.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { McpClient } from './mcp-client.js';
 import { McpClientManager } from './mcp-client-manager.js';

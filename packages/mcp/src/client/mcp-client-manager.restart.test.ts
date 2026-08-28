@@ -8,17 +8,17 @@ import { waitFor } from '../../../test-utils/src/wait-for.js';
 import { vi, describe, it, expect, afterEach, type Mock } from 'bun:test';
 import { McpClientManager } from './mcp-client-manager.js';
 import { McpClient, populateMcpServerCommand } from './mcp-client.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { Config } from './test-support/mcpClientTestSupport.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
-import type { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
-import type { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
+import type { PromptRegistry } from './test-support/mcpClientTestSupport.js';
+import type { ResourceRegistry } from './test-support/mcpClientTestSupport.js';
+import type { WorkspaceContext } from './test-support/mcpClientTestSupport.js';
 import type {
   MCPServerConfig,
   LlxprtExtension,
-} from '@vybestack/llxprt-code-core/config/configTypes.js';
+} from './test-support/mcpClientTestSupport.js';
 import { EventEmitter } from 'node:events';
-import { CoreEvent } from '@vybestack/llxprt-code-core/utils/events.js';
+import { MCP_CLIENT_UPDATE_EVENT } from '../host/hostServices.js';
 
 void vi.mock('./mcp-client.js', () => ({
   McpClient: vi.fn(),
@@ -320,7 +320,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     );
 
     const emittedCounts: number[] = [];
-    eventEmitter.on(CoreEvent.McpClientUpdate, (payload) => {
+    eventEmitter.on(MCP_CLIENT_UPDATE_EVENT, (payload) => {
       const { clients } = payload as { clients: Map<string, unknown> };
       emittedCounts.push(clients.size);
     });

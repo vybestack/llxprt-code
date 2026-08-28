@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ServiceAccountImpersonationProvider } from './sa-impersonation-provider.js';
-import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import type { MCPServerConfig } from '../config/mcpServerConfig.js';
 
 const mockRequest = vi.fn();
 const mockGetClient = vi.fn(() => ({

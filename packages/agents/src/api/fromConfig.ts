@@ -27,6 +27,7 @@ import {
 import { executeProviderActivation } from './providerActivationExecutor.js';
 import { consumeCompletedActivationPreflight } from './activationPreflightState.js';
 import { finalizeAgent, registerProvidersOntoManager } from './createAgent.js';
+import { wireMcpHostServices } from './mcpHostWiring.js';
 
 /**
  * Adopts an existing caller-supplied Config and returns a ready Agent.
@@ -51,6 +52,7 @@ import { finalizeAgent, registerProvidersOntoManager } from './createAgent.js';
  * @pseudocode lines 10-48
  */
 export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
+  wireMcpHostServices();
   // @pseudocode lines 11-13: validate presence + the small validatable portion.
   // The FromConfigOptions type marks config as required, but at runtime callers
   // may omit it (T1d); read through a generic presence check so the lint

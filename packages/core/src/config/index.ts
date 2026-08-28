@@ -15,7 +15,7 @@ export {
   type SummarizeToolOutputSettings,
   type ComplexityAnalyzerSettings,
   type TelemetrySettings,
-  MCPServerConfig,
+  type MCPServerConfig,
   AuthProviderType,
   type SandboxConfig,
   type ActiveExtension,

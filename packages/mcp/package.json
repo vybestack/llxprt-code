@@ -1,7 +1,7 @@
 {
   "name": "@vybestack/llxprt-code-mcp",
   "version": "0.11.0",
-  "description": "LLxprt Code MCP — Model Context Protocol client, OAuth, and token storage",
+  "description": "LLxprt Code MCP: Model Context Protocol client, OAuth, and token storage",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -15,6 +15,21 @@
       "types": "./dist/mcp/index.d.ts",
       "bun": "./index.ts",
       "import": "./dist/mcp/index.js"
+    },
+    "./config/mcpServerConfig.js": {
+      "types": "./dist/mcp/src/config/mcpServerConfig.d.ts",
+      "bun": "./src/config/mcpServerConfig.ts",
+      "import": "./dist/mcp/src/config/mcpServerConfig.js"
+    },
+    "./host/hostInterfaces.js": {
+      "types": "./dist/mcp/src/host/hostInterfaces.d.ts",
+      "bun": "./src/host/hostInterfaces.ts",
+      "import": "./dist/mcp/src/host/hostInterfaces.js"
+    },
+    "./host/hostServices.js": {
+      "types": "./dist/mcp/src/host/hostServices.d.ts",
+      "bun": "./src/host/hostServices.ts",
+      "import": "./dist/mcp/src/host/hostServices.js"
     }
   },
   "scripts": {
@@ -36,13 +51,15 @@
     "!**/*.spec.tsx",
     "!**/__tests__/**",
     "!**/__snapshots__/**",
+    "!**/test-support/**",
     "dist"
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.2",
-    "@vybestack/llxprt-code-core": "file:../core",
+    "@vybestack/llxprt-code-auth": "file:../auth",
     "@vybestack/llxprt-code-settings": "file:../settings",
     "@vybestack/llxprt-code-storage": "file:../storage",
+    "@vybestack/llxprt-code-telemetry": "file:../telemetry",
     "@vybestack/llxprt-code-tools": "file:../tools",
     "google-auth-library": "^9.11.0",
     "shell-quote": "^1.10.0",

@@ -7,16 +7,15 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { ListRootsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
-import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/configTypes.js';
-import type {
-  Unsubscribe,
-  WorkspaceContext,
-} from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
+import type { MCPServerConfig } from '../config/mcpServerConfig.js';
+import type { McpWorkspaceContext } from '../host/hostInterfaces.js';
+
+type Unsubscribe = () => void;
 import {
   is404Error,
   isAuthenticationError,
-} from '@vybestack/llxprt-code-core/utils/errors.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+} from '@vybestack/llxprt-code-tools/utils/errors.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
@@ -133,7 +132,7 @@ function abortable<T>(
 
 function initializeMcpClient(
   clientVersion: string,
-  workspaceContext: WorkspaceContext,
+  workspaceContext: McpWorkspaceContext,
 ): Client {
   const mcpClient = new Client(
     {
@@ -467,7 +466,7 @@ export async function connectToMcpServer(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   debugMode: boolean,
-  workspaceContext: WorkspaceContext,
+  workspaceContext: McpWorkspaceContext,
   signal?: AbortSignal,
 ): Promise<Client> {
   const mcpClient = initializeMcpClient(clientVersion, workspaceContext);

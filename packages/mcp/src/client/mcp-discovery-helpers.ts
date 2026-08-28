@@ -5,8 +5,8 @@
  */
 
 import { parse } from 'shell-quote';
-import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/configTypes.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { MCPServerConfig } from '../config/mcpServerConfig.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:tools:mcp-client');
 

@@ -7,44 +7,24 @@
 /**
  * Standalone-consumer contract for `@vybestack/llxprt-code-mcp` (#3305).
  *
- * `packages/mcp` value-imports `@vybestack/llxprt-code-core` at runtime
- * (`getErrorMessage`, `DebugLogger`, `debugLogger`, `coreEvents`,
- * `openBrowserSecurely`, `AuthProviderType`, `safeJsonStringify`) but declared
- * core in `devDependencies` only. `scripts/bind-release-deps.ts` rewrites the
- * `file:` specifier in every dependency section at release time, so the
- * published manifest carried core in `devDependencies` — a section `npm i
- * @vybestack/llxprt-code-mcp` never installs. The shipped `dist/mcp/**` still
- * emits bare `@vybestack/llxprt-code-core/...` specifiers, so the published
- * package could not resolve its own imports.
+ * The original defect did not reproduce in-repo because workspace hoisting and
+ * TypeScript path mappings satisfied imports that a published consumer could
+ * not resolve. MCP is now below core in the package graph and must neither
+ * import nor declare core. These tests build a sandbox whose module resolution
+ * is constrained to the PACKED manifest's declared dependencies.
  *
- * This does not reproduce in-repo: workspace hoisting and the tsconfig path
- * wildcards satisfy the import regardless of what the manifest declares. These
- * tests therefore build a sandbox whose module resolution is constrained to the
- * PACKED manifest's declared dependencies and nothing else.
+ * The sandbox lives in the OS temp directory so Node and Bun cannot walk up to
+ * the repository's `node_modules`. The packed package is copied rather than
+ * symlinked so its realpath also stays inside that sandbox.
  *
- * Two details are essential and were both established empirically:
+ * Imports use the Bun runtime so the `bun` export condition resolves to packed
+ * TypeScript source. This keeps the test independent of existing `dist` output.
  *
- *  1. The sandbox must live in the OS temp directory, never inside the repo.
- *     Node and Bun walk parent directories looking for `node_modules`, so a
- *     sandbox under `<repo>/tmp/` reaches the repo's own `node_modules` and the
- *     test passes vacuously even with the dependency omitted.
- *  2. The packed package is COPIED rather than symlinked, so its realpath is
- *     inside the sandbox. Resolution follows realpaths; a symlink back into the
- *     repo would again resolve against the repo's `node_modules`.
- *
- * The import is driven with the Bun runtime so the `bun` export condition
- * resolves to the packed TypeScript source. That keeps the test independent of
- * whether `dist/` has been built.
- *
- * Scope limit, deliberate: the declared dependencies are symlinked from the
- * repository, and resolution follows realpaths, so once execution hops into one
- * of them that package resolves its OWN imports against the repository's
- * `node_modules`. This suite therefore pins that `mcp`'s direct imports are
- * satisfiable from its declared dependencies; it does not pin that each of
- * those dependencies is itself installable. That second property is covered
- * statically for every published workspace by
- * `scripts/check-runtime-dependency-declarations.ts`, so do not read a green
- * result here as proof of the whole transitive closure.
+ * Declared dependencies are symlinked from the repository. Once execution
+ * enters one of them, that package can resolve its own imports from the
+ * repository. This suite therefore checks MCP's direct imports and package
+ * exports. `scripts/check-runtime-dependency-declarations.ts` checks runtime
+ * declarations for the complete set of published workspaces.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
@@ -68,6 +48,8 @@ const repoRoot = resolve(thisFile, '..', '..', '..');
 const mcpWorkspaceDir = join(repoRoot, 'packages', 'mcp');
 const MCP_PACKAGE_NAME = '@vybestack/llxprt-code-mcp';
 const CORE_PACKAGE_NAME = '@vybestack/llxprt-code-core';
+const REQUIRED_DEPENDENCY_FOR_NEGATIVE_CONTROL =
+  '@vybestack/llxprt-code-telemetry';
 
 const PACK_TIMEOUT_MS = 300_000;
 const IMPORT_TIMEOUT_MS = 120_000;
@@ -94,6 +76,7 @@ interface PackedManifest {
   readonly dependencies?: Record<string, string>;
   readonly devDependencies?: Record<string, string>;
   readonly peerDependencies?: Record<string, string>;
+  readonly optionalDependencies?: Record<string, string>;
 }
 
 /** Directories created by this suite, removed in `afterAll`. */
@@ -201,8 +184,15 @@ function importEntrypoint(consumerRoot: string): ImportOutcome {
     process.execPath,
     [
       '-e',
-      `const m = await import(${JSON.stringify(MCP_PACKAGE_NAME)});` +
-        'console.log("EXPORT_COUNT:" + Object.keys(m).length);',
+      `const root = await import(${JSON.stringify(MCP_PACKAGE_NAME)});` +
+        `const host = await import(${JSON.stringify(
+          `${MCP_PACKAGE_NAME}/host/hostServices.js`,
+        )});` +
+        'if ("registerMcpHostServices" in root) ' +
+        'throw new Error("Host registration leaked through the root barrel");' +
+        'if (typeof host.registerMcpHostServices !== "function") ' +
+        'throw new Error("Host registration subpath is unavailable");' +
+        'console.log("EXPORT_COUNT:" + Object.keys(root).length);',
     ],
     {
       cwd: consumerRoot,
@@ -254,18 +244,17 @@ describeStandalone('published mcp package installs standalone (#3305)', () => {
     }
   });
 
-  it('declares the core package as an installable runtime dependency', () => {
+  it('does not declare core in any dependency section', () => {
     expect(manifest.name).toBe(MCP_PACKAGE_NAME);
-    expect(
-      Object.keys(manifest.dependencies ?? {}),
-      `${MCP_PACKAGE_NAME} value-imports ${CORE_PACKAGE_NAME} at runtime, so ` +
-        'it must appear in "dependencies" of the packed manifest.',
-    ).toContain(CORE_PACKAGE_NAME);
-    expect(
-      Object.keys(manifest.devDependencies ?? {}),
-      `${CORE_PACKAGE_NAME} must not be a devDependency: consumers never ` +
-        'install that section, which is the #3305 defect.',
-    ).not.toContain(CORE_PACKAGE_NAME);
+    const dependencySections = [
+      manifest.dependencies,
+      manifest.devDependencies,
+      manifest.peerDependencies,
+      manifest.optionalDependencies,
+    ];
+    for (const section of dependencySections) {
+      expect(Object.keys(section ?? {})).not.toContain(CORE_PACKAGE_NAME);
+    }
   });
 
   it(
@@ -285,24 +274,26 @@ describeStandalone('published mcp package installs standalone (#3305)', () => {
   );
 
   it(
-    'fails to import when the declared core dependency is absent',
+    'fails when a required declared dependency is absent',
     () => {
       // Negative control. Without it, a sandbox that silently resolved against
       // the repository's node_modules would make the test above meaningless.
       const consumerRoot = materializeConsumer(
         packageDir,
         manifest,
-        new Set([CORE_PACKAGE_NAME]),
+        new Set([REQUIRED_DEPENDENCY_FOR_NEGATIVE_CONTROL]),
       );
       const outcome = importEntrypoint(consumerRoot);
       expect(
         outcome.status,
-        'Removing the core dependency must break the import; if this passes, ' +
-          'the sandbox is leaking to an outer node_modules and the positive ' +
-          'test proves nothing.',
+        `Removing ${REQUIRED_DEPENDENCY_FOR_NEGATIVE_CONTROL} must break the ` +
+          'import. If this passes, the sandbox is leaking to an outer ' +
+          'node_modules and the positive test proves nothing.',
       ).not.toBe(0);
       expect(outcome.stderr).toContain('Cannot find module');
-      expect(outcome.stderr).toContain(CORE_PACKAGE_NAME);
+      expect(outcome.stderr).toContain(
+        REQUIRED_DEPENDENCY_FOR_NEGATIVE_CONTROL,
+      );
     },
     TEST_TIMEOUT_MS,
   );

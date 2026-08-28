@@ -16,6 +16,8 @@
       "@vybestack/llxprt-code-core/*": ["../core/src/*"],
       "@vybestack/llxprt-code-ide-integration": ["../ide-integration/index.ts"],
       "@vybestack/llxprt-code-ide-integration/*": ["../ide-integration/src/*"],
+      "@vybestack/llxprt-code-mcp": ["../mcp/index.ts"],
+      "@vybestack/llxprt-code-mcp/*": ["../mcp/src/*"],
       "@vybestack/llxprt-code-policy": ["../policy/index.ts"],
       "@vybestack/llxprt-code-policy/*": ["../policy/src/*"],
       "@vybestack/llxprt-code-providers": ["../providers/index.ts"],

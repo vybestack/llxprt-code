@@ -19,7 +19,7 @@ import { Buffer } from 'node:buffer';
 import * as crypto from 'node:crypto';
 import { FileTokenStore } from './file-token-store.js';
 import type { MCPOAuthToken, MCPOAuthCredentials } from './token-store.js';
-import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry/utils/debugLogger.js';
 
 // Mock file system operations
 const realLlxprtCodeSettingsModule = {

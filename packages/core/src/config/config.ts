@@ -81,7 +81,7 @@ export {
   normalizeShellReplacement,
   DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
   DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
-  MCPServerConfig,
+  type MCPServerConfig,
   AuthProviderType,
   type SandboxConfig,
   type ActiveExtension,
