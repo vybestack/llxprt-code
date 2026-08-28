@@ -37,7 +37,7 @@ const SSH_TUNNEL_POLL_TIMEOUT_MS = 10000;
 const SSH_AGENT_PROBE_TIMEOUT_MS = 5000;
 const SSH_AGENT_ENV_PREFIX = 'SSH_AUTH_SOCK=';
 const SSH_AGENT_NO_IDENTITIES_PATTERN = /agent has no identities/i;
-const SSH_AGENT_EMPTY_WARNING =
+export const SSH_AGENT_EMPTY_WARNING =
   [
     'SSH agent socket is present, but no identities are loaded (ssh-add -l reported empty).',
     'SSH forwarding is enabled, but git SSH auth will fail until a key is loaded.',
@@ -119,7 +119,9 @@ function listSshAgentIdentities(sshAuthSock: string): Promise<SshAgentProbe> {
 /**
  * Warns when the agent being forwarded is reachable but holds no identities —
  * the cause of "Permission denied (publickey)" inside a sandbox whose
- * forwarding is otherwise wired up correctly.
+ * forwarding is otherwise wired up correctly. Resolves true only when the
+ * empty-agent warning was written, so the caller can hand the condition off
+ * to the container.
  *
  * `ssh-add -l` exits 1 for any identity-listing failure, including a
  * communication error with the agent, so the empty case is confirmed from the
@@ -128,18 +130,18 @@ function listSshAgentIdentities(sshAuthSock: string): Promise<SshAgentProbe> {
  */
 async function warnIfSshAgentHasNoIdentities(
   sshAuthSock: string,
-): Promise<void> {
+): Promise<boolean> {
   const probe = await listSshAgentIdentities(sshAuthSock);
 
   if (probe.spawnError) {
     debugLogger.warn(
       `Could not run ssh-add to check for loaded SSH agent identities: ${probe.spawnError.message}`,
     );
-    return;
+    return false;
   }
 
   if (probe.status === 0) {
-    return;
+    return false;
   }
 
   if (
@@ -147,12 +149,13 @@ async function warnIfSshAgentHasNoIdentities(
     SSH_AGENT_NO_IDENTITIES_PATTERN.test(probe.output)
   ) {
     process.stderr.write(SSH_AGENT_EMPTY_WARNING);
-    return;
+    return true;
   }
 
   debugLogger.warn(
     `Could not determine whether the SSH agent has identities loaded; ssh-add -l exited with status ${probe.status}.`,
   );
+  return false;
 }
 
 /**
@@ -216,7 +219,13 @@ export async function setupSshAgentForwarding(
   );
 
   if (containerWillReceiveSshAgent(args)) {
-    await warnIfSshAgentHasNoIdentities(sshAuthSock);
+    const warned = await warnIfSshAgentHasNoIdentities(sshAuthSock);
+    if (warned) {
+      // Carry the empty-agent condition across the host→container boundary so
+      // the in-container session can surface the warning it cannot see from
+      // the host. Boolean flag; no secret or key material crossed.
+      args.push('--env', 'LLXPRT_SANDBOX_SSH_AGENT_EMPTY=1');
+    }
   }
 
   return result;

@@ -35,6 +35,7 @@ const { mockWriteToStderr } = {
   mockWriteToStderr: vi.fn<(chunk: string | Uint8Array) => boolean>(() => true),
 };
 
+import * as coreModule from '@vybestack/llxprt-code-core';
 import {
   coreEvents,
   CoreEvent,
@@ -93,8 +94,19 @@ void vi.mock('../cliAgentBootstrap.js', () => ({
 }));
 
 // The actual module path used by session-dispatch is utils/startupWarnings.js
+const TEST_SSH_AGENT_EMPTY_WARNING =
+  [
+    'SSH agent socket is present, but no identities are loaded (ssh-add -l reported empty).',
+    'SSH forwarding is enabled, but git SSH auth will fail until a key is loaded.',
+    'Try: ssh-add ~/.ssh/id_ed25519',
+  ].join('\n') + '\n';
 void vi.mock('../utils/startupWarnings.js', () => ({
   getStartupWarnings: vi.fn(async () => []),
+  getSandboxHandoffWarning: vi.fn((env: NodeJS.ProcessEnv) =>
+    env.LLXPRT_SANDBOX_SSH_AGENT_EMPTY === '1'
+      ? TEST_SSH_AGENT_EMPTY_WARNING
+      : undefined,
+  ),
 }));
 
 void vi.mock('../utils/userStartupWarnings.js', () => ({
@@ -140,6 +152,32 @@ void vi.mock('../utils/cleanup.js', () => ({
 // Uses the __setRenderForTesting seam in interactiveUI.tsx instead of
 // module mocking, which deadlocks during module evaluation under Bun.
 const renderCalls: unknown[] = [];
+
+/**
+ * Walks the rendered React element tree (StrictMode → ErrorBoundary →
+ * SettingsContext.Provider → AppWrapper) to the startupWarnings prop, exposing
+ * the warnings array delivered to the TUI root as an observable effect.
+ */
+function findStartupWarningsProp(node: unknown): unknown[] | undefined {
+  if (node === null || node === undefined || typeof node !== 'object') {
+    return undefined;
+  }
+  const el = node as { props?: Record<string, unknown> };
+  const props = el.props;
+  if (props) {
+    if (Array.isArray(props.startupWarnings)) {
+      return props.startupWarnings;
+    }
+    const childProps = (props as { children?: unknown }).children;
+    const viaChildren = Array.isArray(childProps)
+      ? childProps
+          .map(findStartupWarningsProp)
+          .find((found) => found !== undefined)
+      : findStartupWarningsProp(childProps);
+    if (viaChildren !== undefined) return viaChildren;
+  }
+  return undefined;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers for building minimal Config/Settings stubs consumed by the real
@@ -936,6 +974,194 @@ describe('session-dispatch characterization', () => {
       } finally {
         stdoutWrite.mockRestore();
       }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Suite 8: Sandbox empty-agent handoff warning delivery (#3408)
+  // ---------------------------------------------------------------------------
+
+  describe('session-dispatch characterization — sandbox empty-agent handoff warning delivery', () => {
+    const originalEnv = { ...process.env };
+
+    // Created per test: afterEach(vi.restoreAllMocks) would otherwise kill a
+    // suite-scoped spy after the first test.
+    function installStderrSpy() {
+      return vi
+        .spyOn(coreModule, 'writeToStderr')
+        .mockImplementation(() => true);
+    }
+    let stderrWriteSpy: ReturnType<typeof installStderrSpy>;
+
+    beforeEach(() => {
+      stderrWriteSpy = installStderrSpy();
+      process.env = { ...originalEnv };
+      dispatchTrace.length = 0;
+      renderCalls.length = 0;
+      installSafeProcessExit();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('interactive: prepends the empty-agent warning to the startup warnings rendered by the TUI when the env flag is set', async () => {
+      process.env.LLXPRT_SANDBOX_SSH_AGENT_EMPTY = '1';
+      const config = createMinimalConfig({ interactive: true });
+      const settings = createMinimalSettings({ hideWindowTitle: true });
+
+      await dispatchInteractiveOrNonInteractive({
+        config: config as never,
+        agent: createFakeAgent() as never,
+        settings: settings as never,
+        workspaceRoot: '/tmp/test',
+        recording: {
+          recordingIntegration: undefined,
+          resumedHistory: undefined,
+          recordingService: undefined,
+          resumedLockHandle: null,
+        } as never,
+        hasPipedInput: false,
+        readStdinData: async () => '',
+      });
+
+      const delivered = renderCalls
+        .map((args) => findStartupWarningsProp((args as unknown[])[0]))
+        .find((warnings) => warnings !== undefined);
+      expect(delivered?.[0]).toBe(TEST_SSH_AGENT_EMPTY_WARNING);
+    });
+
+    it('interactive: startup warnings are unchanged when the env flag is unset', async () => {
+      delete process.env.LLXPRT_SANDBOX_SSH_AGENT_EMPTY;
+      const config = createMinimalConfig({ interactive: true });
+      const settings = createMinimalSettings({ hideWindowTitle: true });
+
+      await dispatchInteractiveOrNonInteractive({
+        config: config as never,
+        agent: createFakeAgent() as never,
+        settings: settings as never,
+        workspaceRoot: '/tmp/test',
+        recording: {
+          recordingIntegration: undefined,
+          resumedHistory: undefined,
+          recordingService: undefined,
+          resumedLockHandle: null,
+        } as never,
+        hasPipedInput: false,
+        readStdinData: async () => '',
+      });
+
+      const delivered = renderCalls
+        .map((args) => findStartupWarningsProp((args as unknown[])[0]))
+        .find((warnings) => warnings !== undefined);
+      expect(delivered).toStrictEqual([]);
+    });
+
+    it('non-interactive: writes the empty-agent warning to stderr before the session runs when the env flag is set', async () => {
+      process.env.LLXPRT_SANDBOX_SSH_AGENT_EMPTY = '1';
+      const config = createMinimalConfig({
+        interactive: false,
+        question: 'prompt',
+      });
+      const settings = createMinimalSettings();
+
+      // The stderr spy records fd-direct calls; the mocked runNonInteractive
+      // records when the session run is reached, so both records together
+      // prove the warning was written on the way to the session run.
+      const order: string[] = [];
+      stderrWriteSpy.mockImplementation((chunk: unknown) => {
+        if (String(chunk) === TEST_SSH_AGENT_EMPTY_WARNING) {
+          order.push('warning');
+        }
+        return true;
+      });
+
+      await expect(
+        dispatchInteractiveOrNonInteractive({
+          config: config as never,
+          agent: createFakeAgent() as never,
+          settings: settings as never,
+          workspaceRoot: '/tmp/test',
+          recording: {
+            recordingIntegration: undefined,
+            resumedHistory: undefined,
+            recordingService: undefined,
+            resumedLockHandle: null,
+          } as never,
+          hasPipedInput: false,
+          readStdinData: async () => '',
+        }),
+      ).rejects.toThrow('process.exit');
+
+      expect(order).toContain('warning');
+      expect(dispatchTrace).toContain('runNonInteractive');
+    });
+
+    it('non-interactive: withholds the handoff warning in JSON output mode so it cannot reach the payload stream', async () => {
+      process.env.LLXPRT_SANDBOX_SSH_AGENT_EMPTY = '1';
+      const config = createMinimalConfig({
+        interactive: false,
+        question: 'prompt',
+        outputFormat: OutputFormat.JSON,
+      });
+      const settings = createMinimalSettings();
+
+      await expect(
+        dispatchInteractiveOrNonInteractive({
+          config: config as never,
+          agent: createFakeAgent() as never,
+          settings: settings as never,
+          workspaceRoot: '/tmp/test',
+          recording: {
+            recordingIntegration: undefined,
+            resumedHistory: undefined,
+            recordingService: undefined,
+            resumedLockHandle: null,
+          } as never,
+          hasPipedInput: false,
+          readStdinData: async () => '',
+        }),
+      ).rejects.toThrow('process.exit');
+
+      expect(
+        stderrWriteSpy.mock.calls.some((call) =>
+          String(call[0]).includes('SSH agent socket is present'),
+        ),
+      ).toBe(false);
+      expect(dispatchTrace).toContain('runNonInteractive');
+    });
+
+    it('non-interactive: writes nothing for the handoff when the env flag is unset', async () => {
+      delete process.env.LLXPRT_SANDBOX_SSH_AGENT_EMPTY;
+      const config = createMinimalConfig({
+        interactive: false,
+        question: 'prompt',
+      });
+      const settings = createMinimalSettings();
+
+      await expect(
+        dispatchInteractiveOrNonInteractive({
+          config: config as never,
+          agent: createFakeAgent() as never,
+          settings: settings as never,
+          workspaceRoot: '/tmp/test',
+          recording: {
+            recordingIntegration: undefined,
+            resumedHistory: undefined,
+            recordingService: undefined,
+            resumedLockHandle: null,
+          } as never,
+          hasPipedInput: false,
+          readStdinData: async () => '',
+        }),
+      ).rejects.toThrow('process.exit');
+
+      expect(
+        stderrWriteSpy.mock.calls.some((call) =>
+          String(call[0]).includes('SSH agent socket is present'),
+        ),
+      ).toBe(false);
+      expect(dispatchTrace).toContain('runNonInteractive');
     });
   });
 });
