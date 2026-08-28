@@ -57,6 +57,7 @@ interface RunnerModule {
   readPackageDirs: (repoRoot: string) => readonly string[];
 }
 
+/** Imports the real runner module under test; nothing here is stubbed. */
 async function loadRunner(): Promise<RunnerModule> {
   return await import(RUNNER_PATH);
 }

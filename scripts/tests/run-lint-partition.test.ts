@@ -59,6 +59,7 @@ interface RunnerModule {
   executeLintCommands: (commands: readonly LintCommand[]) => Promise<void>;
 }
 
+/** Imports the real runner module under test; nothing here is stubbed. */
 async function loadRunner(): Promise<RunnerModule> {
   return await import(RUNNER_PATH);
 }

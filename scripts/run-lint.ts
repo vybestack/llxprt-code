@@ -171,6 +171,7 @@ export function buildLintCommands({
       ]
     : [];
 
+  /** Assembles one group's command: targets, group-specific flags, then the shared ones. */
   const makeCommand = (
     label: string,
     targetArgs: readonly string[],
@@ -361,6 +362,7 @@ export async function executeLintCommands(
   }
 }
 
+/** CLI entry point: resolves the run shape from argv and executes every group. */
 async function runLint(): Promise<void> {
   // Forward CLI args to ESLint, stripping runner-managed flags (see
   // stripRunnerArgs) so they are not duplicated.

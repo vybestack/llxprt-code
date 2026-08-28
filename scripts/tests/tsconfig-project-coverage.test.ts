@@ -50,6 +50,7 @@ function parseTsconfig(path: string): Record<string, unknown> {
   return config as Record<string, unknown>;
 }
 
+/** The `exclude` array of a parsed tsconfig, or empty when it declares none. */
 function excludeEntries(config: Record<string, unknown>): string[] {
   const exclude = config['exclude'];
   return Array.isArray(exclude)
@@ -57,6 +58,7 @@ function excludeEntries(config: Record<string, unknown>): string[] {
     : [];
 }
 
+/** Names of the directories under packages/, sorted for stable assertions. */
 function packageDirs(): string[] {
   return readdirSync(PACKAGES_ROOT, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
@@ -98,6 +100,7 @@ function typeAwareSources(pkg: string): string[] {
     return [];
   }
   const found: string[] = [];
+  /** Collects .ts and .tsx files, skipping build output and dependencies. */
   const walk = (dir: string): void => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const path = join(dir, entry.name);
