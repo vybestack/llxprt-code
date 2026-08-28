@@ -62,6 +62,11 @@ export class TopDownTruncationStrategy implements CompressionStrategy {
     // below only sees committed history (issue #3406).
     const target =
       targetTokenCount ?? compressionThreshold * contextLimit * 0.6;
+    // An explicit target is a maximum, so landing exactly on it is done —
+    // matching the `<=` no-op guard below. The threshold-derived fallback
+    // keeps its historical strict comparison.
+    const isSatisfied = (tokens: number): boolean =>
+      targetTokenCount !== undefined ? tokens <= target : tokens < target;
 
     if (currentTokenCount <= target) {
       return this.structuralNoop(originalCount, 'already-under-target');
@@ -74,7 +79,7 @@ export class TopDownTruncationStrategy implements CompressionStrategy {
     for (let i = 1; i <= originalCount - minKeep; i++) {
       const remaining = history.slice(i);
       const tokens = await estimateTokens(remaining);
-      if (tokens < target) {
+      if (isSatisfied(tokens)) {
         removeCount = i;
         break;
       }

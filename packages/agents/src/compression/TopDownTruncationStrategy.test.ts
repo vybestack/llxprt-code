@@ -382,9 +382,9 @@ describe('TopDownTruncationStrategy', () => {
 
       expect(result.kind).toBe('applied');
       if (result.kind !== 'applied') return;
-      // 5 messages × 500 = 2500 < 3000; 6 × 500 = 3000 is not < 3000.
-      expect(result.newHistory.length).toBeLessThanOrEqual(5);
-      expect(result.newHistory.length).toBeGreaterThanOrEqual(2);
+      // An explicit target is a maximum, so 6 messages × 500 = 3000 exactly
+      // satisfies it and no further message is dropped.
+      expect(result.newHistory.length).toBe(6);
       // The survivors are the newest messages; the oldest were dropped.
       const kept = result.newHistory.length;
       for (let i = 0; i < kept; i++) {
