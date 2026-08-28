@@ -179,4 +179,16 @@ describe('Interactive UI (tmux harness)', () => {
     },
     300_000,
   );
+
+  runTmuxE2E(
+    'startup composer renders deterministically and quits cleanly',
+    () => {
+      const result = runHarness(
+        'tmux-script.issue2016-composer.fake.json',
+        'issue2016-composer',
+      );
+      assertHarnessSuccess(result);
+    },
+    300_000,
+  );
 });
