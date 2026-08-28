@@ -348,8 +348,13 @@ describe('E2E Tests', () => {
     process.chdir(prevCwd);
     try {
       rmSync(workspace, { recursive: true, force: true });
-    } catch {
-      /* best-effort cleanup */
+    } catch (err) {
+      // Best-effort cleanup, but observable: locked files or a lingering
+      // fake MCP server should show up in CI logs instead of vanishing.
+      process.stderr.write(
+        `app.test.ts: best-effort workspace cleanup failed: ${String(err)}
+`,
+      );
     }
   });
 

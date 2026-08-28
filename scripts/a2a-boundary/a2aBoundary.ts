@@ -67,6 +67,7 @@ export interface A2aImportViolation {
   readonly kind:
     | 'static-import'
     | 'import-equals'
+    | 'export'
     | 'dynamic-import'
     | 'dynamic-import-non-literal'
     | 'vi.mock'
@@ -153,10 +154,23 @@ export function loadDeclaredDependencies(
    */
   scope: 'production' | 'all' = 'all',
 ): readonly string[] {
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+  let manifest: {
     dependencies?: Record<string, string>;
     devDependencies?: Record<string, string>;
   };
+  try {
+    manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+  } catch (err) {
+    // Fail with the manifest path front and center: an unreadable or
+    // malformed package.json is a CI wiring problem, not a code finding.
+    throw new Error(
+      `a2a-boundary: cannot load dependency manifest at ${manifestPath}: ` +
+        `${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
   const production = Object.keys(manifest.dependencies ?? {});
   if (scope === 'production') {
     return production;
@@ -369,6 +383,9 @@ function classifyKind(node: ts.Node): A2aImportViolation['kind'] {
   if (ts.isImportEqualsDeclaration(node)) {
     return 'import-equals';
   }
+  if (ts.isExportDeclaration(node)) {
+    return 'export';
+  }
   return 'static-import';
 }
 
@@ -428,10 +445,15 @@ function pushRuntimeRootViolations(
       return;
     }
     for (const element of namedBindings.elements) {
-      rejectBannedName(
-        (element.propertyName ?? element.name).text,
-        element.getStart(),
-      );
+      // `import { default as Config }` binds Config locally while the source
+      // symbol reads 'default': check BOTH names so a banned symbol cannot
+      // slip through either side of the alias.
+      const candidateNames = element.propertyName
+        ? [element.propertyName.text, element.name.text]
+        : [element.name.text];
+      for (const candidate of candidateNames) {
+        rejectBannedName(candidate, element.getStart());
+      }
     }
     return;
   }
@@ -464,10 +486,14 @@ function pushRuntimeRootExportViolations(
       return;
     }
     for (const element of node.exportClause.elements) {
-      rejectBannedName(
-        (element.propertyName ?? element.name).text,
-        element.getStart(),
-      );
+      // Same alias discipline as the import side: `export { default as
+      // Config }` must flag the Config binding, not just 'default'.
+      const candidateNames = element.propertyName
+        ? [element.propertyName.text, element.name.text]
+        : [element.name.text];
+      for (const candidate of candidateNames) {
+        rejectBannedName(candidate, element.getStart());
+      }
     }
     return;
   }

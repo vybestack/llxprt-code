@@ -150,6 +150,9 @@ export class Task {
   }
 
   async dispose(): Promise<void> {
+    // A paused approval turn would otherwise outlive the task: abort it so
+    // its suspended generator ends before the underlying agent goes away.
+    this.#abortActiveTurn();
     await this.agent.dispose();
   }
 
@@ -336,10 +339,12 @@ export class Task {
         yield* this.#driveTurnStream(stream);
         // Natural completion releases the turn; the abandoned case leaves
         // it in place for the resuming confirmation-only request.
-        if (this.activeTurn.stream === stream) {
-          this.activeTurn = undefined;
-          this.resolvedToolCallIds.clear();
-        }
+        this.#releaseTurnIfCurrent(stream);
+      } catch (err) {
+        // A failed turn is not resumable: discard it so a confirmation-only
+        // message cannot later resume a dead stream.
+        this.#releaseTurnIfCurrent(stream);
+        throw err;
       } finally {
         if (this.turnAbortController === controller) {
           this.turnAbortController = undefined;
@@ -395,6 +400,21 @@ export class Task {
     while (next.done !== true) {
       yield next.value;
       next = await stream.next();
+    }
+  }
+
+  /**
+   * Releases the turn bookkeeping when `stream` is still the active turn.
+   * No-ops when an abort path or a superseding turn already cleared it —
+   * the type system cannot see #abortActiveTurn nulling the field, so the
+   * guard lives here instead of at each call site.
+   */
+  #releaseTurnIfCurrent(
+    stream: AsyncGenerator<AgentEvent, void, unknown>,
+  ): void {
+    if (this.activeTurn?.stream === stream) {
+      this.activeTurn = undefined;
+      this.resolvedToolCallIds.clear();
     }
   }
 

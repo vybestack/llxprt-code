@@ -321,7 +321,12 @@ afterAll(() => {
 process.on('exit', () => {
   try {
     rmSync(WORKSPACE, { recursive: true, force: true });
-  } catch {
-    /* best-effort cleanup */
+  } catch (err) {
+    // Best-effort, but observable: an orphaned workspace with a locked
+    // file is worth seeing in CI output.
+    process.stderr.write(
+      `config.createTaskAgent.test.ts: workspace cleanup failed: ${String(err)}
+`,
+    );
   }
 });

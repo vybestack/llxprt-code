@@ -41,6 +41,9 @@ describe('setTargetDir', () => {
     try {
       expect(setTargetDir(agentSettings)).toBe(workspace);
     } finally {
+      // setTargetDir chdir'd into the workspace; leave it before removing
+      // the directory (rmSync of the CWD fails on Windows).
+      process.chdir(suiteCwd);
       rmSync(workspace, { recursive: true, force: true });
     }
   });
@@ -62,6 +65,7 @@ describe('setTargetDir', () => {
       expect(setTargetDir(agentSettings)).toBe(envWorkspace);
     } finally {
       delete process.env['CODER_AGENT_WORKSPACE_PATH'];
+      process.chdir(suiteCwd);
       rmSync(envWorkspace, { recursive: true, force: true });
       rmSync(settingsWorkspace, { recursive: true, force: true });
     }

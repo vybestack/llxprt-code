@@ -84,6 +84,9 @@ describe('InitCommand', () => {
       await command.execute(context, []);
 
       const event = events[0];
+      // Fail with a clear assertion rather than an undefined dereference
+      // if the command ever stops publishing its status event.
+      expect(event).toBeDefined();
       expect(event.kind).toBe('status-update');
       if (event.kind !== 'status-update') {
         throw new Error('expected a status-update event');

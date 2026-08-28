@@ -391,6 +391,16 @@ describe('issue #3221: a2a-server fail-closed import boundary (AST checker)', ()
         source: `export { AgentClient as AC } from '${ROOT}';\n`,
         kind: 'banned-symbol',
       },
+      {
+        label: 'default-alias import of a banned symbol',
+        source: `import { default as Config } from '${ROOT}';\nexport { Config };\n`,
+        kind: 'banned-symbol',
+      },
+      {
+        label: 'default-alias re-export of a banned symbol',
+        source: `export { default as AgentClient } from '${ROOT}';\n`,
+        kind: 'banned-symbol',
+      },
     ];
     for (const { label, source, kind } of forms) {
       const violations = scanSourceText(

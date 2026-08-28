@@ -48,6 +48,9 @@ async function disposeAgent(agent: Agent): Promise<void> {
 }
 
 afterEach(() => {
+  // Two-way restore: drop anything this file added, then reinstate anything
+  // it removed or changed, so later files in the same process see the env
+  // exactly as this file found it.
   for (const key of Object.keys(process.env)) {
     if (SAVED_ENV[key] === undefined) {
       delete process.env[key];
@@ -55,16 +58,9 @@ afterEach(() => {
       process.env[key] = SAVED_ENV[key];
     }
   }
-  delete process.env.LLXPRT_FAKE_RESPONSES;
-  delete process.env.GEMINI_API_KEY;
-  delete process.env.GEMINI_YOLO_MODE;
-  delete process.env.LLXPRT_DEFAULT_PROVIDER;
-  delete process.env.LLXPRT_YOLO_MODE;
-  delete process.env.USE_CCPA;
-  delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
-  delete process.env.GOOGLE_CLOUD_PROJECT;
-  delete process.env.GOOGLE_CLOUD_LOCATION;
-  delete process.env.GOOGLE_API_KEY;
+  for (const key of Object.keys(SAVED_ENV)) {
+    process.env[key] = SAVED_ENV[key];
+  }
 });
 
 describe('Task: provider-neutral default (not gemini)', () => {

@@ -180,8 +180,13 @@ describe('host sequential approvals over a paused stream', () => {
         );
       }
     } finally {
-      await cleanup();
-      rmSync(workspace, { recursive: true, force: true });
+      try {
+        await cleanup();
+      } finally {
+        // Remove the workspace even when cleanup throws, so repeated runs
+        // do not accumulate orphaned temp directories.
+        rmSync(workspace, { recursive: true, force: true });
+      }
     }
   }, 60_000);
 
@@ -208,8 +213,11 @@ describe('host sequential approvals over a paused stream', () => {
       // The provider stays the fake seam; only the model slot changed.
       expect(agent.getProvider()).toBe(providerBefore);
     } finally {
-      await cleanup();
-      rmSync(workspace, { recursive: true, force: true });
+      try {
+        await cleanup();
+      } finally {
+        rmSync(workspace, { recursive: true, force: true });
+      }
     }
   }, 60_000);
 });

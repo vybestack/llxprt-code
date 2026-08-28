@@ -103,7 +103,9 @@ describe('createTextMessage / createDataMessage', () => {
   it('builds a data message wrapping the raw payload', () => {
     const message = createDataMessage({ value: 1 }, 'task-1', 'ctx-1');
     expect(message.kind).toBe('message');
+    expect(message.role).toBe('agent');
     expect(message.taskId).toBe('task-1');
+    expect(message.contextId).toBe('ctx-1');
     expect(message.parts).toEqual([{ kind: 'data', data: { value: 1 } }]);
   });
 });

@@ -6,7 +6,9 @@
 
 /**
  * Resolves a timestamp for task status updates: prefers an explicitly
- * provided timestamp and falls back to the current wall-clock time.
+ * provided timestamp and falls back to the current wall-clock time. A
+ * present-but-empty string is treated as absent (legacy parity) rather
+ * than published as-is.
  */
 export function resolveTimestamp(timestamp?: string): string {
   // Legacy parity: a present-but-empty timestamp is treated as absent —

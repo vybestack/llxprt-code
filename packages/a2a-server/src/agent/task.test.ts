@@ -19,8 +19,8 @@
  * their old pinning tests are re-expressed here as public-surface behavior.
  */
 
-import { describe, it, expect, afterEach } from 'bun:test';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { describe, it, expect, afterEach, afterAll } from 'bun:test';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-core';
@@ -39,6 +39,20 @@ writeFileSync(
     ],
   }) + '\n',
 );
+
+afterAll(() => {
+  // The workspace is created at module scope so both fixtures share it;
+  // remove it once the file's tests are done so repeated runs do not
+  // accumulate temp directories.
+  try {
+    rmSync(WORKSPACE, { recursive: true, force: true });
+  } catch (err) {
+    process.stderr.write(
+      `task.test.ts: failed to clean up workspace: ${String(err)}
+`,
+    );
+  }
+});
 
 async function buildAgent(): Promise<Agent> {
   return createTaskAgent({}, [], 'task-facade');

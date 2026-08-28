@@ -245,7 +245,17 @@ process.on('exit', () => {
   try {
     process.chdir(SAVED_CWD);
   } catch {
-    // CWD already gone; rmSync still safe from any directory.
+    // SAVED_CWD vanished; fall back to tmpdir so the rm below never runs
+    // from inside the directory it is deleting.
+    try {
+      process.chdir(tmpdir());
+    } catch {
+      // No viable CWD left; deletion below is best effort.
+    }
   }
-  rmSync(WORKSPACE, { recursive: true, force: true });
+  try {
+    rmSync(WORKSPACE, { recursive: true, force: true });
+  } catch {
+    // Best-effort cleanup during process exit; nowhere left to report to.
+  }
 });
