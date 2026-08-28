@@ -17,6 +17,12 @@ export * from './api/index.js';
 // type identity (with newHistory and metadata) that main shipped.
 export type { CompressionResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
 
+// The skill activation tool cannot be constructed from core (issue #2417), so
+// every composition root needs this hook. Exported from the root barrel rather
+// than a subpath because the CLI boundary guard permits the agents package root
+// and no deep paths (scripts/cli-boundary/config.ts).
+export { registerActivateSkillTool } from './skill-tool-registrar.js';
+
 /**
  * @plan PLAN-20260610-ISSUE1592.P03
  * @requirement REQ-INV-003

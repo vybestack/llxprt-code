@@ -23,6 +23,10 @@ export abstract class ExtensionLoader {
   // Whether or not we are currently executing `start`
   private isStarting: boolean = false;
 
+  // Set when an extension that contributes skills starts or stops, so the
+  // rediscovery happens once per settled batch instead of once per extension.
+  private skillsNeedRefresh: boolean = false;
+
   constructor(private readonly eventEmitter?: EventEmitter<ExtensionEvents>) {}
 
   /**
@@ -73,6 +77,13 @@ export abstract class ExtensionLoader {
       completed: this.startCompletedCount,
     });
     try {
+      // Mark before the await, not after. By the time we get here the caller
+      // has already changed what getExtensions() returns: SimpleExtensionLoader
+      // pushes in loadExtension and splices in unloadExtension, both before
+      // this runs. So if the MCP transition below rejects, the skill surface is
+      // already stale and still needs reconciling. Moving this after the await
+      // reintroduces issue #3383 for the failure path.
+      this.markSkillsDirty(extension);
       await this.config.getMcpClientManager()!.startExtension(extension);
       await this.maybeRefreshAgentTools(extension);
       // Register extension subagents
@@ -104,6 +115,7 @@ export abstract class ExtensionLoader {
         this.startCompletedCount = 0;
       }
       await this.maybeRefreshMemory();
+      await this.maybeRefreshSkills();
     }
   }
 
@@ -137,6 +149,71 @@ export abstract class ExtensionLoader {
   }
 
   /**
+   * Records that an extension transition changed the available skills.
+   *
+   * Extension-contributed skills are one of the sources SkillManager reads, so
+   * loading or unloading an extension that ships skills makes the discovered
+   * set, and therefore the model-facing skill activation tool, stale
+   * (issue #3383). Extensions that ship no skills cost nothing here.
+   */
+  private markSkillsDirty(extension: LlxprtExtension): void {
+    if (Array.isArray(extension.skills) && extension.skills.length > 0) {
+      this.skillsNeedRefresh = true;
+    }
+  }
+
+  /**
+   * Rediscovers skills once every extension transition has settled.
+   *
+   * Batched on the same counters as {@link maybeRefreshMemory}, so a batch of
+   * concurrent transitions rediscovers once at the end rather than once each.
+   * Sequential transitions are not collapsed: `restartExtension` awaits its
+   * stop before its start, so each settles on its own and this runs twice. That
+   * is harmless, because a restart leaves the extension listed and active, so
+   * its skills stay available throughout.
+   *
+   * Skipped during the initial `start()`: `Config.initialize` runs
+   * `discoverSkills` immediately after `start()` returns, so anything done here
+   * would be thrown away. The flag is cleared on that path so the first real
+   * transition is not misattributed to startup.
+   */
+  private async maybeRefreshSkills(): Promise<void> {
+    if (!this.config) {
+      throw new Error('Cannot refresh skills prior to calling `start`.');
+    }
+    if (this.isStarting) {
+      this.skillsNeedRefresh = false;
+      return;
+    }
+    if (!this.skillsNeedRefresh || !this.transitionsSettled()) {
+      return;
+    }
+    this.skillsNeedRefresh = false;
+    try {
+      await this.config.refreshSkills();
+    } catch (error) {
+      // The failure propagates; this only restores the marker so the next
+      // transition retries rather than inheriting a skill surface that was
+      // never reconciled.
+      this.skillsNeedRefresh = true;
+      throw error;
+    }
+  }
+
+  /**
+   * Whether every in-flight extension start and stop has completed.
+   *
+   * Shared by the memory and skill reconciliation steps so the two cannot
+   * drift apart on what "settled" means.
+   */
+  private transitionsSettled(): boolean {
+    return (
+      this.startingCount === this.startCompletedCount &&
+      this.stoppingCount === this.stopCompletedCount
+    );
+  }
+
+  /**
    * Refreshes memory only after all extensions are done loading/unloading.
    */
   private async maybeRefreshMemory(): Promise<void> {
@@ -145,8 +222,7 @@ export abstract class ExtensionLoader {
     }
     if (
       !this.isStarting && // Don't refresh memories on the first call to `start`.
-      this.startingCount === this.startCompletedCount &&
-      this.stoppingCount === this.stopCompletedCount
+      this.transitionsSettled()
     ) {
       // Wait until all extensions are done starting and stopping before we
       // reload memory, this is somewhat expensive and also busts the context
@@ -176,6 +252,10 @@ export abstract class ExtensionLoader {
     });
 
     try {
+      // See startExtension: the caller has already removed the extension from
+      // the collection getExtensions() reads, so mark before the await or a
+      // rejected transition leaves the skill surface stale.
+      this.markSkillsDirty(extension);
       await this.config.getMcpClientManager()!.stopExtension(extension);
       await this.maybeRefreshAgentTools(extension);
       // Remove extension subagents
@@ -199,6 +279,7 @@ export abstract class ExtensionLoader {
         this.stopCompletedCount = 0;
       }
       await this.maybeRefreshMemory();
+      await this.maybeRefreshSkills();
     }
   }
 
