@@ -55,7 +55,11 @@ null-pattern / `cwd`-change still `RESET`.
   gate cannot use `state.pattern`, so a separate record of the attempted
   pattern is required.
 - Pattern that differs only by case (`"ALP"` after `"alp"`) — normalizes to the
-  same value, so it is not a retry trigger.
+  same value, so it is not a retry trigger. If it arrives while a retry is
+  still waiting on the debounce it cancels that retry through the effect
+  cleanup, so the attempted pattern must be recorded when the retry dispatches
+  rather than when it is scheduled; otherwise the cancelled retry would count
+  as made and recovery would never happen.
 - Empty pattern in `ERROR` — retries without debounce.
 - Retry that fails again — lands back in `ERROR`, dispatches nothing further.
 - Stale in-flight work — the lifecycle generation is bumped and any current
@@ -79,14 +83,26 @@ In `usePatternChangeHandler` only:
 2. Add an `ERROR` branch to the status dispatch chain: when
    `state.status === ERROR` and the normalized pattern differs from the
    recorded attempted pattern, record the new pattern, bump the lifecycle
-   generation, abort any current search, and dispatch `INITIALIZE` —
-   immediately for an empty pattern, otherwise through the existing debounce
-   timer.
+   generation, abort any current search, and dispatch `RESET` — immediately for
+   an empty pattern, otherwise through the existing debounce timer.
+
+`RESET` rather than `INITIALIZE` because `INITIALIZE` leaves `state.pattern`
+alone. On the search-failure path that pattern is the one that just failed, and
+`useInitializationHandler` would then dispatch a `SEARCH` for it as soon as the
+retry crawl succeeded: a wasted search of the pattern the user has already
+typed past. `RESET` clears it and hands control to the `IDLE` branch, which is
+the state machine's existing entry point, so the retry runs the normal
+initialize-then-search path for the pattern the user actually typed.
 
 The reducer, `useInitializationHandler`, `useSearchHandler`, and
-`useResetOnCwdChange` are untouched. After a successful retry the hook lands in
-`READY` and the existing `READY` branch issues the search for the current
-pattern, which is how the first search is issued today.
+`useResetOnCwdChange` are untouched.
+
+Getting under the repository's `max-lines-per-function` (80) and
+`sonarjs/cognitive-complexity` (30) limits required extracting the
+debounce-and-dispatch body, which the search path and the retry path now share,
+into `startPatternWork`, and the three copies of the timer teardown into
+`clearDebounceTimer`. Both are behavior-preserving extractions of code that
+already existed.
 
 ## Tests (behavioral, `packages/cli/src/ui/hooks/useAtCompletion.test.ts`)
 
@@ -108,6 +124,17 @@ path, with `FileSearchFactory.create` stubbed only to inject the failure.
    pattern once, wait for the second failure to settle, and assert
    `FileSearchFactory.create` was called exactly twice — the retry happened and
    did not loop.
+5. **AC1 boundary** — drive to `ERROR`, then rerender twice back to back with
+   `"alph"` and `"ALPH"`. The second edit cancels the pending retry and
+   normalizes to the same pattern; suggestions must still populate.
+6. **AC2/AC3** — every search fails until the third pattern. Drive to `ERROR`,
+   change the pattern into a retry whose own search also fails, then change it
+   once more and assert suggestions populate. A failing retry must not strand
+   the hook.
+
+Test 2 also asserts `FileSearch.search` was called exactly twice, which is the
+evidence for the `RESET`-over-`INITIALIZE` decision: dispatching `INITIALIZE`
+there replays the failed pattern and makes that count three.
 
 The existing suite must continue to pass unchanged, in particular
 `should reset the state when disabled after being in an ERROR state` and

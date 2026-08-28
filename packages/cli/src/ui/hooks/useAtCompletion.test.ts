@@ -533,6 +533,60 @@ describe('useAtCompletion', () => {
         ]);
       });
       expect(result.current.isLoadingSuggestions).toBe(false);
+      // Exactly the two searches the user asked for: the retry must not replay
+      // the pattern that already failed.
+      expect(stubFileSearch.search).toHaveBeenCalledTimes(2);
+    });
+
+    it('still retries when a case-only edit cancels the pending retry (AC1)', async () => {
+      testRootDir = await createTmpDir({ 'alpha.txt': '' });
+
+      const realFileSearch = FileSearchFactory.create({
+        projectRoot: testRootDir,
+        ignoreDirs: [],
+        useGitignore: true,
+        useExtensionIgnore: true,
+        cache: false,
+        cacheTtl: 0,
+        enableRecursiveFileSearch: true,
+        enableFuzzySearch: true,
+      });
+      await realFileSearch.initialize();
+
+      const failingSearcher: FileSearch = {
+        initialize: vi.fn().mockRejectedValue(new Error('crawl failed')),
+        search: vi.fn().mockResolvedValue([]),
+      };
+
+      let createCall = 0;
+      vi.spyOn(FileSearchFactory, 'create').mockImplementation(() => {
+        createCall += 1;
+        return createCall === 1 ? failingSearcher : realFileSearch;
+      });
+
+      const { result, rerender } = renderHook(
+        ({ pattern }: { pattern: string }) =>
+          useTestHarnessForAtCompletion(true, pattern, mockConfig, testRootDir),
+        { initialProps: { pattern: 'alp' } },
+      );
+
+      await waitFor(() => {
+        expect(result.current.isLoadingSuggestions).toBe(false);
+        expect(result.current.suggestions).toStrictEqual([]);
+      });
+
+      // The second edit lands inside the retry debounce and normalizes to the
+      // same pattern, so it cancels the pending retry. Recovery must still
+      // happen: that retry was never actually made.
+      rerender({ pattern: 'alph' });
+      rerender({ pattern: 'ALPH' });
+
+      await waitFor(() => {
+        expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
+          'alpha.txt',
+        ]);
+      });
+      expect(result.current.isLoadingSuggestions).toBe(false);
     });
 
     it('retries at most once per distinct normalized pattern (AC3)', async () => {
@@ -573,6 +627,8 @@ describe('useAtCompletion', () => {
       expect(createSpy).toHaveBeenCalledTimes(1);
       expect(result.current.isLoadingSuggestions).toBe(false);
       expect(result.current.suggestions).toStrictEqual([]);
+
+      vi.useRealTimers();
     });
 
     it('does not loop when a retry fails again (AC4)', async () => {
@@ -617,6 +673,69 @@ describe('useAtCompletion', () => {
         vi.advanceTimersByTime(1000);
       });
       expect(createSpy).toHaveBeenCalledTimes(2);
+
+      vi.useRealTimers();
+    });
+
+    it('keeps recovering when the retry runs its own failing search (AC2/AC3)', async () => {
+      testRootDir = await createTmpDir({ 'alphabet.txt': '' });
+
+      const realFileSearch = FileSearchFactory.create({
+        projectRoot: testRootDir,
+        ignoreDirs: [],
+        useGitignore: true,
+        useExtensionIgnore: true,
+        cache: false,
+        cacheTtl: 0,
+        enableRecursiveFileSearch: true,
+        enableFuzzySearch: true,
+      });
+      await realFileSearch.initialize();
+
+      // Every search fails until the user has typed 'alphab'.
+      const stubFileSearch: FileSearch = {
+        initialize: vi.fn().mockResolvedValue(undefined),
+        search: vi.fn((searchPattern: string, options) => {
+          if (searchPattern !== 'alphab') {
+            return Promise.reject(new Error('search failed'));
+          }
+          return realFileSearch.search(searchPattern, options);
+        }),
+      };
+      vi.spyOn(FileSearchFactory, 'create').mockReturnValue(stubFileSearch);
+
+      const { result, rerender } = renderHook(
+        ({ pattern }: { pattern: string }) =>
+          useTestHarnessForAtCompletion(true, pattern, mockConfig, testRootDir),
+        { initialProps: { pattern: 'alp' } },
+      );
+
+      await waitFor(() => {
+        expect(stubFileSearch.search).toHaveBeenCalledWith(
+          'alp',
+          expect.any(Object),
+        );
+      });
+
+      // The retry for 'alpha' runs a search that fails too, so the hook lands
+      // back in ERROR rather than getting stuck against the first failure.
+      rerender({ pattern: 'alpha' });
+      await waitFor(() => {
+        expect(stubFileSearch.search).toHaveBeenCalledWith(
+          'alpha',
+          expect.any(Object),
+        );
+      });
+
+      // A third pattern still recovers, which it could not do if a failing
+      // retry stranded the hook.
+      rerender({ pattern: 'alphab' });
+      await waitFor(() => {
+        expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
+          'alphabet.txt',
+        ]);
+      });
+      expect(result.current.isLoadingSuggestions).toBe(false);
     });
   });
 

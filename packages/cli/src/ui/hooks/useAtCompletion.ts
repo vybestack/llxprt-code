@@ -536,6 +536,11 @@ function clearDebounceTimer(debounceTimer: DebounceTimerRef): void {
  * full listing and has typed nothing to debounce. Anything else waits out
  * SEARCH_DEBOUNCE_MS, so a burst of keystrokes costs one unit of work rather
  * than one per character.
+ *
+ * The attempted pattern is recorded when the action dispatches, not when it is
+ * scheduled. A debounced action can still be cancelled by the effect cleanup,
+ * and recording it early would tell the ERROR branch that a retry had already
+ * been made for a pattern that never got one.
  */
 function startPatternWork(
   normalizedPattern: string,
@@ -546,17 +551,18 @@ function startPatternWork(
   abortCurrentSearch: () => void,
   dispatch: React.Dispatch<AtCompletionAction>,
 ): void {
-  attemptedPattern.current = normalizedPattern;
   lifecycleGeneration.current += 1;
   abortCurrentSearch();
   clearDebounceTimer(debounceTimer);
-  if (normalizedPattern === '') {
+  const startWork = (): void => {
+    attemptedPattern.current = normalizedPattern;
     dispatch(action);
+  };
+  if (normalizedPattern === '') {
+    startWork();
     return;
   }
-  debounceTimer.current = setTimeout(() => {
-    dispatch(action);
-  }, SEARCH_DEBOUNCE_MS);
+  debounceTimer.current = setTimeout(startWork, SEARCH_DEBOUNCE_MS);
 }
 
 function usePatternChangeHandler(
@@ -620,13 +626,17 @@ function usePatternChangeHandler(
       normalizedPattern !== attemptedPatternRef.current
     ) {
       // A failed crawl or search leaves the hook in ERROR with no way back, so
-      // typing another character would otherwise never retry. The recorded
-      // attempted pattern is the bound: one retry per distinct normalized
-      // pattern, which keeps a genuinely broken directory from re-crawling on
-      // every render and keeps a failing retry from looping.
+      // typing another character would otherwise never retry. Reset instead of
+      // initializing directly: that drops the pattern the failure was recorded
+      // against, so the IDLE branch above re-enters the normal
+      // initialize-then-search path for the pattern the user actually typed.
+      //
+      // The recorded attempted pattern is the bound: one retry per distinct
+      // normalized pattern, which keeps a genuinely broken directory from
+      // re-crawling on every render and keeps a failing retry from looping.
       startPatternWork(
         normalizedPattern,
-        { type: 'INITIALIZE' },
+        { type: 'RESET' },
         attemptedPatternRef,
         lifecycleGeneration,
         debounceTimerRef,
