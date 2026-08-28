@@ -408,6 +408,30 @@ async function* handleErrorEvent(
   });
 }
 
+async function* handleContextWindowWillOverflowEvent(
+  deps: MessageStreamDeps,
+  ctx: StreamContext,
+  deferredEvents: ServerAgentStreamEvent[],
+  state: TerminalState,
+): AsyncGenerator<ServerAgentStreamEvent, IterationResult> {
+  deps.logger.warn(
+    () =>
+      `[stream:orchestrator] context window will overflow; ending iteration`,
+    {
+      deferredEventCount: deferredEvents.length,
+      hadToolCallsThisTurn: state.hadToolCallsThisTurn,
+      hadContent: state.hadContent,
+      hadThinking: state.hadThinking,
+    },
+  );
+  for (const d of deferredEvents) yield d;
+  yield* fireAfterHookAndEmitClearContext(deps, ctx);
+  return earlyIterResult(state.hadToolCallsThisTurn, {
+    ...state,
+    deferredEvents,
+  });
+}
+
 async function* handleInvalidStreamEvent(
   deps: MessageStreamDeps,
   signal: AbortSignal,
@@ -473,6 +497,15 @@ export async function* handleTerminalEvent(
       deferredEvents,
       state,
       initialRequest,
+    );
+  }
+
+  if (event.type === AgentEventType.ContextWindowWillOverflow) {
+    return yield* handleContextWindowWillOverflowEvent(
+      deps,
+      ctx,
+      deferredEvents,
+      state,
     );
   }
 

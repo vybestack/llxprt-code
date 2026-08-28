@@ -65,6 +65,16 @@ describe('AgenticLoop integration - terminal outcomes and bus scoping', () => {
         type: AgentEventType.LoopDetected,
       } satisfies ServerAgentStreamEvent,
     ],
+    [
+      'ContextWindowWillOverflow',
+      {
+        type: AgentEventType.ContextWindowWillOverflow,
+        value: {
+          estimatedRequestTokenCount: 135262,
+          remainingTokenCount: 134144,
+        },
+      } satisfies ServerAgentStreamEvent,
+    ],
   ])(
     'does not execute collected tools after %s',
     async (_name, terminalEvent) => {
