@@ -15,7 +15,9 @@ describe('save_memory', () => {
   evalTest('ALWAYS_PASSES', {
     name: 'should be able to save to memory',
     params: {
-      settings: { tools: { core: ['save_memory'] } },
+      settings: {
+        excludeTools: ['todo_read', 'todo_write', 'todo_pause'],
+      },
     },
     prompt: [
       'Follow these instructions exactly.',

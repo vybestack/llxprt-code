@@ -5,10 +5,13 @@
  */
 
 import { beforeAll, describe, it, expect } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { join, resolve } from 'node:path';
+import * as ts from 'typescript';
 
 const ROOT = resolve(import.meta.dirname, '../..');
+const TODO_TOOLS = ['todo_read', 'todo_write', 'todo_pause'];
 describe('eval JSON output contract', () => {
   let buildEvalArgs: (prompt: string) => string[];
   let extractModelResponse: (output: string) => string;
@@ -362,5 +365,109 @@ describe('assertFavoriteColorBlueOutput predicate (deterministic exact-value)', 
       /some output/i,
     );
     expect(() => assertFavoriteColorBlueOutput(42)).toThrow(/some output/i);
+  });
+});
+
+function loadSaveMemoryEval(): ts.SourceFile {
+  const filePath = join(ROOT, 'evals/save_memory.eval.ts');
+  return ts.createSourceFile(
+    filePath,
+    readFileSync(filePath, 'utf8'),
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+}
+
+function findEvalCase(sourceFile: ts.SourceFile): ts.ObjectLiteralExpression {
+  let evalCase: ts.ObjectLiteralExpression | undefined;
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'evalTest'
+    ) {
+      const candidate = node.arguments[1];
+      if (candidate && ts.isObjectLiteralExpression(candidate)) {
+        evalCase = candidate;
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  if (!evalCase) {
+    throw new Error('save_memory eval must declare an evalTest case');
+  }
+  return evalCase;
+}
+
+function propertyValue(
+  object: ts.ObjectLiteralExpression,
+  propertyName: string,
+): ts.Expression {
+  const property = object.properties.find(
+    (candidate) =>
+      ts.isPropertyAssignment(candidate) &&
+      ts.isIdentifier(candidate.name) &&
+      candidate.name.text === propertyName,
+  );
+  if (!property || !ts.isPropertyAssignment(property)) {
+    throw new Error(`Expected property ${propertyName}`);
+  }
+  return property.initializer;
+}
+
+function objectProperty(
+  object: ts.ObjectLiteralExpression,
+  propertyName: string,
+): ts.ObjectLiteralExpression {
+  const value = propertyValue(object, propertyName);
+  if (!ts.isObjectLiteralExpression(value)) {
+    throw new Error(`Expected ${propertyName} to be an object literal`);
+  }
+  return value;
+}
+
+function stringArrayProperty(
+  object: ts.ObjectLiteralExpression,
+  propertyName: string,
+): string[] {
+  const value = propertyValue(object, propertyName);
+  if (!ts.isArrayLiteralExpression(value)) {
+    throw new Error(`Expected ${propertyName} to be an array literal`);
+  }
+  return value.elements.map((element) => {
+    if (!ts.isStringLiteral(element)) {
+      throw new Error(`${propertyName} must contain only string literals`);
+    }
+    return element.text;
+  });
+}
+
+/**
+ * Issue #3256: The save_memory eval isolates itself from todo bookkeeping via the
+ * flat `excludeTools` settings list, which drives both registry exclusion and policy
+ * denial. The exactly-three todo tools must be excluded and `save_memory` must not
+ * be excluded (it is registered by default and must remain reachable).
+ */
+describe('save_memory eval tool isolation (operative flat excludeTools)', () => {
+  it('uses the operative flat excludeTools list for exactly the three todo tools', () => {
+    const settings = objectProperty(
+      objectProperty(findEvalCase(loadSaveMemoryEval()), 'params'),
+      'settings',
+    );
+
+    expect(stringArrayProperty(settings, 'excludeTools')).toEqual(TODO_TOOLS);
+  });
+
+  it('does not exclude save_memory', () => {
+    const settings = objectProperty(
+      objectProperty(findEvalCase(loadSaveMemoryEval()), 'params'),
+      'settings',
+    );
+
+    expect(stringArrayProperty(settings, 'excludeTools')).not.toContain(
+      'save_memory',
+    );
   });
 });
