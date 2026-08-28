@@ -935,7 +935,7 @@ ssh-add ~/.ssh/id_ed25519
 
 LLxprt Code prints a startup warning when it detects this empty-agent state.
 The warning now also appears in the TUI startup-warnings box (and on stderr
-for non-interactive runs) instead of only on host stderr.
+for text-mode non-interactive runs) instead of only on host stderr.
 
 **"socat not found" error** — the sandbox container image needs `socat` for SSH
 agent and credential proxy tunneling. Use the official sandbox image.
