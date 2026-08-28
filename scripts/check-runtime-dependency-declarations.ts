@@ -148,7 +148,7 @@ function lineOf(sourceFile: ts.SourceFile, node: ts.Node): number {
 function isRuntimeImportDeclaration(node: ts.ImportDeclaration): boolean {
   const clause = node.importClause;
   if (clause === undefined) {
-    // `import 'x'` — a side-effect import, evaluated at runtime.
+    // `import 'x'` is a side-effect import evaluated at runtime.
     return true;
   }
   if (clause.isTypeOnly) return false;
@@ -164,7 +164,7 @@ function isRuntimeExportDeclaration(node: ts.ExportDeclaration): boolean {
   if (node.isTypeOnly) return false;
   const clause = node.exportClause;
   if (clause === undefined) {
-    // `export * from 'x'` — re-exports values at runtime.
+    // `export * from 'x'` re-exports values at runtime.
     return true;
   }
   if (ts.isNamespaceExport(clause)) return true;
@@ -527,7 +527,7 @@ function violationMessage(
       : `is declared only in ${declaredIn.join(', ')}`;
   return (
     `${file}:${line}: imports "${specifier}" at runtime, but ` +
-    `"${importedPackage}" ${where} in ${workspaceDir}/package.json — ` +
+    `"${importedPackage}" ${where} in ${workspaceDir}/package.json. ` +
     'add it to "dependencies" (or "peerDependencies"/"optionalDependencies"). ' +
     'A devDependencies-only declaration is never installed for a consumer.'
   );
