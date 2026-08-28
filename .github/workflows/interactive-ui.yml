@@ -21,8 +21,11 @@ on:
       - 'scripts/tmux-script.approval-ui.json'
       - 'scripts/tmux-script.issue2208-newlines.fake.json'
       - 'scripts/tmux-script.issue2016-composer.fake.json'
-      # Scenario config referenced by all scenarios (welcome banner +
-      # system settings env paths set in each scenario)
+      - 'scripts/tmux-script.onboarding.json'
+      # Scenario config referenced by the scenarios (welcome banner +
+      # system settings env paths set in each scenario). The onboarding
+      # scenario deliberately points the welcome config at a per-run temp
+      # path instead, so it does not consume welcome-completed.json.
       - 'scripts/fixtures/welcome-completed.json'
       - 'scripts/system-settings.interactive-ui.json'
       # Fixtures referenced by the executed scenarios
@@ -31,6 +34,8 @@ on:
       # CLI UI layer (dialogs, autocomplete, input handling)
       - 'packages/cli/src/ui/**'
       - 'packages/cli/src/commands/**'
+      # First-run welcome detection/persistence driven by the onboarding scenario
+      - 'packages/cli/src/config/welcomeConfig.ts'
       # Core tool approval, skills, fake provider, and policy logic
       - 'packages/agents/src/scheduler/**'
       - 'packages/cli/src/providers/providerManagerInstance.ts'
@@ -63,12 +68,14 @@ on:
       - 'scripts/tmux-script.approval-ui.json'
       - 'scripts/tmux-script.issue2208-newlines.fake.json'
       - 'scripts/tmux-script.issue2016-composer.fake.json'
+      - 'scripts/tmux-script.onboarding.json'
       - 'scripts/fixtures/welcome-completed.json'
       - 'scripts/system-settings.interactive-ui.json'
       - 'scripts/fixtures/approval-ui.responses.jsonl'
       - 'scripts/fixtures/issue2208-newlines.responses.jsonl'
       - 'packages/cli/src/ui/**'
       - 'packages/cli/src/commands/**'
+      - 'packages/cli/src/config/welcomeConfig.ts'
       - 'packages/agents/src/scheduler/**'
       - 'packages/cli/src/providers/providerManagerInstance.ts'
       - 'packages/core/src/policy/**'
