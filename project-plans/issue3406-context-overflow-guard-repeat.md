@@ -62,18 +62,101 @@ the outliers.
 reservation. The arithmetic in the guard is correct; the overflow itself is real
 (1,118 tokens over on the first attempt).
 
-### Explicitly NOT treated as defects in this effort
+## Second root cause: the last-resort truncator measures the wrong thing
 
-- The guard's token arithmetic. It is correct for the session's configured
-  context limit and completion budget.
-- `/compress` returning NOOP. Manual compression operates on curated committed
-  history (`compressionContextBuilder.ts:47-53`); middle-out and its one-shot
-  route both require a minimum number of compressible messages, so a truthful
-  structural no-op is possible. Changing compression strategy minimums is a
-  different, unproven change and is out of scope.
+The reporter's other complaint — "it should have either compressed or truncated a
+tool call" — is a separate, provable defect.
+
+Hard-limit enforcement runs five reduction stages. On this configuration each one
+declines:
+
+1. **Density optimization** returns immediately: the default strategy is
+   middle-out, which has no `optimize()` and is threshold-triggered rather than
+   continuous (`MiddleOutStrategy.ts:86-93`, `CompressionHandler.ts:187-203`).
+2. **Compression** runs, but middle-out needs 4 messages in its compressible
+   middle (`MINIMUM_MIDDLE_MESSAGES`) and its no-op routes to one-shot, which
+   needs 4 too (`MINIMUM_COMPRESS_MESSAGES`). Those are message-count guards, so
+   a handful of very large messages passes straight through both.
+3. **Compression retry** is skipped: the provider path converts a structural
+   NOOP into a `compressionFailure` (`providerContentEnforcement.ts:436-449`) and
+   the retry is gated on `compressionFailure === undefined` (lines 466-470).
+4. **TopDownTruncation fallback** — the defect.
+5. **Tool-response truncation** only has candidates when the bulk sits in
+   `tool_response` blocks.
+
+`TopDownTruncationStrategy.ts:52-59` decided whether to act with:
+
+```ts
+const target = compressionThreshold * contextLimit * 0.6;
+if (currentTokenCount <= target) return this.structuralNoop(originalCount, 'already-under-target');
+```
+
+`currentTokenCount` is `historyService.getTotalTokens()` — committed history only
+(`compressionContextBuilder.ts:53`). The enforcer that invoked it needs the
+finalized prompt envelope (system prompt + tool schemas + committed history +
+pending content) under `marginAdjustedLimit`, with `completionBudget` reserved.
+`CompressionContext` had no field to carry the real deficit
+(`core/compression/types.ts:139-177`), so the strategy invented its own yardstick
+and was never told how many tokens had to go.
+
+On the reported session:
+
+```
+context limit          262,144
+completion budget      128,000
+enforcer input budget  134,144   (matches the reported "remaining" exactly)
+reported input         135,262   → over by 1,118
+TopDown's own target   0.85 × 262,144 × 0.6 = 133,693
+```
+
+TopDown refuses unless committed history alone exceeds 133,693, but the whole
+envelope has to fit in 134,144. The 451-token gap is far smaller than the system
+prompt plus tool schemas, so committed history is essentially always under
+TopDown's target by the time the finalized payload is over budget. The last-resort
+truncator structurally refuses in exactly the situation it exists to rescue.
+
+### Fix
+
+`CompressionContext` gains an optional `targetTokenCount`, set only by hard-limit
+enforcement, which is the only layer that knows the real deficit. TopDown prefers
+it and keeps its ephemeral target when absent, so threshold-triggered compression
+is unchanged. Both enforcers compute it through one shared helper,
+`computeHistoryTruncationTarget(projected, marginAdjustedLimit, historyTokens)` in
+`contextLimitPolicy.ts`: truncation can only remove committed history, so the
+target is the current history total less the overage. No arbitrary safety cushion
+— the enforcer re-projects afterwards and still falls through to tool-response
+truncation when it comes up short.
+
+### Additional acceptance criteria
+
+**AC6 — Explicit target honoured.** TopDownTruncation truncates when given an
+explicit `targetTokenCount` below `currentTokenCount`, even when its own
+ephemeral target says it is already under.
+
+**AC7 — No target, no change.** With no explicit target the strategy behaves
+exactly as before.
+
+**AC8 — Provider path recovers.** When the finalized envelope overflows while
+committed history is under the ephemeral target, `ProviderContentEnforcer.enforce`
+resolves with contents that fit instead of throwing ContextOverflowError.
+
+**AC9 — 413 recovery path recovers.** Same for `PendingContextWindowEnforcer`
+when the pending request supplies the overage.
+
+**AC10 — Requests that fit are untouched.** Neither enforcer truncates history
+when the request is already within budget.
+
+### Still NOT treated as defects
+
+- The guard's token arithmetic. It is correct for the configured context limit
+  and completion budget.
+- `/compress` returning NOOP. Manual compression sees only curated committed
+  history, and middle-out and one-shot both require a minimum number of
+  compressible messages, so a truthful structural no-op is reachable. Changing
+  strategy minimums is a different, unproven change.
 - `TopDownTruncationStrategy` returning `kind: 'applied'` with unchanged history
   when `finalRemoveCount === 0`. A truthfulness wart with no proven user-visible
-  symptom here. Deferred.
+  symptom.
 
 ## Acceptance criteria
 

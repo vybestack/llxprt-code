@@ -41,8 +41,13 @@ export class TopDownTruncationStrategy implements CompressionStrategy {
   async compress(
     context: CompressionContext,
   ): Promise<StrategyCompressionResult> {
-    const { history, runtimeContext, estimateTokens, currentTokenCount } =
-      context;
+    const {
+      history,
+      runtimeContext,
+      estimateTokens,
+      currentTokenCount,
+      targetTokenCount,
+    } = context;
     const originalCount = history.length;
 
     if (originalCount === 0) {
@@ -52,7 +57,11 @@ export class TopDownTruncationStrategy implements CompressionStrategy {
     const compressionThreshold =
       runtimeContext.ephemerals.compressionThreshold();
     const contextLimit = runtimeContext.ephemerals.contextLimit();
-    const target = compressionThreshold * contextLimit * 0.6;
+    // Hard-limit enforcement supplies the real target because it is the only
+    // layer that knows the finalized envelope's deficit; the ephemeral target
+    // below only sees committed history (issue #3406).
+    const target =
+      targetTokenCount ?? compressionThreshold * contextLimit * 0.6;
 
     if (currentTokenCount <= target) {
       return this.structuralNoop(originalCount, 'already-under-target');

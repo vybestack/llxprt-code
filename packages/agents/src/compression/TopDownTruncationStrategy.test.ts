@@ -115,6 +115,7 @@ function buildContext(
     compressionThreshold: number;
     contextLimit: number;
     currentTokenCount: number;
+    targetTokenCount: number;
     estimateTokens: (contents: readonly IContent[]) => Promise<number>;
   }> = {},
 ): CompressionContext {
@@ -166,6 +167,9 @@ function buildContext(
     runtimeState,
     estimateTokens,
     currentTokenCount: overrides.currentTokenCount ?? 5000,
+    ...(overrides.targetTokenCount !== undefined
+      ? { targetTokenCount: overrides.targetTokenCount }
+      : {}),
     logger: noopLogger,
     resolveProvider: () => ({
       provider: throwingProvider,
@@ -345,6 +349,88 @@ describe('TopDownTruncationStrategy', () => {
       expect(result.kind).toBe('noop');
       expect(result.reason).toBe('already-under-target');
       expect(result.metadata.originalMessageCount).toBe(5);
+    });
+
+    // -------------------------------------------------------------------
+    // Issue #3406 — hard-limit enforcement supplies the real target.
+    //
+    // The ephemeral target (compressionThreshold × contextLimit × 0.6) is
+    // derived from committed history alone, but the enforcer must fit the
+    // whole finalized envelope (system prompt + tool schemas + history +
+    // pending content) into the context budget. When the enforcer knows the
+    // real deficit it passes an explicit targetTokenCount, and the strategy
+    // must honour it instead of declaring itself already under target.
+    // -------------------------------------------------------------------
+
+    it('truncates to an explicit target even when the ephemeral target says it is already under', async () => {
+      // 20 messages × 500 tokens = 10000 committed tokens.
+      // Ephemeral target = 0.8 * 40000 * 0.6 = 19200, so currentTokenCount
+      // (10000) is comfortably under it and today this is a no-op.
+      // Hard-limit enforcement needs history down to 3000 tokens.
+      const history = generateHistory(20);
+      const ctx = buildContext({
+        history,
+        currentTokenCount: 10000,
+        contextLimit: 40000,
+        compressionThreshold: 0.8,
+        targetTokenCount: 3000,
+        estimateTokens: async (contents) => contents.length * 500,
+      });
+
+      const strategy = new TopDownTruncationStrategy();
+      const result = await strategy.compress(ctx);
+
+      expect(result.kind).toBe('applied');
+      if (result.kind !== 'applied') return;
+      // 5 messages × 500 = 2500 < 3000; 6 × 500 = 3000 is not < 3000.
+      expect(result.newHistory.length).toBeLessThanOrEqual(5);
+      expect(result.newHistory.length).toBeGreaterThanOrEqual(2);
+      // The survivors are the newest messages; the oldest were dropped.
+      const kept = result.newHistory.length;
+      for (let i = 0; i < kept; i++) {
+        expect(result.newHistory[i]).toBe(history[history.length - kept + i]);
+      }
+    });
+
+    it('still reports a structural no-op when the explicit target is above the current count', async () => {
+      const history = generateHistory(5);
+      const ctx = buildContext({
+        history,
+        currentTokenCount: 500,
+        contextLimit: 10000,
+        compressionThreshold: 0.8,
+        targetTokenCount: 4000,
+        estimateTokens: async (contents) => contents.length * 100,
+      });
+
+      const strategy = new TopDownTruncationStrategy();
+      const result = await strategy.compress(ctx);
+
+      expect(result.kind).toBe('noop');
+      expect(result.reason).toBe('already-under-target');
+    });
+
+    it('truncates deeper than the ephemeral target when the explicit target is lower', async () => {
+      // Ephemeral target = 0.8 * 10000 * 0.6 = 4800 would stop at 9
+      // messages (4500 tokens). The explicit target of 1000 must drive a
+      // deeper truncation than the ephemeral one would.
+      const history = generateHistory(20);
+      const ctx = buildContext({
+        history,
+        currentTokenCount: 10000,
+        contextLimit: 10000,
+        compressionThreshold: 0.8,
+        targetTokenCount: 1000,
+        estimateTokens: async (contents) => contents.length * 500,
+      });
+
+      const strategy = new TopDownTruncationStrategy();
+      const result = await strategy.compress(ctx);
+
+      expect(result.kind).toBe('applied');
+      if (result.kind !== 'applied') return;
+      // 1 message × 500 < 1000, but minKeep clamps the removal at 2 kept.
+      expect(result.newHistory.length).toBe(2);
     });
 
     it('removes specific number of messages to get under target', async () => {
