@@ -1,0 +1,20 @@
+{
+  // Issue #3387: the `tsc --noEmit` gate for this package.
+  //
+  // These entries used to live in tsconfig.json. They are test files that
+  // fail `tsc`, and excluding them there left them outside every package
+  // project, so typescript-eslint resolved them against the root
+  // tsconfig.json, which declares no `include` and therefore spans the whole
+  // repository. Serving one such file cost ~7 GB and ~40 s per ESLint
+  // process. Keeping the list here preserves typecheck behavior exactly
+  // while letting ESLint resolve every source file to its own package.
+  "extends": "./tsconfig.json",
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/debug/DebugLogger.test.ts",
+    "src/debug/FileOutput.test.ts",
+    "src/telemetry/canonicalConsumer.behavior.test.ts",
+    "src/telemetry/types.test.ts"
+  ]
+}

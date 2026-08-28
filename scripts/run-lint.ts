@@ -6,29 +6,54 @@
  */
 
 /**
- * Canonical lint runner (issue #2710).
+ * Canonical lint runner (issues #2710, #3387).
  *
- * A single root ESLint invocation handles the full tree (including
- * integration-tests). Scoped runs (CI PRs) consume an explicit JSON target
- * list and always include integration-tests as an explicit target so the
- * separate integration-test ESLint pass is covered after collapsing duplicate
- * traversals. Cache is opt-in (CI only) and never silently enabled locally.
+ * A full run is partitioned into one ESLint process per `packages/<pkg>`
+ * directory plus one process for the rest of the tree, so peak memory is the
+ * largest single group rather than the whole monorepo at once (#3387). The
+ * partition is derived from the filesystem and is exhaustive: the package
+ * targets cover exactly what lives under `packages/`, and the final target is
+ * `.` with those same paths ignored, so the union is the file set of
+ * `eslint .`. A new package is picked up without editing this runner.
  *
- * `lint`, `lint:ci`, and `lint:fix` delegate to this runner. The LSP package's
- * separate lint step is intentionally preserved.
+ * Scoped runs (CI PRs) consume an explicit JSON target list and always include
+ * integration-tests as an explicit target so the separate integration-test
+ * ESLint pass is covered after collapsing duplicate traversals. They are
+ * partitioned the same way, one process per target, so the heap default is
+ * safe on that path too. Cache is opt-in (CI only) and never silently enabled
+ * locally.
+ *
+ * `lint` and `lint:fix` delegate to this runner. `lint:ci` and the LSP
+ * package's separate lint step are intentionally preserved.
  */
 
 import { constants as osConstants } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { execa } from 'execa';
 import { messageOf, propertyValue } from './utils/error-guards.ts';
 
-const DEFAULT_HEAP_MB = 12288;
+/**
+ * Heap ceiling for each ESLint process. Sized to the largest single group
+ * (`packages/cli`), not to the whole tree. See project-plans/issue3387 for the
+ * measurements behind this number.
+ */
+const DEFAULT_HEAP_MB = 6144;
 const ESLINT_CACHE_LOCATION = 'node_modules/.cache/eslint';
 const INTEGRATION_TESTS_TARGET = 'integration-tests';
 const FULL_TARGET = '.';
+const PACKAGES_DIR = 'packages';
+/** Ignore pattern that makes the rest-of-tree group complement the package groups. */
+const PACKAGES_IGNORE_PATTERN = `${PACKAGES_DIR}/**`;
 const LINT_TARGETS_ENV = 'LLXPRT_LINT_TARGETS';
+/**
+ * Targets are derived from the filesystem or from CI's affected-target
+ * selector, so an unmatched pattern carries no signal. It does happen
+ * legitimately: eslint.config.js ignores `packages/lsp` wholesale, and a
+ * target matching only ignored files is otherwise a hard error.
+ */
+const NO_ERROR_ON_UNMATCHED = '--no-error-on-unmatched-pattern';
 
 /** Cache flags that take a value; the runner owns these centrally. */
 const CACHE_VALUE_FLAGS: ReadonlySet<string> = new Set([
@@ -44,6 +69,8 @@ export interface LintCommand {
   readonly cmd: string;
   readonly args: readonly string[];
   readonly nodeOptions: string;
+  /** Human-readable name of the group, used for progress output. */
+  readonly label: string;
 }
 
 /** Parameters for the exported command builder. */
@@ -52,6 +79,13 @@ export interface BuildCommandsParams {
   readonly targets: readonly string[] | null;
   readonly forwardedArgs: readonly string[];
   readonly cache: boolean;
+  /**
+   * Directories under `packages/` to partition a full run across, as paths
+   * relative to the repo root (e.g. `packages/cli`). Supplied by the caller so
+   * the builder stays pure and testable. An empty list means there is nothing
+   * to partition and a full run stays a single root invocation.
+   */
+  readonly packageDirs?: readonly string[];
   readonly heapMb?: number;
   readonly nodeOptions?: string;
 }
@@ -93,12 +127,14 @@ function nodeOptionsWithMemoryLimit(
  *
  * Exported for behavioral tests so the command structure can be asserted
  * without spawning ESLint. The CLI entry point calls this and then executes
- * the commands sequentially with fail-fast exit/signal propagation.
+ * the commands sequentially: lint failures accumulate so no group hides
+ * another's findings, and a signal termination aborts the rest.
  */
 export function buildLintCommands({
   targets,
   forwardedArgs,
   cache,
+  packageDirs = [],
   heapMb = DEFAULT_HEAP_MB,
   nodeOptions,
 }: BuildCommandsParams): readonly LintCommand[] {
@@ -113,41 +149,108 @@ export function buildLintCommands({
     Number.isFinite(heapMb) && heapMb > 0 ? heapMb : DEFAULT_HEAP_MB;
   const resolvedNodeOptions = nodeOptionsWithMemoryLimit(safeHeap, nodeOptions);
 
-  const cacheArgs: readonly string[] = cache
-    ? [
-        '--cache',
-        '--cache-strategy',
-        'content',
-        '--cache-location',
-        ESLINT_CACHE_LOCATION,
-      ]
-    : [];
+  // Each group gets its own cache file. ESLint rewrites the whole cache file
+  // with just the files it linted, so a single shared location would leave the
+  // last group's entries and discard the other sixteen.
+  const cacheArgsFor = (label: string): readonly string[] =>
+    cache
+      ? [
+          '--cache',
+          '--cache-strategy',
+          'content',
+          '--cache-location',
+          `${ESLINT_CACHE_LOCATION}-${cacheSlug(label)}`,
+        ]
+      : [];
 
-  // Full run: a single root invocation covers the whole tree including
-  // integration-tests. No duplicate integration-test pass.
+  const makeCommand = (
+    label: string,
+    targetArgs: readonly string[],
+  ): LintCommand => ({
+    cmd: eslintBin,
+    args: [
+      ...targetArgs,
+      NO_ERROR_ON_UNMATCHED,
+      ...forwardedArgs,
+      ...cacheArgsFor(label),
+    ],
+    nodeOptions: resolvedNodeOptions,
+    label,
+  });
+
   if (targets === null) {
-    return [
-      {
-        cmd: eslintBin,
-        args: [FULL_TARGET, ...forwardedArgs, ...cacheArgs],
-        nodeOptions: resolvedNodeOptions,
-      },
-    ];
+    return fullRunCommands(packageDirs, makeCommand);
   }
+  // Scoped run: one process per target, always including integration-tests
+  // (deduplicated), so a scoped run never holds several package type programs
+  // at once either.
+  return scopedTargets(targets).map((target) => makeCommand(target, [target]));
+}
 
-  // Scoped run: forward the explicit target list, always including
-  // integration-tests (deduplicated).
+/**
+ * Filesystem-safe slug for a group label, so each group's cache file is
+ * distinct. Labels are unique within a run, so slugs are too.
+ */
+function cacheSlug(label: string): string {
+  const parts = label
+    .split(/[^a-z0-9]/i)
+    .filter((part: string) => part.length > 0);
+  return parts.length > 0 ? parts.join('-') : 'root';
+}
+
+/** Factory that turns a group label plus its ESLint targets into a command. */
+type CommandFactory = (
+  label: string,
+  targetArgs: readonly string[],
+) => LintCommand;
+
+/**
+ * Partitions a full run: one command per package directory, then one command
+ * for everything else. The two halves are exact complements, so the union is
+ * the file set of `eslint .`.
+ *
+ * With no package directories there is nothing to partition and the run stays
+ * a single root invocation, which is still complete.
+ */
+function fullRunCommands(
+  packageDirs: readonly string[],
+  makeCommand: CommandFactory,
+): readonly LintCommand[] {
+  if (packageDirs.length === 0) {
+    return [makeCommand(FULL_TARGET, [FULL_TARGET])];
+  }
+  const ordered = [...new Set(packageDirs)].sort();
+  return [
+    ...ordered.map((dir) => makeCommand(dir, [dir])),
+    makeCommand(`${FULL_TARGET} (excluding ${PACKAGES_DIR}/)`, [
+      FULL_TARGET,
+      '--ignore-pattern',
+      PACKAGES_IGNORE_PATTERN,
+    ]),
+  ];
+}
+
+/** Deduplicated, sorted scoped targets, always including integration-tests. */
+function scopedTargets(targets: readonly string[]): readonly string[] {
   const targetSet = new Set<string>(targets);
   targetSet.add(INTEGRATION_TESTS_TARGET);
-  const orderedTargets = [...targetSet].sort();
+  return [...targetSet].sort();
+}
 
-  return [
-    {
-      cmd: eslintBin,
-      args: [...orderedTargets, ...forwardedArgs, ...cacheArgs],
-      nodeOptions: resolvedNodeOptions,
-    },
-  ];
+/**
+ * Lists the package directories a full run is partitioned across, as paths
+ * relative to the repo root. Reading the filesystem keeps the partition
+ * exhaustive without a hand-maintained list: a new package is linted the day
+ * it appears.
+ *
+ * A missing `packages/` directory is a broken checkout, not a condition to
+ * paper over, so the underlying error propagates.
+ */
+export function readPackageDirs(repoRoot: string): readonly string[] {
+  return readdirSync(resolve(repoRoot, PACKAGES_DIR), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => `${PACKAGES_DIR}/${entry.name}`)
+    .sort();
 }
 
 /**
@@ -233,22 +336,43 @@ async function runLint(): Promise<void> {
 
   const targets = resolveTargets(rawArgs);
   const cache = isCacheEnabled(rawArgs);
+  const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
   const commands = buildLintCommands({
     targets,
     forwardedArgs,
     cache,
+    packageDirs: targets === null ? readPackageDirs(repoRoot) : [],
   });
 
-  // Fail-fast: stop at the first failing scope (matches package-script &&).
-  for (const { cmd, args, nodeOptions } of commands) {
-    await execa(cmd, [...args], {
-      stdio: 'inherit',
-      env: {
-        ...process.env,
-        NODE_OPTIONS: nodeOptions,
-      },
-    });
+  // A lint failure in one group must not hide findings in the others, so
+  // every group runs and the first failure is re-thrown at the end. An
+  // interruption (Ctrl-C, watchdog, OOM kill) is not a lint result and aborts
+  // the remaining groups immediately.
+  let firstFailure: unknown;
+  for (const [index, command] of commands.entries()) {
+    process.stdout.write(
+      `
+Lint ${index + 1}/${commands.length}: ${command.label}
+`,
+    );
+    try {
+      await execa(command.cmd, [...command.args], {
+        stdio: 'inherit',
+        env: {
+          ...process.env,
+          NODE_OPTIONS: command.nodeOptions,
+        },
+      });
+    } catch (error) {
+      if (terminationSignal(error) !== undefined) {
+        throw error;
+      }
+      firstFailure ??= error;
+    }
+  }
+  if (firstFailure !== undefined) {
+    throw firstFailure;
   }
 }
 
@@ -263,6 +387,17 @@ function signalNumber(signal: unknown): number | undefined {
   return typeof number === 'number' ? number : undefined;
 }
 
+/**
+ * The signal that terminated the child, or undefined when it exited normally.
+ * Distinguishes an interruption (which aborts the whole partitioned run) from
+ * an ordinary lint failure (which does not).
+ */
+function terminationSignal(error: unknown): string | undefined {
+  const signal =
+    propertyValue(error, 'signalCode') ?? propertyValue(error, 'signal');
+  return signalNumber(signal) === undefined ? undefined : String(signal);
+}
+
 /** A classified runner termination: an exit code and optional diagnostic. */
 export interface RunnerFailure {
   readonly exitCode: number;
@@ -272,7 +407,7 @@ export interface RunnerFailure {
 function buildSignalDiagnostic(signal: string, signum: number): string {
   const base = `Lint runner: ESLint was terminated by ${signal} (signal ${signum}). This is an interruption/kill (e.g. harness watchdog or OOM killer), not a lint failure.`;
   if (signal === 'SIGKILL') {
-    return `${base} An out-of-memory kill is a likely cause given the full-tree run's memory profile.`;
+    return `${base} An out-of-memory kill is possible; each group runs with a ${DEFAULT_HEAP_MB} MB heap, so a kill means the machine could not supply that.`;
   }
   return base;
 }

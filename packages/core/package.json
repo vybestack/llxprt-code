@@ -552,7 +552,7 @@
     "format": "prettier --write .",
     "test": "bun run-bun-tests.ts",
     "test:ci": "bun run-bun-tests.ts",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.runner.json"
+    "typecheck": "tsc --noEmit -p tsconfig.noemit.json && tsc -p tsconfig.runner.json"
   },
   "files": [
     "index.ts",

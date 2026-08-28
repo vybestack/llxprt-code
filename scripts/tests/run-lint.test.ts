@@ -5,22 +5,24 @@
  */
 
 /**
- * Behavioral tests for the canonical lint runner (issue #2710).
+ * Behavioral tests for the canonical lint runner (issues #2710, #3387).
  *
  * These tests exercise the REAL command builder exported from
  * `scripts/run-lint.ts`. No mock theater: the builder is imported and invoked
  * with real argument lists and environment inputs, and the produced ESLint
- * invocations are asserted as concrete command/argument tuples.
+ * invocations are asserted as concrete command/argument tuples. The package
+ * discovery test reads the REAL `packages/` directory.
  *
- * Coverage (per project-plans/issue-2710 acceptance matrix A1/A2/A7):
- *  - lint/lint:ci/lint:fix delegate to the runner (package-script migration test)
- *  - Full run uses ONE root ESLint invocation (no duplicate integration pass)
- *  - Full run target includes integration-tests via root '.'
- *  - Scoped run consumes a JSON target list and forwards it as explicit targets
- *  - Scoped run always includes integration-tests as an explicit target
+ * Coverage:
+ *  - lint/lint:fix delegate to the runner (package-script migration test)
+ *  - A full run is partitioned one process per package plus one for the rest,
+ *    and that partition covers every package on disk (#3387)
+ *  - The rest group complements the package groups via --ignore-pattern
+ *  - Scoped runs are partitioned one process per target
+ *  - Scoped run always includes integration-tests as a target
  *  - Argument forwarding (--max-warnings 0, --fix) is preserved
  *  - Cache is opt-in only (--cache requires explicit env/flag, not default)
- *  - Heap is normalized to 12GB (12288) and a stale inherited limit is replaced
+ *  - Heap is normalized to 6GB (6144) and a stale inherited limit is replaced
  */
 
 import { describe, expect, it } from 'bun:test';
@@ -36,6 +38,7 @@ interface LintCommand {
   readonly cmd: string;
   readonly args: readonly string[];
   readonly nodeOptions: string;
+  readonly label: string;
 }
 
 /** Parameters for the runner's command builder. */
@@ -43,6 +46,7 @@ interface BuildCommandsParams {
   readonly targets: readonly string[] | null;
   readonly forwardedArgs: readonly string[];
   readonly cache: boolean;
+  readonly packageDirs?: readonly string[];
   readonly heapMb?: number;
   readonly nodeOptions?: string;
 }
@@ -50,31 +54,129 @@ interface BuildCommandsParams {
 interface RunnerModule {
   buildLintCommands: (params: BuildCommandsParams) => readonly LintCommand[];
   stripRunnerArgs: (rawArgs: readonly string[]) => string[];
+  readPackageDirs: (repoRoot: string) => readonly string[];
 }
 
 async function loadRunner(): Promise<RunnerModule> {
   return await import(RUNNER_PATH);
 }
 
-describe('run-lint runner — full run is a single root invocation (A1/A2)', () => {
-  it('produces exactly one ESLint command for a full run (null targets)', async () => {
+/** Positional ESLint targets: the args before the first flag. */
+function targetsOf(command: LintCommand): readonly string[] {
+  const firstFlag = command.args.findIndex((arg) => arg.startsWith('-'));
+  return firstFlag === -1 ? command.args : command.args.slice(0, firstFlag);
+}
+
+const TWO_PACKAGES = ['packages/cli', 'packages/core'];
+
+describe('run-lint runner — a full run is partitioned per package (#3387)', () => {
+  it('emits one command per package directory plus one for the rest', async () => {
     const { buildLintCommands } = await loadRunner();
     const commands = buildLintCommands({
       targets: null,
       forwardedArgs: [],
       cache: false,
+      packageDirs: TWO_PACKAGES,
     });
-    expect(commands.length).toBe(1);
+    expect(commands.length).toBe(TWO_PACKAGES.length + 1);
   });
 
-  it('the full-run command targets the root "."', async () => {
+  it('gives each package directory its own dedicated invocation', async () => {
     const { buildLintCommands } = await loadRunner();
     const commands = buildLintCommands({
       targets: null,
       forwardedArgs: [],
       cache: false,
+      packageDirs: TWO_PACKAGES,
     });
-    expect(commands[0].args).toContain('.');
+    expect(commands.slice(0, 2).map((c) => [...targetsOf(c)])).toEqual([
+      ['packages/cli'],
+      ['packages/core'],
+    ]);
+  });
+
+  it('sorts package groups so the run order is deterministic', async () => {
+    const { buildLintCommands } = await loadRunner();
+    const commands = buildLintCommands({
+      targets: null,
+      forwardedArgs: [],
+      cache: false,
+      packageDirs: ['packages/tools', 'packages/agents', 'packages/cli'],
+    });
+    expect(commands.slice(0, 3).map((c) => c.label)).toEqual([
+      'packages/agents',
+      'packages/cli',
+      'packages/tools',
+    ]);
+  });
+
+  it('lints the rest of the tree with packages excluded, so the two halves complement', async () => {
+    const { buildLintCommands } = await loadRunner();
+    const commands = buildLintCommands({
+      targets: null,
+      forwardedArgs: [],
+      cache: false,
+      packageDirs: TWO_PACKAGES,
+    });
+    const rest = commands[commands.length - 1];
+    expect([...targetsOf(rest)]).toEqual(['.']);
+    const patternIndex = rest.args.indexOf('--ignore-pattern');
+    expect(patternIndex).toBeGreaterThan(-1);
+    expect(rest.args[patternIndex + 1]).toBe('packages/**');
+  });
+
+  it('does not exclude packages from the per-package groups', async () => {
+    const { buildLintCommands } = await loadRunner();
+    const commands = buildLintCommands({
+      targets: null,
+      forwardedArgs: [],
+      cache: false,
+      packageDirs: TWO_PACKAGES,
+    });
+    for (const command of commands.slice(0, 2)) {
+      expect(command.args).not.toContain('--ignore-pattern');
+    }
+  });
+
+  it('covers every package that actually exists on disk', async () => {
+    const { buildLintCommands, readPackageDirs } = await loadRunner();
+    const onDisk = readPackageDirs(REPO_ROOT);
+    // Guards the test itself: a discovery bug that returned nothing would
+    // otherwise make the coverage assertion vacuously true.
+    expect(onDisk.length).toBeGreaterThan(1);
+    const commands = buildLintCommands({
+      targets: null,
+      forwardedArgs: [],
+      cache: false,
+      packageDirs: onDisk,
+    });
+    const covered = commands.flatMap((c) => [...targetsOf(c)]);
+    for (const dir of onDisk) {
+      expect(covered).toContain(dir);
+    }
+  });
+
+  it('discovers real package directories and nothing outside packages/', async () => {
+    const { readPackageDirs } = await loadRunner();
+    const dirs = readPackageDirs(REPO_ROOT);
+    expect(dirs).toContain('packages/cli');
+    expect(dirs).toContain('packages/core');
+    for (const dir of dirs) {
+      expect(dir.startsWith('packages/')).toBe(true);
+    }
+  });
+
+  it('stays a single root invocation when there is nothing to partition', async () => {
+    const { buildLintCommands } = await loadRunner();
+    const commands = buildLintCommands({
+      targets: null,
+      forwardedArgs: [],
+      cache: false,
+      packageDirs: [],
+    });
+    expect(commands.length).toBe(1);
+    expect([...targetsOf(commands[0])]).toEqual(['.']);
+    expect(commands[0].args).not.toContain('--ignore-pattern');
   });
 
   it('does NOT produce a separate integration-tests invocation for a full run', async () => {
@@ -83,27 +185,42 @@ describe('run-lint runner — full run is a single root invocation (A1/A2)', () 
       targets: null,
       forwardedArgs: [],
       cache: false,
+      packageDirs: TWO_PACKAGES,
     });
-    // A single root '.' invocation already covers integration-tests; there
-    // must be no standalone second "integration-tests" command.
+    // The rest group already covers integration-tests; there must be no
+    // standalone "integration-tests" command duplicating that traversal.
     const standaloneIntegration = commands.filter((c) =>
       c.args.includes('integration-tests'),
     );
     expect(standaloneIntegration.length).toBe(0);
   });
+
+  it('tolerates targets that match only ignored files, which packages/lsp does', async () => {
+    const { buildLintCommands } = await loadRunner();
+    const commands = buildLintCommands({
+      targets: null,
+      forwardedArgs: [],
+      cache: false,
+      packageDirs: TWO_PACKAGES,
+    });
+    for (const command of commands) {
+      expect(command.args).toContain('--no-error-on-unmatched-pattern');
+    }
+  });
 });
 
-describe('run-lint runner — scoped run forwards explicit targets (A2)', () => {
-  it('produces one ESLint command with the explicit target list', async () => {
+describe('run-lint runner — scoped run is partitioned per target (A2, #3387)', () => {
+  it('emits one command per explicit target', async () => {
     const { buildLintCommands } = await loadRunner();
     const commands = buildLintCommands({
       targets: ['packages/core', 'integration-tests'],
       forwardedArgs: [],
       cache: false,
     });
-    expect(commands.length).toBe(1);
-    expect(commands[0].args).toContain('packages/core');
-    expect(commands[0].args).toContain('integration-tests');
+    expect(commands.map((c) => [...targetsOf(c)])).toEqual([
+      ['integration-tests'],
+      ['packages/core'],
+    ]);
   });
 
   it('treats an empty targets array as a scoped run with integration-tests only', async () => {
@@ -125,17 +242,19 @@ describe('run-lint runner — scoped run forwards explicit targets (A2)', () => 
       forwardedArgs: [],
       cache: false,
     });
-    expect(commands[0].args).toContain('integration-tests');
+    expect(commands.flatMap((c) => [...targetsOf(c)])).toContain(
+      'integration-tests',
+    );
   });
 
-  it('scoped run does not add a separate root "." target', async () => {
+  it('scoped run does not add a root "." target', async () => {
     const { buildLintCommands } = await loadRunner();
     const commands = buildLintCommands({
       targets: ['packages/core'],
       forwardedArgs: [],
       cache: false,
     });
-    expect(commands[0].args).not.toContain('.');
+    expect(commands.flatMap((c) => [...c.args])).not.toContain('.');
   });
 
   it('scoped run deduplicates integration-tests if already present', async () => {
@@ -145,10 +264,24 @@ describe('run-lint runner — scoped run forwards explicit targets (A2)', () => 
       forwardedArgs: [],
       cache: false,
     });
-    const itCount = commands[0].args.filter(
-      (a) => a === 'integration-tests',
-    ).length;
+    const itCount = commands
+      .flatMap((c) => [...targetsOf(c)])
+      .filter((a) => a === 'integration-tests').length;
     expect(itCount).toBe(1);
+  });
+
+  it('ignores packageDirs for a scoped run', async () => {
+    const { buildLintCommands } = await loadRunner();
+    const commands = buildLintCommands({
+      targets: ['packages/core'],
+      forwardedArgs: [],
+      cache: false,
+      packageDirs: ['packages/cli', 'packages/agents'],
+    });
+    expect(commands.flatMap((c) => [...targetsOf(c)])).toEqual([
+      'integration-tests',
+      'packages/core',
+    ]);
   });
 });
 
@@ -200,6 +333,35 @@ describe('run-lint runner — cache is opt-in only (A3)', () => {
     expect(commands[0].args).toContain('content');
     expect(commands[0].args).toContain('--cache-location');
     expect(commands[0].args.join(' ')).toContain('node_modules/.cache/eslint');
+  });
+
+  it('gives every group its own cache file so groups do not clobber each other', async () => {
+    const { buildLintCommands } = await loadRunner();
+    const commands = buildLintCommands({
+      targets: null,
+      forwardedArgs: [],
+      cache: true,
+      packageDirs: TWO_PACKAGES,
+    });
+    const locations = commands.map(
+      (c) => c.args[c.args.indexOf('--cache-location') + 1],
+    );
+    expect(locations.length).toBe(3);
+    expect(new Set(locations).size).toBe(3);
+    expect(locations).toContain('node_modules/.cache/eslint-packages-cli');
+  });
+
+  it('gives every scoped target its own cache file too', async () => {
+    const { buildLintCommands } = await loadRunner();
+    const commands = buildLintCommands({
+      targets: ['packages/cli', 'packages/core'],
+      forwardedArgs: [],
+      cache: true,
+    });
+    const locations = commands.map(
+      (c) => c.args[c.args.indexOf('--cache-location') + 1],
+    );
+    expect(new Set(locations).size).toBe(commands.length);
   });
 });
 
@@ -277,14 +439,14 @@ describe('run-lint runner — runner-managed arg stripping', () => {
 });
 
 describe('run-lint runner — heap normalization', () => {
-  it('normalizes to 12GB (12288) by default', async () => {
+  it('normalizes to 6GB (6144) by default', async () => {
     const { buildLintCommands } = await loadRunner();
     const commands = buildLintCommands({
       targets: null,
       forwardedArgs: [],
       cache: false,
     });
-    expect(commands[0].nodeOptions).toContain('--max-old-space-size=12288');
+    expect(commands[0].nodeOptions).toContain('--max-old-space-size=6144');
   });
 
   it('does not retain a stale --max-old-space-size from inherited NODE_OPTIONS', async () => {
@@ -295,10 +457,10 @@ describe('run-lint runner — heap normalization', () => {
       cache: false,
       nodeOptions: '--max-old-space-size=4096 --enable-source-maps',
     });
-    // The inherited 4096 must be replaced by the normalized 12288, but
+    // The inherited 4096 must be replaced by the normalized 6144, but
     // unrelated options must survive.
     expect(commands[0].nodeOptions).not.toContain('4096');
-    expect(commands[0].nodeOptions).toContain('--max-old-space-size=12288');
+    expect(commands[0].nodeOptions).toContain('--max-old-space-size=6144');
     expect(commands[0].nodeOptions).toContain('--enable-source-maps');
   });
 
@@ -311,9 +473,9 @@ describe('run-lint runner — heap normalization', () => {
       nodeOptions: '--max-old-space-size 4096 --enable-source-maps',
     });
     // The space-separated 4096 must be stripped (not left as a stray token)
-    // and replaced by the normalized 12288.
+    // and replaced by the normalized 6144.
     expect(commands[0].nodeOptions).not.toContain('4096');
-    expect(commands[0].nodeOptions).toContain('--max-old-space-size=12288');
+    expect(commands[0].nodeOptions).toContain('--max-old-space-size=6144');
     expect(commands[0].nodeOptions).toContain('--enable-source-maps');
   });
 
@@ -325,7 +487,7 @@ describe('run-lint runner — heap normalization', () => {
       cache: false,
       heapMb: 0,
     });
-    expect(commands[0].nodeOptions).toContain('--max-old-space-size=12288');
+    expect(commands[0].nodeOptions).toContain('--max-old-space-size=6144');
   });
 
   it('clamps NaN heap to the default instead of producing --max-old-space-size=NaN', async () => {
@@ -336,7 +498,7 @@ describe('run-lint runner — heap normalization', () => {
       cache: false,
       heapMb: Number.NaN,
     });
-    expect(commands[0].nodeOptions).toContain('--max-old-space-size=12288');
+    expect(commands[0].nodeOptions).toContain('--max-old-space-size=6144');
     expect(commands[0].nodeOptions).not.toContain('NaN');
   });
 
@@ -348,7 +510,7 @@ describe('run-lint runner — heap normalization', () => {
       cache: false,
       heapMb: Number.POSITIVE_INFINITY,
     });
-    expect(commands[0].nodeOptions).toContain('--max-old-space-size=12288');
+    expect(commands[0].nodeOptions).toContain('--max-old-space-size=6144');
     expect(commands[0].nodeOptions).not.toContain('Infinity');
   });
 });

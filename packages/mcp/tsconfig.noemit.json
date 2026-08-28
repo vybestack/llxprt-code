@@ -1,34 +1,14 @@
 {
-  "extends": "../../tsconfig.json",
-  "compilerOptions": {
-    "outDir": "dist",
-    "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/mcp.tsbuildinfo",
-    "lib": ["DOM", "DOM.Iterable", "ES2021", "ES2022.Error"],
-    "composite": false,
-    "types": ["node", "bun-types/test", "bun-types/test-globals"],
-    "baseUrl": ".",
-    "paths": {
-      "@vybestack/llxprt-code-auth": ["../auth/src/index.ts"],
-      "@vybestack/llxprt-code-mcp": ["./index.ts"],
-      "@vybestack/llxprt-code-core": ["../core/index.ts"],
-      "@vybestack/llxprt-code-core/*": ["../core/src/*"],
-      "@vybestack/llxprt-code-settings": ["../settings/index.ts"],
-      "@vybestack/llxprt-code-settings/*": ["../settings/src/*"],
-      "@vybestack/llxprt-code-tools": ["../tools/index.ts"],
-      "@vybestack/llxprt-code-tools/*": ["../tools/src/*"]
-    }
-  },
-  "include": [
-    "../../bun-test-corrections.d.ts",
-    "index.ts",
-    "src/**/*.ts",
-    "src/**/*.json",
-    "../core/src/types/wasm.d.ts",
-    "../settings/index.ts",
-    "../settings/src/**/*.ts",
-    "../tools/index.ts",
-    "../tools/src/**/*.ts"
-  ],
+  // Issue #3387: the `tsc --noEmit` gate for this package.
+  //
+  // These entries used to live in tsconfig.json. They are test files that
+  // fail `tsc`, and excluding them there left them outside every package
+  // project, so typescript-eslint resolved them against the root
+  // tsconfig.json, which declares no `include` and therefore spans the whole
+  // repository. Serving one such file cost ~7 GB and ~40 s per ESLint
+  // process. Keeping the list here preserves typecheck behavior exactly
+  // while letting ESLint resolve every source file to its own package.
+  "extends": "./tsconfig.json",
   "exclude": [
     "node_modules",
     "dist",
@@ -64,6 +44,30 @@
     "../tools/src/tools/structural-analysis/structural-analysis-modes.bun.test.ts",
     "../tools/src/tools/todo-store-injection.test.ts",
     "../tools/src/tools/tools.test.ts",
-    "../tools/src/utils/fileUtils.test.ts"
+    "../tools/src/utils/fileUtils.test.ts",
+    "src/auth/google-auth-provider.test.ts",
+    "src/auth/oauth-provider.authenticate.test.ts",
+    "src/auth/oauth-provider.token.test.ts",
+    "src/auth/token-storage/base-token-storage.test.ts",
+    "src/client/mcp-client-manager.partial-failure.test.ts",
+    "src/client/mcp-client-manager.restart.test.ts",
+    "src/client/mcp-client-manager.status-failure.test.ts",
+    "src/client/mcp-client-manager.test.ts",
+    "src/client/mcp-client-manager.trust.test.ts",
+    "src/client/mcp-client.disconnect-cleanup.test.ts",
+    "src/client/mcp-client.discover-rollback.test.ts",
+    "src/client/mcp-client.discovery.test.ts",
+    "src/client/mcp-client.lifecycle.test.ts",
+    "src/client/mcp-client.oauth.test.ts",
+    "src/client/mcp-client.resource-refresh.test.ts",
+    "src/client/mcp-client.stale-error.test.ts",
+    "src/client/mcp-client.tools.test.ts",
+    "src/client/mcp-client.transport.test.ts",
+    "src/client/mcp-discovery.authorization.test.ts",
+    "src/client/mcp-oauth-helpers.test.ts",
+    "src/client/mcp-public-api.test.ts",
+    "src/client/mcp-tool.confirm.test.ts",
+    "src/client/neutral-types.test.ts",
+    "src/client/retryable-client-disconnections.test.ts"
   ]
 }
