@@ -982,7 +982,7 @@ describe('session-dispatch characterization', () => {
   // ---------------------------------------------------------------------------
 
   describe('session-dispatch characterization — sandbox empty-agent handoff warning delivery', () => {
-    const originalEnv = { ...process.env };
+    const originalEnv = process.env;
 
     // Created per test: afterEach(vi.restoreAllMocks) would otherwise kill a
     // suite-scoped spy after the first test.
@@ -1002,6 +1002,10 @@ describe('session-dispatch characterization', () => {
     });
 
     afterEach(() => {
+      // Restore the original env object identity, not a copy, so a throwing
+      // test cannot leak the substituted object or the handoff flag into
+      // suites that run later in this worker.
+      process.env = originalEnv;
       vi.restoreAllMocks();
     });
 
@@ -1036,6 +1040,15 @@ describe('session-dispatch characterization', () => {
       );
     }
 
+    it('pins the mocked handoff text to the warning the production preflight emits', async () => {
+      // Imported lazily: referencing this binding from the hoisted vi.mock
+      // factory above would read it before the module is evaluated.
+      const { SSH_AGENT_EMPTY_WARNING } = await import(
+        '../utils/sandbox-ssh.js'
+      );
+      expect(TEST_SSH_AGENT_EMPTY_WARNING).toBe(SSH_AGENT_EMPTY_WARNING);
+    });
+
     it('interactive: prepends the empty-agent warning to the startup warnings rendered by the TUI when the env flag is set', async () => {
       process.env.LLXPRT_SANDBOX_SSH_AGENT_EMPTY = '1';
 
@@ -1061,13 +1074,13 @@ describe('session-dispatch characterization', () => {
     it('non-interactive: writes the empty-agent warning to stderr before the session runs when the env flag is set', async () => {
       process.env.LLXPRT_SANDBOX_SSH_AGENT_EMPTY = '1';
 
-      // The stderr spy records fd-direct calls and the mocked runNonInteractive
-      // records the session run, so the sequence proves the warning was written
-      // on the way to the session rather than after it.
+      // Sampling the dispatch trace at the moment of the write puts both
+      // events on one timeline, so a regression that warned only after the
+      // session ran would be caught.
       const order: string[] = [];
       stderrWriteSpy.mockImplementation((chunk: unknown) => {
         if (String(chunk) === TEST_SSH_AGENT_EMPTY_WARNING) {
-          order.push('warning');
+          order.push(...dispatchTrace, 'warning');
         }
         return true;
       });
@@ -1079,7 +1092,9 @@ describe('session-dispatch characterization', () => {
         ),
       ).rejects.toThrow('process.exit');
 
-      expect(order).toContain('warning');
+      // The warning was the only event on the timeline when it was written:
+      // runNonInteractive had not run yet, and it did run afterwards.
+      expect(order).toStrictEqual(['warning']);
       expect(dispatchTrace).toContain('runNonInteractive');
     });
 

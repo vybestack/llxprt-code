@@ -239,59 +239,53 @@ describe('maybeHopIntoSandbox hop-exit stdio flush (#3408)', () => {
     // Mirror cli.tsx setupProcessLifecycle: patch stdio and register the
     // sync-cleanup flush that runExitCleanup drains on the hop exit path.
     const cleanupStdio = coreModule.patchStdio();
-    registerSyncCleanup(() => {
-      initializeOutputListenersAndFlush();
-      cleanupStdio();
-    });
 
-    // The marker written through the patched stream is buffered (no Output
-    // listener yet); it must reach the fd-direct writer when runExitCleanup
-    // drains the backlog. The order array pins flush-before-exit.
-    const order: string[] = [];
-    const writeSpy = vi
-      .spyOn(coreModule, 'writeToStderr')
-      .mockImplementation((chunk: unknown) => {
-        const text = String(chunk);
-        if (text.includes('HOP-EXIT-MARKER')) {
-          order.push('flush');
-        }
-        return true;
-      });
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
-      order.push('exit');
-      throw new Error('exit sentinel');
-    }) as typeof process.exit);
-
-    process.stderr.write('HOP-EXIT-MARKER\n');
-
-    // The exit sentinel throws out of the hop, which is the only way to observe
-    // the call without terminating the runner.
-    await expect(maybeHopIntoSandbox(buildHopOptions())).rejects.toThrow(
-      'exit sentinel',
-    );
-
-    let exitCode: number | undefined;
+    // A failing assertion must not leave the stdio patch installed for the
+    // rest of the file, so every restore runs in the finally block.
     try {
-      exitCode = exitSpy.mock.calls[0]?.[0] as number | undefined;
+      registerSyncCleanup(() => {
+        initializeOutputListenersAndFlush();
+        cleanupStdio();
+      });
+
+      // The marker written through the patched stream is buffered (no Output
+      // listener yet); it must reach the fd-direct writer when runExitCleanup
+      // drains the backlog. The order array pins flush-before-exit.
+      const order: string[] = [];
+      vi.spyOn(coreModule, 'writeToStderr').mockImplementation(
+        (chunk: unknown) => {
+          if (String(chunk).includes('HOP-EXIT-MARKER')) {
+            order.push('flush');
+          }
+          return true;
+        },
+      );
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+        order.push('exit');
+        throw new Error('exit sentinel');
+      }) as typeof process.exit);
+
+      process.stderr.write('HOP-EXIT-MARKER\n');
+
+      // The exit sentinel throws out of the hop, which is the only way to
+      // observe the call without terminating the runner.
+      await expect(maybeHopIntoSandbox(buildHopOptions())).rejects.toThrow(
+        'exit sentinel',
+      );
+
+      expect(exitSpy.mock.calls[0]?.[0]).toBe(7);
+      // The buffered marker reached the fd-direct writer, and it did so before
+      // the hop-exit sentinel fired (runExitCleanup is awaited first).
+      expect(order).toStrictEqual(['flush', 'exit']);
     } finally {
-      exitSpy.mockRestore();
-      writeSpy.mockRestore();
+      // Restores the spies (including process.exit) before anything else.
+      vi.restoreAllMocks();
+      if (originalSandbox === undefined) {
+        delete process.env.SANDBOX;
+      } else {
+        process.env.SANDBOX = originalSandbox;
+      }
+      cleanupStdio();
     }
-
-    expect(exitCode).toBe(7);
-    // The buffered marker reached the fd-direct writer, and it did so before
-    // the hop-exit sentinel fired (runExitCleanup is awaited first).
-    expect(order).toStrictEqual(['flush', 'exit']);
-
-    if (originalSandbox === undefined) {
-      delete process.env.SANDBOX;
-    } else {
-      process.env.SANDBOX = originalSandbox;
-    }
-
-    coreEvents.removeAllListeners(CoreEvent.Output);
-    coreEvents.removeAllListeners(CoreEvent.ConsoleLog);
-    __resetCleanupStateForTesting();
-    cleanupStdio();
   });
 });
