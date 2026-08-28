@@ -408,6 +408,17 @@ async function* handleErrorEvent(
   });
 }
 
+/**
+ * Context-window overflow is terminal for the turn: enforcement already ran
+ * every reduction path it has and still could not fit the request, so
+ * resubmitting cannot succeed. Without this the overflow turn looks like an
+ * empty turn (no content, thinking or tool calls) and falls through to the
+ * continuation path, which resubmits the same oversized request until
+ * MAX_RETRIES, showing the user the identical guard three times (issue #3406).
+ *
+ * The caller already yielded the overflow event before dispatching here, so
+ * this handler must not re-yield it.
+ */
 async function* handleContextWindowWillOverflowEvent(
   deps: MessageStreamDeps,
   ctx: StreamContext,
