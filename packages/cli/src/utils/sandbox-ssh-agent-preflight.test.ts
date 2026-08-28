@@ -30,6 +30,8 @@ void vi.mock('node:child_process', () => ({
 }));
 
 import { setupSshAgentForwarding } from './sandbox.js';
+import { getSandboxHandoffWarning } from './startupWarnings.js';
+import { SSH_AGENT_EMPTY_WARNING } from './sandbox-ssh.js';
 
 const HOST_SOCKET = '/tmp/test-ssh-agent.sock';
 const CONTAINER_SOCKET_ENV = 'SSH_AUTH_SOCK=/ssh-agent';
@@ -127,9 +129,11 @@ describe('setupSshAgentForwarding SSH agent identity preflight', () => {
     const stderrText = captureStderr();
     mockSshAdd({ status: 1, stdout: EMPTY_AGENT_STDOUT });
 
-    await runForwarding();
+    const { args } = await runForwarding();
 
     expect(stderrText()).toBe(EXPECTED_WARNING);
+    expect(args).toContain('--env');
+    expect(args).toContain('LLXPRT_SANDBOX_SSH_AGENT_EMPTY=1');
   });
 
   it('still configures forwarding when the agent reports no identities', async () => {
@@ -141,6 +145,8 @@ describe('setupSshAgentForwarding SSH agent identity preflight', () => {
 
     expect(result).toStrictEqual({});
     expect(args).toContain(CONTAINER_SOCKET_ENV);
+    expect(args).toContain('--env');
+    expect(args).toContain('LLXPRT_SANDBOX_SSH_AGENT_EMPTY=1');
   });
 
   it('stays silent when the agent has identities loaded', async () => {
@@ -152,6 +158,7 @@ describe('setupSshAgentForwarding SSH agent identity preflight', () => {
 
     expect(stderrText()).toBe('');
     expect(args).toContain(CONTAINER_SOCKET_ENV);
+    expect(args).not.toContain('LLXPRT_SANDBOX_SSH_AGENT_EMPTY=1');
   });
 
   it('stays silent when listing identities fails for a reason other than an empty agent', async () => {
@@ -164,6 +171,7 @@ describe('setupSshAgentForwarding SSH agent identity preflight', () => {
 
     expect(stderrText()).toBe('');
     expect(args).toContain(CONTAINER_SOCKET_ENV);
+    expect(args).not.toContain('LLXPRT_SANDBOX_SSH_AGENT_EMPTY=1');
   });
 
   it('stays silent when the agent cannot be contacted', async () => {
@@ -179,6 +187,7 @@ describe('setupSshAgentForwarding SSH agent identity preflight', () => {
 
     expect(stderrText()).toBe('');
     expect(args).toContain(CONTAINER_SOCKET_ENV);
+    expect(args).not.toContain('LLXPRT_SANDBOX_SSH_AGENT_EMPTY=1');
   });
 
   it('stays silent when ssh-add is not installed', async () => {
@@ -195,6 +204,7 @@ describe('setupSshAgentForwarding SSH agent identity preflight', () => {
 
     expect(stderrText()).toBe('');
     expect(args).toContain(CONTAINER_SOCKET_ENV);
+    expect(args).not.toContain('LLXPRT_SANDBOX_SSH_AGENT_EMPTY=1');
   });
 
   it('stays silent when the probe is killed after exceeding its timeout', async () => {
@@ -207,6 +217,7 @@ describe('setupSshAgentForwarding SSH agent identity preflight', () => {
 
     expect(stderrText()).toBe('');
     expect(args).toContain(CONTAINER_SOCKET_ENV);
+    expect(args).not.toContain('LLXPRT_SANDBOX_SSH_AGENT_EMPTY=1');
   });
 
   it('queries the agent that is being forwarded, under a bounded timeout', async () => {
@@ -233,10 +244,11 @@ describe('setupSshAgentForwarding SSH agent identity preflight', () => {
     vi.spyOn(fs, 'existsSync').mockReturnValue(true);
     const stderrText = captureStderr();
 
-    await runForwarding();
+    const { args } = await runForwarding();
 
     expect(child_process.spawn).not.toHaveBeenCalled();
     expect(stderrText()).toBe('');
+    expect(args).not.toContain('LLXPRT_SANDBOX_SSH_AGENT_EMPTY=1');
   });
 
   it('does not query the agent when SSH_AUTH_SOCK is unset', async () => {
@@ -245,10 +257,11 @@ describe('setupSshAgentForwarding SSH agent identity preflight', () => {
     silenceDebugWarnings();
     const stderrText = captureStderr();
 
-    await runForwarding();
+    const { args } = await runForwarding();
 
     expect(child_process.spawn).not.toHaveBeenCalled();
     expect(stderrText()).toBe('');
+    expect(args).not.toContain('LLXPRT_SANDBOX_SSH_AGENT_EMPTY=1');
   });
 
   it('does not query the agent when the socket path is missing', async () => {
@@ -258,10 +271,11 @@ describe('setupSshAgentForwarding SSH agent identity preflight', () => {
     silenceDebugWarnings();
     const stderrText = captureStderr();
 
-    await runForwarding();
+    const { args } = await runForwarding();
 
     expect(child_process.spawn).not.toHaveBeenCalled();
     expect(stderrText()).toBe('');
+    expect(args).not.toContain('LLXPRT_SANDBOX_SSH_AGENT_EMPTY=1');
   });
 
   it('does not claim forwarding is enabled when Podman declines to override the network mode', async () => {
@@ -278,5 +292,32 @@ describe('setupSshAgentForwarding SSH agent identity preflight', () => {
     expect(args).toStrictEqual(['--network', 'none']);
     expect(child_process.spawn).not.toHaveBeenCalled();
     expect(stderrText()).toBe('');
+  });
+});
+
+describe('getSandboxHandoffWarning', () => {
+  it('returns the empty-agent warning text when the handoff flag is "1"', () => {
+    expect(
+      getSandboxHandoffWarning({ LLXPRT_SANDBOX_SSH_AGENT_EMPTY: '1' }),
+    ).toBe(SSH_AGENT_EMPTY_WARNING);
+  });
+
+  it('returns undefined when the handoff flag is absent', () => {
+    expect(getSandboxHandoffWarning({})).toBeUndefined();
+  });
+
+  it('returns undefined when the handoff flag is empty', () => {
+    expect(
+      getSandboxHandoffWarning({ LLXPRT_SANDBOX_SSH_AGENT_EMPTY: '' }),
+    ).toBeUndefined();
+  });
+
+  it('returns undefined for any other handoff flag value', () => {
+    expect(
+      getSandboxHandoffWarning({ LLXPRT_SANDBOX_SSH_AGENT_EMPTY: '0' }),
+    ).toBeUndefined();
+    expect(
+      getSandboxHandoffWarning({ LLXPRT_SANDBOX_SSH_AGENT_EMPTY: 'true' }),
+    ).toBeUndefined();
   });
 });
