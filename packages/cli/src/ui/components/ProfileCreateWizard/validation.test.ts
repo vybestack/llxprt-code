@@ -157,11 +157,19 @@ describe('validateKeyFile', () => {
     });
   });
 
-  it('expands a bare tilde to the home directory itself', async () => {
+  it('treats a bare tilde exactly like the literal home directory path', async () => {
+    // expandTilde has a separate branch for a bare `~`. Asserting that `~` and
+    // the literal home path get the SAME verdict pins that branch without
+    // asserting anything about what the verdict for a directory ought to be —
+    // validateKeyFile currently only checks read access, so it accepts a
+    // directory, and that is a separate question (filed as #3402) that this
+    // coverage-only test must not enshrine either way.
     const dir = keyFileDir();
     homeDirOverride = dir;
 
-    await expect(validateKeyFile('~')).resolves.toEqual({ valid: true });
+    const bareTilde = await validateKeyFile('~');
+    const literalHome = await validateKeyFile(dir);
+    expect(bareTilde.valid).toBe(literalHome.valid);
   });
 
   it('reports not-found for a tilde path whose target is absent from the home directory', async () => {

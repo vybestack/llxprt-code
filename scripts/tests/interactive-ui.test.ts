@@ -164,10 +164,12 @@ describe('Interactive UI (tmux harness)', () => {
   runTmuxE2E(
     'a clean welcome config shows onboarding, and skipping dismisses it',
     () => {
-      // The scenario points LLXPRT_CODE_WELCOME_CONFIG_PATH at a per-run temp
-      // path that does not exist, so the CLI starts as a first-run/clean
-      // runner. Pointing it at a completed config instead makes the scenario
-      // fail on the first waitFor, which is what makes this smoke meaningful.
+      // The startCommand inside scripts/tmux-script.onboarding.json — not this
+      // test — sets LLXPRT_CODE_WELCOME_CONFIG_PATH to a per-run temp path and
+      // removes it before launch, so the CLI starts as a first-run/clean
+      // runner. Editing that scenario to point at a completed config instead
+      // makes it fail on the first waitFor, which is what makes this smoke
+      // meaningful rather than vacuous.
       const result = runHarness(
         'tmux-script.onboarding.json',
         'onboarding-clean-runner',

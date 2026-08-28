@@ -120,6 +120,19 @@ describe('loadWelcomeConfig', () => {
     resetWelcomeConfigForTesting();
     expect(loadWelcomeConfig()).toEqual({ welcomeCompleted: false });
     expect(isWelcomeCompleted()).toBe(false);
+    // Repeated reads without a cache reset must keep returning the default
+    // rather than re-parsing (or caching) the corrupt file into something else.
+    expect(loadWelcomeConfig()).toEqual({ welcomeCompleted: false });
+    expect(isWelcomeCompleted()).toBe(false);
+  });
+
+  it('recovers once the malformed file is replaced and the cache is reset', () => {
+    fs.writeFileSync(getConfigPath(), '{ not json', 'utf-8');
+    resetWelcomeConfigForTesting();
+    expect(isWelcomeCompleted()).toBe(false);
+    fs.writeFileSync(getConfigPath(), '{"welcomeCompleted": true}', 'utf-8');
+    resetWelcomeConfigForTesting();
+    expect(isWelcomeCompleted()).toBe(true);
   });
 });
 
