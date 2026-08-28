@@ -456,7 +456,10 @@ describe('useAtCompletion', () => {
         { initialProps: { pattern: 'alp' } },
       );
 
-      // The first crawl fails; the hook settles in ERROR.
+      // The crawl is in flight, so the wait below cannot pass on the value the
+      // hook started with; only the ERROR dispatch clears the loading flag
+      // while leaving suggestions empty.
+      expect(result.current.isLoadingSuggestions).toBe(true);
       await waitFor(() => {
         expect(result.current.isLoadingSuggestions).toBe(false);
         expect(result.current.suggestions).toStrictEqual([]);
@@ -570,6 +573,7 @@ describe('useAtCompletion', () => {
         { initialProps: { pattern: 'alp' } },
       );
 
+      expect(result.current.isLoadingSuggestions).toBe(true);
       await waitFor(() => {
         expect(result.current.isLoadingSuggestions).toBe(false);
         expect(result.current.suggestions).toStrictEqual([]);
@@ -607,6 +611,7 @@ describe('useAtCompletion', () => {
       );
 
       // The crawl fails; the hook settles in ERROR.
+      expect(result.current.isLoadingSuggestions).toBe(true);
       await waitFor(() => {
         expect(result.current.isLoadingSuggestions).toBe(false);
         expect(result.current.suggestions).toStrictEqual([]);
@@ -648,6 +653,7 @@ describe('useAtCompletion', () => {
         { initialProps: { pattern: 'alp' } },
       );
 
+      expect(result.current.isLoadingSuggestions).toBe(true);
       await waitFor(() => {
         expect(result.current.isLoadingSuggestions).toBe(false);
         expect(result.current.suggestions).toStrictEqual([]);
