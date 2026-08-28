@@ -445,10 +445,10 @@ function stringArrayProperty(
 }
 
 /**
- * Issue #3256: The save_memory eval isolates itself from todo bookkeeping via the
+ * Issue #3256: The save_memory eval isolates itself from task bookkeeping via the
  * flat `excludeTools` settings list, which drives both registry exclusion and policy
- * denial. The exactly-three todo tools must be excluded and `save_memory` must not
- * be excluded (it is registered by default and must remain reachable).
+ * denial. The exactly-three task-management tools must be excluded and `save_memory`
+ * must not be excluded (it is registered by default and must remain reachable).
  */
 describe('save_memory eval tool isolation (operative flat excludeTools)', () => {
   it('uses the operative flat excludeTools list for exactly the three todo tools', () => {

@@ -84,11 +84,18 @@ No Blocker-Fix or In-scope-Fix findings remain.
 
 ## Local verification
 
-- `npm run test`: passed on the remediated candidate (`tmp/issue3256/deepthinker-review/npm-test-rerun.log`). A later loaded rerun hit the unrelated 10-second subprocess timeout in `modelLimitsParity.test.ts`; its other 12 tests and all other suites passed. The timed-out test passed immediately in isolation (`tmp/issue3256/final/modelLimitsParity-rerun.log`).
+- `npm run test`: passed on the final remediated candidate (`tmp/verify3256/full-test-remediation-rerun.log`). The first post-lint-remediation attempt hit an unrelated timing failure in `turn.watchdog.test.ts`; that file passed immediately in isolation before the complete suite rerun passed.
 - Focused assertion and isolation tests: 44 passed, 0 failed.
-- `npm run lint`: passed.
-- `npm run typecheck`: passed after generated package outputs were refreshed by the build.
-- `npm run format`: passed.
-- `npm run build`: passed.
-- Required `stepfun-37` smoke test: passed and returned a haiku.
+- `npm run lint`: passed (`tmp/verify3256/full-lint-remediation-rerun.log`).
+- `npm run typecheck`: passed (`tmp/verify3256/full-typecheck-remediation-rerun.log`).
+- `npm run format`: passed (`tmp/verify3256/full-format-remediation-rerun.log`).
+- `npm run build`: passed (`tmp/verify3256/full-build-remediation-rerun.log`).
+- Required `stepfun-37` smoke test: passed and returned a haiku (`tmp/verify3256/full-smoke-remediation-rerun.log`).
 - Test audit: no finding for the touched test and no parse failures.
+
+## PR stage
+
+- **Candidate-head CI lint (In-scope-Fix):** the candidate-head `eslint . --max-warnings 0` run reported `sonarjs/todo-tag` at `scripts/tests/evals-save-memory-assertion.test.ts` lines 448 and 450 because prose comments used the ordinary word `todo` while describing the tool family. The comment phrases were rewritten to `task bookkeeping` and `task-management`; the tool identifiers `todo_read`, `todo_write`, and `todo_pause` are unchanged. No assertion, behavior, suppression, or config changed.
+- **PR OCR - future multiple evalTest cases (Reject):** the suggestion to make the AST locator validate every future eval case is speculative. The accepted behavior covers the one existing eval case and does not define multi-case support, which is not part of this issue.
+- **PR OCR - order-insensitive comparison / DRY (Reject):** exact ordered declaration comparison is intentional, since the test checks the exact `excludeTools` declaration, and extracting a helper is optional cleanup rather than an accepted behavior change.
+- **CodeRabbit - docstring coverage (Reject):** adding docstrings to the small local test AST helpers is unrelated cleanup, and CodeRabbit generated no actionable comments.
