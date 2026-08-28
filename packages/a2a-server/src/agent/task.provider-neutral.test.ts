@@ -64,7 +64,22 @@ afterEach(() => {
 });
 
 describe('Task: provider-neutral default (not gemini)', () => {
+  // CI runs with provider env set (LLXPRT_AUTH_TYPE=provider,
+  // OPENAI_API_KEY, ...); these tests pin the DEFAULT, so the
+  // provider-selecting vars must be absent for the duration.
+  // afterEach restores the original env two-way.
+  function neutralizeProviderEnv(): void {
+    const PROVIDER_ENV =
+      /^(GEMINI|GOOGLE|OPENAI|VERTEX|LLXPRT_AUTH|LLXPRT_DEFAULT_PROVIDER|GOOGLE_CLOUD)/;
+    for (const key of Object.keys(process.env)) {
+      if (PROVIDER_ENV.test(key) && key !== 'LLXPRT_FAKE_RESPONSES') {
+        delete process.env[key];
+      }
+    }
+  }
+
   it('streams a plain-text turn through the Agent facade with a done event', async () => {
+    neutralizeProviderEnv();
     process.env.LLXPRT_FAKE_RESPONSES = FIXTURE;
     const agent = await buildAgent();
     try {
@@ -84,7 +99,7 @@ describe('Task: provider-neutral default (not gemini)', () => {
   }, 30_000);
 
   it('getMetadata reports the provider-neutral model (PLACEHOLDER_MODEL)', async () => {
-    delete process.env.LLXPRT_DEFAULT_PROVIDER;
+    neutralizeProviderEnv();
     process.env.LLXPRT_FAKE_RESPONSES = FIXTURE;
     const agent = await buildAgent();
     try {
@@ -101,6 +116,7 @@ describe('Task: provider-neutral default (not gemini)', () => {
   }, 30_000);
 
   it('keeps the provider neutral (UNCONFIGURED_PROVIDER) when GEMINI_API_KEY is set', async () => {
+    neutralizeProviderEnv();
     process.env.LLXPRT_FAKE_RESPONSES = FIXTURE;
     process.env.GEMINI_API_KEY = 'test-key';
     const agent = await buildAgent();
