@@ -149,6 +149,8 @@ Every retainer path carries an explicit proof status:
 
 Snapshot structure is validated strictly before analysis (node/edge counts against array lengths and strides, edge offsets, type enum and string-table bounds); a malformed file is rejected with an actionable `SnapshotFormatError` rather than producing misleading numbers. Invalid arguments (unknown options, nonpositive/non-integer `--top`, nonpositive `--min-mb`) fail fast with usage and exit 2; runtime errors exit 1.
 
+Analyzing a snapshot also requires memory headroom. The analyzer holds the snapshot text and parsed graph structures at the same time, so peak memory can be several times the snapshot file size. Analyze large snapshots on a machine with enough free memory.
+
 **Important limitations:**
 
 - The analyzer reports `self_size`, **not retained size**. A container (array, closure, map) has a small `self_size` while retaining far more memory, so the retainer chains matter more than the size table.

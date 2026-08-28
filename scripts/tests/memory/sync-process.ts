@@ -84,6 +84,8 @@ export function spawnSyncWithFileCapture(
       {
         cwd: options.cwd,
         env: options.env,
+        // Let the wrapper publish the child's timeout result before the outer
+        // process guard terminates a wrapper that failed to exit.
         timeout:
           options.timeout === undefined ? undefined : options.timeout + 1_000,
         stdio: 'ignore',

@@ -527,11 +527,13 @@ jobs:
       - name: 'Install dependencies'
         run: 'npm ci'
 
-      - name: 'Build and launch the prebuilt CLI bundle'
+      - name: 'Build and launch the prebuilt CLI and profiler bundles'
         env:
           CI: true
           LLXPRT_RUN_BUNDLE_BUILD_TEST: '1'
-        run: 'bun test scripts/tests/issue-2999-cli-bundle.bun.test.ts'
+        run: |-
+          bun test scripts/tests/issue-2999-cli-bundle.bun.test.ts
+          bun test --timeout 30000 scripts/tests/issue-3386-installed-profiler-bundle.bun.test.ts
 
   notify_failure:
     name: 'Create Issue on Failure'

@@ -7,6 +7,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -45,6 +46,9 @@ interface PackedFixture {
 
 let fixture: PackedFixture | undefined;
 let fixtureRoot: string | undefined;
+let bundleBackupRoot: string | undefined;
+let bundleReplacementStarted = false;
+let restoreExistingBundle = false;
 
 interface ProcessResult {
   readonly status: number | null;
@@ -223,6 +227,17 @@ describe.skipIf(!runPackedSmoke)(
   'issue #3386: packed installed profiler bundles',
   () => {
     beforeAll(() => {
+      bundleBackupRoot = mkdtempSync(
+        join(tmpdir(), 'llxprt-cli-bundle-backup-'),
+      );
+      if (existsSync(cliBundleDir)) {
+        cpSync(cliBundleDir, join(bundleBackupRoot, 'bundle'), {
+          recursive: true,
+        });
+        restoreExistingBundle = true;
+      }
+      bundleReplacementStarted = true;
+      rmSync(cliBundleDir, { recursive: true, force: true });
       fixture = createPackedFixture();
     }, 360_000);
 
@@ -230,7 +245,17 @@ describe.skipIf(!runPackedSmoke)(
       if (fixtureRoot !== undefined) {
         rmSync(fixtureRoot, { recursive: true, force: true });
       }
-      rmSync(cliBundleDir, { recursive: true, force: true });
+      if (bundleReplacementStarted) {
+        rmSync(cliBundleDir, { recursive: true, force: true });
+        if (restoreExistingBundle && bundleBackupRoot !== undefined) {
+          cpSync(join(bundleBackupRoot, 'bundle'), cliBundleDir, {
+            recursive: true,
+          });
+        }
+      }
+      if (bundleBackupRoot !== undefined) {
+        rmSync(bundleBackupRoot, { recursive: true, force: true });
+      }
     });
 
     it('emits and packs exactly the stable executable bundle set', () => {

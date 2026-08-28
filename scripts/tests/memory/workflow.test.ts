@@ -121,16 +121,18 @@ function startProbeChild(
 function runCli(
   args: readonly string[],
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
-  const result = spawnSyncWithFileCapture(
-    join(repoRoot, 'tmp'),
-    process.execPath,
-    args,
-    { cwd: repoRoot },
-  );
-  return Promise.resolve({
-    code: result.status,
-    stdout: result.stdout,
-    stderr: result.stderr,
+  return new Promise((resolveRun) => {
+    const result = spawnSyncWithFileCapture(
+      join(repoRoot, 'tmp'),
+      process.execPath,
+      args,
+      { cwd: repoRoot },
+    );
+    resolveRun({
+      code: result.status,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    });
   });
 }
 

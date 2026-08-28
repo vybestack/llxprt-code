@@ -7,10 +7,10 @@
 import { describe, expect, it } from 'bun:test';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawnSyncWithFileCapture } from '../tests/memory/sync-process.ts';
+import { spawnSyncWithFileCapture } from './sync-process.ts';
 
 const generatorPath = fileURLToPath(
-  new URL('./output-generator.ts', import.meta.url),
+  new URL('../../memory/output-generator.ts', import.meta.url),
 );
 const repoRoot = resolve(generatorPath, '..', '..', '..');
 

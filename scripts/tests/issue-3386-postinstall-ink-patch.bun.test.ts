@@ -93,13 +93,18 @@ function run(
     encoding: 'utf8',
     timeout,
     maxBuffer: 64 * 1024 * 1024,
-    env: { ...process.env, PATH: process.env.PATH },
+    env: {
+      ...process.env,
+      PATH: process.env.PATH,
+      BUN_INSTALL_CACHE_DIR: join(cwd, '.bun-install-cache'),
+    },
   });
 }
 
 const behavioralGuard = `
 const measure = await import('./node_modules/ink/build/measure-text.js');
 if (
+  measure.internal_memoryRetentionPatchVersion !== 2 ||
   typeof measure.internal_resetToStyledCharactersCache !== 'function' ||
   typeof measure.internal_getToStyledCharactersCacheStats !== 'function'
 ) {

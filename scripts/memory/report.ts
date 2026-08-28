@@ -167,7 +167,7 @@ function renderNotes(samples: readonly Sample[]): string[] {
   ) {
     lines.push(
       `  NOTE: protectedObjectCount ${first.protectedObjectCount.toLocaleString('en-US')} -> ` +
-        `${last.protectedObjectCount.toLocaleString('en-US')}. Something native is holding JS objects alive.`,
+        `${last.protectedObjectCount.toLocaleString('en-US')}. The counter rose, but it does not identify the retainer and does not prove native ownership.`,
     );
   }
   return lines;

@@ -4,19 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { writeSync } from 'node:fs';
+import { once } from 'node:events';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const MAX_LINES = 1_000_000;
 const MAX_WIDTH = 4_096;
+const OUTPUT_CHUNK_CODE_UNITS = 64 * 1024;
 const FIRST_PRINTABLE_ASCII = 0x21;
 const PRINTABLE_ASCII_COUNT = 0x7e - FIRST_PRINTABLE_ASCII + 1;
 const SEED_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
 const USAGE = `Usage: bun scripts/memory/output-generator.ts --seed <seed> --lines <count> --width <columns>
 
-  --seed <seed>      1-64 ASCII letters, digits, underscores, or hyphens
+  --seed <seed>      1-64 ASCII letters, digits, underscores, or hyphens; first character must be alphanumeric
   --lines <count>    positive integer, at most ${MAX_LINES}
   --width <columns>  positive integer, at most ${MAX_WIDTH}`;
 
@@ -144,18 +145,26 @@ function generateLine(width: number, randomUint32: () => number): string {
   return line;
 }
 
-function writeOutput(options: OutputOptions): void {
-  const randomUint32 = createRandomUint32(options.seed);
-  for (let line = 0; line < options.lineCount; line += 1) {
-    writeSync(
-      process.stdout.fd,
-      `${generateLine(options.lineWidth, randomUint32)}\n`,
-    );
+async function writeChunk(chunk: string): Promise<void> {
+  if (!process.stdout.write(chunk)) {
+    await once(process.stdout, 'drain');
   }
-  writeSync(process.stdout.fd, `LLXPRT3386_OUTPUT_DONE_${options.seed}\n`);
 }
 
-function main(): void {
+async function writeOutput(options: OutputOptions): Promise<void> {
+  const randomUint32 = createRandomUint32(options.seed);
+  let output = '';
+  for (let line = 0; line < options.lineCount; line += 1) {
+    output += `${generateLine(options.lineWidth, randomUint32)}\n`;
+    if (output.length >= OUTPUT_CHUNK_CODE_UNITS) {
+      await writeChunk(output);
+      output = '';
+    }
+  }
+  await writeChunk(`${output}LLXPRT3386_OUTPUT_DONE_${options.seed}\n`);
+}
+
+async function main(): Promise<void> {
   let options: OutputOptions;
   try {
     options = parseArgs(process.argv.slice(2));
@@ -167,7 +176,7 @@ function main(): void {
     }
     throw error;
   }
-  writeOutput(options);
+  await writeOutput(options);
 }
 
 const isMain =
@@ -175,7 +184,7 @@ const isMain =
   resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
   try {
-    main();
+    await main();
   } catch (error) {
     process.stderr.write(
       `${error instanceof Error ? error.message : String(error)}\n`,

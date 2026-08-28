@@ -643,5 +643,370 @@ file. Its 25 findings were classified as follows:
 
 All accepted OCR findings have focused behavioral evidence. The rejected items
 either lacked a supported defect or conflicted with measured runtime and package
-behavior. No further deep review is permitted by this plan. OCR completed in one
-round.
+behavior. No further deep review is permitted by this plan. The local OCR round
+completed before the pull request review cycle described below.
+
+### Pull request CI and review remediation
+
+The first pull request run exposed three platform and test-discovery defects. The
+test coverage guard did not discover the two tests under `scripts/memory`, Bun's
+shared install cache could retain an already-patched Ink tree, and in-process
+`Bun.build()` calls failed on Windows with Bun's internal `Unexpected reading
+file` resolver error after the test runner loaded workspace imports.
+Consolidating six builds into one did not isolate that process-level state, as
+the second Windows run confirmed. The tests now live under
+`scripts/tests/memory`, the install proof uses a fixture-local Bun cache, and the
+parser fixture runs one multi-entry build in a fresh Bun process with explicit
+artifact checks and destinations.
+
+Every actionable pull request finding received a source and runtime review. The
+resulting classifications are:
+
+| Finding | Classification | Resolution |
+| --- | --- | --- |
+| Memory tests outside discovered test roots | In-scope-Fix | Moved both tests under `scripts/tests/memory`; the coverage guard reports zero uncovered and zero doubly executed files. |
+| File symlink is not portable to Windows | In-scope-Fix | The entrypoint test now uses a directory junction on Windows and a directory symlink elsewhere. |
+| Entrypoint real-path lookup can throw | In-scope-Fix | Path comparison now returns false when either path cannot be resolved, with a missing-path regression test. |
+| Release capture cleanup can fail on Windows handles | In-scope-Fix | Capture-directory removal is best effort after process-tree cleanup. |
+| Signal test timeout is shorter than its two waits | In-scope-Fix | Raised the enclosing test timeout above both bounded waits. |
+| `ProfilerArtifact` type is duplicated | In-scope-Fix | Exported the helper type and imported it at the call site. |
+| Installed-bundle test deletes existing output | In-scope-Fix | The test backs up the complete bundle tree before replacement and restores it afterward; byte hashes before and after acceptance match. |
+| Request completion text implies successful action | In-scope-Fix | Changed the text to say the probe finished handling the request and retained the pointer to refusal details. |
+| Parser fixture hits Bun's Windows resolver failure | In-scope-Fix | Replaced six in-process builds with one multi-entry build in a fresh Bun process and asserted every source and installed destination. |
+| Parser fixture can leak after setup failure | In-scope-Fix | Tracks the temporary root before building so teardown can always remove it. |
+| Twenty-millisecond wait test is scheduler-sensitive | In-scope-Fix | Increased the bounded test wait to 200 milliseconds. |
+| Synchronous workflow helper errors escape Promise assertions | In-scope-Fix | Runs synchronous capture inside the Promise executor so thrown errors reject. |
+| Output-generator usage omits the first-character rule | In-scope-Fix | Usage now states that the first seed character must be alphanumeric. |
+| Shared Bun install cache can invalidate the stock proof | In-scope-Fix | Uses a fixture-local `BUN_INSTALL_CACHE_DIR` for npm and Bun installation cases. |
+| Zero-capacity Ink cache can loop | Reject | Cache capacities are private positive constants and no runtime path can provide zero or a negative value. |
+| Outer Bun `--` changes application arguments | Reject | Bun consumes that runtime-to-script separator; measured shim tests show the application receives the intended arguments. |
+| Bundled Bun executable needs a platform-specific name | Reject | The verified macOS `bun` package in this checkout uses `bun.exe`; selecting by `process.platform` would break that layout. |
+| Successful captures should serialize `spawnError: null` | Reject | Optional serialization omits the property on success, so the parsed value is intentionally undefined. |
+| Node `-e` wrappers should start supplied arguments at index 2 | Reject | Measured Node behavior places the first supplied argument at `process.argv[1]`. |
+| Process-capture helper ignores `cwd` | Reject | The outer wrapper starts in the requested directory and the inner process inherits it. |
+| Bun resolution should be lazy in Bun-native tests | Reject | These test modules already require Bun to load and execute. |
+| PID fixture writes to the wrong Node argument | Reject | The current `process.argv[1]` target is the first supplied argument under Node `-e`, and the orphan regression passes. |
+| Preserve a null inner status through the wrapper | Reject | The helper contract returns a numeric wrapper status; callers do not consume inner signal identity, while outer wrapper spawn failures still throw. |
+| Packaging should tolerate missing dependencies | Reject | Publishable packaging must fail before emitting incomplete bundles. |
+| Ink tests should avoid patched private symbols | Reject | Ink is version-pinned and the narrow test-only exports provide deterministic cache-bound evidence unavailable through the public API. |
+| Release smoke should recover from malformed sample JSON | Reject | The test runtime atomically writes its own samples; malformed output is a test failure rather than external input to recover from. |
+| Detached profiling with inherited TTY input can stop | Reject | The deterministic tmux workload exercised an actual TTY and completed without the proposed stop. |
+| Postinstall test should omit Bun when Bun is unavailable | Reject | The file is a Bun test and cannot execute without Bun; both package-manager paths are required acceptance cases. |
+| Installer timeout may leave package-manager descendants | Defer | The risk is limited to the timeout path. A cross-platform process-tree supervisor is a broader test-harness change, while normal npm and Bun completion leaves no descendants. |
+| Docstring and changed-file coverage warnings | Reject | The repository has no policy requiring low-value comments or line coverage percentages for these script tests. Behavioral assertions cover the changed contracts. |
+| Profiler bundles omit directory-sensitive externals | In-scope-Fix | Applied the same external set as the published CLI, preventing future profiler imports from inlining packages that resolve assets relative to their installed directories. |
+| Windows profiling ignores Ctrl+C | Reject | Windows delivers console Ctrl+C to every process in the shared console group. The shim and launcher ignore duplicate delivery while the application receives the signal directly. |
+| Entrypoint comparison should recover from malformed URLs | Reject | The URL is the module's internal `import.meta.url`, not external input; an invalid value means the module contract is broken and should fail at its source. |
+| Installed-entry marker depends on fragile import order | Reject | Each wrapper sets the marker synchronously before awaiting the dynamic implementation import, whose evaluation cannot begin before that call completes. |
+| Installed dynamic-import failure needs recovery | Reject | A failed implementation import is a startup defect and the top-level await terminates that one-shot utility; no later implementation import runs in the same process. |
+| Pointer tightening can replace the child exit | Reject | `tightenLatestPointer` already catches filesystem errors and reports them without throwing. |
+| Output generation is quadratic | Reject | Modern JavaScript engines use concatenation representations rather than copying the complete prefix for every character. Width is bounded at 4,096, and the deterministic memory workload uses 96 columns. |
+| Lease-refusal logging bypasses probe cleanup | Reject | No lease or handlers have been acquired on the refusal branch. A logging failure remains a fatal startup filesystem error rather than a recoverable profiling state. |
+| npm prefix configuration can redirect the local install proof | Reject | The test runs a local install from the fixture package root; npm's prefix setting governs global installation and does not relocate this local `node_modules`. |
+| Capture-helper timeout grace is undocumented | In-scope-Fix | Documented that the outer one-second grace lets the wrapper publish the inner child's bounded timeout result before the wrapper guard fires. |
+| Source-entry predicate name is inverted | Reject | The predicate returns true only for a directly invoked source entry and false for installed wrappers; `isSourceMemoryEntrypoint` names that result directly. |
+| Snapshot heap cap exists only in the shim | Reject | `probe.ts` parses `LLXPRT_MEM_MAX_HEAP_MB` with `MAX_SNAPSHOT_HEAP_MB_LIMIT` and enforces the parsed guard before snapshot capture. |
+| Bundle-test process diagnostics use fields absent from capture results | Reject | The shared shape also accepts direct `spawnSync` results from the build path, where `signal` and `error` are present; optional fields let one formatter handle both process sources. |
+
+No additional broad review round is permitted. The pull request OCR and
+CodeRabbit runs supply the second review cycle, and this remediation verifies
+those findings without widening scope.
+
+### Final verification after pull request remediation
+
+- `npm run test` passed the complete serial suite after the isolated parser
+  correction. Its primary runner reported 9,216 tests passed, 0 failed, 5
+  skipped, and 13 todo; the subsequent isolated workspace suites also passed.
+  Bun emitted its known directory-mismatch diagnostic for the isolated VS Code
+  companion tests without changing the exit status.
+- The complete post-format `scripts/tests/memory` suite passed 240 tests with 0
+  failures and 622 expectations across 16 files. This run exercised the final
+  isolated parser fixture from a stable source snapshot.
+- `npm run lint`, `npm run typecheck`, the final `npm run format`, and
+  `npm run build` passed after all review changes.
+- Installed-profiler bundle acceptance passed 5 tests and 21 expectations. The
+  source bundle directory was absent before and after the run, confirming exact
+  cleanup restoration. Release-like npm and Bun install acceptance passed 5
+  tests and 16 expectations.
+- The `stepfun-37` startup smoke exited 0 and returned a three-line haiku.
+- A fresh source-profiler smoke exited 0, printed version `0.11.0`, published
+  `startup` and `exit` samples, and rendered the same report automatically and
+  through `npm run mem:report`.
+- The test-discovery coverage guard reports zero uncovered and zero doubly
+  executed test files after the relocations.
+- The final false-green audit found 469 normalized prohibited findings on both
+  the branch and detached `origin/main`, with zero branch-only findings. The
+  supplemental `scripts/memory` scans found zero findings on both revisions.
+
+### Validated Ink retention completion
+
+A focused source audit checked five specific claims raised after the first pull
+request cycle. All five were supported by the installed Ink source and the
+issue's acceptance requirements:
+
+| Finding | Classification | Resolution |
+| --- | --- | --- |
+| Ink retains completed static output for the renderer lifetime | In-scope-Fix | Replaced the lifetime string with whole bounded chunks. Retention is limited to 4 MiB of UTF-16 code units and 1,024 chunks. An individually oversized current chunk is rendered but not retained. |
+| Ink's character-width cache is unbounded | In-scope-Fix | Reused the bounded LRU with limits of 10,000 entries and 65,536 retained key code units. Hits refresh recency. |
+| Installed-profiler acceptance runs nowhere | In-scope-Fix | The nightly bundle job now executes the five-case installed-profiler suite under its existing build-test gate. The suite contains five cases, correcting an external claim that it contained seven. |
+| Publishable builds do not prove the Ink patch is present | In-scope-Fix | Added patch marker version 2 and a fail-fast build guard. Fixture tests accept version 2 and reject stale or absent markers. |
+| No automated test runs the real retention workload | In-scope-Fix | Interactive UI CI now runs the standard-buffer tmux scenario, requires exactly three forced-GC manual samples, and checks post-clear growth. |
+
+The width-cache tests exercise multi-code-unit grapheme churn and an independent
+10,000-entry workload. They assert retained code-unit accounting, LRU recency,
+and eviction. Static-output tests assert code-unit eviction, chunk-count
+eviction, and current-frame rendering without retention for an oversized chunk.
+The complete Ink behavior suite passes eight tests with 1,053 expectations.
+
+The real workload now emits four distinct 3,000 by 400 output sets, totaling 4.8
+million generated characters. This crosses the 4 MiB static-output retention
+budget. Initial runs stopped on two harness issues before evaluating retention:
+a local theme dialog appeared when `NO_COLOR` was absent, and synchronous output
+writes returned `EAGAIN` under the TTY workload. The scenario now fixes color
+selection explicitly, sends a second Escape when leaving shell mode after a
+completed command, and the generator publishes bounded 64 KiB chunks while
+respecting stdout backpressure.
+
+The completed real tmux run passed. Its forced-GC manual samples measured:
+
+- Baseline: 185,160,599 heap bytes, 557,072,384 RSS bytes, and 796,642 objects.
+- Post-workload: 189,183,688 heap bytes, 601,456,640 RSS bytes, and 835,155 objects.
+- Post-clear: 190,156,809 heap bytes, 607,027,200 RSS bytes, and 835,548 objects.
+
+Post-clear growth from baseline was 4,996,210 heap bytes, 49,954,816 RSS bytes,
+and 38,906 objects. The initial regression limits were 16 MiB heap, 64 MiB RSS,
+and 180,000 objects. Replacement Linux CI later measured the fixed workload at
+1,022,061 bytes of heap growth, 71,516,160 bytes of RSS growth, and 35,211
+additional objects. The heap and object measurements remained below their
+limits, but process-wide RSS crossed the initial limit by 4,407,296 bytes as the
+allocator moved from 440,328,192 bytes after the workload to 583,221,248 bytes
+after clear. The RSS allowance is now 96 MiB and the exact Linux profile is a
+regression fixture. The previously measured stock profile remains rejected by
+its 206,723-object growth. These counters describe the complete process and do
+not attribute every retained object or RSS byte to Ink.
+
+Fresh fixture installations under npm and Bun both applied the regenerated
+`ink@6.4.8` patch and passed the behavioral guard. The guard now also requires
+patch marker version 2, so the earlier styled-cache-only patch is insufficient.
+
+### Profiler evidence-language corrections
+
+The report now treats `protectedObjectCount` as an observed counter. Growth does
+not identify the retainer and does not prove native ownership. `heapSize` and
+`extraMemorySize` remain separate and are never added. The source analyzer usage
+now names the executable command, `npm run mem:analyze --`, and the documentation
+states that analysis holds snapshot text and parsed graph structures at the same
+time. Peak analyzer memory can therefore be several times the snapshot file
+size.
+
+### Final retention-remediation verification
+
+After the width-cache, static-output, build-guard, workload, and evidence-language
+changes, the complete serial verification cycle passed:
+
+- `npm run test` returned status 0. The primary runner reported 9,216 passed, 0
+  failed, 5 skipped, and 13 todo tests; every subsequent isolated workspace suite
+  also passed. A scan of the complete log found no failure signatures.
+- The test-discovery guard reported zero uncovered and zero doubly executed test
+  files. The focused retention, build-guard, checkpoint, workload, generator, and
+  report suites passed 42 tests with 1,178 expectations. The complete
+  `scripts/tests/memory` suite passed 240 tests with 622 expectations.
+- `npm run format`, `npm run lint`, `npm run typecheck`, and `npm run build` all
+  returned status 0. The build exercised the exact-version Ink patch guard before
+  emitting the publishable CLI and profiler bundles.
+- Fresh npm and Bun installations applied patch version 2 and passed 2 behavioral
+  cases with 14 expectations. Installed-profiler bundle acceptance passed 5 cases
+  with 21 expectations under the same gate used by nightly CI.
+- The source profiler printed version `0.11.0`, published `startup` and `exit`
+  samples, and rendered its report. The required `stepfun-37` startup smoke exited
+  0 and returned a three-line haiku.
+- The first release-install invocation used a 180-second Bun timeout below the
+  suite's 600-second smoke bound. It terminated the outer runner after two tests,
+  so that invocation did not establish a complete suite result. Its detached
+  smoke finished all release-install assertions, and a clean retry with the
+  600-second bound passed all 5 tests with 16 expectations in 235.59 seconds. No
+  release-smoke process or generated `packages/cli/bundle` directory remained.
+- The final real tmux workload was not repeated because only this plan's prose
+  changed after its passing forced-GC run.
+
+The final false-green audit used the branch and a clean detached `origin/main`
+worktree at `2fadb59ac`. Both default-root scans produced the same 469 normalized
+`MOCK_MIRROR`, `ALWAYS_TRUE`, `SELF_CONFIRMING`, or `NO_ASSERT` findings, leaving
+zero branch-only findings. Supplemental `scripts/memory` scans found no test files
+or findings. Four lower-tier scanner findings appeared in touched tests. Three
+`SWALLOWED_ASSERT` findings refer to one report-parser catch block that first
+asserts `toThrow` and converts the no-throw path into an error that fails the
+catch assertions. The `DUP_ASSERT` finding validates the same shell prompt shape
+after two distinct transition types. Neither finding is a false-green oracle.
+The detached worktree stayed clean and was removed.
+
+### PR publication and replacement checks
+
+The verified implementation amendment was published as `46508e83d`, replacing
+commit `151c37fc3` with an exact force-with-lease. This publication record is the
+only subsequent file change. The published branch retained `origin/main` as an
+ancestor with divergence `0 2`, and GitHub reported the pull request mergeable.
+The PR title and body were updated to cover all three Ink retention paths, patch
+marker version 2, forced-GC evidence, and the installed profiling workflow.
+
+CodeRabbit reviewed the amendment from `151c37fc3` to `46508e83d` and generated
+no actionable comments. Its docstring coverage warning is **Reject** because the
+repository does not require per-function docstrings and low-value comments would
+conflict with local conventions. Its summary repeated two previously classified
+cautions. Nonpositive cache capacity is **Reject** because the patched Ink module
+constructs both caches with fixed positive internal limits and has no caller path
+for another capacity. Interactive TTY suspension is **Reject** because the real
+tmux workload exercised the inherited TTY and completed successfully. Open Code
+Review was not run again because the repository's two automatic review rounds
+had already completed. GitHub reported zero actionable review threads after the
+amendment.
+
+Replacement CI concluded with 38 passing checks, zero failures, zero pending
+checks, four skipped or neutral checks, and one cancelled check. The cancelled
+check was the repository's expected pull-request CodeQL timeout; the separate
+CodeQL result was neutral. The aggregate and sharded test jobs, lint, package
+smokes, Linux E2E jobs, Windows memory-tool workflow, interactive tmux workload,
+mergeability gates, LLxprt review, and CodeRabbit all passed.
+
+## Post-publication JSC sampler correction
+
+A source-checkout analysis session exposed a separate defect in the profiling
+code added by this branch. The 60-second memory sampler called
+`bun:jsc.heapStats()`. During automatic history compression with two concurrent
+in-process review agents, sampled RSS rose from 6,522,159,104 bytes to
+42,236,575,744 bytes. Later samples remained near 36 to 42 GB while reported
+heap-stat values became implausibly large. The process stopped near 43.3 GB RSS
+without producing a macOS diagnostic crash report.
+
+### Root cause and correction
+
+`heapStats()` enumerates live JSC cells and allocates the returned statistics.
+That operation is unsuitable for periodic monitoring because its work grows
+with the active heap and can itself create severe transient memory pressure.
+The sampler now calls `bun:jsc.heapSize()`, which reads the aggregate heap-size
+counter without enumerating live cells. RSS, external memory, and ArrayBuffer
+values still come from `process.memoryUsage()`. `heapTotal` is the larger of the
+base value and the JSC heap size, preserving the `NodeJS.MemoryUsage` shape.
+The sampler still does not force garbage collection.
+
+The behavioral regression test replaces the real Bun JSC module's
+`heapStats()` function with a throwing function, invokes the production
+sampler, and restores the original function in `finally`. Against the old
+implementation it failed with `full heap enumeration must not run during
+sampling`: 7 tests passed and 1 failed. Against the correction, all 8 tests
+passed. This comparison proves that the test executes the production sampling
+path and detects the unsafe implementation.
+
+### Controlled and guarded evidence
+
+A Bun 1.3.14 probe retained one million objects and took 20 samples. The fixed
+production sampler completed its sampling loop in 6.352 ms with a 49,152-byte
+RSS change. Direct `heapSize()` sampling took 6.727 ms. Direct `heapStats()`
+sampling took 2,717.172 ms, about 404 times longer at this heap size. This
+controlled heap did not reproduce the multi-gigabyte RSS failure by itself; it
+establishes the cost difference between aggregate sampling and full heap
+enumeration. The captured interactive session establishes the large-heap
+failure.
+
+A guarded source-checkout run used `bun start -- --profile-load zai` and two
+in-process review agents on the DeepSeek MI300X profile. Over 1,321.533 seconds,
+the workload processed about 9.69 million aggregate input tokens while the
+fixed profiler recorded 21 periodic samples. External monitoring collected 254
+five-second samples. Median RSS was 2.114 GiB, peak RSS was 10.494 GiB, and the
+final reading was 1.434 GiB. Twenty-one readings exceeded 7 GiB and two exceeded
+10 GiB, but none crossed the 12 GiB per-process guard. The peaks repeatedly
+fell within subsequent samples instead of producing the old sustained 36 to 42
+GiB plateau. Profiler ticks retained a 60.004-second median interval and a
+66.959-second maximum interval.
+
+The guarded-run harness incorrectly labeled the run `operation-complete` after
+three screen polls lacked the active-operation marker. The foreground agent was
+still inside a bounded `sleep 300` tool call, both reviewers were still reported
+as running, and no final synthesis was recorded. The harness then stopped only
+its private tmux server. This run therefore provides active-workload and
+periodic-sampler evidence, but it does not prove natural reviewer completion or
+foreground synthesis.
+
+The post-change test-audit scan reported 2,019 findings, matching the previous
+branch scan after line-number normalization. It introduced no new finding. The
+only normalized branch-only finding versus the clean main baseline remains the
+previously assessed duplicate shell-prompt assertion in the tmux memory
+workload test. The new sampler regression test produced no scanner finding.
+
+### Final sampler-correction verification
+
+The complete serial gate passed after the sampler correction:
+
+- The focused sampler suite passed 8 tests with 21 assertions. The adjacent
+  memory-telemetry suite passed 13 tests with 47 assertions, and the memory
+  monitor suite passed.
+- `npm run test` returned status 0. The CLI runner passed all 716 discovered
+  test files, including `jscMemorySampler.test.ts`, and the remaining workspace
+  suites completed successfully.
+- `npm run lint`, `npm run typecheck`, `npm run format`, and `npm run build` all
+  returned status 0.
+- The required `stepfun-37` startup smoke returned status 0 and produced only a
+  three-line haiku.
+- Formatting left only the two sampler files and this plan modified, and
+  `git diff --check` returned status 0.
+
+### Sampler-correction review and publication gate
+
+The final Z.AI Open Code Review used two permitted rounds. The first round found
+that the test-wide JSC capability gate still required `heapStats()` and that the
+sampler documentation overstated the source of `heapTotal`. The test gate now
+depends only on `heapSize()`, heap-statistics tests check their own capabilities,
+and the documentation states that `heapTotal` remains the process shim value
+floored at the JSC heap size.
+
+The second round checked only those findings. It identified one remaining
+heap-statistics test that still cast `heapStats()` and `gcAndSweep()` without a
+capability check. A shared test-only guard now verifies both functions before
+that test runs. No third review round was run. The focused sampler suite passed
+8 tests with 21 assertions after the final fix, and targeted ESLint and Prettier
+checks passed.
+
+The complete serial gate then passed. `npm run test` returned status 0 across all
+workspace suites, including 581 of 581 provider files, 382 of 382 agents files,
+716 of 716 CLI files, 22 of 22 A2A files, 13 of 13 test-utils files, and 7 of 7
+VS Code companion files. A failure-signature scan found no failure. Bun printed
+its known VS Code directory-mismatch diagnostic without changing the result.
+`npm run lint`, `npm run typecheck`, `npm run format`, and `npm run build` all
+returned status 0. The post-format sampler suite passed again. `git diff --check`
+passed, and formatting left only the two sampler files and this plan modified.
+The required `stepfun-37` startup smoke returned status 0 and printed a
+three-line haiku.
+
+### Replacement CI RSS variance remediation
+
+Replacement checks for `04b2b422a` passed 37 jobs and failed only the Interactive
+UI memory-retention assertion. The fixed Linux profile measured a 511,705,088-byte
+baseline RSS and a 583,221,248-byte post-clear RSS, a 71,516,160-byte increase
+against the former 64 MiB allowance. Retained heap increased by 1,022,061 bytes
+and objects by 35,211, both well below their existing limits. Manual checkpoints
+also enumerate the JSC heap after reading each RSS value, so later RSS readings
+include allocator effects from the preceding enumeration.
+
+The regression test now includes that exact Linux profile. It failed first with
+`rss grew by 71516160, limit 67108864`. The process-wide RSS allowance then moved
+to 96 MiB while the 16 MiB heap and 180,000-object limits remained unchanged.
+The fixture passes with the new allowance. The measured stock profile remains
+rejected because it grows by 206,723 objects.
+
+The CI-remediation verification completed serially:
+
+- The focused retention-checkpoint and JSC sampler suites passed, along with
+  targeted ESLint and Prettier checks.
+- `npm run test` returned status 0 across all workspace suites, including 581 of
+  581 provider files, 382 of 382 agents files, and 716 of 716 CLI files.
+- `npm run lint`, `npm run typecheck`, `npm run format`, and `npm run build` all
+  returned status 0.
+- The post-format retention-checkpoint suite and `git diff --check` passed.
+- The test-audit scan produced 1,999 normalized findings, identical to the prior
+  verified branch scan, with no new or missing finding.
+- The required `stepfun-37` smoke returned status 0 and printed only a
+  three-line haiku.
+
+A local Interactive UI retry under high host load was inconclusive and is not
+counted as passing evidence. The replacement CI job remains the authoritative
+interactive check for this adjustment.

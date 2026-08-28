@@ -247,7 +247,11 @@ function runSmokeAsync(): SmokeHandle {
     listenerTeardown?.();
     listenerTeardown = null;
     child = null;
-    rmSync(captureDir, { recursive: true, force: true });
+    try {
+      rmSync(captureDir, { recursive: true, force: true });
+    } catch {
+      // Best effort because Windows may still hold a descendant's log open.
+    }
   }
 
   return { promise, dispose };

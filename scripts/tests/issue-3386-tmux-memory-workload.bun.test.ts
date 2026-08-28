@@ -93,6 +93,7 @@ describe('issue #3386 tmux memory-retention workload', () => {
       '${bun} scripts/memory/launcher.ts --dir "$LLXPRT_TMUX_ARTIFACT_DIR/memprofile"',
     );
     expect(shellCommand).toContain('--interval 86400000 --');
+    expect(shellCommand).toContain('NO_COLOR=true FORCE_COLOR=0');
     expect(shellCommand).not.toContain('--snapshots');
     expect(shellCommand).toContain('--provider fake --model fake-model');
     expect(shellCommand).toContain(
@@ -188,7 +189,7 @@ describe('issue #3386 tmux memory-retention workload', () => {
         (total, call) => total + call.lineCount * call.lineWidth,
         0,
       ),
-    ).toBeGreaterThan(1_000_000);
+    ).toBeGreaterThan(4 * 1024 * 1024);
 
     const firstGenerator = generatorStepIndexes[0] ?? -1;
     const lastGeneratorPrompt = generatorPromptIndexes.at(-1) ?? -1;

@@ -26,6 +26,47 @@ const BASE: NodeJS.MemoryUsage = {
 
 const base = () => ({ ...BASE });
 
+interface JscHeapSizeApi {
+  heapSize: () => number;
+}
+
+interface JscTestApi extends JscHeapSizeApi {
+  heapStats: () => {
+    heapSize: number;
+    heapCapacity: number;
+    extraMemorySize: number;
+  };
+}
+
+interface JscStatsTestApi extends JscTestApi {
+  gcAndSweep: () => void;
+}
+
+function isJscHeapSizeApi(value: unknown): value is JscHeapSizeApi {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'heapSize' in value &&
+    typeof value.heapSize === 'function'
+  );
+}
+
+function isJscTestApi(value: unknown): value is JscTestApi {
+  return (
+    isJscHeapSizeApi(value) &&
+    'heapStats' in value &&
+    typeof value.heapStats === 'function'
+  );
+}
+
+function isJscStatsTestApi(value: unknown): value is JscStatsTestApi {
+  return (
+    isJscTestApi(value) &&
+    'gcAndSweep' in value &&
+    typeof value.gcAndSweep === 'function'
+  );
+}
+
 /** Reads the JSC heap directly, defensively in case `process` is a double. */
 function jscHeapSize(): number | null {
   const getBuiltinModule = (
@@ -34,10 +75,8 @@ function jscHeapSize(): number | null {
   if (typeof getBuiltinModule !== 'function') {
     return null;
   }
-  const jsc = getBuiltinModule('bun:jsc') as
-    | { heapSize?: () => number }
-    | undefined;
-  return typeof jsc?.heapSize === 'function' ? jsc.heapSize() : null;
+  const jsc = getBuiltinModule('bun:jsc');
+  return isJscHeapSizeApi(jsc) ? jsc.heapSize() : null;
 }
 
 const jscAvailable = jscHeapSize() !== null;
@@ -89,16 +128,40 @@ describe('heapUsed correctness', () => {
   );
 
   it.skipIf(!jscAvailable)(
+    'samples the JSC heap when full heap statistics are unavailable',
+    () => {
+      const jsc = globalThis.process.getBuiltinModule('bun:jsc');
+      if (!isJscTestApi(jsc)) {
+        throw new Error('bun:jsc test API is unavailable');
+      }
+      const expectedHeapSize = jsc.heapSize();
+      const originalHeapStats = jsc.heapStats;
+      jsc.heapStats = () => {
+        throw new Error('full heap enumeration must not run during sampling');
+      };
+
+      try {
+        const sample = sampleMemoryUsage(base);
+        expect(
+          Math.abs(sample.heapUsed - expectedHeapSize) / expectedHeapSize,
+        ).toBeLessThan(0.05);
+      } finally {
+        jsc.heapStats = originalHeapStats;
+      }
+    },
+  );
+
+  it.skipIf(!jscAvailable)(
     'does not add extraMemorySize, which double-counts string backing stores',
     () => {
       const jsc = (
         globalThis as {
           process: { getBuiltinModule: (id: string) => unknown };
         }
-      ).process.getBuiltinModule('bun:jsc') as {
-        gcAndSweep: () => void;
-        heapStats: () => { heapSize: number; extraMemorySize: number };
-      };
+      ).process.getBuiltinModule('bun:jsc');
+      if (!isJscStatsTestApi(jsc)) {
+        throw new Error('bun:jsc heap statistics test API is unavailable');
+      }
 
       // Deltas, not absolutes: sibling suites share this heap.
       jsc.gcAndSweep();

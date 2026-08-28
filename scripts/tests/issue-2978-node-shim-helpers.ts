@@ -77,7 +77,7 @@ export function writeBundleEntry(pkgRoot: string, body: string): void {
   writeFileSync(path.join(dir, 'llxprt.js'), body);
 }
 
-type ProfilerArtifact =
+export type ProfilerArtifact =
   | 'memprofile-launcher.js'
   | 'memprofile-preload.js'
   | 'memprofile-request.js'

@@ -21,6 +21,8 @@ import {
   spyOn,
 } from 'bun:test';
 import {
+  copyFileSync,
+  existsSync,
   mkdtempSync,
   mkdirSync,
   readdirSync,
@@ -28,7 +30,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   RequestCliParseError,
@@ -219,22 +221,72 @@ interface UtilityFixture {
 const parserTestFile = fileURLToPath(import.meta.url);
 const parserRepoRoot = resolve(parserTestFile, '..', '..', '..', '..');
 
-async function buildUtilityEntry(
-  entrypoint: string,
-  outdir: string,
-  naming: string,
-): Promise<string> {
-  mkdirSync(outdir, { recursive: true });
-  const result = await Bun.build({
-    entrypoints: [entrypoint],
-    outdir,
-    naming,
-    target: 'bun',
-  });
-  if (!result.success) {
-    throw new Error(result.logs.map((log) => log.message).join('\n'));
+interface UtilityBuildSpec {
+  readonly entrypoint: string;
+  readonly destination: string;
+}
+
+function buildUtilityEntries(
+  root: string,
+  specs: readonly UtilityBuildSpec[],
+): void {
+  const buildRoot = join(root, '.build');
+  const buildScript = join(root, 'build-utilities.ts');
+  writeFileSync(
+    buildScript,
+    `const entrypoints = JSON.parse(process.env.LLXPRT_UTILITY_ENTRYPOINTS ?? '[]');
+const outdir = process.env.LLXPRT_UTILITY_OUTDIR;
+if (outdir === undefined) throw new Error('Missing utility output directory');
+const result = await Bun.build({ entrypoints, outdir, target: 'bun' });
+if (!result.success) {
+  process.stderr.write(result.logs.map((log) => log.message).join('\\n'));
+  process.exit(1);
+}
+process.stdout.write(JSON.stringify(result.outputs.map((output) => output.path)));
+`,
+  );
+  const result = spawnSyncWithFileCapture(
+    join(root, '.build-capture'),
+    process.execPath,
+    [buildScript],
+    {
+      cwd: parserRepoRoot,
+      env: {
+        ...process.env,
+        LLXPRT_UTILITY_ENTRYPOINTS: JSON.stringify(
+          specs.map((spec) => spec.entrypoint),
+        ),
+        LLXPRT_UTILITY_OUTDIR: buildRoot,
+      },
+      timeout: 30_000,
+    },
+  );
+  if (result.status !== 0) {
+    throw new Error(`Utility build failed: ${result.stderr}`);
   }
-  return join(outdir, naming);
+  const outputPaths = JSON.parse(result.stdout) as string[];
+  if (outputPaths.length !== specs.length) {
+    throw new Error(
+      `Expected ${specs.length} utility artifacts, received ${outputPaths.length}`,
+    );
+  }
+
+  for (const spec of specs) {
+    const expectedName = `${basename(spec.entrypoint, '.ts')}.js`;
+    const outputPath = outputPaths.find(
+      (candidate) => basename(candidate) === expectedName,
+    );
+    if (outputPath === undefined || !existsSync(outputPath)) {
+      throw new Error(`Missing built utility artifact: ${expectedName}`);
+    }
+    mkdirSync(dirname(spec.destination), { recursive: true });
+    copyFileSync(outputPath, spec.destination);
+    if (!existsSync(spec.destination)) {
+      throw new Error(
+        `Failed to publish utility artifact: ${spec.destination}`,
+      );
+    }
+  }
 }
 
 function utilityEnvironment(dataRoot: string): NodeJS.ProcessEnv {
@@ -306,7 +358,7 @@ describe('request completion waiting', () => {
         waitPollMs: 5,
       });
       expect(readdirSync(join(runDir, 'requests', 'done'))).toHaveLength(1);
-      expect(output.join('\n')).toContain('Probe processed request');
+      expect(output.join('\n')).toContain('Probe finished handling request');
       expect(output.join('\n')).toContain('probe.log');
       expect(output.join('\n')).not.toContain('Probe completed');
     } finally {
@@ -326,7 +378,7 @@ describe('request completion waiting', () => {
           usage: 'test usage',
           memprofileRoot: root,
           argv: ['--dir', runDir, '--wait'],
-          waitTimeoutMs: 20,
+          waitTimeoutMs: 200,
           waitPollMs: 5,
         }),
       ).rejects.toThrow('timed out waiting for probe completion of request');
@@ -354,42 +406,44 @@ function runUtility(
 }
 
 describe('source and installed memprofile utility entries', () => {
+  let fixtureRoot: string | undefined;
   let fixture: UtilityFixture | undefined;
 
-  beforeAll(async () => {
+  beforeAll(() => {
     const root = mkdtempSync(join(tmpdir(), 'memprofile-utilities-'));
-    const sourceOut = join(root, 'scripts', 'memory');
-    const installedOut = join(root, 'bundle');
-    const sourceRequest = await buildUtilityEntry(
-      join(parserRepoRoot, 'scripts/memory/request-cli.ts'),
-      sourceOut,
-      'request-cli.js',
-    );
-    const sourceReport = await buildUtilityEntry(
-      join(parserRepoRoot, 'scripts/memory/report.ts'),
-      sourceOut,
-      'report.js',
-    );
-    const sourceAnalyze = await buildUtilityEntry(
-      join(parserRepoRoot, 'scripts/memory/heapanalyze.ts'),
-      sourceOut,
-      'heapanalyze.js',
-    );
-    const installedRequest = await buildUtilityEntry(
-      join(parserRepoRoot, 'scripts/memory/installed-request.ts'),
-      installedOut,
-      'memprofile-request.js',
-    );
-    const installedReport = await buildUtilityEntry(
-      join(parserRepoRoot, 'scripts/memory/installed-report.ts'),
-      installedOut,
-      'memprofile-report.js',
-    );
-    const installedAnalyze = await buildUtilityEntry(
-      join(parserRepoRoot, 'scripts/memory/installed-analyze.ts'),
-      installedOut,
-      'memprofile-analyze.js',
-    );
+    fixtureRoot = root;
+    const sourceRequest = join(root, 'scripts', 'memory', 'request-cli.js');
+    const sourceReport = join(root, 'scripts', 'memory', 'report.js');
+    const sourceAnalyze = join(root, 'scripts', 'memory', 'heapanalyze.js');
+    const installedRequest = join(root, 'bundle', 'memprofile-request.js');
+    const installedReport = join(root, 'bundle', 'memprofile-report.js');
+    const installedAnalyze = join(root, 'bundle', 'memprofile-analyze.js');
+    buildUtilityEntries(root, [
+      {
+        entrypoint: join(parserRepoRoot, 'scripts/memory/request-cli.ts'),
+        destination: sourceRequest,
+      },
+      {
+        entrypoint: join(parserRepoRoot, 'scripts/memory/report.ts'),
+        destination: sourceReport,
+      },
+      {
+        entrypoint: join(parserRepoRoot, 'scripts/memory/heapanalyze.ts'),
+        destination: sourceAnalyze,
+      },
+      {
+        entrypoint: join(parserRepoRoot, 'scripts/memory/installed-request.ts'),
+        destination: installedRequest,
+      },
+      {
+        entrypoint: join(parserRepoRoot, 'scripts/memory/installed-report.ts'),
+        destination: installedReport,
+      },
+      {
+        entrypoint: join(parserRepoRoot, 'scripts/memory/installed-analyze.ts'),
+        destination: installedAnalyze,
+      },
+    ]);
     fixture = {
       root,
       sourceRoot: join(root, '.memprofile'),
@@ -411,8 +465,8 @@ describe('source and installed memprofile utility entries', () => {
   });
 
   afterAll(() => {
-    if (fixture !== undefined) {
-      rmSync(fixture.root, { recursive: true, force: true });
+    if (fixtureRoot !== undefined) {
+      rmSync(fixtureRoot, { recursive: true, force: true });
     }
   });
 
@@ -599,7 +653,7 @@ describe('source and installed memprofile utility entries', () => {
       'Usage: llxprt memprofile request',
     );
     expect(sourceAnalyze.status).toBe(2);
-    expect(sourceAnalyze.stderr).toContain('Usage: mem:analyze --');
+    expect(sourceAnalyze.stderr).toContain('Usage: npm run mem:analyze --');
     expect(installedAnalyze.status).toBe(2);
     expect(installedAnalyze.stderr).toContain(
       'Usage: llxprt memprofile analyze',

@@ -223,7 +223,7 @@ function profilerBundleConfig(
 ): Parameters<typeof Bun.build>[0] {
   return {
     ...cliBundleSharedConfig,
-    external: EXTERNALS,
+    external: [...EXTERNALS, ...CLI_DIRNAME_DEPENDENT_EXTERNALS],
     entrypoints: [join(root, 'scripts/memory', sourceName)],
     naming: outputName,
   };
@@ -394,6 +394,32 @@ function pruneStaleBundleEntries(bundleDir: string, keep: Set<string>): void {
   }
 }
 
+const INK_MEMORY_RETENTION_PATCH_VERSION = 2;
+const INK_MEMORY_RETENTION_PATCH_MARKER = `export const internal_memoryRetentionPatchVersion = ${INK_MEMORY_RETENTION_PATCH_VERSION};`;
+
+export function assertInkMemoryRetentionPatch(rootDir: string = root): void {
+  const measureTextPath = join(
+    rootDir,
+    'node_modules',
+    'ink',
+    'build',
+    'measure-text.js',
+  );
+  let source: string;
+  try {
+    source = readFileSync(measureTextPath, 'utf8');
+  } catch {
+    throw new Error(
+      `Ink memory-retention patch v${INK_MEMORY_RETENTION_PATCH_VERSION} is required; run the repository install before building publishable CLI bundles.`,
+    );
+  }
+  if (!source.includes(INK_MEMORY_RETENTION_PATCH_MARKER)) {
+    throw new Error(
+      `Ink memory-retention patch v${INK_MEMORY_RETENTION_PATCH_VERSION} is required; reinstall dependencies so patch-package can apply patches/ink+6.4.8.patch.`,
+    );
+  }
+}
+
 /**
  * Builds the prebuilt CLI bundle only (issue #2999).
  *
@@ -405,6 +431,7 @@ function pruneStaleBundleEntries(bundleDir: string, keep: Set<string>): void {
  * failure, not as a hard kill of the test runner process.
  */
 export async function buildCliBundle(): Promise<readonly string[]> {
+  assertInkMemoryRetentionPatch();
   const results: Bun.BuildOutput[] = [];
   for (const target of cliBundleTargets) {
     let result: Awaited<ReturnType<typeof Bun.build>>;

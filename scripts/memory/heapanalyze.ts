@@ -796,7 +796,7 @@ export interface AnalyzeCliOptions {
   readonly maxRetainerDepth: number;
 }
 
-export const SOURCE_ANALYZE_USAGE = `Usage: mem:analyze -- <file.heapsnapshot> [--top N] [--min-mb N]`;
+export const SOURCE_ANALYZE_USAGE = `Usage: npm run mem:analyze -- <file.heapsnapshot> [--top N] [--min-mb N]`;
 export const INSTALLED_ANALYZE_USAGE = `Usage: llxprt memprofile analyze <file.heapsnapshot> [--top N] [--min-mb N]`;
 
 /** Requires the next argv slot after `index` to be a non-flag value. */

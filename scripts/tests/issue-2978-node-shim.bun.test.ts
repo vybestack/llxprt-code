@@ -56,6 +56,7 @@ import {
   writeProfilerEntry,
   writeSourceEntry,
   type Layout,
+  type ProfilerArtifact,
   type RunResult,
 } from './issue-2978-node-shim-helpers.ts';
 
@@ -710,7 +711,7 @@ describe('packages/cli/bin/llxprt.mjs memory-profile dispatch (issue #3386)', ()
       expect(result).toEqual({ code: 0, signal: null });
       expect(readFileSync(countPath, 'utf8')).toBe('1');
     },
-    15_000,
+    30_000,
   );
 });
 

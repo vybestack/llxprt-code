@@ -165,7 +165,7 @@ export async function runRequestCli(runtime: RequestCliRuntime): Promise<void> {
       runtime.waitPollMs ?? REQUEST_WAIT_POLL_MS,
     );
     process.stdout.write(
-      `Probe processed request ${queued.request.id}. Check ${join(runDir, 'probe.log')} for completion or refusal details.\n`,
+      `Probe finished handling request ${queued.request.id}. Check ${join(runDir, 'probe.log')} for completion or refusal details.\n`,
     );
   }
 }

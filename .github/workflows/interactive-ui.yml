@@ -16,11 +16,15 @@ on:
       # The interactive UI test and its Bun test preload
       - 'scripts/tests/test-setup.ts'
       - 'scripts/tests/interactive-ui.test.ts'
-      # The three scenario JSON files executed by the test
+      # The four scenario JSON files executed by the test
       - 'scripts/tmux-script.slash-autocomplete.json'
       - 'scripts/tmux-script.approval-ui.json'
       - 'scripts/tmux-script.issue2208-newlines.fake.json'
-      # Scenario config referenced by ALL three scenarios (welcome banner +
+      - 'scripts/tmux-script.issue3386-memory-retention.fake.json'
+      - 'scripts/tests/memory/retention-checkpoints.ts'
+      - 'scripts/memory/**'
+      - 'patches/ink+6.4.8.patch'
+      # Scenario config referenced by all four scenarios (welcome banner and
       # system settings env paths set in each scenario)
       - 'scripts/fixtures/welcome-completed.json'
       - 'scripts/system-settings.interactive-ui.json'
@@ -61,6 +65,10 @@ on:
       - 'scripts/tmux-script.slash-autocomplete.json'
       - 'scripts/tmux-script.approval-ui.json'
       - 'scripts/tmux-script.issue2208-newlines.fake.json'
+      - 'scripts/tmux-script.issue3386-memory-retention.fake.json'
+      - 'scripts/tests/memory/retention-checkpoints.ts'
+      - 'scripts/memory/**'
+      - 'patches/ink+6.4.8.patch'
       - 'scripts/fixtures/welcome-completed.json'
       - 'scripts/system-settings.interactive-ui.json'
       - 'scripts/fixtures/approval-ui.responses.jsonl'

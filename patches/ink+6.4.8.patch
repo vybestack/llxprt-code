@@ -1,8 +1,8 @@
 diff --git a/node_modules/ink/build/data-limited-lru-map.d.ts b/node_modules/ink/build/data-limited-lru-map.d.ts
-index 9582c49..dd8f07e 100644
+index 9582c49..51d0bdc 100644
 --- a/node_modules/ink/build/data-limited-lru-map.d.ts
 +++ b/node_modules/ink/build/data-limited-lru-map.d.ts
-@@ -1,19 +1,25 @@
+@@ -1,19 +1,26 @@
  /**
   * A specialized LRU map that enforces limits on both the number of entries and
 - * the total character length of the keys.
@@ -28,15 +28,16 @@ index 9582c49..dd8f07e 100644
      set(key: string, value: V): void;
 +    delete(key: string): boolean;
 +    clear(): void;
++    keys(): IterableIterator<string>;
      get size(): number;
      get currentDataSizeValue(): number;
 +    get currentValueSizeValue(): number;
  }
 diff --git a/node_modules/ink/build/data-limited-lru-map.js b/node_modules/ink/build/data-limited-lru-map.js
-index 80485a6..40c69c8 100644
+index 80485a6..07b06c9 100644
 --- a/node_modules/ink/build/data-limited-lru-map.js
 +++ b/node_modules/ink/build/data-limited-lru-map.js
-@@ -1,55 +1,63 @@
+@@ -1,55 +1,66 @@
 -import { LRUMapWithDelete } from 'mnemonist';
  /**
   * A specialized LRU map that enforces limits on both the number of entries and
@@ -132,10 +133,13 @@ index 80485a6..40c69c8 100644
 +        this.map.clear();
 +        this.currentDataSize = 0;
 +        this.currentValueSize = 0;
++    }
++    keys() {
++        return this.map.keys();
      }
      get size() {
          return this.map.size;
-@@ -57,5 +65,8 @@ export class DataLimitedLruMap {
+@@ -57,5 +68,8 @@ export class DataLimitedLruMap {
      get currentDataSizeValue() {
          return this.currentDataSize;
      }
@@ -144,38 +148,193 @@ index 80485a6..40c69c8 100644
 +    }
  }
  //# sourceMappingURL=data-limited-lru-map.js.map
+diff --git a/node_modules/ink/build/ink.d.ts b/node_modules/ink/build/ink.d.ts
+index 1ff7c4c..5825b42 100644
+--- a/node_modules/ink/build/ink.d.ts
++++ b/node_modules/ink/build/ink.d.ts
+@@ -42,7 +42,11 @@ export default class Ink {
+     private lastCursorPosition?;
+     private readonly container;
+     private readonly rootNode;
+-    private fullStaticOutput;
++    private fullStaticOutputChunks;
++    private fullStaticOutputLength;
++    private get fullStaticOutput();
++    private appendStaticOutput;
++    private staticOutputForRender;
+     private exitPromise?;
+     private restoreConsole?;
+     private readonly unsubscribeResize?;
+diff --git a/node_modules/ink/build/ink.js b/node_modules/ink/build/ink.js
+index 0dc50a2..d7f1739 100644
+--- a/node_modules/ink/build/ink.js
++++ b/node_modules/ink/build/ink.js
+@@ -21,6 +21,8 @@ import { calculateScroll } from './scroll.js';
+ import { ResizeObserverEntry } from './resize-observer.js';
+ import { Selection } from './selection.js';
+ const noop = () => { };
++const MAX_RETAINED_STATIC_OUTPUT_CODE_UNITS = 4 * 1024 * 1024;
++const MAX_RETAINED_STATIC_OUTPUT_CHUNKS = 1024;
+ const rainbowColors = [
+     'red',
+     'green',
+@@ -51,9 +53,8 @@ export default class Ink {
+     lastCursorPosition;
+     container;
+     rootNode;
+-    // This variable is used only in debug mode to store full static output
+-    // so that it's rerendered every time, not just new static parts, like in non-debug mode
+-    fullStaticOutput;
++    fullStaticOutputChunks;
++    fullStaticOutputLength;
+     exitPromise;
+     restoreConsole;
+     unsubscribeResize;
+@@ -112,9 +113,8 @@ export default class Ink {
+         // Store last output to only rerender when needed
+         this.lastOutput = '';
+         this.lastOutputHeight = 0;
+-        // This variable is used only in debug mode to store full static output
+-        // so that it's rerendered every time, not just new static parts, like in non-debug mode
+-        this.fullStaticOutput = '';
++        this.fullStaticOutputChunks = [];
++        this.fullStaticOutputLength = 0;
+         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+         this.container = reconciler.createContainer(this.rootNode, LegacyRoot, null, false, null, 'id', () => { }, () => { }, () => { }, () => { }, null);
+         // Unmount when process exits
+@@ -138,6 +138,28 @@ export default class Ink {
+             };
+         }
+     }
++    get fullStaticOutput() {
++        return this.fullStaticOutputChunks.join('');
++    }
++    appendStaticOutput(output) {
++        if (output.length > MAX_RETAINED_STATIC_OUTPUT_CODE_UNITS) {
++            return false;
++        }
++        while (this.fullStaticOutputChunks.length > 0 &&
++            (this.fullStaticOutputChunks.length >= MAX_RETAINED_STATIC_OUTPUT_CHUNKS ||
++                this.fullStaticOutputLength + output.length > MAX_RETAINED_STATIC_OUTPUT_CODE_UNITS)) {
++            const removed = this.fullStaticOutputChunks.shift();
++            this.fullStaticOutputLength -= removed.length;
++        }
++        this.fullStaticOutputChunks.push(output);
++        this.fullStaticOutputLength += output.length;
++        return true;
++    }
++    staticOutputForRender(output) {
++        return this.appendStaticOutput(output)
++            ? this.fullStaticOutput
++            : this.fullStaticOutput + output;
++    }
+     resized = () => {
+         this.calculateLayout();
+         this.onRender();
+@@ -211,10 +233,10 @@ export default class Ink {
+         // If <Static> output isn't empty, it means new children have been added to it
+         const hasStaticOutput = staticOutput && staticOutput !== '\n';
+         if (this.options.debug) {
+-            if (hasStaticOutput) {
+-                this.fullStaticOutput += staticOutput;
+-            }
+-            this.options.stdout.write(this.fullStaticOutput + output);
++            const staticOutputForRender = hasStaticOutput
++                ? this.staticOutputForRender(staticOutput)
++                : this.fullStaticOutput;
++            this.options.stdout.write(staticOutputForRender + output);
+             return;
+         }
+         if (isInCi) {
+@@ -226,10 +248,10 @@ export default class Ink {
+             return;
+         }
+         if (this.options.alternateBuffer) {
+-            if (hasStaticOutput) {
+-                this.fullStaticOutput += staticOutput;
+-            }
+-            this.log(this.fullStaticOutput + output, styledOutput, debugRainbowColor, cursorPosition);
++            const staticOutputForRender = hasStaticOutput
++                ? this.staticOutputForRender(staticOutput)
++                : this.fullStaticOutput;
++            this.log(staticOutputForRender + output, styledOutput, debugRainbowColor, cursorPosition);
+             this.lastOutput = output;
+             return;
+         }
+@@ -266,13 +288,16 @@ export default class Ink {
+                 wrappedOutput === '' ? 0 : wrappedOutput.split('\n').length;
+             return;
+         }
+-        if (hasStaticOutput) {
+-            this.fullStaticOutput += staticOutput;
+-        }
++        const staticOutputRetained = hasStaticOutput
++            ? this.appendStaticOutput(staticOutput)
++            : true;
+         if (this.lastOutputHeight >= this.options.stdout.rows) {
+             // Build a single buffer for all operations
+             let buffer = '';
+-            buffer += ansiEscapes.clearTerminal + this.fullStaticOutput + output;
++            const staticOutputForRender = staticOutputRetained
++                ? this.fullStaticOutput
++                : this.fullStaticOutput + staticOutput;
++            buffer += ansiEscapes.clearTerminal + staticOutputForRender + output;
+             // Position cursor after screen clear if requested by a component
+             if (cursorPosition) {
+                 const lineCount = output.split('\n').length;
 diff --git a/node_modules/ink/build/measure-text.d.ts b/node_modules/ink/build/measure-text.d.ts
-index 5619c54..993cd37 100644
+index 5619c54..e6b6254 100644
 --- a/node_modules/ink/build/measure-text.d.ts
 +++ b/node_modules/ink/build/measure-text.d.ts
-@@ -1,6 +1,11 @@
+@@ -1,6 +1,19 @@
  import { type StyledChar } from '@alcalzone/ansi-tokenize';
  import { type DOMNode } from './dom.js';
  export type StringWidth = (text: string) => number;
++export declare const internal_memoryRetentionPatchVersion = 2;
 +export type StyledCharactersCacheStats = {
 +    readonly entryCount: number;
 +    readonly dataSize: number;
 +    readonly styledCharacterCells: number;
 +};
++export type WidthCacheStats = {
++    readonly entryCount: number;
++    readonly dataSize: number;
++    readonly maxKeyLength: number;
++    readonly oldestKey: string | undefined;
++    readonly newestKey: string | undefined;
++};
  /**
   * Character offset range within a text sequence.
   * Used for mapping DOM nodes to their character positions.
-@@ -17,6 +22,8 @@ export type CharOffsetRange = {
+@@ -17,6 +30,9 @@ export type CharOffsetRange = {
  export type CharOffsetMap = Map<DOMNode, CharOffsetRange>;
  export declare function setStringWidthFunction(fn: StringWidth): void;
  export declare function clearStringWidthCache(): void;
++export declare function internal_getWidthCacheStats(): Readonly<WidthCacheStats>;
 +export declare function internal_resetToStyledCharactersCache(): void;
 +export declare function internal_getToStyledCharactersCacheStats(): Readonly<StyledCharactersCacheStats>;
  export declare function toStyledCharacters(text: string): StyledChar[];
  export declare function styledCharsWidth(styledChars: StyledChar[]): number;
  export declare function inkCharacterWidth(text: string): number;
 diff --git a/node_modules/ink/build/measure-text.js b/node_modules/ink/build/measure-text.js
-index 94955b7..e398353 100644
+index 94955b7..0b15987 100644
 --- a/node_modules/ink/build/measure-text.js
 +++ b/node_modules/ink/build/measure-text.js
-@@ -9,10 +9,10 @@ let currentStringWidth = defaultStringWidth;
- // characters.
- const widthCache = new Map();
+@@ -1,18 +1,18 @@
+ import stringWidth from 'string-width';
+ import { tokenize, styledCharsFromTokens, } from '@alcalzone/ansi-tokenize';
+ import { DataLimitedLruMap } from './data-limited-lru-map.js';
++export const internal_memoryRetentionPatchVersion = 2;
+ const defaultStringWidth = stringWidth;
+ let currentStringWidth = defaultStringWidth;
+ // This cache must be cleared each time the string width function is changed.
+-// The strings passed as input are single characters so there is no need to
+-// limit the size of the cache as there are only a limited number of valid
+-// characters.
+-const widthCache = new Map();
++// Styled-character values can contain arbitrary multi-code-unit graphemes, so
++// keep both the entry count and retained key data bounded.
++const widthCache = new DataLimitedLruMap(10_000, 65_536);
  // This cache can persist for the lifetime of the application.
 -// The keys for this cache can be very large so we need to limit the size
 -// of the data cached as well as the number of keys cached to prevent
@@ -188,10 +347,20 @@ index 94955b7..e398353 100644
  export function setStringWidthFunction(fn) {
      currentStringWidth = fn;
      // Clear the width cache to avoid stale values.
-@@ -21,6 +21,16 @@ export function setStringWidthFunction(fn) {
+@@ -21,6 +21,26 @@ export function setStringWidthFunction(fn) {
  export function clearStringWidthCache() {
      widthCache.clear();
  }
++export function internal_getWidthCacheStats() {
++    const keys = [...widthCache.keys()];
++    return Object.freeze({
++        entryCount: widthCache.size,
++        dataSize: widthCache.currentDataSizeValue,
++        maxKeyLength: keys.reduce((maximum, key) => Math.max(maximum, key.length), 0),
++        oldestKey: keys[0],
++        newestKey: keys.at(-1),
++    });
++}
 +export function internal_resetToStyledCharactersCache() {
 +    toStyledCharactersCache.clear();
 +}

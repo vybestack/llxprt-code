@@ -24,9 +24,13 @@ export function clearInstalledEntryLoading(): void {
 function normalizeEntrypointPath(
   path: string,
   platform: NodeJS.Platform,
-): string {
-  const realPath = realpathSync.native(resolve(path));
-  return platform === 'win32' ? realPath.toLowerCase() : realPath;
+): string | undefined {
+  try {
+    const realPath = realpathSync.native(resolve(path));
+    return platform === 'win32' ? realPath.toLowerCase() : realPath;
+  } catch {
+    return undefined;
+  }
 }
 
 export function entryPathsMatch(
@@ -34,10 +38,12 @@ export function entryPathsMatch(
   entryUrl: string,
   platform: NodeJS.Platform = process.platform,
 ): boolean {
-  return (
-    normalizeEntrypointPath(argvPath, platform) ===
-    normalizeEntrypointPath(fileURLToPath(entryUrl), platform)
+  const argvEntry = normalizeEntrypointPath(argvPath, platform);
+  const expectedEntry = normalizeEntrypointPath(
+    fileURLToPath(entryUrl),
+    platform,
   );
+  return argvEntry !== undefined && argvEntry === expectedEntry;
 }
 
 export function isSourceMemoryEntrypoint(entryUrl: string): boolean {
