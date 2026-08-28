@@ -70,6 +70,9 @@ interface Step {
   key?: string;
   keys?: string[];
   ms?: number;
+  cols?: number;
+  rows?: number;
+  settleMs?: number;
   postTypeMs?: number;
   submitKeys?: string[];
   label?: string;
@@ -107,6 +110,37 @@ export async function executeWaitStep(step: Step): Promise<void> {
     throw new Error(`Invalid wait.ms`);
   }
   await sleep(ms);
+}
+
+async function executeResizeStep(
+  step: Step,
+  sessionName: string,
+): Promise<void> {
+  const cols = Number(step.cols);
+  if (!Number.isInteger(cols) || cols <= 0) {
+    throw new Error(`Invalid resize.cols`);
+  }
+
+  const rows = Number(step.rows);
+  if (!Number.isInteger(rows) || rows <= 0) {
+    throw new Error(`Invalid resize.rows`);
+  }
+
+  const settleMs = Number(step.settleMs ?? 600);
+  if (!Number.isFinite(settleMs) || settleMs < 0) {
+    throw new Error(`Invalid resize.settleMs`);
+  }
+
+  runTmux([
+    'resize-window',
+    '-t',
+    sessionName,
+    '-x',
+    String(cols),
+    '-y',
+    String(rows),
+  ]);
+  await sleep(settleMs);
 }
 
 export async function executeLineStep(
@@ -528,6 +562,8 @@ export async function executeStepDispatch(
   switch (step.type) {
     case 'wait':
       return executeWaitStep(step);
+    case 'resize':
+      return executeResizeStep(step, sessionName);
     case 'line':
       return executeLineStep(step, sessionName, sendKeys, defaults);
     case 'key':

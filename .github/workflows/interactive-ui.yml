@@ -16,13 +16,31 @@ on:
       # The interactive UI test and its Bun test preload
       - 'scripts/tests/test-setup.ts'
       - 'scripts/tests/interactive-ui.test.ts'
-      # The scenario JSON files executed by the test
+      # The eight scenario JSON files executed by the test
       - 'scripts/tmux-script.slash-autocomplete.json'
       - 'scripts/tmux-script.approval-ui.json'
       - 'scripts/tmux-script.issue2208-newlines.fake.json'
       - 'scripts/tmux-script.issue2016-composer.fake.json'
-      # Scenario config referenced by all scenarios (welcome banner +
-      # system settings env paths set in each scenario)
+      - 'scripts/tmux-script.provider-model.json'
+      - 'scripts/tmux-script.welcome.json'
+      - 'scripts/tmux-script.session-browser-resize.json'
+      - 'scripts/tmux-script.unicode-composer.json'
+      # Deterministic session seed executed by the resize scenario
+      - 'scripts/seed-session-browser-resize.ts'
+      - 'packages/core/package.json'
+      - 'packages/core/index.ts'
+      - 'packages/core/src/index.ts'
+      - 'packages/core/src/recording/index.ts'
+      - 'packages/core/src/recording/SessionRecordingService.ts'
+      - 'packages/core/src/recording/SessionLockManager.ts'
+      - 'packages/core/src/recording/SessionLockManager.internals.ts'
+      - 'packages/core/src/utils/paths.ts'
+      - 'packages/storage/package.json'
+      - 'packages/storage/index.ts'
+      - 'packages/storage/src/index.ts'
+      - 'packages/storage/src/config/storage.ts'
+      # Scenario config referenced by the executed scenarios (welcome banner,
+      # plus system settings env path set in each scenario)
       - 'scripts/fixtures/welcome-completed.json'
       - 'scripts/system-settings.interactive-ui.json'
       # Fixtures referenced by the executed scenarios
@@ -63,6 +81,23 @@ on:
       - 'scripts/tmux-script.approval-ui.json'
       - 'scripts/tmux-script.issue2208-newlines.fake.json'
       - 'scripts/tmux-script.issue2016-composer.fake.json'
+      - 'scripts/tmux-script.provider-model.json'
+      - 'scripts/tmux-script.welcome.json'
+      - 'scripts/tmux-script.session-browser-resize.json'
+      - 'scripts/tmux-script.unicode-composer.json'
+      - 'scripts/seed-session-browser-resize.ts'
+      - 'packages/core/package.json'
+      - 'packages/core/index.ts'
+      - 'packages/core/src/index.ts'
+      - 'packages/core/src/recording/index.ts'
+      - 'packages/core/src/recording/SessionRecordingService.ts'
+      - 'packages/core/src/recording/SessionLockManager.ts'
+      - 'packages/core/src/recording/SessionLockManager.internals.ts'
+      - 'packages/core/src/utils/paths.ts'
+      - 'packages/storage/package.json'
+      - 'packages/storage/index.ts'
+      - 'packages/storage/src/index.ts'
+      - 'packages/storage/src/config/storage.ts'
       - 'scripts/fixtures/welcome-completed.json'
       - 'scripts/system-settings.interactive-ui.json'
       - 'scripts/fixtures/approval-ui.responses.jsonl'

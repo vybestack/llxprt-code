@@ -84,20 +84,61 @@ describe('interactive-ui.yml: direct harness inputs are included', () => {
     expect(prPaths).toContain('scripts/tests/interactive-ui.test.ts');
   });
 
-  it('includes all executed scenario JSON files', () => {
-    expect(prPaths).toContain('scripts/tmux-script.slash-autocomplete.json');
-    expect(prPaths).toContain('scripts/tmux-script.approval-ui.json');
-    expect(prPaths).toContain(
-      'scripts/tmux-script.issue2208-newlines.fake.json',
-    );
+  it('includes the target-branch startup composer fake scenario', () => {
     expect(prPaths).toContain(
       'scripts/tmux-script.issue2016-composer.fake.json',
     );
   });
 
-  it('includes the scenario config fixtures referenced by all scenarios', () => {
-    // All executed scenarios set LLXPRT_CODE_WELCOME_CONFIG_PATH and
-    // LLXPRT_SYSTEM_SETTINGS_PATH to these direct inputs.
+  it('includes all executed scenario JSON files (target and issue #2017)', () => {
+    const executedScenarios = [
+      'scripts/tmux-script.slash-autocomplete.json',
+      'scripts/tmux-script.approval-ui.json',
+      'scripts/tmux-script.issue2208-newlines.fake.json',
+      'scripts/tmux-script.issue2016-composer.fake.json',
+      'scripts/tmux-script.provider-model.json',
+      'scripts/tmux-script.welcome.json',
+      'scripts/tmux-script.session-browser-resize.json',
+      'scripts/tmux-script.unicode-composer.json',
+    ];
+
+    for (const scenario of executedScenarios) {
+      expect(prPaths).toContain(scenario);
+    }
+
+    // Duplicate browser-navigation (PR #3310) and approval (PR #3308)
+    // scenarios are excluded from this lane and from the path contract.
+    expect(prPaths).not.toContain('scripts/tmux-script.session-browser.json');
+    expect(prPaths).not.toContain('scripts/tmux-script.approval-deny.json');
+    expect(prPaths).not.toContain('scripts/tmux-script.approval-escape.json');
+  });
+
+  it('includes the deterministic resize-session seed input', () => {
+    expect(prPaths).toContain('scripts/seed-session-browser-resize.ts');
+  });
+
+  it('includes the resize seeder package exports and direct implementations', () => {
+    const seederDependencies = [
+      'packages/core/package.json',
+      'packages/core/index.ts',
+      'packages/core/src/index.ts',
+      'packages/core/src/recording/index.ts',
+      'packages/core/src/recording/SessionRecordingService.ts',
+      'packages/core/src/recording/SessionLockManager.ts',
+      'packages/core/src/recording/SessionLockManager.internals.ts',
+      'packages/core/src/utils/paths.ts',
+      'packages/storage/package.json',
+      'packages/storage/index.ts',
+      'packages/storage/src/index.ts',
+      'packages/storage/src/config/storage.ts',
+    ];
+
+    for (const dependency of seederDependencies) {
+      expect(prPaths).toContain(dependency);
+    }
+  });
+
+  it('includes the scenario config fixtures referenced by the executed scenarios', () => {
     expect(prPaths).toContain('scripts/fixtures/welcome-completed.json');
     expect(prPaths).toContain('scripts/system-settings.interactive-ui.json');
   });
