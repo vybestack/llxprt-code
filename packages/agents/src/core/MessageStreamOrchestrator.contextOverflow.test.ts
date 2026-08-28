@@ -75,9 +75,9 @@ function overflowStream(): AsyncGenerator<ServerAgentStreamEvent> {
   })();
 }
 
-function contentStream(): AsyncGenerator<ServerAgentStreamEvent> {
+function contentStream(text: string): AsyncGenerator<ServerAgentStreamEvent> {
   return (async function* (): AsyncGenerator<ServerAgentStreamEvent> {
-    yield { type: AgentEventType.Content, value: 'hello' };
+    yield { type: AgentEventType.Content, value: text };
     yield {
       type: AgentEventType.Finished,
       value: {
@@ -332,12 +332,22 @@ describe('MessageStreamOrchestrator context-overflow terminal handling', () => {
   });
 
   it('still continues a non-overflow turn while todos remain active', async () => {
+    let attempt = 0;
     const { orchestrator } = buildOrchestrator({
-      turnStreamFactory: contentStream,
+      turnStreamFactory: () => {
+        attempt += 1;
+        return contentStream(`answer-${attempt}`);
+      },
     });
 
-    await collectEvents(orchestrator);
+    const events = await collectEvents(orchestrator);
+    const contentValues = events
+      .filter((event) => event.type === AgentEventType.Content)
+      .map((event) => event.value);
 
-    expect(mockTurnRun.mock.calls.length).toBeGreaterThan(1);
+    // The consumer receives content from more than one model attempt, so the
+    // continuation loop still drives follow-up turns after this change.
+    expect(contentValues).toContain('answer-1');
+    expect(contentValues).toContain('answer-2');
   });
 });
