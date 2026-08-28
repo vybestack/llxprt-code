@@ -74,11 +74,10 @@ describe('affected-lint-targets selector — package closure', () => {
     });
     expect(result.fullRun).toBe(false);
     expect(result.targets).toContain('packages/core');
-    // core is imported by agents, cli, providers, mcp, a2a-server
+    // core is imported by agents, cli, providers, and a2a-server
     expect(result.targets).toContain('packages/agents');
     expect(result.targets).toContain('packages/cli');
     expect(result.targets).toContain('packages/providers');
-    expect(result.targets).toContain('packages/mcp');
     expect(result.targets).toContain('packages/a2a-server');
     // integration-tests is always an explicit scoped target
     expect(result.targets).toContain('integration-tests');
