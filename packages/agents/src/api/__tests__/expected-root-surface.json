@@ -186,6 +186,7 @@
   "mapLoopStream",
   "mapStreamEvent",
   "preflightAgentActivation",
+  "registerActivateSkillTool",
   "splitPartsByRole",
   "toConfigParameters"
 ]

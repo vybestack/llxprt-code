@@ -124,4 +124,75 @@ describe('ActivateSkillTool', () => {
       tool.build({ name: '' } as unknown as { name: string }),
     ).toThrow(Error);
   });
+
+  /**
+   * Issue #3379: the model only learns which skills exist from this tool's
+   * declaration, and that declaration is built from the skill list captured
+   * when the instance is constructed. Rebuilding the instance is therefore the
+   * mechanism that refreshes the model-facing skill list after a reload.
+   */
+  describe('declaration reflects the skill list at construction @issue:3379', () => {
+    function serviceListing(names: string[]): ISkillService {
+      const skills: SkillInfo[] = names.map((name) => ({
+        name,
+        description: `${name} description`,
+        location: `/skills/${name}/SKILL.md`,
+      }));
+      return {
+        activateSkill: vi.fn(),
+        getSkillManager: vi.fn(),
+        listSkills: vi.fn().mockReturnValue(skills),
+        getSkill: vi
+          .fn()
+          .mockImplementation(
+            (name: string) => skills.find((s) => s.name === name) ?? null,
+          ),
+        getFolderStructure: vi.fn().mockResolvedValue(''),
+      } as unknown as ISkillService;
+    }
+
+    function enumeratedNames(instance: ActivateSkillTool): string[] {
+      const schema = instance.schema.parametersJsonSchema as {
+        properties?: { name?: { enum?: string[] } };
+      };
+      return schema.properties?.name?.enum ?? [];
+    }
+
+    it('enumerates every listed skill and names them in the description', () => {
+      const instance = new ActivateSkillTool(
+        serviceListing(['alpha', 'beta']),
+        mockMessageBus,
+      );
+
+      expect(enumeratedNames(instance)).toEqual(['alpha', 'beta']);
+      expect(instance.description).toContain("Available: 'alpha', 'beta'");
+      expect(instance.build({ name: 'beta' })).toBeDefined();
+    });
+
+    it('reflects a changed skill list when reconstructed', () => {
+      const before = new ActivateSkillTool(
+        serviceListing(['alpha']),
+        mockMessageBus,
+      );
+      expect(() => before.build({ name: 'gamma' })).toThrow(Error);
+
+      const after = new ActivateSkillTool(
+        serviceListing(['alpha', 'gamma']),
+        mockMessageBus,
+      );
+
+      expect(enumeratedNames(after)).toEqual(['alpha', 'gamma']);
+      expect(after.build({ name: 'gamma' })).toBeDefined();
+    });
+
+    it('enumerates no names when no skills are listed', () => {
+      const instance = new ActivateSkillTool(
+        serviceListing([]),
+        mockMessageBus,
+      );
+
+      expect(enumeratedNames(instance)).toEqual([]);
+      expect(instance.description).not.toContain('Available:');
+    });
+  });
 });
