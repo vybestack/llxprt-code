@@ -41,6 +41,7 @@ export type GithubParamKind =
   | 'threadId'
   | 'body'
   | 'freetext'
+  | 'searchQuery'
   | 'limit'
   | 'closeReason'
   | 'color'
@@ -89,7 +90,7 @@ export const GITHUB_OP_SPECS: Readonly<Record<string, GithubOpSpec>> = {
     summary: 'list issues',
     mutating: false,
     params: {
-      search: 'freetext',
+      search: 'searchQuery',
       state: 'stateIssue',
       label: 'label',
       limit: 'limit',
@@ -221,13 +222,13 @@ export const GITHUB_OP_SPECS: Readonly<Record<string, GithubOpSpec>> = {
   'search.issues': {
     summary: 'search issues across repositories',
     mutating: false,
-    params: { query: 'freetext', limit: 'limit', repo: 'repo' },
+    params: { query: 'searchQuery', limit: 'limit', repo: 'repo' },
     required: ['query'],
   },
   'search.prs': {
     summary: 'search pull requests across repositories',
     mutating: false,
-    params: { query: 'freetext', limit: 'limit', repo: 'repo' },
+    params: { query: 'searchQuery', limit: 'limit', repo: 'repo' },
     required: ['query'],
   },
   'run.list': {
@@ -300,6 +301,8 @@ export const GITHUB_PARAM_KIND_HINTS: Readonly<
   threadId: 'review thread id',
   body: 'markdown text',
   freetext: 'string',
+  searchQuery:
+    'GitHub search query; qualifiers may be negated with a leading dash',
   limit: 'positive integer 1–100',
   closeReason: 'completed or not planned',
   color: 'hex color like #RRGGBB',
@@ -580,7 +583,17 @@ export function validateGithubParamValue(
   value: unknown,
   kind: GithubParamKind,
 ): string | null {
-  if (typeof value === 'string' && value.startsWith('-')) {
+  // Flag-injection defence, deliberately skipped for search queries: GitHub
+  // negates a qualifier with a leading dash (`-label:bug`) and this tool
+  // documents that syntax. It restricted nothing there anyway, since
+  // `-label:bug` was refused while the identical `is:open -label:bug` passed.
+  // Safe because a search query never reaches gh as a bare token: `search` is
+  // the value of `--search`, and `query` is tokenized behind a `--` terminator.
+  if (
+    kind !== 'searchQuery' &&
+    typeof value === 'string' &&
+    value.startsWith('-')
+  ) {
     return `Parameter ${key} must not begin with '-'`;
   }
   return KIND_VALIDATORS[kind](key, value);
@@ -639,6 +652,27 @@ function validateColorValue(key: string, value: unknown): string | null {
   return null;
 }
 
+/**
+ * Validates a search-query value.
+ *
+ * Unlike other string kinds this deliberately ALLOWS a leading dash, because
+ * GitHub negates a qualifier that way (`-label:bug`) and the tool documents
+ * that syntax. The generic leading-dash rule is flag-injection defence, and it
+ * buys nothing here: `search` reaches gh as the value of `--search`, never as
+ * a bare token, and `query` is tokenized and emitted after a `--` option
+ * terminator. It also never worked as a restriction, since `-label:bug` was
+ * rejected while the semantically identical `is:open -label:bug` passed; three
+ * separate model evaluations hit the rejection and each worked around it by
+ * reordering the query.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-10
+ * @issue 3407
+ */
+function validateSearchQueryValue(key: string, value: unknown): string | null {
+  return typeof value === 'string' ? null : `Parameter ${key} must be a string`;
+}
+
 /** Validates a generic string-kind value (milestone, project, branch, body, freetext). */
 function validateStringValue(key: string, value: unknown): string | null {
   if (typeof value !== 'string') {
@@ -675,4 +709,5 @@ const KIND_VALIDATORS: Readonly<
   branch: validateStringValue,
   body: validateStringValue,
   freetext: validateStringValue,
+  searchQuery: validateSearchQueryValue,
 };

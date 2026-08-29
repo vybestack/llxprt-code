@@ -257,7 +257,34 @@ with no `bug` label excludes nothing and returns the unfiltered total, which is
 indistinguishable from the filter having been dropped; all three models flagged that, and two
 independently proposed this remedy.
 
-### Findings from the re-run, since fixed
+### AC-10: Documented exclusion syntax is actually accepted
+
+Given `issue.list`'s `search` or a search operation's `query`, when the value begins with a
+dash (`-label:bug`), then it is accepted. GitHub negates a qualifier that way and this tool
+documents the syntax, but the generic leading-dash flag-injection guard rejected it while
+accepting the semantically identical `is:open -label:bug`, so it blocked the documented form
+and nothing else. All three models hit the rejection on the third evaluation round and each
+worked around it by reordering the query.
+
+The relaxation is scoped to the two search-query parameters and is safe by construction:
+`search` reaches gh as the value of `--search`, never as a bare token, and `query` is tokenized
+and emitted after the `--` option terminator added for AC-2. Every other string parameter keeps
+the guard, which the tests pin alongside the argv placement that makes the exemption safe.
+
+### Findings from the third re-run, since fixed
+
+The third round was run against the build containing AC-8 and AC-9. It confirmed those (see
+below) and found three defects introduced or documented by this work:
+
+- The leading-dash rejection above, which contradicted documentation added in this PR.
+- The rate-limit guidance claimed `issue.list` was unaffected by search throttling. That became
+  false the moment `issue.list` gained a count request. Corrected to name which operations
+  touch the search endpoint and which genuinely never do.
+- The description carried two paragraphs that read as contradicting each other on whether
+  `totalCount` is a true total when `hasMore` is set. Rewritten so `totalCount` is stated once,
+  unambiguously, as the size of the whole result set.
+
+### Findings from the second re-run, since fixed
 
 Both items the first re-run left open were taken up rather than deferred.
 

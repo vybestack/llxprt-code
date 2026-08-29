@@ -212,6 +212,73 @@ describe('issue #3407: rejected parameters name the operation that accepts them'
  * @requirement AC-4
  * @issue 3407
  */
+/**
+ * Issue #3407: GitHub negates a qualifier with a leading dash (`-label:bug`),
+ * and this tool documents that syntax, but the generic leading-dash guard
+ * rejected it. The guard never restricted anything: `-label:bug` was refused
+ * while the semantically identical `is:open -label:bug` passed, so it blocked
+ * the documented form and nothing else. Three separate model evaluations hit
+ * the rejection and each worked around it by reordering the query.
+ *
+ * It is safe to allow: `search` reaches gh as the value of `--search`, never
+ * as a bare token, and `query` is tokenized and emitted after a `--` option
+ * terminator.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-10
+ * @issue 3407
+ */
+describe('issue #3407: search qualifiers may be negated with a leading dash', () => {
+  /**
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-10
+   * @issue 3407
+   */
+  it('accepts a leading exclusion in issue.list search and in search queries', () => {
+    expect(
+      validateGithubOpParams('issue.list', { search: '-label:bug' }),
+    ).toBeNull();
+    expect(
+      validateGithubOpParams('search.issues', { query: '-label:bug' }),
+    ).toBeNull();
+    expect(
+      validateGithubOpParams('search.prs', { query: '-label:bug' }),
+    ).toBeNull();
+    // The form that already worked must keep working.
+    expect(
+      validateGithubOpParams('issue.list', { search: 'is:open -label:bug' }),
+    ).toBeNull();
+  });
+
+  /**
+   * The relaxation is scoped to search queries. Flag-injection defence still
+   * applies to parameters that can reach gh as bare tokens.
+   *
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-10
+   * @issue 3407
+   */
+  it('still rejects a leading dash on non-query string parameters', () => {
+    expect(
+      validateGithubOpParams('issue.create', { title: '--malicious' }),
+    ).toContain("must not begin with '-'");
+    expect(
+      validateGithubOpParams('run.list', { branch: '--malicious' }),
+    ).toContain("must not begin with '-'");
+  });
+
+  /**
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-10
+   * @issue 3407
+   */
+  it('still rejects a non-string search query', () => {
+    expect(validateGithubOpParams('issue.list', { search: 42 })).toContain(
+      'must be a string',
+    );
+  });
+});
+
 describe('issue #3407: the type parameter description states the create/edit split', () => {
   /**
    * @plan PLAN-20260828-ISSUE3407

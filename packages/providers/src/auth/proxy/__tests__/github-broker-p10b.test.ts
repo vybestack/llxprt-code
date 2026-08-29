@@ -488,10 +488,21 @@ describe('search pure functions (P10)', () => {
       );
     });
 
-    it('rejects dash-prefixed query', () => {
-      expect(validateSearchIssuesParams({ query: '--malicious' })?.code).toBe(
-        'INVALID_PARAM',
-      );
+    /**
+     * See the issue-3407 note on issue.list: exclusion syntax is documented, so
+     * a dash-prefixed query is accepted. It is safe because query terms are
+     * tokenized and emitted after a `--` option terminator, asserted here.
+     *
+     * @plan PLAN-20260828-ISSUE3407
+     * @requirement AC-10
+     * @issue 3407
+     */
+    it('accepts a dash-prefixed query, protected by the -- terminator', () => {
+      expect(validateSearchIssuesParams({ query: '-label:bug' })).toBeNull();
+      const argv = buildSearchIssuesArgv({ query: '-label:bug' });
+      const terminator = argv.indexOf('--');
+      expect(terminator).toBeGreaterThan(-1);
+      expect(argv.slice(terminator + 1)).toStrictEqual(['-label:bug']);
     });
 
     it('rejects dash-prefixed repo', () => {
@@ -502,10 +513,8 @@ describe('search pure functions (P10)', () => {
   });
 
   describe('validateSearchPrsParams', () => {
-    it('rejects dash-prefixed query', () => {
-      expect(validateSearchPrsParams({ query: '--bad' })?.code).toBe(
-        'INVALID_PARAM',
-      );
+    it('accepts a dash-prefixed query like search.issues', () => {
+      expect(validateSearchPrsParams({ query: '-label:bug' })).toBeNull();
     });
   });
 

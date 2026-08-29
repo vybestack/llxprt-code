@@ -270,9 +270,26 @@ describe('issue.list pure functions (P10)', () => {
       expect(result?.code).toBe('INVALID_PARAM');
     });
 
-    it('rejects dash-prefixed search value', () => {
-      const result = validateIssueListParams({ search: '--malicious' });
-      expect(result?.code).toBe('INVALID_PARAM');
+    /**
+     * A dash-prefixed search value is now ALLOWED, because GitHub negates a
+     * qualifier that way and the tool documents `-label:bug`. The value never
+     * reaches gh as a bare token, so the flag-injection defence loses nothing:
+     * `search` is passed as the value of `--search`. Dash-prefixed values on
+     * parameters that CAN become bare tokens are still rejected, asserted
+     * immediately below.
+     *
+     * @plan PLAN-20260828-ISSUE3407
+     * @requirement AC-10
+     * @issue 3407
+     */
+    it('accepts a dash-prefixed search value and keeps it out of argv', () => {
+      expect(validateIssueListParams({ search: '-label:bug' })).toBeNull();
+      const argv = buildIssueListArgv({ search: '-label:bug' });
+      const idx = argv.indexOf('--search');
+      // It is the VALUE of --search, never a standalone token gh could read
+      // as a flag.
+      expect(idx).toBeGreaterThan(-1);
+      expect(argv[idx + 1]).toBe('-label:bug');
     });
 
     it('rejects dash-prefixed repo value', () => {

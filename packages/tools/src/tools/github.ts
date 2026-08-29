@@ -115,19 +115,24 @@ Notes:
   result. Do not poll it yourself.
 - issue.edit sets issue type, labels, assignees, projects and milestone in one
   call, including fields the gh CLI cannot set directly.
-- List and search results carry "hasMore": true when more results exist beyond
-  the returned page, so the returned count is NOT a total unless hasMore is
-  false. Raise "limit" (max 100) or narrow the query to see the rest.
-- issue.list, pr.list, search.issues and search.prs also return "totalCount",
-  the size of the WHOLE result set, so counting is one call: read totalCount
-  rather than adding up pages. They also return "effectiveQuery", the query
-  actually executed, which is how to confirm a filter survived — an exclusion
-  like "-label:bug" against a repository that has no such label excludes
-  nothing and returns the unfiltered total, which otherwise looks identical to
-  the filter being ignored.
-- GitHub rate-limits the search endpoint separately, and counting a truncated
-  result costs one request there. Issue searches one at a time rather than
-  several at once; issue.list and issue.view are unaffected.
+- issue.list, pr.list, search.issues and search.prs each return "totalCount",
+  "hasMore" and "effectiveQuery" alongside their items.
+  - "totalCount" is the size of the WHOLE result set, always. To count matches
+    ("how many open issues are there?") read totalCount from a single call; do
+    not count the returned items and do not add up pages.
+  - "hasMore" says only that the page does not contain every item. Items past
+    the page are reached by raising "limit" (max 100) or narrowing the query.
+  - "effectiveQuery" is the query that actually ran, including the repository
+    scope and the type:issue/type:pr filter. Use it to confirm a term survived:
+    an exclusion like "-label:bug" against a repository that has no such label
+    excludes nothing and returns the unfiltered total, which otherwise looks
+    identical to the filter having been ignored.
+- GitHub rate-limits the search endpoint separately from the rest of the API,
+  and it is easy to trip by running several searches at once. Issue them one at
+  a time. search.issues and search.prs always use it; issue.list and pr.list
+  use it only to fetch totalCount for a truncated page. issue.view, pr.view,
+  pr.diff, pr.checks and label.list never do and keep working while search is
+  throttled.
 
 Returned fields:
   issue.view    number, title, state, author, assignees, milestone, labels, body, comments
