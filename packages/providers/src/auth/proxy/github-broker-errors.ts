@@ -169,11 +169,12 @@ export const SEARCH_ERROR_GUIDANCE =
  */
 const SEARCH_RATE_LIMIT_GUIDANCE =
   ' GitHub rate-limits the search endpoint separately and counts concurrent' +
-  ' searches against it, so issue the retry on its own rather than alongside' +
-  ' other searches. issue.list and pr.list also touch this endpoint, but only' +
-  ' to count a truncated page, so a smaller "limit" avoids it. issue.view,' +
-  ' pr.view, pr.diff, pr.checks and label.list never touch it and keep working' +
-  ' while search is throttled.';
+  ' requests against it, so retry this call on its own rather than alongside' +
+  ' other searches. issue.list and pr.list reach that endpoint only to count a' +
+  ' page that did not fit, so RAISING "limit" (max 100) avoids the extra' +
+  ' request, while lowering it causes more of them. issue.view, pr.view,' +
+  ' pr.diff, pr.checks and label.list never touch the search endpoint and keep' +
+  ' working while it is throttled.';
 
 /**
  * Appends throttling guidance when a search is rejected by the secondary rate

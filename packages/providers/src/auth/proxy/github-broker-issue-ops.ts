@@ -13,6 +13,7 @@
  * @pseudocode 003-github-broker.md lines 38-55, 101-126
  */
 
+import { augmentSearchError } from './github-broker-errors.js';
 import type {
   GhRunner,
   OpDescriptor,
@@ -354,6 +355,9 @@ export const issueListDescriptor: OpDescriptor = {
   params: ISSUE_LIST_SPEC.params,
   buildArgv: (params) => buildIssueListArgv(params),
   execute: (params, run) => executeIssueList(params, run),
+  // Counting a truncated page reaches the separately-throttled search
+  // endpoint, so a 403 here needs the same guidance the search ops give.
+  augmentError: augmentSearchError,
   shape: (rawJson, params) => {
     const { items, hasMore } = windowByLimit(shapeIssueList(rawJson), params);
     return { hasMore, issues: items };

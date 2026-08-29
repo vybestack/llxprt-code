@@ -271,6 +271,32 @@ The relaxation is scoped to the two search-query parameters and is safe by const
 and emitted after the `--` option terminator added for AC-2. Every other string parameter keeps
 the guard, which the tests pin alongside the argv placement that makes the exemption safe.
 
+### Findings from the fourth re-run, since fixed
+
+Fourth round, against the build carrying AC-10. opus5 reached seven of eight tasks on the
+first call, from two before any of this work. The remaining friction converged on one thing:
+the search endpoint's separate rate limit, which this PR increased pressure on by counting
+truncated pages. Two defects in how that was handled, both introduced here:
+
+- The remediation text was attached only to the search descriptors, but `issue.list` and
+  `pr.list` reach the same endpoint now. A model blocked on `pr.list` found the guidance on a
+  different operation. Both list ops now carry it.
+- The guidance was backwards. It advised a smaller `limit`, which truncates more often and so
+  causes MORE count requests. Raising the limit is what avoids the extra request.
+
+Still open, and recorded rather than fixed: no-op qualifier detection. `effectiveQuery` proves
+a term was transmitted, not that it selected anything. opus5 demonstrated the limit precisely
+with a control: `-label:security` returns 197 against an unfiltered 210, so exclusions work,
+while `-label:bug` returns 210 because the repository has no such label. The two responses are
+indistinguishable. Detecting it means resolving every referenced label against `label.list`,
+which costs another request on the endpoint already under pressure. The description now states
+the limitation and points at `label.list` for confirmation.
+
+All three models also proposed absorbing 403s with internal backoff. Declined: a blocking
+retry inside a tool call turns a fast failure into an unbounded wait, and this repository
+prefers failing fast with an actionable message over hiding the condition. The message now
+names the endpoint, the operations that avoid it, and the correct remedy.
+
 ### Findings from the third re-run, since fixed
 
 The third round was run against the build containing AC-8 and AC-9. It confirmed those (see

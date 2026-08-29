@@ -52,7 +52,11 @@ import {
   searchIssuesDescriptor,
   searchPrsDescriptor,
 } from '../github-broker-search-ops.js';
-import { issueViewDescriptor } from '../github-broker-issue-ops.js';
+import {
+  issueListDescriptor,
+  issueViewDescriptor,
+} from '../github-broker-issue-ops.js';
+import { prListDescriptor } from '../github-broker-pr-ops.js';
 import {
   buildIssueViewArgv,
   shapeIssueView,
@@ -1031,10 +1035,42 @@ describe('GitHub broker pure functions (P08)', () => {
       expect(augmentSearchError(notFound)).toStrictEqual(notFound);
     });
 
-    it('only the search descriptors opt into guided failures', () => {
+    /**
+     * The list ops reach the throttled search endpoint too, to count a page
+     * that did not fit, so a 403 raised there needs the same guidance. One
+     * evaluated model was blocked on pr.list and found the remediation text
+     * only on a different operation.
+     *
+     * @plan PLAN-20260828-ISSUE3407
+     * @requirement AC-3
+     * @issue 3407
+     */
+    it('every op that can reach the search endpoint gives guided failures', () => {
       expect(searchIssuesDescriptor.augmentError).toBeDefined();
       expect(searchPrsDescriptor.augmentError).toBeDefined();
+      expect(issueListDescriptor.augmentError).toBeDefined();
+      expect(prListDescriptor.augmentError).toBeDefined();
+      // issue.view never touches it, so it gets no search guidance.
       expect(issueViewDescriptor.augmentError).toBeUndefined();
+    });
+
+    /**
+     * The remedy is counter-intuitive and was stated backwards at first: a
+     * SMALLER limit truncates more often and therefore causes more count
+     * requests against the throttled endpoint, not fewer.
+     *
+     * @plan PLAN-20260828-ISSUE3407
+     * @requirement AC-3
+     * @issue 3407
+     */
+    it('tells a throttled caller to raise the limit, not lower it', () => {
+      const throttled = {
+        code: 'RATE_LIMITED' as const,
+        message: 'HTTP 403: You have exceeded a secondary rate limit.',
+      };
+      const message = augmentSearchError(throttled).message;
+      expect(message).toContain('RAISING');
+      expect(message).not.toContain('a smaller "limit" avoids it');
     });
   });
 

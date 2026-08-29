@@ -128,11 +128,16 @@ Notes:
     excludes nothing and returns the unfiltered total, which otherwise looks
     identical to the filter having been ignored.
 - GitHub rate-limits the search endpoint separately from the rest of the API,
-  and it is easy to trip by running several searches at once. Issue them one at
-  a time. search.issues and search.prs always use it; issue.list and pr.list
-  use it only to fetch totalCount for a truncated page. issue.view, pr.view,
-  pr.diff, pr.checks and label.list never do and keep working while search is
-  throttled.
+  and running several searches at once trips it. Issue them one at a time.
+  search.issues and search.prs always use that endpoint; issue.list and pr.list
+  use it only to count a page that did not fit, so RAISING "limit" (max 100)
+  avoids the extra request and lowering it causes more of them. issue.view,
+  pr.view, pr.diff, pr.checks and label.list never touch it and keep working
+  while search is throttled.
+- "effectiveQuery" proves a term was sent, not that it matched anything. An
+  exclusion naming a label the repository does not have is applied faithfully
+  and excludes nothing, so its total equals the unfiltered total. When that
+  matters, confirm the label exists with label.list.
 
 Returned fields:
   issue.view    number, title, state, author, assignees, milestone, labels, body, comments
