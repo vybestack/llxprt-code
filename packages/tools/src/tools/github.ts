@@ -118,19 +118,29 @@ Notes:
 - List and search results carry "hasMore": true when more results exist beyond
   the returned page, so the returned count is NOT a total unless hasMore is
   false. Raise "limit" (max 100) or narrow the query to see the rest.
-- search.issues and search.prs additionally return "totalCount", the size of
-  the WHOLE result set. To count matches (e.g. "how many open issues are
-  there?") use search.issues and read totalCount; do not add up pages.
+- issue.list, pr.list, search.issues and search.prs also return "totalCount",
+  the size of the WHOLE result set, so counting is one call: read totalCount
+  rather than adding up pages. They also return "effectiveQuery", the query
+  actually executed, which is how to confirm a filter survived — an exclusion
+  like "-label:bug" against a repository that has no such label excludes
+  nothing and returns the unfiltered total, which otherwise looks identical to
+  the filter being ignored.
+- GitHub rate-limits the search endpoint separately, and counting a truncated
+  result costs one request there. Issue searches one at a time rather than
+  several at once; issue.list and issue.view are unaffected.
 
 Returned fields:
   issue.view    number, title, state, author, assignees, milestone, labels, body, comments
-  issue.list    number, title, state, author, assignees, milestone, labels, updatedAt + hasMore
+  issue.list    number, title, state, author, assignees, milestone, labels, updatedAt
   pr.view       number, title, state, author, headRefName, baseRefName, isDraft, reviewDecision, body, comments
-  pr.list       number, title, state, author, labels, updatedAt + hasMore
-  search.issues number, title, state, author, assignees, labels, repository, updatedAt + hasMore, totalCount
+  pr.list       number, title, state, author, labels, updatedAt
+  search.issues number, title, state, author, assignees, labels, repository, updatedAt
   search.prs    same as search.issues
-  "state" is always lower case ("open"/"closed"/"merged"), matching the state
-  parameter. Search results carry no milestone: gh exposes no such field there.
+  All four list/search ops wrap those items with hasMore, totalCount and
+  effectiveQuery. "state" is always lower case ("open"/"closed"/"merged"),
+  matching the state parameter, and a bot author is always "name[bot]".
+  Search results carry no milestone: gh exposes no such field there, so use
+  issue.list when you need it.
 - To filter issues by assignee or milestone, put the qualifier in issue.list's
   "search" (e.g. "no:assignee milestone:0.11.0"); there is no separate
   assignee or milestone parameter.

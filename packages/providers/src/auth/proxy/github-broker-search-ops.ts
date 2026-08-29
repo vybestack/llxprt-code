@@ -22,7 +22,8 @@ import {
   resolveFetchLimit,
   validateParams,
 } from './github-broker-validation.js';
-import { augmentSearchError, brokerError } from './github-broker-errors.js';
+import { augmentSearchError } from './github-broker-errors.js';
+import { quoteCountTerm, resolveTotalCount } from './github-broker-count.js';
 import {
   GITHUB_OP_SPECS,
   isGithubRepoName,
@@ -205,78 +206,6 @@ export function buildSearchCountQuery(
 }
 
 /**
- * Re-quotes a term whose value contains whitespace, for the count query only.
- *
- * This is the one place quoting is CORRECT, and it is the exact inverse of the
- * rule the argv builder follows. Terms handed to `gh` as separate argv
- * elements must not be quoted, because gh quotes each value itself when it
- * assembles the API query. Here the query string IS assembled by hand, so
- * nobody else will do it: joining `label:help wanted` unquoted makes the API
- * read `label:help` plus the freetext `wanted`, which matched 0 issues against
- * the 2 the page returned for the same search.
- *
- * @plan PLAN-20260828-ISSUE3407
- * @requirement AC-8
- * @issue 3407
- */
-function quoteCountTerm(term: string): string {
-  if (!/\s/.test(term)) return term;
-  const colon = term.indexOf(':');
-  // A bare multi-word keyword is quoted whole; a qualifier keeps its name
-  // outside the quotes so it is still parsed as a qualifier.
-  return colon === -1
-    ? `"${term}"`
-    : `${term.slice(0, colon)}:"${term.slice(colon + 1)}"`;
-}
-
-/**
- * Builds the argv that asks GitHub for the size of the whole result set.
- *
- * `per_page=1` keeps the payload to a single row: only `total_count` is
- * wanted, and gh's built-in jq extracts it so nothing else crosses the wire.
- *
- * @plan PLAN-20260828-ISSUE3407
- * @requirement AC-8
- * @issue 3407
- */
-export function buildSearchCountArgv(
-  params: Record<string, unknown>,
-  kind: 'issue' | 'pr',
-): string[] {
-  return [
-    'api',
-    '-X',
-    'GET',
-    'search/issues',
-    '-f',
-    `q=${buildSearchCountQuery(params, kind)}`,
-    '-f',
-    'per_page=1',
-    '--jq',
-    '.total_count',
-  ];
-}
-
-/**
- * Parses gh's `--jq .total_count` output, which arrives as raw text.
- *
- * @plan PLAN-20260828-ISSUE3407
- * @requirement AC-8
- * @issue 3407
- */
-export function parseSearchTotal(raw: unknown): number {
-  const text = typeof raw === 'string' ? raw.trim() : '';
-  const value = Number(text);
-  if (!Number.isInteger(value) || value < 0) {
-    throw brokerError(
-      'GITHUB_ERROR',
-      `search: expected a numeric total from gh but received "${text}"`,
-    );
-  }
-  return value;
-}
-
-/**
  * Runs a search and reports how large the full result set is.
  *
  * A page plus a `hasMore` boolean answers "is there more" but not "how
@@ -303,19 +232,15 @@ async function executeSearch(
       ? buildSearchIssuesArgv(params)
       : buildSearchPrsArgv(params);
   const page = shapeSearchPage(await run(argv), params);
-  // Only pay for the count request when the page is actually truncated; a
-  // complete page already knows its own total.
-  const totalCount = page.hasMore
-    ? parseSearchTotal(
-        await run(buildSearchCountArgv(params, kind), { rawOutput: true }),
-      )
-    : page.items.length;
-  // hasMore and totalCount lead the object: a size-truncated response cuts
-  // from the end, and losing the total is exactly the failure this returns it
-  // to prevent.
+  const effectiveQuery = buildSearchCountQuery(params, kind);
+  const totalCount = await resolveTotalCount(page, effectiveQuery, run);
+  // hasMore, totalCount and effectiveQuery lead the object: a size-truncated
+  // response cuts from the end, and losing the total is exactly the failure
+  // returning it exists to prevent.
   return {
     hasMore: page.hasMore,
     totalCount,
+    effectiveQuery,
     [kind === 'issue' ? 'issues' : 'prs']: page.items,
   };
 }

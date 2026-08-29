@@ -13,11 +13,16 @@
  * @pseudocode 003-github-broker.md lines 38-55, 101-126
  */
 
-import type { OpDescriptor, ValidationError } from './github-broker-types.js';
+import type {
+  GhRunner,
+  OpDescriptor,
+  ValidationError,
+} from './github-broker-types.js';
 import {
   resolveFetchLimit,
   validateParams,
 } from './github-broker-validation.js';
+import { resolveTotalCount, stateQualifier } from './github-broker-count.js';
 import {
   GITHUB_OP_SPECS,
   type GithubOpSpec,
@@ -130,12 +135,62 @@ export function shapePrList(rawJson: unknown): readonly ShapedPrListItem[] {
  * @requirement REQ-002, REQ-013
  * @pseudocode 003-github-broker.md lines 38-44, 120-123
  */
+/**
+ * Rebuilds a pr.list call as a GitHub search query, so the same filter can be
+ * counted.
+ *
+ * `closed` maps to `is:closed` rather than excluding merges because that is
+ * what `gh pr list --state closed` actually returns: sampled on this
+ * repository it was 196 merged against 4 plain-closed, and search's
+ * `is:closed` includes merges too (1323 = 1271 merged + 52 unmerged), so the
+ * count describes the rows it accompanies.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-8
+ * @issue 3407
+ */
+export function buildPrListCountQuery(params: Record<string, unknown>): string {
+  const parts: string[] = [];
+  const state = stateQualifier(params.state ?? 'open');
+  if (state !== null) parts.push(state);
+  if (typeof params.repo === 'string' && params.repo.length > 0) {
+    parts.push(`repo:${params.repo}`);
+  }
+  parts.push('type:pr');
+  return parts.join(' ');
+}
+
+/**
+ * Runs pr.list and reports how many pull requests match in total.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-8
+ * @issue 3407
+ */
+async function executePrList(
+  params: Record<string, unknown>,
+  run: GhRunner,
+): Promise<Record<string, unknown>> {
+  const page = windowByLimit(
+    shapePrList(await run(buildPrListArgv(params))),
+    params,
+  );
+  const effectiveQuery = buildPrListCountQuery(params);
+  return {
+    hasMore: page.hasMore,
+    totalCount: await resolveTotalCount(page, effectiveQuery, run),
+    effectiveQuery,
+    prs: page.items,
+  };
+}
+
 export const prListDescriptor: OpDescriptor = {
   name: 'pr.list',
   requiredParams: PR_LIST_SPEC.required,
   mutating: PR_LIST_SPEC.mutating,
   params: PR_LIST_SPEC.params,
   buildArgv: (params) => buildPrListArgv(params),
+  execute: (params, run) => executePrList(params, run),
   shape: (rawJson, params) => {
     const { items, hasMore } = windowByLimit(shapePrList(rawJson), params);
     return { hasMore, prs: items };

@@ -13,7 +13,11 @@
  * @pseudocode 003-github-broker.md lines 38-55, 101-126
  */
 
-import type { OpDescriptor, ValidationError } from './github-broker-types.js';
+import type {
+  GhRunner,
+  OpDescriptor,
+  ValidationError,
+} from './github-broker-types.js';
 import { validateParams } from './github-broker-validation.js';
 import {
   GITHUB_OP_SPECS,
@@ -34,6 +38,11 @@ import {
   windowByLimit,
 } from './github-broker-shaping.js';
 import { resolveFetchLimit } from './github-broker-validation.js';
+import {
+  labelQualifiers,
+  resolveTotalCount,
+  stateQualifier,
+} from './github-broker-count.js';
 
 const ISSUE_VIEW_SPEC: GithubOpSpec = GITHUB_OP_SPECS['issue.view'];
 const ISSUE_LIST_SPEC: GithubOpSpec = GITHUB_OP_SPECS['issue.list'];
@@ -277,12 +286,74 @@ export function shapeIssueList(
  * @requirement REQ-002, REQ-013
  * @pseudocode 003-github-broker.md lines 38-44, 120-123
  */
+/**
+ * Rebuilds an issue.list call as a GitHub search query, so the same filters
+ * can be counted.
+ *
+ * `search` is spliced verbatim because it is already GitHub search syntax
+ * (that is what `gh issue list --search` takes), quotes and all. The mapping
+ * was checked against live counts rather than assumed: label, `no:assignee`
+ * and `milestone:` filters each produced identical numbers from `gh issue
+ * list` and from the search API (33/33, 143/143, 141/141), as did an
+ * unfiltered open count (210/210).
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-8
+ * @issue 3407
+ */
+export function buildIssueListCountQuery(
+  params: Record<string, unknown>,
+): string {
+  const parts: string[] = [];
+  if (typeof params.search === 'string' && params.search.length > 0) {
+    parts.push(params.search);
+  }
+  const state = stateQualifier(params.state ?? 'open');
+  if (state !== null) parts.push(state);
+  parts.push(...labelQualifiers(params.label));
+  if (typeof params.repo === 'string' && params.repo.length > 0) {
+    parts.push(`repo:${params.repo}`);
+  }
+  parts.push('type:issue');
+  return parts.join(' ');
+}
+
+/**
+ * Runs issue.list and reports how many issues match in total.
+ *
+ * issue.list is the operation an agent reaches for when counting, because it
+ * is the one that filters richly and returns `milestone`. Leaving the total
+ * to search.issues alone meant "how many issues are on milestone X" needed
+ * two operations, which every evaluated model called out.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-8
+ * @issue 3407
+ */
+async function executeIssueList(
+  params: Record<string, unknown>,
+  run: GhRunner,
+): Promise<Record<string, unknown>> {
+  const page = windowByLimit(
+    shapeIssueList(await run(buildIssueListArgv(params))),
+    params,
+  );
+  const effectiveQuery = buildIssueListCountQuery(params);
+  return {
+    hasMore: page.hasMore,
+    totalCount: await resolveTotalCount(page, effectiveQuery, run),
+    effectiveQuery,
+    issues: page.items,
+  };
+}
+
 export const issueListDescriptor: OpDescriptor = {
   name: 'issue.list',
   requiredParams: ISSUE_LIST_SPEC.required,
   mutating: ISSUE_LIST_SPEC.mutating,
   params: ISSUE_LIST_SPEC.params,
   buildArgv: (params) => buildIssueListArgv(params),
+  execute: (params, run) => executeIssueList(params, run),
   shape: (rawJson, params) => {
     const { items, hasMore } = windowByLimit(shapeIssueList(rawJson), params);
     return { hasMore, issues: items };

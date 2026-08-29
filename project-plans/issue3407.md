@@ -248,19 +248,37 @@ still rated the `issue.create` + `type` rejection the best error they hit.
   (AC-3). Note this PR increases pressure on that endpoint, since a truncated search makes a
   second search-API request for the count.
 
-### Findings from the re-run, NOT fixed
+### AC-9: A caller can see which query actually ran
 
-- `issue.list` and `pr.list` still have no `totalCount`; only the search ops do. All three
-  models raised it, and it is a real asymmetry: `issue.list` filters richly and returns
-  `milestone`, while `search.issues` can count but has no milestone field, so "how many issues
-  are on milestone X" needs two operations. Not fixed because a total for `issue.list` would
-  have to come from the search API while the rows come from GraphQL, so the count could
-  disagree with the list it accompanies, and because it would add search-endpoint calls to the
-  throttling problem above. Worth doing deliberately rather than as a footnote.
-- `-label:bug` against a repository with no `bug` label excludes nothing and returns the
-  unfiltered total. All three flagged that this is indistinguishable from a dropped filter.
-  It is correct GitHub search behaviour; two models suggested echoing the effective query in
-  the response, which is a reasonable follow-up.
+Given any list or search operation, when results are shaped, then
+`effectiveQuery` reports the query that was executed, including the repository scope and the
+`type:issue`/`type:pr` discriminator gh appends invisibly. `-label:bug` against a repository
+with no `bug` label excludes nothing and returns the unfiltered total, which is
+indistinguishable from the filter having been dropped; all three models flagged that, and two
+independently proposed this remedy.
+
+### Findings from the re-run, since fixed
+
+Both items the first re-run left open were taken up rather than deferred.
+
+`issue.list` and `pr.list` now carry `totalCount` too. The concern that held it back was that
+their rows come from GraphQL while a total comes from the search index, so the count might
+disagree with the list it accompanies. That was measured rather than assumed, and the two
+agree exactly on every uncapped comparison available:
+
+| query | `gh` list | search `total_count` |
+|---|---|---|
+| open issues | 210 | 210 |
+| open pull requests | 66 | 66 |
+| open issues labelled `Tooling` | 33 | 33 |
+| open issues `no:assignee` | 143 | 143 |
+| open issues `milestone:0.12.0` | 141 | 141 |
+
+`--state closed` needed care in the mapping: `gh pr list --state closed` includes merged pull
+requests (sampled: 196 merged against 4 plain-closed) and search's `is:closed` does too, so
+`closed` maps to `is:closed` rather than to an unmerged-only filter. The count request is still
+only made when the page is truncated, which keeps the added pressure off the throttled search
+endpoint in the common case.
 
 Known remaining limitation, deliberately not fixed here: results past the `limit` ceiling of
 100 are still unreachable, because `gh search` exposes no page flag and the v1 protocol frame
