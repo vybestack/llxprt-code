@@ -121,6 +121,33 @@ Shaping MUST reduce assignees to logins and milestone to its title string: the r
 carries a multi-paragraph `description` that would otherwise be repeated on every item of
 every list response for no benefit.
 
+### AC-6: A page is never mistaken for a total
+
+Given any list or search operation, when the results are shaped, then the broker requests one
+row more than the caller's limit, returns at most the limit, and reports `hasMore`. The
+repository has over 200 open issues against a default limit of 30, so a returned count of 30
+previously read as a total with nothing to contradict it.
+
+### AC-7: State is one value across operations
+
+Given `issue.list`, `pr.list` and the search operations, when a state is shaped, then it is
+lower case. gh reports `OPEN` from `issue list` but `open` from `search issues`, so the same
+issue compared unequal across two operations. Lower case is the form the tool's own `state`
+parameter accepts, so a shaped state round-trips back into a request.
+
+### AC-8: Counting does not require paging
+
+Given `search.issues` or `search.prs` whose page is truncated, when the results are shaped,
+then `totalCount` reports the size of the whole result set, obtained from the search API's
+`total_count`. A complete page uses its own length and issues no second request.
+
+Evidence: three models (opus5, zai/glm-5.3, dsflash/DeepSeek-V4) were each given the same
+eight realistic tasks through the tool alone. All three independently invented the same
+workaround for counting — partition the query into `created:` date buckets under the 100 item
+ceiling and sum them — spending roughly twenty calls on it, and one still miscounted by hand.
+All three named a missing total as their top finding. After this change the same question is
+one call.
+
 ## Inputs and boundaries
 
 - Touch `packages/providers/src/auth/proxy/github-broker-search-ops.ts` (query tokenization and
@@ -172,10 +199,33 @@ Extend existing files; no new test files.
   - Outbound HTTPS, localhost port binding, `/tmp` and `$HOME` writes, and git push
     authentication over the forwarded SSH agent all work; `/etc` writes are denied.
 
+## Model evaluation
+
+Three models ran the same eight-task script against the tool with no shell and no `gh` binary
+available (`--approval-mode yolo` is required for the tool to be registered at all in
+non-interactive mode; without it the registry silently omits every tool that can prompt).
+Transcripts are in `tmp/verify3407/eval-*.log`.
+
+Unanimous findings, all fixed here: no way to obtain a total (AC-8); `pr.list` and the search
+results omitted `author` that gh had all along (AC-5); search results were a thinner projection
+than `issue.list` for the same underlying objects. Two of three also flagged the `state`
+casing split (AC-7).
+
+Unanimous positives, recorded so they are not regressed: the `issue.create` + `type` rejection
+was called "the most actionable tool error I've encountered" and "a model of what a tool error
+should say"; the `search` qualifier documentation and the do-not-quote warning were followed
+correctly by all three; `issue.view` answered a four-field question in one call.
+
+Known remaining limitation, deliberately not fixed here: results past the `limit` ceiling of
+100 are still unreachable, because `gh search` exposes no page flag and the v1 protocol frame
+cap of 64 KiB makes simply raising the ceiling unsafe. `totalCount` removes the reason most
+callers wanted paging (counting); enumerating beyond 100 still requires narrowing the query.
+
 ## Out of scope
 
-- `gh search issues --json` offers `assignees` but has no `milestone` field at all, so AC-5
-  covers `issue.view` and `issue.list` only; search result shaping is unchanged.
+- `gh search issues --json` has no `milestone` field at all, so AC-5's milestone half covers
+  `issue.view` and `issue.list` only. Search results do carry `assignees`, `author` and
+  `labels`, which are now shaped.
 - The repo is publicly readable (unauthenticated `raw.githubusercontent.com` fetch of the main
   README returned 200), so none of the observed errors were permission-related.
 

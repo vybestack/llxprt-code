@@ -14,7 +14,10 @@
  */
 
 import type { OpDescriptor, ValidationError } from './github-broker-types.js';
-import { resolveLimit, validateParams } from './github-broker-validation.js';
+import {
+  resolveFetchLimit,
+  validateParams,
+} from './github-broker-validation.js';
 import {
   GITHUB_OP_SPECS,
   type GithubOpSpec,
@@ -27,10 +30,12 @@ import {
   extractComments,
   extractLabels,
   extractNumber,
+  extractState,
   extractString,
   truncateWithMarker,
   type ShapedComment,
   assertListShape,
+  windowByLimit,
 } from './github-broker-shaping.js';
 
 const PR_LIST_SPEC: GithubOpSpec = GITHUB_OP_SPECS['pr.list'];
@@ -66,12 +71,12 @@ export function buildPrListArgv(params: Record<string, unknown>): string[] {
     'pr',
     'list',
     '--json',
-    'number,title,state,labels,updatedAt',
+    'number,title,state,author,labels,updatedAt',
   ];
   if (typeof params.state === 'string' && params.state.length > 0) {
     argv.push('--state', params.state);
   }
-  argv.push('--limit', String(resolveLimit(params)));
+  argv.push('--limit', String(resolveFetchLimit(params)));
   if (typeof params.repo === 'string' && params.repo.length > 0) {
     argv.push('--repo', params.repo);
   }
@@ -89,6 +94,7 @@ export interface ShapedPrListItem {
   readonly number: number;
   readonly title: string;
   readonly state: string;
+  readonly author: string;
   readonly labels: readonly string[];
   readonly updatedAt: string;
 }
@@ -109,7 +115,8 @@ export function shapePrList(rawJson: unknown): readonly ShapedPrListItem[] {
     return {
       number: extractNumber(obj.number),
       title: extractString(obj.title, ''),
-      state: extractString(obj.state, ''),
+      state: extractState(obj.state),
+      author: extractAuthor(obj.author),
       labels: extractLabels(obj.labels),
       updatedAt: extractString(obj.updatedAt, ''),
     };
@@ -129,7 +136,10 @@ export const prListDescriptor: OpDescriptor = {
   mutating: PR_LIST_SPEC.mutating,
   params: PR_LIST_SPEC.params,
   buildArgv: (params) => buildPrListArgv(params),
-  shape: (rawJson) => ({ prs: shapePrList(rawJson) }),
+  shape: (rawJson, params) => {
+    const { items, hasMore } = windowByLimit(shapePrList(rawJson), params);
+    return { prs: items, hasMore };
+  },
 };
 
 // ─── pr.view ─────────────────────────────────────────────────────────────────
@@ -212,7 +222,7 @@ export function shapePrView(rawJson: unknown): ShapedPrView {
   return {
     number: extractNumber(raw.number),
     title: extractString(raw.title, ''),
-    state: extractString(raw.state, ''),
+    state: extractState(raw.state),
     author: extractAuthor(raw.author),
     labels: extractLabels(raw.labels),
     body: extractString(raw.body, ''),
@@ -411,7 +421,7 @@ export function shapePrChecks(rawJson: unknown): ShapedPrChecks {
       checks.push({
         name: extractString(obj.name, ''),
         bucket: extractString(obj.bucket, ''),
-        state: extractString(obj.state, ''),
+        state: extractState(obj.state),
         link: extractString(obj.link, ''),
       });
     }

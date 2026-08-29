@@ -20,6 +20,43 @@ import {
   makeBrokerError,
   BrokerErrorException,
 } from './github-broker-errors.js';
+import { resolveLimit } from './github-broker-validation.js';
+
+/**
+ * A page of shaped items plus whether the query had more to give.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-6
+ * @issue 3407
+ */
+export interface WindowedItems<T> {
+  readonly items: readonly T[];
+  readonly hasMore: boolean;
+}
+
+/**
+ * Trims the over-fetched probe row (see `resolveFetchLimit`) and reports
+ * whether more results exist.
+ *
+ * Without this, a list returning exactly `limit` rows is indistinguishable
+ * from a list that happens to have exactly `limit` matches, so an agent
+ * reports a page size as a total. That is the same class of silent wrong
+ * answer as the missing milestone field: nothing errors, the number is just
+ * incorrect.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-6
+ * @issue 3407
+ */
+export function windowByLimit<T>(
+  items: readonly T[],
+  params: Record<string, unknown>,
+): WindowedItems<T> {
+  const limit = resolveLimit(params);
+  return items.length > limit
+    ? { items: items.slice(0, limit), hasMore: true }
+    : { items, hasMore: false };
+}
 
 /**
  * The shaped comment in the issue.view / pr.view contract.
@@ -70,6 +107,22 @@ export function extractNumber(value: unknown): number {
  */
 export function extractString(value: unknown, def: string): string {
   return typeof value === 'string' ? value : def;
+}
+
+/**
+ * Extracts an issue/PR state, normalised to lower case.
+ *
+ * gh reports `OPEN` from `issue list` and `pr list` but `open` from `search
+ * issues`, so the same logical issue compared across two operations looked
+ * like two different states. Lower case is the form the tool's own `state`
+ * parameter accepts, so a shaped state now round-trips back into a request.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-7
+ * @issue 3407
+ */
+export function extractState(value: unknown): string {
+  return typeof value === 'string' ? value.toLowerCase() : '';
 }
 
 /**

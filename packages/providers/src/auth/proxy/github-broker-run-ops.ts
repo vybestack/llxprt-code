@@ -14,7 +14,10 @@
  */
 
 import type { OpDescriptor, ValidationError } from './github-broker-types.js';
-import { resolveLimit, validateParams } from './github-broker-validation.js';
+import {
+  resolveFetchLimit,
+  validateParams,
+} from './github-broker-validation.js';
 import {
   GITHUB_OP_SPECS,
   type GithubOpSpec,
@@ -24,6 +27,7 @@ import {
   extractNumber,
   extractString,
   assertListShape,
+  windowByLimit,
 } from './github-broker-shaping.js';
 
 const RUN_LIST_SPEC: GithubOpSpec = GITHUB_OP_SPECS['run.list'];
@@ -55,7 +59,7 @@ export function buildRunListArgv(params: Record<string, unknown>): string[] {
     '--json',
     'databaseId,name,status,conclusion,headBranch,createdAt',
   ];
-  argv.push('--limit', String(resolveLimit(params)));
+  argv.push('--limit', String(resolveFetchLimit(params)));
   if (typeof params.branch === 'string' && params.branch.length > 0) {
     argv.push('--branch', params.branch);
   }
@@ -115,5 +119,8 @@ export const runListDescriptor: OpDescriptor = {
   mutating: RUN_LIST_SPEC.mutating,
   params: RUN_LIST_SPEC.params,
   buildArgv: (params) => buildRunListArgv(params),
-  shape: (rawJson) => ({ runs: shapeRunList(rawJson) }),
+  shape: (rawJson, params) => {
+    const { items, hasMore } = windowByLimit(shapeRunList(rawJson), params);
+    return { runs: items, hasMore };
+  },
 };

@@ -28,10 +28,12 @@ import {
   extractLabels,
   extractMilestone,
   extractNumber,
+  extractState,
   extractString,
   type ShapedComment,
+  windowByLimit,
 } from './github-broker-shaping.js';
-import { resolveLimit } from './github-broker-validation.js';
+import { resolveFetchLimit } from './github-broker-validation.js';
 
 const ISSUE_VIEW_SPEC: GithubOpSpec = GITHUB_OP_SPECS['issue.view'];
 const ISSUE_LIST_SPEC: GithubOpSpec = GITHUB_OP_SPECS['issue.list'];
@@ -119,7 +121,7 @@ export function shapeIssueView(rawJson: unknown): ShapedIssueView {
   return {
     number: extractNumber(raw.number),
     title: extractString(raw.title, ''),
-    state: extractString(raw.state, ''),
+    state: extractState(raw.state),
     author: extractAuthor(raw.author),
     labels: extractLabels(raw.labels),
     assignees: extractAssignees(raw.assignees),
@@ -183,7 +185,7 @@ export function buildIssueListArgv(params: Record<string, unknown>): string[] {
     'issue',
     'list',
     '--json',
-    'number,title,state,labels,updatedAt,assignees,milestone',
+    'number,title,state,author,labels,updatedAt,assignees,milestone',
   ];
   if (typeof params.search === 'string' && params.search.length > 0) {
     argv.push('--search', params.search);
@@ -192,7 +194,7 @@ export function buildIssueListArgv(params: Record<string, unknown>): string[] {
     argv.push('--state', params.state);
   }
   appendLabelArgs(argv, params.label);
-  argv.push('--limit', String(resolveLimit(params)));
+  argv.push('--limit', String(resolveFetchLimit(params)));
   if (typeof params.repo === 'string' && params.repo.length > 0) {
     argv.push('--repo', params.repo);
   }
@@ -232,6 +234,7 @@ export interface ShapedIssueListItem {
   readonly number: number;
   readonly title: string;
   readonly state: string;
+  readonly author: string;
   readonly labels: readonly string[];
   readonly assignees: readonly string[];
   /** The milestone title, null when the issue has no milestone. */
@@ -257,7 +260,8 @@ export function shapeIssueList(
     return {
       number: extractNumber(obj.number),
       title: extractString(obj.title, ''),
-      state: extractString(obj.state, ''),
+      state: extractState(obj.state),
+      author: extractAuthor(obj.author),
       labels: extractLabels(obj.labels),
       assignees: extractAssignees(obj.assignees),
       milestone: extractMilestone(obj.milestone),
@@ -279,5 +283,8 @@ export const issueListDescriptor: OpDescriptor = {
   mutating: ISSUE_LIST_SPEC.mutating,
   params: ISSUE_LIST_SPEC.params,
   buildArgv: (params) => buildIssueListArgv(params),
-  shape: (rawJson) => ({ issues: shapeIssueList(rawJson) }),
+  shape: (rawJson, params) => {
+    const { items, hasMore } = windowByLimit(shapeIssueList(rawJson), params);
+    return { issues: items, hasMore };
+  },
 };

@@ -842,7 +842,10 @@ describe('GitHub broker pure functions (P08)', () => {
       const shaped = shapeIssueView(raw);
       expect(shaped.number).toBe(42);
       expect(shaped.title).toBe('Test Issue');
-      expect(shaped.state).toBe('OPEN');
+      // gh reports OPEN here but `open` from search; the shaped contract
+      // normalises to the lower-case form the `state` parameter accepts, so
+      // the same issue compares equal across operations (issue 3407).
+      expect(shaped.state).toBe('open');
       expect(shaped.author).toBe('testuser');
       expect(shaped.labels).toStrictEqual(['bug']);
       expect(shaped.assignees).toStrictEqual([]);

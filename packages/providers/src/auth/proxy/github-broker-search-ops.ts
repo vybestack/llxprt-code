@@ -13,9 +13,16 @@
  * @pseudocode 003-github-broker.md lines 38-55, 120-123
  */
 
-import type { OpDescriptor, ValidationError } from './github-broker-types.js';
-import { resolveLimit, validateParams } from './github-broker-validation.js';
-import { augmentSearchError } from './github-broker-errors.js';
+import type {
+  GhRunner,
+  OpDescriptor,
+  ValidationError,
+} from './github-broker-types.js';
+import {
+  resolveFetchLimit,
+  validateParams,
+} from './github-broker-validation.js';
+import { augmentSearchError, brokerError } from './github-broker-errors.js';
 import {
   GITHUB_OP_SPECS,
   isGithubRepoName,
@@ -23,9 +30,15 @@ import {
 } from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 import {
   assertNotPartialSuccess,
+  extractAssignees,
+  extractAuthor,
+  extractLabels,
   extractNumber,
+  extractState,
   extractString,
   assertListShape,
+  windowByLimit,
+  type WindowedItems,
 } from './github-broker-shaping.js';
 
 const SEARCH_ISSUES_SPEC: GithubOpSpec = GITHUB_OP_SPECS['search.issues'];
@@ -167,6 +180,137 @@ function hasNonEmptyRepo(params: Record<string, unknown>): boolean {
 }
 
 /**
+ * Rebuilds the caller's search as a single GitHub search-API `q` string.
+ *
+ * The lifted `repo:` term and the issue/PR discriminator have to go back INTO
+ * the query here, because the count endpoint takes one opaque query rather
+ * than gh's flags. Terms are joined verbatim and unquoted, matching what the
+ * argv builder sends, so the count describes the same result set as the page.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-8
+ * @issue 3407
+ */
+export function buildSearchCountQuery(
+  params: Record<string, unknown>,
+  kind: 'issue' | 'pr',
+): string {
+  const query = typeof params.query === 'string' ? params.query : '';
+  const { terms, liftedRepo } = normalizeSearchQuery(query);
+  const repo = hasNonEmptyRepo(params) ? String(params.repo) : liftedRepo;
+  const parts = [...terms];
+  if (repo !== null) parts.push(`repo:${repo}`);
+  parts.push(`type:${kind}`);
+  return parts.join(' ');
+}
+
+/**
+ * Builds the argv that asks GitHub for the size of the whole result set.
+ *
+ * `per_page=1` keeps the payload to a single row: only `total_count` is
+ * wanted, and gh's built-in jq extracts it so nothing else crosses the wire.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-8
+ * @issue 3407
+ */
+export function buildSearchCountArgv(
+  params: Record<string, unknown>,
+  kind: 'issue' | 'pr',
+): string[] {
+  return [
+    'api',
+    '-X',
+    'GET',
+    'search/issues',
+    '-f',
+    `q=${buildSearchCountQuery(params, kind)}`,
+    '-f',
+    'per_page=1',
+    '--jq',
+    '.total_count',
+  ];
+}
+
+/**
+ * Parses gh's `--jq .total_count` output, which arrives as raw text.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-8
+ * @issue 3407
+ */
+export function parseSearchTotal(raw: unknown): number {
+  const text = typeof raw === 'string' ? raw.trim() : '';
+  const value = Number(text);
+  if (!Number.isInteger(value) || value < 0) {
+    throw brokerError(
+      'GITHUB_ERROR',
+      `search: expected a numeric total from gh but received "${text}"`,
+    );
+  }
+  return value;
+}
+
+/**
+ * Runs a search and reports how large the full result set is.
+ *
+ * A page plus a `hasMore` boolean answers "is there more" but not "how
+ * many", and "how many open issues are there" is an ordinary question. With
+ * only the boolean, counting past the 100-item ceiling means splitting the
+ * query into disjoint date buckets and summing them by hand — three separate
+ * models independently invented that workaround during evaluation, spending
+ * roughly twenty calls on what is now one, and one of them still miscounted.
+ *
+ * The extra request is only made when the page is actually truncated; when
+ * everything fits, the page length IS the total and no second call happens.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-8
+ * @issue 3407
+ */
+async function executeSearch(
+  params: Record<string, unknown>,
+  run: GhRunner,
+  kind: 'issue' | 'pr',
+): Promise<Record<string, unknown>> {
+  const argv =
+    kind === 'issue'
+      ? buildSearchIssuesArgv(params)
+      : buildSearchPrsArgv(params);
+  const page = shapeSearchPage(await run(argv), params);
+  // Only pay for the count request when the page is actually truncated; a
+  // complete page already knows its own total.
+  const totalCount = page.hasMore
+    ? parseSearchTotal(
+        await run(buildSearchCountArgv(params, kind), { rawOutput: true }),
+      )
+    : page.items.length;
+  return {
+    [kind === 'issue' ? 'issues' : 'prs']: page.items,
+    hasMore: page.hasMore,
+    totalCount,
+  };
+}
+
+/**
+ * The shaped search page: the windowed items under their op-specific key,
+ * plus `hasMore`.
+ *
+ * `execute` builds on this rather than duplicating it, so the descriptor's
+ * `shape` and the executed path cannot describe two different contracts.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-8
+ * @issue 3407
+ */
+export function shapeSearchPage(
+  rawJson: unknown,
+  params: Record<string, unknown>,
+): WindowedItems<ShapedSearchItem> {
+  return windowByLimit(shapeSearchResults(rawJson), params);
+}
+
+/**
  * Validates parameters for search.issues.
  *
  * @plan PLAN-20260731-GHBROKER.P10, PLAN-20260731-GHBROKER.P15
@@ -198,9 +342,9 @@ export function buildSearchIssuesArgv(
     'search',
     'issues',
     '--json',
-    'number,title,state,repository,updatedAt',
+    'number,title,state,repository,updatedAt,assignees,author,labels',
   ];
-  argv.push('--limit', String(resolveLimit(params)));
+  argv.push('--limit', String(resolveFetchLimit(params)));
   // Must come last: it emits --repo and then the `--` terminator followed by
   // the query terms, so every flag has to already be on argv.
   appendSearchQuery(argv, params);
@@ -219,6 +363,10 @@ export interface ShapedSearchItem {
   readonly title: string;
   readonly state: string;
   readonly repository: string;
+  readonly author: string;
+  readonly labels: readonly string[];
+  /** Assignee logins; gh search exposes assignees but has no milestone field. */
+  readonly assignees: readonly string[];
   readonly updatedAt: string;
 }
 
@@ -240,8 +388,11 @@ export function shapeSearchResults(
     return {
       number: extractNumber(obj.number),
       title: extractString(obj.title, ''),
-      state: extractString(obj.state, ''),
+      state: extractState(obj.state),
       repository: extractRepository(obj.repository),
+      author: extractAuthor(obj.author),
+      labels: extractLabels(obj.labels),
+      assignees: extractAssignees(obj.assignees),
       updatedAt: extractString(obj.updatedAt, ''),
     };
   });
@@ -277,7 +428,11 @@ export const searchIssuesDescriptor: OpDescriptor = {
   mutating: SEARCH_ISSUES_SPEC.mutating,
   params: SEARCH_ISSUES_SPEC.params,
   buildArgv: (params) => buildSearchIssuesArgv(params),
-  shape: (rawJson) => ({ issues: shapeSearchResults(rawJson) }),
+  execute: (params, run) => executeSearch(params, run, 'issue'),
+  shape: (rawJson, params) => {
+    const { items, hasMore } = shapeSearchPage(rawJson, params);
+    return { issues: items, hasMore };
+  },
   augmentError: augmentSearchError,
 };
 
@@ -313,9 +468,9 @@ export function buildSearchPrsArgv(params: Record<string, unknown>): string[] {
     'search',
     'prs',
     '--json',
-    'number,title,state,repository,updatedAt',
+    'number,title,state,repository,updatedAt,assignees,author,labels',
   ];
-  argv.push('--limit', String(resolveLimit(params)));
+  argv.push('--limit', String(resolveFetchLimit(params)));
   // Must come last: it emits --repo and then the `--` terminator followed by
   // the query terms, so every flag has to already be on argv.
   appendSearchQuery(argv, params);
@@ -335,6 +490,10 @@ export const searchPrsDescriptor: OpDescriptor = {
   mutating: SEARCH_PRS_SPEC.mutating,
   params: SEARCH_PRS_SPEC.params,
   buildArgv: (params) => buildSearchPrsArgv(params),
-  shape: (rawJson) => ({ prs: shapeSearchResults(rawJson) }),
+  execute: (params, run) => executeSearch(params, run, 'pr'),
+  shape: (rawJson, params) => {
+    const { items, hasMore } = shapeSearchPage(rawJson, params);
+    return { prs: items, hasMore };
+  },
   augmentError: augmentSearchError,
 };

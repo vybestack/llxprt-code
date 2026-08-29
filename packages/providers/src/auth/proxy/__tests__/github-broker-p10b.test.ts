@@ -51,6 +51,13 @@ import {
   validatePrReviewsParams,
 } from '../github-broker-ops.js';
 import { MAX_LIMIT } from '../github-broker-validation.js';
+import type { GhRunner } from '../github-broker-types.js';
+import {
+  searchIssuesDescriptor,
+  searchPrsDescriptor,
+} from '../github-broker-search-ops.js';
+import { shapeIssueList } from '../github-broker-issue-ops.js';
+import { buildPrListArgv } from '../github-broker-pr-ops.js';
 
 const isWindows = process.platform === 'win32';
 const RUN_NETWORK_TESTS = process.env.RUN_GH_NETWORK_TESTS === '1';
@@ -191,10 +198,20 @@ describe('search pure functions (P10)', () => {
       expect(argv[jsonIdx + 1]).not.toContain('body');
     });
 
-    it('defaults limit to 30', () => {
+    /**
+     * gh is asked for ONE more row than the caller's limit, so a full page can
+     * be distinguished from a complete result set; `windowByLimit` trims the
+     * probe row and reports `hasMore`. Asserting the raw 30 here would pin the
+     * ambiguity this fixes.
+     *
+     * @plan PLAN-20260828-ISSUE3407
+     * @requirement AC-6
+     * @issue 3407
+     */
+    it('over-fetches one past the default limit of 30', () => {
       const argv = buildSearchIssuesArgv({ query: 'test' });
       const idx = argv.indexOf('--limit');
-      expect(argv[idx + 1]).toBe('30');
+      expect(argv[idx + 1]).toBe('31');
     });
 
     it('appends --repo when provided', () => {
@@ -551,10 +568,20 @@ describe('run.list pure functions (P10)', () => {
       expect(argv[idx + 1]).toBe('feature');
     });
 
-    it('defaults limit to 30', () => {
+    /**
+     * gh is asked for ONE more row than the caller's limit, so a full page can
+     * be distinguished from a complete result set; `windowByLimit` trims the
+     * probe row and reports `hasMore`. Asserting the raw 30 here would pin the
+     * ambiguity this fixes.
+     *
+     * @plan PLAN-20260828-ISSUE3407
+     * @requirement AC-6
+     * @issue 3407
+     */
+    it('over-fetches one past the default limit of 30', () => {
       const argv = buildRunListArgv({});
       const idx = argv.indexOf('--limit');
-      expect(argv[idx + 1]).toBe('30');
+      expect(argv[idx + 1]).toBe('31');
     });
 
     it('appends --repo when provided', () => {
@@ -617,10 +644,20 @@ describe('label.list pure functions (P10)', () => {
       expect(argv[jsonIdx + 1]).toContain('description');
     });
 
-    it('defaults limit to 30', () => {
+    /**
+     * gh is asked for ONE more row than the caller's limit, so a full page can
+     * be distinguished from a complete result set; `windowByLimit` trims the
+     * probe row and reports `hasMore`. Asserting the raw 30 here would pin the
+     * ambiguity this fixes.
+     *
+     * @plan PLAN-20260828-ISSUE3407
+     * @requirement AC-6
+     * @issue 3407
+     */
+    it('over-fetches one past the default limit of 30', () => {
       const argv = buildLabelListArgv({});
       const idx = argv.indexOf('--limit');
-      expect(argv[idx + 1]).toBe('30');
+      expect(argv[idx + 1]).toBe('31');
     });
 
     it('appends --repo when provided', () => {
@@ -927,4 +964,171 @@ describe.skipIf(skipNetwork)('GitHub broker P10 end-to-end (real gh)', () => {
     expect(result.ok).toBe(true);
     assertListExcludesBodies(result.data, 'runs');
   }, 30000);
+});
+
+/**
+ * Issue #3407: a page plus a `hasMore` boolean answers "is there more" but
+ * not "how many". Three different models evaluated against this tool all
+ * invented the same workaround — split the query into date buckets and sum
+ * them — spending roughly twenty calls on a question that is one call with a
+ * total, and one of them still miscounted by hand.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-8
+ * @issue 3407
+ */
+describe('issue #3407: search reports the size of the whole result set', () => {
+  /** Builds `count` raw gh search rows. */
+  function rawResults(count: number): unknown[] {
+    return Array.from({ length: count }, (_, i) => ({
+      number: i + 1,
+      title: `T${i}`,
+      state: 'open',
+      repository: { nameWithOwner: 'vybestack/llxprt-code' },
+      author: { login: 'acoliver' },
+      labels: [],
+      assignees: [],
+      updatedAt: '2026-08-01T00:00:00Z',
+    }));
+  }
+
+  /**
+   * Records every argv the op runs, so the test asserts on the real gh
+   * invocations rather than on a mock's internal bookkeeping.
+   */
+  function recordingRunner(responses: readonly unknown[]): {
+    run: GhRunner;
+    argvs: string[][];
+  } {
+    const argvs: string[][] = [];
+    let call = 0;
+    const run: GhRunner = async (argv) => {
+      argvs.push([...argv]);
+      return responses[call++];
+    };
+    return { run, argvs };
+  }
+
+  /**
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-8
+   * @issue 3407
+   */
+  it('asks GitHub for the total only when the page is truncated', async () => {
+    const { run, argvs } = recordingRunner([rawResults(31), '206\n']);
+    const result = (await searchIssuesDescriptor.execute!(
+      { query: 'is:open', repo: 'vybestack/llxprt-code' },
+      run,
+      new AbortController().signal,
+    )) as { issues: readonly unknown[]; hasMore: boolean; totalCount: number };
+
+    expect(result.issues).toHaveLength(30);
+    expect(result.hasMore).toBe(true);
+    expect(result.totalCount).toBe(206);
+
+    // Second call is the count request, and it rebuilds the SAME query: the
+    // lifted repo scope and the issue/PR discriminator go back into `q`.
+    expect(argvs).toHaveLength(2);
+    const q = argvs[1][argvs[1].indexOf('-f') + 1];
+    expect(q).toBe('q=is:open repo:vybestack/llxprt-code type:issue');
+    expect(argvs[1]).toContain('--jq');
+    expect(argvs[1]).toContain('.total_count');
+  });
+
+  /**
+   * A complete page already knows its own size, so paying for a second round
+   * trip would be waste.
+   *
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-8
+   * @issue 3407
+   */
+  it('uses the page length and makes no extra call when nothing is truncated', async () => {
+    const { run, argvs } = recordingRunner([rawResults(4)]);
+    const result = (await searchIssuesDescriptor.execute!(
+      { query: 'is:open' },
+      run,
+      new AbortController().signal,
+    )) as { issues: readonly unknown[]; hasMore: boolean; totalCount: number };
+
+    expect(result.hasMore).toBe(false);
+    expect(result.totalCount).toBe(4);
+    expect(argvs).toHaveLength(1);
+  });
+
+  /**
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-8
+   * @issue 3407
+   */
+  it('search.prs counts pull requests, not issues', async () => {
+    const { run, argvs } = recordingRunner([rawResults(31), '68\n']);
+    const result = (await searchPrsDescriptor.execute!(
+      { query: 'is:open', repo: 'vybestack/llxprt-code' },
+      run,
+      new AbortController().signal,
+    )) as { prs: readonly unknown[]; totalCount: number };
+
+    expect(result.totalCount).toBe(68);
+    expect(argvs[1][argvs[1].indexOf('-f') + 1]).toContain('type:pr');
+  });
+
+  /**
+   * A non-numeric total means gh returned something unexpected; surfacing it
+   * beats reporting a silently wrong count, which is the whole point here.
+   *
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-8
+   * @issue 3407
+   */
+  it('rejects a non-numeric total rather than inventing a count', async () => {
+    const { run } = recordingRunner([rawResults(31), 'not a number']);
+    await expect(
+      searchIssuesDescriptor.execute!(
+        { query: 'is:open' },
+        run,
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow(/numeric total/);
+  });
+
+  /**
+   * gh reports `OPEN` from `issue list` but `open` from `search issues`, so
+   * the same issue looked like two different states depending on which op
+   * returned it. Lower case is what the `state` parameter accepts.
+   *
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-7
+   * @issue 3407
+   */
+  it('normalises state to lower case across list and search', () => {
+    const fromSearch = shapeSearchResults([
+      { number: 1, title: 'T', state: 'open', updatedAt: '' },
+    ]);
+    const fromList = shapeIssueList([
+      { number: 1, title: 'T', state: 'OPEN', labels: [], updatedAt: '' },
+    ]);
+    expect(fromSearch[0].state).toBe('open');
+    expect(fromList[0].state).toBe(fromSearch[0].state);
+  });
+
+  /**
+   * Answering "who filed each of these" cost one pr.view per row because the
+   * list projection omitted the author that gh had all along.
+   *
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-5
+   * @issue 3407
+   */
+  it('search results and pr.list carry the author', () => {
+    expect(
+      buildSearchIssuesArgv({ query: 'x' })[
+        buildSearchIssuesArgv({ query: 'x' }).indexOf('--json') + 1
+      ],
+    ).toContain('author');
+    expect(
+      buildPrListArgv({})[buildPrListArgv({}).indexOf('--json') + 1],
+    ).toContain('author');
+    expect(shapeSearchResults(rawResults(1))[0].author).toBe('acoliver');
+  });
 });

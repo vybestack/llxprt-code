@@ -38,6 +38,7 @@ import {
   shapePrReviews,
   validatePrReviewsParams,
 } from '../github-broker-ops.js';
+import { issueListDescriptor } from '../github-broker-issue-ops.js';
 import { OP_REGISTRY } from '../github-broker-ops.js';
 
 /**
@@ -181,16 +182,36 @@ describe('issue.list pure functions (P10)', () => {
       expect(argv[idx + 1]).toBe('bug');
     });
 
-    it('defaults limit to 30', () => {
+    /**
+     * gh is asked for ONE more row than the caller's limit, so a full page can
+     * be distinguished from a complete result set; `windowByLimit` trims the
+     * probe row and reports `hasMore`. Asserting the raw 30 here would pin the
+     * ambiguity this fixes.
+     *
+     * @plan PLAN-20260828-ISSUE3407
+     * @requirement AC-6
+     * @issue 3407
+     */
+    it('over-fetches one past the default limit of 30', () => {
       const argv = buildIssueListArgv({});
       const idx = argv.indexOf('--limit');
-      expect(argv[idx + 1]).toBe('30');
+      expect(argv[idx + 1]).toBe('31');
     });
 
-    it('honours explicit limit', () => {
+    /**
+     * gh is asked for ONE more row than the caller's limit, so a full page can
+     * be distinguished from a complete result set; `windowByLimit` trims the
+     * probe row and reports `hasMore`. Asserting the raw 30 here would pin the
+     * ambiguity this fixes.
+     *
+     * @plan PLAN-20260828-ISSUE3407
+     * @requirement AC-6
+     * @issue 3407
+     */
+    it('over-fetches one past an explicit limit', () => {
       const argv = buildIssueListArgv({ limit: 50 });
       const idx = argv.indexOf('--limit');
-      expect(argv[idx + 1]).toBe('50');
+      expect(argv[idx + 1]).toBe('51');
     });
 
     it('appends --repo when provided', () => {
@@ -284,7 +305,10 @@ describe('issue.list pure functions (P10)', () => {
       expect(shaped.length).toBe(2);
       expect(shaped[0].number).toBe(1);
       expect(shaped[0].title).toBe('First');
-      expect(shaped[0].state).toBe('OPEN');
+      // gh reports OPEN here but `open` from search; the shaped contract
+      // normalises to the lower-case form the `state` parameter accepts, so
+      // the same issue compares equal across operations (issue 3407).
+      expect(shaped[0].state).toBe('open');
       expect(shaped[0].labels).toStrictEqual(['bug']);
       expect(shaped[0].updatedAt).toBe('2026-01-01T00:00:00Z');
       // Body must NOT be a field on the shaped output
@@ -415,10 +439,20 @@ describe('pr.list pure functions (P10)', () => {
       expect(argv[idx + 1]).toBe('merged');
     });
 
-    it('defaults limit to 30', () => {
+    /**
+     * gh is asked for ONE more row than the caller's limit, so a full page can
+     * be distinguished from a complete result set; `windowByLimit` trims the
+     * probe row and reports `hasMore`. Asserting the raw 30 here would pin the
+     * ambiguity this fixes.
+     *
+     * @plan PLAN-20260828-ISSUE3407
+     * @requirement AC-6
+     * @issue 3407
+     */
+    it('over-fetches one past the default limit of 30', () => {
       const argv = buildPrListArgv({});
       const idx = argv.indexOf('--limit');
-      expect(argv[idx + 1]).toBe('30');
+      expect(argv[idx + 1]).toBe('31');
     });
 
     it('appends --repo when provided', () => {
@@ -817,5 +851,107 @@ describe('pr.reviews pure functions (P10)', () => {
       expect(shapePrReviews(null, false).threads).toStrictEqual([]);
       expect(shapePrReviews({}, false).threads).toStrictEqual([]);
     });
+  });
+});
+
+/**
+ * Issue #3407: a list that returns exactly `limit` rows used to be
+ * indistinguishable from a list with exactly `limit` matches. This repository
+ * has over 200 open issues against a default limit of 30, so an agent would
+ * report "30 issues" as a total and be wrong with nothing signalling it. The
+ * broker over-fetches one row and reports `hasMore`.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-6
+ * @issue 3407
+ */
+describe('issue #3407: list truncation is visible via hasMore', () => {
+  /** Builds `count` raw gh issue rows. */
+  function rawIssues(count: number): unknown[] {
+    return Array.from({ length: count }, (_, i) => ({
+      number: i + 1,
+      title: `T${i}`,
+      state: 'OPEN',
+      author: { login: 'acoliver' },
+      labels: [],
+      updatedAt: '2026-08-01T00:00:00Z',
+      assignees: [],
+      milestone: null,
+    }));
+  }
+
+  /**
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-6
+   * @issue 3407
+   */
+  it('trims the probe row and reports hasMore when gh returns limit+1', () => {
+    const shaped = issueListDescriptor.shape(rawIssues(31), {}) as {
+      issues: readonly unknown[];
+      hasMore: boolean;
+    };
+    // The caller asked for 30, so it gets exactly 30 back, not the probe row.
+    expect(shaped.issues).toHaveLength(30);
+    expect(shaped.hasMore).toBe(true);
+  });
+
+  /**
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-6
+   * @issue 3407
+   */
+  it('reports hasMore false when the results fit inside the limit', () => {
+    const shaped = issueListDescriptor.shape(rawIssues(7), {}) as {
+      issues: readonly unknown[];
+      hasMore: boolean;
+    };
+    expect(shaped.issues).toHaveLength(7);
+    expect(shaped.hasMore).toBe(false);
+  });
+
+  /**
+   * The boundary that caused the bug: exactly `limit` rows really is the whole
+   * set, because the probe row would have been the 31st.
+   *
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-6
+   * @issue 3407
+   */
+  it('reports hasMore false at exactly the limit', () => {
+    const shaped = issueListDescriptor.shape(rawIssues(30), {}) as {
+      issues: readonly unknown[];
+      hasMore: boolean;
+    };
+    expect(shaped.issues).toHaveLength(30);
+    expect(shaped.hasMore).toBe(false);
+  });
+
+  /**
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-6
+   * @issue 3407
+   */
+  it('honours an explicit limit when windowing', () => {
+    const shaped = issueListDescriptor.shape(rawIssues(6), { limit: 5 }) as {
+      issues: readonly unknown[];
+      hasMore: boolean;
+    };
+    expect(shaped.issues).toHaveLength(5);
+    expect(shaped.hasMore).toBe(true);
+  });
+
+  /**
+   * issue.list dropped `author` from its gh field list, so triaging a list
+   * meant an issue.view per row just to learn who filed it.
+   *
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-5
+   * @issue 3407
+   */
+  it('issue.list carries the author', () => {
+    const argv = buildIssueListArgv({});
+    expect(argv[argv.indexOf('--json') + 1]).toContain('author');
+    const shaped = shapeIssueList(rawIssues(1));
+    expect(shaped[0].author).toBe('acoliver');
   });
 });

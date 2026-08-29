@@ -205,6 +205,25 @@ function withParamCatalogue(
 }
 
 /**
+ * The number of items to REQUEST from gh: one more than the caller asked for.
+ *
+ * A list that returns exactly `limit` items is ambiguous — it reads
+ * identically whether those are all the matches or the first page of many.
+ * That ambiguity is not cosmetic: this repository has over 200 open issues
+ * and the default limit is 30, so an agent listing issues would report "30
+ * issues" as a total and be wrong. Over-fetching by one turns the ambiguity
+ * into a fact, at the cost of a single extra row and no extra round trip;
+ * `windowByLimit` then trims the probe row back off and reports `hasMore`.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-6
+ * @issue 3407
+ */
+export function resolveFetchLimit(params: Record<string, unknown>): number {
+  return resolveLimit(params) + 1;
+}
+
+/**
  * Resolves the effective limit value: if provided and valid, use it;
  * otherwise return DEFAULT_LIMIT.
  *

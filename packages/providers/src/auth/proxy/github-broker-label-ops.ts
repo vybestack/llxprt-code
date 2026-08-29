@@ -13,7 +13,10 @@
  */
 
 import type { OpDescriptor, ValidationError } from './github-broker-types.js';
-import { resolveLimit, validateParams } from './github-broker-validation.js';
+import {
+  resolveFetchLimit,
+  validateParams,
+} from './github-broker-validation.js';
 import {
   GITHUB_OP_SPECS,
   type GithubOpSpec,
@@ -22,6 +25,7 @@ import {
   assertNotPartialSuccess,
   extractString,
   assertListShape,
+  windowByLimit,
 } from './github-broker-shaping.js';
 
 const LABEL_LIST_SPEC: GithubOpSpec = GITHUB_OP_SPECS['label.list'];
@@ -53,7 +57,7 @@ export function validateLabelListParams(
  */
 export function buildLabelListArgv(params: Record<string, unknown>): string[] {
   const argv: string[] = ['label', 'list', '--json', 'name,color,description'];
-  argv.push('--limit', String(resolveLimit(params)));
+  argv.push('--limit', String(resolveFetchLimit(params)));
   if (typeof params.repo === 'string' && params.repo.length > 0) {
     argv.push('--repo', params.repo);
   }
@@ -106,5 +110,8 @@ export const labelListDescriptor: OpDescriptor = {
   mutating: LABEL_LIST_SPEC.mutating,
   params: LABEL_LIST_SPEC.params,
   buildArgv: (params) => buildLabelListArgv(params),
-  shape: (rawJson) => ({ labels: shapeLabelList(rawJson) }),
+  shape: (rawJson, params) => {
+    const { items, hasMore } = windowByLimit(shapeLabelList(rawJson), params);
+    return { labels: items, hasMore };
+  },
 };

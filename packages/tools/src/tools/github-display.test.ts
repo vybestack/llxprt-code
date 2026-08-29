@@ -177,6 +177,40 @@ describe('github result rendering', () => {
   });
 
   /**
+   * A full page used to render as though it were the total, so a repository
+   * with 200 open issues reported "30 issues".
+   *
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-6
+   * @issue 3407
+   */
+  it('list and search renders mark a truncated page as having more', () => {
+    const items = [
+      { number: 1, title: 'T', state: 'open', labels: [], updatedAt: '' },
+    ];
+    const truncated = renderGithubResult(
+      'issue.list',
+      {},
+      { issues: items, hasMore: true },
+    );
+    expect(truncated).toContain('more available');
+
+    const complete = renderGithubResult(
+      'issue.list',
+      {},
+      { issues: items, hasMore: false },
+    );
+    expect(complete).not.toContain('more available');
+
+    const search = renderGithubResult(
+      'search.issues',
+      {},
+      { issues: items, hasMore: true },
+    );
+    expect(search).toContain('more available');
+  });
+
+  /**
    * pr.list has neither field, so its line format must be untouched by the
    * issue-3407 suffix.
    *

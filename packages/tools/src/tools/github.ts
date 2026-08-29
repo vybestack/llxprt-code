@@ -97,7 +97,9 @@ Examples:
   { "op": "issue.view", "number": 1663, "comments": true }
   { "op": "issue.view", "number": 42, "repo": "acoliver/otherproject" }
   { "op": "issue.list", "search": "sandbox", "state": "open", "limit": 20 }
+  { "op": "issue.list", "state": "open", "search": "no:assignee milestone:0.11.0" }
   { "op": "issue.edit", "number": 1663, "addLabel": ["security"], "type": "Feature" }
+  { "op": "search.issues", "query": "author:acoliver is:open", "repo": "vybestack/llxprt-code" }
   { "op": "pr.reviews", "number": 2317, "actionable": true }
   { "op": "pr.resolve-thread", "threadId": "PRRT_kwDO..." }
   { "op": "pr.checks", "number": 2317, "watch": true }
@@ -113,6 +115,27 @@ Notes:
   result. Do not poll it yourself.
 - issue.edit sets issue type, labels, assignees, projects and milestone in one
   call, including fields the gh CLI cannot set directly.
+- List and search results carry "hasMore": true when more results exist beyond
+  the returned page, so the returned count is NOT a total unless hasMore is
+  false. Raise "limit" (max 100) or narrow the query to see the rest.
+- search.issues and search.prs additionally return "totalCount", the size of
+  the WHOLE result set. To count matches (e.g. "how many open issues are
+  there?") use search.issues and read totalCount; do not add up pages.
+
+Returned fields:
+  issue.view    number, title, state, author, assignees, milestone, labels, body, comments
+  issue.list    number, title, state, author, assignees, milestone, labels, updatedAt + hasMore
+  pr.view       number, title, state, author, headRefName, baseRefName, isDraft, reviewDecision, body, comments
+  pr.list       number, title, state, author, labels, updatedAt + hasMore
+  search.issues number, title, state, author, assignees, labels, repository, updatedAt + hasMore, totalCount
+  search.prs    same as search.issues
+  "state" is always lower case ("open"/"closed"/"merged"), matching the state
+  parameter. Search results carry no milestone: gh exposes no such field there.
+- To filter issues by assignee or milestone, put the qualifier in issue.list's
+  "search" (e.g. "no:assignee milestone:0.11.0"); there is no separate
+  assignee or milestone parameter.
+- Scope a search to one repository with the "repo" parameter rather than a
+  "repo:" term inside "query", and do not wrap qualifier values in quotes.
 
 Operations:
 ${buildOpReferenceBlock()}`;
@@ -250,7 +273,8 @@ function textHintFor(name: string): string {
     repo: 'Repository as "owner/name". Omit to use the current repository.',
     title:
       'Issue or pull request title. Required by issue.create and pr.create; optional for issue.edit, pr.edit.',
-    search: 'Free-text search query. Accepted by issue.list.',
+    search:
+      'Search query for issue.list. Accepts the full GitHub issue-search syntax, not just free text: qualifiers like "no:assignee", "milestone:0.11.0", "assignee:acoliver", "author:acoliver" and "-label:bug" all work here, and combine. Use this to filter by assignee or milestone, which have no dedicated parameter.',
     milestone:
       'Milestone name or number. Accepted by issue.create, issue.edit.',
     project: 'Project name. Accepted by issue.create.',
