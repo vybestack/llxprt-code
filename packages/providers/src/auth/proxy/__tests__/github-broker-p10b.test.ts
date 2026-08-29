@@ -177,10 +177,12 @@ describe('search pure functions (P10)', () => {
       const argv = buildSearchIssuesArgv({ query: 'is:open label:bug' });
       expect(argv[0]).toBe('search');
       expect(argv[1]).toBe('issues');
-      // Each whitespace-separated term is its OWN positional so gh parses
-      // every qualifier instead of swallowing the rest of the query.
-      expect(argv[2]).toBe('is:open');
-      expect(argv[3]).toBe('label:bug');
+      // Each whitespace-separated term is its OWN argv element so gh parses
+      // every qualifier instead of swallowing the rest of the query, and the
+      // terms sit behind the `--` option terminator so an exclusion term
+      // cannot be read as a flag.
+      const terms = argv.slice(argv.indexOf('--') + 1);
+      expect(terms).toStrictEqual(['is:open', 'label:bug']);
     });
 
     it('includes --json without body', () => {
@@ -206,8 +208,8 @@ describe('search pure functions (P10)', () => {
       const argv = buildSearchPrsArgv({ query: 'is:pr is:open' });
       expect(argv[0]).toBe('search');
       expect(argv[1]).toBe('prs');
-      expect(argv[2]).toBe('is:pr');
-      expect(argv[3]).toBe('is:open');
+      const terms = argv.slice(argv.indexOf('--') + 1);
+      expect(terms).toStrictEqual(['is:pr', 'is:open']);
     });
   });
 
@@ -220,9 +222,14 @@ describe('search pure functions (P10)', () => {
       { name: 'search.prs', build: buildSearchPrsArgv },
     ];
 
-    /** The positional terms: the slot right after the subcommand, before --json. */
+    /**
+     * The query terms: everything after the `--` option terminator. Terms are
+     * emitted last and behind `--` so a GitHub exclusion term like
+     * `-label:bug` is not parsed by gh as a CLI flag.
+     */
     function positionals(argv: string[]): string[] {
-      return argv.slice(2, argv.indexOf('--json'));
+      const end = argv.indexOf('--');
+      return end === -1 ? [] : argv.slice(end + 1);
     }
 
     for (const { name, build } of builders) {
@@ -398,9 +405,49 @@ describe('search pure functions (P10)', () => {
         const argv = build({ query: '   ' });
         expect(positionals(argv)).toStrictEqual([]);
         expect(argv).not.toContain('');
-        // The argv is still well formed around the empty positional slot.
+        // No terms means no bare trailing terminator either.
+        expect(argv).not.toContain('--');
         expect(argv[0]).toBe('search');
         expect(argv.indexOf('--json')).toBe(2);
+      });
+
+      /**
+       * GitHub excludes a qualifier by prefixing it with a dash. Once every
+       * term is its own argv element, gh parses a leading-dash term as a CLI
+       * flag and dies with "unknown shorthand flag: 'l'" unless the terms sit
+       * behind a `--` option terminator. Value validation only rejects a
+       * query that STARTS with a dash, so an interior `-label:bug` reaches
+       * argv and the terminator is what makes it work.
+       *
+       * @plan PLAN-20260828-ISSUE3407
+       * @requirement AC-2
+       * @issue 3407
+       */
+      it(`${name}: an exclusion term is protected by the -- terminator`, () => {
+        const argv = build({ query: 'is:open -label:bug' });
+        expect(positionals(argv)).toStrictEqual(['is:open', '-label:bug']);
+        // Every flag must precede the terminator, or gh sees the terms first.
+        const terminator = argv.indexOf('--');
+        expect(terminator).toBeGreaterThan(-1);
+        expect(argv.indexOf('--json')).toBeLessThan(terminator);
+        expect(argv.indexOf('--limit')).toBeLessThan(terminator);
+        // Nothing after the terminator may be mistaken for a flag position.
+        expect(argv.lastIndexOf('--')).toBe(terminator);
+      });
+
+      /**
+       * @plan PLAN-20260828-ISSUE3407
+       * @requirement AC-1, AC-2
+       * @issue 3407
+       */
+      it(`${name}: --repo is emitted before the terminator, never after`, () => {
+        const argv = build({ query: 'repo:owner/name -label:bug' });
+        const terminator = argv.indexOf('--');
+        const repoIdx = argv.indexOf('--repo');
+        expect(repoIdx).toBeGreaterThan(-1);
+        expect(repoIdx).toBeLessThan(terminator);
+        expect(argv[repoIdx + 1]).toBe('owner/name');
+        expect(positionals(argv)).toStrictEqual(['-label:bug']);
       });
 
       /**
@@ -416,6 +463,7 @@ describe('search pure functions (P10)', () => {
         const argv = build({ query: 'repo:vybestack/llxprt-code' });
         expect(positionals(argv)).toStrictEqual([]);
         expect(argv).not.toContain('');
+        expect(argv).not.toContain('--');
         const idx = argv.indexOf('--repo');
         expect(idx).toBeGreaterThan(-1);
         expect(argv[idx + 1]).toBe('vybestack/llxprt-code');

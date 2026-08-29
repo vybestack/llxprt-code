@@ -116,12 +116,22 @@ export function normalizeSearchQuery(query: string): {
 }
 
 /**
- * Appends the tokenized query terms as positional argv elements, and sets the
- * `--repo` value from a lifted `repo:` term when no explicit repo parameter
- * is present. The terms are inserted in the positional slot (right after the
- * subcommand, before `--json`). Empty tokens are dropped and no quote
- * characters are ever emitted: gh quotes each positional term's value itself, so a
- * pre-quoted value would arrive at the API double-quoted and match nothing.
+ * Appends the repository scope and then the tokenized query terms, which are
+ * emitted LAST and behind a `--` option terminator.
+ *
+ * The terminator is required, not cosmetic. GitHub's search syntax excludes a
+ * qualifier by prefixing it with a dash (`-label:bug`), and once each term is
+ * its own argv element gh parses a leading-dash term as a CLI flag and fails
+ * with "unknown shorthand flag: 'l'". Terms therefore go after `--`, which
+ * means every flag must already be on argv by the time this runs.
+ *
+ * Value-level validation rejects a `query` that STARTS with a dash, but not
+ * `is:open -label:bug`, where the dash is on an interior term — so the
+ * terminator is what actually makes exclusion syntax usable.
+ *
+ * No quote characters are ever emitted: gh quotes each term's value itself,
+ * so a pre-quoted value would arrive at the API double-quoted and match
+ * nothing.
  *
  * @plan PLAN-20260731-GHBROKER.P10
  * @requirement REQ-002, REQ-013
@@ -132,12 +142,17 @@ function appendSearchQuery(
 ): void {
   const query = typeof params.query === 'string' ? params.query : '';
   const { terms, liftedRepo } = normalizeSearchQuery(query);
-  // The positional slot is right after `search <issues|prs>`, before --json.
-  argv.splice(2, 0, ...terms);
   // An explicit repo parameter wins on conflict; the lifted repo: term is
-  // still dropped from the terms either way.
-  if (liftedRepo !== null && !hasNonEmptyRepo(params)) {
-    argv.push('--repo', liftedRepo);
+  // dropped from the terms either way.
+  const explicitRepo = hasNonEmptyRepo(params) ? String(params.repo) : null;
+  const repo = explicitRepo ?? liftedRepo;
+  if (repo !== null) {
+    argv.push('--repo', repo);
+  }
+  // A bare trailing `--` would be noise, so it is emitted only when there is
+  // at least one term to protect.
+  if (terms.length > 0) {
+    argv.push('--', ...terms);
   }
 }
 
@@ -185,11 +200,10 @@ export function buildSearchIssuesArgv(
     '--json',
     'number,title,state,repository,updatedAt',
   ];
-  appendSearchQuery(argv, params);
   argv.push('--limit', String(resolveLimit(params)));
-  if (typeof params.repo === 'string' && params.repo.length > 0) {
-    argv.push('--repo', params.repo);
-  }
+  // Must come last: it emits --repo and then the `--` terminator followed by
+  // the query terms, so every flag has to already be on argv.
+  appendSearchQuery(argv, params);
   return argv;
 }
 
@@ -301,11 +315,10 @@ export function buildSearchPrsArgv(params: Record<string, unknown>): string[] {
     '--json',
     'number,title,state,repository,updatedAt',
   ];
-  appendSearchQuery(argv, params);
   argv.push('--limit', String(resolveLimit(params)));
-  if (typeof params.repo === 'string' && params.repo.length > 0) {
-    argv.push('--repo', params.repo);
-  }
+  // Must come last: it emits --repo and then the `--` terminator followed by
+  // the query terms, so every flag has to already be on argv.
+  appendSearchQuery(argv, params);
   return argv;
 }
 

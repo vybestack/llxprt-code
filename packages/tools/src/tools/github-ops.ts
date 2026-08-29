@@ -415,14 +415,17 @@ export function githubParamRedirect(
   op: string,
   param: string,
 ): Readonly<{ elsewhere: readonly string[]; hint?: string }> | null {
-  const elsewhere = GITHUB_SUPPORTED_OPS.filter(
-    (other) =>
-      other !== op &&
-      Object.prototype.hasOwnProperty.call(
-        GITHUB_OP_SPECS[other].params,
-        param,
-      ),
-  );
+  // Iterating the catalog's own entries rather than filtering the op-name
+  // list and indexing back into the catalog means there is no lookup that
+  // could miss: the name and the spec are read from the same entry. Order is
+  // unchanged, since GITHUB_SUPPORTED_OPS is Object.keys of this same object.
+  const elsewhere = Object.entries(GITHUB_OP_SPECS)
+    .filter(
+      ([other, spec]) =>
+        other !== op &&
+        Object.prototype.hasOwnProperty.call(spec.params, param),
+    )
+    .map(([other]) => other);
   if (elsewhere.length === 0) return null;
   if (op === 'issue.create' && param === 'type') {
     return {
