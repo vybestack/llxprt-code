@@ -1010,3 +1010,40 @@ The CI-remediation verification completed serially:
 A local Interactive UI retry under high host load was inconclusive and is not
 counted as passing evidence. The replacement CI job remains the authoritative
 interactive check for this adjustment.
+
+### Cache read cost regression found by real-workload reproduction
+
+Reproducing the reported growth with the real analysis workload, under the
+memory profiler in the tmux harness, exposed a defect in this branch's own Ink
+patch.
+
+`DataLimitedLruMap.get` refreshed recency on every cache hit by deleting the key
+and re-inserting it. That churns the JSC `Map` backing store, and the renderer
+reads these caches per character. An in-process sampling profile taken during a
+burst attributed 3,507 of 12,738 samples, 27.5 percent, to those two lines,
+the largest share of any site, directly beneath `renderNodeToOutput`.
+
+Measured in isolation, 2,000,000 reads of a 10,000-entry cache grew the heap by
+32,525,802 bytes with the delete-and-reinsert refresh and by 0.1 MiB without it,
+roughly 7 bytes of garbage per cache hit.
+
+Recency now lives in an intrusive doubly linked list. A read rewrites two
+pointers and never mutates the `Map`, and eviction reads the list head instead
+of allocating a `Map` iterator. The entry budgets, the eviction policy and the
+retention bounds are unchanged, and the existing recency-refresh contract still
+passes.
+
+`scripts/tests/issue-3425-ink-cache-read-cost.bun.test.ts` covers this. It failed
+at 32,525,802 bytes against its 2 MiB budget before the change and passes after,
+and two further tests pin exact eviction order and list ordering so the bound
+cannot be met by dropping recency tracking.
+
+Effect on the real workload, same prompt and profile, with the collection cadence
+that previously produced the failure:
+
+- Peak RSS fell from 46.8 GiB to 813 MiB.
+- Peak JSC heap fell from 28 GiB to 404 MiB.
+- RSS declined to 520 MiB by the end of the run instead of holding at its peak.
+
+The read path is also 2.8 times faster, 28.41 ms against 78.85 ms for two
+million reads.
