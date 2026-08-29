@@ -186,22 +186,31 @@ export function trimToVisibleTail(
   maxDisplayLines: number,
   width: number,
 ): { text: string; hiddenDisplayLines: number } {
-  const lines = text.split('\n');
-  if (lines.length <= maxDisplayLines) {
-    return { text, hiddenDisplayLines: 0 };
-  }
-
   const usableWidth = Math.max(1, width);
-  const removed = lines.slice(0, lines.length - maxDisplayLines);
   let hiddenDisplayLines = 0;
-  for (const line of removed) {
-    hiddenDisplayLines += Math.max(1, Math.ceil(line.length / usableWidth));
+  let kept = text;
+
+  const lines = text.split('\n');
+  if (lines.length > maxDisplayLines) {
+    for (const line of lines.slice(0, lines.length - maxDisplayLines)) {
+      hiddenDisplayLines += Math.max(1, Math.ceil(line.length / usableWidth));
+    }
+    kept = lines.slice(lines.length - maxDisplayLines).join('\n');
   }
 
-  return {
-    text: lines.slice(lines.length - maxDisplayLines).join('\n'),
-    hiddenDisplayLines,
-  };
+  // Line count alone does not bound the work: a single unbroken line, such as
+  // minified output or a log without newlines, wraps into as many display rows
+  // as it has width-sized chunks. Keeping the last `maxDisplayLines` rows worth
+  // of characters always leaves at least that many rows, because a row never
+  // holds more than `usableWidth` of them.
+  const characterBudget = maxDisplayLines * usableWidth;
+  if (kept.length > characterBudget) {
+    const dropped = kept.length - characterBudget;
+    hiddenDisplayLines += Math.ceil(dropped / usableWidth);
+    kept = kept.slice(dropped);
+  }
+
+  return { text: kept, hiddenDisplayLines };
 }
 
 /**

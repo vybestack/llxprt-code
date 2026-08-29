@@ -108,6 +108,18 @@ describe('ToolResultDisplay — large results cost only what they display', () =
     expect(frame).toContain('hidden');
   });
 
+  it('bounds a single unbroken line, which has no newlines to trim on', () => {
+    // Minified output and logs without newlines arrive as one source line, so
+    // a line-count check alone would hand the whole body to layout.
+    const oneLongLine = 'abcdefghij'.repeat(100_000);
+    const settled = settleRssBytes();
+    const large = renderResult(oneLongLine);
+
+    expect(large.peakRssBytes - settled).toBeLessThan(10 * 1024 * 1024);
+    expect(large.frame).toContain('hidden');
+    expect(large.frame).toContain('abcdefghij');
+  });
+
   it('leaves results that fit entirely visible', () => {
     const { frame } = renderResult('alpha\nbravo\ncharlie');
 
