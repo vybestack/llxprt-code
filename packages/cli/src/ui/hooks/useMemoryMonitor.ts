@@ -35,6 +35,25 @@ export interface MemoryMonitorPorts {
    * Defaults to process.memoryUsage.rss().
    */
   rssBytes: () => number;
+  /**
+   * Retained JS heap, read only on the tick that fires the warning.
+   *
+   * Deliberately independent of `memoryUsage`: the disabled path must not take
+   * a full reading, and reading the JSC heap directly keeps the warning working
+   * regardless of what `process.memoryUsage` is doing.
+   */
+  retainedHeapBytes: () => number;
+}
+
+interface JscHeapSizeApi {
+  heapSize: () => number;
+}
+
+function isJscHeapSizeApi(value: unknown): value is JscHeapSizeApi {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  return 'heapSize' in value && typeof value.heapSize === 'function';
 }
 
 const realPorts: MemoryMonitorPorts = {
@@ -46,6 +65,13 @@ const realPorts: MemoryMonitorPorts = {
   // warning-only path below still reads it directly.
   memoryUsage: () => sampleMemoryUsage(),
   rssBytes: () => process.memoryUsage.rss(),
+  retainedHeapBytes: () => {
+    const jsc = process.getBuiltinModule('bun:jsc');
+    if (!isJscHeapSizeApi(jsc)) {
+      throw new Error('bun:jsc heap size is unavailable');
+    }
+    return jsc.heapSize();
+  },
 };
 
 let __portsForTesting: MemoryMonitorPorts | null = null;
@@ -99,11 +125,11 @@ export function useMemoryMonitor({
     // heap, which does fall when memory is released. The full sample is read
     // only on the tick that crosses the threshold, so the steady-state check
     // stays on the cheap RSS accessor.
-    const maybeWarn = (rss: number, sample?: NodeJS.MemoryUsage): void => {
+    const maybeWarn = (rss: number): void => {
       if (rss <= MEMORY_WARNING_THRESHOLD_BYTES || warnedOnce) {
         return;
       }
-      const retained = (sample ?? ports.memoryUsage()).heapUsed;
+      const retained = ports.retainedHeapBytes();
       addItem(
         {
           type: MessageType.WARNING,
@@ -123,7 +149,7 @@ export function useMemoryMonitor({
         // Telemetry-enabled tick: exactly one full process.memoryUsage()
         // capture, reused for warning + ring + persistence.
         const sample = ports.memoryUsage();
-        maybeWarn(sample.rss, sample);
+        maybeWarn(sample.rss);
         memoryController.recordTickSample(sample);
       } else {
         // Disabled path: cheaper rss-only check (no full MemoryUsage object).

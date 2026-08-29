@@ -114,6 +114,7 @@ function makeControllablePorts(
     },
     memoryUsage,
     rssBytes: () => memoryUsage().rss,
+    retainedHeapBytes: () => memoryUsage().heapUsed,
     fireTick: () => {
       if (handler !== null) handler();
     },
@@ -288,6 +289,7 @@ describe('useMemoryMonitor — disabled path uses rss() not full memoryUsage (P1
         rssCalls++;
         return 1000;
       },
+      retainedHeapBytes: () => 0,
     };
     __setMemoryMonitorPortsForTesting(ports);
     const { addItem } = makeAddItem();
@@ -322,6 +324,7 @@ describe('useMemoryMonitor — disabled path uses rss() not full memoryUsage (P1
         rssCalls++;
         return 10_000_000;
       },
+      retainedHeapBytes: () => 0,
     };
     __setMemoryMonitorPortsForTesting(ports);
     const { addItem } = makeAddItem();
@@ -464,9 +467,10 @@ describe('useMemoryMonitor — high-memory warning distinguishes peak from retai
     unmount();
   });
 
-  it('keeps the per-tick check cheap and samples the full usage only when warning', () => {
+  it('keeps every tick on the cheap accessors and never takes a full reading', () => {
     let fullCalls = 0;
     let rssCalls = 0;
+    let heapCalls = 0;
     let rss = 1_000_000;
     const handler: { current: (() => void) | null } = { current: null };
     const ports: MemoryMonitorPorts = {
@@ -491,25 +495,31 @@ describe('useMemoryMonitor — high-memory warning distinguishes peak from retai
         rssCalls += 1;
         return rss;
       },
+      retainedHeapBytes: () => {
+        heapCalls += 1;
+        return RETAINED_HEAP;
+      },
     };
     __setMemoryMonitorPortsForTesting(ports);
     const { addItem, texts } = makeCapturingAddItem();
 
     const { unmount } = renderHook(() => useMemoryMonitor({ addItem }));
 
-    // Below threshold: cheap accessor only, no full sample allocated.
+    // Below threshold: cheap RSS accessor only, no heap read, no full sample.
     handler.current?.();
     handler.current?.();
     expect(rssCalls).toBe(2);
-    expect(fullCalls).toBe(0);
+    expect(heapCalls).toBe(0);
     expect(texts()).toHaveLength(0);
 
-    // Crossing the threshold reads the full usage once, to report heap.
+    // Crossing the threshold reads the retained heap, still not a full sample.
     rss = EIGHT_POINT_FOUR_GB;
     handler.current?.();
     expect(texts()).toHaveLength(1);
     expect(rssCalls).toBe(3);
-    expect(fullCalls).toBe(1);
+    expect(heapCalls).toBe(1);
+    // A full MemoryUsage object is never allocated on the disabled path.
+    expect(fullCalls).toBe(0);
 
     unmount();
   });
@@ -517,6 +527,7 @@ describe('useMemoryMonitor — high-memory warning distinguishes peak from retai
   it('stays on the cheap path for every tick after the warning', () => {
     let fullCalls = 0;
     let rssCalls = 0;
+    let heapCalls = 0;
     const handler: { current: (() => void) | null } = { current: null };
     const ports: MemoryMonitorPorts = {
       setInterval: (h: () => void, _ms: number) => {
@@ -540,6 +551,10 @@ describe('useMemoryMonitor — high-memory warning distinguishes peak from retai
         rssCalls += 1;
         return EIGHT_POINT_FOUR_GB;
       },
+      retainedHeapBytes: () => {
+        heapCalls += 1;
+        return RETAINED_HEAP;
+      },
     };
     __setMemoryMonitorPortsForTesting(ports);
     const { addItem, texts } = makeCapturingAddItem();
@@ -553,16 +568,17 @@ describe('useMemoryMonitor — high-memory warning distinguishes peak from retai
     handler.current?.();
     handler.current?.();
 
-    // The warning fires once, and only that tick reads the full usage, but the
-    // interval keeps sampling cheaply.
+    // The warning fires once and reads the heap once, while the interval keeps
+    // sampling RSS on every tick and never allocates a full MemoryUsage.
     expect(texts()).toHaveLength(1);
-    expect(fullCalls).toBe(1);
+    expect(heapCalls).toBe(1);
     expect(rssCalls).toBe(5);
+    expect(fullCalls).toBe(0);
 
     unmount();
   });
 
-  it('reuses the controller sample instead of taking a second reading', () => {
+  it('takes one full reading per tick when telemetry is enabled', () => {
     let fullCalls = 0;
     const sample: NodeJS.MemoryUsage = {
       rss: EIGHT_POINT_FOUR_GB,
@@ -585,6 +601,7 @@ describe('useMemoryMonitor — high-memory warning distinguishes peak from retai
         return sample;
       },
       rssBytes: () => sample.rss,
+      retainedHeapBytes: () => sample.heapUsed,
     };
     __setMemoryMonitorPortsForTesting(ports);
     const { addItem, texts } = makeCapturingAddItem();
@@ -606,7 +623,7 @@ describe('useMemoryMonitor — high-memory warning distinguishes peak from retai
 
     expect(texts()).toHaveLength(1);
     expect(texts()[0] ?? '').toContain('1.20 GB');
-    // One reading per tick: the warning must not trigger an extra sample.
+    // The tick's own reading, and the warning does not trigger another.
     expect(fullCalls).toBe(1);
 
     unmount();
