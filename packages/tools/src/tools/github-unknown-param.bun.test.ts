@@ -21,6 +21,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { GithubTool, type GitHubBrokerClient } from './github.js';
+import { validateGithubOpParams } from './github-ops.js';
 
 function stubClient(): GitHubBrokerClient {
   return {
@@ -127,5 +128,105 @@ describe('issue #3019 (AB2): github tool documents per-operation params', () => 
     expect(normalized).toContain(
       'an operation rejects any parameter it does not accept and names the accepted ones in the error',
     );
+  });
+});
+
+/**
+ * Issue #3407: a rejected parameter now names the operation that DOES accept
+ * it. The reporter watched an agent retry the identical rejected
+ * `issue.create` + `type` call over and over because the message listed what
+ * `issue.create` accepts but never said where `type` belongs. The tool is the
+ * only sanctioned GitHub interface inside the sandbox, so the rejection has
+ * to carry the recovery path itself.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-4
+ * @issue 3407
+ */
+describe('issue #3407: rejected parameters name the operation that accepts them', () => {
+  /**
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-4
+   * @issue 3407
+   */
+  it('issue.create still REJECTS type and points at issue.edit', () => {
+    const message = validateGithubOpParams('issue.create', {
+      title: 'A new issue',
+      type: 'Bug',
+    });
+    // The op must NOT start accepting `type`: gh issue create has no --type.
+    expect(message).not.toBeNull();
+    if (message === null) return;
+    expect(message).toContain('unknown parameter "type"');
+    // ...and it must say where the parameter belongs, and that it is a
+    // post-creation step rather than something to retry on issue.create.
+    expect(message).toContain('issue.edit');
+    expect(message.toLowerCase()).toContain('after creation');
+  });
+
+  /**
+   * The redirect is computed from the catalog, so it is not a hand-written
+   * special case for `type` alone.
+   *
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-4
+   * @issue 3407
+   */
+  it('names the accepting operations for any misplaced parameter', () => {
+    const message = validateGithubOpParams('issue.create', {
+      title: 'A new issue',
+      number: 42,
+    });
+    expect(message).not.toBeNull();
+    if (message === null) return;
+    expect(message).toContain('unknown parameter "number"');
+    expect(message).toContain('issue.view');
+    expect(message).toContain('pr.ready');
+  });
+
+  /**
+   * A parameter no operation accepts gets no redirect clause — and no stray
+   * trailing whitespace where the clause would have gone.
+   *
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-4
+   * @issue 3407
+   */
+  it('omits the redirect entirely for a parameter no operation accepts', () => {
+    const message = validateGithubOpParams('issue.create', {
+      title: 'A new issue',
+      bogus: true,
+    });
+    expect(message).not.toBeNull();
+    if (message === null) return;
+    expect(message).not.toContain('That parameter is accepted by');
+    expect(message).toBe(message.trim());
+  });
+});
+
+/**
+ * Issue #3407: the published `type` parameter description must not read as
+ * though `issue.create` might take it.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-4
+ * @issue 3407
+ */
+describe('issue #3407: the type parameter description states the create/edit split', () => {
+  /**
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-4
+   * @issue 3407
+   */
+  it('says type is set after creation via issue.edit, not on issue.create', () => {
+    const tool = new GithubTool(stubClient());
+    const typeProp = propertyTypeAndDescription(tool, 'type');
+    expect(typeProp).not.toBeNull();
+    if (typeProp === null) return;
+    expect(typeProp.description).toContain('issue.edit');
+    expect(typeProp.description).toContain('issue.create');
+    // The distinguishing claim: it is a POST-creation step. A description
+    // that merely mentions issue.edit passed before this fix.
+    expect(typeProp.description.toLowerCase()).toContain('after');
   });
 });

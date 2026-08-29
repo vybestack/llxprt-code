@@ -146,9 +146,10 @@ describe('issue.list pure functions (P10)', () => {
       expect(fields).toContain('state');
       expect(fields).toContain('labels');
       expect(fields).toContain('updatedAt');
+      expect(fields).toContain('assignees');
+      expect(fields).toContain('milestone');
       expect(fields).not.toContain('body');
     });
-
     it('includes --search when provided', () => {
       const argv = buildIssueListArgv({ search: 'bug report' });
       const idx = argv.indexOf('--search');
@@ -288,6 +289,84 @@ describe('issue.list pure functions (P10)', () => {
       expect(shaped[0].updatedAt).toBe('2026-01-01T00:00:00Z');
       // Body must NOT be a field on the shaped output
       expect(shaped[0]).not.toHaveProperty('body');
+    });
+
+    /**
+     * Assignment state was invisible through the tool: the --json field list
+     * omitted assignees and milestone, so an agent asked to find unassigned
+     * issues concluded nothing was assigned and no milestones existed. The
+     * raw gh shapes are exercised verbatim here.
+     *
+     * @plan PLAN-20260828-ISSUE3407
+     * @requirement AC-5
+     * @issue 3407
+     */
+    it('reduces real gh assignee objects to logins and a milestone to its title', () => {
+      const description = [
+        '0.12.0 is a stability release',
+        'major themes',
+        '* remove useless tests (non behavioral)',
+        '* murder the config god object',
+      ].join('\n');
+      const shaped = shapeIssueList([
+        {
+          number: 12,
+          title: 'Assigned and milestoned',
+          state: 'OPEN',
+          labels: [],
+          updatedAt: '2026-08-01T00:00:00Z',
+          assignees: [
+            {
+              id: 'MDQ6VXNlcjQyMDI5',
+              login: 'acoliver',
+              name: 'Andrew C. Oliver',
+              databaseId: 0,
+            },
+          ],
+          milestone: {
+            number: 13,
+            title: '0.12.0',
+            description,
+            dueOn: '2026-08-31T00:00:00Z',
+          },
+        },
+      ]);
+      expect(shaped[0].assignees).toStrictEqual(['acoliver']);
+      expect(shaped[0].milestone).toBe('0.12.0');
+      // The milestone description is multi-paragraph and would otherwise be
+      // repeated on every item of every list response, so only the title may
+      // survive shaping.
+      expect(JSON.stringify(shaped)).not.toContain(description);
+    });
+
+    /**
+     * @plan PLAN-20260828-ISSUE3407
+     * @requirement AC-5
+     * @issue 3407
+     */
+    it('yields an empty assignee list and a null milestone when unset', () => {
+      const shaped = shapeIssueList([
+        {
+          number: 13,
+          title: 'Unassigned',
+          state: 'OPEN',
+          labels: [],
+          updatedAt: '2026-08-01T00:00:00Z',
+          assignees: [],
+          milestone: null,
+        },
+        {
+          number: 14,
+          title: 'Fields absent entirely',
+          state: 'OPEN',
+          labels: [],
+          updatedAt: '2026-08-01T00:00:00Z',
+        },
+      ]);
+      expect(shaped[0].assignees).toStrictEqual([]);
+      expect(shaped[0].milestone).toBeNull();
+      expect(shaped[1].assignees).toStrictEqual([]);
+      expect(shaped[1].milestone).toBeNull();
     });
 
     /**

@@ -126,6 +126,46 @@ export function redactTokenShaped(message: string): string {
 }
 
 /**
+ * Self-correction guidance appended to a failed search op's message, hoisted
+ * to a constant so the idempotency guard below checks against the ACTUAL
+ * appended text: a stale guard string that drifts from the text it detects
+ * silently re-appends on every retry.
+ *
+ * @plan PLAN-20260731-GHBROKER.P10
+ * @requirement REQ-004
+ */
+export const SEARCH_ERROR_GUIDANCE =
+  ' Scope a repository with the repo parameter, not a repo: term in the query, and do not wrap qualifier values in quotes.';
+
+/**
+ * Augments a failed search operation's error with self-correction guidance.
+ *
+ * gh's search failures ("invalid search query", "cannot be searched") both have
+ * the same root: a `repo:` term or a quoted qualifier value that gh re-quotes
+ * into nothing. The github tool is the only sanctioned GitHub interface in a
+ * sandbox, so the error must carry the concrete fix rather than leaving the
+ * caller to rediscover it. The appended text is static, so it passes
+ * `redactTokenShaped` unchanged and the caller's redaction path is not
+ * bypassed. This is defensive parsing of gh's external wording, which is the
+ * documented exception to the repo's fail-fast preference.
+ *
+ * @plan PLAN-20260731-GHBROKER.P10
+ * @requirement REQ-004
+ */
+export function augmentSearchError(error: BrokerError): BrokerError {
+  const lower = error.message.toLowerCase();
+  const isSearchFailure =
+    lower.includes('invalid search query') ||
+    lower.includes('cannot be searched');
+  if (!isSearchFailure) return error;
+  if (error.message.includes(SEARCH_ERROR_GUIDANCE)) return error;
+  return {
+    ...error,
+    message: error.message + SEARCH_ERROR_GUIDANCE,
+  };
+}
+
+/**
  * A structured broker error that can be serialized into a response.
  *
  * @plan PLAN-20260731-GHBROKER.P08

@@ -63,7 +63,12 @@ export function shapeCreatedUrl(rawText: unknown): {
 export function validateIssueCreateParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(ISSUE_CREATE_SPEC.params, params);
+  return validateParams(
+    ISSUE_CREATE_SPEC.params,
+    params,
+    undefined,
+    'issue.create',
+  );
 }
 
 /**
@@ -110,7 +115,12 @@ export const issueCreateDescriptor: OpDescriptor = {
 export function validateIssueCommentParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(ISSUE_COMMENT_SPEC.params, params);
+  return validateParams(
+    ISSUE_COMMENT_SPEC.params,
+    params,
+    undefined,
+    'issue.comment',
+  );
 }
 
 /**
@@ -151,7 +161,12 @@ export const issueCommentDescriptor: OpDescriptor = {
 export function validateIssueCloseParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(ISSUE_CLOSE_SPEC.params, params);
+  return validateParams(
+    ISSUE_CLOSE_SPEC.params,
+    params,
+    undefined,
+    'issue.close',
+  );
 }
 
 /**

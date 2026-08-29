@@ -51,7 +51,7 @@ const PR_REVIEWS_SPEC: GithubOpSpec = GITHUB_OP_SPECS['pr.reviews'];
 export function validatePrListParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(PR_LIST_SPEC.params, params);
+  return validateParams(PR_LIST_SPEC.params, params, undefined, 'pr.list');
 }
 
 /**
@@ -150,7 +150,7 @@ export function validatePrViewParams(
       message: 'Parameter number is required',
     };
   }
-  return validateParams(PR_VIEW_SPEC.params, params);
+  return validateParams(PR_VIEW_SPEC.params, params, undefined, 'pr.view');
 }
 
 /**
@@ -261,7 +261,7 @@ export function validatePrDiffParams(
       message: 'Parameter number is required',
     };
   }
-  return validateParams(PR_DIFF_SPEC.params, params);
+  return validateParams(PR_DIFF_SPEC.params, params, undefined, 'pr.diff');
 }
 
 /**
@@ -343,7 +343,7 @@ export function validatePrChecksParams(
       message: 'Parameter number is required',
     };
   }
-  return validateParams(PR_CHECKS_SPEC.params, params);
+  return validateParams(PR_CHECKS_SPEC.params, params, undefined, 'pr.checks');
 }
 
 /**
@@ -495,7 +495,12 @@ export function validatePrReviewsParams(
       message: 'Parameter number is required',
     };
   }
-  return validateParams(PR_REVIEWS_SPEC.params, params);
+  return validateParams(
+    PR_REVIEWS_SPEC.params,
+    params,
+    undefined,
+    'pr.reviews',
+  );
 }
 
 /**

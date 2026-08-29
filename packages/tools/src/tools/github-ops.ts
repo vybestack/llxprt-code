@@ -383,7 +383,7 @@ export function validateGithubOpParams(
     // validated — silently ignored, which is what the fail-fast invariant
     // forbids. `hasOwnProperty` confines the check to the op's own params.
     if (!Object.prototype.hasOwnProperty.call(spec.params, key)) {
-      return `${op}: unknown parameter "${key}". ${describeGithubOpParams(op)}`;
+      return unknownParamToolMessage(op, key);
     }
   }
   for (const key of spec.required) {
@@ -400,6 +400,62 @@ export function validateGithubOpParams(
     if (msg !== null) return `${op}: ${msg}`;
   }
   return null;
+}
+
+/**
+ * Catalog-backed redirect for a rejected unknown parameter. Names every OTHER
+ * operation that accepts the parameter, so a caller rejected for passing a
+ * param the op does not take learns which op does. Refines well-known cases
+ * with an explicit hint.
+ *
+ * @plan PLAN-20260731-GHBROKER.P08
+ * @requirement REQ-002
+ */
+export function githubParamRedirect(
+  op: string,
+  param: string,
+): Readonly<{ elsewhere: readonly string[]; hint?: string }> | null {
+  const elsewhere = GITHUB_SUPPORTED_OPS.filter(
+    (other) =>
+      other !== op &&
+      Object.prototype.hasOwnProperty.call(
+        GITHUB_OP_SPECS[other].params,
+        param,
+      ),
+  );
+  if (elsewhere.length === 0) return null;
+  if (op === 'issue.create' && param === 'type') {
+    return {
+      elsewhere,
+      hint: 'Issue type is set AFTER creation via issue.edit ({ op: "issue.edit", number, type }), never on issue.create — gh issue create has no --type flag. Create the issue first, then set the type.',
+    };
+  }
+  return { elsewhere };
+}
+
+/**
+ * The redirect sentence for an unknown parameter shared by the tool boundary
+ * and the broker, so both name the same operations.
+ *
+ * @plan PLAN-20260731-GHBROKER.P08
+ * @requirement REQ-002
+ */
+export function githubParamRedirectText(op: string, param: string): string {
+  const redirect = githubParamRedirect(op, param);
+  if (redirect === null) return '';
+  const extra = redirect.hint !== undefined ? ` ${redirect.hint}` : '';
+  return `That parameter is accepted by ${redirect.elsewhere.join(', ')}.${extra}`;
+}
+
+/**
+ * Builds the tool-boundary unknown-parameter rejection, naming the accepted
+ * params and the catalog-backed redirect.
+ *
+ * @plan PLAN-20260731-GHBROKER.P08
+ * @requirement REQ-002
+ */
+function unknownParamToolMessage(op: string, key: string): string {
+  return `${op}: unknown parameter "${key}". ${describeGithubOpParams(op)} ${githubParamRedirectText(op, key)}`.trim();
 }
 
 /**
@@ -420,6 +476,20 @@ export const GITHUB_LIMIT_MAX = 100;
  * @requirement REQ-002, REQ-009
  */
 const REPO_REGEX = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
+
+/**
+ * True when `value` has the shape of a GitHub repository name (`owner/name`).
+ *
+ * Shared between the repo value validator and the broker's search-query
+ * tokenizer (which lifts a `repo:` term into the `--repo` flag), so the
+ * two layers match on one predicate rather than each owning a copy of the regex.
+ *
+ * @plan PLAN-20260731-GHBROKER.P08
+ * @requirement REQ-002
+ */
+export function isGithubRepoName(value: unknown): value is string {
+  return typeof value === 'string' && REPO_REGEX.test(value);
+}
 
 /** Allowed close-reason values for `gh issue close`. */
 const CLOSE_REASONS = ['completed', 'not planned'] as const;
@@ -515,7 +585,7 @@ export function validateGithubParamValue(
 
 /** Validates a repo-kind value: must be "owner/name". */
 function validateRepoValue(key: string, value: unknown): string | null {
-  if (typeof value !== 'string' || !REPO_REGEX.test(value)) {
+  if (!isGithubRepoName(value)) {
     return `Parameter ${key} must be "owner/name"`;
   }
   return null;

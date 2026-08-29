@@ -36,7 +36,12 @@ const LABEL_LIST_SPEC: GithubOpSpec = GITHUB_OP_SPECS['label.list'];
 export function validateLabelListParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(LABEL_LIST_SPEC.params, params);
+  return validateParams(
+    LABEL_LIST_SPEC.params,
+    params,
+    undefined,
+    'label.list',
+  );
 }
 
 /**

@@ -19,6 +19,7 @@
 
 import type { RequestHandler } from './github-broker-request-handler.js';
 import type { GithubParamKind } from '@vybestack/llxprt-code-tools/tools/github-ops.js';
+import type { BrokerError } from './github-broker-errors.js';
 
 /**
  * A validation error produced when a request's parameters do not match an
@@ -129,6 +130,17 @@ export interface OpDescriptor {
    * @requirement REQ-002
    */
   readonly requiredParams?: readonly string[];
+  /**
+   * Optional per-op error augmentation. When declared, the dispatcher runs
+   * it on the structured broker error before the failure is thrown, so an op
+   * can append self-correction guidance (e.g. the search ops telling a caller
+   * to use the `repo` parameter instead of a `repo:` term). The generic
+   * classifier is op-agnostic; ops that need guided failures opt in here.
+   *
+   * @plan PLAN-20260731-GHBROKER.P10
+   * @requirement REQ-013
+   */
+  readonly augmentError?: (error: BrokerError) => BrokerError;
   /**
    * When true, a non-zero gh exit code does NOT short-circuit the
    * response as an error. Instead stdout is still passed to `shape` so

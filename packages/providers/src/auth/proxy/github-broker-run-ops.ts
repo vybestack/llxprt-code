@@ -38,7 +38,7 @@ const RUN_LIST_SPEC: GithubOpSpec = GITHUB_OP_SPECS['run.list'];
 export function validateRunListParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(RUN_LIST_SPEC.params, params);
+  return validateParams(RUN_LIST_SPEC.params, params, undefined, 'run.list');
 }
 
 /**

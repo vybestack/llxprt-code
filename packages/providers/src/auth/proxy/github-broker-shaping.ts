@@ -108,6 +108,51 @@ export function extractLabels(value: unknown): readonly string[] {
 }
 
 /**
+ * Extracts assignee logins from a gh assignees array (defensive), reduced
+ * to logins with empty ones dropped, exactly like `extractLabels` reduces
+ * labels to names. Accepts a bare string element like `extractAuthor`
+ * does. gh's assignee objects are `{ id, login, name, databaseId }` and
+ * `[]` when none.
+ *
+ * @plan PLAN-20260731-GHBROKER.P10
+ * @requirement REQ-013
+ */
+export function extractAssignees(value: unknown): readonly string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((assignee): string => {
+      if (typeof assignee === 'string') return assignee;
+      if (typeof assignee === 'object' && assignee !== null) {
+        const obj = assignee as Record<string, unknown>;
+        if (typeof obj.login === 'string') return obj.login;
+      }
+      return '';
+    })
+    .filter((login) => login.length > 0);
+}
+
+/**
+ * Extracts the milestone title from a gh milestone object (defensive).
+ * Returns null when the milestone is unset (absent, null, or not an
+ * object): the raw milestone carries a multi-paragraph `description`
+ * that would otherwise be repeated on every list item, so only the title
+ * is kept.
+ *
+ * @plan PLAN-20260731-GHBROKER.P10
+ * @requirement REQ-013
+ */
+export function extractMilestone(value: unknown): string | null {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object' && value !== null) {
+    const obj = value as Record<string, unknown>;
+    return typeof obj.title === 'string' && obj.title.length > 0
+      ? obj.title
+      : null;
+  }
+  return null;
+}
+
+/**
  * Extracts shaped comments from a gh comments array (defensive). Returns
  * null when there is no comments array, so the caller can distinguish
  * "not requested" from "zero comments".

@@ -256,7 +256,7 @@ function textHintFor(name: string): string {
     project: 'Project name. Accepted by issue.create.',
     addProject: 'Project to add the item to. Accepted by issue.edit.',
     removeProject: 'Project to remove the item from. Accepted by issue.edit.',
-    type: 'Issue type (e.g. Bug, Feature). Accepted by issue.edit.',
+    type: 'Issue type (e.g. Bug, Feature). Set AFTER creation via issue.edit; NOT accepted by issue.create.',
     base: 'Base branch for the pull request. Accepted by pr.create.',
     head: 'Head branch for the pull request. Accepted by pr.create.',
     threadId:

@@ -202,6 +202,10 @@ function renderIssueView(data: Data): string {
   if (author) lines.push(`by ${author}`);
   const labels = asStrArray(data.labels);
   if (labels.length > 0) lines.push(`labels: ${labels.join(', ')}`);
+  const assignees = asStrArray(data.assignees);
+  if (assignees.length > 0) lines.push(`assignees: ${assignees.join(', ')}`);
+  const milestone = asStr(data.milestone);
+  if (milestone) lines.push(`milestone: ${milestone}`);
   const comments = asDataArray(data.comments);
   if (comments.length > 0) lines.push(`${comments.length} comments`);
   const content = renderViewContent(data);
@@ -232,9 +236,15 @@ function renderList(op: string, data: Data): string {
   const items = asDataArray(data[key]);
   const lines = [`${items.length} ${noun}`];
   for (const item of items.slice(0, MAX_SUMMARY_LINES)) {
-    lines.push(
-      `#${asNum(item.number) ?? '?'} ${asStr(item.state)}  ${asStr(item.title)}`,
-    );
+    let line = `#${asNum(item.number) ?? '?'} ${asStr(item.state)}  ${asStr(item.title)}`;
+    if (op === 'issue.list') {
+      const assignees = asStrArray(item.assignees);
+      const milestone = asStr(item.milestone);
+      if (assignees.length > 0)
+        line += ` (${assignees.join(', ')}${milestone ? ` · ${milestone}` : ''})`;
+      else if (milestone) line += ` (${milestone})`;
+    }
+    lines.push(line);
   }
   const tail = moreTail(items.length);
   if (tail) lines.push(tail);

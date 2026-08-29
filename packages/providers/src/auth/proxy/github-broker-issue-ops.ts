@@ -20,14 +20,16 @@ import {
   type GithubOpSpec,
 } from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 import {
+  assertListShape,
   assertNotPartialSuccess,
+  extractAssignees,
   extractAuthor,
   extractComments,
   extractLabels,
+  extractMilestone,
   extractNumber,
   extractString,
   type ShapedComment,
-  assertListShape,
 } from './github-broker-shaping.js';
 import { resolveLimit } from './github-broker-validation.js';
 
@@ -52,7 +54,12 @@ export function validateIssueViewParams(
       message: 'Parameter number is required',
     };
   }
-  return validateParams(ISSUE_VIEW_SPEC.params, params);
+  return validateParams(
+    ISSUE_VIEW_SPEC.params,
+    params,
+    undefined,
+    'issue.view',
+  );
 }
 
 /**
@@ -67,9 +74,8 @@ export function buildIssueViewArgv(
   comments: boolean,
 ): string[] {
   const number = String(params.number);
-  const fields = comments
-    ? 'number,title,state,author,labels,body,comments'
-    : 'number,title,state,author,labels,body';
+  const required = 'number,title,state,author,labels,body,assignees,milestone';
+  const fields = comments ? `${required},comments` : required;
   const argv = ['issue', 'view', number, '--json', fields];
   if (typeof params.repo === 'string' && params.repo.length > 0) {
     argv.push('--repo', params.repo);
@@ -90,6 +96,9 @@ export interface ShapedIssueView {
   readonly state: string;
   readonly author: string;
   readonly labels: readonly string[];
+  readonly assignees: readonly string[];
+  /** The milestone title, null when the issue has no milestone. */
+  readonly milestone: string | null;
   readonly body: string;
   readonly comments: readonly ShapedComment[] | null;
 }
@@ -113,6 +122,8 @@ export function shapeIssueView(rawJson: unknown): ShapedIssueView {
     state: extractString(raw.state, ''),
     author: extractAuthor(raw.author),
     labels: extractLabels(raw.labels),
+    assignees: extractAssignees(raw.assignees),
+    milestone: extractMilestone(raw.milestone),
     body: extractString(raw.body, ''),
     comments: extractComments(raw.comments),
   };
@@ -149,7 +160,12 @@ export const issueViewDescriptor: OpDescriptor = {
 export function validateIssueListParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(ISSUE_LIST_SPEC.params, params);
+  return validateParams(
+    ISSUE_LIST_SPEC.params,
+    params,
+    undefined,
+    'issue.list',
+  );
 }
 
 /**
@@ -167,7 +183,7 @@ export function buildIssueListArgv(params: Record<string, unknown>): string[] {
     'issue',
     'list',
     '--json',
-    'number,title,state,labels,updatedAt',
+    'number,title,state,labels,updatedAt,assignees,milestone',
   ];
   if (typeof params.search === 'string' && params.search.length > 0) {
     argv.push('--search', params.search);
@@ -217,6 +233,9 @@ export interface ShapedIssueListItem {
   readonly title: string;
   readonly state: string;
   readonly labels: readonly string[];
+  readonly assignees: readonly string[];
+  /** The milestone title, null when the issue has no milestone. */
+  readonly milestone: string | null;
   readonly updatedAt: string;
 }
 
@@ -240,6 +259,8 @@ export function shapeIssueList(
       title: extractString(obj.title, ''),
       state: extractString(obj.state, ''),
       labels: extractLabels(obj.labels),
+      assignees: extractAssignees(obj.assignees),
+      milestone: extractMilestone(obj.milestone),
       updatedAt: extractString(obj.updatedAt, ''),
     };
   });

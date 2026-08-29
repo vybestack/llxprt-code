@@ -46,7 +46,13 @@ import {
   redactTokenShaped,
   mapGraphQLErrorType,
   classifyStderr,
+  augmentSearchError,
 } from '../github-broker-errors.js';
+import {
+  searchIssuesDescriptor,
+  searchPrsDescriptor,
+} from '../github-broker-search-ops.js';
+import { issueViewDescriptor } from '../github-broker-issue-ops.js';
 import {
   buildIssueViewArgv,
   shapeIssueView,
@@ -694,6 +700,10 @@ describe('GitHub broker pure functions (P08)', () => {
       const jsonIdx = argv.indexOf('--json');
       const fieldsValue = argv[jsonIdx + 1];
       expect(fieldsValue).toContain('comments');
+      // The comments field list must also carry the assignment state the
+      // shaped contract now exposes (issue 3407), not just comments.
+      expect(fieldsValue).toContain('assignees');
+      expect(fieldsValue).toContain('milestone');
     });
 
     it('omits comments field when comments=false', () => {
@@ -701,6 +711,11 @@ describe('GitHub broker pure functions (P08)', () => {
       const jsonIdx = argv.indexOf('--json');
       const fieldsValue = argv[jsonIdx + 1];
       expect(fieldsValue).not.toContain('comments');
+      // Even without comments the required view fields must still carry
+      // assignees and milestone (issue 3407); the comments flag is only meant
+      // to add the comments field.
+      expect(fieldsValue).toContain('assignees');
+      expect(fieldsValue).toContain('milestone');
     });
 
     it('appends --repo when repo is provided', () => {
@@ -813,6 +828,8 @@ describe('GitHub broker pure functions (P08)', () => {
         state: 'OPEN',
         author: { login: 'testuser' },
         labels: [{ name: 'bug' }],
+        assignees: [],
+        milestone: null,
         body: 'This is a test body',
         comments: [
           {
@@ -828,6 +845,8 @@ describe('GitHub broker pure functions (P08)', () => {
       expect(shaped.state).toBe('OPEN');
       expect(shaped.author).toBe('testuser');
       expect(shaped.labels).toStrictEqual(['bug']);
+      expect(shaped.assignees).toStrictEqual([]);
+      expect(shaped.milestone).toBeNull();
       expect(shaped.body).toBe('This is a test body');
       expect(Array.isArray(shaped.comments)).toBe(true);
       const c = shaped.comments[0];
@@ -837,16 +856,43 @@ describe('GitHub broker pure functions (P08)', () => {
     });
 
     it('excludes comments when comments array is absent', () => {
+      const description = [
+        'Line one of the milestone body.',
+        '',
+        'Line two of the milestone body continued.',
+        '',
+        'Conclusion paragraph.',
+      ].join('\n');
       const raw = {
         number: 42,
         title: 'Test',
         state: 'OPEN',
         author: { login: 'user' },
         labels: [],
+        assignees: [
+          {
+            id: 'MDQ6VXNlcjQyMDI5',
+            login: 'acoliver',
+            name: 'Andrew C. Oliver',
+            databaseId: 0,
+          },
+        ],
+        milestone: {
+          number: 13,
+          title: '0.12.0',
+          description,
+          dueOn: '2026-08-31T00:00:00Z',
+        },
         body: 'body',
       };
       const shaped = shapeIssueView(raw);
       expect(shaped.comments).toBeNull();
+      // The realistic assignee object is reduced to a login.
+      expect(shaped.assignees).toStrictEqual(['acoliver']);
+      expect(shaped.milestone).toBe('0.12.0');
+      // The milestone description must be reduced to the title alone; its
+      // multi-paragraph text must not appear anywhere in the shaped object.
+      expect(JSON.stringify(shaped)).not.toContain(description);
     });
 
     it('handles missing labels gracefully', () => {
@@ -909,6 +955,57 @@ describe('GitHub broker pure functions (P08)', () => {
 
     it('classifies unknown as GITHUB_ERROR', () => {
       expect(classifyStderr('some random error')).toBe('GITHUB_ERROR');
+    });
+  });
+
+  // ─── augmentSearchError ───────────────────────────────────────────────────
+
+  /**
+   * gh's search failure text blames missing resources or permissions, which
+   * sends a caller down a permissions rabbit hole when the real cause is a
+   * `repo:` term or a pre-quoted qualifier value. The github tool is the only
+   * sanctioned GitHub interface inside the sandbox (no gh binary, no token),
+   * so the error itself has to close the self-correction loop.
+   *
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-3
+   * @issue 3407
+   */
+  describe('augmentSearchError', () => {
+    // The failure exactly as reported in issue 3407.
+    const reported = {
+      code: 'GITHUB_ERROR' as const,
+      message:
+        'Invalid search query "( repo:\\"alibaba/open-code-review author:acoliver\\" ) type:issue".\nThe listed users and repositories cannot be searched either because the resources do not exist or you do not have permission to view them.',
+    };
+
+    it('appends concrete guidance to the reported search failure', () => {
+      const augmented = augmentSearchError(reported);
+      expect(augmented.message).toContain(reported.message);
+      expect(augmented.message).toContain('repo parameter');
+      expect(augmented.message.length).toBeGreaterThan(reported.message.length);
+      // The classification is unchanged; only the guidance is added.
+      expect(augmented.code).toBe('GITHUB_ERROR');
+    });
+
+    it('is idempotent, so a re-augmented error is not annotated twice', () => {
+      const once = augmentSearchError(reported);
+      const twice = augmentSearchError(once);
+      expect(twice.message).toBe(once.message);
+    });
+
+    it('leaves an unrelated failure completely untouched', () => {
+      const rateLimited = {
+        code: 'RATE_LIMITED' as const,
+        message: 'HTTP 403: API rate limit exceeded',
+      };
+      expect(augmentSearchError(rateLimited)).toStrictEqual(rateLimited);
+    });
+
+    it('only the search descriptors opt into guided failures', () => {
+      expect(searchIssuesDescriptor.augmentError).toBeDefined();
+      expect(searchPrsDescriptor.augmentError).toBeDefined();
+      expect(issueViewDescriptor.augmentError).toBeUndefined();
     });
   });
 
