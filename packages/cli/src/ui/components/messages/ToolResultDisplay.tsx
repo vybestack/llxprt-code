@@ -206,7 +206,18 @@ export function trimToVisibleTail(
   const characterBudget = maxDisplayLines * usableWidth;
   if (kept.length > characterBudget) {
     const dropped = kept.length - characterBudget;
-    hiddenDisplayLines += Math.ceil(dropped / usableWidth);
+    // Count the dropped prefix line by line rather than dividing its length by
+    // the width. Short lines each occupy a row regardless of length, so
+    // ignoring newline boundaries here would undercount what was hidden.
+    const droppedLines = kept.slice(0, dropped).split('\n');
+    if (droppedLines[droppedLines.length - 1] === '') {
+      // The prefix ended exactly on a newline, so the trailing empty piece is
+      // the start of a line that is being kept.
+      droppedLines.pop();
+    }
+    for (const line of droppedLines) {
+      hiddenDisplayLines += Math.max(1, Math.ceil(line.length / usableWidth));
+    }
     kept = kept.slice(dropped);
   }
 

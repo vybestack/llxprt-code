@@ -18,7 +18,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { ToolResultDisplay } from './ToolResultDisplay.js';
+import { ToolResultDisplay, trimToVisibleTail } from './ToolResultDisplay.js';
 import { renderWithProviders } from '../../../test-utils/render.js';
 
 interface JscGcApi {
@@ -118,6 +118,15 @@ describe('ToolResultDisplay — large results cost only what they display', () =
     expect(large.peakRssBytes - settled).toBeLessThan(10 * 1024 * 1024);
     expect(large.frame).toContain('hidden');
     expect(large.frame).toContain('abcdefghij');
+  });
+
+  it('counts hidden rows by line, not by character count', () => {
+    // Nine one-character lines followed by a long one. The character budget
+    // drops only 19 characters, but those characters are ten display rows.
+    const text = `${'x\n'.repeat(9)}${'y'.repeat(1001)}`;
+    const { hiddenDisplayLines } = trimToVisibleTail(text, 10, 100);
+
+    expect(hiddenDisplayLines).toBe(10);
   });
 
   it('leaves results that fit entirely visible', () => {
