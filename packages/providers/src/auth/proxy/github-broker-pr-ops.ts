@@ -138,7 +138,7 @@ export const prListDescriptor: OpDescriptor = {
   buildArgv: (params) => buildPrListArgv(params),
   shape: (rawJson, params) => {
     const { items, hasMore } = windowByLimit(shapePrList(rawJson), params);
-    return { prs: items, hasMore };
+    return { hasMore, prs: items };
   },
 };
 

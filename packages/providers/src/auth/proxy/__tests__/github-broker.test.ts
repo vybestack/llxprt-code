@@ -997,12 +997,38 @@ describe('GitHub broker pure functions (P08)', () => {
       expect(twice.message).toBe(once.message);
     });
 
-    it('leaves an unrelated failure completely untouched', () => {
-      const rateLimited = {
+    /**
+     * GitHub throttles the search endpoint separately from everything else,
+     * and says only "wait a few minutes". Two evaluated models fired parallel
+     * searches, got 403s, and could not tell that non-search operations were
+     * still usable; one burned roughly eight of nineteen calls on it.
+     *
+     * @plan PLAN-20260828-ISSUE3407
+     * @requirement AC-3
+     * @issue 3407
+     */
+    it('tells a throttled search that only search is affected', () => {
+      const throttled = {
         code: 'RATE_LIMITED' as const,
-        message: 'HTTP 403: API rate limit exceeded',
+        message:
+          'HTTP 403: You have exceeded a secondary rate limit. Please wait a few minutes before you try again.',
       };
-      expect(augmentSearchError(rateLimited)).toStrictEqual(rateLimited);
+      const augmented = augmentSearchError(throttled);
+      expect(augmented.message).toContain(throttled.message);
+      expect(augmented.message).toContain('issue.list');
+      expect(augmented.code).toBe('RATE_LIMITED');
+      // Throttling guidance must not be confused with query-syntax guidance.
+      expect(augmented.message).not.toContain('repo parameter');
+      // ...and it must not stack on a retry of the same error.
+      expect(augmentSearchError(augmented).message).toBe(augmented.message);
+    });
+
+    it('leaves an unrelated failure completely untouched', () => {
+      const notFound = {
+        code: 'NOT_FOUND' as const,
+        message: 'Could not resolve to a node',
+      };
+      expect(augmentSearchError(notFound)).toStrictEqual(notFound);
     });
 
     it('only the search descriptors opt into guided failures', () => {

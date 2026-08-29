@@ -216,6 +216,52 @@ was called "the most actionable tool error I've encountered" and "a model of wha
 should say"; the `search` qualifier documentation and the do-not-quote warning were followed
 correctly by all three; `issue.view` answered a four-field question in one call.
 
+### Re-run after the fixes
+
+The identical script was run again on all three models against the fixed build
+(`tmp/verify3407/post-*.log`). Measured change:
+
+| | before | after |
+|---|---|---|
+| first-call successes (opus5) | 2 of 8 | 6 of 8 |
+| first-call successes (dsflash) | 4 of 8 | 7 of 8 |
+| "how many open issues" | ~5-6 calls, hand-partitioned | 1 call, `totalCount` |
+| "list open PRs and their authors" | not completable (68 `pr.view` calls) | 1 call |
+
+opus5 on the counting fix: *"`search.issues` returns an explicit `totalCount: 207` alongside
+`hasMore: true`... which is what would have misled me if `hasMore` were not there."* All three
+still rated the `issue.create` + `type` rejection the best error they hit.
+
+### Findings from the re-run, fixed here
+
+- Bot authors disagreed between operations: `app/cursor` from `issue list`, `cursor[bot]` from
+  `search issues`, for the same issue, so cross-operation equality failed. Normalised to the
+  `[bot]` form (AC-7). Both forms are accepted as `author:` qualifiers, so this is consistency
+  rather than round-tripping.
+- `hasMore` and `totalCount` sat at the END of the response, and a size-truncated response is
+  cut from the end, so the total was the first casualty of the truncation it exists to guard
+  against. They now lead the object.
+- The search endpoint is rate-limited separately and GitHub's message says only "wait a few
+  minutes". Two models fired parallel searches, got 403s across all of them, and could not tell
+  that non-search operations still worked; one spent roughly eight of nineteen calls on the
+  lockout. The throttling case now gets its own guidance naming the unaffected operations
+  (AC-3). Note this PR increases pressure on that endpoint, since a truncated search makes a
+  second search-API request for the count.
+
+### Findings from the re-run, NOT fixed
+
+- `issue.list` and `pr.list` still have no `totalCount`; only the search ops do. All three
+  models raised it, and it is a real asymmetry: `issue.list` filters richly and returns
+  `milestone`, while `search.issues` can count but has no milestone field, so "how many issues
+  are on milestone X" needs two operations. Not fixed because a total for `issue.list` would
+  have to come from the search API while the rows come from GraphQL, so the count could
+  disagree with the list it accompanies, and because it would add search-endpoint calls to the
+  throttling problem above. Worth doing deliberately rather than as a footnote.
+- `-label:bug` against a repository with no `bug` label excludes nothing and returns the
+  unfiltered total. All three flagged that this is indistinguishable from a dropped filter.
+  It is correct GitHub search behaviour; two models suggested echoing the effective query in
+  the response, which is a reasonable follow-up.
+
 Known remaining limitation, deliberately not fixed here: results past the `limit` ceiling of
 100 are still unreachable, because `gh search` exposes no page flag and the v1 protocol frame
 cap of 64 KiB makes simply raising the ceiling unsafe. `totalCount` removes the reason most

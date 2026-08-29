@@ -1156,6 +1156,59 @@ describe('issue #3407: search reports the size of the whole result set', () => {
    * @requirement AC-7
    * @issue 3407
    */
+  it('normalises a bot author to one name across list and search', () => {
+    // gh reports the same bot as `app/cursor` from issue list and
+    // `cursor[bot]` from search, so equality checks across ops failed.
+    const fromList = shapeIssueList([
+      {
+        number: 3403,
+        title: 'T',
+        state: 'OPEN',
+        author: { login: 'app/cursor', is_bot: true },
+        labels: [],
+        updatedAt: '',
+      },
+    ]);
+    const fromSearch = shapeSearchResults([
+      {
+        number: 3403,
+        title: 'T',
+        state: 'open',
+        author: { login: 'cursor[bot]', type: 'Bot' },
+        updatedAt: '',
+      },
+    ]);
+    expect(fromList[0].author).toBe('cursor[bot]');
+    expect(fromList[0].author).toBe(fromSearch[0].author);
+    // A human login is untouched.
+    expect(
+      shapeSearchResults([{ number: 1, author: { login: 'acoliver' } }])[0]
+        .author,
+    ).toBe('acoliver');
+  });
+
+  /**
+   * A size-truncated response is cut from the end, so the total has to lead
+   * the object or it is the first thing lost — which is precisely the failure
+   * returning a total exists to prevent.
+   *
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-8
+   * @issue 3407
+   */
+  it('puts hasMore and totalCount before the items array', async () => {
+    const { run } = recordingRunner([rawResults(31), '206\n']);
+    const result = (await searchIssuesDescriptor.execute!(
+      { query: 'is:open' },
+      run,
+      new AbortController().signal,
+    )) as Record<string, unknown>;
+    expect(Object.keys(result).slice(0, 2)).toStrictEqual([
+      'hasMore',
+      'totalCount',
+    ]);
+  });
+
   it('normalises state to lower case across list and search', () => {
     const fromSearch = shapeSearchResults([
       { number: 1, title: 'T', state: 'open', updatedAt: '' },

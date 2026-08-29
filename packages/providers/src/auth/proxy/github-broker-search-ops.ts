@@ -310,10 +310,13 @@ async function executeSearch(
         await run(buildSearchCountArgv(params, kind), { rawOutput: true }),
       )
     : page.items.length;
+  // hasMore and totalCount lead the object: a size-truncated response cuts
+  // from the end, and losing the total is exactly the failure this returns it
+  // to prevent.
   return {
-    [kind === 'issue' ? 'issues' : 'prs']: page.items,
     hasMore: page.hasMore,
     totalCount,
+    [kind === 'issue' ? 'issues' : 'prs']: page.items,
   };
 }
 
@@ -456,7 +459,7 @@ export const searchIssuesDescriptor: OpDescriptor = {
   execute: (params, run) => executeSearch(params, run, 'issue'),
   shape: (rawJson, params) => {
     const { items, hasMore } = shapeSearchPage(rawJson, params);
-    return { issues: items, hasMore };
+    return { hasMore, issues: items };
   },
   augmentError: augmentSearchError,
 };
@@ -518,7 +521,7 @@ export const searchPrsDescriptor: OpDescriptor = {
   execute: (params, run) => executeSearch(params, run, 'pr'),
   shape: (rawJson, params) => {
     const { items, hasMore } = shapeSearchPage(rawJson, params);
-    return { prs: items, hasMore };
+    return { hasMore, prs: items };
   },
   augmentError: augmentSearchError,
 };

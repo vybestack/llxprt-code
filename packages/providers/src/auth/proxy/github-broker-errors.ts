@@ -152,12 +152,54 @@ export const SEARCH_ERROR_GUIDANCE =
  * @plan PLAN-20260731-GHBROKER.P10
  * @requirement REQ-004
  */
+/**
+ * Guidance appended to a throttled search.
+ *
+ * GitHub applies a SEPARATE secondary rate limit to the search endpoint, and
+ * its raw message ("please wait a few minutes") names neither the endpoint nor
+ * the concurrency that triggered it. Two evaluated models fired several
+ * searches in parallel, got 403s across all of them, and could not tell that
+ * only search was affected — one spent roughly eight of nineteen calls on the
+ * lockout and its retries. Non-search operations keep working throughout,
+ * which is the actionable part.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-3
+ * @issue 3407
+ */
+const SEARCH_RATE_LIMIT_GUIDANCE =
+  ' GitHub rate-limits the search endpoint separately and counts concurrent' +
+  ' searches against it, so issue the retry on its own rather than alongside' +
+  ' other searches. Non-search operations (issue.list, issue.view, pr.list,' +
+  ' pr.view, label.list) are unaffected and can be used meanwhile; issue.list' +
+  ' with a "search" qualifier covers most searches within one repository.';
+
+/**
+ * Appends throttling guidance when a search is rejected by the secondary rate
+ * limit, so the caller learns what to do instead of only being told to wait.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-3
+ * @issue 3407
+ */
+function augmentSearchRateLimit(error: BrokerError): BrokerError {
+  const lower = error.message.toLowerCase();
+  const throttled =
+    lower.includes('secondary rate limit') || lower.includes('rate limit');
+  if (!throttled || error.message.includes(SEARCH_RATE_LIMIT_GUIDANCE)) {
+    return error;
+  }
+  return { ...error, message: error.message + SEARCH_RATE_LIMIT_GUIDANCE };
+}
+
 export function augmentSearchError(error: BrokerError): BrokerError {
   const lower = error.message.toLowerCase();
   const isSearchFailure =
     lower.includes('invalid search query') ||
     lower.includes('cannot be searched');
-  if (!isSearchFailure) return error;
+  // Throttling and a malformed query are different failures with different
+  // remedies, so they get different guidance rather than one generic blob.
+  if (!isSearchFailure) return augmentSearchRateLimit(error);
   if (error.message.includes(SEARCH_ERROR_GUIDANCE)) return error;
   return {
     ...error,

@@ -285,6 +285,6 @@ export const issueListDescriptor: OpDescriptor = {
   buildArgv: (params) => buildIssueListArgv(params),
   shape: (rawJson, params) => {
     const { items, hasMore } = windowByLimit(shapeIssueList(rawJson), params);
-    return { issues: items, hasMore };
+    return { hasMore, issues: items };
   },
 };

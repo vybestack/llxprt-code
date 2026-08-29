@@ -112,6 +112,6 @@ export const labelListDescriptor: OpDescriptor = {
   buildArgv: (params) => buildLabelListArgv(params),
   shape: (rawJson, params) => {
     const { items, hasMore } = windowByLimit(shapeLabelList(rawJson), params);
-    return { labels: items, hasMore };
+    return { hasMore, labels: items };
   },
 };

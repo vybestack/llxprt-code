@@ -121,6 +121,6 @@ export const runListDescriptor: OpDescriptor = {
   buildArgv: (params) => buildRunListArgv(params),
   shape: (rawJson, params) => {
     const { items, hasMore } = windowByLimit(shapeRunList(rawJson), params);
-    return { runs: items, hasMore };
+    return { hasMore, runs: items };
   },
 };

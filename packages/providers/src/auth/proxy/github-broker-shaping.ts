@@ -132,12 +132,32 @@ export function extractState(value: unknown): string {
  * @requirement REQ-013
  */
 export function extractAuthor(value: unknown): string {
-  if (typeof value === 'string') return value;
+  if (typeof value === 'string') return normalizeLogin(value);
   if (typeof value === 'object' && value !== null) {
     const obj = value as Record<string, unknown>;
-    if (typeof obj.login === 'string') return obj.login;
+    if (typeof obj.login === 'string') return normalizeLogin(obj.login);
   }
   return '';
+}
+
+/**
+ * Normalises an app login to the `name[bot]` form GitHub itself displays.
+ *
+ * gh reports the same bot two ways: `gh issue list` says `app/cursor` while
+ * `gh search issues` says `cursor[bot]`, so the same issue carried two
+ * different authors depending on which operation returned it and equality
+ * checks across operations failed. Both forms are accepted as `author:`
+ * qualifiers, so neither round-trips better; the `[bot]` suffix wins because
+ * it is the account's actual login.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-7
+ * @issue 3407
+ */
+function normalizeLogin(login: string): string {
+  return login.startsWith('app/')
+    ? `${login.slice('app/'.length)}[bot]`
+    : login;
 }
 
 /**
