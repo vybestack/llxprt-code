@@ -169,6 +169,42 @@ function renderObjectContent(
 }
 
 /**
+ * Drops source lines that cannot reach the visible window.
+ *
+ * `MaxSizedBox` shows the tail of its content and lays out every line it is
+ * given before clipping. A source line always occupies at least one display
+ * line, so keeping the last `maxDisplayLines` source lines is enough to fill
+ * the window, and everything earlier can be dropped before layout rather than
+ * wrapped and discarded afterwards.
+ *
+ * The returned count is the estimated number of display lines removed, so the
+ * caller can report them through `additionalHiddenLinesCount`. It is an
+ * estimate because exact wrapping depends on word boundaries.
+ */
+export function trimToVisibleTail(
+  text: string,
+  maxDisplayLines: number,
+  width: number,
+): { text: string; hiddenDisplayLines: number } {
+  const lines = text.split('\n');
+  if (lines.length <= maxDisplayLines) {
+    return { text, hiddenDisplayLines: 0 };
+  }
+
+  const usableWidth = Math.max(1, width);
+  const removed = lines.slice(0, lines.length - maxDisplayLines);
+  let hiddenDisplayLines = 0;
+  for (const line of removed) {
+    hiddenDisplayLines += Math.max(1, Math.ceil(line.length / usableWidth));
+  }
+
+  return {
+    text: lines.slice(lines.length - maxDisplayLines).join('\n'),
+    hiddenDisplayLines,
+  };
+}
+
+/**
  * Render string content.
  */
 function renderStringContent(
@@ -191,11 +227,20 @@ function renderStringContent(
     );
   }
 
+  const { text, hiddenDisplayLines } =
+    availableHeight === undefined
+      ? { text: displayContent, hiddenDisplayLines: 0 }
+      : trimToVisibleTail(displayContent, availableHeight, childWidth);
+
   return (
-    <MaxSizedBox maxHeight={availableHeight} maxWidth={childWidth}>
+    <MaxSizedBox
+      maxHeight={availableHeight}
+      maxWidth={childWidth}
+      additionalHiddenLinesCount={hiddenDisplayLines}
+    >
       <Box>
         <Text color={Colors.Foreground} wrap="wrap">
-          {displayContent}
+          {text}
         </Text>
       </Box>
     </MaxSizedBox>
