@@ -114,12 +114,27 @@ function makeControllablePorts(
     },
     memoryUsage,
     rssBytes: () => memoryUsage().rss,
+    retainedHeapBytes: () => memoryUsage().heapUsed,
     fireTick: () => {
       if (handler !== null) handler();
     },
     intervalCount: () => intervals,
     clearCount: () => clears,
     isCleared: () => handler === null,
+  };
+}
+
+function makeCapturingAddItem(): {
+  addItem: (item: HistoryItemWithoutId, ts: number) => void;
+  texts: () => readonly string[];
+} {
+  const texts: string[] = [];
+  return {
+    addItem: (item: HistoryItemWithoutId) => {
+      const text = (item as { text?: unknown }).text;
+      texts.push(typeof text === 'string' ? text : '');
+    },
+    texts: () => texts,
   };
 }
 
@@ -274,6 +289,7 @@ describe('useMemoryMonitor — disabled path uses rss() not full memoryUsage (P1
         rssCalls++;
         return 1000;
       },
+      retainedHeapBytes: () => 0,
     };
     __setMemoryMonitorPortsForTesting(ports);
     const { addItem } = makeAddItem();
@@ -308,6 +324,7 @@ describe('useMemoryMonitor — disabled path uses rss() not full memoryUsage (P1
         rssCalls++;
         return 10_000_000;
       },
+      retainedHeapBytes: () => 0,
     };
     __setMemoryMonitorPortsForTesting(ports);
     const { addItem } = makeAddItem();
@@ -390,5 +407,225 @@ describe('useMemoryMonitor — disabled path uses rss() not full memoryUsage (P1
         ).memoryUsage = origMu;
       }
     });
+  });
+});
+
+/**
+ * Resident memory is a high-water mark: measured on Bun 1.3.14 (darwin-arm64),
+ * releasing 200 MB of strings returns `heapSize` to baseline while RSS stays at
+ * its peak. A warning that reports only RSS therefore describes a past peak as
+ * though it were current usage. The warning must report retained JS heap too,
+ * so the reader can tell accumulation apart from a one-time spike.
+ */
+describe('useMemoryMonitor — high-memory warning distinguishes peak from retained', () => {
+  const EIGHT_POINT_FOUR_GB = 9_018_355_814;
+  const RETAINED_HEAP = 1_288_490_188;
+
+  it('reports both resident memory and retained JS heap in the warning', () => {
+    const ports = makeControllablePorts(() => ({
+      rss: EIGHT_POINT_FOUR_GB,
+      heapUsed: RETAINED_HEAP,
+      heapTotal: RETAINED_HEAP,
+      external: 0,
+      arrayBuffers: 0,
+    }));
+    __setMemoryMonitorPortsForTesting(ports);
+    const { addItem, texts } = makeCapturingAddItem();
+
+    const { unmount } = renderHook(() => useMemoryMonitor({ addItem }));
+    ports.fireTick();
+
+    expect(texts()).toHaveLength(1);
+    const warning = texts()[0] ?? '';
+    // 9_018_355_814 / 1024^3 = 8.40 GB resident.
+    expect(warning).toContain('8.40 GB');
+    // 1_288_490_188 / 1024^3 = 1.20 GB retained.
+    expect(warning).toContain('1.20 GB');
+    expect(warning).toContain('/bug');
+
+    unmount();
+  });
+
+  it('describes resident memory as a peak that may not shrink', () => {
+    const ports = makeControllablePorts(() => ({
+      rss: EIGHT_POINT_FOUR_GB,
+      heapUsed: RETAINED_HEAP,
+      heapTotal: RETAINED_HEAP,
+      external: 0,
+      arrayBuffers: 0,
+    }));
+    __setMemoryMonitorPortsForTesting(ports);
+    const { addItem, texts } = makeCapturingAddItem();
+
+    const { unmount } = renderHook(() => useMemoryMonitor({ addItem }));
+    ports.fireTick();
+
+    const warning = texts()[0] ?? '';
+    expect(warning.toLowerCase()).toContain('peak');
+    expect(warning.toLowerCase()).toContain('retained');
+
+    unmount();
+  });
+
+  it('keeps every tick on the cheap accessors and never takes a full reading', () => {
+    let fullCalls = 0;
+    let rssCalls = 0;
+    let heapCalls = 0;
+    let rss = 1_000_000;
+    const handler: { current: (() => void) | null } = { current: null };
+    const ports: MemoryMonitorPorts = {
+      setInterval: (h: () => void, _ms: number) => {
+        handler.current = h;
+        return 1;
+      },
+      clearInterval: () => {
+        handler.current = null;
+      },
+      memoryUsage: () => {
+        fullCalls += 1;
+        return {
+          rss,
+          heapUsed: RETAINED_HEAP,
+          heapTotal: RETAINED_HEAP,
+          external: 0,
+          arrayBuffers: 0,
+        };
+      },
+      rssBytes: () => {
+        rssCalls += 1;
+        return rss;
+      },
+      retainedHeapBytes: () => {
+        heapCalls += 1;
+        return RETAINED_HEAP;
+      },
+    };
+    __setMemoryMonitorPortsForTesting(ports);
+    const { addItem, texts } = makeCapturingAddItem();
+
+    const { unmount } = renderHook(() => useMemoryMonitor({ addItem }));
+
+    // Below threshold: cheap RSS accessor only, no heap read, no full sample.
+    handler.current?.();
+    handler.current?.();
+    expect(rssCalls).toBe(2);
+    expect(heapCalls).toBe(0);
+    expect(texts()).toHaveLength(0);
+
+    // Crossing the threshold reads the retained heap, still not a full sample.
+    rss = EIGHT_POINT_FOUR_GB;
+    handler.current?.();
+    expect(texts()).toHaveLength(1);
+    expect(rssCalls).toBe(3);
+    expect(heapCalls).toBe(1);
+    // A full MemoryUsage object is never allocated on the disabled path.
+    expect(fullCalls).toBe(0);
+
+    unmount();
+  });
+
+  it('stays on the cheap path for every tick after the warning', () => {
+    let fullCalls = 0;
+    let rssCalls = 0;
+    let heapCalls = 0;
+    const handler: { current: (() => void) | null } = { current: null };
+    const ports: MemoryMonitorPorts = {
+      setInterval: (h: () => void, _ms: number) => {
+        handler.current = h;
+        return 1;
+      },
+      clearInterval: () => {
+        handler.current = null;
+      },
+      memoryUsage: () => {
+        fullCalls += 1;
+        return {
+          rss: EIGHT_POINT_FOUR_GB,
+          heapUsed: RETAINED_HEAP,
+          heapTotal: RETAINED_HEAP,
+          external: 0,
+          arrayBuffers: 0,
+        };
+      },
+      rssBytes: () => {
+        rssCalls += 1;
+        return EIGHT_POINT_FOUR_GB;
+      },
+      retainedHeapBytes: () => {
+        heapCalls += 1;
+        return RETAINED_HEAP;
+      },
+    };
+    __setMemoryMonitorPortsForTesting(ports);
+    const { addItem, texts } = makeCapturingAddItem();
+
+    const { unmount } = renderHook(() => useMemoryMonitor({ addItem }));
+
+    // Five ticks all above the threshold.
+    handler.current?.();
+    handler.current?.();
+    handler.current?.();
+    handler.current?.();
+    handler.current?.();
+
+    // The warning fires once and reads the heap once, while the interval keeps
+    // sampling RSS on every tick and never allocates a full MemoryUsage.
+    expect(texts()).toHaveLength(1);
+    expect(heapCalls).toBe(1);
+    expect(rssCalls).toBe(5);
+    expect(fullCalls).toBe(0);
+
+    unmount();
+  });
+
+  it('takes one full reading per tick when telemetry is enabled', () => {
+    let fullCalls = 0;
+    const sample: NodeJS.MemoryUsage = {
+      rss: EIGHT_POINT_FOUR_GB,
+      heapUsed: RETAINED_HEAP,
+      heapTotal: RETAINED_HEAP,
+      external: 0,
+      arrayBuffers: 0,
+    };
+    const handler: { current: (() => void) | null } = { current: null };
+    const ports: MemoryMonitorPorts = {
+      setInterval: (h: () => void, _ms: number) => {
+        handler.current = h;
+        return 1;
+      },
+      clearInterval: () => {
+        handler.current = null;
+      },
+      memoryUsage: () => {
+        fullCalls += 1;
+        return sample;
+      },
+      rssBytes: () => sample.rss,
+      retainedHeapBytes: () => sample.heapUsed,
+    };
+    __setMemoryMonitorPortsForTesting(ports);
+    const { addItem, texts } = makeCapturingAddItem();
+
+    const sink = new PerfSink({ dir, runUuid: crypto.randomUUID() });
+    const controller = new MemoryTelemetryController({
+      sink,
+      monotonicNow: () => 0,
+      memoryNow: () => sample,
+    });
+    activeSinks.push(sink);
+    activeControllers.push(controller);
+
+    const { unmount } = renderHook(() =>
+      useMemoryMonitor({ addItem, memoryController: controller }),
+    );
+
+    handler.current?.();
+
+    expect(texts()).toHaveLength(1);
+    expect(texts()[0] ?? '').toContain('1.20 GB');
+    // The tick's own reading, and the warning does not trigger another.
+    expect(fullCalls).toBe(1);
+
+    unmount();
   });
 });
