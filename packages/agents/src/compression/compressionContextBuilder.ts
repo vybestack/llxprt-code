@@ -29,6 +29,7 @@ export async function buildCompressionContext(
   ) => Promise<CompressionProviderResult>,
   activeTodosProvider: (() => Promise<string | undefined>) | undefined,
   logger: DebugLogger,
+  options?: { targetTokenCount?: number },
 ): Promise<CompressionContext> {
   const promptResolver = new PromptResolver();
   const promptBaseDir = path.join(Storage.getGlobalConfigDir(), 'prompts');
@@ -51,6 +52,9 @@ export async function buildCompressionContext(
     estimateTokens: (contents) =>
       historyService.estimateTokensForContents(contents as IContent[]),
     currentTokenCount: historyService.getTotalTokens(),
+    ...(options?.targetTokenCount !== undefined
+      ? { targetTokenCount: options.targetTokenCount }
+      : {}),
     logger,
     resolveProvider: providerResolver,
     promptResolver,

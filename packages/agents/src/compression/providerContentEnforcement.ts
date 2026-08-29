@@ -21,6 +21,7 @@ import { buildProviderContent } from '@vybestack/llxprt-code-core/services/histo
 import { buildContextOverflowError } from './contextOverflowError.js';
 import {
   INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD,
+  computeHistoryTruncationTarget,
   computeMarginAdjustedLimit,
 } from './contextLimitPolicy.js';
 import {
@@ -47,6 +48,7 @@ export interface ProviderContentEnforcementDeps {
   performFallbackCompression: (
     promptId: string,
     applyResult: (newHistory: IContent[]) => Promise<void>,
+    targetTokenCount?: number,
   ) => Promise<boolean>;
   getPromptTokenBaseline: () => number | null;
   resetPromptTokenBaseline: () => void;
@@ -153,6 +155,7 @@ export class ProviderContentEnforcer {
       model,
       initialProjected,
       retryResult.compressionFailure,
+      retryResult.projected,
     );
   }
 
@@ -180,6 +183,7 @@ export class ProviderContentEnforcer {
     model: string,
     initialProjected: number,
     compressionFailure: Error | undefined,
+    projectedBeforeTruncation: number,
   ): Promise<IContent[]> {
     const truncationResult = await this.forceTruncation(
       promptId,
@@ -187,6 +191,11 @@ export class ProviderContentEnforcer {
       limits.completionBudget,
       model,
       compressionFailure,
+      computeHistoryTruncationTarget(
+        projectedBeforeTruncation,
+        limits.marginAdjustedLimit,
+        this.deps.historyService.getTotalTokens(),
+      ),
     );
     if (
       truncationResult.truncationApplied &&
@@ -513,8 +522,12 @@ export class ProviderContentEnforcer {
     completionBudget: number,
     model: string,
     compressionFailure: Error | undefined,
+    targetTokenCount: number | undefined,
   ): Promise<OverflowReductionResult> {
-    const fallbackOutcome = await this.executeFallbackTruncation(promptId);
+    const fallbackOutcome = await this.executeFallbackTruncation(
+      promptId,
+      targetTokenCount,
+    );
     await this.deps.historyService.waitForTokenUpdates();
     const contents = this.recomposeProviderContents(pendingContents);
     const projected = await this.estimateProviderProjection(
@@ -581,7 +594,10 @@ export class ProviderContentEnforcer {
    * The existing history remains untouched unless the complete candidate is
    * accepted and its token accounting succeeds.
    */
-  private async executeFallbackTruncation(promptId: string): Promise<{
+  private async executeFallbackTruncation(
+    promptId: string,
+    targetTokenCount: number | undefined,
+  ): Promise<{
     truncationApplied: boolean;
     truncationFailure?: Error;
   }> {
@@ -602,6 +618,7 @@ export class ProviderContentEnforcer {
           this.deps.resetPromptTokenBaseline();
           candidate.committed = true;
         },
+        targetTokenCount,
       );
       if (!fallbackSucceeded && candidate.installed) {
         throw new Error(

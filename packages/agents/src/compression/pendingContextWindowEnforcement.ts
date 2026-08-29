@@ -29,6 +29,7 @@ import type {
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { buildContextOverflowError } from './contextOverflowError.js';
+import { computeHistoryTruncationTarget } from './contextLimitPolicy.js';
 import {
   truncateLargestToolResponses,
   type ToolResponseTruncationResult,
@@ -62,7 +63,10 @@ export interface PendingContextWindowEnforcerDeps {
     promptId: string,
     options: { bypassCooldown: true; trigger: 'auto' },
   ): Promise<PerformCompressionResult>;
-  buildCompressionContext(promptId: string): Promise<CompressionContext>;
+  buildCompressionContext(
+    promptId: string,
+    targetTokenCount?: number,
+  ): Promise<CompressionContext>;
   compressWithFallbackStrategy(
     context: CompressionContext,
   ): Promise<StrategyCompressionResult>;
@@ -402,7 +406,14 @@ export class PendingContextWindowEnforcer {
     this.deps.setSuppressDensityDirty(true);
     let truncationFailure: Error | undefined;
     try {
-      const context = await this.deps.buildCompressionContext(input.promptId);
+      const context = await this.deps.buildCompressionContext(
+        input.promptId,
+        computeHistoryTruncationTarget(
+          input.postCompressionProjected,
+          input.marginAdjustedLimit,
+          this.deps.historyService.getTotalTokens(),
+        ),
+      );
       const result = await this.deps.compressWithFallbackStrategy(context);
       await this.applyFallbackCompressionResult(result);
       this.deps.logger.debug(

@@ -78,12 +78,16 @@ function deduplicateToolCallRequests(
 }
 
 function isTerminalStreamOutcome(type: AgentEventType): boolean {
-  return (
-    type === AgentEventType.Error ||
-    type === AgentEventType.StreamIdleTimeout ||
-    type === AgentEventType.UserCancelled ||
-    type === AgentEventType.LoopDetected
-  );
+  switch (type) {
+    case AgentEventType.Error:
+    case AgentEventType.StreamIdleTimeout:
+    case AgentEventType.UserCancelled:
+    case AgentEventType.LoopDetected:
+    case AgentEventType.ContextWindowWillOverflow:
+      return true;
+    default:
+      return false;
+  }
 }
 
 /** A mutable holder so promise callbacks can communicate state to the loop. */
