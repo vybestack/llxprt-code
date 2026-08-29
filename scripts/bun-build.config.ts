@@ -171,6 +171,28 @@ const a2aServerConfig: Parameters<typeof Bun.build>[0] = {
  */
 export const CLI_BUNDLE_DIR = join(root, 'packages/cli/bundle');
 
+const cliBundleSharedConfig = {
+  target: 'bun',
+  loader: { '.node': 'file' },
+  minify: false,
+  splitting: false,
+  sourcemap: 'none',
+  define: {
+    'process.env.CLI_VERSION': JSON.stringify(pkg.version),
+    'process.env.NODE_ENV': '"production"',
+  },
+  outdir: CLI_BUNDLE_DIR,
+} satisfies Pick<
+  Parameters<typeof Bun.build>[0],
+  | 'target'
+  | 'loader'
+  | 'minify'
+  | 'splitting'
+  | 'sourcemap'
+  | 'define'
+  | 'outdir'
+>;
+
 /**
  * CLI bundle (issue #2999): packages/cli/index.ts -> bundle/llxprt.js.
  *
@@ -182,22 +204,81 @@ export const CLI_BUNDLE_DIR = join(root, 'packages/cli/bundle');
  * external (resolved from node_modules at launch, exactly as raw TS does).
  */
 export const cliBundleConfig: Parameters<typeof Bun.build>[0] = {
-  target: 'bun',
+  ...cliBundleSharedConfig,
   external: [...EXTERNALS, ...CLI_DIRNAME_DEPENDENT_EXTERNALS],
-  loader: { '.node': 'file' },
-  minify: false,
-  splitting: false,
-  sourcemap: 'none',
-  define: {
-    'process.env.CLI_VERSION': JSON.stringify(pkg.version),
-    'process.env.NODE_ENV': '"production"',
-  },
   // Absolute paths: `prepack` runs this from `packages/cli`, not the repo
   // root, so cwd-relative entrypoints would not resolve.
   entrypoints: [join(root, 'packages/cli/index.ts')],
-  outdir: CLI_BUNDLE_DIR,
   naming: 'llxprt.js',
 };
+
+interface CliBundleTarget {
+  readonly label: string;
+  readonly config: Parameters<typeof Bun.build>[0];
+}
+
+function profilerBundleConfig(
+  sourceName: string,
+  outputName: string,
+): Parameters<typeof Bun.build>[0] {
+  return {
+    ...cliBundleSharedConfig,
+    external: [...EXTERNALS, ...CLI_DIRNAME_DEPENDENT_EXTERNALS],
+    entrypoints: [join(root, 'scripts/memory', sourceName)],
+    naming: outputName,
+  };
+}
+
+export function requireDependenciesInstalled(
+  workspaceRoot: string = root,
+): void {
+  if (!dependenciesInstalled(workspaceRoot)) {
+    throw new Error(
+      'bun-build.config: cannot build publishable CLI bundles without node_modules. Run `npm install` before packing.',
+    );
+  }
+}
+
+/**
+ * Each executable has its own single-entry build so its published name cannot
+ * depend on Bun's multi-entry naming rules. The preload remains an independent
+ * side-effect entry rather than being imported by the launcher bundle.
+ */
+export const cliBundleTargets: readonly CliBundleTarget[] = [
+  { label: 'cli-bundle', config: cliBundleConfig },
+  {
+    label: 'memprofile-launcher',
+    config: profilerBundleConfig(
+      'installed-launcher.ts',
+      'memprofile-launcher.js',
+    ),
+  },
+  {
+    label: 'memprofile-preload',
+    config: profilerBundleConfig(
+      'installed-preload.ts',
+      'memprofile-preload.js',
+    ),
+  },
+  {
+    label: 'memprofile-request',
+    config: profilerBundleConfig(
+      'installed-request.ts',
+      'memprofile-request.js',
+    ),
+  },
+  {
+    label: 'memprofile-report',
+    config: profilerBundleConfig('installed-report.ts', 'memprofile-report.js'),
+  },
+  {
+    label: 'memprofile-analyze',
+    config: profilerBundleConfig(
+      'installed-analyze.ts',
+      'memprofile-analyze.js',
+    ),
+  },
+];
 
 /**
  * Separator for multi-diagnostic messages: one diagnostic per line, indented so
@@ -313,6 +394,32 @@ function pruneStaleBundleEntries(bundleDir: string, keep: Set<string>): void {
   }
 }
 
+const INK_MEMORY_RETENTION_PATCH_VERSION = 2;
+const INK_MEMORY_RETENTION_PATCH_MARKER = `export const internal_memoryRetentionPatchVersion = ${INK_MEMORY_RETENTION_PATCH_VERSION};`;
+
+export function assertInkMemoryRetentionPatch(rootDir: string = root): void {
+  const measureTextPath = join(
+    rootDir,
+    'node_modules',
+    'ink',
+    'build',
+    'measure-text.js',
+  );
+  let source: string;
+  try {
+    source = readFileSync(measureTextPath, 'utf8');
+  } catch {
+    throw new Error(
+      `Ink memory-retention patch v${INK_MEMORY_RETENTION_PATCH_VERSION} is required; run the repository install before building publishable CLI bundles.`,
+    );
+  }
+  if (!source.includes(INK_MEMORY_RETENTION_PATCH_MARKER)) {
+    throw new Error(
+      `Ink memory-retention patch v${INK_MEMORY_RETENTION_PATCH_VERSION} is required; reinstall dependencies so patch-package can apply patches/ink+6.4.8.patch.`,
+    );
+  }
+}
+
 /**
  * Builds the prebuilt CLI bundle only (issue #2999).
  *
@@ -324,26 +431,35 @@ function pruneStaleBundleEntries(bundleDir: string, keep: Set<string>): void {
  * failure, not as a hard kill of the test runner process.
  */
 export async function buildCliBundle(): Promise<readonly string[]> {
-  let cliResult: Awaited<ReturnType<typeof Bun.build>>;
-  try {
-    cliResult = await Bun.build(cliBundleConfig);
-  } catch (error) {
-    throw new Error(`cli-bundle build failed: ${describeBuildFailure(error)}`);
+  assertInkMemoryRetentionPatch();
+  const results: Bun.BuildOutput[] = [];
+  for (const target of cliBundleTargets) {
+    let result: Awaited<ReturnType<typeof Bun.build>>;
+    try {
+      result = await Bun.build(target.config);
+    } catch (error) {
+      throw new Error(
+        `${target.label} build failed: ${describeBuildFailure(error)}`,
+      );
+    }
+    if (!result.success) {
+      throw new Error(
+        `${target.label} build completed with errors: ${describeBuildLogs(result.logs ?? [])}`,
+      );
+    }
+    results.push(result);
   }
-  if (!cliResult.success) {
-    throw new Error(
-      `cli-bundle build completed with errors: ${describeBuildLogs(cliResult.logs ?? [])}`,
-    );
-  }
-  const outputs = cliResult.outputs.map((o) => `${o.path}=${o.size}`);
-  // Drop stale assets only once the build has succeeded, so a transient build
-  // failure leaves the previous bundle intact instead of deleting it. Bun.build
-  // does not clean its outdir and the stager only writes — never deletes — so
-  // without this an alias, policy, or template removed from source would linger
-  // and ship. The freshly emitted artifacts are preserved by name.
+
+  const emittedOutputs = results.flatMap((result) => result.outputs);
+  const outputs = emittedOutputs.map(
+    (output) => `${output.path}=${output.size}`,
+  );
+  // Prune only after the complete publication set succeeds. A failed profiler
+  // build therefore fails prepack without deleting any previously publishable
+  // artifact, while a successful run removes outputs no longer produced.
   pruneStaleBundleEntries(
     CLI_BUNDLE_DIR,
-    new Set(cliResult.outputs.map((o) => basename(o.path))),
+    new Set(emittedOutputs.map((output) => basename(output.path))),
   );
   // Stage the runtime data assets the bundled code reads relative to the
   // bundle directory (issue #3068). Throws on a missing required asset so a
@@ -381,19 +497,7 @@ async function runBuilds(argv: readonly string[]): Promise<void> {
     process.exit(1);
   }
 
-  // Skipping is safe specifically because the bundle is an optimisation, not a
-  // requirement: packages/cli ships its TypeScript source too, and the entry
-  // resolver falls back to it when no bundle is present. A publisher always has
-  // dependencies installed, so a real release still gets the bundle; this only
-  // spares dependency-free `npm pack` callers a failure they cannot act on.
-  if (!dependenciesInstalled()) {
-    console.error(
-      'bun-build.config: node_modules is absent, so the CLI bundle cannot be ' +
-        'built. Skipping the bundle; the package still ships TypeScript source ' +
-        'and the launcher falls back to it. Run `npm install` to bundle.',
-    );
-    return;
-  }
+  requireDependenciesInstalled();
 
   const artifacts: string[] = [];
   if (!cliOnly) {

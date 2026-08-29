@@ -351,6 +351,50 @@ function main() {
         ),
         `global --version output unexpected: ${result.stdout}`,
       );
+
+      const profileDir = join(tempDir, 'global-installed-profile');
+      const profileResult = spawnSync(
+        binInv.command,
+        [
+          ...binInv.baseArgs,
+          '--memprofile=1',
+          '--memprofile-dir',
+          profileDir,
+          '--version',
+        ],
+        {
+          encoding: 'utf8',
+          timeout: 30_000,
+          env: { ...process.env, PATH: constrainedPath() },
+        },
+      );
+      if (profileResult.error) {
+        throw new Error(
+          `global --memprofile spawn failed: ${profileResult.error.message}`,
+        );
+      }
+      if (profileResult.status !== 0) {
+        throw new Error(
+          `global --memprofile exited ${profileResult.status}: ${profileResult.stderr}`,
+        );
+      }
+      const samplesPath = join(profileDir, 'samples.jsonl');
+      assert(
+        existsSync(samplesPath),
+        `global --memprofile did not create ${samplesPath}`,
+      );
+      const sampleLines = readFileSync(samplesPath, 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line));
+      assert(
+        sampleLines.some((sample) => sample.tag === 'startup'),
+        'global --memprofile did not record a startup sample',
+      );
+      assert(
+        sampleLines.some((sample) => sample.tag === 'exit'),
+        'global --memprofile did not record an exit sample',
+      );
     });
 
     // 3. Local install of replica runs --version and exits 0.

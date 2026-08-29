@@ -18,39 +18,42 @@
  *
  * The heap tripled while `heapUsed` sat still. That is not a scale factor to
  * correct for, it is a number that does not move, so any trend built on it is
- * meaningless — which is why a session could grow to many gigabytes while
- * `/perf` reported a small, flat heap.
+ * meaningless. A session could grow to many gigabytes while `/perf` reported
+ * a small, flat heap.
  *
- * `rss` and `external` from the shim are sound and are passed through
- * unchanged; only `heapUsed`/`heapTotal` are re-sourced.
+ * `rss`, `external`, and `heapTotal` come from the shim. `heapTotal` is
+ * floored at the JSC heap size so it cannot be less than `heapUsed`; only
+ * `heapUsed` is re-sourced from `bun:jsc`.
  *
  * LLxprt runs under Bun, so failure to load `bun:jsc` is a startup error rather
  * than a reason to silently fall back to the inaccurate compatibility value.
  *
- * TWO MEASURED PROPERTIES OF `heapStats()` THAT SHAPE THIS CODE
+ * `heapStats()` must not be used for periodic monitoring. It enumerates live
+ * heap cells and allocates statistics while doing so. On a large, active heap,
+ * that work can block the event loop and sharply increase resident memory.
+ * `heapSize()` reads the same heap-size counter without enumerating the heap.
  *
- * 1. `extraMemorySize` must NOT be added to `heapSize`. It double-counts:
- *    retaining strings of a known logical size reported
+ * Two measured properties shape the remaining behavior:
+ *
+ * 1. `extraMemorySize` from `heapStats()` must not be added to `heapSize`.
+ *    Retaining strings of a known logical size reported
  *    `heapSize == extraMemorySize == logicalBytes`, so summing them yields
- *    exactly 2x the truth.
+ *    exactly twice the retained size.
  *
- * 2. `heapSize` lags allocation until a sweep. Sampled immediately after
+ * 2. `heapSize()` lags allocation until a sweep. Sampled immediately after
  *    retaining 185 MB it read 67 MB; after `gcAndSweep()` it read 185 MB,
  *    matching the logical size exactly.
  *
- * This sampler deliberately does NOT force a collection. It runs on a 60 s UI
- * tick, and a full GC against a multi-gigabyte heap is a user-visible pause —
- * a monitor must not perturb what it observes. The consequence is that
+ * This sampler deliberately does not force a collection. It runs on a 60 s UI
+ * tick, and a full GC against a multi-gigabyte heap is a user-visible pause.
+ * A monitor must not perturb what it observes. The consequence is that
  * `heapUsed` is a floor that trails recent allocation and converges after the
- * next natural collection, which is sound for the trend this feeds. Callers
- * wanting an exact instantaneous figure should collect first and read
- * `heapStats()` themselves.
+ * next natural collection, which is sound for the trend this feeds.
  */
 
 /** The subset of `bun:jsc` this module needs. */
 interface JscHeapApi {
   heapSize: () => number;
-  heapStats: () => { heapSize: number; heapCapacity: number };
 }
 
 /**
@@ -75,12 +78,7 @@ function isJscHeapApi(value: unknown): value is JscHeapApi {
   if (typeof value !== 'object' || value === null) {
     return false;
   }
-  return (
-    'heapSize' in value &&
-    typeof value.heapSize === 'function' &&
-    'heapStats' in value &&
-    typeof value.heapStats === 'function'
-  );
+  return 'heapSize' in value && typeof value.heapSize === 'function';
 }
 
 /** Loads the synchronous JavaScriptCore heap API required by this Bun CLI. */
@@ -90,7 +88,7 @@ function loadJscHeapApi(): JscHeapApi {
   }
   const jsc = process.getBuiltinModule('bun:jsc');
   if (!isJscHeapApi(jsc)) {
-    throw new Error('bun:jsc heap statistics are unavailable');
+    throw new Error('bun:jsc heap size is unavailable');
   }
   return jsc;
 }
@@ -115,8 +113,8 @@ function defaultBaseSampler(): NodeJS.MemoryUsage {
 const jscHeapApi = loadJscHeapApi();
 
 /**
- * Samples process memory, correcting `heapUsed`/`heapTotal` from JavaScriptCore
- * when running under Bun.
+ * Samples process memory, replacing `heapUsed` with JavaScriptCore's aggregate
+ * heap size and flooring the shim's `heapTotal` at that value.
  *
  * Shaped as `NodeJS.MemoryUsage` so it drops into the existing
  * `MemoryTelemetryControllerOptions.memoryNow` and `MemoryMonitorPorts.memoryUsage`
@@ -126,11 +124,11 @@ export function sampleMemoryUsage(
   baseSampler: () => NodeJS.MemoryUsage = defaultBaseSampler,
 ): NodeJS.MemoryUsage {
   const base = baseSampler();
-  const stats = jscHeapApi.heapStats();
+  const heapUsed = jscHeapApi.heapSize();
   return {
     ...base,
-    heapUsed: stats.heapSize,
-    // JSC's capacity is the closest analogue to V8's committed heapTotal.
-    heapTotal: Math.max(stats.heapCapacity, stats.heapSize),
+    heapUsed,
+    // Bun's base heapTotal is the shim value and can trail the JSC heap size.
+    heapTotal: Math.max(base.heapTotal, heapUsed),
   };
 }

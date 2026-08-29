@@ -22,7 +22,7 @@
  */
 
 import { afterAll, describe, expect, it } from 'bun:test';
-import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -33,7 +33,11 @@ import {
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { dependenciesInstalled } from '../bun-build.config.ts';
+import {
+  dependenciesInstalled,
+  requireDependenciesInstalled,
+} from '../bun-build.config.ts';
+import { spawnSyncWithFileCapture } from './memory/sync-process.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const repoRoot = resolve(__filename, '..', '..', '..');
@@ -56,10 +60,15 @@ const RUN_BUILD_TEST = process.env.LLXPRT_RUN_BUNDLE_BUILD_TEST === '1';
  * streams. The build and the launch both run as subprocesses, and reporting
  * only an exit code discards the diagnostics that say what actually broke.
  */
-function describeProcessFailure(
-  label: string,
-  proc: SpawnSyncReturns<string>,
-): string {
+interface ProcessResult {
+  readonly status: number | null;
+  readonly signal?: NodeJS.Signals | null;
+  readonly error?: Error;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
+function describeProcessFailure(label: string, proc: ProcessResult): string {
   return [
     `${label} failed (status ${proc.status}, signal ${proc.signal})`,
     proc.error ? `spawn error: ${String(proc.error)}` : '',
@@ -117,16 +126,21 @@ describe.skipIf(!RUN_BUILD_TEST)(
       // Execute the artifact with the same Bun that resolves 4,274 modules
       // when running raw TypeScript. A 0 exit with version output proves the
       // bundled module graph loads cleanly.
-      const proc = spawnSync(repoBun, [bundlePath, '--version'], {
-        encoding: 'utf8',
-        timeout: 60_000,
-        env: { ...process.env, CI: 'true' },
-      });
+      const proc = spawnSyncWithFileCapture(
+        join(repoRoot, 'tmp'),
+        repoBun,
+        [bundlePath, '--version'],
+        {
+          cwd: repoRoot,
+          timeout: 60_000,
+          env: { ...process.env, CI: 'true' },
+        },
+      );
 
       // Surface the child's own output: a bundle that fails to load reports the
       // offending module on stderr, and asserting the exit code alone discards
       // it.
-      if (proc.error !== undefined || proc.status !== 0) {
+      if (proc.status !== 0) {
         throw new Error(describeProcessFailure('bundle launch', proc));
       }
       // Assert the exact version rather than a shape-matching regex: this also
@@ -146,38 +160,34 @@ describe.skipIf(!RUN_BUILD_TEST)(
   },
 );
 
-// Ungated: this must always run, because it guards the escape hatch that keeps
-// `npm pack` working in dependency-free checkouts.
-describe('issue #2999: prepack skips bundling without dependencies', () => {
-  it('reports dependencies missing for a tree with no node_modules', () => {
+// Ungated: this must always run because publishable packages require freshly
+// built CLI and profiler artifacts.
+describe('issue #2999: prepack requires dependencies', () => {
+  it('rejects a bundle build when node_modules is absent', () => {
     const empty = mkdtempSync(join(tmpdir(), 'llxprt-nodeps-'));
     try {
-      // Real filesystem state, not a mock: prepack fires on any `npm pack` of
-      // packages/cli, including the release-pack smoke's copy of the repo made
-      // without node_modules. Bun cannot resolve a single import there, so the
-      // build must be skipped rather than failing for an unactionable reason.
       expect(dependenciesInstalled(empty)).toBe(false);
+      expect(() => requireDependenciesInstalled(empty)).toThrow(
+        /cannot build publishable CLI bundles without node_modules/,
+      );
     } finally {
       rmSync(empty, { recursive: true, force: true });
     }
   });
 
-  it('reports dependencies present once node_modules exists', () => {
+  it('accepts a bundle build once node_modules exists', () => {
     const populated = mkdtempSync(join(tmpdir(), 'llxprt-deps-'));
     try {
       mkdirSync(join(populated, 'node_modules'));
-      // The negative case alone would pass even if the predicate always
-      // returned false, so pin the positive case too: a real publisher has
-      // dependencies installed and must still get a bundle.
       expect(dependenciesInstalled(populated)).toBe(true);
+      expect(() => requireDependenciesInstalled(populated)).not.toThrow();
     } finally {
       rmSync(populated, { recursive: true, force: true });
     }
   });
 
   it('defaults to the repo root, which has dependencies installed', () => {
-    // Guards the default argument: if it drifted to another directory, the real
-    // prepack would silently skip bundling on every publish.
     expect(dependenciesInstalled()).toBe(true);
+    expect(() => requireDependenciesInstalled()).not.toThrow();
   });
 });

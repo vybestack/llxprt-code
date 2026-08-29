@@ -21,10 +21,13 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, it } from 'bun:test';
+import { parseSamples } from '../memory/sample.ts';
+import { assertBoundedPostClearRetention } from './memory/retention-checkpoints.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '../..');
@@ -66,6 +69,7 @@ function runHarness(
   testName: string,
   extraArgs: string[] = [],
   extraEnv: NodeJS.ProcessEnv = {},
+  timeoutMs = 300_000,
 ): HarnessResult {
   const scriptPath = path.join(projectRoot, 'scripts', scriptName);
   const harnessPath = path.join(projectRoot, 'scripts/tmux-harness.ts');
@@ -85,7 +89,7 @@ function runHarness(
     {
       encoding: 'utf8',
       cwd: projectRoot,
-      timeout: 300_000,
+      timeout: timeoutMs,
       env: { ...process.env, FORCE_COLOR: '0', ...extraEnv },
     },
   );
@@ -178,5 +182,30 @@ describe('Interactive UI (tmux harness)', () => {
       assertHarnessSuccess(result);
     },
     300_000,
+  );
+
+  runTmuxE2E(
+    'keeps post-clear memory bounded after sustained standard-buffer output',
+    () => {
+      const testName = 'issue3386-memory-retention';
+      const artifactDir = getArtifactDir(testName);
+      const result = runHarness(
+        'tmux-script.issue3386-memory-retention.fake.json',
+        testName,
+        [],
+        { LLXPRT_TMUX_ARTIFACT_DIR: artifactDir },
+        600_000,
+      );
+      assertHarnessSuccess(result);
+
+      const samples = parseSamples(
+        readFileSync(
+          path.join(artifactDir, 'memprofile', 'samples.jsonl'),
+          'utf8',
+        ),
+      );
+      assertBoundedPostClearRetention(samples);
+    },
+    600_000,
   );
 });
