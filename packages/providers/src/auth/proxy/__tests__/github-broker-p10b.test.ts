@@ -53,6 +53,7 @@ import {
 import { MAX_LIMIT } from '../github-broker-validation.js';
 import type { GhRunner } from '../github-broker-types.js';
 import {
+  buildSearchCountQuery,
   searchIssuesDescriptor,
   searchPrsDescriptor,
 } from '../github-broker-search-ops.js';
@@ -1090,6 +1091,60 @@ describe('issue #3407: search reports the size of the whole result set', () => {
         new AbortController().signal,
       ),
     ).rejects.toThrow(/numeric total/);
+  });
+
+  /**
+   * The count query is assembled by hand, so it must re-quote a multi-word
+   * qualifier value that gh would have quoted for the page request. Joined
+   * unquoted, `label:help wanted` reads to the API as `label:help` plus the
+   * freetext `wanted`: measured against cli/cli it matched 0 issues where the
+   * page returned 2, so a truncated page would have reported totalCount 0.
+   *
+   * This is the exact inverse of the argv rule, where quoting is forbidden
+   * because gh does it. Both rules are pinned so neither can be "corrected"
+   * into the other.
+   *
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-8
+   * @issue 3407
+   */
+  it('re-quotes multi-word qualifier values in the count query only', () => {
+    const params = { query: 'is:open label:"help wanted"', repo: 'cli/cli' };
+    expect(buildSearchCountQuery(params, 'issue')).toBe(
+      'is:open label:"help wanted" repo:cli/cli type:issue',
+    );
+    // ...while the argv the page request uses stays unquoted.
+    const argv = buildSearchIssuesArgv(params);
+    expect(argv.slice(argv.indexOf('--') + 1)).toStrictEqual([
+      'is:open',
+      'label:help wanted',
+    ]);
+    expect(argv.some((a) => a.includes('"'))).toBe(false);
+  });
+
+  /**
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-8
+   * @issue 3407
+   */
+  it('quotes a multi-word freetext keyword whole in the count query', () => {
+    expect(
+      buildSearchCountQuery({ query: '"sandbox proxy" is:open' }, 'issue'),
+    ).toBe('"sandbox proxy" is:open type:issue');
+  });
+
+  /**
+   * An exclusion keeps its leading dash outside the quotes so it is still
+   * parsed as a negated qualifier.
+   *
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-8
+   * @issue 3407
+   */
+  it('keeps an excluded qualifier negated when re-quoting', () => {
+    expect(
+      buildSearchCountQuery({ query: '-label:"help wanted"' }, 'issue'),
+    ).toBe('-label:"help wanted" type:issue');
   });
 
   /**

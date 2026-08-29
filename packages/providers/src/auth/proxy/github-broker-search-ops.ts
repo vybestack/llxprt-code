@@ -198,10 +198,35 @@ export function buildSearchCountQuery(
   const query = typeof params.query === 'string' ? params.query : '';
   const { terms, liftedRepo } = normalizeSearchQuery(query);
   const repo = hasNonEmptyRepo(params) ? String(params.repo) : liftedRepo;
-  const parts = [...terms];
+  const parts = terms.map(quoteCountTerm);
   if (repo !== null) parts.push(`repo:${repo}`);
   parts.push(`type:${kind}`);
   return parts.join(' ');
+}
+
+/**
+ * Re-quotes a term whose value contains whitespace, for the count query only.
+ *
+ * This is the one place quoting is CORRECT, and it is the exact inverse of the
+ * rule the argv builder follows. Terms handed to `gh` as separate argv
+ * elements must not be quoted, because gh quotes each value itself when it
+ * assembles the API query. Here the query string IS assembled by hand, so
+ * nobody else will do it: joining `label:help wanted` unquoted makes the API
+ * read `label:help` plus the freetext `wanted`, which matched 0 issues against
+ * the 2 the page returned for the same search.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-8
+ * @issue 3407
+ */
+function quoteCountTerm(term: string): string {
+  if (!/\s/.test(term)) return term;
+  const colon = term.indexOf(':');
+  // A bare multi-word keyword is quoted whole; a qualifier keeps its name
+  // outside the quotes so it is still parsed as a qualifier.
+  return colon === -1
+    ? `"${term}"`
+    : `${term.slice(0, colon)}:"${term.slice(colon + 1)}"`;
 }
 
 /**
