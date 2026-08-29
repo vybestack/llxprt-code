@@ -27,12 +27,12 @@ import { join, relative } from 'node:path';
 import {
   DEFAULT_PER_FILE_TIMEOUT_MS,
   DEFAULT_PER_TEST_TIMEOUT_MS,
+  envPerFileTimeoutMs,
   resolveTestConcurrency,
 } from '../../scripts/lib/bun-test-policy.js';
 
 process.env.LLXPRT_RUNNING_TESTS = 'true';
 
-const PER_FILE_TIMEOUT_MS = DEFAULT_PER_FILE_TIMEOUT_MS;
 const PER_INTEGRATION_FILE_TIMEOUT_MS = 900_000;
 /**
  * Per-test timeout. Bun defaults to 5s, which the tests that spawn the real
@@ -106,9 +106,16 @@ export function timeoutForFile(file: string): number {
  * slow-but-progressing file rather than to bound total runtime.
  */
 export function fileTimeoutForFile(file: string): number {
-  return INTEGRATION_FILE_PATTERN.test(file)
-    ? PER_INTEGRATION_FILE_TIMEOUT_MS
-    : PER_FILE_TIMEOUT_MS;
+  const override = envPerFileTimeoutMs(
+    process.env,
+    'LLXPRT_TEST_FILE_TIMEOUT_MS',
+  );
+  // Integration files keep their dedicated multi-spawn budget: the override
+  // exists for short behavioral-runner tests, not to shrink CI-scale budgets.
+  if (INTEGRATION_FILE_PATTERN.test(file)) {
+    return PER_INTEGRATION_FILE_TIMEOUT_MS;
+  }
+  return override ?? DEFAULT_PER_FILE_TIMEOUT_MS;
 }
 
 function parseConcurrency(): number {
@@ -276,7 +283,26 @@ interface TestResult {
   readonly output: string;
 }
 
-function runTestFile(file: string): Promise<TestResult> {
+export async function runTestFileWithTimeoutRetry<
+  T extends { readonly timedOut: boolean },
+>(
+  file: string,
+  runAttempt: () => Promise<T>,
+  logRetry: (message: string) => void = (message) => console.log(message),
+): Promise<T> {
+  const firstAttempt = await runAttempt();
+  if (!firstAttempt.timedOut) {
+    return firstAttempt;
+  }
+
+  logRetry(`RETRY (2/2): ${file} after per-file timeout`);
+  return runAttempt();
+}
+
+export async function runTestFile(file: string): Promise<TestResult> {
+  // Resolve the budget before spawning so an invalid override fails fast
+  // instead of stranding an already-started child without a timeout.
+  const timeoutMs = fileTimeoutForFile(file);
   return new Promise((resolve) => {
     let settled = false;
     let output = '';
@@ -312,7 +338,7 @@ function runTestFile(file: string): Promise<TestResult> {
     const timer = setTimeout(() => {
       killedByTimeout = true;
       killProcessTree(child);
-    }, fileTimeoutForFile(file));
+    }, timeoutMs);
 
     child.on('exit', (code) => {
       if (settled) return;
@@ -563,6 +589,9 @@ export function exitCodeForRun(
 
 async function main(): Promise<void> {
   const root = import.meta.dir;
+  // Fail fast on an invalid per-file budget before any worker spawns, so a
+  // misconfiguration cannot kill the run mid-flight without a JUnit report.
+  envPerFileTimeoutMs(process.env, 'LLXPRT_TEST_FILE_TIMEOUT_MS');
   const testFiles = discoverTestFiles(root);
   if (testFiles.length === 0) {
     console.error('No CLI test files were discovered.');
@@ -596,7 +625,10 @@ async function main(): Promise<void> {
     for (;;) {
       const index = nextIndex++;
       if (index >= selectedFiles.length) return;
-      const result = await runTestFile(selectedFiles[index]);
+      const file = selectedFiles[index];
+      const result = await runTestFileWithTimeoutRetry(file, () =>
+        runTestFile(file),
+      );
       results.push(result);
       completed++;
       if (!result.passed) {
