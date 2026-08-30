@@ -433,12 +433,13 @@ describe('CoreToolScheduler approval outcomes', () => {
   });
 
   describe('multiple pending tool calls', () => {
-    it('ProceedOnce on one call gates execution behind the sibling decision; cancelling the sibling strands the approved call (characterization, see #3299)', async () => {
+    it('ProceedOnce on one call gates execution behind the sibling decision, then runs the approved call once the sibling is cancelled', async () => {
       // @plan PLAN-20260824-ISSUE2021.P02 @requirement REQ-2021.2
-      // Current behavior: handleCancellation does not re-attempt execution,
-      // so a call already approved (scheduled) never executes after its
-      // sibling's denial. Pinned here as a characterization; a fix belongs to
-      // a follow-up issue.
+      // This was originally pinned as a characterization of #3299: an approved
+      // call stayed stranded at 'scheduled' because handleCancellation never
+      // re-attempted execution. #3299 fixed that in the confirmation
+      // coordinator, so the approved call now runs to completion once its
+      // sibling is decided.
       const executed: string[] = [];
       const allowed = new Set<string>();
       const tool = gatedTool('sharedTool', allowed, executed);
@@ -488,12 +489,9 @@ describe('CoreToolScheduler approval outcomes', () => {
 
       await confirmCall(awaitingB, ToolConfirmationOutcome.Cancel);
       await waitForCallStatus(onToolCallsUpdate, 'call-b', 'cancelled');
+      await waitForCallStatus(onToolCallsUpdate, 'call-a', 'success');
       await flushAsyncWork();
-      expectNeverLeaves(
-        recordedStatuses(onToolCallsUpdate, 'call-a'),
-        'scheduled',
-      );
-      expect(executed).toEqual([]);
+      expect(executed).toEqual(['sharedTool']);
     });
 
     it('ProceedAlways cascades to the compatible pending call without a second prompt', async () => {
@@ -542,10 +540,11 @@ describe('CoreToolScheduler approval outcomes', () => {
       expect(confirmationRequestCount(messageBus)).toBe(requestsBeforeCascade);
     });
 
-    it('ProceedAlways cascade skips a call whose tool is not allowlisted (characterization: denying it strands the cascaded calls, see #3299)', async () => {
+    it('ProceedAlways cascade skips a call whose tool is not allowlisted, and the cascaded calls still run when it is denied', async () => {
       // @plan PLAN-20260824-ISSUE2021.P02 @requirement REQ-2021.2
-      // Same stranded-sibling behavior as the ProceedOnce characterization:
-      // cancelling the last awaiting call leaves scheduled calls unexecuted.
+      // The counterpart to the ProceedOnce case above: #3299 also stopped
+      // cancelling the last awaiting call from stranding the calls the cascade
+      // had already scheduled.
       const executed: string[] = [];
       const allowed = new Set<string>();
       const shared = gatedTool('sharedTool', allowed, executed);
@@ -608,16 +607,10 @@ describe('CoreToolScheduler approval outcomes', () => {
 
       await confirmCall(awaitingC, ToolConfirmationOutcome.Cancel);
       await waitForCallStatus(onToolCallsUpdate, 'call-c', 'cancelled');
+      await waitForCallStatus(onToolCallsUpdate, 'call-a', 'success');
+      await waitForCallStatus(onToolCallsUpdate, 'call-b', 'success');
       await flushAsyncWork();
-      expectNeverLeaves(
-        recordedStatuses(onToolCallsUpdate, 'call-a'),
-        'scheduled',
-      );
-      expectNeverLeaves(
-        recordedStatuses(onToolCallsUpdate, 'call-b'),
-        'scheduled',
-      );
-      expect(executed).toEqual([]);
+      expect(executed).toEqual(['sharedTool', 'sharedTool']);
     });
   });
 
