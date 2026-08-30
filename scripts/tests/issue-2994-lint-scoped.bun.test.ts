@@ -231,11 +231,15 @@ describe('issue-2994 runner-argv composition (real resolveTargets + stripRunnerA
   // The full pipeline the wrapper hands to the runner: build the argv,
   // resolve targets the way the runner does, strip runner-managed flags, then
   // build the concrete ESLint command. Asserts the EXACT argument array.
-  function compose(
+  /**
+   * Issue #3387 partitions a scoped run into one ESLint process per target,
+   * so this returns the argv of every command rather than just the first.
+   */
+  function composeAll(
     targets: readonly string[] | null,
     fix: boolean,
     cache: boolean,
-  ): readonly string[] {
+  ): ReadonlyArray<readonly string[]> {
     const argv = buildRunnerArgs({ targets, fix, cache });
     const resolved = resolveTargets(argv);
     const forwardedArgs = stripRunnerArgs(argv);
@@ -244,35 +248,44 @@ describe('issue-2994 runner-argv composition (real resolveTargets + stripRunnerA
       forwardedArgs,
       cache,
     });
-    return commands[0].args;
+    return commands.map((command) => command.args);
+  }
+
+  function compose(
+    targets: readonly string[] | null,
+    fix: boolean,
+    cache: boolean,
+  ): readonly string[] {
+    return composeAll(targets, fix, cache)[0];
   }
 
   beforeEach(() => withEnv('LLXPRT_LINT_TARGETS', undefined, () => undefined));
 
-  it('a scoped plan yields exactly [integration-tests, packages/cli]', () => {
-    expect(compose(['packages/cli'], false, false)).toEqual([
-      'integration-tests',
-      'packages/cli',
+  it('a scoped plan yields one command each for integration-tests and packages/cli', () => {
+    expect(composeAll(['packages/cli'], false, false)).toEqual([
+      ['integration-tests'],
+      ['packages/cli'],
     ]);
   });
 
-  it('a scoped plan with --fix yields the target plus --fix', () => {
-    expect(compose(['packages/core'], true, false)).toEqual([
-      'integration-tests',
-      'packages/core',
-      '--fix',
+  it('a scoped plan with --fix forwards --fix to every target command', () => {
+    expect(composeAll(['packages/core'], true, false)).toEqual([
+      ['integration-tests', '--fix'],
+      ['packages/core', '--fix'],
     ]);
   });
 
-  it('a scoped plan with --cache yields the runner cache flags', () => {
-    expect(compose(['packages/core'], false, true)).toEqual([
-      'integration-tests',
-      'packages/core',
+  it('a scoped plan with --cache gives every target command the shared cache flags', () => {
+    const cacheFlags = [
       '--cache',
       '--cache-strategy',
       'content',
       '--cache-location',
       'node_modules/.cache/eslint',
+    ];
+    expect(composeAll(['packages/core'], false, true)).toEqual([
+      ['integration-tests', ...cacheFlags],
+      ['packages/core', ...cacheFlags],
     ]);
   });
 

@@ -24,7 +24,7 @@
     "test": "bun ../../scripts/run_bun_tests.ts --workspace mcp --junit junit.xml",
     "test:bun": "bun ../../scripts/run_bun_tests.ts --workspace mcp",
     "test:ci": "bun ../../scripts/run_bun_tests.ts --workspace mcp --junit junit.xml",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit -p tsconfig.noemit.json"
   },
   "files": [
     "index.ts",

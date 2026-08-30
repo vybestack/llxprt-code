@@ -1,68 +1,22 @@
 {
-  "extends": "../../tsconfig.json",
-  "compilerOptions": {
-    "outDir": "dist",
-    "tsBuildInfoFile": "../../node_modules/.cache/tsbuildinfo/cli.tsbuildinfo",
-    "jsx": "react-jsx",
-    "lib": ["DOM", "DOM.Iterable", "ES2022"],
-    "composite": false,
-    // bun-types/test.d.ts declares only the `bun:test` module (import { ... } from 'bun:test');
-    // test-globals.d.ts declares the ambient globals (describe/it/expect/beforeEach...).
-    // Both are needed so test files compile under the Bun-native runner (issue #2970).
-    "types": ["node", "bun-types/test", "bun-types/test-globals"],
-    "baseUrl": ".",
-    "rootDir": "..",
-    "paths": {
-      "@vybestack/llxprt-code-auth": ["../auth/src/index.ts"],
-      "@vybestack/llxprt-code-auth/*": ["../auth/src/*"],
-      "@vybestack/llxprt-code-agents": ["../agents/index.ts"],
-      "@vybestack/llxprt-code-agents/constants.js": [
-        "../agents/src/constants.ts"
-      ],
-      "@vybestack/llxprt-code-core": ["../core/index.ts"],
-      "@vybestack/llxprt-code-core/*": ["../core/src/*"],
-      "@vybestack/llxprt-code-ide-integration": ["../ide-integration/index.ts"],
-      "@vybestack/llxprt-code-ide-integration/*": ["../ide-integration/src/*"],
-      "@vybestack/llxprt-code-mcp": ["../mcp/index.ts"],
-      "@vybestack/llxprt-code-mcp/*": ["../mcp/src/*"],
-      "@vybestack/llxprt-code-providers": ["../providers/index.ts"],
-      "@vybestack/llxprt-code-providers/auth.js": [
-        "../providers/src/auth/index.ts"
-      ],
-      "@vybestack/llxprt-code-providers/composition.js": [
-        "../providers/src/composition/index.ts"
-      ],
-      "@vybestack/llxprt-code-providers/runtime.js": [
-        "../providers/src/runtime/index.ts"
-      ],
-      "@vybestack/llxprt-code-providers/*": ["../providers/src/*"],
-      "@vybestack/llxprt-code-settings": ["../settings/index.ts"],
-      "@vybestack/llxprt-code-settings/*": ["../settings/src/*"],
-      "@vybestack/llxprt-code-tools": ["../tools/dist/index.d.ts"],
-      "@vybestack/llxprt-code-tools/*": ["../tools/dist/src/*"]
-    }
-  },
-  "include": [
-    "../../bun-test-corrections.d.ts",
-    "index.ts",
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "src/**/*.d.ts",
-    "src/**/*.json",
-    "./package.json",
-    "../providers/index.ts",
-    "../providers/src/**/*.ts",
-    "../providers/src/**/*.json",
-    "../auth/src/index.ts",
-    "../auth/src/**/*.ts",
-    "../mcp/index.ts",
-    "../mcp/src/**/*.ts",
-    "../mcp/src/**/*.d.ts",
-    "../settings/index.ts",
-    "../settings/src/**/*.ts",
-    "../ide-integration/index.ts",
-    "../ide-integration/src/**/*.ts"
-  ],
+  // Issue #3387: the file set `tsc --noEmit` verifies for this package.
+  //
+  // tsconfig.json is what typescript-eslint resolves source files against, so
+  // it must not exclude a file that lives in this package. An excluded file
+  // belongs to no package project and falls back to the root tsconfig.json,
+  // which declares no `include` and therefore spans the whole repository.
+  // Building that program cost ~7 GB and ~40 s per ESLint process, and one
+  // such file was enough to pay it in full.
+  //
+  // tsconfig.json therefore keeps only node_modules, dist, and entries that
+  // point outside this package; this file carries the complete list and is
+  // what `tsc` reads. The overlap is deliberate, because `extends` replaces
+  // `exclude` wholesale rather than merging it.
+  // scripts/tests/tsconfig-project-coverage.test.ts holds both halves to that.
+  "extends": "./tsconfig.json",
+  // Set here as well as on the command line so a direct
+  // `tsc -p tsconfig.noemit.json` cannot emit build output into the sources.
+  "compilerOptions": { "noEmit": true },
   "exclude": [
     "node_modules",
     "dist",
@@ -312,11 +266,74 @@
     "../providers/src/utils/chronologyProviderIsolation.test.ts",
     "../providers/src/utils/dumpContext.test.ts",
     "../providers/src/utils/toolFormatDetection.issue1943.test.ts",
-    "../providers/src/utils/toolResponsePayload.test.ts"
+    "../providers/src/utils/toolResponsePayload.test.ts",
+    "src/config/config.integration.test.ts",
+    "src/config/config.test.ts",
+    "src/config/settings.test.ts",
+    "src/nonInteractiveCli.test.ts",
+    "src/nonInteractiveCliCancellation.test.ts",
+    "src/nonInteractiveSigint.test.ts",
+    "src/services/FileCommandLoader.test.ts",
+    "src/ui/commands/authCommand.test.ts",
+    "src/ui/commands/chatCommand.test.ts",
+    "src/ui/commands/clearCommand.test.ts",
+    "src/ui/commands/copyCommand.test.ts",
+    "src/ui/commands/directoryCommand.test.tsx",
+    "src/ui/commands/extensionsCommand.test.ts",
+    "src/ui/commands/helpCommand.test.ts",
+    "src/ui/commands/ideCommand.test.ts",
+    "src/ui/commands/initCommand.test.ts",
+    "src/ui/commands/memoryCommand.test.ts",
+    "src/ui/commands/restoreCommand.test.ts",
+    "src/ui/commands/statsCommand.test.ts",
+    "src/ui/commands/terminalSetupCommand.test.ts",
+    "src/ui/commands/themeCommand.test.ts",
+    "src/ui/commands/toolsCommand.test.ts",
+    "src/ui/components/InputPrompt.completion.test.tsx",
+    "src/ui/components/InputPrompt.editing.test.tsx",
+    "src/ui/components/InputPrompt.paste.test.tsx",
+    "src/ui/components/InputPrompt.test.tsx",
+    "src/ui/components/InputPrompt.vim.test.tsx",
+    "src/ui/components/ModelStatsDisplay.test.tsx",
+    "src/ui/components/SessionSummaryDisplay.test.tsx",
+    "src/ui/components/shared/text-buffer.test.ts",
+    "src/ui/contexts/SessionContext.test.tsx",
+    "src/ui/hooks/slashCommandProcessor.test.tsx",
+    "src/ui/hooks/useAgentStream.commands.test.tsx",
+    "src/ui/hooks/useAgentStream.finished.test.tsx",
+    "src/ui/hooks/useAgentStream.include.test.tsx",
+    "src/ui/hooks/useAgentStream.ordering.test.tsx",
+    "src/ui/hooks/useAgentStream.test.tsx",
+    "src/ui/hooks/useAgentStream.thinking.test.tsx",
+    "src/ui/hooks/useAgentStream.thought.test.tsx",
+    "src/ui/hooks/useAgentStream.usercancel.test.tsx",
+    "src/ui/hooks/useAtCompletion.test.ts",
+    "src/ui/hooks/useCommandCompletion.more.test.tsx",
+    "src/ui/hooks/useCommandCompletion.test.tsx",
+    "src/ui/hooks/useFocus.test.tsx",
+    "src/ui/hooks/useFolderTrust.test.ts",
+    "src/ui/hooks/usePhraseCycler.test.ts",
+    "src/ui/hooks/vim.reducer.test.tsx",
+    "src/ui/hooks/vim.test.tsx",
+    "src/ui/hooks/vim.wordops.test.tsx",
+    "src/ui/themes/theme.test.ts",
+    "src/utils/cleanup.test.ts",
+    "src/utils/handleAutoUpdate.test.ts",
+    "src/utils/startupWarnings.test.ts",
+    "src/validateNonInteractiveAuth.test.ts"
   ],
+  // `references` is repeated here on purpose: TypeScript does not inherit
+  // it through `extends`, and dropping it makes referenced project sources
+  // ordinary inputs of this composite project, which trips rootDir (TS6059).
   "references": [
-    { "path": "../core/tsconfig.build.json" },
-    { "path": "../settings" },
-    { "path": "../ide-integration/tsconfig.build.json" }
+    {
+      "path": "../core/tsconfig.build.json"
+    },
+    {
+      "path": "../settings"
+    },
+    {
+      "path": "../ide-integration/tsconfig.build.json"
+    }
   ]
 }
