@@ -79,16 +79,6 @@ export class CompressionLoadBalancingProvider implements IProvider {
     return requireCandidateModel(this.candidates[0]);
   }
 
-  getServerTools(): string[] {
-    return [];
-  }
-
-  async invokeServerTool(toolName: string): Promise<unknown> {
-    throw new Error(
-      `Server tool '${toolName}' not supported by compression load-balancer provider`,
-    );
-  }
-
   generateChatCompletion(
     options: RuntimeGenerateChatOptions,
   ): AsyncIterableIterator<IContent>;

@@ -63,8 +63,6 @@ function createCapturingProvider(name: string): CapturingProvider {
     },
     getModels: async () => [],
     getDefaultModel: () => 'test',
-    getServerTools: () => [],
-    invokeServerTool: async () => ({}),
   };
 }
 
@@ -190,8 +188,6 @@ describe('LoadBalancingProvider - provider-specific prompt rendering (issue #317
       },
       getModels: async () => [],
       getDefaultModel: () => 'model-a',
-      getServerTools: () => [],
-      invokeServerTool: async () => ({}),
     };
     const anthropicCaptured: GenerateChatOptions[] = [];
     const anthropic: IProvider = {
@@ -207,8 +203,6 @@ describe('LoadBalancingProvider - provider-specific prompt rendering (issue #317
       },
       getModels: async () => [],
       getDefaultModel: () => 'model-b',
-      getServerTools: () => [],
-      invokeServerTool: async () => ({}),
     };
     providerManager.registerProvider(openai);
     providerManager.registerProvider(anthropic);

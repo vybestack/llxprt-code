@@ -132,8 +132,6 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
       getModels: vi.fn(async () => []),
       getDefaultModel: () => 'claude-sonnet-4-5-20250929',
       generateChatCompletion: generateChatCompletionMock,
-      getServerTools: () => [],
-      invokeServerTool: vi.fn(),
       getAuthToken: vi.fn(async () => 'test-auth-token'),
     };
 
@@ -250,8 +248,6 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
       getModels: vi.fn(async () => []),
       getDefaultModel: () => 'claude-sonnet-4-5-20250929',
       generateChatCompletion: generateChatCompletionMock,
-      getServerTools: () => [],
-      invokeServerTool: vi.fn(),
       getAuthToken: vi.fn(async () => 'test-auth-token'),
     };
 
@@ -361,8 +357,6 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
       getModels: vi.fn(async () => []),
       getDefaultModel: () => 'claude-sonnet-4-5-20250929',
       generateChatCompletion: generateChatCompletionMock,
-      getServerTools: () => [],
-      invokeServerTool: vi.fn(),
       getAuthToken: vi.fn(async () => 'test-auth-token'),
     };
 
@@ -483,8 +477,6 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
       getModels: vi.fn(async () => []),
       getDefaultModel: () => 'claude-sonnet-4-5-20250929',
       generateChatCompletion: generateChatCompletionMock,
-      getServerTools: () => [],
-      invokeServerTool: vi.fn(),
       getAuthToken: vi.fn(async () => 'test-auth-token'),
     };
 

@@ -134,11 +134,6 @@ describe('FakeProvider', () => {
     expect(await provider.getAuthToken()).toBe('fake-auth-token');
     expect(provider.getDefaultModel()).toBe('fake-model');
     expect(provider.getCurrentModel()).toBe('fake-model');
-    expect(provider.getServerTools()).toStrictEqual([]);
-
-    await expect(provider.invokeServerTool()).rejects.toThrow(
-      /does not support server tools/,
-    );
 
     const models = await provider.getModels();
     expect(models).toHaveLength(1);

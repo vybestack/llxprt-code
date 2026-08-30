@@ -118,8 +118,6 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
       getDefaultModel: () => 'stub-model',
       generateChatCompletion:
         generateChatCompletion as IProvider['generateChatCompletion'],
-      getServerTools: () => [],
-      invokeServerTool: vi.fn(),
       getAuthToken: vi.fn(async () => 'stub-auth-token'),
     } as unknown as IProvider;
     manager.registerProvider(provider);

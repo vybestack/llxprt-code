@@ -575,12 +575,6 @@ function createStubProvider(
         blocks: [{ type: 'text' as const, text: `${name}-${defaultModel}` }],
       };
     },
-    getServerTools() {
-      return [];
-    },
-    async invokeServerTool() {
-      return {};
-    },
     isPaidMode() {
       return false;
     },

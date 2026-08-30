@@ -19,12 +19,6 @@ describe('RetryOrchestrator.getContextLimit() delegation (issue #2251)', () => {
       getDefaultModel() {
         return 'test-model';
       },
-      getServerTools() {
-        return [];
-      },
-      async invokeServerTool() {
-        return null;
-      },
       async *generateChatCompletion() {
         yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
       },
@@ -43,12 +37,6 @@ describe('RetryOrchestrator.getContextLimit() delegation (issue #2251)', () => {
       },
       getDefaultModel() {
         return 'test-model';
-      },
-      getServerTools() {
-        return [];
-      },
-      async invokeServerTool() {
-        return null;
       },
       async *generateChatCompletion() {
         yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };

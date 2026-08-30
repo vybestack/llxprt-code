@@ -911,19 +911,6 @@ export abstract class BaseProvider implements IProvider {
 
     this.providerConfig = config as IProviderConfig;
   }
-  getServerTools(): string[] {
-    return [];
-  }
-  async invokeServerTool(
-    toolName: string,
-    _params: unknown,
-    _config?: unknown,
-    _signal?: AbortSignal,
-  ): Promise<unknown> {
-    throw new Error(
-      `Server tool '${toolName}' not supported by ${this.name} provider`,
-    );
-  }
   getModelParams?(): Record<string, unknown> | undefined {
     return undefined;
   }

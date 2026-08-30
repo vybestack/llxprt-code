@@ -92,8 +92,6 @@ describe('MiddleOutStrategy enriched EmptySummaryError diagnostics (issue #2333)
       name: 'thinking-only-provider',
       getModels: async () => [],
       getDefaultModel: () => 'gpt-5.5',
-      getServerTools: () => [],
-      invokeServerTool: async () => ({}),
       async *generateChatCompletion() {
         yield {
           speaker: 'ai' as const,

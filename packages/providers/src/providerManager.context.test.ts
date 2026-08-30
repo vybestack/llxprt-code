@@ -24,8 +24,6 @@ function createStubProvider(name: string): IProvider {
     getModels: vi.fn(async () => []),
     getDefaultModel: () => 'stub-model',
     generateChatCompletion,
-    getServerTools: () => [],
-    invokeServerTool: vi.fn(),
   };
 }
 

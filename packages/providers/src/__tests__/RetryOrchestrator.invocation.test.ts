@@ -200,12 +200,6 @@ describe('RetryOrchestrator invocation safety', () => {
       getDefaultModel(): string {
         return 'test-model';
       },
-      getServerTools(): string[] {
-        return [];
-      },
-      async invokeServerTool(): Promise<unknown> {
-        return null;
-      },
     };
 
     const orchestrator = new RetryOrchestrator(provider, {
@@ -246,12 +240,6 @@ describe('RetryOrchestrator invocation safety', () => {
       },
       getDefaultModel(): string {
         return 'test-model';
-      },
-      getServerTools(): string[] {
-        return [];
-      },
-      async invokeServerTool(): Promise<unknown> {
-        return null;
       },
     };
 

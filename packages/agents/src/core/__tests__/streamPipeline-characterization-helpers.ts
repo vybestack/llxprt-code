@@ -168,8 +168,6 @@ export function createFullLoopHarness(
     getModels: vi.fn(async () => []),
     getDefaultModel: () => 'stub-model',
     generateChatCompletion: generateChatCompletionMock,
-    getServerTools: () => [],
-    invokeServerTool: vi.fn(),
   };
 
   manager.registerProvider(provider);

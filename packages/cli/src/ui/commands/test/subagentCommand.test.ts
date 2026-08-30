@@ -737,7 +737,6 @@ describe('subagentCommand', () => {
             mode: 'NONE',
           },
         },
-        serverTools: [],
       });
 
       // Verify success message type and content
@@ -772,7 +771,6 @@ describe('subagentCommand', () => {
                 mode: 'NONE',
               },
             },
-            serverTools: [],
           },
         }),
         expect.any(String),
@@ -804,7 +802,6 @@ describe('subagentCommand', () => {
                 mode: 'NONE',
               },
             },
-            serverTools: [],
           },
         }),
         expect.any(String),

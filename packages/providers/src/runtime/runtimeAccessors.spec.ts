@@ -325,8 +325,6 @@ describe('runtimeAccessors', () => {
             }
           : () => opts.paid ?? false,
       getModels: () => Promise.resolve([]),
-      getServerTools: () => [],
-      invokeServerTool: () => Promise.resolve(undefined),
       async *generateChatCompletion() {},
       ...(opts.baseURL !== undefined
         ? {

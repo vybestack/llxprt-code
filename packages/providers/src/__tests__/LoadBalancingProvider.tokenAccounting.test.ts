@@ -52,8 +52,6 @@ function createMockProvider(overrides: Partial<IProvider> = {}): IProvider {
       },
     getModels: overrides.getModels ?? (async () => []),
     getDefaultModel: overrides.getDefaultModel ?? (() => 'mock-model'),
-    getServerTools: overrides.getServerTools ?? (() => []),
-    invokeServerTool: overrides.invokeServerTool ?? (async () => ({})),
   };
 }
 
@@ -142,8 +140,6 @@ function createProjectedProvider(
     },
     getModels: async () => [],
     getDefaultModel: () => 'gpt-5.6-sol',
-    getServerTools: () => [],
-    invokeServerTool: async () => ({}),
   };
 }
 
@@ -834,8 +830,6 @@ describe('LoadBalancingProvider - Token Accounting (issue #2207)', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'gpt-4.1',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
       providerManager.registerProvider(failingGptProvider);
       providerManager.registerProvider(

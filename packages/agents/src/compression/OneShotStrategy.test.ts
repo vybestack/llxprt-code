@@ -104,8 +104,6 @@ function createFakeProvider(
     name,
     getModels: async () => [],
     getDefaultModel: () => 'fake-model',
-    getServerTools: () => [],
-    invokeServerTool: async () => ({}),
     async *generateChatCompletion() {
       yield {
         speaker: 'ai' as const,
@@ -120,8 +118,6 @@ function createEmptyProvider(): IProvider {
     name: 'empty-provider',
     getModels: async () => [],
     getDefaultModel: () => 'fake-model',
-    getServerTools: () => [],
-    invokeServerTool: async () => ({}),
     async *generateChatCompletion() {
       yield {
         speaker: 'ai' as const,
@@ -136,10 +132,6 @@ function createThrowingProvider(): IProvider {
     name: 'throwing-provider',
     getModels: async () => [],
     getDefaultModel: () => 'fake-model',
-    getServerTools: () => [],
-    invokeServerTool: async () => {
-      throw new Error('provider error');
-    },
     async *generateChatCompletion() {
       throw new Error('provider exploded');
       yield undefined as never;
@@ -649,8 +641,6 @@ describe('OneShotStrategy', () => {
         name: 'capture-provider',
         getModels: async () => [],
         getDefaultModel: () => 'capture-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
         async *generateChatCompletion(options: { contents: IContent[] }) {
           capturedRequests.push(...options.contents);
           yield {
@@ -733,8 +723,6 @@ describe('OneShotStrategy', () => {
         name: 'capture-provider',
         getModels: async () => [],
         getDefaultModel: () => 'capture-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
         async *generateChatCompletion(options: { contents: IContent[] }) {
           capturedRequests.push(...options.contents);
           yield {

@@ -45,23 +45,6 @@ export interface CoreToolHostConfig {
   getFileSystemService(): IToolHostFileSystemService;
   getConversationLoggingEnabled(): boolean;
   getDebugMode(): boolean;
-  getContentGeneratorConfig():
-    | {
-        providerManager?: {
-          getServerToolsProvider?():
-            | {
-                getServerTools: () => string[];
-                invokeServerTool: (
-                  name: string,
-                  params: { prompt: string },
-                  options: { signal: AbortSignal },
-                ) => Promise<unknown>;
-              }
-            | null
-            | undefined;
-        };
-      }
-    | undefined;
 }
 
 export class CoreToolHostAdapter implements IToolHost {
@@ -171,24 +154,5 @@ export class CoreToolHostAdapter implements IToolHost {
 
   getDebugMode(): boolean {
     return this.config.getDebugMode();
-  }
-
-  getServerToolsProvider(): {
-    getServerTools: () => string[];
-    invokeServerTool: (
-      name: string,
-      params: { prompt: string },
-      options: { signal: AbortSignal },
-    ) => Promise<unknown>;
-  } | null {
-    return (
-      this.config
-        .getContentGeneratorConfig()
-        ?.providerManager?.getServerToolsProvider?.() ?? null
-    );
-  }
-
-  hasProviderManager(): boolean {
-    return this.config.getContentGeneratorConfig()?.providerManager != null;
   }
 }

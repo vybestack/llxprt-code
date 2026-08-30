@@ -42,8 +42,7 @@ function createAutoPromptRequest(
           mode: 'NONE',
         },
       },
-      serverTools: [],
-    } as AgentClientGenerateConfig & { serverTools: unknown[] },
+    } satisfies AgentClientGenerateConfig,
   };
 }
 

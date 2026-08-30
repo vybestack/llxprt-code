@@ -130,7 +130,6 @@ function createDefaultContext(providerName: string): ProviderContext {
     isPaidMode: false,
     capabilities: {
       supportsStreaming: true,
-      supportsTools: false,
       supportsVision: false,
       maxTokens: 4096,
       supportedFormats: [],

@@ -231,8 +231,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'gemini-flash',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const originalGetProvider =
@@ -287,8 +285,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'gemini-flash',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const originalGetProvider =
@@ -336,8 +332,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'gemini-flash',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const originalGetProvider =
@@ -393,8 +387,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'model-1',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const originalGetProvider =
@@ -451,8 +443,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'model-1',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const originalGetProvider =
@@ -510,8 +500,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'model-1',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const originalGetProvider =
@@ -563,8 +551,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'model-1',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const originalGetProvider =
@@ -642,8 +628,6 @@ describe('LoadBalancingProvider', () => {
         },
         getModels: async () => [],
         getDefaultModel: () => 'model-1',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
       };
 
       const originalGetProvider =

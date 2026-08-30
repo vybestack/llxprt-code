@@ -122,8 +122,6 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
         capturedCalls.push(opts2);
         yield { speaker: 'ai', blocks: [{ type: 'text', text: 'done' }] };
       }),
-      getServerTools: () => [],
-      invokeServerTool: vi.fn(),
       getAuthToken: vi.fn(async () => 'token'),
     };
 

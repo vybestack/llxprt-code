@@ -57,7 +57,9 @@ function createTestAgentChat(): AgentChatContract {
   };
 }
 
-function createTestAgentClient(): AgentClientContract {
+export function createTestAgentClient(
+  overrides?: Partial<AgentClientContract>,
+): AgentClientContract {
   const chat = createTestAgentChat();
   return {
     initialize: async () => {},
@@ -86,6 +88,7 @@ function createTestAgentClient(): AgentClientContract {
     generateEmbedding: async (texts: string[]) => texts.map(() => []),
     sendMessageStream: () => emptyServerAgentStream(),
     getCurrentSequenceModel: () => null,
+    ...overrides,
   };
 }
 

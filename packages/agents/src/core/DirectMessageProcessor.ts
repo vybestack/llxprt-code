@@ -920,7 +920,6 @@ export class DirectMessageProcessor {
    */
   private _extractDirectGeminiOverrides(config?: AgentClientGenerateConfig):
     | {
-        serverTools?: unknown;
         toolConfig?: unknown;
       }
     | undefined {
@@ -929,14 +928,10 @@ export class DirectMessageProcessor {
     }
 
     const overrides: {
-      serverTools?: unknown;
       toolConfig?: unknown;
     } = {};
 
     const rawConfig = config as Record<string, unknown>;
-    if ('serverTools' in rawConfig) {
-      overrides.serverTools = rawConfig.serverTools;
-    }
     if ('toolConfig' in rawConfig) {
       overrides.toolConfig = rawConfig.toolConfig;
     }

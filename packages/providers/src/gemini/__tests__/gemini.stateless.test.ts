@@ -330,7 +330,7 @@ describe('Gemini provider stateless contract tests', () => {
     authMock.restore();
   });
 
-  it('includes server tool declarations for Gemini streams @plan:PLAN-20251018-STATELESSPROVIDER2.P11 @requirement:REQ-SP2-001 @pseudocode anthropic-gemini-stateless.md lines 4-6', async () => {
+  it('includes function tool declarations for Gemini streams @plan:PLAN-20251018-STATELESSPROVIDER2.P11 @requirement:REQ-SP2-001 @pseudocode anthropic-gemini-stateless.md lines 4-6', async () => {
     queueGoogleStream([
       {
         candidates: [
@@ -416,15 +416,6 @@ describe('Gemini provider stateless contract tests', () => {
         }),
       ]),
     );
-
-    const toolChunks = googleGenAIState.streamCalls[0]?.request;
-    expect(toolChunks).toStrictEqual(
-      expect.objectContaining({
-        config: expect.objectContaining({
-          serverTools: expect.arrayContaining(['web_search', 'web_fetch']),
-        }),
-      }),
-    );
   });
 
   it('honors invocation overrides without touching config ephemerals', async () => {
@@ -487,7 +478,6 @@ describe('Gemini provider stateless contract tests', () => {
     expect(lastRequest).toBeDefined();
     expect(lastRequest?.config).toMatchObject({
       temperature: 0.23,
-      serverTools: ['web_search', 'web_fetch'],
     });
     expect(getEphemerals).not.toHaveBeenCalled();
   });

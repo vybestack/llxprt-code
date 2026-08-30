@@ -82,7 +82,6 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
           yield { role: 'assistant', parts: [{ text: 'chunk1' }] } as IContent;
           yield { role: 'assistant', parts: [{ text: 'chunk2' }] } as IContent;
         },
-        getServerTools: () => [],
       };
       providerManager.registerProvider(mockProvider);
 
@@ -130,14 +129,12 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
             parts: [{ text: 'too late' }],
           } as IContent;
         },
-        getServerTools: () => [],
       };
       const mockProvider2 = {
         name: 'test-provider-2',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
           yield { role: 'assistant', parts: [{ text: 'success' }] } as IContent;
         },
-        getServerTools: () => [],
       };
 
       providerManager.registerProvider(mockProvider1);
@@ -193,7 +190,6 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
           yield { role: 'assistant', parts: [{ text: 'chunk1' }] } as IContent;
           yield { role: 'assistant', parts: [{ text: 'chunk2' }] } as IContent;
         },
-        getServerTools: () => [],
       };
 
       providerManager.registerProvider(mockProvider);
@@ -238,7 +234,6 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
           yield { role: 'assistant', parts: [{ text: 'chunk3' }] } as IContent;
           chunkOrder.push('yielded:chunk3');
         },
-        getServerTools: () => [],
       };
 
       providerManager.registerProvider(mockProvider);
@@ -288,7 +283,6 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
             parts: [{ text: 'too late' }],
           } as IContent;
         },
-        getServerTools: () => [],
       };
       const mockProvider2 = {
         name: 'test-provider-2',
@@ -299,7 +293,6 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
             parts: [{ text: 'from backend2' }],
           } as IContent;
         },
-        getServerTools: () => [],
       };
 
       providerManager.registerProvider(mockProvider1);
@@ -348,14 +341,12 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
             parts: [{ text: 'too late' }],
           } as IContent;
         },
-        getServerTools: () => [],
       };
       const mockProvider2 = {
         name: 'test-provider-2',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
           yield { role: 'assistant', parts: [{ text: 'success' }] } as IContent;
         },
-        getServerTools: () => [],
       };
 
       providerManager.registerProvider(mockProvider1);
@@ -395,8 +386,6 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
       },
       getModels: async () => [],
       getDefaultModel: () => 'test-model',
-      getServerTools: () => [],
-      invokeServerTool: async () => null,
     };
     providerManager.registerProvider(stalledProvider);
     const lb = new LoadBalancingProvider(
@@ -446,8 +435,6 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
       },
       getModels: async () => [],
       getDefaultModel: () => 'test-model',
-      getServerTools: () => [],
-      invokeServerTool: async () => null,
     });
 
     const chunks: IContent[] = [];
@@ -478,8 +465,6 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
       },
       getModels: async () => [],
       getDefaultModel: () => 'test-model',
-      getServerTools: () => [],
-      invokeServerTool: async () => null,
     };
     providerManager.registerProvider(throwingProvider);
     const lb = new LoadBalancingProvider(
@@ -529,8 +514,6 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
       },
       getModels: async () => [],
       getDefaultModel: () => 'test-model',
-      getServerTools: () => [],
-      invokeServerTool: async () => null,
     };
     providerManager.registerProvider(throwingProvider);
     providerManager.registerProvider({
@@ -600,7 +583,6 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
           await new Promise((resolve) => setTimeout(resolve, 250));
           yield { role: 'assistant', parts: [{ text: 'chunk3' }] } as IContent;
         },
-        getServerTools: () => [],
       };
 
       providerManager.registerProvider(mockProvider);

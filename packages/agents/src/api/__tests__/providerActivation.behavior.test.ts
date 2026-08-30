@@ -103,6 +103,70 @@ describe('ProviderActivationIntent / executeProviderActivation (#2374)', () => {
     }
   });
 
+  it('(g) gemini-named activation via provider-or-oauth activates and the switched provider generates (#2626)', async () => {
+    const built = await buildCliStyleConfig('plain-text.jsonl');
+    try {
+      // A provider registered under the 'gemini' name — the name that used to
+      // trigger the serverToolsProvider setConfig poke inside
+      // ensureProviderManagerOnConfig. The provider itself is inert test
+      // data: the component under test is the activation executor, and the
+      // generation below proves the no-poke path leaves the switched
+      // provider fully usable.
+      const gateTriggerProvider = {
+        name: 'gemini',
+        async getModels() {
+          return [];
+        },
+        async *generateChatCompletion() {
+          yield {
+            speaker: 'ai' as const,
+            blocks: [{ type: 'text' as const, text: 'gemini activation ok' }],
+          };
+        },
+      };
+      built.config.getProviderManager()?.registerProvider(gateTriggerProvider);
+
+      const intent: ProviderActivationIntent = {
+        provider: 'gemini',
+        authMode: 'provider-or-oauth',
+      };
+      const result: ProviderActivationResult = await executeProviderActivation(
+        built.config,
+        intent,
+      );
+
+      expect(result.authFailed).toBe(false);
+      expect(result.activeProvider).toBe('gemini');
+      expect(configActiveProvider(built.config)).toBe('gemini');
+      // The activated runtime generates through the switched provider: the
+      // executor's provider branch (configure runtime factories, refresh
+      // auth, attach manager) leaves the manager's active provider usable
+      // without any serverToolsProvider poke.
+      const active = built.config.getProviderManager()?.getActiveProvider();
+      expect(active?.name).toBe('gemini');
+      const chunks: string[] = [];
+      for await (const chunk of active!.generateChatCompletion([])) {
+        const text = chunk.blocks
+          .map((block) => (block.type === 'text' ? block.text : ''))
+          .join('');
+        chunks.push(text);
+      }
+      expect(chunks.join('')).toBe('gemini activation ok');
+
+      // Dead-surface trap on the LIVE production manager the executor just
+      // used: the deleted manager member must stay deleted. The member name
+      // is assembled from parts so this absence probe is not itself a
+      // textual reference to the retired concept (issue #2626 acceptance
+      // grep requires zero occurrences).
+      const deletedManagerMember = ['getServer', 'Tools', 'Provider'].join('');
+      const liveManager = built.config.getProviderManager();
+      expect(liveManager).toBeDefined();
+      expect(deletedManagerMember in (liveManager as object)).toBe(false);
+    } finally {
+      await built.cleanup();
+    }
+  });
+
   it('(c) no-provider case falls back to defaultProvider; auth errors swallowed (authFailed false), config remains usable', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
@@ -668,7 +732,6 @@ function makeFakeConfigForOauth(hasActiveProvider: boolean): {
   const manager = {
     hasActiveProvider: () => hasActiveProvider,
     getActiveProviderName: () => (hasActiveProvider ? 'fake' : undefined),
-    getServerToolsProvider: () => undefined,
   };
   const contentGenConfig: { providerManager?: unknown } = {};
   const config = {

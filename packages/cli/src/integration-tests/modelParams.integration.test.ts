@@ -55,12 +55,6 @@ function createStubProvider(name: string): IProvider {
         blocks: [{ type: 'text' as const, text: `response-from-${name}` }],
       };
     },
-    getServerTools() {
-      return [];
-    },
-    async invokeServerTool() {
-      return {};
-    },
   };
 }
 

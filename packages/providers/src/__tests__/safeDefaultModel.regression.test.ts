@@ -37,8 +37,6 @@ function createProviderWithoutDefaultModel(name: string): IProvider {
     async getModels() {
       return [];
     },
-    getServerTools: () => [],
-    invokeServerTool: async () => null,
     // getDefaultModel intentionally omitted
   } as unknown as IProvider;
 }

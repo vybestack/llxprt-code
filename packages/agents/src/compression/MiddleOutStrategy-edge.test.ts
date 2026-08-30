@@ -131,8 +131,6 @@ describe('MiddleOutStrategy edge cases', () => {
         name: 'multi-chunk',
         getModels: async () => [],
         getDefaultModel: () => 'fake-model',
-        getServerTools: () => [],
-        invokeServerTool: async () => ({}),
         async *generateChatCompletion() {
           yield {
             speaker: 'ai' as const,

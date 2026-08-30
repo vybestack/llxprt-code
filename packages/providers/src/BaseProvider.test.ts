@@ -806,23 +806,6 @@ describe('BaseProvider', () => {
     });
   });
 
-  describe('Server Tools', () => {
-    it('should throw error for unsupported server tools', async () => {
-      const config: BaseProviderConfig = {
-        name: 'test',
-        cliKey: 'test-key',
-      };
-
-      const provider = new TestProvider(config);
-
-      await expect(
-        provider.invokeServerTool('unsupported-tool', {}),
-      ).rejects.toThrow(
-        "Server tool 'unsupported-tool' not supported by test provider",
-      );
-    });
-  });
-
   describe('isAuthenticated OAuth timing', () => {
     it('should not trigger OAuth when checking authentication status', async () => {
       const mockResolveAuth = vi.fn().mockResolvedValue('test-token');

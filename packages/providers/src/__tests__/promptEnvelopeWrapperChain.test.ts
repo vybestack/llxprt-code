@@ -90,12 +90,6 @@ class EstimatingProvider implements IProvider {
   getDefaultModel(): string {
     return 'test-model';
   }
-  getServerTools(): string[] {
-    return [];
-  }
-  async invokeServerTool(): Promise<unknown> {
-    return undefined;
-  }
   async *generateChatCompletion(
     _optionsOrContents: GenerateChatOptions | IContent[],
     _tools?: ProviderToolset,
@@ -135,12 +129,6 @@ class NonEstimatingProvider implements IProvider {
   }
   getDefaultModel(): string {
     return 'test-model';
-  }
-  getServerTools(): string[] {
-    return [];
-  }
-  async invokeServerTool(): Promise<unknown> {
-    return undefined;
   }
   async *generateChatCompletion(
     _optionsOrContents: GenerateChatOptions | IContent[],

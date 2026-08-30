@@ -48,12 +48,6 @@ function createMockProvider(): IProvider {
     getDefaultModel() {
       return 'model-1';
     },
-    getServerTools() {
-      return [];
-    },
-    async invokeServerTool() {
-      return {};
-    },
   };
 }
 

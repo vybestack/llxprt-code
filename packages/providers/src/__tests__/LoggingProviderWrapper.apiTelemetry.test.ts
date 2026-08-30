@@ -408,16 +408,6 @@ describe('LoggingProviderWrapper API Telemetry', () => {
         getDefaultModel(): string {
           return 'stopreason-model';
         }
-        getServerTools(): string[] {
-          return [];
-        }
-        async invokeServerTool(
-          _toolName: string,
-          _params: unknown,
-          _config?: unknown,
-        ): Promise<unknown> {
-          return {};
-        }
         async *generateChatCompletion(
           _options: GenerateChatOptions,
         ): AsyncIterableIterator<IContent> {
@@ -470,16 +460,6 @@ describe('LoggingProviderWrapper API Telemetry', () => {
         }
         getDefaultModel(): string {
           return 'stopreason-model';
-        }
-        getServerTools(): string[] {
-          return [];
-        }
-        async invokeServerTool(
-          _toolName: string,
-          _params: unknown,
-          _config?: unknown,
-        ): Promise<unknown> {
-          return {};
         }
         async *generateChatCompletion(
           _options: GenerateChatOptions,

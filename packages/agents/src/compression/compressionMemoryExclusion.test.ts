@@ -128,8 +128,6 @@ function createOptionsCapturingProvider(
     name: 'options-capture-provider',
     getModels: async () => [],
     getDefaultModel: () => COMPRESSION_MODEL,
-    getServerTools: () => [],
-    invokeServerTool: async () => ({}),
     async *generateChatCompletion(options: RuntimeGenerateChatOptions) {
       captured.push(options);
       yield {

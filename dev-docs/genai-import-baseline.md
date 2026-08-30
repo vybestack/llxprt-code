@@ -4,16 +4,15 @@
 
 Every tracked TypeScript file under `packages/**` that imports `@google/genai`, classified to the downstream issue that removes the import (or to the permanent Gemini `enclave`). This file is the baseline the #2352 enforcement ratchet compares against — the count may only ever decrease as migration issues land.
 
-**Total importers:** 20
+**Total importers:** 18
 
 **Per-owner breakdown:**
 
-- `enclave`: 20
+- `enclave`: 18
 
 | File                                                                      | Owner   |
 | ------------------------------------------------------------------------- | ------- |
 | `packages/providers/src/gemini/GeminiMessageConverter.ts`                 | enclave |
-| `packages/providers/src/gemini/GeminiProvider.auth.test.ts`               | enclave |
 | `packages/providers/src/gemini/GeminiProvider.mediaBlock.test.ts`         | enclave |
 | `packages/providers/src/gemini/GeminiProvider.test.ts`                    | enclave |
 | `packages/providers/src/gemini/GeminiProvider.ts`                         | enclave |
@@ -27,7 +26,6 @@ Every tracked TypeScript file under `packages/**` that imports `@google/genai`, 
 | `packages/providers/src/gemini/geminiResponseMapper.test.ts`              | enclave |
 | `packages/providers/src/gemini/geminiResponseMapper.ts`                   | enclave |
 | `packages/providers/src/gemini/geminiSchemaHelpers.ts`                    | enclave |
-| `packages/providers/src/gemini/geminiServerTools.ts`                      | enclave |
 | `packages/providers/src/gemini/neutralConverters.property.test.ts`        | enclave |
 | `packages/providers/src/gemini/neutralConverters.test.ts`                 | enclave |
 | `packages/providers/src/gemini/neutralConverters.ts`                      | enclave |

@@ -49,8 +49,6 @@ function createManagerDouble(
       thought: 0,
       total: 0,
     }),
-    getServerToolsProvider: () => undefined,
-    setServerToolsProvider: () => {},
     setConfig: () => {},
     hasActiveProvider: () => active !== undefined && active in providersByName,
     accumulateSessionTokens: () => {},

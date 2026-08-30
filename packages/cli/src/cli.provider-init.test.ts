@@ -222,7 +222,6 @@ describe('cli main provider initialization', () => {
     const providerManager = {
       getActiveProvider: vi.fn().mockReturnValue({ name: 'gemini' }),
       getActiveProviderName: vi.fn().mockReturnValue('gemini'),
-      getServerToolsProvider: vi.fn().mockReturnValue(null),
       hasActiveProvider: vi.fn().mockReturnValue(true),
       setActiveProvider: vi.fn().mockReturnValue(undefined),
     };
@@ -315,7 +314,6 @@ describe('cli main provider initialization', () => {
     const providerManager = {
       getActiveProvider: vi.fn().mockReturnValue({ name: 'gemini' }),
       getActiveProviderName: vi.fn().mockReturnValue('gemini'),
-      getServerToolsProvider: vi.fn().mockReturnValue(null),
       hasActiveProvider: vi.fn().mockReturnValue(true),
       setActiveProvider: vi.fn().mockReturnValue(undefined),
     };
@@ -452,7 +450,6 @@ describe('cli main provider initialization', () => {
     const providerManager = {
       getActiveProvider: vi.fn().mockReturnValue({ name: 'gemini' }),
       getActiveProviderName: vi.fn().mockReturnValue('gemini'),
-      getServerToolsProvider: vi.fn().mockReturnValue(null),
       hasActiveProvider: vi.fn().mockReturnValue(true),
       setActiveProvider: vi.fn().mockReturnValue(undefined),
     };

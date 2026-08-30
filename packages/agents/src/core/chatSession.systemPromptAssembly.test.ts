@@ -102,8 +102,6 @@ function buildFixture(
         blocks: [{ type: 'text', text: 'ok' }],
       };
     }),
-    getServerTools: () => [],
-    invokeServerTool: vi.fn(),
     getAuthToken: vi.fn(async () => 'stub-auth-token'),
   };
 
@@ -356,8 +354,6 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
         capturedCalls.push(opts);
         yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
       }),
-      getServerTools: () => [],
-      invokeServerTool: vi.fn(),
       getAuthToken: vi.fn(async () => 'token'),
     };
     const manager = new TestRuntimeProviderManager(providerRuntime);

@@ -228,12 +228,6 @@ function createMockProvider(
         blocks: [{ type: 'text' as const, text: 'test response' }],
       };
     },
-    getServerTools() {
-      return [];
-    },
-    async invokeServerTool() {
-      return {};
-    },
     getDefaultModel() {
       return 'test-model';
     },

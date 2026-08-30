@@ -58,12 +58,6 @@ function createTestProvider(config: {
     getDefaultModel(): string {
       return 'test-model';
     },
-    getServerTools(): string[] {
-      return [];
-    },
-    async invokeServerTool(): Promise<unknown> {
-      return null;
-    },
   };
 }
 
@@ -630,12 +624,6 @@ describe('RetryOrchestrator', () => {
         getDefaultModel(): string {
           return 'test-model';
         },
-        getServerTools(): string[] {
-          return [];
-        },
-        async invokeServerTool(): Promise<unknown> {
-          return null;
-        },
       };
 
       const orchestrator = new RetryOrchestrator(provider, {
@@ -691,12 +679,6 @@ describe('RetryOrchestrator', () => {
         getDefaultModel(): string {
           return 'test-model';
         },
-        getServerTools(): string[] {
-          return [];
-        },
-        async invokeServerTool(): Promise<unknown> {
-          return null;
-        },
       };
 
       const orchestrator = new RetryOrchestrator(provider, {
@@ -741,12 +723,6 @@ describe('RetryOrchestrator', () => {
         },
         getDefaultModel(): string {
           return 'test-model';
-        },
-        getServerTools(): string[] {
-          return [];
-        },
-        async invokeServerTool(): Promise<unknown> {
-          return null;
         },
       };
 
@@ -930,12 +906,6 @@ describe('RetryOrchestrator', () => {
         getDefaultModel(): string {
           return 'test-model';
         },
-        getServerTools(): string[] {
-          return [];
-        },
-        async invokeServerTool(): Promise<unknown> {
-          return null;
-        },
       };
 
       const orchestrator = new RetryOrchestrator(provider);
@@ -997,5 +967,30 @@ describe('RetryOrchestrator', () => {
       name: 'RetriesExhaustedError',
     });
     expect(calls).toBe(3);
+  });
+
+  // #2626: ProviderManager.setActiveProvider's uniform switch-away state
+  // clear must propagate through this wrapper to the underlying provider.
+  // clearState is an optional member outside IProvider, so the forwarding
+  // is structural — pinned here for both branches (present and absent).
+  it('forwards clearState to the wrapped provider (#2626)', () => {
+    const clearStateCalls: string[] = [];
+    const provider = createTestProvider({});
+    (provider as { clearState?: () => void }).clearState = () => {
+      clearStateCalls.push('wrapped');
+    };
+    const orchestrator = new RetryOrchestrator(provider);
+
+    orchestrator.clearState?.();
+
+    expect(clearStateCalls).toEqual(['wrapped']);
+  });
+
+  it('clearState is a no-op when the wrapped provider lacks the member (#2626)', () => {
+    const provider = createTestProvider({});
+    expect('clearState' in provider).toBe(false);
+    const orchestrator = new RetryOrchestrator(provider);
+
+    expect(() => orchestrator.clearState?.()).not.toThrow();
   });
 });

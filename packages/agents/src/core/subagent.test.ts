@@ -74,8 +74,6 @@ describe('subagent.ts', () => {
                   yield { speaker: 'ai', blocks: [] };
                 }),
                 getDefaultModel: () => defaultModelConfig.model,
-                getServerTools: () => [],
-                invokeServerTool: vi.fn(),
               }) as IProvider,
           ),
           setActiveProvider: vi.fn(),

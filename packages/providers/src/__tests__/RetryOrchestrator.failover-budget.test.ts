@@ -28,12 +28,6 @@ function failingProvider(onCall: () => void): IProvider {
     getDefaultModel() {
       return 'test-model';
     },
-    getServerTools() {
-      return [];
-    },
-    async invokeServerTool() {
-      return null;
-    },
   };
 }
 

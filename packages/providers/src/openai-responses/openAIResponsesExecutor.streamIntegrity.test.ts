@@ -189,12 +189,6 @@ function createExecutorProvider(deps: ResponsesExecutorDeps): IProvider {
     getDefaultModel(): string {
       return 'gpt-5';
     },
-    getServerTools(): string[] {
-      return [];
-    },
-    async invokeServerTool(): Promise<unknown> {
-      return null;
-    },
   };
 }
 

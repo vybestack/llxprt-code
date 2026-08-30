@@ -60,12 +60,6 @@ class StubAdoptedProvider implements IProvider {
   async *generateChatCompletion(): AsyncIterableIterator<never> {
     // intentionally empty — never driven in these tests
   }
-  getServerTools(): string[] {
-    return [];
-  }
-  async invokeServerTool(): Promise<unknown> {
-    return undefined;
-  }
 }
 
 /** Builds a real ProviderManager the way the providers test suite bootstraps one. */

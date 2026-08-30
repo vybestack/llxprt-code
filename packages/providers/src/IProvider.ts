@@ -159,15 +159,6 @@ export interface IProvider {
   // Methods for updating provider configuration
   getToolFormat?(): string;
   isPaidMode?(): boolean;
-  // ServerTool methods for provider-native tools
-  getServerTools(): string[];
-  invokeServerTool(
-    toolName: string,
-    params: unknown,
-    config?: unknown,
-    signal?: AbortSignal,
-  ): Promise<unknown>;
-  // Add other methods as needed, e.g., generateCompletion, getToolDefinitions
 
   /**
    * Set model parameters to be included in API calls

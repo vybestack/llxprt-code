@@ -58,8 +58,6 @@ describe('RetryOrchestrator timeout cleanup', () => {
         return [];
       },
       getDefaultModel: () => 'test-model',
-      getServerTools: () => [],
-      invokeServerTool: async () => null,
     };
     const orchestrator = new RetryOrchestrator(provider, {
       streamingTimeoutMs: 50,
@@ -117,8 +115,6 @@ describe('RetryOrchestrator timeout cleanup', () => {
         return [];
       },
       getDefaultModel: () => 'test-model',
-      getServerTools: () => [],
-      invokeServerTool: async () => null,
     };
     const orchestrator = new RetryOrchestrator(provider, {
       maxAttempts: 3,

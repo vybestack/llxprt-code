@@ -65,8 +65,6 @@ function buildConversationManager(model: string): {
     async *generateChatCompletion() {
       /* stub */
     },
-    getServerTools: () => [],
-    invokeServerTool: undefined,
     getAuthToken: undefined,
   };
   manager.registerProvider(provider);

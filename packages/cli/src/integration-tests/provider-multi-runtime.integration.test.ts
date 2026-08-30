@@ -261,12 +261,6 @@ function createStubProvider(
         blocks: [{ type: 'text' as const, text: `${name}-response` }],
       };
     },
-    getServerTools() {
-      return [];
-    },
-    async invokeServerTool() {
-      return {};
-    },
     clearState() {
       // Stub provider does not persist internal state.
     },

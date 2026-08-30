@@ -105,8 +105,6 @@ describe('ChatSession runtime context', () => {
       getModels: vi.fn(async () => []),
       getDefaultModel: () => 'stub-model',
       generateChatCompletion: generateChatCompletionMock,
-      getServerTools: () => [],
-      invokeServerTool: vi.fn(),
       getAuthToken: vi.fn(async () => 'stub-auth-token'),
     };
 
@@ -228,8 +226,6 @@ describe('ChatSession runtime context', () => {
       getModels: vi.fn(async () => []),
       getDefaultModel: () => 'stub-model',
       generateChatCompletion: generateChatCompletionMock,
-      getServerTools: () => [],
-      invokeServerTool: vi.fn(),
       getAuthToken: vi.fn(async () => 'stub-auth-token'),
     };
     manager.registerProvider(provider);
@@ -347,8 +343,6 @@ describe('ChatSession runtime context', () => {
       getModels: vi.fn(async () => []),
       getDefaultModel: () => 'stub-model',
       generateChatCompletion: generateChatCompletionMock,
-      getServerTools: () => [],
-      invokeServerTool: vi.fn(),
       getAuthToken: vi.fn(async () => 'stub-auth-token'),
     };
     manager.registerProvider(provider);

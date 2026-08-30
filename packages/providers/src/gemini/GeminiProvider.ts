@@ -17,7 +17,6 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   type GenerateContentParameters,
   type GenerateContentResponse,
-  type GoogleGenAI,
   type GoogleGenAIOptions,
 } from '@google/genai';
 import {
@@ -28,13 +27,7 @@ import {
   type GeminiAuthMode,
   type VertexAIAuthConfig,
 } from './geminiAuth.js';
-import { throwIfAborted } from './geminiAbort.js';
 import { resolveModelList } from './geminiModels.js';
-import {
-  invokeWebFetch,
-  invokeWebSearch,
-  type ServerToolContext,
-} from './geminiServerTools.js';
 import {
   buildGenerationSetup,
   type GeminiGenerationSetup,
@@ -72,10 +65,6 @@ export class GeminiProvider extends BaseProvider {
 
   private getLogger(): DebugLogger {
     return new DebugLogger('llxprt:gemini:provider');
-  }
-
-  private getToolsLogger(): DebugLogger {
-    return new DebugLogger('llxprt:gemini:tools');
   }
 
   private getStreamingPreference(
@@ -260,67 +249,6 @@ export class GeminiProvider extends BaseProvider {
   override clearAuthCache(): void {
     super.clearAuthCache();
     this.clearClientCache();
-  }
-
-  override getServerTools(): string[] {
-    return ['web_search', 'web_fetch'];
-  }
-
-  override async invokeServerTool(
-    toolName: string,
-    params: unknown,
-    _config?: unknown,
-    signal?: AbortSignal,
-  ): Promise<unknown> {
-    if (toolName === 'web_search') {
-      return invokeWebSearch(
-        params,
-        signal,
-        this.getToolsLogger(),
-        this.serverToolContext,
-      );
-    }
-    if (toolName === 'web_fetch') {
-      return invokeWebFetch(
-        params,
-        signal,
-        this.getToolsLogger(),
-        this.serverToolContext,
-      );
-    }
-    throw new Error(`Unknown server tool: ${toolName}`);
-  }
-
-  private get serverToolContext(): ServerToolContext {
-    return {
-      resolveAuth: (signal) => this.resolveAuthWithAbortCheck(signal),
-      createHttpOptions: () => this.createHttpOptions(),
-      getBaseURL: () => this.getBaseURL(),
-      createGenAIClient: (token, mode, opts, baseURL) =>
-        this.createGenAIClient(token, mode, opts, baseURL),
-      globalConfig: this.globalConfig,
-    };
-  }
-
-  private async resolveAuthWithAbortCheck(
-    signal?: AbortSignal,
-  ): Promise<{ authMode: GeminiAuthMode; token: string }> {
-    throwIfAborted(signal);
-    const result = await this.determineBestAuth();
-    throwIfAborted(signal);
-    return result;
-  }
-
-  private async createGenAIClient(
-    authToken: string,
-    authMode: GeminiAuthMode,
-    httpOptions: ReturnType<typeof this.createHttpOptions>,
-    baseURL?: string,
-  ): Promise<GoogleGenAI> {
-    const { GoogleGenAI } = await import('@google/genai');
-    return new GoogleGenAI(
-      this.buildGoogleGenAIOptions(authToken, authMode, httpOptions, baseURL),
-    );
   }
 
   private hasDirectVertexCredentials(

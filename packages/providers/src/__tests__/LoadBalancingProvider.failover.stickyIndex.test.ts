@@ -49,8 +49,6 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
       },
       getModels: async () => [],
       getDefaultModel: () => 'test-model',
-      getServerTools: () => [],
-      invokeServerTool: async () => ({ content: [] }),
     };
 
     providerManager.registerProvider(mockProvider);
@@ -156,8 +154,6 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
       },
       getModels: async () => [],
       getDefaultModel: () => 'test-model',
-      getServerTools: () => [],
-      invokeServerTool: async () => ({ content: [] }),
     };
 
     providerManager.registerProvider(mockProvider);
@@ -235,8 +231,6 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
       },
       getModels: async () => [],
       getDefaultModel: () => 'test-model',
-      getServerTools: () => [],
-      invokeServerTool: async () => ({ content: [] }),
     };
 
     providerManager.registerProvider(mockProvider);
@@ -326,8 +320,6 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
       },
       getModels: async () => [],
       getDefaultModel: () => 'test-model',
-      getServerTools: () => [],
-      invokeServerTool: async () => ({ content: [] }),
     };
 
     providerManager.registerProvider(mockProvider);

@@ -59,8 +59,6 @@ describe('Anthropic stream retry ownership', () => {
       },
       getModels: async () => [],
       getDefaultModel: () => 'claude-test',
-      getServerTools: () => [],
-      invokeServerTool: async () => null,
     };
     const provider = new RetryOrchestrator(transport, {
       maxAttempts: 3,
@@ -93,8 +91,6 @@ describe('Anthropic stream retry ownership', () => {
       },
       getModels: async () => [],
       getDefaultModel: () => 'claude-test',
-      getServerTools: () => [],
-      invokeServerTool: async () => null,
     };
     const provider = new RetryOrchestrator(transport, {
       maxAttempts: 3,

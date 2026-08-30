@@ -398,8 +398,6 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       },
       getModels: async () => [],
       getDefaultModel: () => 'model',
-      getServerTools: () => [],
-      invokeServerTool: async () => undefined,
     };
     providerManager.registerProvider(delegate);
     const lb = new LoadBalancingProvider(

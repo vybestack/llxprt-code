@@ -93,8 +93,6 @@ function buildConversationManager(
     getModels: async () => [],
     getDefaultModel: () => runtimeModel,
     generateChatCompletion: async function* () {},
-    getServerTools: () => [],
-    invokeServerTool: async () => undefined,
   };
   if (liveProvider?.liveModel === 'throw') {
     provider.getCurrentModel = (): string => {
@@ -243,8 +241,6 @@ function buildChatSessionWithLiveProvider(
         blocks: [{ type: 'text', text: 'Quiet morning dew.' }],
       } satisfies IContent;
     },
-    getServerTools: () => [],
-    invokeServerTool: async () => undefined,
   };
   if (liveProvider?.liveModel !== undefined) {
     if (liveProvider.liveModel === 'throw') {

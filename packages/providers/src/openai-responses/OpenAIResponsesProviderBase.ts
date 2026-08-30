@@ -242,25 +242,6 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
   }
 
   /**
-   * Get the list of server tools supported by this provider
-   */
-  override getServerTools(): string[] {
-    return [];
-  }
-
-  /**
-   * Invoke a server tool (native provider tool)
-   */
-  override async invokeServerTool(
-    _toolName: string,
-    _params: unknown,
-    _config?: unknown,
-    _signal?: AbortSignal,
-  ): Promise<unknown> {
-    throw new Error('Server tools not supported by OpenAI Responses provider');
-  }
-
-  /**
    * Get current model parameters
    */
 

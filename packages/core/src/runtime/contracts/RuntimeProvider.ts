@@ -67,14 +67,6 @@ export interface RuntimeProvider {
     callback: ((contents: IContent[]) => Promise<IContent[]>) | null,
   ): void;
 
-  getServerTools(): string[];
-  invokeServerTool(
-    toolName: string,
-    params: unknown,
-    config?: unknown,
-    signal?: AbortSignal,
-  ): Promise<unknown>;
-
   generateChatCompletion(
     options: RuntimeGenerateChatOptions,
   ): AsyncIterableIterator<IContent>;
