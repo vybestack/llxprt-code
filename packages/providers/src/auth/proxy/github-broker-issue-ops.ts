@@ -13,23 +13,37 @@
  * @pseudocode 003-github-broker.md lines 38-55, 101-126
  */
 
-import type { OpDescriptor, ValidationError } from './github-broker-types.js';
+import { augmentSearchError } from './github-broker-errors.js';
+import type {
+  GhRunner,
+  OpDescriptor,
+  ValidationError,
+} from './github-broker-types.js';
 import { validateParams } from './github-broker-validation.js';
 import {
   GITHUB_OP_SPECS,
   type GithubOpSpec,
 } from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 import {
+  assertListShape,
   assertNotPartialSuccess,
+  extractAssignees,
   extractAuthor,
   extractComments,
   extractLabels,
+  extractMilestone,
   extractNumber,
+  extractState,
   extractString,
   type ShapedComment,
-  assertListShape,
+  windowByLimit,
 } from './github-broker-shaping.js';
-import { resolveLimit } from './github-broker-validation.js';
+import { resolveFetchLimit } from './github-broker-validation.js';
+import {
+  labelQualifiers,
+  resolveTotalCount,
+  stateQualifier,
+} from './github-broker-count.js';
 
 const ISSUE_VIEW_SPEC: GithubOpSpec = GITHUB_OP_SPECS['issue.view'];
 const ISSUE_LIST_SPEC: GithubOpSpec = GITHUB_OP_SPECS['issue.list'];
@@ -52,7 +66,12 @@ export function validateIssueViewParams(
       message: 'Parameter number is required',
     };
   }
-  return validateParams(ISSUE_VIEW_SPEC.params, params);
+  return validateParams(
+    ISSUE_VIEW_SPEC.params,
+    params,
+    undefined,
+    'issue.view',
+  );
 }
 
 /**
@@ -67,9 +86,8 @@ export function buildIssueViewArgv(
   comments: boolean,
 ): string[] {
   const number = String(params.number);
-  const fields = comments
-    ? 'number,title,state,author,labels,body,comments'
-    : 'number,title,state,author,labels,body';
+  const required = 'number,title,state,author,labels,body,assignees,milestone';
+  const fields = comments ? `${required},comments` : required;
   const argv = ['issue', 'view', number, '--json', fields];
   if (typeof params.repo === 'string' && params.repo.length > 0) {
     argv.push('--repo', params.repo);
@@ -90,6 +108,9 @@ export interface ShapedIssueView {
   readonly state: string;
   readonly author: string;
   readonly labels: readonly string[];
+  readonly assignees: readonly string[];
+  /** The milestone title, null when the issue has no milestone. */
+  readonly milestone: string | null;
   readonly body: string;
   readonly comments: readonly ShapedComment[] | null;
 }
@@ -110,9 +131,11 @@ export function shapeIssueView(rawJson: unknown): ShapedIssueView {
   return {
     number: extractNumber(raw.number),
     title: extractString(raw.title, ''),
-    state: extractString(raw.state, ''),
+    state: extractState(raw.state),
     author: extractAuthor(raw.author),
     labels: extractLabels(raw.labels),
+    assignees: extractAssignees(raw.assignees),
+    milestone: extractMilestone(raw.milestone),
     body: extractString(raw.body, ''),
     comments: extractComments(raw.comments),
   };
@@ -149,7 +172,12 @@ export const issueViewDescriptor: OpDescriptor = {
 export function validateIssueListParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(ISSUE_LIST_SPEC.params, params);
+  return validateParams(
+    ISSUE_LIST_SPEC.params,
+    params,
+    undefined,
+    'issue.list',
+  );
 }
 
 /**
@@ -167,7 +195,7 @@ export function buildIssueListArgv(params: Record<string, unknown>): string[] {
     'issue',
     'list',
     '--json',
-    'number,title,state,labels,updatedAt',
+    'number,title,state,author,labels,updatedAt,assignees,milestone',
   ];
   if (typeof params.search === 'string' && params.search.length > 0) {
     argv.push('--search', params.search);
@@ -176,7 +204,7 @@ export function buildIssueListArgv(params: Record<string, unknown>): string[] {
     argv.push('--state', params.state);
   }
   appendLabelArgs(argv, params.label);
-  argv.push('--limit', String(resolveLimit(params)));
+  argv.push('--limit', String(resolveFetchLimit(params)));
   if (typeof params.repo === 'string' && params.repo.length > 0) {
     argv.push('--repo', params.repo);
   }
@@ -216,7 +244,11 @@ export interface ShapedIssueListItem {
   readonly number: number;
   readonly title: string;
   readonly state: string;
+  readonly author: string;
   readonly labels: readonly string[];
+  readonly assignees: readonly string[];
+  /** The milestone title, null when the issue has no milestone. */
+  readonly milestone: string | null;
   readonly updatedAt: string;
 }
 
@@ -238,8 +270,11 @@ export function shapeIssueList(
     return {
       number: extractNumber(obj.number),
       title: extractString(obj.title, ''),
-      state: extractString(obj.state, ''),
+      state: extractState(obj.state),
+      author: extractAuthor(obj.author),
       labels: extractLabels(obj.labels),
+      assignees: extractAssignees(obj.assignees),
+      milestone: extractMilestone(obj.milestone),
       updatedAt: extractString(obj.updatedAt, ''),
     };
   });
@@ -252,11 +287,79 @@ export function shapeIssueList(
  * @requirement REQ-002, REQ-013
  * @pseudocode 003-github-broker.md lines 38-44, 120-123
  */
+/**
+ * Rebuilds an issue.list call as a GitHub search query, so the same filters
+ * can be counted.
+ *
+ * `search` is spliced verbatim because it is already GitHub search syntax
+ * (that is what `gh issue list --search` takes), quotes and all. The mapping
+ * was checked against live counts rather than assumed: label, `no:assignee`
+ * and `milestone:` filters each produced identical numbers from `gh issue
+ * list` and from the search API (33/33, 143/143, 141/141), as did an
+ * unfiltered open count (210/210).
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-8
+ * @issue 3407
+ */
+export function buildIssueListCountQuery(
+  params: Record<string, unknown>,
+): string {
+  const parts: string[] = [];
+  if (typeof params.search === 'string' && params.search.length > 0) {
+    parts.push(params.search);
+  }
+  const state = stateQualifier(params.state ?? 'open');
+  if (state !== null) parts.push(state);
+  parts.push(...labelQualifiers(params.label));
+  if (typeof params.repo === 'string' && params.repo.length > 0) {
+    parts.push(`repo:${params.repo}`);
+  }
+  parts.push('type:issue');
+  return parts.join(' ');
+}
+
+/**
+ * Runs issue.list and reports how many issues match in total.
+ *
+ * issue.list is the operation an agent reaches for when counting, because it
+ * is the one that filters richly and returns `milestone`. Leaving the total
+ * to search.issues alone meant "how many issues are on milestone X" needed
+ * two operations, which every evaluated model called out.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-8
+ * @issue 3407
+ */
+async function executeIssueList(
+  params: Record<string, unknown>,
+  run: GhRunner,
+): Promise<Record<string, unknown>> {
+  const page = windowByLimit(
+    shapeIssueList(await run(buildIssueListArgv(params))),
+    params,
+  );
+  const effectiveQuery = buildIssueListCountQuery(params);
+  return {
+    hasMore: page.hasMore,
+    totalCount: await resolveTotalCount(page, effectiveQuery, run),
+    effectiveQuery,
+    issues: page.items,
+  };
+}
+
 export const issueListDescriptor: OpDescriptor = {
   name: 'issue.list',
   requiredParams: ISSUE_LIST_SPEC.required,
   mutating: ISSUE_LIST_SPEC.mutating,
   params: ISSUE_LIST_SPEC.params,
   buildArgv: (params) => buildIssueListArgv(params),
-  shape: (rawJson) => ({ issues: shapeIssueList(rawJson) }),
+  execute: (params, run) => executeIssueList(params, run),
+  // Counting a truncated page reaches the separately-throttled search
+  // endpoint, so a 403 here needs the same guidance the search ops give.
+  augmentError: augmentSearchError,
+  shape: (rawJson, params) => {
+    const { items, hasMore } = windowByLimit(shapeIssueList(rawJson), params);
+    return { hasMore, issues: items };
+  },
 };

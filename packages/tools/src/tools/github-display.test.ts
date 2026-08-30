@@ -86,6 +86,151 @@ describe('github result rendering', () => {
   });
 
   /**
+   * Issue #3407: assignment state was invisible in the transcript even once
+   * the shaped contract carried it, so a human reading the render could not
+   * see who an issue was assigned to or which milestone it belonged to.
+   *
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-5
+   * @issue 3407
+   */
+  it('issue.view renders assignees and milestone when present', () => {
+    const out = renderGithubResult(
+      'issue.view',
+      { number: 3345 },
+      {
+        number: 3345,
+        title: 'Assigned and milestoned',
+        state: 'open',
+        author: 'alice',
+        labels: ['bug'],
+        assignees: ['acoliver'],
+        milestone: '0.12.0',
+        comments: null,
+      },
+    );
+    expect(out).toContain('acoliver');
+    expect(out).toContain('0.12.0');
+  });
+
+  /**
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-5
+   * @issue 3407
+   */
+  it('issue.view omits the assignee and milestone lines when unset', () => {
+    const out = renderGithubResult(
+      'issue.view',
+      { number: 3407 },
+      {
+        number: 3407,
+        title: 'Unassigned',
+        state: 'open',
+        author: 'alice',
+        labels: [],
+        assignees: [],
+        milestone: null,
+        comments: null,
+      },
+    );
+    expect(out).not.toContain('assignees:');
+    expect(out).not.toContain('milestone:');
+  });
+
+  /**
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-5
+   * @issue 3407
+   */
+  it('issue.list surfaces assignee and milestone on each item line', () => {
+    const out = renderGithubResult(
+      'issue.list',
+      {},
+      {
+        issues: [
+          {
+            number: 1,
+            title: 'Assigned',
+            state: 'open',
+            labels: [],
+            updatedAt: '',
+            assignees: ['acoliver'],
+            milestone: '0.12.0',
+          },
+          {
+            number: 2,
+            title: 'Bare',
+            state: 'open',
+            labels: [],
+            updatedAt: '',
+            assignees: [],
+            milestone: null,
+          },
+        ],
+      },
+    );
+    const lines = out.split('\n').filter((l) => l.startsWith('#'));
+    expect(lines[0]).toContain('acoliver');
+    expect(lines[0]).toContain('0.12.0');
+    // An item with neither field keeps the plain "#N state  title" form.
+    expect(lines[1]).toBe('#2 open  Bare');
+  });
+
+  /**
+   * A full page used to render as though it were the total, so a repository
+   * with 200 open issues reported "30 issues".
+   *
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-6
+   * @issue 3407
+   */
+  it('list and search renders mark a truncated page as having more', () => {
+    const items = [
+      { number: 1, title: 'T', state: 'open', labels: [], updatedAt: '' },
+    ];
+    const truncated = renderGithubResult(
+      'issue.list',
+      {},
+      { issues: items, hasMore: true },
+    );
+    expect(truncated).toContain('more available');
+
+    const complete = renderGithubResult(
+      'issue.list',
+      {},
+      { issues: items, hasMore: false },
+    );
+    expect(complete).not.toContain('more available');
+
+    const search = renderGithubResult(
+      'search.issues',
+      {},
+      { issues: items, hasMore: true },
+    );
+    expect(search).toContain('more available');
+  });
+
+  /**
+   * pr.list has neither field, so its line format must be untouched by the
+   * issue-3407 suffix.
+   *
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-5
+   * @issue 3407
+   */
+  it('pr.list item lines are unaffected by the issue.list suffix', () => {
+    const out = renderGithubResult(
+      'pr.list',
+      {},
+      {
+        prs: [{ number: 7, title: 'A PR', state: 'open', updatedAt: '' }],
+      },
+    );
+    const lines = out.split('\n').filter((l) => l.startsWith('#'));
+    expect(lines[0]).toBe('#7 open  A PR');
+  });
+
+  /**
    * @plan PLAN-20260731-GHBROKER.P15
    * @requirement REQ-013
    */

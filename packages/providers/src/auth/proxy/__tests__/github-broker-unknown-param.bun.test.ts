@@ -58,8 +58,12 @@ describe('issue #3019: self-correcting unknown-parameter rejection', () => {
       thrown = error;
     }
     const message = errorMessage(thrown);
+    // The dispatch path names the offending parameter, the accepted set
+    // (with the required `threadId`), and the catalog-backed redirect:
+    // `number` is not taken by pr.resolve-thread but IS taken by the ops
+    // that take a PR/issue number, so the caller learns where it belongs.
     expect(message).toBe(
-      'Unknown parameter: number. Accepted parameters: threadId, repo. Required: threadId.',
+      'Unknown parameter: number. Accepted parameters: threadId, repo. Required: threadId. That parameter is accepted by issue.view, issue.comment, issue.edit, issue.close, pr.view, pr.diff, pr.checks, pr.reviews, pr.comment, pr.edit, pr.ready.',
     );
   });
 
@@ -82,7 +86,7 @@ describe('issue #3019: self-correcting unknown-parameter rejection', () => {
     }
     const message = errorMessage(thrown);
     expect(message).toBe(
-      'Unknown parameter: number. Accepted parameters: threadId, repo. Required: threadId.',
+      'Unknown parameter: number. Accepted parameters: threadId, repo. Required: threadId. That parameter is accepted by issue.view, issue.comment, issue.edit, issue.close, pr.view, pr.diff, pr.checks, pr.reviews, pr.comment, pr.edit, pr.ready.',
     );
   });
 
@@ -100,7 +104,7 @@ describe('issue #3019: self-correcting unknown-parameter rejection', () => {
     });
     expect(result?.code).toBe('INVALID_PARAM');
     expect(result?.message).toBe(
-      'Unknown parameter: number. Accepted parameters: threadId, repo. Required: threadId.',
+      'Unknown parameter: number. Accepted parameters: threadId, repo. Required: threadId. That parameter is accepted by issue.view, issue.comment, issue.edit, issue.close, pr.view, pr.diff, pr.checks, pr.reviews, pr.comment, pr.edit, pr.ready.',
     );
   });
 
@@ -115,6 +119,10 @@ describe('issue #3019: self-correcting unknown-parameter rejection', () => {
   it('validateIssueListParams lists accepted params with no Required clause', () => {
     const result = validateIssueListParams({ bogus: true });
     expect(result?.code).toBe('INVALID_PARAM');
+    // `bogus` is accepted by NO operation, so the issue-3407 redirect sentence
+    // is omitted entirely — including its separating space. Asserting the
+    // exact string pins that a missing redirect cannot leave trailing
+    // whitespace on the message.
     expect(result?.message).toBe(
       'Unknown parameter: bogus. Accepted parameters: search, state, label, limit, repo.',
     );

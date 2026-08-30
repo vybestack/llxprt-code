@@ -29,6 +29,7 @@
 import type { ParamKind, ValidationError } from './github-broker-types.js';
 import {
   validateGithubParamValue,
+  githubParamRedirectText,
   GITHUB_LIMIT_MAX,
 } from '@vybestack/llxprt-code-tools/tools/github-ops.js';
 
@@ -77,6 +78,7 @@ export function validateParams(
   spec: Readonly<Record<string, ParamKind>>,
   params: Record<string, unknown>,
   required?: readonly string[],
+  opName?: string,
 ): ValidationError | null {
   for (const key of Object.keys(params)) {
     // `in` walks the prototype chain, so `{ constructor: 'x' }`,
@@ -88,7 +90,7 @@ export function validateParams(
     if (!Object.prototype.hasOwnProperty.call(spec, key)) {
       return {
         code: 'INVALID_PARAM',
-        message: unknownParamMessage(key, spec, required),
+        message: unknownParamMessage(key, spec, required, opName),
       };
     }
   }
@@ -133,8 +135,15 @@ function unknownParamMessage(
   key: string,
   spec: Readonly<Record<string, ParamKind>>,
   required: readonly string[] | undefined,
+  opName?: string,
 ): string {
-  return withParamCatalogue(`Unknown parameter: ${key}.`, spec, required);
+  return withParamCatalogue(
+    `Unknown parameter: ${key}.`,
+    spec,
+    required,
+    opName,
+    key,
+  );
 }
 
 /**
@@ -175,13 +184,43 @@ function withParamCatalogue(
   base: string,
   spec: Readonly<Record<string, ParamKind>>,
   required: readonly string[] | undefined,
+  opName?: string,
+  unknownKey?: string,
 ): string {
   const accepted = Object.keys(spec).join(', ');
   const withAccepted = `${base} Accepted parameters: ${accepted}.`;
-  if (required !== undefined && required.length > 0) {
-    return `${withAccepted} Required: ${required.join(', ')}.`;
-  }
-  return withAccepted;
+  const withRequired =
+    required !== undefined && required.length > 0
+      ? ` Required: ${required.join(', ')}.`
+      : '';
+  // githubParamRedirectText returns '' when no other op accepts the
+  // parameter, so the separating space is only added when there is text to
+  // separate; otherwise the message would end in a stray trailing space.
+  const redirectText =
+    opName !== undefined && unknownKey !== undefined
+      ? githubParamRedirectText(opName, unknownKey)
+      : '';
+  const redirect = redirectText !== '' ? ` ${redirectText}` : '';
+  return `${withAccepted}${withRequired}${redirect}`;
+}
+
+/**
+ * The number of items to REQUEST from gh: one more than the caller asked for.
+ *
+ * A list that returns exactly `limit` items is ambiguous — it reads
+ * identically whether those are all the matches or the first page of many.
+ * That ambiguity is not cosmetic: this repository has over 200 open issues
+ * and the default limit is 30, so an agent listing issues would report "30
+ * issues" as a total and be wrong. Over-fetching by one turns the ambiguity
+ * into a fact, at the cost of a single extra row and no extra round trip;
+ * `windowByLimit` then trims the probe row back off and reports `hasMore`.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-6
+ * @issue 3407
+ */
+export function resolveFetchLimit(params: Record<string, unknown>): number {
+  return resolveLimit(params) + 1;
 }
 
 /**

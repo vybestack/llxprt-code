@@ -13,8 +13,17 @@
  * @pseudocode 003-github-broker.md lines 38-55, 101-126
  */
 
-import type { OpDescriptor, ValidationError } from './github-broker-types.js';
-import { resolveLimit, validateParams } from './github-broker-validation.js';
+import { augmentSearchError } from './github-broker-errors.js';
+import type {
+  GhRunner,
+  OpDescriptor,
+  ValidationError,
+} from './github-broker-types.js';
+import {
+  resolveFetchLimit,
+  validateParams,
+} from './github-broker-validation.js';
+import { resolveTotalCount, stateQualifier } from './github-broker-count.js';
 import {
   GITHUB_OP_SPECS,
   type GithubOpSpec,
@@ -27,10 +36,12 @@ import {
   extractComments,
   extractLabels,
   extractNumber,
+  extractState,
   extractString,
   truncateWithMarker,
   type ShapedComment,
   assertListShape,
+  windowByLimit,
 } from './github-broker-shaping.js';
 
 const PR_LIST_SPEC: GithubOpSpec = GITHUB_OP_SPECS['pr.list'];
@@ -51,7 +62,7 @@ const PR_REVIEWS_SPEC: GithubOpSpec = GITHUB_OP_SPECS['pr.reviews'];
 export function validatePrListParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(PR_LIST_SPEC.params, params);
+  return validateParams(PR_LIST_SPEC.params, params, undefined, 'pr.list');
 }
 
 /**
@@ -66,12 +77,12 @@ export function buildPrListArgv(params: Record<string, unknown>): string[] {
     'pr',
     'list',
     '--json',
-    'number,title,state,labels,updatedAt',
+    'number,title,state,author,labels,updatedAt',
   ];
   if (typeof params.state === 'string' && params.state.length > 0) {
     argv.push('--state', params.state);
   }
-  argv.push('--limit', String(resolveLimit(params)));
+  argv.push('--limit', String(resolveFetchLimit(params)));
   if (typeof params.repo === 'string' && params.repo.length > 0) {
     argv.push('--repo', params.repo);
   }
@@ -89,6 +100,7 @@ export interface ShapedPrListItem {
   readonly number: number;
   readonly title: string;
   readonly state: string;
+  readonly author: string;
   readonly labels: readonly string[];
   readonly updatedAt: string;
 }
@@ -109,7 +121,8 @@ export function shapePrList(rawJson: unknown): readonly ShapedPrListItem[] {
     return {
       number: extractNumber(obj.number),
       title: extractString(obj.title, ''),
-      state: extractString(obj.state, ''),
+      state: extractState(obj.state),
+      author: extractAuthor(obj.author),
       labels: extractLabels(obj.labels),
       updatedAt: extractString(obj.updatedAt, ''),
     };
@@ -123,13 +136,69 @@ export function shapePrList(rawJson: unknown): readonly ShapedPrListItem[] {
  * @requirement REQ-002, REQ-013
  * @pseudocode 003-github-broker.md lines 38-44, 120-123
  */
+/**
+ * Rebuilds a pr.list call as a GitHub search query, so the same filter can be
+ * counted.
+ *
+ * `closed` maps to `is:closed` rather than excluding merges because that is
+ * what `gh pr list --state closed` actually returns: sampled on this
+ * repository it was 196 merged against 4 plain-closed, and search's
+ * `is:closed` includes merges too (1323 = 1271 merged + 52 unmerged), so the
+ * count describes the rows it accompanies.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-8
+ * @issue 3407
+ */
+export function buildPrListCountQuery(params: Record<string, unknown>): string {
+  const parts: string[] = [];
+  const state = stateQualifier(params.state ?? 'open');
+  if (state !== null) parts.push(state);
+  if (typeof params.repo === 'string' && params.repo.length > 0) {
+    parts.push(`repo:${params.repo}`);
+  }
+  parts.push('type:pr');
+  return parts.join(' ');
+}
+
+/**
+ * Runs pr.list and reports how many pull requests match in total.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-8
+ * @issue 3407
+ */
+async function executePrList(
+  params: Record<string, unknown>,
+  run: GhRunner,
+): Promise<Record<string, unknown>> {
+  const page = windowByLimit(
+    shapePrList(await run(buildPrListArgv(params))),
+    params,
+  );
+  const effectiveQuery = buildPrListCountQuery(params);
+  return {
+    hasMore: page.hasMore,
+    totalCount: await resolveTotalCount(page, effectiveQuery, run),
+    effectiveQuery,
+    prs: page.items,
+  };
+}
+
 export const prListDescriptor: OpDescriptor = {
   name: 'pr.list',
   requiredParams: PR_LIST_SPEC.required,
   mutating: PR_LIST_SPEC.mutating,
   params: PR_LIST_SPEC.params,
   buildArgv: (params) => buildPrListArgv(params),
-  shape: (rawJson) => ({ prs: shapePrList(rawJson) }),
+  execute: (params, run) => executePrList(params, run),
+  // Counting a truncated page reaches the separately-throttled search
+  // endpoint, so a 403 here needs the same guidance the search ops give.
+  augmentError: augmentSearchError,
+  shape: (rawJson, params) => {
+    const { items, hasMore } = windowByLimit(shapePrList(rawJson), params);
+    return { hasMore, prs: items };
+  },
 };
 
 // ─── pr.view ─────────────────────────────────────────────────────────────────
@@ -150,7 +219,7 @@ export function validatePrViewParams(
       message: 'Parameter number is required',
     };
   }
-  return validateParams(PR_VIEW_SPEC.params, params);
+  return validateParams(PR_VIEW_SPEC.params, params, undefined, 'pr.view');
 }
 
 /**
@@ -212,7 +281,7 @@ export function shapePrView(rawJson: unknown): ShapedPrView {
   return {
     number: extractNumber(raw.number),
     title: extractString(raw.title, ''),
-    state: extractString(raw.state, ''),
+    state: extractState(raw.state),
     author: extractAuthor(raw.author),
     labels: extractLabels(raw.labels),
     body: extractString(raw.body, ''),
@@ -261,7 +330,7 @@ export function validatePrDiffParams(
       message: 'Parameter number is required',
     };
   }
-  return validateParams(PR_DIFF_SPEC.params, params);
+  return validateParams(PR_DIFF_SPEC.params, params, undefined, 'pr.diff');
 }
 
 /**
@@ -343,7 +412,7 @@ export function validatePrChecksParams(
       message: 'Parameter number is required',
     };
   }
-  return validateParams(PR_CHECKS_SPEC.params, params);
+  return validateParams(PR_CHECKS_SPEC.params, params, undefined, 'pr.checks');
 }
 
 /**
@@ -411,7 +480,7 @@ export function shapePrChecks(rawJson: unknown): ShapedPrChecks {
       checks.push({
         name: extractString(obj.name, ''),
         bucket: extractString(obj.bucket, ''),
-        state: extractString(obj.state, ''),
+        state: extractState(obj.state),
         link: extractString(obj.link, ''),
       });
     }
@@ -495,7 +564,12 @@ export function validatePrReviewsParams(
       message: 'Parameter number is required',
     };
   }
-  return validateParams(PR_REVIEWS_SPEC.params, params);
+  return validateParams(
+    PR_REVIEWS_SPEC.params,
+    params,
+    undefined,
+    'pr.reviews',
+  );
 }
 
 /**

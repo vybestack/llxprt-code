@@ -76,6 +76,60 @@ function findStepIndex(
 }
 
 describe('issue #3386 tmux memory-retention workload', () => {
+  /**
+   * Each sample request must be followed by a wait on evidence that the probe
+   * actually handled it.
+   *
+   * Waiting on the shell prompt does not do that: the prompt is already on
+   * screen when the command is submitted, so the wait is satisfied instantly
+   * and the script runs on. For the final, post-clear request the next steps
+   * are Escape, Escape and /quit, so the CLI was being killed before the
+   * probe's poller picked the request up. The run then produced two manual
+   * samples instead of three and the retention assertion failed, with the
+   * probe log showing no trace of the third request at all.
+   *
+   * The marker is echoed only on success (`&&`), so a failed or timed-out
+   * request now fails this step loudly instead of silently yielding a run with
+   * a missing checkpoint. The echoed literal is split so the marker the wait
+   * looks for cannot be matched by the command text as it is typed.
+   */
+  it('waits for proof that each sample request completed, not just for the prompt', () => {
+    const scenario = loadScenario();
+    const steps = requireRecords(scenario['steps'], 'scenario.steps');
+
+    const requestIndexes = steps
+      .map((step, index) => ({ step, index }))
+      .filter(
+        ({ step }) =>
+          step['type'] === 'line' &&
+          typeof step['text'] === 'string' &&
+          step['text'].includes('request-cli.ts'),
+      );
+    expect(requestIndexes).toHaveLength(3);
+
+    const markers = new Set<string>();
+    for (const { step, index } of requestIndexes) {
+      const text = String(step['text']);
+      expect(text).toContain('--wait');
+
+      const next = steps[index + 1];
+      expect(next?.['type']).toBe('waitFor');
+      const marker = String(next?.['contains']);
+      expect(marker).toMatch(/^MEMPROFILE_[A-Z]+_DONE$/);
+
+      // Only echoed when request-cli succeeded.
+      expect(text).toContain('&&');
+      expect(text).toContain('echo');
+      // The typed command must not itself satisfy the wait.
+      expect(text).not.toContain(marker);
+      // Each request gets its own marker, so a stale one cannot pass a later
+      // wait.
+      expect(markers.has(marker)).toBe(false);
+      markers.add(marker);
+    }
+    expect(markers.size).toBe(3);
+  });
+
   it('starts the source profiler with fixed local-only launch settings and harness-rooted artifacts', () => {
     const scenario = loadScenario();
     const tmux = requireRecord(scenario['tmux'], 'scenario.tmux');
@@ -112,10 +166,16 @@ describe('issue #3386 tmux memory-retention workload', () => {
     const scenario = loadScenario();
     const steps = requireRecords(scenario['steps'], 'scenario.steps');
     const lines = lineTexts(steps);
+    // Each request now appends `&& echo <marker>` so the following wait can
+    // observe that the probe finished; see the completion-proof test above.
     const requestCommand =
       'bun scripts/memory/request-cli.ts --dir "$LLXPRT_TMUX_ARTIFACT_DIR/memprofile" --wait';
     const requestStepIndexes = steps.flatMap((step, index) =>
-      step['type'] === 'line' && step['text'] === requestCommand ? [index] : [],
+      step['type'] === 'line' &&
+      typeof step['text'] === 'string' &&
+      step['text'].startsWith(requestCommand)
+        ? [index]
+        : [],
     );
     const generatorPattern =
       /^bun scripts\/memory\/output-generator\.ts --seed ([A-Za-z0-9_-]+) --lines ([1-9]\d*) --width ([1-9]\d*)$/;
@@ -144,12 +204,14 @@ describe('issue #3386 tmux memory-retention workload', () => {
       ),
     );
     const requestPromptIndexes = requestStepIndexes.map((index) => {
-      const shellPrompt = steps[index + 1];
-      expect(shellPrompt).toMatchObject({
-        type: 'waitFor',
-        scope: 'screen',
-        contains: 'Type your shell command',
-      });
+      // Waiting on the shell prompt here was the defect: the prompt is already
+      // on screen when the command is submitted, so the script ran on before
+      // the probe had handled the request.
+      const completion = steps[index + 1];
+      expect(completion).toMatchObject({ type: 'waitFor', scope: 'screen' });
+      expect(String(completion?.['contains'])).toMatch(
+        /^MEMPROFILE_[A-Z]+_DONE$/,
+      );
       return index + 1;
     });
     const generatorPromptIndexes = generatorStepIndexes.map((index) => {
@@ -169,9 +231,11 @@ describe('issue #3386 tmux memory-retention workload', () => {
     });
 
     expect(requestStepIndexes).toHaveLength(3);
-    expect(
-      lines.filter((line) => line.includes('scripts/memory/request-cli.ts')),
-    ).toEqual([requestCommand, requestCommand, requestCommand]);
+    for (const line of lines.filter((candidate) =>
+      candidate.includes('scripts/memory/request-cli.ts'),
+    )) {
+      expect(line.startsWith(requestCommand)).toBe(true);
+    }
     expect(
       steps.filter(
         (step) =>

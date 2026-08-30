@@ -34,6 +34,7 @@ import {
   buildIssueCommentArgv,
   buildIssueCloseArgv,
   shapeCreatedUrl,
+  validateIssueCreateParams,
 } from '../github-broker-issue-write-ops.js';
 import {
   buildPrCreateArgv,
@@ -401,5 +402,49 @@ describe('parameter edge cases from review', () => {
     expect(resolveLimit({ limit: 5000 })).toBe(MAX_LIMIT);
     expect(resolveLimit({ limit: 5 })).toBe(5);
     expect(resolveLimit({})).toBe(DEFAULT_LIMIT);
+  });
+});
+
+/**
+ * Issue #3407: `gh issue create` has no `--type` flag, so `issue.create`
+ * cannot accept `type` — but the old rejection only listed what the op DOES
+ * accept, leaving no recovery path. The reporter watched an agent retry the
+ * identical rejected call repeatedly instead of switching to `issue.edit`.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-4
+ * @issue 3407
+ */
+describe('issue #3407: issue.create rejects type and redirects to issue.edit', () => {
+  /**
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-4
+   * @issue 3407
+   */
+  it('still rejects type rather than silently accepting it', () => {
+    const result = validateIssueCreateParams({ title: 'T', type: 'Bug' });
+    expect(result?.code).toBe('INVALID_PARAM');
+  });
+
+  /**
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-4
+   * @issue 3407
+   */
+  it('names issue.edit and says the type is set after creation', () => {
+    const result = validateIssueCreateParams({ title: 'T', type: 'Bug' });
+    expect(result?.message).toContain('issue.edit');
+    expect(result?.message.toLowerCase()).toContain('after creation');
+  });
+
+  /**
+   * The redirect must not leak into ops that legitimately accept `type`.
+   *
+   * @plan PLAN-20260828-ISSUE3407
+   * @requirement AC-4
+   * @issue 3407
+   */
+  it('issue.edit still accepts type without complaint', () => {
+    expect(OP_REGISTRY['issue.edit'].params.type).toBeDefined();
   });
 });

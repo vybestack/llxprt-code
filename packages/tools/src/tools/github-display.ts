@@ -195,6 +195,17 @@ function renderViewContent(data: Data): string {
   return lines.join('\n');
 }
 
+/**
+ * Marks a page that is not the whole result set. `hasMore` comes from the
+ * broker over-fetching one row past the limit, so a full page is never
+ * mistaken for a total.
+ */
+function moreSuffix(data: Data): string {
+  if (data.hasMore !== true) return '';
+  const total = asNum(data.totalCount);
+  return total !== null ? ` of ${total}` : ' (more available)';
+}
+
 /** Renders issue.view. */
 function renderIssueView(data: Data): string {
   const lines = [renderViewHeader('Issue', data)];
@@ -202,6 +213,10 @@ function renderIssueView(data: Data): string {
   if (author) lines.push(`by ${author}`);
   const labels = asStrArray(data.labels);
   if (labels.length > 0) lines.push(`labels: ${labels.join(', ')}`);
+  const assignees = asStrArray(data.assignees);
+  if (assignees.length > 0) lines.push(`assignees: ${assignees.join(', ')}`);
+  const milestone = asStr(data.milestone);
+  if (milestone) lines.push(`milestone: ${milestone}`);
   const comments = asDataArray(data.comments);
   if (comments.length > 0) lines.push(`${comments.length} comments`);
   const content = renderViewContent(data);
@@ -230,11 +245,19 @@ function renderList(op: string, data: Data): string {
   const key = op === 'issue.list' ? 'issues' : 'prs';
   const noun = op === 'issue.list' ? 'issues' : 'pull requests';
   const items = asDataArray(data[key]);
-  const lines = [`${items.length} ${noun}`];
+  // Without the suffix a full page reads as a total, so "30 issues" would be
+  // reported for a repository with 200 open ones.
+  const lines = [`${items.length} ${noun}${moreSuffix(data)}`];
   for (const item of items.slice(0, MAX_SUMMARY_LINES)) {
-    lines.push(
-      `#${asNum(item.number) ?? '?'} ${asStr(item.state)}  ${asStr(item.title)}`,
-    );
+    let line = `#${asNum(item.number) ?? '?'} ${asStr(item.state)}  ${asStr(item.title)}`;
+    if (op === 'issue.list') {
+      const assignees = asStrArray(item.assignees);
+      const milestone = asStr(item.milestone);
+      if (assignees.length > 0)
+        line += ` (${assignees.join(', ')}${milestone ? ` · ${milestone}` : ''})`;
+      else if (milestone) line += ` (${milestone})`;
+    }
+    lines.push(line);
   }
   const tail = moreTail(items.length);
   if (tail) lines.push(tail);
@@ -245,7 +268,7 @@ function renderList(op: string, data: Data): string {
 function renderSearch(op: string, data: Data): string {
   const key = op === 'search.issues' ? 'issues' : 'prs';
   const items = asDataArray(data[key]);
-  const lines = [`${items.length} results`];
+  const lines = [`${items.length} results${moreSuffix(data)}`];
   for (const item of items.slice(0, MAX_SUMMARY_LINES)) {
     lines.push(
       `${asStr(item.repository)}#${asNum(item.number) ?? '?'} ${asStr(
@@ -261,7 +284,7 @@ function renderSearch(op: string, data: Data): string {
 /** Renders run.list. */
 function renderRunList(data: Data): string {
   const items = asDataArray(data.runs);
-  const lines = [`${items.length} workflow runs`];
+  const lines = [`${items.length} workflow runs${moreSuffix(data)}`];
   for (const item of items.slice(0, MAX_SUMMARY_LINES)) {
     const verdict = asStr(item.conclusion) || asStr(item.status) || '?';
     lines.push(`${verdict}  ${asStr(item.name)}  (${asStr(item.headBranch)})`);
@@ -278,7 +301,7 @@ function renderLabelList(data: Data): string {
   // an absent or non-string `name` renders nothing, so the header, slice and
   // tail must all use the filtered `names` count to stay consistent.
   const names = items.map((item) => asStr(item.name)).filter((n) => n);
-  const lines = [`${names.length} labels`];
+  const lines = [`${names.length} labels${moreSuffix(data)}`];
   const shown = names.slice(0, MAX_SUMMARY_LINES);
   if (shown.length > 0) lines.push(shown.join(', '));
   const tail = moreTail(names.length);

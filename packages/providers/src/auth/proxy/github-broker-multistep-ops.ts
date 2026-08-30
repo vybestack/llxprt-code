@@ -335,6 +335,7 @@ export function validateIssueEditParams(params: Record<string, unknown>) {
     ISSUE_EDIT_SPEC.params,
     params,
     ISSUE_EDIT_SPEC.required,
+    'issue.edit',
   );
 }
 
@@ -349,5 +350,6 @@ export function validateResolveThreadParams(params: Record<string, unknown>) {
     PR_RESOLVE_THREAD_SPEC.params,
     params,
     PR_RESOLVE_THREAD_SPEC.required,
+    'pr.resolve-thread',
   );
 }

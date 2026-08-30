@@ -41,6 +41,7 @@ export type GithubParamKind =
   | 'threadId'
   | 'body'
   | 'freetext'
+  | 'searchQuery'
   | 'limit'
   | 'closeReason'
   | 'color'
@@ -89,7 +90,7 @@ export const GITHUB_OP_SPECS: Readonly<Record<string, GithubOpSpec>> = {
     summary: 'list issues',
     mutating: false,
     params: {
-      search: 'freetext',
+      search: 'searchQuery',
       state: 'stateIssue',
       label: 'label',
       limit: 'limit',
@@ -221,13 +222,13 @@ export const GITHUB_OP_SPECS: Readonly<Record<string, GithubOpSpec>> = {
   'search.issues': {
     summary: 'search issues across repositories',
     mutating: false,
-    params: { query: 'freetext', limit: 'limit', repo: 'repo' },
+    params: { query: 'searchQuery', limit: 'limit', repo: 'repo' },
     required: ['query'],
   },
   'search.prs': {
     summary: 'search pull requests across repositories',
     mutating: false,
-    params: { query: 'freetext', limit: 'limit', repo: 'repo' },
+    params: { query: 'searchQuery', limit: 'limit', repo: 'repo' },
     required: ['query'],
   },
   'run.list': {
@@ -300,6 +301,8 @@ export const GITHUB_PARAM_KIND_HINTS: Readonly<
   threadId: 'review thread id',
   body: 'markdown text',
   freetext: 'string',
+  searchQuery:
+    'GitHub search query; qualifiers may be negated with a leading dash',
   limit: 'positive integer 1–100',
   closeReason: 'completed or not planned',
   color: 'hex color like #RRGGBB',
@@ -383,7 +386,7 @@ export function validateGithubOpParams(
     // validated — silently ignored, which is what the fail-fast invariant
     // forbids. `hasOwnProperty` confines the check to the op's own params.
     if (!Object.prototype.hasOwnProperty.call(spec.params, key)) {
-      return `${op}: unknown parameter "${key}". ${describeGithubOpParams(op)}`;
+      return unknownParamToolMessage(op, key);
     }
   }
   for (const key of spec.required) {
@@ -400,6 +403,65 @@ export function validateGithubOpParams(
     if (msg !== null) return `${op}: ${msg}`;
   }
   return null;
+}
+
+/**
+ * Catalog-backed redirect for a rejected unknown parameter. Names every OTHER
+ * operation that accepts the parameter, so a caller rejected for passing a
+ * param the op does not take learns which op does. Refines well-known cases
+ * with an explicit hint.
+ *
+ * @plan PLAN-20260731-GHBROKER.P08
+ * @requirement REQ-002
+ */
+export function githubParamRedirect(
+  op: string,
+  param: string,
+): Readonly<{ elsewhere: readonly string[]; hint?: string }> | null {
+  // Iterating the catalog's own entries rather than filtering the op-name
+  // list and indexing back into the catalog means there is no lookup that
+  // could miss: the name and the spec are read from the same entry. Order is
+  // unchanged, since GITHUB_SUPPORTED_OPS is Object.keys of this same object.
+  const elsewhere = Object.entries(GITHUB_OP_SPECS)
+    .filter(
+      ([other, spec]) =>
+        other !== op &&
+        Object.prototype.hasOwnProperty.call(spec.params, param),
+    )
+    .map(([other]) => other);
+  if (elsewhere.length === 0) return null;
+  if (op === 'issue.create' && param === 'type') {
+    return {
+      elsewhere,
+      hint: 'Issue type is set AFTER creation via issue.edit ({ op: "issue.edit", number, type }), never on issue.create — gh issue create has no --type flag. Create the issue first, then set the type.',
+    };
+  }
+  return { elsewhere };
+}
+
+/**
+ * The redirect sentence for an unknown parameter shared by the tool boundary
+ * and the broker, so both name the same operations.
+ *
+ * @plan PLAN-20260731-GHBROKER.P08
+ * @requirement REQ-002
+ */
+export function githubParamRedirectText(op: string, param: string): string {
+  const redirect = githubParamRedirect(op, param);
+  if (redirect === null) return '';
+  const extra = redirect.hint !== undefined ? ` ${redirect.hint}` : '';
+  return `That parameter is accepted by ${redirect.elsewhere.join(', ')}.${extra}`;
+}
+
+/**
+ * Builds the tool-boundary unknown-parameter rejection, naming the accepted
+ * params and the catalog-backed redirect.
+ *
+ * @plan PLAN-20260731-GHBROKER.P08
+ * @requirement REQ-002
+ */
+function unknownParamToolMessage(op: string, key: string): string {
+  return `${op}: unknown parameter "${key}". ${describeGithubOpParams(op)} ${githubParamRedirectText(op, key)}`.trim();
 }
 
 /**
@@ -420,6 +482,20 @@ export const GITHUB_LIMIT_MAX = 100;
  * @requirement REQ-002, REQ-009
  */
 const REPO_REGEX = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
+
+/**
+ * True when `value` has the shape of a GitHub repository name (`owner/name`).
+ *
+ * Shared between the repo value validator and the broker's search-query
+ * tokenizer (which lifts a `repo:` term into the `--repo` flag), so the
+ * two layers match on one predicate rather than each owning a copy of the regex.
+ *
+ * @plan PLAN-20260731-GHBROKER.P08
+ * @requirement REQ-002
+ */
+export function isGithubRepoName(value: unknown): value is string {
+  return typeof value === 'string' && REPO_REGEX.test(value);
+}
 
 /** Allowed close-reason values for `gh issue close`. */
 const CLOSE_REASONS = ['completed', 'not planned'] as const;
@@ -507,7 +583,17 @@ export function validateGithubParamValue(
   value: unknown,
   kind: GithubParamKind,
 ): string | null {
-  if (typeof value === 'string' && value.startsWith('-')) {
+  // Flag-injection defence, deliberately skipped for search queries: GitHub
+  // negates a qualifier with a leading dash (`-label:bug`) and this tool
+  // documents that syntax. It restricted nothing there anyway, since
+  // `-label:bug` was refused while the identical `is:open -label:bug` passed.
+  // Safe because a search query never reaches gh as a bare token: `search` is
+  // the value of `--search`, and `query` is tokenized behind a `--` terminator.
+  if (
+    kind !== 'searchQuery' &&
+    typeof value === 'string' &&
+    value.startsWith('-')
+  ) {
     return `Parameter ${key} must not begin with '-'`;
   }
   return KIND_VALIDATORS[kind](key, value);
@@ -515,7 +601,7 @@ export function validateGithubParamValue(
 
 /** Validates a repo-kind value: must be "owner/name". */
 function validateRepoValue(key: string, value: unknown): string | null {
-  if (typeof value !== 'string' || !REPO_REGEX.test(value)) {
+  if (!isGithubRepoName(value)) {
     return `Parameter ${key} must be "owner/name"`;
   }
   return null;
@@ -566,6 +652,27 @@ function validateColorValue(key: string, value: unknown): string | null {
   return null;
 }
 
+/**
+ * Validates a search-query value.
+ *
+ * Unlike other string kinds this deliberately ALLOWS a leading dash, because
+ * GitHub negates a qualifier that way (`-label:bug`) and the tool documents
+ * that syntax. The generic leading-dash rule is flag-injection defence, and it
+ * buys nothing here: `search` reaches gh as the value of `--search`, never as
+ * a bare token, and `query` is tokenized and emitted after a `--` option
+ * terminator. It also never worked as a restriction, since `-label:bug` was
+ * rejected while the semantically identical `is:open -label:bug` passed; three
+ * separate model evaluations hit the rejection and each worked around it by
+ * reordering the query.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-10
+ * @issue 3407
+ */
+function validateSearchQueryValue(key: string, value: unknown): string | null {
+  return typeof value === 'string' ? null : `Parameter ${key} must be a string`;
+}
+
 /** Validates a generic string-kind value (milestone, project, branch, body, freetext). */
 function validateStringValue(key: string, value: unknown): string | null {
   if (typeof value !== 'string') {
@@ -602,4 +709,5 @@ const KIND_VALIDATORS: Readonly<
   branch: validateStringValue,
   body: validateStringValue,
   freetext: validateStringValue,
+  searchQuery: validateSearchQueryValue,
 };

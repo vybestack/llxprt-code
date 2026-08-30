@@ -126,6 +126,90 @@ export function redactTokenShaped(message: string): string {
 }
 
 /**
+ * Self-correction guidance appended to a failed search op's message, hoisted
+ * to a constant so the idempotency guard below checks against the ACTUAL
+ * appended text: a stale guard string that drifts from the text it detects
+ * silently re-appends on every retry.
+ *
+ * @plan PLAN-20260731-GHBROKER.P10
+ * @requirement REQ-004
+ */
+export const SEARCH_ERROR_GUIDANCE =
+  ' Scope a repository with the repo parameter, not a repo: term in the query, and do not wrap qualifier values in quotes.';
+
+/**
+ * Augments a failed search operation's error with self-correction guidance.
+ *
+ * gh's search failures ("invalid search query", "cannot be searched") both have
+ * the same root: a `repo:` term or a quoted qualifier value that gh re-quotes
+ * into nothing. The github tool is the only sanctioned GitHub interface in a
+ * sandbox, so the error must carry the concrete fix rather than leaving the
+ * caller to rediscover it. The appended text is static, so it passes
+ * `redactTokenShaped` unchanged and the caller's redaction path is not
+ * bypassed. This is defensive parsing of gh's external wording, which is the
+ * documented exception to the repo's fail-fast preference.
+ *
+ * @plan PLAN-20260731-GHBROKER.P10
+ * @requirement REQ-004
+ */
+/**
+ * Guidance appended to a throttled search.
+ *
+ * GitHub applies a SEPARATE secondary rate limit to the search endpoint, and
+ * its raw message ("please wait a few minutes") names neither the endpoint nor
+ * the concurrency that triggered it. Two evaluated models fired several
+ * searches in parallel, got 403s across all of them, and could not tell that
+ * only search was affected — one spent roughly eight of nineteen calls on the
+ * lockout and its retries. Non-search operations keep working throughout,
+ * which is the actionable part.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-3
+ * @issue 3407
+ */
+const SEARCH_RATE_LIMIT_GUIDANCE =
+  ' GitHub rate-limits the search endpoint separately and counts concurrent' +
+  ' requests against it, so retry this call on its own rather than alongside' +
+  ' other searches. issue.list and pr.list reach that endpoint only to count a' +
+  ' page that did not fit, so RAISING "limit" (max 100) avoids the extra' +
+  ' request, while lowering it causes more of them. issue.view, pr.view,' +
+  ' pr.diff, pr.checks and label.list never touch the search endpoint and keep' +
+  ' working while it is throttled.';
+
+/**
+ * Appends throttling guidance when a search is rejected by the secondary rate
+ * limit, so the caller learns what to do instead of only being told to wait.
+ *
+ * @plan PLAN-20260828-ISSUE3407
+ * @requirement AC-3
+ * @issue 3407
+ */
+function augmentSearchRateLimit(error: BrokerError): BrokerError {
+  const lower = error.message.toLowerCase();
+  const throttled =
+    lower.includes('secondary rate limit') || lower.includes('rate limit');
+  if (!throttled || error.message.includes(SEARCH_RATE_LIMIT_GUIDANCE)) {
+    return error;
+  }
+  return { ...error, message: error.message + SEARCH_RATE_LIMIT_GUIDANCE };
+}
+
+export function augmentSearchError(error: BrokerError): BrokerError {
+  const lower = error.message.toLowerCase();
+  const isSearchFailure =
+    lower.includes('invalid search query') ||
+    lower.includes('cannot be searched');
+  // Throttling and a malformed query are different failures with different
+  // remedies, so they get different guidance rather than one generic blob.
+  if (!isSearchFailure) return augmentSearchRateLimit(error);
+  if (error.message.includes(SEARCH_ERROR_GUIDANCE)) return error;
+  return {
+    ...error,
+    message: error.message + SEARCH_ERROR_GUIDANCE,
+  };
+}
+
+/**
  * A structured broker error that can be serialized into a response.
  *
  * @plan PLAN-20260731-GHBROKER.P08
