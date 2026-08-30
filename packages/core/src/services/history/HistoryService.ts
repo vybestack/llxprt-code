@@ -72,6 +72,10 @@ import {
   type MutationFailure,
   combineMutationFailures,
 } from './historyMutationFailure.js';
+import {
+  CompressionOperationQueue,
+  type CompressionOperationKind,
+} from './historyCompressionQueue.js';
 
 type QueuedHistoryMutation =
   | { kind: 'synchronous'; execute: () => void }
@@ -128,10 +132,15 @@ export class HistoryService
   private activeTokenizationModel = 'gpt-4.1';
   private activeTokenizationProvider?: string;
 
-  private static readonly COMPRESSION_QUEUE_HIGH_WATER = 4096;
   private isCompressing: boolean = false;
-  private pendingOperations: Array<() => void> = [];
-  private pendingCompressionHighWaterReported: boolean = false;
+  // Queue tagged add/clear so a rebuild clear never destroys streaming content
+  // queued before it (#3264) - see CompressionOperationQueue.
+  private pendingOperations = new CompressionOperationQueue((pendingCount) =>
+    this.logger.error(
+      'History compression queue exceeded its high-water mark; the compression lock is being held for an unexpectedly long time. No operations are dropped.',
+      { pendingCount },
+    ),
+  );
 
   /**
    * @plan:PLAN-20260603-ISSUE1584.P05
@@ -438,7 +447,7 @@ export class HistoryService
   add(content: IContent, modelName?: string): void {
     if (this.isCompressing) {
       logQueuedDuringCompression(this.logger, content);
-      this.queueCompressionOperation(() => {
+      this.queueCompressionOperation('add', () => {
         this.runSynchronousHistoryMutation(() => {
           this.addInternal(content, modelName);
         });
@@ -454,6 +463,13 @@ export class HistoryService
   /**
    * Queues an operation that arrived while compression held the history lock.
    *
+   * Operations are tagged with whether they came from streaming content (`add`)
+   * or a compression rebuild (`clear`). When the queue is flushed, everything
+   * from the FIRST rebuild clear onward is applied before streaming operations,
+   * so a rebuild clear never destroys streaming content queued before it: that
+   * content is re-applied after the rebuild, and its `contentAdded` fires
+   * after `compressionLockReleased` so recording captures it (issue #3264).
+   *
    * Operations are never dropped and never rejected: `add()` is on the
    * streaming path, so failing here would lose conversation content and could
    * break a turn. `startCompression`/`endCompression` are balanced in a
@@ -462,19 +478,11 @@ export class HistoryService
    * compression takes. Crossing the high-water mark is reported once so an
    * unbalanced lock would be diagnosable rather than silent (issue #2852).
    */
-  private queueCompressionOperation(operation: () => void): void {
-    this.pendingOperations.push(operation);
-    if (
-      !this.pendingCompressionHighWaterReported &&
-      this.pendingOperations.length >=
-        HistoryService.COMPRESSION_QUEUE_HIGH_WATER
-    ) {
-      this.pendingCompressionHighWaterReported = true;
-      this.logger.error(
-        'History compression queue exceeded its high-water mark; the compression lock is being held for an unexpectedly long time. No operations are dropped.',
-        { pendingCount: this.pendingOperations.length },
-      );
-    }
+  private queueCompressionOperation(
+    kind: CompressionOperationKind,
+    operation: () => void,
+  ): void {
+    this.pendingOperations.enqueue(operation, kind);
   }
 
   private addInternal(content: IContent, modelName?: string): void {
@@ -863,7 +871,7 @@ export class HistoryService
     this.totalTokens = 0;
     this.baseTokenOffset = 0;
     this.isCompressing = false;
-    this.pendingOperations = [];
+    this.pendingOperations.clear();
     this.tokenizerCache.clear();
     this.tokenizerLock = Promise.resolve();
     this.pendingTokenizerFailure = undefined;
@@ -878,7 +886,7 @@ export class HistoryService
     // If compression is active, queue this operation
     if (this.isCompressing) {
       this.logger.debug('Queueing clear operation during compression');
-      this.queueCompressionOperation(() => {
+      this.queueCompressionOperation('clear', () => {
         this.runSynchronousHistoryMutation(() => {
           this.clearInternal();
         });
@@ -1137,9 +1145,24 @@ export class HistoryService
 
   /**
    * Mark compression as complete
-   * This will flush all queued operations.
-   * Always emits a compressionLockReleased event so recording can stop suppressing
-   * content, while compressionEnded stays conditional on summary + itemsCompressed.
+   * This will flush all queued operations in two phases, partitioned at the
+   * FIRST queued rebuild clear.
+   *
+   * Rebuild phase (the first `clear` and everything queued after it) flushes
+   * first: its `contentAdded` events stay inside the recording suppression
+   * window, so rebuilt entries produce no duplicate content records (#3132).
+   * Only then are `compressionLockReleased`/`compressionEnded` emitted.
+   *
+   * Streaming phase (operations queued before the first `clear`) flushes after
+   * the events: a rebuild clear never destroys that content — it is re-applied
+   * after the rebuild and its `contentAdded` fires after
+   * `compressionLockReleased`, so recording captures it and replay can recover
+   * it (issue #3264).
+   *
+   * `compressionLockReleased` fires unconditionally so a summary-less end
+   * (no-op/failed compression) cannot wedge recording, while
+   * `compressionEnded` stays conditional on summary + itemsCompressed
+   * (issue #3263).
    */
   endCompression(summary?: IContent, itemsCompressed?: number): void {
     this.logger.debug('Compression complete - unlocking history', {
@@ -1147,28 +1170,21 @@ export class HistoryService
     });
 
     this.isCompressing = false;
-    this.pendingCompressionHighWaterReported = false;
 
-    // Flush all pending operations
-    const operations = this.pendingOperations;
-    this.pendingOperations = [];
+    this.pendingOperations.flush(() => {
+      // Route the release events through the same mutation FIFO as the dequeued
+      // closures: if an asynchronous mutation was in flight, its rebuild
+      // contentAdded must land BEFORE these events (staying inside the recording
+      // suppression window), then the streaming content after them (#3264). When
+      // nothing is in flight this executes inline, behavior unchanged.
+      this.runSynchronousHistoryMutation(() => {
+        this.emit('compressionLockReleased');
 
-    for (const operation of operations) {
-      operation();
-    }
-
-    this.logger.debug('Flushed pending operations', {
-      count: operations.length,
+        if (summary && itemsCompressed !== undefined) {
+          this.emit('compressionEnded', summary, itemsCompressed);
+        }
+      });
     });
-
-    // Emitted after the queue drain so flushed rebuild content stays inside the
-    // recording suppression window; fires unconditionally so a summary-less
-    // end (no-op/failed compression) cannot wedge recording. (Issue #3263)
-    this.emit('compressionLockReleased');
-
-    if (summary && itemsCompressed !== undefined) {
-      this.emit('compressionEnded', summary, itemsCompressed);
-    }
   }
 
   /**

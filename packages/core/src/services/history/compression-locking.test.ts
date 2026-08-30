@@ -3,7 +3,53 @@
  */
 
 import { describe, it, expect, beforeEach } from 'bun:test';
+import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
 import { HistoryService } from './HistoryService.js';
+import { CompressionOperationQueue } from './historyCompressionQueue.js';
+
+function createBlockedTokenizerFactory(): {
+  factory: RuntimeTokenizerFactory;
+  blockNext: () => Promise<void>;
+  release: () => void;
+} {
+  let blocking = false;
+  let startedResolve: (() => void) | undefined;
+  let releaseResolve: (() => void) | undefined;
+  let releasePromise = Promise.resolve();
+
+  return {
+    factory: {
+      getTokenizer: () => ({
+        countTokens: async (content: unknown) => {
+          if (blocking) {
+            blocking = false;
+            startedResolve?.();
+            await releasePromise;
+          }
+          return typeof content === 'string' ? content.length : 1;
+        },
+      }),
+      estimatePrompt: async () => ({
+        count: 0,
+        method: 'exact' as const,
+        family: 'test',
+        estimatorVersion: '0',
+        assetRevision: '0',
+        projectionRevision: 0,
+      }),
+    },
+    blockNext: () => {
+      blocking = true;
+      releasePromise = new Promise<void>((resolve) => {
+        releaseResolve = resolve;
+      });
+      return new Promise<void>((resolve) => {
+        startedResolve = resolve;
+      });
+    },
+    release: () => releaseResolve?.(),
+  };
+}
 
 describe('Compression locking', () => {
   let historyService: HistoryService;
@@ -292,7 +338,10 @@ describe('Compression locking', () => {
       expect(observed).toContain('compressionEnded');
     });
 
-    it('flushes queued contentAdded before compressionLockReleased then compressionEnded', () => {
+    it('flushes streaming contentAdded after compressionLockReleased so recording captures it', () => {
+      // Streaming content (queued with no rebuild clear behind it) was never
+      // recorded during the window, so its flush must land AFTER the lock is
+      // released. Rebuild-phase content is covered separately below (#3264).
       historyService.startCompression();
       historyService.add({
         speaker: 'human',
@@ -305,9 +354,9 @@ describe('Compression locking', () => {
       );
 
       expect(observed).toStrictEqual([
-        'contentAdded',
         'compressionLockReleased',
         'compressionEnded',
+        'contentAdded',
       ]);
     });
 
@@ -316,5 +365,358 @@ describe('Compression locking', () => {
 
       expect(observed).toContain('compressionLockReleased');
     });
+  });
+
+  describe('mid-compression content vs the rebuild clear (#3264)', () => {
+    it('preserves content queued before the rebuild clear, landing it after the rebuild', () => {
+      historyService.add({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'original question' }],
+      });
+      const retained = historyService.getCurated();
+
+      historyService.startCompression();
+      historyService.add({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'mid-stream content' }],
+      });
+      historyService.clear();
+      for (const content of retained) {
+        historyService.add(content);
+      }
+      historyService.endCompression(
+        { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
+        1,
+      );
+
+      const texts = historyService.getAll().map((entry) => {
+        const block = entry.blocks[0];
+        return block.type === 'text' ? block.text : `<${block.type}>`;
+      });
+      expect(texts).toStrictEqual(['original question', 'mid-stream content']);
+    });
+
+    it('flushes rebuild contentAdded before compressionLockReleased and streaming contentAdded after', () => {
+      historyService.add({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'original question' }],
+      });
+      const retained = historyService.getCurated();
+
+      const observed: string[] = [];
+      historyService.on('contentAdded', (content) => {
+        const block = content.blocks[0];
+        observed.push(
+          `contentAdded:${block.type === 'text' ? block.text : block.type}`,
+        );
+      });
+      historyService.on('compressionLockReleased', () => {
+        observed.push('compressionLockReleased');
+      });
+      historyService.on('compressionEnded', () => {
+        observed.push('compressionEnded');
+      });
+
+      historyService.startCompression();
+      historyService.add({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'mid-stream content' }],
+      });
+      historyService.clear();
+      for (const content of retained) {
+        historyService.add(content);
+      }
+      historyService.endCompression(
+        { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
+        1,
+      );
+
+      expect(observed).toStrictEqual([
+        // Rebuild entries stay inside the recording suppression window: their
+        // contentAdded fires before the lock is released (#3263, #3132).
+        'contentAdded:original question',
+        'compressionLockReleased',
+        'compressionEnded',
+        // Streaming entries were never recorded during the window, so they
+        // flush after the release and the events (#3264).
+        'contentAdded:mid-stream content',
+      ]);
+    });
+
+    it('keeps every queued streaming entry when several arrive before the rebuild clear', () => {
+      historyService.add({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'original question' }],
+      });
+      const retained = historyService.getCurated();
+
+      historyService.startCompression();
+      historyService.add({
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'call_mid',
+            toolName: 'probe_tool',
+            result: { ok: true },
+          },
+        ],
+      });
+      historyService.add({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'follow-up stream chunk' }],
+      });
+      historyService.clear();
+      for (const content of retained) {
+        historyService.add(content);
+      }
+      historyService.endCompression(
+        { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
+        1,
+      );
+
+      const all = historyService.getAll();
+      expect(all).toHaveLength(3);
+      expect(all[0].blocks[0]).toStrictEqual({
+        type: 'text',
+        text: 'original question',
+      });
+      expect(all[1].blocks[0]).toStrictEqual({
+        type: 'tool_response',
+        callId: 'call_mid',
+        toolName: 'probe_tool',
+        result: { ok: true },
+      });
+      expect(all[2].blocks[0]).toStrictEqual({
+        type: 'text',
+        text: 'follow-up stream chunk',
+      });
+    });
+  });
+
+  describe('deferred asynchronous mutation ordering', () => {
+    it('keeps rebuild contentAdded inside the lock-release events when a replaceAll is in flight', async () => {
+      // A blocked replaceAll holds the mutation FIFO across the whole
+      // compression window, so every queued closure defers into it. The
+      // release events must route through that same FIFO: the rebuild
+      // contentAdded fires first (staying inside the suppression window), then
+      // the events, then the streaming contentAdded (#3264).
+      historyService.add({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'original question' }],
+      });
+      const retained = historyService.getCurated();
+
+      const observed: string[] = [];
+      historyService.on('contentAdded', (content) => {
+        const block = content.blocks[0];
+        observed.push(
+          `contentAdded:${block.type === 'text' ? block.text : block.type}`,
+        );
+      });
+      historyService.on('compressionLockReleased', () => {
+        observed.push('compressionLockReleased');
+      });
+      historyService.on('compressionEnded', () => {
+        observed.push('compressionEnded');
+      });
+
+      const blocked = createBlockedTokenizerFactory();
+      historyService.setTokenizerFactory(blocked.factory);
+      const estimationStarted = blocked.blockNext();
+      const replacing = historyService.replaceAll([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'replacement' }] },
+      ]);
+      await estimationStarted;
+
+      historyService.startCompression();
+      historyService.add({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'mid-stream content' }],
+      });
+      historyService.clear();
+      for (const content of retained) {
+        historyService.add(content);
+      }
+      historyService.endCompression(
+        { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
+        1,
+      );
+
+      blocked.release();
+      await replacing;
+
+      expect(observed).toStrictEqual([
+        // Rebuild content stays inside the suppression window: it must fire
+        // before the lock-release events, then streaming content after them.
+        'contentAdded:original question',
+        'compressionLockReleased',
+        'compressionEnded',
+        'contentAdded:mid-stream content',
+      ]);
+      expect(
+        historyService.getAll().map((entry) => {
+          const block = entry.blocks[0];
+          return block.type === 'text' ? block.text : `<${block.type}>`;
+        }),
+      ).toStrictEqual(['original question', 'mid-stream content']);
+    });
+  });
+
+  describe('listener throw during flush', () => {
+    it('still applies the streaming phase and rethrows when a compressionLockReleased listener throws', () => {
+      historyService.add({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'original question' }],
+      });
+      const retained = historyService.getCurated();
+
+      historyService.on('compressionLockReleased', () => {
+        throw new Error('listener failure');
+      });
+
+      historyService.startCompression();
+      historyService.add({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'mid-stream content' }],
+      });
+      historyService.clear();
+      for (const content of retained) {
+        historyService.add(content);
+      }
+
+      expect(() =>
+        historyService.endCompression(
+          { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
+          1,
+        ),
+      ).toThrow('listener failure');
+
+      // The streaming slice is applied even though the release event threw: the
+      // queue must never drop operations the pre-change code preserved.
+      const texts = historyService.getAll().map((entry) => {
+        const block = entry.blocks[0];
+        return block.type === 'text' ? block.text : `<${block.type}>`;
+      });
+      expect(texts).toStrictEqual(['original question', 'mid-stream content']);
+    });
+
+    it('still emits compressionLockReleased, preserves streaming content, and rethrows when a rebuild operation throws', () => {
+      historyService.add({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'original question' }],
+      });
+      const retained = historyService.getCurated();
+
+      let tokensUpdatedCalls = 0;
+      let compressionLockReleasedObserved = false;
+      historyService.on('tokensUpdated', () => {
+        tokensUpdatedCalls += 1;
+        if (tokensUpdatedCalls === 1) {
+          // The FIRST call is the rebuild clear's emit (clearInternal): a listener
+          // throwing inside it must not abort the flush before the lock release or
+          // the streaming phase (never-drop guarantee, AC-6). Subsequent calls
+          // (async token accounting) count harmlessly.
+          throw new Error('rebuild listener failure');
+        }
+      });
+      historyService.on('compressionLockReleased', () => {
+        compressionLockReleasedObserved = true;
+      });
+
+      historyService.startCompression();
+      historyService.add({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'mid-stream content' }],
+      });
+      historyService.clear();
+      for (const content of retained) {
+        historyService.add(content);
+      }
+
+      expect(() =>
+        historyService.endCompression(
+          { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
+          1,
+        ),
+      ).toThrow('rebuild listener failure');
+
+      // A failing rebuild op must not prevent the release events from firing or the
+      // streaming slice from being applied: both are still attempted (#3264).
+      expect(compressionLockReleasedObserved).toBe(true);
+      const texts = historyService.getAll().map((entry) => {
+        const block = entry.blocks[0];
+        return block.type === 'text' ? block.text : `<${block.type}>`;
+      });
+      expect(texts).toStrictEqual(['original question', 'mid-stream content']);
+    });
+
+    it('propagates a thrown undefined listener failure instead of swallowing it', () => {
+      historyService.add({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'original question' }],
+      });
+      const retained = historyService.getCurated();
+
+      historyService.on('compressionLockReleased', () => {
+        // `throw undefined` is a legal JS throw; a sentinel keyed on `undefined`
+        // cannot distinguish it from "no throw", so it must be rethrown truthfully.
+        const nothing = undefined;
+        throw nothing;
+      });
+
+      historyService.startCompression();
+      historyService.add({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'mid-stream content' }],
+      });
+      historyService.clear();
+      for (const content of retained) {
+        historyService.add(content);
+      }
+
+      // The thrown value is `undefined`, so this is asserted via a capture
+      // rather than toThrow(), which cannot match a non-Error thrown value.
+      let caught = false;
+      try {
+        historyService.endCompression(
+          { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
+          1,
+        );
+      } catch {
+        caught = true;
+      }
+      expect(caught).toBe(true);
+
+      // The streaming slice is still applied despite the throwing release listener, and
+      // the undefined throw is truthfully rethrown rather than swallowed.
+      const texts = historyService.getAll().map((entry) => {
+        const block = entry.blocks[0];
+        return block.type === 'text' ? block.text : `<${block.type}>`;
+      });
+      expect(texts).toStrictEqual(['original question', 'mid-stream content']);
+    });
+  });
+});
+
+describe('CompressionOperationQueue high-water latch', () => {
+  it('re-arms the one-shot high-water diagnostic after clear() (#2852)', () => {
+    const reports: number[] = [];
+    const queue = new CompressionOperationQueue(
+      (pendingCount) => reports.push(pendingCount),
+      2,
+    );
+
+    queue.enqueue(() => {}, 'add');
+    queue.enqueue(() => {}, 'add');
+    // Crossing the threshold fires the diagnostic exactly once for this cycle.
+    expect(reports).toStrictEqual([2]);
+
+    queue.clear();
+    queue.enqueue(() => {}, 'add');
+    queue.enqueue(() => {}, 'add');
+    // clear() must restore initial state (dispose path), so a later cycle
+    // crossing the threshold is diagnosable again instead of staying latched.
+    expect(reports).toStrictEqual([2, 2]);
   });
 });
