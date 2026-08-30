@@ -56,6 +56,19 @@ const CAPABILITY_FD_ENV = 'LLXPRT_CAPABILITY_FD';
 // read and closed.
 const CAPABILITY_FD_NUMBER = 3;
 
+const MAX_INTERVAL_MS = 86_400_000;
+const MAX_SNAPSHOT_HEAP_MB_LIMIT = 1_048_576;
+
+const PROFILE_USAGE = `Usage: llxprt --memprofile[=<interval-ms>] [profile options] [llxprt args...]
+
+  --memprofile                  enable memory profiling with the default interval
+  --memprofile=<interval-ms>    enable memory profiling with a custom interval
+  --memprofile-dir <run-dir>    write artifacts to the selected run directory
+  --memprofile-snapshots        arm heap snapshots
+  --memprofile-max-heap-mb <n>  set the snapshot heap guard`;
+
+const PROFILE_UTILITY_USAGE = `Usage: llxprt memprofile <request|report|analyze> [args...]`;
+
 // import.meta.url is the real path of this module (the published bin), so the
 // package root is exactly one directory above the bin/ directory. Node's module
 // resolution walks node_modules upward from here, finding the @oven optional
@@ -381,6 +394,206 @@ function resolveEntry() {
   return join(pkgRoot, 'index.ts');
 }
 
+class InvocationParseError extends Error {
+  constructor(message, usage) {
+    super(message);
+    this.usage = usage;
+  }
+}
+
+function profileOptionValue(argv, index, name) {
+  const value = argv[index + 1];
+  if (value === undefined) {
+    throw new InvocationParseError(`missing value for ${name}`, PROFILE_USAGE);
+  }
+  if (value.length === 0 || value.startsWith('-')) {
+    throw new InvocationParseError(
+      `invalid value for ${name}: ${value} (expected a non-flag value)`,
+      PROFILE_USAGE,
+    );
+  }
+  return value;
+}
+
+function validatePositiveInteger(raw, name, max) {
+  if (!/^\d+$/u.test(raw)) {
+    throw new InvocationParseError(
+      `invalid value for ${name}: ${raw} (expected a positive integer)`,
+      PROFILE_USAGE,
+    );
+  }
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new InvocationParseError(
+      `invalid value for ${name}: ${raw} (expected a positive integer)`,
+      PROFILE_USAGE,
+    );
+  }
+  if (value > max) {
+    throw new InvocationParseError(
+      `invalid value for ${name}: ${raw} (must be <= ${max})`,
+      PROFILE_USAGE,
+    );
+  }
+}
+
+function buildUtilityInvocation(argv, packageRoot) {
+  const command = argv[1];
+  if (command === undefined) {
+    throw new InvocationParseError(
+      'missing memprofile subcommand',
+      PROFILE_UTILITY_USAGE,
+    );
+  }
+
+  let artifact;
+  switch (command) {
+    case 'request':
+      artifact = 'memprofile-request.js';
+      break;
+    case 'report':
+      artifact = 'memprofile-report.js';
+      break;
+    case 'analyze':
+      artifact = 'memprofile-analyze.js';
+      break;
+    default:
+      throw new InvocationParseError(
+        `unknown memprofile subcommand: ${command}`,
+        PROFILE_UTILITY_USAGE,
+      );
+  }
+
+  const entry = join(packageRoot, 'bundle', artifact);
+  return {
+    entry,
+    requiredEntries: [entry],
+    childArgv: argv.slice(2),
+    profilerEntry: true,
+    isolateSignalGroup: false,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Argument boundary parsing.
+//
+// A user-supplied `--` ends this shim's option region: ordinary application
+// argv has its own `--` contract (and the user's `--` is a separator
+// the user owns, never a diagnostic). Everything at or after the first `--` is
+// forwarded to the application verbatim, in order, and must never be counted,
+// parsed, or translated as a profile flag.
+//
+// With an active shim-launched profile, only the prefix before the first `--` is a
+// candidate for profile-control translation, and the ordinary argv the application
+// receives is `[prefix ..] -- [suffix ..]`.
+//
+// Utility dispatch is decided by the first shim argument being `memprofile`; a
+// `memprofile` token after `--` belongs to the application and is never utility
+// dispatch.
+// ---------------------------------------------------------------------------
+
+function findUserBoundaryIndex(argv) {
+  return argv.indexOf('--');
+}
+
+function buildProfileInvocation(argv, packageRoot) {
+  const boundaryIndex = findUserBoundaryIndex(argv);
+  const prefix = boundaryIndex < 0 ? argv : argv.slice(0, boundaryIndex);
+  const suffix = boundaryIndex < 0 ? [] : argv.slice(boundaryIndex);
+
+  const activationCount = prefix.filter(
+    (arg) => arg === '--memprofile' || arg.startsWith('--memprofile='),
+  ).length;
+  if (activationCount > 1) {
+    throw new InvocationParseError(
+      '--memprofile may only be specified once',
+      PROFILE_USAGE,
+    );
+  }
+
+  for (const control of [
+    '--memprofile-dir',
+    '--memprofile-snapshots',
+    '--memprofile-max-heap-mb',
+  ]) {
+    if (prefix.filter((arg) => arg === control).length > 1) {
+      throw new InvocationParseError(
+        `${control} may only be specified once`,
+        PROFILE_USAGE,
+      );
+    }
+  }
+
+  const profilerArgv = [];
+  const ordinaryArgv = [];
+  for (let index = 0; index < prefix.length; index += 1) {
+    const arg = prefix[index];
+    if (arg === '--memprofile') {
+      continue;
+    }
+    if (arg.startsWith('--memprofile=')) {
+      const interval = arg.slice('--memprofile='.length);
+      validatePositiveInteger(interval, '--memprofile', MAX_INTERVAL_MS);
+      profilerArgv.push('--interval', interval);
+    } else if (arg === '--memprofile-dir') {
+      const value = profileOptionValue(prefix, index, arg);
+      profilerArgv.push('--dir', value);
+      index += 1;
+    } else if (arg === '--memprofile-snapshots') {
+      profilerArgv.push('--snapshots');
+    } else if (arg === '--memprofile-max-heap-mb') {
+      const value = profileOptionValue(prefix, index, arg);
+      validatePositiveInteger(value, arg, MAX_SNAPSHOT_HEAP_MB_LIMIT);
+      profilerArgv.push('--max-heap-mb', value);
+      index += 1;
+    } else {
+      ordinaryArgv.push(arg);
+    }
+  }
+
+  const entry = join(packageRoot, 'bundle', 'memprofile-launcher.js');
+  return {
+    entry,
+    requiredEntries: [
+      entry,
+      join(packageRoot, 'bundle', 'memprofile-preload.js'),
+      join(packageRoot, 'bundle', 'llxprt.js'),
+    ],
+    childArgv: [...profilerArgv, '--', ...ordinaryArgv, ...suffix],
+    profilerEntry: true,
+    isolateSignalGroup: true,
+  };
+}
+
+/**
+ * Selects the installed entry and child argv without reading process or file
+ * system state. Profile-control flags remain ordinary arguments unless an exact
+ * activation flag is present.
+ */
+function selectInvocation(argv, ordinaryEntry, packageRoot) {
+  if (argv[0] === 'memprofile') {
+    return buildUtilityInvocation(argv, packageRoot);
+  }
+
+  const boundaryIndex = findUserBoundaryIndex(argv);
+  const prefix = boundaryIndex < 0 ? argv : argv.slice(0, boundaryIndex);
+
+  const profiling = prefix.some(
+    (arg) => arg === '--memprofile' || arg.startsWith('--memprofile='),
+  );
+  if (profiling) {
+    return buildProfileInvocation(argv, packageRoot);
+  }
+
+  return {
+    entry: ordinaryEntry,
+    requiredEntries: [ordinaryEntry],
+    childArgv: [...argv],
+    profilerEntry: false,
+    isolateSignalGroup: false,
+  };
+}
+
 function failBunNotFound() {
   console.error('LLxprt Code: bundled Bun runtime was not found.');
   console.error(
@@ -392,13 +605,24 @@ function failBunNotFound() {
   process.exit(LAUNCHER_FAILURE_EXIT);
 }
 
-function failEntryNotFound(entry) {
-  console.error('LLxprt Code: entry point was not found.');
-  console.error(`Expected: ${entry}`);
+function failEntryNotFound(invocation, missingEntry) {
+  if (invocation.profilerEntry) {
+    console.error('LLxprt Code: memory profiler entry point was not found.');
+  } else {
+    console.error('LLxprt Code: entry point was not found.');
+  }
+  console.error(`Expected: ${missingEntry}`);
   console.error(
     'Your installation may be corrupt; reinstall @vybestack/llxprt-code.',
   );
   process.exit(LAUNCHER_FAILURE_EXIT);
+}
+
+function failInvocationParse(error) {
+  console.error(`LLxprt Code: ${error.message}`);
+  console.error('');
+  console.error(error.usage);
+  process.exit(1);
 }
 
 function failLaunch(message) {
@@ -470,30 +694,71 @@ function closeCapabilityFd() {
   }
 }
 
-// Signals forwarded from this Node process to the Bun child. Because the child
-// shares the foreground process group (spawn is not detached), a terminal
-// Ctrl+C already reaches Bun directly; the explicit forwarding covers signals
-// targeted at this process alone (e.g. `kill <pid>`).
-const FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
+const SIGNAL_BRIDGE_ENV = 'LLXPRT_INTERNAL_MEMPROFILE_SIGNAL_BRIDGE';
+const SHARED_GROUP_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
+const ISOLATED_GROUP_SIGNALS = [
+  'SIGINT',
+  'SIGTERM',
+  'SIGHUP',
+  'SIGQUIT',
+  'SIGTSTP',
+  'SIGCONT',
+  'SIGWINCH',
+];
+const WINDOWS_PROFILE_SIGNALS = ['SIGTERM', 'SIGHUP'];
 
 function run() {
+  let invocation;
+  try {
+    invocation = selectInvocation(
+      process.argv.slice(2),
+      resolveEntry(),
+      pkgRoot,
+    );
+  } catch (error) {
+    if (error instanceof InvocationParseError) {
+      failInvocationParse(error);
+      return;
+    }
+    throw error;
+  }
+
   const bunExe = resolveBun();
   if (bunExe === null) {
     failBunNotFound();
     return;
   }
 
-  const entry = resolveEntry();
-  if (!isFile(entry)) {
-    failEntryNotFound(entry);
-    return;
+  for (const requiredEntry of invocation.requiredEntries) {
+    if (!isFile(requiredEntry)) {
+      failEntryNotFound(invocation, requiredEntry);
+      return;
+    }
   }
 
   const { stdio, forwardsCapability } = buildStdio();
+  const isolateSignalGroup =
+    invocation.isolateSignalGroup && process.platform !== 'win32';
+  const forwardedSignals = isolateSignalGroup
+    ? ISOLATED_GROUP_SIGNALS
+    : invocation.isolateSignalGroup
+      ? WINDOWS_PROFILE_SIGNALS
+      : SHARED_GROUP_SIGNALS;
+  const ignoredSignals =
+    invocation.isolateSignalGroup && process.platform === 'win32'
+      ? ['SIGINT']
+      : [];
+  const childEnv = invocation.isolateSignalGroup
+    ? { ...process.env, [SIGNAL_BRIDGE_ENV]: '1' }
+    : process.env;
 
   let child;
   try {
-    child = spawn(bunExe, [entry, ...process.argv.slice(2)], { stdio });
+    child = spawn(bunExe, [invocation.entry, '--', ...invocation.childArgv], {
+      stdio,
+      detached: isolateSignalGroup,
+      env: childEnv,
+    });
   } catch (error) {
     // A marked but unopened fd 3 makes spawn throw EBADF synchronously, and
     // that is the only failure the capability transport is responsible for.
@@ -514,26 +779,41 @@ function run() {
   }
 
   const forward = (signal) => {
+    let delivered = false;
     try {
-      child.kill(signal);
+      delivered = child.kill(signal);
     } catch {
       // The child may have exited between the signal arriving and the kill.
     }
+    if (isolateSignalGroup && signal === 'SIGTSTP' && delivered) {
+      process.kill(process.pid, 'SIGSTOP');
+    }
   };
-  for (const signal of FORWARDED_SIGNALS) {
+  for (const signal of forwardedSignals) {
     process.on(signal, forward);
   }
 
+  const ignore = () => undefined;
+  for (const signal of ignoredSignals) {
+    process.on(signal, ignore);
+  }
+
   child.on('error', (error) => {
-    for (const signal of FORWARDED_SIGNALS) {
+    for (const signal of forwardedSignals) {
       process.off(signal, forward);
+    }
+    for (const signal of ignoredSignals) {
+      process.off(signal, ignore);
     }
     failLaunch(error.message);
   });
 
   child.on('exit', (code, signal) => {
-    for (const sig of FORWARDED_SIGNALS) {
+    for (const sig of forwardedSignals) {
       process.off(sig, forward);
+    }
+    for (const sig of ignoredSignals) {
+      process.off(sig, ignore);
     }
     if (signal) {
       // Re-raise on the parent so the process dies with the same signal the

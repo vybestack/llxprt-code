@@ -24,16 +24,19 @@
  * `--` is passed through to LLxprt untouched.
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, type StdioOptions } from 'node:child_process';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  closeSync,
   existsSync,
   readFileSync,
   renameSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { isSourceMemoryEntrypoint } from './entrypoint.ts';
+import { resolveInstalledMemprofileRoot } from './runtime-paths.ts';
 import process from 'node:process';
 import {
   devLocalStorageFile,
@@ -54,10 +57,6 @@ import {
 import { renderReport } from './report.ts';
 import { parseSamples } from './sample.ts';
 
-interface PackageJson {
-  readonly version: string;
-}
-
 export class LauncherParseError extends Error {
   constructor(message: string) {
     super(message);
@@ -74,7 +73,7 @@ export interface LauncherOptions {
   readonly passthrough: readonly string[];
 }
 
-const USAGE = `Usage: npm run mem:profile -- [options] -- [llxprt args...]
+export const SOURCE_LAUNCHER_USAGE = `Usage: npm run mem:profile -- [options] -- [llxprt args...]
 
   --snapshots          arm heap snapshots (off by default; see guard below)
   --interval <ms>      sampling interval, default 15000 (max 86400000)
@@ -91,6 +90,34 @@ more transient memory than the live heap. The guard refuses above
 While a session runs:  npm run mem:request         (sample now)
                        npm run mem:request -- --heap (snapshot, needs --snapshots)
 After a session:       npm run mem:report`;
+
+export const INSTALLED_LAUNCHER_USAGE = `Usage: llxprt --memprofile [options] [llxprt args...]
+
+  --snapshots          arm heap snapshots (off by default; see guard below)
+  --interval <ms>      sampling interval, default 15000 (max 86400000)
+  --max-heap-mb <n>    snapshot guard, default ${DEFAULT_MAX_SNAPSHOT_HEAP_MB}
+  --dir <path>         run directory override
+  -h, --help           print this help
+  --                   everything after this is passed to LLxprt unchanged
+
+Snapshots are synchronous, block the target, and can consume substantially
+more transient memory than the live heap. The guard refuses above
+--max-heap-mb. Do not snapshot a process that has already blown out.
+
+While a session runs:  llxprt memprofile request
+                       llxprt memprofile request --heap
+After a session:       llxprt memprofile report`;
+
+export interface LauncherRuntime {
+  readonly usage: string;
+  readonly entryPath: string;
+  readonly preloadPath: string;
+  readonly cwd: string;
+  readonly packageVersion: string;
+  readonly memprofileRoot: string;
+  readonly developmentEnvironment: boolean;
+  readonly sourcePrivacyWarning: boolean;
+}
 
 function expectOptionValue(
   argv: readonly string[],
@@ -196,41 +223,87 @@ export function buildLauncherEnv(
   base: NodeJS.ProcessEnv,
   options: LauncherOptions,
   pkgVersion: string,
+  developmentEnvironment = true,
 ): NodeJS.ProcessEnv {
+  const profiling = {
+    CLI_VERSION: pkgVersion,
+    LLXPRT_MEM_DIR: options.runDir,
+    LLXPRT_MEM_INTERVAL_MS: String(options.intervalMs),
+    LLXPRT_MEM_MAX_HEAP_MB: String(options.maxHeapMb),
+    LLXPRT_MEM_SNAPSHOT: options.snapshots ? '1' : '0',
+  };
+  if (!developmentEnvironment) {
+    return { ...base, ...profiling };
+  }
   return {
     ...base,
-    CLI_VERSION: pkgVersion,
     DEV: 'true',
-    // Exactly one launcher-owned --localstorage-file: inherited variants
-    // (flag/value, '='-attached, bare) are stripped first, then one value is
-    // appended.
     NODE_OPTIONS: prepareDevNodeOptions(
       base['NODE_OPTIONS'],
       devLocalStorageFile(),
     ),
-    LLXPRT_MEM_DIR: options.runDir,
-    LLXPRT_MEM_INTERVAL_MS: String(options.intervalMs),
-    LLXPRT_MEM_MAX_HEAP_MB: String(options.maxHeapMb),
-    // Explicit on both branches: an inherited LLXPRT_MEM_SNAPSHOT=1 from the
-    // parent cannot re-arm snapshots the user did not ask for.
-    LLXPRT_MEM_SNAPSHOT: options.snapshots ? '1' : '0',
+    ...profiling,
   };
 }
 
-const scriptDir = dirname(fileURLToPath(import.meta.url));
-const repoRoot = join(scriptDir, '..', '..');
-const memprofileRoot = join(repoRoot, MEMPROFILE_DIR_NAME);
+const sourceScriptDir = dirname(fileURLToPath(import.meta.url));
+const sourceRepoRoot = join(sourceScriptDir, '..', '..');
 
-function defaultRunDir(): string {
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  return join(memprofileRoot, stamp);
+function readPkgVersion(repoRoot: string): string {
+  const parsed: unknown = JSON.parse(
+    readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
+  );
+  if (
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    !('version' in parsed) ||
+    typeof parsed.version !== 'string'
+  ) {
+    throw new Error(
+      `Invalid package version in ${join(repoRoot, 'package.json')}`,
+    );
+  }
+  return parsed.version;
 }
 
-function readPkgVersion(): string {
-  const pkg = JSON.parse(
-    readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
-  ) as PackageJson;
-  return pkg.version;
+export function createSourceLauncherRuntime(): LauncherRuntime {
+  return {
+    usage: SOURCE_LAUNCHER_USAGE,
+    entryPath: join(sourceRepoRoot, 'packages/cli/index.ts'),
+    preloadPath: join(sourceScriptDir, 'probe-preload.ts'),
+    cwd: sourceRepoRoot,
+    packageVersion: readPkgVersion(sourceRepoRoot),
+    memprofileRoot: join(sourceRepoRoot, MEMPROFILE_DIR_NAME),
+    developmentEnvironment: true,
+    sourcePrivacyWarning: true,
+  };
+}
+
+export function createInstalledLauncherRuntime(
+  entryUrl: string,
+  packageVersion: string | undefined,
+  cwd: string = process.cwd(),
+  memprofileRoot: string = resolveInstalledMemprofileRoot(),
+): LauncherRuntime {
+  if (packageVersion === undefined || packageVersion.length === 0) {
+    throw new Error('The installed memprofile launcher is missing CLI_VERSION');
+  }
+  const bundleDir = dirname(fileURLToPath(entryUrl));
+  return {
+    usage: INSTALLED_LAUNCHER_USAGE,
+    entryPath: join(bundleDir, 'llxprt.js'),
+    preloadPath: join(bundleDir, 'memprofile-preload.js'),
+    cwd,
+    packageVersion,
+    memprofileRoot,
+    developmentEnvironment: false,
+    sourcePrivacyWarning: false,
+  };
+}
+
+function defaultRunDir(memprofileRoot: string): string {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  return join(memprofileRoot, stamp);
 }
 
 /**
@@ -311,15 +384,20 @@ function announce(options: LauncherOptions): void {
 export function warnIfRunDirOutsideMemprofile(
   runDir: string,
   memRoot: string,
+  sourcePrivacyWarning = true,
 ): boolean {
   const inside = runDir === memRoot || runDir.startsWith(memRoot + sep);
   if (!inside) {
+    const locationWarning = sourcePrivacyWarning
+      ? '  potentially credentials. .memprofile/ is git-ignored; this location\n' +
+        '  is NOT, so an accidental "git add" can commit sensitive artifacts.\n' +
+        '  Keep this path out of any repository or add it to .gitignore.\n\n'
+      : '  potentially credentials and prior input. This override is outside\n' +
+        '  LLxprt user data. Do not commit or upload profiling artifacts.\n\n';
     process.stdout.write(
       `memprofile: WARNING: run directory is outside ${memRoot}.\n` +
         '  Samples and heap snapshots contain full prompts, tool output, and\n' +
-        '  potentially credentials. .memprofile/ is git-ignored; this location\n' +
-        '  is NOT, so an accidental "git add" can commit sensitive artifacts.\n' +
-        '  Keep this path out of any repository or add it to .gitignore.\n\n',
+        locationWarning,
     );
   }
   return inside;
@@ -348,29 +426,176 @@ export function launcherExitCode(code: number | null): number {
   return code ?? 1;
 }
 
-function main(): void {
+const CAPABILITY_FD_ENV = 'LLXPRT_CAPABILITY_FD';
+const CAPABILITY_FD_NUMBER = 3;
+const SIGNAL_BRIDGE_ENV = 'LLXPRT_INTERNAL_MEMPROFILE_SIGNAL_BRIDGE';
+const SHARED_GROUP_SIGNALS: readonly NodeJS.Signals[] = [
+  'SIGINT',
+  'SIGTERM',
+  'SIGHUP',
+];
+const ISOLATED_GROUP_SIGNALS: readonly NodeJS.Signals[] = [
+  ...SHARED_GROUP_SIGNALS,
+  'SIGQUIT',
+  'SIGTSTP',
+  'SIGCONT',
+  'SIGWINCH',
+];
+
+export interface LauncherSignalPolicy {
+  readonly forwardedSignals: readonly NodeJS.Signals[];
+  readonly ignoredSignals: readonly NodeJS.Signals[];
+  readonly stopOnSuspend: boolean;
+}
+
+export function selectLauncherSignalPolicy(
+  platform: NodeJS.Platform,
+  installedSignalBridge: boolean,
+): LauncherSignalPolicy {
+  if (!installedSignalBridge) {
+    return {
+      forwardedSignals: SHARED_GROUP_SIGNALS,
+      ignoredSignals: [],
+      stopOnSuspend: false,
+    };
+  }
+  if (platform === 'win32') {
+    return {
+      forwardedSignals: ['SIGTERM', 'SIGHUP'],
+      ignoredSignals: ['SIGINT'],
+      stopOnSuspend: false,
+    };
+  }
+  return {
+    forwardedSignals: ISOLATED_GROUP_SIGNALS,
+    ignoredSignals: [],
+    stopOnSuspend: true,
+  };
+}
+
+function childStdio(): {
+  readonly stdio: StdioOptions;
+  readonly forwardsCapability: boolean;
+} {
+  const marker = process.env[CAPABILITY_FD_ENV];
+  if (marker === undefined || marker === '') {
+    return { stdio: 'inherit', forwardsCapability: false };
+  }
+  if (marker !== String(CAPABILITY_FD_NUMBER)) {
+    throw new Error(
+      `${CAPABILITY_FD_ENV} must be ${CAPABILITY_FD_NUMBER}, received ${marker}`,
+    );
+  }
+  return {
+    stdio: ['inherit', 'inherit', 'inherit', CAPABILITY_FD_NUMBER],
+    forwardsCapability: true,
+  };
+}
+
+function removeSignalHandlers(
+  signals: readonly NodeJS.Signals[],
+  forward: (signal: NodeJS.Signals) => void,
+): void {
+  for (const signal of signals) {
+    process.off(signal, forward);
+  }
+}
+
+function superviseChild(
+  child: ReturnType<typeof spawn>,
+  options: LauncherOptions,
+  runtime: LauncherRuntime,
+  signalPolicy: LauncherSignalPolicy,
+): void {
+  const forward = (signal: NodeJS.Signals): void => {
+    let delivered = false;
+    try {
+      delivered = child.kill(signal);
+    } catch {
+      // The child may have exited between signal delivery and forwarding.
+    }
+    if (signalPolicy.stopOnSuspend && signal === 'SIGTSTP' && delivered) {
+      process.kill(process.pid, 'SIGSTOP');
+    }
+  };
+  const ignore = (): void => undefined;
+  for (const signal of signalPolicy.forwardedSignals) {
+    process.on(signal, forward);
+  }
+  for (const signal of signalPolicy.ignoredSignals) {
+    process.on(signal, ignore);
+  }
+
+  child.on('error', (error) => {
+    removeSignalHandlers(signalPolicy.forwardedSignals, forward);
+    removeSignalHandlers(signalPolicy.ignoredSignals, ignore);
+    process.stderr.write(
+      `memprofile: failed to spawn: ${error.message}\n` +
+        'memprofile: LLxprt did not start; removing the latest pointer so\n' +
+        'requests are not queued into a dead run.\n',
+    );
+    deleteLatestPointer(runtime.memprofileRoot, options.runDir);
+    process.exit(1);
+  });
+  child.on('close', (code, signal) => {
+    removeSignalHandlers(signalPolicy.forwardedSignals, forward);
+    removeSignalHandlers(signalPolicy.ignoredSignals, ignore);
+    try {
+      renderExitReport(options.runDir);
+    } catch (error) {
+      process.stderr.write(
+        `memprofile: failed to render the exit report: ${message(error)}\n`,
+      );
+    }
+    tightenLatestPointer(runtime.memprofileRoot, options.runDir);
+    if (signal !== null) {
+      process.kill(process.pid, signal);
+    } else {
+      process.exit(launcherExitCode(code));
+    }
+  });
+}
+
+function consumeInstalledSignalBridge(): boolean {
+  const installedSignalBridge = process.env[SIGNAL_BRIDGE_ENV] === '1';
+  delete process.env[SIGNAL_BRIDGE_ENV];
+  return installedSignalBridge;
+}
+
+export function runLauncher(runtime: LauncherRuntime): void {
+  const installedSignalBridge = consumeInstalledSignalBridge();
+  const signalPolicy = selectLauncherSignalPolicy(
+    process.platform,
+    installedSignalBridge,
+  );
+
   let options: LauncherOptions;
   try {
-    options = parseLauncherArgs(process.argv.slice(2), defaultRunDir());
+    options = parseLauncherArgs(
+      process.argv.slice(2),
+      defaultRunDir(runtime.memprofileRoot),
+    );
   } catch (error) {
     process.stderr.write(
-      `${error instanceof Error ? error.message : String(error)}\n\n${USAGE}\n`,
+      `${error instanceof Error ? error.message : String(error)}\n\n${runtime.usage}\n`,
     );
     process.exit(2);
   }
   if (options.help) {
-    process.stdout.write(`${USAGE}\n`);
+    process.stdout.write(`${runtime.usage}\n`);
     process.exit(0);
   }
-  warnIfRunDirOutsideMemprofile(options.runDir, memprofileRoot);
+  warnIfRunDirOutsideMemprofile(
+    options.runDir,
+    runtime.memprofileRoot,
+    runtime.sourcePrivacyWarning,
+  );
   try {
     ensureSecureDir(options.runDir);
     ensureSecureDir(join(options.runDir, 'requests'));
-    ensureSecureDir(memprofileRoot);
-    publishLatestPointer(memprofileRoot, options.runDir);
+    ensureSecureDir(runtime.memprofileRoot);
+    publishLatestPointer(runtime.memprofileRoot, options.runDir);
   } catch (error) {
-    // Setup filesystem failures are actionable launcher errors: report and
-    // exit nonzero without spawning the child.
     process.stderr.write(
       `memprofile: failed to prepare the run directory: ${message(error)}\n`,
     );
@@ -380,19 +605,33 @@ function main(): void {
 
   let child: ReturnType<typeof spawn>;
   try {
-    const entry = join(repoRoot, 'packages/cli/index.ts');
-    const probe = join(scriptDir, 'probe-preload.ts');
-    const env = buildLauncherEnv(process.env, options, readPkgVersion());
+    const env = buildLauncherEnv(
+      process.env,
+      options,
+      runtime.packageVersion,
+      runtime.developmentEnvironment,
+    );
+    const { stdio, forwardsCapability } = childStdio();
     child = spawn(
       process.execPath,
-      ['--preload', probe, entry, ...options.passthrough],
-      { stdio: 'inherit', env, cwd: repoRoot },
+      [
+        '--preload',
+        runtime.preloadPath,
+        runtime.entryPath,
+        ...options.passthrough,
+      ],
+      { stdio, env, cwd: runtime.cwd },
     );
+    superviseChild(child, options, runtime, signalPolicy);
+    if (forwardsCapability) {
+      closeSync(CAPABILITY_FD_NUMBER);
+      delete process.env[CAPABILITY_FD_ENV];
+    }
   } catch (error) {
     process.stderr.write(
       `memprofile: failed to start LLxprt: ${message(error)}\n`,
     );
-    deleteLatestPointer(memprofileRoot, options.runDir);
+    deleteLatestPointer(runtime.memprofileRoot, options.runDir);
     process.exit(1);
   }
   try {
@@ -404,33 +643,8 @@ function main(): void {
       `memprofile: could not record the child pid: ${message(error)}\n`,
     );
   }
-
-  child.on('error', (error) => {
-    process.stderr.write(
-      `memprofile: failed to spawn: ${error.message}\n` +
-        'memprofile: LLxprt did not start; removing the latest pointer so\n' +
-        'requests are not queued into a dead run.\n',
-    );
-    deleteLatestPointer(memprofileRoot, options.runDir);
-    process.exit(1);
-  });
-  child.on('close', (code) => {
-    try {
-      renderExitReport(options.runDir);
-    } catch (error) {
-      // The report must never replace the child's own exit status.
-      process.stderr.write(
-        `memprofile: failed to render the exit report: ${message(error)}\n`,
-      );
-    }
-    tightenLatestPointer(memprofileRoot, options.runDir);
-    process.exit(launcherExitCode(code));
-  });
 }
 
-const isMain =
-  process.argv[1] !== undefined &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-if (isMain) {
-  main();
+if (isSourceMemoryEntrypoint(import.meta.url)) {
+  runLauncher(createSourceLauncherRuntime());
 }

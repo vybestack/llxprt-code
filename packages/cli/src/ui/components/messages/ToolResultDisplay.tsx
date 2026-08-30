@@ -169,6 +169,62 @@ function renderObjectContent(
 }
 
 /**
+ * Drops source lines that cannot reach the visible window.
+ *
+ * `MaxSizedBox` shows the tail of its content and lays out every line it is
+ * given before clipping. A source line always occupies at least one display
+ * line, so keeping the last `maxDisplayLines` source lines is enough to fill
+ * the window, and everything earlier can be dropped before layout rather than
+ * wrapped and discarded afterwards.
+ *
+ * The returned count is the estimated number of display lines removed, so the
+ * caller can report them through `additionalHiddenLinesCount`. It is an
+ * estimate because exact wrapping depends on word boundaries.
+ */
+export function trimToVisibleTail(
+  text: string,
+  maxDisplayLines: number,
+  width: number,
+): { text: string; hiddenDisplayLines: number } {
+  const usableWidth = Math.max(1, width);
+  let hiddenDisplayLines = 0;
+  let kept = text;
+
+  const lines = text.split('\n');
+  if (lines.length > maxDisplayLines) {
+    for (const line of lines.slice(0, lines.length - maxDisplayLines)) {
+      hiddenDisplayLines += Math.max(1, Math.ceil(line.length / usableWidth));
+    }
+    kept = lines.slice(lines.length - maxDisplayLines).join('\n');
+  }
+
+  // Line count alone does not bound the work: a single unbroken line, such as
+  // minified output or a log without newlines, wraps into as many display rows
+  // as it has width-sized chunks. Keeping the last `maxDisplayLines` rows worth
+  // of characters always leaves at least that many rows, because a row never
+  // holds more than `usableWidth` of them.
+  const characterBudget = maxDisplayLines * usableWidth;
+  if (kept.length > characterBudget) {
+    const dropped = kept.length - characterBudget;
+    // Count the dropped prefix line by line rather than dividing its length by
+    // the width. Short lines each occupy a row regardless of length, so
+    // ignoring newline boundaries here would undercount what was hidden.
+    const droppedLines = kept.slice(0, dropped).split('\n');
+    if (droppedLines[droppedLines.length - 1] === '') {
+      // The prefix ended exactly on a newline, so the trailing empty piece is
+      // the start of a line that is being kept.
+      droppedLines.pop();
+    }
+    for (const line of droppedLines) {
+      hiddenDisplayLines += Math.max(1, Math.ceil(line.length / usableWidth));
+    }
+    kept = kept.slice(dropped);
+  }
+
+  return { text: kept, hiddenDisplayLines };
+}
+
+/**
  * Render string content.
  */
 function renderStringContent(
@@ -191,11 +247,20 @@ function renderStringContent(
     );
   }
 
+  const { text, hiddenDisplayLines } =
+    availableHeight === undefined
+      ? { text: displayContent, hiddenDisplayLines: 0 }
+      : trimToVisibleTail(displayContent, availableHeight, childWidth);
+
   return (
-    <MaxSizedBox maxHeight={availableHeight} maxWidth={childWidth}>
+    <MaxSizedBox
+      maxHeight={availableHeight}
+      maxWidth={childWidth}
+      additionalHiddenLinesCount={hiddenDisplayLines}
+    >
       <Box>
         <Text color={Colors.Foreground} wrap="wrap">
-          {displayContent}
+          {text}
         </Text>
       </Box>
     </MaxSizedBox>

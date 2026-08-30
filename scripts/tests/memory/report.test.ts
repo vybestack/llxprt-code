@@ -116,7 +116,7 @@ describe('renderReport', () => {
     expect(out).toContain('not add');
   });
 
-  it('flags a doubling protectedObjectCount as a native-retention note', () => {
+  it('reports protected-object growth without claiming an owner', () => {
     const samples: Sample[] = [
       makeSample('startup', '2026-08-14T10:00:00.000Z', {
         heap: 50 * MB,
@@ -137,7 +137,8 @@ describe('renderReport', () => {
     ];
     const out = renderReport(samples);
     expect(out).toContain('protectedObjectCount 1,000 -> 2,500');
-    expect(out.toLowerCase()).toContain('native');
+    expect(out).toContain('does not identify the retainer');
+    expect(out).toContain('does not prove native ownership');
   });
 
   it('flags protected-object growth from a zero baseline', () => {

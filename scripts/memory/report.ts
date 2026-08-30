@@ -26,9 +26,10 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_TOP_TYPES, type Sample, parseSamples } from './sample.ts';
+import { isSourceMemoryEntrypoint } from './entrypoint.ts';
 import { MEMPROFILE_DIR_NAME, resolveSamplesPath } from './paths.ts';
 
 const MB = 1024 * 1024;
@@ -40,6 +41,20 @@ export const REPORT_USAGE = `Usage: npm run mem:report -- [path]
   -h, --help  print this help
 
 Unknown options and extra arguments are rejected.`;
+
+export const INSTALLED_REPORT_USAGE = `Usage: llxprt memprofile report [path]
+
+  (default)   analyze the most recent installed memprofile run
+  <path>      a specific samples.jsonl file or a run directory containing one
+  -h, --help  print this help
+
+Unknown options and extra arguments are rejected.`;
+
+export interface ReportCliRuntime {
+  readonly usage: string;
+  readonly memprofileRoot: string;
+  readonly startCommandHint?: string;
+}
 
 export class ReportParseError extends Error {
   constructor(message: string) {
@@ -58,7 +73,10 @@ export interface ReportCliOptions {
  * nothing else. Unknown options, flag-shaped targets, or extra arguments
  * fail fast. Exported for testing.
  */
-export function parseReportArgs(argv: readonly string[]): ReportCliOptions {
+export function parseReportArgs(
+  argv: readonly string[],
+  usage = REPORT_USAGE,
+): ReportCliOptions {
   let help = false;
   let target: string | undefined;
   let i = 0;
@@ -69,7 +87,7 @@ export function parseReportArgs(argv: readonly string[]): ReportCliOptions {
       i += 1;
     } else if (arg.startsWith('-')) {
       throw new ReportParseError(
-        `unknown option: ${arg}. ${REPORT_USAGE.split('\n')[0]}`,
+        `unknown option: ${arg}. ${usage.split('\n')[0]}`,
       );
     } else if (target !== undefined) {
       throw new ReportParseError(`unexpected extra argument: ${arg}`);
@@ -149,7 +167,7 @@ function renderNotes(samples: readonly Sample[]): string[] {
   ) {
     lines.push(
       `  NOTE: protectedObjectCount ${first.protectedObjectCount.toLocaleString('en-US')} -> ` +
-        `${last.protectedObjectCount.toLocaleString('en-US')}. Something native is holding JS objects alive.`,
+        `${last.protectedObjectCount.toLocaleString('en-US')}. The counter rose, but it does not identify the retainer and does not prove native ownership.`,
     );
   }
   return lines;
@@ -257,9 +275,11 @@ export function renderReport(samples: readonly Sample[]): string {
   return blocks.join('\n');
 }
 
-function repoRoot(): string {
-  return join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-}
+const sourceRepoRoot = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+);
 
 function loadSamples(path: string): Sample[] {
   if (!existsSync(path)) {
@@ -268,29 +288,27 @@ function loadSamples(path: string): Sample[] {
   return parseSamples(readFileSync(path, 'utf8'));
 }
 
-function main(): void {
-  const options = parseReportArgs(process.argv.slice(2));
+export function runReportCli(runtime: ReportCliRuntime): void {
+  const options = parseReportArgs(process.argv.slice(2), runtime.usage);
   if (options.help) {
-    process.stdout.write(`${REPORT_USAGE}\n`);
+    process.stdout.write(`${runtime.usage}\n`);
     return;
   }
   const samplesPath = resolveSamplesPath({
     explicit: options.target,
-    memprofileRoot: join(repoRoot(), MEMPROFILE_DIR_NAME),
+    memprofileRoot: runtime.memprofileRoot,
+    startCommandHint: runtime.startCommandHint,
   });
   const samples = loadSamples(samplesPath);
   process.stdout.write(`${renderReport(samples)}\n`);
 }
 
-const isMain =
-  process.argv[1] !== undefined &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-if (isMain) {
+export function runReportCliMain(runtime: ReportCliRuntime): void {
   try {
-    main();
+    runReportCli(runtime);
   } catch (error) {
     if (error instanceof ReportParseError) {
-      process.stderr.write(`${error.message}\n\n${REPORT_USAGE}\n`);
+      process.stderr.write(`${error.message}\n\n${runtime.usage}\n`);
       process.exit(2);
     }
     process.stderr.write(
@@ -298,4 +316,11 @@ if (isMain) {
     );
     process.exit(1);
   }
+}
+
+if (isSourceMemoryEntrypoint(import.meta.url)) {
+  runReportCliMain({
+    usage: REPORT_USAGE,
+    memprofileRoot: join(sourceRepoRoot, MEMPROFILE_DIR_NAME),
+  });
 }

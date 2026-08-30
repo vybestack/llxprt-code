@@ -1,0 +1,160 @@
+{
+  "tmux": {
+    "cols": 120,
+    "rows": 40,
+    "historyLimit": 50000,
+    "scrollbackLines": 5000,
+    "initialWaitMs": 6000
+  },
+  "startCommand": [
+    "/bin/sh",
+    "-c",
+    "exec env CI=0 CONTINUOUS_INTEGRATION=0 NO_COLOR=true FORCE_COLOR=0 NODE_OPTIONS= LLXPRT_CODE_NO_RELAUNCH=true LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION=true LLXPRT_CODE_BUILTIN_COMMANDS_ONLY=true LLXPRT_CODE_SUPPRESS_STATIC_HEADER=true LLXPRT_CODE_WELCOME_CONFIG_PATH=scripts/fixtures/welcome-completed.json LLXPRT_SYSTEM_SETTINGS_PATH=scripts/system-settings.interactive-ui.json LLXPRT_FAKE_RESPONSES=scripts/fixtures/issue2208-newlines.responses.jsonl ${bun} scripts/memory/launcher.ts --dir \"$LLXPRT_TMUX_ARTIFACT_DIR/memprofile\" --interval 86400000 -- --provider fake --model fake-model --yolo"
+  ],
+  "yolo": false,
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 30000
+    },
+    { "type": "key", "key": "!" },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "shell mode enabled",
+      "timeoutMs": 10000
+    },
+    {
+      "type": "line",
+      "text": "bun scripts/memory/request-cli.ts --dir \"$LLXPRT_TMUX_ARTIFACT_DIR/memprofile\" --wait",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 200
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your shell command",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "line",
+      "text": "bun scripts/memory/output-generator.ts --seed baseline-a --lines 3000 --width 400",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 200
+    },
+    { "type": "wait", "ms": 20000 },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your shell command",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "line",
+      "text": "bun scripts/memory/output-generator.ts --seed baseline-b --lines 3000 --width 400",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 200
+    },
+    { "type": "wait", "ms": 20000 },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your shell command",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "line",
+      "text": "bun scripts/memory/output-generator.ts --seed baseline-c --lines 3000 --width 400",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 200
+    },
+    { "type": "wait", "ms": 20000 },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your shell command",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "line",
+      "text": "bun scripts/memory/output-generator.ts --seed baseline-d --lines 3000 --width 400",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 200
+    },
+    { "type": "wait", "ms": 20000 },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your shell command",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "line",
+      "text": "bun scripts/memory/request-cli.ts --dir \"$LLXPRT_TMUX_ARTIFACT_DIR/memprofile\" --wait",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 200
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your shell command",
+      "timeoutMs": 30000
+    },
+    { "type": "key", "key": "Escape" },
+    { "type": "key", "key": "Escape" },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 10000
+    },
+    {
+      "type": "line",
+      "text": "/clear",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 200
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 30000
+    },
+    { "type": "key", "key": "!" },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "shell mode enabled",
+      "timeoutMs": 10000
+    },
+    {
+      "type": "line",
+      "text": "bun scripts/memory/request-cli.ts --dir \"$LLXPRT_TMUX_ARTIFACT_DIR/memprofile\" --wait",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 200
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your shell command",
+      "timeoutMs": 30000
+    },
+    { "type": "key", "key": "Escape" },
+    { "type": "key", "key": "Escape" },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 10000
+    },
+    {
+      "type": "line",
+      "text": "/quit",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 200
+    },
+    { "type": "waitForExit", "timeoutMs": 30000 }
+  ]
+}

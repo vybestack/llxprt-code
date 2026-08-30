@@ -9,10 +9,42 @@
 /* eslint-env node */
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const { detectInstaller } = require('./detect-installer.cjs');
 
 const lockfilePath = path.join(__dirname, '..', 'package-lock.json');
 const repoRoot = path.join(__dirname, '..');
+const PATCH_PACKAGE_TIMEOUT_MS = 120_000;
+
+function applyDependencyPatches() {
+  const patchesDir = path.join(repoRoot, 'patches');
+  if (!fs.existsSync(patchesDir)) {
+    return;
+  }
+
+  const patchPackageCli = require.resolve('patch-package', {
+    paths: [repoRoot],
+  });
+  const result = spawnSync(
+    process.execPath,
+    [patchPackageCli, '--error-on-fail'],
+    {
+      cwd: repoRoot,
+      stdio: 'inherit',
+      timeout: PATCH_PACKAGE_TIMEOUT_MS,
+    },
+  );
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    throw new Error(
+      result.signal
+        ? `patch-package terminated by ${result.signal}`
+        : `patch-package exited with status ${String(result.status)}`,
+    );
+  }
+}
 
 /**
  * Expands a single root-`workspaces` entry (a `packages/*`-style glob or a
@@ -292,6 +324,15 @@ function installWindowsNativeLaunchers() {
       msg,
     );
   }
+}
+
+try {
+  applyDependencyPatches();
+} catch (error) {
+  const message =
+    error && typeof error.message === 'string' ? error.message : String(error);
+  fs.writeSync(2, `Failed to apply dependency patches: ${message}\n`);
+  process.exit(1);
 }
 
 // Under Bun, only the npm-specific actions below are skipped: Bun does not
