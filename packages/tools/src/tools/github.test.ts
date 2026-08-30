@@ -56,6 +56,8 @@ const VALID_SAMPLE_BY_KIND: Record<GithubParamKind, unknown> = {
   threadId: 'PRRT_kwDOabc',
   body: 'x',
   freetext: 'x',
+  // Exercises the exclusion syntax the tool documents (issue 3407).
+  searchQuery: '-label:bug',
   limit: 5,
   closeReason: 'completed',
   color: '#ff0000',

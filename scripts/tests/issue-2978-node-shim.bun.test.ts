@@ -21,185 +21,44 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdtempSync,
   mkdirSync,
   writeFileSync,
-  copyFileSync,
   rmSync,
   readFileSync,
   statSync,
 } from 'node:fs';
 import * as path from 'node:path';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
-
-const thisFile = fileURLToPath(import.meta.url);
-const repoRoot = path.resolve(thisFile, '..', '..', '..');
-const shimSrc = path.join(repoRoot, 'packages', 'cli', 'bin', 'llxprt.mjs');
-const cliManifestPath = path.join(repoRoot, 'packages', 'cli', 'package.json');
-// The native Bun binary stand-in. The published `bun` package names it bun.exe
-// on every platform (its postinstall copies the native binary to that name), so
-// it is executable on the current host despite the .exe suffix.
-const stubBun = path.join(repoRoot, 'node_modules', 'bun', 'bin', 'bun.exe');
-
-/**
- * Every fixture copies this binary to stand in for the bundled Bun. Fail with a
- * clear message rather than an opaque ENOENT from copyFileSync if the `bun`
- * package is missing or laid out differently.
- */
-function requireStubBun(): string {
-  if (!existsSync(stubBun)) {
-    throw new Error(
-      `Expected the bun package's native binary at ${stubBun}. ` +
-        'Run `npm install` to restore it before running this suite.',
-    );
-  }
-  return stubBun;
-}
-
-const LAUNCH_TIMEOUT_MS = 30_000;
-const LAUNCHER_FAILURE_EXIT = 43;
-
-const isWin = process.platform === 'win32';
-// The shim probes bun.exe first on every platform; this mirrors that.
-const bunExeName = 'bun.exe';
-
-interface Layout {
-  readonly root: string;
-  readonly pkgRoot: string;
-  readonly nodeModules: string;
-  readonly shim: string;
-}
-
-/**
- * Builds the npm-installed shape the shim anchors against:
- *   <root>/node_modules/@vybestack/llxprt-code/bin/llxprt.mjs
- * The package root is exactly one directory above the bin/ directory, matching
- * the shim's `dirname(dirname(import.meta.url))` derivation.
- */
-function makeLayout(root: string): Layout {
-  const nodeModules = path.join(root, 'node_modules');
-  const pkgRoot = path.join(nodeModules, '@vybestack', 'llxprt-code');
-  const binDir = path.join(pkgRoot, 'bin');
-  mkdirSync(binDir, { recursive: true });
-  copyFileSync(shimSrc, path.join(binDir, 'llxprt.mjs'));
-  return { root, pkgRoot, nodeModules, shim: path.join(binDir, 'llxprt.mjs') };
-}
-
-/**
- * Entry point the resolved Bun runs. It prints process.execPath (identifying
- * WHICH candidate ran) and the forwarded arguments, then optionally exits with
- * a code taken from LLXPRT_TEST_EXIT so exit-code propagation can be observed.
- */
-const defaultEntryBody =
-  'console.log(JSON.stringify({exe:process.execPath,argv:process.argv.slice(2)}));' +
-  'let c=Number(process.env.LLXPRT_TEST_EXIT||"0");if(c)process.exit(c);';
-
-function writeSourceEntry(pkgRoot: string, body: string): void {
-  writeFileSync(path.join(pkgRoot, 'index.ts'), body);
-}
-
-function writeBundleEntry(pkgRoot: string, body: string): void {
-  const dir = path.join(pkgRoot, 'bundle');
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(path.join(dir, 'llxprt.js'), body);
-}
-
-function placeBundledBun(nodeModules: string): string {
-  const dir = path.join(nodeModules, 'bun', 'bin');
-  mkdirSync(dir, { recursive: true });
-  const exe = path.join(dir, bunExeName);
-  copyFileSync(requireStubBun(), exe);
-  return exe;
-}
-
-/**
- * The @oven variant package names the host could select, covering both AVX2 and
- * baseline siblings so the binary is found regardless of the host's AVX2
- * detection result.
- */
-function hostOvenVariants(): string[] {
-  const key = `${process.platform}-${process.arch}`;
-  const map: Record<string, string[]> = {
-    'darwin-arm64': ['bun-darwin-aarch64'],
-    'darwin-x64': ['bun-darwin-x64', 'bun-darwin-x64-baseline'],
-    'linux-arm64': ['bun-linux-aarch64', 'bun-linux-aarch64-musl'],
-    'linux-x64': [
-      'bun-linux-x64',
-      'bun-linux-x64-baseline',
-      'bun-linux-x64-musl',
-      'bun-linux-x64-musl-baseline',
-    ],
-    'win32-arm64': ['bun-windows-aarch64'],
-    'win32-x64': ['bun-windows-x64', 'bun-windows-x64-baseline'],
-  };
-  return map[key] ?? [];
-}
-
-function placeOvenBun(nodeModules: string, variant: string): string {
-  const pkgDir = path.join(nodeModules, '@oven', variant);
-  const binDir = path.join(pkgDir, 'bin');
-  mkdirSync(binDir, { recursive: true });
-  // A package.json is required so the shim's createRequire().resolve() can
-  // locate the variant package via Node module resolution.
-  writeFileSync(
-    path.join(pkgDir, 'package.json'),
-    JSON.stringify({ name: `@oven/${variant}`, version: '1.3.14' }),
-  );
-  const exe = path.join(binDir, bunExeName);
-  copyFileSync(requireStubBun(), exe);
-  return exe;
-}
-
-interface RunResult {
-  readonly status: number | null;
-  readonly stdout: string;
-  readonly stderr: string;
-}
-
-/**
- * Runs the shim via `node`, forwarding `args` and merging `extraEnv` into the
- * environment. The shim uses stdio:'inherit', so the child Bun's output flows
- * to stdout/stderr which spawnSync captures.
- */
-function runShim(
-  layout: Layout,
-  args: readonly string[] = [],
-  extraEnv: Record<string, string> = {},
-): RunResult {
-  const result = spawnSync('node', [layout.shim, ...args], {
-    cwd: layout.root,
-    encoding: 'utf8',
-    timeout: LAUNCH_TIMEOUT_MS,
-    env: { ...process.env, ...extraEnv },
-    ...(isWin ? { windowsHide: true } : {}),
-  });
-  return {
-    status: result.status,
-    stdout: result.stdout ?? '',
-    stderr: result.stderr ?? '',
-  };
-}
-
-/** Parses the JSON line the entry prints, or returns null if absent. */
-function parseEntryOutput(
-  stdout: string,
-): { exe: string; argv: string[] } | null {
-  const line = stdout
-    .split(/\r?\n/)
-    .find((candidate) => candidate.trim().startsWith('{'));
-  if (line === undefined) {
-    return null;
-  }
-  try {
-    return JSON.parse(line) as { exe: string; argv: string[] };
-  } catch {
-    return null;
-  }
-}
+import {
+  MAX_INTERVAL_MS,
+  MAX_SNAPSHOT_HEAP_MB_LIMIT,
+} from '../memory/probe.ts';
+import {
+  LAUNCHER_FAILURE_EXIT,
+  LAUNCH_TIMEOUT_MS,
+  cliManifestPath,
+  defaultEntryBody,
+  hostOvenVariants,
+  isWin,
+  makeLayout,
+  parseEntryOutput,
+  placeBundledBun,
+  placeOvenBun,
+  readCapture,
+  runShim,
+  shimSrc,
+  writeBundleEntry,
+  writeProfileLauncher,
+  writeProfilerEntry,
+  writeSourceEntry,
+  type Layout,
+  type ProfilerArtifact,
+  type RunResult,
+} from './issue-2978-node-shim-helpers.ts';
 
 describe('packages/cli/bin/llxprt.mjs node-shebang shim (issue #2978)', () => {
   let tempDir: string;
@@ -310,6 +169,552 @@ describe('packages/cli/bin/llxprt.mjs node-shebang shim (issue #2978)', () => {
   });
 });
 
+describe('packages/cli/bin/llxprt.mjs memory-profile dispatch (issue #3386)', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(path.join(tmpdir(), 'llxprt-shim-profile-'));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('uses the same numeric limits as the memory probe', () => {
+    const shim = readFileSync(shimSrc, 'utf8');
+    const readNumericConstant = (name: string): number => {
+      const match = shim.match(new RegExp(`const ${name} = ([0-9_]+);`));
+      if (match?.[1] === undefined) {
+        throw new Error(`Missing numeric shim constant ${name}`);
+      }
+      return Number(match[1].replaceAll('_', ''));
+    };
+
+    expect(readNumericConstant('MAX_INTERVAL_MS')).toBe(MAX_INTERVAL_MS);
+    expect(readNumericConstant('MAX_SNAPSHOT_HEAP_MB_LIMIT')).toBe(
+      MAX_SNAPSHOT_HEAP_MB_LIMIT,
+    );
+  });
+
+  it('selects the profile launcher for exact activation and keeps ordinary argv in order', () => {
+    const layout = makeLayout(tempDir);
+    placeBundledBun(layout.nodeModules);
+    writeSourceEntry(layout.pkgRoot, 'throw new Error("ordinary entry ran");');
+    writeProfileLauncher(layout.pkgRoot, 'PROFILE_LAUNCHER_RAN');
+
+    const res = runShim(layout, [
+      '--provider',
+      'fake',
+      '--memprofile-dir',
+      'run path',
+      '--memprofile',
+      'prompt one',
+      '--memprofile-snapshots',
+      '--model',
+      'fake-model',
+      '--memprofile-max-heap-mb',
+      '512',
+      'prompt two',
+    ]);
+
+    expect(res.status, `stderr: ${res.stderr}`).toBe(0);
+    expect(res.stdout).toContain('PROFILE_LAUNCHER_RAN');
+    const out = parseEntryOutput(res.stdout);
+    expect(out?.argv).toEqual([
+      '--dir',
+      'run path',
+      '--snapshots',
+      '--max-heap-mb',
+      '512',
+      '--',
+      '--provider',
+      'fake',
+      'prompt one',
+      '--model',
+      'fake-model',
+      'prompt two',
+    ]);
+  });
+
+  it('preserves the launcher passthrough boundary when no profile options precede it', () => {
+    const layout = makeLayout(tempDir);
+    placeBundledBun(layout.nodeModules);
+    writeProfileLauncher(layout.pkgRoot, 'PROFILE_LAUNCHER_RAN');
+
+    const res = runShim(layout, [
+      '--memprofile',
+      '--profile-load',
+      'installed-profile',
+    ]);
+
+    expect(res.status, `stderr: ${res.stderr}`).toBe(0);
+    expect(parseEntryOutput(res.stdout)?.argv).toEqual([
+      '--',
+      '--profile-load',
+      'installed-profile',
+    ]);
+  });
+
+  it('does not activate profiling for --memprofile after a user --', () => {
+    const layout = makeLayout(tempDir);
+    placeBundledBun(layout.nodeModules);
+    writeSourceEntry(layout.pkgRoot, defaultEntryBody);
+
+    const res = runShim(layout, ['--', '--memprofile']);
+
+    expect(res.status, `stderr: ${res.stderr}`).toBe(0);
+    expect(parseEntryOutput(res.stdout)?.argv).toEqual(['--', '--memprofile']);
+  });
+
+  it('leaves memprofile controls after a user -- as ordinary arguments in order', () => {
+    const layout = makeLayout(tempDir);
+    placeBundledBun(layout.nodeModules);
+    writeSourceEntry(layout.pkgRoot, defaultEntryBody);
+    const args = [
+      '--',
+      '--memprofile-dir',
+      'run path',
+      '--memprofile-snapshots',
+      '--memprofile-max-heap-mb',
+      '512',
+    ];
+
+    const res = runShim(layout, args);
+
+    expect(res.status, `stderr: ${res.stderr}`).toBe(0);
+    expect(parseEntryOutput(res.stdout)?.argv).toEqual(args);
+  });
+
+  it('preserves suffix literals in the launcher passthrough after a prefix activation', () => {
+    const layout = makeLayout(tempDir);
+    placeBundledBun(layout.nodeModules);
+    writeProfileLauncher(layout.pkgRoot, 'PROFILE_LAUNCHER_RAN');
+
+    const res = runShim(layout, [
+      '--memprofile',
+      '--memprofile-snapshots',
+      'prompt',
+      '--',
+      '--memprofile',
+      '--memprofile-max-heap-mb',
+      '99',
+    ]);
+
+    expect(res.status, `stderr: ${res.stderr}`).toBe(0);
+    expect(res.stdout).toContain('PROFILE_LAUNCHER_RAN');
+    expect(parseEntryOutput(res.stdout)?.argv).toEqual([
+      '--snapshots',
+      '--',
+      'prompt',
+      '--',
+      '--memprofile',
+      '--memprofile-max-heap-mb',
+      '99',
+    ]);
+  });
+
+  it('counts duplicate activation only before the first user --', () => {
+    const layout = makeLayout(tempDir);
+    placeBundledBun(layout.nodeModules);
+    writeProfileLauncher(layout.pkgRoot, 'PROFILE_LAUNCHER_RAN');
+
+    const bare = runShim(layout, ['--memprofile', '--', '--memprofile']);
+    expect(bare.status, `stderr: ${bare.stderr}`).toBe(0);
+    expect(bare.stdout).toContain('PROFILE_LAUNCHER_RAN');
+    expect(parseEntryOutput(bare.stdout)?.argv).toEqual([
+      '--',
+      '--',
+      '--memprofile',
+    ]);
+
+    const attached = runShim(layout, [
+      '--memprofile',
+      '--',
+      '--memprofile=5000',
+    ]);
+    expect(attached.status, `stderr: ${attached.stderr}`).toBe(0);
+    expect(attached.stdout).toContain('PROFILE_LAUNCHER_RAN');
+    expect(parseEntryOutput(attached.stdout)?.argv).toEqual([
+      '--',
+      '--',
+      '--memprofile=5000',
+    ]);
+
+    const duplicate = runShim(layout, ['--memprofile', '--memprofile=1000']);
+    expect(duplicate.status).not.toBe(0);
+    expect(duplicate.stderr).toContain('may only be specified once');
+    expect(duplicate.stdout).not.toContain('PROFILE_LAUNCHER_RAN');
+  });
+
+  it('keeps a user -- after a memprofile utility subcommand in the child argv', () => {
+    const layout = makeLayout(tempDir);
+    placeBundledBun(layout.nodeModules);
+    writeSourceEntry(layout.pkgRoot, 'throw new Error("ordinary entry ran");');
+    writeProfilerEntry(
+      layout.pkgRoot,
+      'memprofile-analyze.js',
+      'MEMPROFILE_ANALYZE_RAN',
+    );
+
+    const res = runShim(layout, [
+      'memprofile',
+      'analyze',
+      'heap.snapshot',
+      '--',
+      '--verbose',
+    ]);
+
+    expect(res.status, `stderr: ${res.stderr}`).toBe(0);
+    expect(res.stdout).toContain('MEMPROFILE_ANALYZE_RAN');
+    expect(parseEntryOutput(res.stdout)?.argv).toEqual([
+      'heap.snapshot',
+      '--',
+      '--verbose',
+    ]);
+  });
+
+  it('translates an attached interval and accepts the profiler numeric limits', () => {
+    const layout = makeLayout(tempDir);
+    placeBundledBun(layout.nodeModules);
+    writeProfileLauncher(layout.pkgRoot, 'PROFILE_LAUNCHER_RAN');
+
+    const res = runShim(layout, [
+      `--memprofile=${MAX_INTERVAL_MS}`,
+      '--memprofile-max-heap-mb',
+      String(MAX_SNAPSHOT_HEAP_MB_LIMIT),
+      '--sandbox',
+    ]);
+
+    expect(res.status, `stderr: ${res.stderr}`).toBe(0);
+    const out = parseEntryOutput(res.stdout);
+    expect(out?.argv).toEqual([
+      '--interval',
+      String(MAX_INTERVAL_MS),
+      '--max-heap-mb',
+      String(MAX_SNAPSHOT_HEAP_MB_LIMIT),
+      '--',
+      '--sandbox',
+    ]);
+  });
+
+  it('leaves similar activation text and inactive control flags untouched', () => {
+    const layout = makeLayout(tempDir);
+    placeBundledBun(layout.nodeModules);
+    writeSourceEntry(layout.pkgRoot, defaultEntryBody);
+    const args = [
+      '--memprofiled',
+      '--memprofile-dir',
+      'ordinary path',
+      '--memprofile-snapshots',
+      '--memprofile-max-heap-mb',
+      '12',
+    ];
+
+    const res = runShim(layout, args);
+
+    expect(res.status, `stderr: ${res.stderr}`).toBe(0);
+    expect(parseEntryOutput(res.stdout)?.argv).toEqual(args);
+  });
+
+  const invalidProfileCases: ReadonlyArray<{
+    readonly name: string;
+    readonly args: readonly string[];
+    readonly diagnostic: string;
+  }> = [
+    {
+      name: 'empty attached interval',
+      args: ['--memprofile='],
+      diagnostic: 'invalid value for --memprofile',
+    },
+    {
+      name: 'duplicate activation',
+      args: ['--memprofile', '--memprofile=1000'],
+      diagnostic: 'may only be specified once',
+    },
+    {
+      name: 'missing directory',
+      args: ['--memprofile', '--memprofile-dir'],
+      diagnostic: 'missing value for --memprofile-dir',
+    },
+    {
+      name: 'missing maximum heap',
+      args: ['--memprofile', '--memprofile-max-heap-mb'],
+      diagnostic: 'missing value for --memprofile-max-heap-mb',
+    },
+    {
+      name: 'zero interval',
+      args: ['--memprofile=0'],
+      diagnostic: 'positive integer',
+    },
+    {
+      name: 'fractional interval',
+      args: ['--memprofile=1.5'],
+      diagnostic: 'positive integer',
+    },
+    {
+      name: 'scientific-notation interval',
+      args: ['--memprofile=1e3'],
+      diagnostic: 'positive integer',
+    },
+    {
+      name: 'hexadecimal interval',
+      args: ['--memprofile=0x10'],
+      diagnostic: 'positive integer',
+    },
+    {
+      name: 'signed maximum heap',
+      args: ['--memprofile', '--memprofile-max-heap-mb', '+5'],
+      diagnostic: 'positive integer',
+    },
+    {
+      name: 'duplicate directory control',
+      args: [
+        '--memprofile',
+        '--memprofile-dir',
+        'one',
+        '--memprofile-dir',
+        'two',
+      ],
+      diagnostic: '--memprofile-dir may only be specified once',
+    },
+    {
+      name: 'duplicate snapshots control',
+      args: [
+        '--memprofile',
+        '--memprofile-snapshots',
+        '--memprofile-snapshots',
+      ],
+      diagnostic: '--memprofile-snapshots may only be specified once',
+    },
+    {
+      name: 'duplicate maximum heap control',
+      args: [
+        '--memprofile',
+        '--memprofile-max-heap-mb',
+        '5',
+        '--memprofile-max-heap-mb',
+        '6',
+      ],
+      diagnostic: '--memprofile-max-heap-mb may only be specified once',
+    },
+    {
+      name: 'interval above the probe limit',
+      args: [`--memprofile=${MAX_INTERVAL_MS + 1}`],
+      diagnostic: `must be <= ${MAX_INTERVAL_MS}`,
+    },
+    {
+      name: 'zero maximum heap',
+      args: ['--memprofile', '--memprofile-max-heap-mb', '0'],
+      diagnostic: 'positive integer',
+    },
+    {
+      name: 'maximum heap above the probe limit',
+      args: [
+        '--memprofile',
+        '--memprofile-max-heap-mb',
+        String(MAX_SNAPSHOT_HEAP_MB_LIMIT + 1),
+      ],
+      diagnostic: `must be <= ${MAX_SNAPSHOT_HEAP_MB_LIMIT}`,
+    },
+  ];
+
+  for (const invalidCase of invalidProfileCases) {
+    it(`rejects ${invalidCase.name} before spawning Bun`, () => {
+      const layout = makeLayout(tempDir);
+      placeBundledBun(layout.nodeModules);
+      writeProfileLauncher(layout.pkgRoot, 'PROFILE_LAUNCHER_MUST_NOT_RUN');
+
+      const res = runShim(layout, invalidCase.args);
+
+      expect(res.status).not.toBe(0);
+      expect(res.stderr).toContain(invalidCase.diagnostic);
+      expect(res.stderr).toContain('Usage: llxprt');
+      expect(res.stdout).not.toContain('PROFILE_LAUNCHER_MUST_NOT_RUN');
+    });
+  }
+
+  const utilityCases: ReadonlyArray<{
+    readonly command: 'request' | 'report' | 'analyze';
+    readonly artifact: ProfilerArtifact;
+    readonly args: readonly string[];
+  }> = [
+    {
+      command: 'request',
+      artifact: 'memprofile-request.js',
+      args: ['--heap', '--dir', 'run path'],
+    },
+    {
+      command: 'report',
+      artifact: 'memprofile-report.js',
+      args: ['samples.jsonl'],
+    },
+    {
+      command: 'analyze',
+      artifact: 'memprofile-analyze.js',
+      args: ['heap snapshot', '--top', '12'],
+    },
+  ];
+
+  for (const utilityCase of utilityCases) {
+    it(`dispatches memprofile ${utilityCase.command} with remaining argv unchanged`, () => {
+      const layout = makeLayout(tempDir);
+      placeBundledBun(layout.nodeModules);
+      writeSourceEntry(
+        layout.pkgRoot,
+        'throw new Error("ordinary entry ran");',
+      );
+      writeProfilerEntry(
+        layout.pkgRoot,
+        utilityCase.artifact,
+        `MEMPROFILE_${utilityCase.command.toUpperCase()}_RAN`,
+      );
+
+      const res = runShim(layout, [
+        'memprofile',
+        utilityCase.command,
+        ...utilityCase.args,
+      ]);
+
+      expect(res.status, `stderr: ${res.stderr}`).toBe(0);
+      expect(res.stdout).toContain(
+        `MEMPROFILE_${utilityCase.command.toUpperCase()}_RAN`,
+      );
+      expect(parseEntryOutput(res.stdout)?.argv).toEqual(utilityCase.args);
+    });
+  }
+
+  it('rejects a missing or unknown memprofile utility subcommand with usage', () => {
+    const layout = makeLayout(tempDir);
+    placeBundledBun(layout.nodeModules);
+    writeSourceEntry(layout.pkgRoot, 'console.log("ORDINARY_MUST_NOT_RUN");');
+
+    const missing = runShim(layout, ['memprofile']);
+    const unknown = runShim(layout, ['memprofile', 'unknown']);
+
+    expect(missing.status).not.toBe(0);
+    expect(missing.stderr).toContain('missing memprofile subcommand');
+    expect(missing.stderr).toContain('Usage: llxprt memprofile');
+    expect(unknown.status).not.toBe(0);
+    expect(unknown.stderr).toContain('unknown memprofile subcommand: unknown');
+    expect(unknown.stderr).toContain('Usage: llxprt memprofile');
+    expect(missing.stdout + unknown.stdout).not.toContain(
+      'ORDINARY_MUST_NOT_RUN',
+    );
+  });
+
+  for (const missingArtifact of [
+    'memprofile-launcher.js',
+    'memprofile-preload.js',
+    'llxprt.js',
+  ] as const) {
+    it(`exits 43 before launch when ${missingArtifact} is missing`, () => {
+      const layout = makeLayout(tempDir);
+      placeBundledBun(layout.nodeModules);
+      writeSourceEntry(layout.pkgRoot, 'console.log("ORDINARY_MUST_NOT_RUN");');
+      writeProfileLauncher(layout.pkgRoot, 'PROFILE_LAUNCHER_MUST_NOT_RUN');
+      rmSync(path.join(layout.pkgRoot, 'bundle', missingArtifact));
+
+      const res = runShim(layout, ['--memprofile']);
+
+      expect(res.status).toBe(LAUNCHER_FAILURE_EXIT);
+      expect(res.stderr).toContain('memory profiler entry point was not found');
+      expect(res.stderr).toContain(missingArtifact);
+      expect(res.stderr).toContain('reinstall @vybestack/llxprt-code');
+      expect(res.stdout).not.toContain('PROFILE_LAUNCHER_MUST_NOT_RUN');
+      expect(res.stdout).not.toContain('ORDINARY_MUST_NOT_RUN');
+    });
+  }
+
+  it('propagates profile and utility child exit statuses', () => {
+    const layout = makeLayout(tempDir);
+    placeBundledBun(layout.nodeModules);
+    writeProfileLauncher(layout.pkgRoot, 'PROFILE_LAUNCHER_RAN');
+    writeProfilerEntry(
+      layout.pkgRoot,
+      'memprofile-report.js',
+      'MEMPROFILE_REPORT_RAN',
+    );
+
+    const profile = runShim(layout, ['--memprofile'], {
+      LLXPRT_TEST_EXIT: '19',
+    });
+    const utility = runShim(layout, ['memprofile', 'report'], {
+      LLXPRT_TEST_EXIT: '23',
+    });
+
+    expect(profile.status, `stderr: ${profile.stderr}`).toBe(19);
+    expect(utility.status, `stderr: ${utility.stderr}`).toBe(23);
+  });
+
+  it.skipIf(isWin)(
+    'delivers one SIGINT to a profiled child for one terminal process-group signal',
+    async () => {
+      const layout = makeLayout(tempDir);
+      placeBundledBun(layout.nodeModules);
+      writeProfileLauncher(layout.pkgRoot, 'PROFILE_LAUNCHER_READY');
+      const readyPath = path.join(layout.root, 'signal-ready');
+      const countPath = path.join(layout.root, 'signal-count');
+      writeFileSync(
+        path.join(layout.pkgRoot, 'bundle', 'memprofile-launcher.js'),
+        [
+          'import { writeFileSync } from "node:fs";',
+          'if (process.env.LLXPRT_INTERNAL_MEMPROFILE_SIGNAL_BRIDGE !== "1") throw new Error("signal bridge marker missing");',
+          'let signalCount = 0;',
+          'process.on("SIGINT", () => {',
+          '  signalCount++;',
+          '  if (signalCount === 1) {',
+          `    setTimeout(() => { writeFileSync(${JSON.stringify(countPath)}, String(signalCount)); process.exit(0); }, 250);`,
+          '  }',
+          '});',
+          `writeFileSync(${JSON.stringify(readyPath)}, 'ready');`,
+          'setInterval(() => {}, 1000);',
+        ].join('\n'),
+      );
+
+      const shim = spawn(process.execPath, [layout.shim, '--memprofile'], {
+        cwd: layout.root,
+        detached: true,
+        env: { ...process.env },
+        stdio: 'ignore',
+      });
+      if (shim.pid === undefined) {
+        throw new Error('profile shim did not expose a pid');
+      }
+      const deadline = Date.now() + 10_000;
+      while (!existsSync(readyPath)) {
+        if (Date.now() >= deadline) {
+          process.kill(-shim.pid, 'SIGKILL');
+          throw new Error('timed out waiting for profiled child startup');
+        }
+        await Bun.sleep(25);
+      }
+
+      process.kill(-shim.pid, 'SIGINT');
+      const result = await new Promise<{
+        code: number | null;
+        signal: NodeJS.Signals | null;
+      }>((resolvePromise, reject) => {
+        const timeout = setTimeout(() => {
+          process.kill(-shim.pid, 'SIGKILL');
+          reject(new Error('profile shim did not exit after SIGINT'));
+        }, 10_000);
+        shim.once('error', (error) => {
+          clearTimeout(timeout);
+          reject(error);
+        });
+        shim.once('exit', (code, signal) => {
+          clearTimeout(timeout);
+          resolvePromise({ code, signal });
+        });
+      });
+
+      expect(result).toEqual({ code: 0, signal: null });
+      expect(readFileSync(countPath, 'utf8')).toBe('1');
+    },
+    30_000,
+  );
+});
+
 /**
  * Issue #3389: the shim SPAWNS Bun rather than exec'ing it, so descriptors are
  * not inherited automatically the way they were under the `#!/bin/sh` launcher
@@ -372,23 +777,37 @@ function parseCapabilityOutput(stdout: string): CapabilityEntryOutput | null {
  * Runs the shim with descriptor 3 already open on a file holding the token,
  * exactly as the sandbox entrypoint arranges it before exec'ing the CLI.
  */
+function quoteForBash(value: string): string {
+  return `'${value.replaceAll("'", "'\"'\"'")}'`;
+}
+
 function runShimWithOpenFd3(
   layout: Layout,
+  args: readonly string[] = [],
   extraEnv: Record<string, string> = {},
 ): RunResult & { readonly tokenIno: string } {
   const tokenFile = path.join(layout.root, 'capability-token');
+  const stdoutPath = path.join(layout.root, 'fd3-stdout.log');
+  const stderrPath = path.join(layout.root, 'fd3-stderr.log');
   writeFileSync(tokenFile, `${CAPABILITY_TOKEN}\n`);
-  const script = `exec 3<${JSON.stringify(tokenFile)}\nexec node ${JSON.stringify(layout.shim)}`;
+  writeFileSync(stdoutPath, '');
+  writeFileSync(stderrPath, '');
+  const quotedArgs = args.map(quoteForBash).join(' ');
+  const script =
+    `exec 1>${quoteForBash(stdoutPath)}\n` +
+    `exec 2>${quoteForBash(stderrPath)}\n` +
+    `exec 3<${quoteForBash(tokenFile)}\n` +
+    `exec node ${quoteForBash(layout.shim)}${quotedArgs === '' ? '' : ` ${quotedArgs}`}`;
   const result = spawnSync('bash', ['--noprofile', '--norc', '-c', script], {
     cwd: layout.root,
-    encoding: 'utf8',
     timeout: LAUNCH_TIMEOUT_MS,
     env: { ...process.env, ...extraEnv },
+    stdio: 'ignore',
   });
   return {
     status: result.status,
-    stdout: result.stdout ?? '',
-    stderr: result.stderr ?? '',
+    stdout: readCapture(stdoutPath),
+    stderr: readCapture(stderrPath, result.error),
     tokenIno: String(statSync(tokenFile).ino),
   };
 }
@@ -411,7 +830,7 @@ describe('packages/cli/bin/llxprt.mjs capability descriptor transport (issue #33
       placeBundledBun(layout.nodeModules);
       writeSourceEntry(layout.pkgRoot, capabilityEntryBody);
 
-      const res = runShimWithOpenFd3(layout, { LLXPRT_CAPABILITY_FD: '3' });
+      const res = runShimWithOpenFd3(layout, [], { LLXPRT_CAPABILITY_FD: '3' });
 
       expect(res.status, `stderr: ${res.stderr}`).toBe(0);
       const out = parseCapabilityOutput(res.stdout);
@@ -452,11 +871,37 @@ describe('packages/cli/bin/llxprt.mjs capability descriptor transport (issue #33
       placeBundledBun(layout.nodeModules);
       writeSourceEntry(layout.pkgRoot, 'console.log("CLI_RAN");');
 
-      const res = runShimWithOpenFd3(layout, { LLXPRT_CAPABILITY_FD: '4' });
+      const res = runShimWithOpenFd3(layout, [], { LLXPRT_CAPABILITY_FD: '4' });
 
       expect(res.status).toBe(LAUNCHER_FAILURE_EXIT);
       expect(res.stderr).toContain('LLXPRT_CAPABILITY_FD');
       expect(res.stdout).not.toContain('CLI_RAN');
+    },
+  );
+
+  it.skipIf(isWin)(
+    'forwards descriptor 3 unchanged to a selected profile launcher',
+    () => {
+      const layout = makeLayout(tempDir);
+      placeBundledBun(layout.nodeModules);
+      const bundleDir = path.join(layout.pkgRoot, 'bundle');
+      mkdirSync(bundleDir, { recursive: true });
+      writeFileSync(
+        path.join(bundleDir, 'memprofile-launcher.js'),
+        capabilityEntryBody,
+      );
+      writeFileSync(path.join(bundleDir, 'memprofile-preload.js'), '');
+      writeBundleEntry(layout.pkgRoot, '');
+
+      const res = runShimWithOpenFd3(layout, ['--memprofile'], {
+        LLXPRT_CAPABILITY_FD: '3',
+      });
+
+      expect(res.status, `stderr: ${res.stderr}`).toBe(0);
+      const out = parseCapabilityOutput(res.stdout);
+      expect(out?.marker).toBe('3');
+      expect(out?.ino).toBe(res.tokenIno);
+      expect(out?.raw).toBe(`${CAPABILITY_TOKEN}\n`);
     },
   );
 });

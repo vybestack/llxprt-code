@@ -3,6 +3,7 @@ import {
   writeToStderr,
   triggerSessionEndHook,
   SessionEndReason,
+  OutputFormat,
 } from '@vybestack/llxprt-code-core';
 import {
   debugLogger,
@@ -11,7 +12,10 @@ import {
 } from '@vybestack/llxprt-code-telemetry';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { type LoadedSettings } from '../config/settings.js';
-import { getStartupWarnings } from '../utils/startupWarnings.js';
+import {
+  getStartupWarnings,
+  getSandboxHandoffWarning,
+} from '../utils/startupWarnings.js';
 import { getUserStartupWarnings } from '../utils/userStartupWarnings.js';
 import { runNonInteractive } from '../nonInteractiveCli.js';
 import type { SessionRecordingSetup } from '../cliSessionBootstrap.js';
@@ -89,6 +93,10 @@ export async function dispatchInteractiveOrNonInteractive({
   // from the public accessor rather than a separately-threaded instance.
   const sessionMessageBus = agent.getMessageBus();
 
+  // The supervisor sets the handoff flag only when the host empty-agent
+  // preflight fired; the in-container session is where the user sees it.
+  const sandboxHandoffWarning = getSandboxHandoffWarning(process.env);
+
   // Render UI, passing necessary config values. Check that there is no command line question.
   if (typeof config.isInteractive === 'function' && config.isInteractive()) {
     // Startup warnings are only consumed by the interactive UI, so compute
@@ -98,7 +106,11 @@ export async function dispatchInteractiveOrNonInteractive({
       getStartupWarnings(),
       getUserStartupWarnings(settings.merged),
     ]);
-    const startupWarnings = [...systemWarnings, ...userWarnings];
+    const startupWarnings = [
+      ...(sandboxHandoffWarning !== undefined ? [sandboxHandoffWarning] : []),
+      ...systemWarnings,
+      ...userWarnings,
+    ];
 
     // The single interactive Agent was created at the composition root and is
     // threaded in here. `fromConfig` fired the SessionStart hook internally
@@ -119,6 +131,17 @@ export async function dispatchInteractiveOrNonInteractive({
       suppressStartupWelcome,
     );
     return;
+  }
+
+  if (
+    sandboxHandoffWarning !== undefined &&
+    config.getOutputFormat() === OutputFormat.TEXT
+  ) {
+    // fd-direct bypass: reaches physical stderr immediately even though
+    // patchStdio() redirected process.stderr.write to the event bus. Held back
+    // for machine-readable formats, which a TTY-allocating container engine
+    // merges onto stdout alongside the payload.
+    writeToStderr(sandboxHandoffWarning);
   }
 
   await runPipedOrPromptSession({

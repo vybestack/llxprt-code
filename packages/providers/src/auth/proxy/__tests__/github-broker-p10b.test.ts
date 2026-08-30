@@ -177,7 +177,12 @@ describe('search pure functions (P10)', () => {
       const argv = buildSearchIssuesArgv({ query: 'is:open label:bug' });
       expect(argv[0]).toBe('search');
       expect(argv[1]).toBe('issues');
-      expect(argv[2]).toBe('is:open label:bug');
+      // Each whitespace-separated term is its OWN argv element so gh parses
+      // every qualifier instead of swallowing the rest of the query, and the
+      // terms sit behind the `--` option terminator so an exclusion term
+      // cannot be read as a flag.
+      const terms = argv.slice(argv.indexOf('--') + 1);
+      expect(terms).toStrictEqual(['is:open', 'label:bug']);
     });
 
     it('includes --json without body', () => {
@@ -186,10 +191,20 @@ describe('search pure functions (P10)', () => {
       expect(argv[jsonIdx + 1]).not.toContain('body');
     });
 
-    it('defaults limit to 30', () => {
+    /**
+     * gh is asked for ONE more row than the caller's limit, so a full page can
+     * be distinguished from a complete result set; `windowByLimit` trims the
+     * probe row and reports `hasMore`. Asserting the raw 30 here would pin the
+     * ambiguity this fixes.
+     *
+     * @plan PLAN-20260828-ISSUE3407
+     * @requirement AC-6
+     * @issue 3407
+     */
+    it('over-fetches one past the default limit of 30', () => {
       const argv = buildSearchIssuesArgv({ query: 'test' });
       const idx = argv.indexOf('--limit');
-      expect(argv[idx + 1]).toBe('30');
+      expect(argv[idx + 1]).toBe('31');
     });
 
     it('appends --repo when provided', () => {
@@ -203,8 +218,267 @@ describe('search pure functions (P10)', () => {
       const argv = buildSearchPrsArgv({ query: 'is:pr is:open' });
       expect(argv[0]).toBe('search');
       expect(argv[1]).toBe('prs');
-      expect(argv[2]).toBe('is:pr is:open');
+      const terms = argv.slice(argv.indexOf('--') + 1);
+      expect(terms).toStrictEqual(['is:pr', 'is:open']);
     });
+  });
+
+  describe('search query tokenization and repo lifting (issue 3407)', () => {
+    const builders: ReadonlyArray<{
+      name: string;
+      build: (p: Record<string, unknown>) => string[];
+    }> = [
+      { name: 'search.issues', build: buildSearchIssuesArgv },
+      { name: 'search.prs', build: buildSearchPrsArgv },
+    ];
+
+    /**
+     * The query terms: everything after the `--` option terminator. Terms are
+     * emitted last and behind `--` so a GitHub exclusion term like
+     * `-label:bug` is not parsed by gh as a CLI flag.
+     */
+    function positionals(argv: string[]): string[] {
+      const end = argv.indexOf('--');
+      return end === -1 ? [] : argv.slice(end + 1);
+    }
+
+    for (const { name, build } of builders) {
+      /**
+       * The actual issue 3407 regression: the whole query used to be spliced
+       * as ONE positional, so gh swallowed the rest of the query as one
+       * qualifier value. Each term must be its own argv element.
+       *
+       * @plan PLAN-20260731-GHBROKER.P10
+       * @requirement REQ-002, REQ-013
+       */
+      it(`${name}: multi-term query becomes separate positional argv elements`, () => {
+        const argv = build({
+          query: 'repo:vybestack/llxprt-code author:acoliver',
+        });
+        // The repo term is lifted into --repo, so the surviving positional
+        // shows the OTHER term alone — the regression was one element containing
+        // the whole string with a space.
+        expect(positionals(argv)).toStrictEqual(['author:acoliver']);
+        // The regression: a single element containing the space must never exist.
+        expect(argv).not.toContain(
+          'repo:vybestack/llxprt-code author:acoliver',
+        );
+        expect(argv.filter((a) => a === '--repo')).toHaveLength(1);
+      });
+
+      /**
+       * A liftable repo: term becomes --repo and is dropped from the
+       * positionals, quoted or not.
+       *
+       * @plan PLAN-20260731-GHBROKER.P10
+       * @requirement REQ-002, REQ-013
+       */
+      it(`${name}: lifts an unquoted repo: term into --repo`, () => {
+        const argv = build({ query: 'repo:vybestack/llxprt-code is:open' });
+        expect(positionals(argv)).toStrictEqual(['is:open']);
+        const idx = argv.indexOf('--repo');
+        expect(idx).toBeGreaterThan(-1);
+        expect(argv[idx + 1]).toBe('vybestack/llxprt-code');
+      });
+
+      /**
+       * @plan PLAN-20260731-GHBROKER.P10
+       * @requirement REQ-002, REQ-013
+       */
+      it(`${name}: lifts a quoted repo: term into --repo, dropping the term`, () => {
+        const argv = build({ query: 'repo:"vybestack/llxprt-code" is:open' });
+        expect(positionals(argv)).toStrictEqual(['is:open']);
+        const idx = argv.indexOf('--repo');
+        expect(idx).toBeGreaterThan(-1);
+        expect(argv[idx + 1]).toBe('vybestack/llxprt-code');
+      });
+
+      /**
+       * An explicit repo param wins on conflict and the embedded repo: term
+       * is STILL dropped, so exactly one --repo appears.
+       *
+       * @plan PLAN-20260731-GHBROKER.P10
+       * @requirement REQ-002, REQ-013
+       */
+      it(`${name}: explicit repo param wins and the embedded repo: term is dropped`, () => {
+        const argv = build({
+          query: 'repo:embedded/repo is:open',
+          repo: 'explicit/repo',
+        });
+        expect(positionals(argv)).toStrictEqual(['is:open']);
+        const repos = argv.filter((a) => a === '--repo');
+        expect(repos).toHaveLength(1);
+        expect(argv[argv.indexOf('--repo') + 1]).toBe('explicit/repo');
+      });
+
+      /**
+       * A repo: value that is not owner/name must stay a positional term and
+       * never become --repo.
+       *
+       * @plan PLAN-20260731-GHBROKER.P10
+       * @requirement REQ-002, REQ-013
+       */
+      it(`${name}: a non-conforming repo: value stays a term`, () => {
+        const argv = build({ query: 'repo:notarepo' });
+        expect(positionals(argv)).toStrictEqual(['repo:notarepo']);
+        expect(argv).not.toContain('--repo');
+      });
+
+      /**
+       * Only the FIRST liftable repo: term is lifted; a second one stays a
+       * positional term.
+       *
+       * @plan PLAN-20260731-GHBROKER.P10
+       * @requirement REQ-002, REQ-013
+       */
+      it(`${name}: a second repo: term stays a positional term`, () => {
+        const argv = build({
+          query: 'repo:first/repo repo:second/repo',
+        });
+        expect(positionals(argv)).toStrictEqual(['repo:second/repo']);
+        const idx = argv.indexOf('--repo');
+        expect(idx).toBeGreaterThan(-1);
+        expect(argv[idx + 1]).toBe('first/repo');
+      });
+
+      /**
+       * Quote stripping: a quoted qualifier value loses its quotes (gh quotes
+       * each value itself, so a pre-quoted value would arrive double-quoted
+       * at the API and match nothing); a multi-word freetext phrase keeps its
+       * inner space as ONE term.
+       *
+       * @plan PLAN-20260731-GHBROKER.P10
+       * @requirement REQ-002, REQ-013
+       */
+      it(`${name}: strips quotes around a qualifier value and keeps freetext phrases intact`, () => {
+        const qualifier = build({ query: 'milestone:"0.11.0" is:open' });
+        expect(positionals(qualifier)).toStrictEqual([
+          'milestone:0.11.0',
+          'is:open',
+        ]);
+        const phrase = build({ query: '"sandbox proxy" is:open' });
+        expect(positionals(phrase)).toStrictEqual(['sandbox proxy', 'is:open']);
+      });
+
+      /**
+       * The builder MUST NEVER add quotes of its own: a quoted value
+       * arriving at the API double-quoted matches nothing. No argv element
+       * may contain a quote character.
+       *
+       * @plan PLAN-20260731-GHBROKER.P10
+       * @requirement REQ-002, REQ-013
+       */
+      it(`${name}: no argv element ever contains a quote character`, () => {
+        const argv = build({
+          query: 'repo:"owner/name" is:open "sandbox proxy"',
+        });
+        expect(argv.some((a) => a.includes('"'))).toBe(false);
+      });
+
+      /**
+       * Tab and newline separate terms exactly like a space.
+       *
+       * @plan PLAN-20260731-GHBROKER.P10
+       * @requirement REQ-002, REQ-013
+       */
+      it(`${name}: tokenizes on tab and newline like a space`, () => {
+        const argv = build({ query: 'is:open\tlabel:bug\nis:pr' });
+        expect(positionals(argv)).toStrictEqual([
+          'is:open',
+          'label:bug',
+          'is:pr',
+        ]);
+      });
+
+      /**
+       * An unterminated quote makes the rest of the string one token rather
+       * than choking: the whole remainder becomes ONE positional term.
+       *
+       * @plan PLAN-20260731-GHBROKER.P10
+       * @requirement REQ-002, REQ-013
+       */
+      it(`${name}: an unterminated quote makes the rest one token`, () => {
+        const argv = build({ query: 'milestone:"0.11.0 is:open' });
+        expect(positionals(argv)).toStrictEqual(['milestone:0.11.0 is:open']);
+      });
+
+      /**
+       * A query that carries no terms of its own must not contribute an
+       * empty positional: an empty argv element reaches gh as an empty
+       * search term rather than as "no term at all".
+       *
+       * @plan PLAN-20260828-ISSUE3407
+       * @requirement AC-2
+       * @issue 3407
+       */
+      it(`${name}: a whitespace-only query contributes no positional terms`, () => {
+        const argv = build({ query: '   ' });
+        expect(positionals(argv)).toStrictEqual([]);
+        expect(argv).not.toContain('');
+        // No terms means no bare trailing terminator either.
+        expect(argv).not.toContain('--');
+        expect(argv[0]).toBe('search');
+        expect(argv.indexOf('--json')).toBe(2);
+      });
+
+      /**
+       * GitHub excludes a qualifier by prefixing it with a dash. Once every
+       * term is its own argv element, gh parses a leading-dash term as a CLI
+       * flag and dies with "unknown shorthand flag: 'l'" unless the terms sit
+       * behind a `--` option terminator. Value validation only rejects a
+       * query that STARTS with a dash, so an interior `-label:bug` reaches
+       * argv and the terminator is what makes it work.
+       *
+       * @plan PLAN-20260828-ISSUE3407
+       * @requirement AC-2
+       * @issue 3407
+       */
+      it(`${name}: an exclusion term is protected by the -- terminator`, () => {
+        const argv = build({ query: 'is:open -label:bug' });
+        expect(positionals(argv)).toStrictEqual(['is:open', '-label:bug']);
+        // Every flag must precede the terminator, or gh sees the terms first.
+        const terminator = argv.indexOf('--');
+        expect(terminator).toBeGreaterThan(-1);
+        expect(argv.indexOf('--json')).toBeLessThan(terminator);
+        expect(argv.indexOf('--limit')).toBeLessThan(terminator);
+        // Nothing after the terminator may be mistaken for a flag position.
+        expect(argv.lastIndexOf('--')).toBe(terminator);
+      });
+
+      /**
+       * @plan PLAN-20260828-ISSUE3407
+       * @requirement AC-1, AC-2
+       * @issue 3407
+       */
+      it(`${name}: --repo is emitted before the terminator, never after`, () => {
+        const argv = build({ query: 'repo:owner/name -label:bug' });
+        const terminator = argv.indexOf('--');
+        const repoIdx = argv.indexOf('--repo');
+        expect(repoIdx).toBeGreaterThan(-1);
+        expect(repoIdx).toBeLessThan(terminator);
+        expect(argv[repoIdx + 1]).toBe('owner/name');
+        expect(positionals(argv)).toStrictEqual(['-label:bug']);
+      });
+
+      /**
+       * When the query is nothing but a liftable repo: term, the term moves
+       * to --repo and the positional slot is left empty rather than being
+       * filled with a stray blank term.
+       *
+       * @plan PLAN-20260828-ISSUE3407
+       * @requirement AC-1
+       * @issue 3407
+       */
+      it(`${name}: a query of only a repo: term becomes --repo with no positionals`, () => {
+        const argv = build({ query: 'repo:vybestack/llxprt-code' });
+        expect(positionals(argv)).toStrictEqual([]);
+        expect(argv).not.toContain('');
+        expect(argv).not.toContain('--');
+        const idx = argv.indexOf('--repo');
+        expect(idx).toBeGreaterThan(-1);
+        expect(argv[idx + 1]).toBe('vybestack/llxprt-code');
+      });
+    }
   });
 
   describe('validateSearchIssuesParams', () => {
@@ -214,10 +488,21 @@ describe('search pure functions (P10)', () => {
       );
     });
 
-    it('rejects dash-prefixed query', () => {
-      expect(validateSearchIssuesParams({ query: '--malicious' })?.code).toBe(
-        'INVALID_PARAM',
-      );
+    /**
+     * See the issue-3407 note on issue.list: exclusion syntax is documented, so
+     * a dash-prefixed query is accepted. It is safe because query terms are
+     * tokenized and emitted after a `--` option terminator, asserted here.
+     *
+     * @plan PLAN-20260828-ISSUE3407
+     * @requirement AC-10
+     * @issue 3407
+     */
+    it('accepts a dash-prefixed query, protected by the -- terminator', () => {
+      expect(validateSearchIssuesParams({ query: '-label:bug' })).toBeNull();
+      const argv = buildSearchIssuesArgv({ query: '-label:bug' });
+      const terminator = argv.indexOf('--');
+      expect(terminator).toBeGreaterThan(-1);
+      expect(argv.slice(terminator + 1)).toStrictEqual(['-label:bug']);
     });
 
     it('rejects dash-prefixed repo', () => {
@@ -228,10 +513,8 @@ describe('search pure functions (P10)', () => {
   });
 
   describe('validateSearchPrsParams', () => {
-    it('rejects dash-prefixed query', () => {
-      expect(validateSearchPrsParams({ query: '--bad' })?.code).toBe(
-        'INVALID_PARAM',
-      );
+    it('accepts a dash-prefixed query like search.issues', () => {
+      expect(validateSearchPrsParams({ query: '-label:bug' })).toBeNull();
     });
   });
 
@@ -287,10 +570,20 @@ describe('run.list pure functions (P10)', () => {
       expect(argv[idx + 1]).toBe('feature');
     });
 
-    it('defaults limit to 30', () => {
+    /**
+     * gh is asked for ONE more row than the caller's limit, so a full page can
+     * be distinguished from a complete result set; `windowByLimit` trims the
+     * probe row and reports `hasMore`. Asserting the raw 30 here would pin the
+     * ambiguity this fixes.
+     *
+     * @plan PLAN-20260828-ISSUE3407
+     * @requirement AC-6
+     * @issue 3407
+     */
+    it('over-fetches one past the default limit of 30', () => {
       const argv = buildRunListArgv({});
       const idx = argv.indexOf('--limit');
-      expect(argv[idx + 1]).toBe('30');
+      expect(argv[idx + 1]).toBe('31');
     });
 
     it('appends --repo when provided', () => {
@@ -353,10 +646,20 @@ describe('label.list pure functions (P10)', () => {
       expect(argv[jsonIdx + 1]).toContain('description');
     });
 
-    it('defaults limit to 30', () => {
+    /**
+     * gh is asked for ONE more row than the caller's limit, so a full page can
+     * be distinguished from a complete result set; `windowByLimit` trims the
+     * probe row and reports `hasMore`. Asserting the raw 30 here would pin the
+     * ambiguity this fixes.
+     *
+     * @plan PLAN-20260828-ISSUE3407
+     * @requirement AC-6
+     * @issue 3407
+     */
+    it('over-fetches one past the default limit of 30', () => {
       const argv = buildLabelListArgv({});
       const idx = argv.indexOf('--limit');
-      expect(argv[idx + 1]).toBe('30');
+      expect(argv[idx + 1]).toBe('31');
     });
 
     it('appends --repo when provided', () => {

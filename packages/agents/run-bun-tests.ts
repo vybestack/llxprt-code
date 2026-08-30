@@ -43,6 +43,7 @@ import { tmpdir } from 'node:os';
 import {
   DEFAULT_PER_FILE_TIMEOUT_MS,
   DEFAULT_PER_TEST_TIMEOUT_MS,
+  envPerFileTimeoutMs,
   MAX_TEST_CONCURRENCY,
   resolveTestConcurrency,
 } from '../../scripts/lib/bun-test-policy.js';
@@ -95,21 +96,10 @@ const CONCURRENCY = resolveTestConcurrency({
  * cut it off.
  *
  * This covers slow suites only. A suite that never completes is still caught
- * by PER_FILE_TIMEOUT_MS below, which is what should happen - a raised
- * per-test bound must not turn a hang into a longer hang.
+ * by the per-file budget below, which is what should happen - a raised per-test
+ * bound must not turn a hang into a longer hang.
  */
 const PER_TEST_TIMEOUT_MS = DEFAULT_PER_TEST_TIMEOUT_MS;
-
-/**
- * Per-file wall-clock budget. The slowest agents files (streaming chat-session
- * suites) take tens of seconds, so this is generous enough to avoid flaking
- * while still converting a genuine hang into a reported failure.
- */
-// Raised alongside the per-test bound: the whole-file wall clock for
-// subagentOrchestrator-loadBalancer was measured at 99.4s under load, leaving
-// almost no headroom under the previous 120s cap. This remains the backstop
-// for a suite that genuinely hangs.
-const PER_FILE_TIMEOUT_MS = DEFAULT_PER_FILE_TIMEOUT_MS;
 
 /**
  * Directories that are pruned during discovery.
@@ -184,9 +174,33 @@ interface TestResult {
   /** Set when the child was terminated by a signal rather than exiting. */
   readonly signal: NodeJS.Signals | null;
   readonly timedOut: boolean;
+  readonly timeoutMs: number;
 }
 
-function runTestFile(file: string, reportPath: string): Promise<TestResult> {
+export async function runTestFileWithTimeoutRetry<
+  T extends { readonly timedOut: boolean },
+>(
+  file: string,
+  runAttempt: () => Promise<T>,
+  logRetry: (message: string) => void = (message) => console.log(message),
+): Promise<T> {
+  const firstAttempt = await runAttempt();
+  if (!firstAttempt.timedOut) {
+    return firstAttempt;
+  }
+
+  logRetry(`RETRY (2/2): ${file} after per-file timeout`);
+  return runAttempt();
+}
+
+export function runTestFile(
+  file: string,
+  reportPath: string,
+): Promise<TestResult> {
+  const timeoutMs =
+    envPerFileTimeoutMs(process.env, 'LLXPRT_TEST_FILE_TIMEOUT_MS') ??
+    DEFAULT_PER_FILE_TIMEOUT_MS;
+  rmSync(reportPath, { force: true });
   return new Promise((resolve) => {
     let settled = false;
     const settleOnce = (result: TestResult): void => {
@@ -224,7 +238,7 @@ function runTestFile(file: string, reportPath: string): Promise<TestResult> {
     const timer = setTimeout(() => {
       killedByTimeout = true;
       child.kill('SIGKILL');
-    }, PER_FILE_TIMEOUT_MS);
+    }, timeoutMs);
 
     // `close` rather than `exit`: it fires once the child's stdio has been
     // released, so a slot is not reused while the process is still tearing down.
@@ -235,6 +249,7 @@ function runTestFile(file: string, reportPath: string): Promise<TestResult> {
         exitCode: code,
         signal,
         timedOut: killedByTimeout,
+        timeoutMs,
       });
     });
 
@@ -246,6 +261,7 @@ function runTestFile(file: string, reportPath: string): Promise<TestResult> {
         exitCode: -1,
         signal: null,
         timedOut: false,
+        timeoutMs,
       });
     });
   });
@@ -261,7 +277,7 @@ function escapeXml(value: string): string {
 
 function describeFailure(result: TestResult): string {
   if (result.timedOut) {
-    return `TIMEOUT after ${PER_FILE_TIMEOUT_MS}ms`;
+    return `TIMEOUT after ${result.timeoutMs}ms`;
   }
   if (result.signal !== null) {
     // Distinguishes an external kill (typically the OOM killer on a small CI
@@ -375,6 +391,14 @@ function generateJUnit(
 }
 
 async function main(): Promise<void> {
+  // Fail fast on an invalid per-file budget before any worker spawns, so the
+  // EMFILE catch-all in the worker cannot swallow a misconfiguration into a
+  // generic failed-file result. The validated value also feeds the catch-all
+  // so spawn failures report the budget that was actually in effect.
+  const perFileOverrideMs = envPerFileTimeoutMs(
+    process.env,
+    'LLXPRT_TEST_FILE_TIMEOUT_MS',
+  );
   const testFiles = discoverTestFiles(WORKSPACE_ROOT).map((file) =>
     relative(WORKSPACE_ROOT, file),
   );
@@ -403,7 +427,12 @@ async function main(): Promise<void> {
     while (nextIndex < testFiles.length) {
       const file = testFiles[nextIndex++];
       try {
-        results.push(await runTestFile(file, reportPathFor(file)));
+        const reportPath = reportPathFor(file);
+        results.push(
+          await runTestFileWithTimeoutRetry(file, () =>
+            runTestFile(file, reportPath),
+          ),
+        );
       } catch (error: unknown) {
         // `spawn` can throw synchronously under OS-level resource exhaustion
         // (EMFILE). Record it as a failed file so the run still produces a
@@ -420,6 +449,7 @@ async function main(): Promise<void> {
           exitCode: -1,
           signal: null,
           timedOut: false,
+          timeoutMs: perFileOverrideMs ?? DEFAULT_PER_FILE_TIMEOUT_MS,
         });
       }
     }

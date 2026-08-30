@@ -97,7 +97,9 @@ Examples:
   { "op": "issue.view", "number": 1663, "comments": true }
   { "op": "issue.view", "number": 42, "repo": "acoliver/otherproject" }
   { "op": "issue.list", "search": "sandbox", "state": "open", "limit": 20 }
+  { "op": "issue.list", "state": "open", "search": "no:assignee milestone:0.11.0" }
   { "op": "issue.edit", "number": 1663, "addLabel": ["security"], "type": "Feature" }
+  { "op": "search.issues", "query": "author:acoliver is:open", "repo": "vybestack/llxprt-code" }
   { "op": "pr.reviews", "number": 2317, "actionable": true }
   { "op": "pr.resolve-thread", "threadId": "PRRT_kwDO..." }
   { "op": "pr.checks", "number": 2317, "watch": true }
@@ -113,6 +115,47 @@ Notes:
   result. Do not poll it yourself.
 - issue.edit sets issue type, labels, assignees, projects and milestone in one
   call, including fields the gh CLI cannot set directly.
+- issue.list, pr.list, search.issues and search.prs each return "totalCount",
+  "hasMore" and "effectiveQuery" alongside their items.
+  - "totalCount" is the size of the WHOLE result set, always. To count matches
+    ("how many open issues are there?") read totalCount from a single call; do
+    not count the returned items and do not add up pages.
+  - "hasMore" says only that the page does not contain every item. Items past
+    the page are reached by raising "limit" (max 100) or narrowing the query.
+  - "effectiveQuery" is the query that actually ran, including the repository
+    scope and the type:issue/type:pr filter. Use it to confirm a term survived:
+    an exclusion like "-label:bug" against a repository that has no such label
+    excludes nothing and returns the unfiltered total, which otherwise looks
+    identical to the filter having been ignored.
+- GitHub rate-limits the search endpoint separately from the rest of the API,
+  and running several searches at once trips it. Issue them one at a time.
+  search.issues and search.prs always use that endpoint; issue.list and pr.list
+  use it only to count a page that did not fit, so RAISING "limit" (max 100)
+  avoids the extra request and lowering it causes more of them. issue.view,
+  pr.view, pr.diff, pr.checks and label.list never touch it and keep working
+  while search is throttled.
+- "effectiveQuery" proves a term was sent, not that it matched anything. An
+  exclusion naming a label the repository does not have is applied faithfully
+  and excludes nothing, so its total equals the unfiltered total. When that
+  matters, confirm the label exists with label.list.
+
+Returned fields:
+  issue.view    number, title, state, author, assignees, milestone, labels, body, comments
+  issue.list    number, title, state, author, assignees, milestone, labels, updatedAt
+  pr.view       number, title, state, author, headRefName, baseRefName, isDraft, reviewDecision, body, comments
+  pr.list       number, title, state, author, labels, updatedAt
+  search.issues number, title, state, author, assignees, labels, repository, updatedAt
+  search.prs    same as search.issues
+  All four list/search ops wrap those items with hasMore, totalCount and
+  effectiveQuery. "state" is always lower case ("open"/"closed"/"merged"),
+  matching the state parameter, and a bot author is always "name[bot]".
+  Search results carry no milestone: gh exposes no such field there, so use
+  issue.list when you need it.
+- To filter issues by assignee or milestone, put the qualifier in issue.list's
+  "search" (e.g. "no:assignee milestone:0.11.0"); there is no separate
+  assignee or milestone parameter.
+- Scope a search to one repository with the "repo" parameter rather than a
+  "repo:" term inside "query", and do not wrap qualifier values in quotes.
 
 Operations:
 ${buildOpReferenceBlock()}`;
@@ -250,13 +293,14 @@ function textHintFor(name: string): string {
     repo: 'Repository as "owner/name". Omit to use the current repository.',
     title:
       'Issue or pull request title. Required by issue.create and pr.create; optional for issue.edit, pr.edit.',
-    search: 'Free-text search query. Accepted by issue.list.',
+    search:
+      'Search query for issue.list. Accepts the full GitHub issue-search syntax, not just free text: qualifiers like "no:assignee", "milestone:0.11.0", "assignee:acoliver", "author:acoliver" and "-label:bug" all work here, and combine. Use this to filter by assignee or milestone, which have no dedicated parameter.',
     milestone:
       'Milestone name or number. Accepted by issue.create, issue.edit.',
     project: 'Project name. Accepted by issue.create.',
     addProject: 'Project to add the item to. Accepted by issue.edit.',
     removeProject: 'Project to remove the item from. Accepted by issue.edit.',
-    type: 'Issue type (e.g. Bug, Feature). Accepted by issue.edit.',
+    type: 'Issue type (e.g. Bug, Feature). Set AFTER creation via issue.edit; NOT accepted by issue.create.',
     base: 'Base branch for the pull request. Accepted by pr.create.',
     head: 'Head branch for the pull request. Accepted by pr.create.',
     threadId:

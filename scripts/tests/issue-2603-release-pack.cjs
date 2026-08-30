@@ -32,9 +32,19 @@ const {
   mkdtempSync,
   cpSync,
   copyFileSync,
+  symlinkSync,
 } = require('node:fs');
 const { dirname, join } = require('node:path');
 const { tmpdir } = require('node:os');
+
+const CLI_BUNDLE_PATHS = [
+  'bundle/llxprt.js',
+  'bundle/memprofile-launcher.js',
+  'bundle/memprofile-preload.js',
+  'bundle/memprofile-request.js',
+  'bundle/memprofile-report.js',
+  'bundle/memprofile-analyze.js',
+];
 const { npmInvocation } = require('../lib/npm-command.cjs');
 const {
   spawnTarList,
@@ -156,6 +166,15 @@ function packReleaseLikeCli(repoRoot) {
   const workCopy = mkdtempSync(join(tmpdir(), 'llxprt-release-copy-'));
   try {
     copyRepoExcludingGenerated(repoRoot, workCopy);
+    const sourceNodeModules = join(repoRoot, 'node_modules');
+    if (!existsSync(sourceNodeModules)) {
+      throw new Error('release-like packing requires repository dependencies');
+    }
+    symlinkSync(
+      sourceNodeModules,
+      join(workCopy, 'node_modules'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
     runPreparePackage(workCopy);
     runBindReleaseDeps(workCopy);
     const internalPkgs = collectInternalPackages(workCopy);
@@ -195,9 +214,9 @@ function packReleaseLikeCli(repoRoot) {
     packAllInternal(internalPkgs, workCopy, cacheDir);
     const stagedReplicaTarball = packCli(workCopy, cacheDir);
 
-    // Validate the replica tarball assets as well, so a missing file
-    // (launcher, installer, entry, README, LICENSE) fails here with a clear
-    // message instead of producing obscure downstream install errors.
+    // Validate the replica tarball assets as well, so a missing launcher,
+    // profiler bundle, installer, entry, README, or LICENSE fails here with a
+    // clear message instead of producing obscure downstream install errors.
     assertReleaseTarballAssets(stagedReplicaTarball);
 
     // Publish to module-level cache only after both artifacts exist and
@@ -225,6 +244,12 @@ function packReleaseLikeCli(repoRoot) {
 function shouldCopyRepoEntry(src, repoRoot) {
   const rel = src.slice(repoRoot.length).replace(/\\/g, '/');
   if (rel === '') return true;
+  if (
+    rel === '/packages/cli/bundle' ||
+    rel.startsWith('/packages/cli/bundle/')
+  ) {
+    return false;
+  }
   const skipSubstrings = [
     '/node_modules/',
     '/.git/',
@@ -360,8 +385,8 @@ function assertReleaseBoundManifest(workCopy, internalPkgs) {
 }
 
 /**
- * Assert the release tarball contains the required assets: POSIX launcher,
- * installer script, TypeScript entry, README, and LICENSE.
+ * Assert the release tarball contains the launchers, installed profiler
+ * bundles, TypeScript entry, package metadata, README, and LICENSE.
  */
 function assertReleaseTarballAssets(releaseTarball) {
   const { stdout } = spawnTarList(releaseTarball);
@@ -378,6 +403,7 @@ function assertReleaseTarballAssets(releaseTarball) {
     'package/package.json',
     'package/README.md',
     'package/LICENSE',
+    ...CLI_BUNDLE_PATHS.map((bundlePath) => `package/${bundlePath}`),
   ];
   const missing = required.filter((p) => !files.has(p));
   if (missing.length > 0) {

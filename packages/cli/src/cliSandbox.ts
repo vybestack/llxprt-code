@@ -205,5 +205,8 @@ export async function maybeHopIntoSandbox(
     partialConfig,
     finalSandboxArgs,
   );
+  // Drains the patched-stdio backlog (registered flush) before the bare exit
+  // that terminates this process, mirroring the initialAuthFailed branch.
+  await runExitCleanup();
   process.exit(exitCode);
 }

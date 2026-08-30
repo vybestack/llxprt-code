@@ -13,6 +13,12 @@ import { sampleMemoryUsage } from './memoryTrend/jscMemorySampler.js';
 export const MEMORY_WARNING_THRESHOLD_BYTES = 7 * 1024 * 1024 * 1024; // 7GB
 export const MEMORY_CHECK_INTERVAL_MS = 60 * 1000; // 1 minute
 
+const BYTES_PER_GB = 1024 * 1024 * 1024;
+
+function formatGb(bytes: number): string {
+  return `${(bytes / BYTES_PER_GB).toFixed(2)} GB`;
+}
+
 /**
  * Package-private ports for deterministic testing. The real implementation
  * uses `globalThis.setInterval` / `globalThis.clearInterval` /
@@ -29,6 +35,25 @@ export interface MemoryMonitorPorts {
    * Defaults to process.memoryUsage.rss().
    */
   rssBytes: () => number;
+  /**
+   * Retained JS heap, read only on the tick that fires the warning.
+   *
+   * Deliberately independent of `memoryUsage`: the disabled path must not take
+   * a full reading, and reading the JSC heap directly keeps the warning working
+   * regardless of what `process.memoryUsage` is doing.
+   */
+  retainedHeapBytes: () => number;
+}
+
+interface JscHeapSizeApi {
+  heapSize: () => number;
+}
+
+function isJscHeapSizeApi(value: unknown): value is JscHeapSizeApi {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  return 'heapSize' in value && typeof value.heapSize === 'function';
 }
 
 const realPorts: MemoryMonitorPorts = {
@@ -40,6 +65,13 @@ const realPorts: MemoryMonitorPorts = {
   // warning-only path below still reads it directly.
   memoryUsage: () => sampleMemoryUsage(),
   rssBytes: () => process.memoryUsage.rss(),
+  retainedHeapBytes: () => {
+    const jsc = process.getBuiltinModule('bun:jsc');
+    if (!isJscHeapSizeApi(jsc)) {
+      throw new Error('bun:jsc heap size is unavailable');
+    }
+    return jsc.heapSize();
+  },
 };
 
 let __portsForTesting: MemoryMonitorPorts | null = null;
@@ -86,22 +118,30 @@ export function useMemoryMonitor({
 
     // Shared high-memory warning so the telemetry-enabled and disabled paths
     // cannot drift. Fires once via the latch.
+    //
+    // Resident memory is a high-water mark: freed memory is reused but is not
+    // necessarily returned to the OS, so RSS alone cannot say whether the
+    // session is still accumulating. The warning pairs it with the retained JS
+    // heap, which does fall when memory is released. The full sample is read
+    // only on the tick that crosses the threshold, so the steady-state check
+    // stays on the cheap RSS accessor.
     const maybeWarn = (rss: number): void => {
-      if (rss > MEMORY_WARNING_THRESHOLD_BYTES && !warnedOnce) {
-        addItem(
-          {
-            type: MessageType.WARNING,
-            text:
-              `High memory usage detected: ${(
-                rss /
-                (1024 * 1024 * 1024)
-              ).toFixed(2)} GB. ` +
-              'If the CLI exits unexpectedly, please run `/bug` to report it.',
-          },
-          Date.now(),
-        );
-        warnedOnce = true;
+      if (rss <= MEMORY_WARNING_THRESHOLD_BYTES || warnedOnce) {
+        return;
       }
+      const retained = ports.retainedHeapBytes();
+      addItem(
+        {
+          type: MessageType.WARNING,
+          text:
+            `High memory usage detected: ${formatGb(rss)} resident ` +
+            `(peak since startup, and it may not shrink), ` +
+            `${formatGb(retained)} retained JS heap. ` +
+            'If the CLI exits unexpectedly, please run `/bug` to report it.',
+        },
+        Date.now(),
+      );
+      warnedOnce = true;
     };
 
     const intervalId = ports.setInterval(() => {

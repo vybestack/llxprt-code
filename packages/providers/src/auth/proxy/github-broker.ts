@@ -363,6 +363,7 @@ export async function executeGitHubOp(
     descriptor.params,
     opParams,
     descriptor.requiredParams,
+    descriptor.name,
   );
   if (validationError !== null) {
     // `validateParams` already names the operation's accepted and required
@@ -381,7 +382,11 @@ export async function executeGitHubOp(
   const run: GhRunner = async (argv, options) => {
     const outcome = await runGh(argv, signal, options);
     if (outcome.kind === 'failure') {
-      throw new BrokerErrorException(outcome.error);
+      throw new BrokerErrorException(
+        descriptor.augmentError !== undefined
+          ? descriptor.augmentError(outcome.error)
+          : outcome.error,
+      );
     }
     if (options?.rawOutput !== true) assertNoPartialSuccess(outcome.json);
     return outcome.json;
@@ -405,7 +410,11 @@ export async function executeGitHubOp(
     }),
   );
   if (result.kind === 'failure') {
-    throw new BrokerErrorException(result.error);
+    throw new BrokerErrorException(
+      descriptor.augmentError !== undefined
+        ? descriptor.augmentError(result.error)
+        : result.error,
+    );
   }
   if (descriptor.rawOutput !== true) assertNoPartialSuccess(result.json);
 

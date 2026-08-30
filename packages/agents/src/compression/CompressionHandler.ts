@@ -40,15 +40,13 @@ import { emitCompressionLifecycleEvent } from './compressionLifecycleTelemetry.j
  * @requirement:REQ-DEP-001
  * @pseudocode component-boundaries.md C-CB-08, lines 80-85
  *
- * extractThinkingBlocks and estimateThinkingTokens are retained from
- * the providers path for backward compatibility. The ReasoningOutput
- * contract is available for the injection path where providers pass
- * pre-extracted reasoning data through the RuntimeProvider contract.
+ * Reasoning-aware token accounting lives in effectiveTokenCount.ts, which
+ * still uses the providers-path extractThinkingBlocks/estimateThinkingTokens
+ * helpers. The ReasoningOutput contract is available for the injection path
+ * where providers pass pre-extracted reasoning data through the
+ * RuntimeProvider contract.
  */
-import {
-  extractThinkingBlocks,
-  estimateThinkingTokens,
-} from './reasoningUtils.js';
+import { computeEffectiveTokenCount } from './effectiveTokenCount.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
@@ -132,49 +130,7 @@ export class CompressionHandler {
    * @requirement REQ-THINK-005.1, REQ-THINK-005.2
    */
   getEffectiveTokenCount(): number {
-    const includeInContext =
-      this.runtimeContext.ephemerals.reasoning.includeInContext();
-    const stripPolicy =
-      this.runtimeContext.ephemerals.reasoning.stripFromContext();
-
-    // If reasoning IS included in context, all tokens count
-    if (includeInContext) {
-      return this.historyService.getTotalTokens();
-    }
-
-    // If reasoning is NOT included, calculate actual reduction
-    const allContents = this.historyService.getCurated();
-    const rawTokens = this.historyService.getTotalTokens();
-
-    let thinkingTokensToStrip = 0;
-
-    if (stripPolicy === 'allButLast') {
-      // Find last content with thinking blocks
-      let lastIndexWithThinking = -1;
-      for (let i = allContents.length - 1; i >= 0; i--) {
-        if (extractThinkingBlocks(allContents[i]).length > 0) {
-          lastIndexWithThinking = i;
-          break;
-        }
-      }
-
-      // Strip thinking from all except that last one
-      for (let i = 0; i < allContents.length; i++) {
-        if (i !== lastIndexWithThinking) {
-          const thinkingBlocks = extractThinkingBlocks(allContents[i]);
-          thinkingTokensToStrip += estimateThinkingTokens(thinkingBlocks);
-        }
-      }
-    } else {
-      // stripPolicy === 'all' explicitly strips all thinking; stripPolicy === 'none'
-      // also removes all thinking from the effective count when includeInContext=false.
-      for (const content of allContents) {
-        const thinkingBlocks = extractThinkingBlocks(content);
-        thinkingTokensToStrip += estimateThinkingTokens(thinkingBlocks);
-      }
-    }
-
-    return Math.max(0, rawTokens - thinkingTokensToStrip);
+    return computeEffectiveTokenCount(this.historyService, this.runtimeContext);
   }
 
   /**
@@ -508,10 +464,16 @@ export class CompressionHandler {
       restorePromptTokenBaseline: (baseline) => {
         this.lastPromptTokenCount = baseline;
       },
-      performFallbackCompression: async (promptId, applyResult) => {
+      performFallbackCompression: async (
+        promptId,
+        applyResult,
+        targetTokenCount,
+      ) => {
         this.pushSuppressDensityDirty();
         try {
-          const context = await this.buildCompressionContext(promptId);
+          const context = await this.buildCompressionContext(promptId, {
+            targetTokenCount,
+          });
           const outcome = await this.performFallbackCompression(
             context,
             new Error('Provider content fallback truncation triggered'),
@@ -575,8 +537,8 @@ export class CompressionHandler {
       ensureDensityOptimized: () => this.ensureDensityOptimized(),
       performCompression: (activePromptId, options) =>
         this.performCompression(activePromptId, options),
-      buildCompressionContext: (activePromptId) =>
-        this.buildCompressionContext(activePromptId),
+      buildCompressionContext: (activePromptId, targetTokenCount) =>
+        this.buildCompressionContext(activePromptId, { targetTokenCount }),
       compressWithFallbackStrategy: (context) =>
         this.compressWithFallbackStrategy(context),
       applyFallbackCompressionResult: (result, applyResult) =>
@@ -1064,7 +1026,10 @@ export class CompressionHandler {
    * @plan PLAN-20260211-COMPRESSION.P14
    * @requirement REQ-CS-001.6
    */
-  async buildCompressionContext(promptId: string): Promise<CompressionContext> {
+  async buildCompressionContext(
+    promptId: string,
+    options?: { targetTokenCount?: number },
+  ): Promise<CompressionContext> {
     return buildContext(
       promptId,
       this.runtimeContext,
@@ -1072,6 +1037,7 @@ export class CompressionHandler {
       (profileName?) => Promise.resolve(this.providerResolver(profileName)),
       this.activeTodosProvider,
       this.logger,
+      options,
     );
   }
 

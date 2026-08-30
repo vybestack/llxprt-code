@@ -408,6 +408,41 @@ async function* handleErrorEvent(
   });
 }
 
+/**
+ * Context-window overflow is terminal for the turn: enforcement already ran
+ * every reduction path it has and still could not fit the request, so
+ * resubmitting cannot succeed. Without this the overflow turn looks like an
+ * empty turn (no content, thinking or tool calls) and falls through to the
+ * continuation path, which resubmits the same oversized request until
+ * MAX_RETRIES, showing the user the identical guard three times (issue #3406).
+ *
+ * The caller already yielded the overflow event before dispatching here, so
+ * this handler must not re-yield it.
+ */
+async function* handleContextWindowWillOverflowEvent(
+  deps: MessageStreamDeps,
+  ctx: StreamContext,
+  deferredEvents: ServerAgentStreamEvent[],
+  state: TerminalState,
+): AsyncGenerator<ServerAgentStreamEvent, IterationResult> {
+  deps.logger.warn(
+    () =>
+      `[stream:orchestrator] context window will overflow; ending iteration`,
+    {
+      deferredEventCount: deferredEvents.length,
+      hadToolCallsThisTurn: state.hadToolCallsThisTurn,
+      hadContent: state.hadContent,
+      hadThinking: state.hadThinking,
+    },
+  );
+  for (const d of deferredEvents) yield d;
+  yield* fireAfterHookAndEmitClearContext(deps, ctx);
+  return earlyIterResult(state.hadToolCallsThisTurn, {
+    ...state,
+    deferredEvents,
+  });
+}
+
 async function* handleInvalidStreamEvent(
   deps: MessageStreamDeps,
   signal: AbortSignal,
@@ -473,6 +508,15 @@ export async function* handleTerminalEvent(
       deferredEvents,
       state,
       initialRequest,
+    );
+  }
+
+  if (event.type === AgentEventType.ContextWindowWillOverflow) {
+    return yield* handleContextWindowWillOverflowEvent(
+      deps,
+      ctx,
+      deferredEvents,
+      state,
     );
   }
 

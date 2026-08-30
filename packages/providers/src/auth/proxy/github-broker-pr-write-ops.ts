@@ -56,7 +56,7 @@ function shapeNumberOnly(params: Record<string, unknown>): {
 export function validatePrCreateParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(PR_CREATE_SPEC.params, params);
+  return validateParams(PR_CREATE_SPEC.params, params, undefined, 'pr.create');
 }
 
 /**
@@ -99,7 +99,12 @@ export const prCreateDescriptor: OpDescriptor = {
 export function validatePrCommentParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(PR_COMMENT_SPEC.params, params);
+  return validateParams(
+    PR_COMMENT_SPEC.params,
+    params,
+    undefined,
+    'pr.comment',
+  );
 }
 
 /**
@@ -138,7 +143,7 @@ export const prCommentDescriptor: OpDescriptor = {
 export function validatePrEditParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(PR_EDIT_SPEC.params, params);
+  return validateParams(PR_EDIT_SPEC.params, params, undefined, 'pr.edit');
 }
 
 /**
@@ -182,7 +187,7 @@ export const prEditDescriptor: OpDescriptor = {
 export function validatePrReadyParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(PR_READY_SPEC.params, params);
+  return validateParams(PR_READY_SPEC.params, params, undefined, 'pr.ready');
 }
 
 /**
@@ -219,7 +224,12 @@ export const prReadyDescriptor: OpDescriptor = {
 export function validateLabelCreateParams(
   params: Record<string, unknown>,
 ): ValidationError | null {
-  return validateParams(LABEL_CREATE_SPEC.params, params);
+  return validateParams(
+    LABEL_CREATE_SPEC.params,
+    params,
+    undefined,
+    'label.create',
+  );
 }
 
 /**

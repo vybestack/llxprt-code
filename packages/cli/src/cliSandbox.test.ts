@@ -11,12 +11,28 @@
  * the full sandbox hop.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, afterEach, vi } from 'bun:test';
+import * as coreModule from '@vybestack/llxprt-code-core';
 import {
   resolveContainerMemoryMB,
   findFirstPositionalArgIndex,
   injectStdinIntoArgs,
+  maybeHopIntoSandbox,
+  type SandboxHopOptions,
 } from './cliSandbox.js';
+import { coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
+import { initializeOutputListenersAndFlush } from './session/outputListeners.js';
+import {
+  registerSyncCleanup,
+  __resetCleanupStateForTesting,
+} from './utils/cleanup.js';
+
+void vi.mock('./utils/sandbox.js', () => ({
+  start_sandbox: vi.fn(async () => 7),
+}));
+void vi.mock('./config/config.js', () => ({
+  loadCliConfig: vi.fn(async () => ({})),
+}));
 
 describe('resolveContainerMemoryMB', () => {
   it('returns undefined when no memory env vars are set', () => {
@@ -186,5 +202,90 @@ describe('injectStdinIntoArgs', () => {
     injectStdinIntoArgs(args, 'piped data');
 
     expect(args).toStrictEqual(original);
+  });
+});
+
+describe('maybeHopIntoSandbox hop-exit stdio flush (#3408)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    coreEvents.removeAllListeners(CoreEvent.Output);
+    coreEvents.removeAllListeners(CoreEvent.ConsoleLog);
+    __resetCleanupStateForTesting();
+  });
+
+  function buildHopOptions(): SandboxHopOptions {
+    return {
+      config: {
+        getSandbox: () => ({ command: 'docker', image: 'test-image' }),
+        getDebugMode: () => false,
+      } as SandboxHopOptions['config'],
+      settings: {
+        merged: { ui: { autoConfigureMaxOldSpaceSize: false } },
+      } as SandboxHopOptions['settings'],
+      argv: {} as SandboxHopOptions['argv'],
+      workspaceRoot: '/tmp/ws',
+      runtimeSettingsService: {} as SandboxHopOptions['runtimeSettingsService'],
+      initialAuthFailed: false,
+      readStdin: async () => '',
+      hasPipedInput: false,
+      bootstrapSelection: null,
+    };
+  }
+
+  it('flushes the patched-stdio backlog to the fd-direct writer before the hop exit sentinel fires', async () => {
+    const originalSandbox = process.env.SANDBOX;
+    delete process.env.SANDBOX;
+
+    // Mirror cli.tsx setupProcessLifecycle: patch stdio and register the
+    // sync-cleanup flush that runExitCleanup drains on the hop exit path.
+    const cleanupStdio = coreModule.patchStdio();
+
+    // A failing assertion must not leave the stdio patch installed for the
+    // rest of the file, so every restore runs in the finally block.
+    try {
+      registerSyncCleanup(() => {
+        initializeOutputListenersAndFlush();
+        cleanupStdio();
+      });
+
+      // The marker written through the patched stream is buffered (no Output
+      // listener yet); it must reach the fd-direct writer when runExitCleanup
+      // drains the backlog. The order array pins flush-before-exit.
+      const order: string[] = [];
+      vi.spyOn(coreModule, 'writeToStderr').mockImplementation(
+        (chunk: unknown) => {
+          if (String(chunk).includes('HOP-EXIT-MARKER')) {
+            order.push('flush');
+          }
+          return true;
+        },
+      );
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+        order.push('exit');
+        throw new Error('exit sentinel');
+      }) as typeof process.exit);
+
+      process.stderr.write('HOP-EXIT-MARKER\n');
+
+      // The exit sentinel throws out of the hop, which is the only way to
+      // observe the call without terminating the runner.
+      await expect(maybeHopIntoSandbox(buildHopOptions())).rejects.toThrow(
+        'exit sentinel',
+      );
+
+      expect(exitSpy.mock.calls[0]?.[0]).toBe(7);
+      // The buffered marker reached the fd-direct writer, and it did so before
+      // the hop-exit sentinel fired (runExitCleanup is awaited first).
+      expect(order).toStrictEqual(['flush', 'exit']);
+    } finally {
+      // Restores the spies (including process.exit) before anything else.
+      vi.restoreAllMocks();
+      if (originalSandbox === undefined) {
+        delete process.env.SANDBOX;
+      } else {
+        process.env.SANDBOX = originalSandbox;
+      }
+      cleanupStdio();
+    }
   });
 });

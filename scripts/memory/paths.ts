@@ -38,6 +38,8 @@ export const PROBE_LOG_NAME = 'probe.log';
 /** Name of the snapshot subdirectory inside a run directory. */
 export const SNAPSHOT_DIR_NAME = 'snapshots';
 
+const SOURCE_START_COMMAND = 'npm run mem:profile -- --profile-load <profile>';
+
 export interface PathDeps {
   readonly exists: (path: string) => boolean;
   readonly isDirectory: (path: string) => boolean;
@@ -83,6 +85,8 @@ export interface ResolveRunDirOptions {
   /** Directory containing the `latest` pointer (e.g. `<repo>/.memprofile`). */
   readonly memprofileRoot: string;
   readonly deps?: PathDeps;
+  /** Command shown when no usable run is available. */
+  readonly startCommandHint?: string;
 }
 
 /**
@@ -95,6 +99,7 @@ export interface ResolveRunDirOptions {
  */
 export function resolveRunDir(options: ResolveRunDirOptions): string {
   const deps = options.deps ?? defaultPathDeps;
+  const startCommand = options.startCommandHint ?? SOURCE_START_COMMAND;
   const explicit = options.explicit;
   if (explicit !== undefined && explicit.length > 0) {
     if (
@@ -107,7 +112,7 @@ export function resolveRunDir(options: ResolveRunDirOptions): string {
   const latest = deps.join(options.memprofileRoot, LATEST_POINTER_NAME);
   if (!guarded('stat latest pointer', latest, () => deps.exists(latest))) {
     throw new RunResolutionError(
-      'No profiling run found. Start one with: npm run mem:profile -- --profile-load <profile>',
+      `No profiling run found. Start one with: ${startCommand}`,
     );
   }
   const target = guarded('read latest pointer', latest, () =>
@@ -166,9 +171,10 @@ export function resolveActiveRunDir(
     },
   );
   if (check.status !== 'active') {
+    const startCommand = options.startCommandHint ?? SOURCE_START_COMMAND;
     throw new RunResolutionError(
       `The profiling session at ${runDir} is not active: ${leaseFailure(check)}. ` +
-        'Start one with: npm run mem:profile -- --profile-load <profile>',
+        `Start one with: ${startCommand}`,
     );
   }
   return runDir;
@@ -182,6 +188,7 @@ export interface ResolveSamplesOptions {
   readonly explicit?: string;
   readonly memprofileRoot: string;
   readonly deps?: PathDeps;
+  readonly startCommandHint?: string;
 }
 
 /**
@@ -203,6 +210,7 @@ export function resolveSamplesPath(options: ResolveSamplesOptions): string {
   const runDir = resolveRunDir({
     memprofileRoot: options.memprofileRoot,
     deps,
+    startCommandHint: options.startCommandHint,
   });
   return deps.join(runDir, SAMPLES_FILE_NAME);
 }

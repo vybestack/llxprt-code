@@ -142,6 +142,18 @@ export interface CompressionContext {
   readonly runtimeState: AgentRuntimeState;
   readonly estimateTokens: (contents: readonly IContent[]) => Promise<number>;
   readonly currentTokenCount: number;
+  /**
+   * Maximum committed-history token count the caller requires after this
+   * compression.
+   *
+   * Only hard-limit enforcement knows this number. The finalized provider
+   * envelope it has to fit includes the system prompt, tool schemas and
+   * pending content, none of which are part of `currentTokenCount`, so a
+   * strategy cannot derive the real deficit from ephemerals (issue #3406).
+   * Absent for threshold-triggered compression, where strategies keep
+   * deriving their own target.
+   */
+  readonly targetTokenCount?: number;
   readonly logger: DebugLogger;
   readonly resolveProvider: (
     profileName?: string,

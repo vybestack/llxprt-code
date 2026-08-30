@@ -13,14 +13,19 @@
 
 import { describe, expect, it } from 'bun:test';
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { envPerFileTimeoutMs } from '../../../scripts/lib/bun-test-policy.js';
+
+const PER_FILE_TIMEOUT_ENV_VAR = 'LLXPRT_TEST_FILE_TIMEOUT_MS';
 import {
   discoverTestFiles,
   escapeXml,
@@ -30,6 +35,8 @@ import {
   fileTimeoutForFile,
   parseCaseCounts,
   parsePartitionIdentity,
+  runTestFile,
+  runTestFileWithTimeoutRetry,
   selectPartition,
   stripAnsi,
   timeoutForFile,
@@ -209,6 +216,28 @@ describe('fileTimeoutForFile', () => {
     expect(
       fileTimeoutForFile('src/integration-tests/cli-args.integration.test.ts'),
     ).toBeGreaterThan(observedCiCost);
+  });
+
+  it('keeps the integration budget when the short-file override is set', () => {
+    const saved = process.env[PER_FILE_TIMEOUT_ENV_VAR];
+    process.env[PER_FILE_TIMEOUT_ENV_VAR] = '1500';
+    try {
+      // The override must not shrink the dedicated multi-spawn budget.
+      expect(
+        fileTimeoutForFile(
+          'src/integration-tests/cli-args.integration.test.ts',
+        ),
+      ).toBeGreaterThan(1500);
+      expect(fileTimeoutForFile('src/ui/hooks/useKeypress.test.tsx')).toBe(
+        1500,
+      );
+    } finally {
+      if (saved === undefined) {
+        delete process.env[PER_FILE_TIMEOUT_ENV_VAR];
+      } else {
+        process.env[PER_FILE_TIMEOUT_ENV_VAR] = saved;
+      }
+    }
   });
 });
 
@@ -735,4 +764,223 @@ describe('three partitions over the real packages/cli inventory (issue #3185)', 
       discovered.length,
     );
   });
+});
+
+interface RetryOutcome {
+  readonly passed: boolean;
+  readonly timedOut: boolean;
+  readonly exitCode: number | null;
+}
+
+interface AttemptSequence<T extends { readonly timedOut: boolean }> {
+  readonly run: () => Promise<T>;
+  readonly count: () => number;
+}
+
+function createAttemptSequence<T extends { readonly timedOut: boolean }>(
+  outcomes: readonly T[],
+): AttemptSequence<T> {
+  let attempts = 0;
+  return {
+    run: async (): Promise<T> => {
+      const outcome = outcomes.at(attempts);
+      attempts++;
+      if (outcome === undefined) {
+        throw new Error('Unexpected extra test-file attempt');
+      }
+      return outcome;
+    },
+    count: () => attempts,
+  };
+}
+
+describe('runTestFileWithTimeoutRetry', () => {
+  it('returns a passing retry and logs it after the first attempt times out', async () => {
+    const attempts = createAttemptSequence<RetryOutcome>([
+      { passed: false, timedOut: true, exitCode: null },
+      { passed: true, timedOut: false, exitCode: 0 },
+    ]);
+    const logs: string[] = [];
+
+    const result = await runTestFileWithTimeoutRetry(
+      'src/retry.test.ts',
+      attempts.run,
+      (message) => logs.push(message),
+    );
+
+    expect({ result, attemptCount: attempts.count(), logs }).toEqual({
+      result: { passed: true, timedOut: false, exitCode: 0 },
+      attemptCount: 2,
+      logs: ['RETRY (2/2): src/retry.test.ts after per-file timeout'],
+    });
+  });
+
+  it('returns the second timeout as the final failure', async () => {
+    const attempts = createAttemptSequence<RetryOutcome>([
+      { passed: false, timedOut: true, exitCode: null },
+      { passed: false, timedOut: true, exitCode: null },
+    ]);
+
+    const result = await runTestFileWithTimeoutRetry(
+      'src/retry.test.ts',
+      attempts.run,
+      () => undefined,
+    );
+
+    expect({ result, attemptCount: attempts.count() }).toEqual({
+      result: { passed: false, timedOut: true, exitCode: null },
+      attemptCount: 2,
+    });
+  });
+
+  it('returns a non-timeout failure without a second attempt', async () => {
+    const attempts = createAttemptSequence<RetryOutcome>([
+      { passed: false, timedOut: false, exitCode: 1 },
+      { passed: true, timedOut: false, exitCode: 0 },
+    ]);
+    const logs: string[] = [];
+
+    const result = await runTestFileWithTimeoutRetry(
+      'src/assertion.test.ts',
+      attempts.run,
+      (message) => logs.push(message),
+    );
+
+    expect({ result, attemptCount: attempts.count(), logs }).toEqual({
+      result: { passed: false, timedOut: false, exitCode: 1 },
+      attemptCount: 1,
+      logs: [],
+    });
+  });
+});
+
+async function withShortPerFileTimeout<T>(run: () => Promise<T>): Promise<T> {
+  const saved = process.env[PER_FILE_TIMEOUT_ENV_VAR];
+  // 4s leaves headroom for child Bun startup under CI load while staying far
+  // below the child's 30s sleep, so attempt 1 is killed mid-sleep, not at
+  // spawn.
+  process.env[PER_FILE_TIMEOUT_ENV_VAR] = '4000';
+  try {
+    return await run();
+  } finally {
+    if (saved === undefined) {
+      delete process.env[PER_FILE_TIMEOUT_ENV_VAR];
+    } else {
+      process.env[PER_FILE_TIMEOUT_ENV_VAR] = saved;
+    }
+  }
+}
+
+function writeFlakyThenPassTest(dir: string): string {
+  const file = join(dir, 'flakyThenPass.test.ts');
+  const marker = join(dir, 'first-attempt.marker');
+  writeFileSync(
+    file,
+    `import { expect, test } from 'bun:test';
+import { existsSync, writeFileSync } from 'node:fs';
+
+const marker = ${JSON.stringify(marker)};
+
+test('passes after the timed-out first attempt', async () => {
+  if (!existsSync(marker)) {
+    writeFileSync(marker, String(process.pid));
+    await Bun.sleep(30_000);
+  } else {
+    expect(true).toBe(true);
+  }
+});
+`,
+  );
+  return file;
+}
+
+describe('envPerFileTimeoutMs', () => {
+  it('returns an absent override and parses a positive integer override', () => {
+    expect(envPerFileTimeoutMs({}, PER_FILE_TIMEOUT_ENV_VAR)).toBeUndefined();
+    expect(
+      envPerFileTimeoutMs(
+        { [PER_FILE_TIMEOUT_ENV_VAR]: '1500' },
+        PER_FILE_TIMEOUT_ENV_VAR,
+      ),
+    ).toBe(1500);
+  });
+
+  it('fails fast for every present non-positive or non-integer override', () => {
+    for (const invalid of ['', ' ', '0', '-1', '1.5', '1500ms']) {
+      expect(() =>
+        envPerFileTimeoutMs(
+          { [PER_FILE_TIMEOUT_ENV_VAR]: invalid },
+          PER_FILE_TIMEOUT_ENV_VAR,
+        ),
+      ).toThrow(PER_FILE_TIMEOUT_ENV_VAR);
+    }
+  });
+});
+
+describe('real CLI test-file child retry', () => {
+  it('kills a timed-out child and returns the passing retry', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cli-runner-retry-'));
+    try {
+      const file = writeFlakyThenPassTest(dir);
+      const marker = join(dir, 'first-attempt.marker');
+      const logs: string[] = [];
+
+      const result = await withShortPerFileTimeout(() =>
+        runTestFileWithTimeoutRetry(
+          file,
+          () => runTestFile(file),
+          (message) => logs.push(message),
+        ),
+      );
+
+      expect({
+        passed: result.passed,
+        timedOut: result.timedOut,
+        logs,
+      }).toEqual({
+        passed: true,
+        timedOut: false,
+        logs: [`RETRY (2/2): ${file} after per-file timeout`],
+      });
+
+      // Attempt 1 recorded its pid before being killed: prove the runner
+      // actually reaped the timed-out child rather than orphaning it. On
+      // Windows a freshly-reused pid can already belong to an unrelated live
+      // process, so only POSIX asserts liveness.
+      const firstChildPid = Number.parseInt(readFileSync(marker, 'utf8'), 10);
+      expect(Number.isInteger(firstChildPid)).toBe(true);
+      if (process.platform !== 'win32') {
+        expect(() => process.kill(firstChildPid, 0)).toThrow();
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 40_000);
+
+  it('rejects an invalid per-file override before any child can start', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cli-runner-invalid-'));
+    try {
+      const file = writeFlakyThenPassTest(dir);
+      const marker = join(dir, 'first-attempt.marker');
+      const saved = process.env[PER_FILE_TIMEOUT_ENV_VAR];
+      process.env[PER_FILE_TIMEOUT_ENV_VAR] = '0';
+      try {
+        await expect(runTestFile(file)).rejects.toThrow(
+          PER_FILE_TIMEOUT_ENV_VAR,
+        );
+        // No test child ran, so the scratch marker a started child would
+        // write must still be absent.
+        await Bun.sleep(300);
+        expect(existsSync(marker)).toBe(false);
+      } finally {
+        if (saved === undefined) {
+          delete process.env[PER_FILE_TIMEOUT_ENV_VAR];
+        } else {
+          process.env[PER_FILE_TIMEOUT_ENV_VAR] = saved;
+        }
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 15_000);
 });

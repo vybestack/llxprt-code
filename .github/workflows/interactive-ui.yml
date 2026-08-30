@@ -21,6 +21,10 @@ on:
       - 'scripts/tmux-script.approval-ui.json'
       - 'scripts/tmux-script.issue2208-newlines.fake.json'
       - 'scripts/tmux-script.issue2016-composer.fake.json'
+      - 'scripts/tmux-script.issue3386-memory-retention.fake.json'
+      - 'scripts/tests/memory/retention-checkpoints.ts'
+      - 'scripts/memory/**'
+      - 'patches/ink+6.4.8.patch'
       # Scenario config referenced by all scenarios (welcome banner +
       # system settings env paths set in each scenario)
       - 'scripts/fixtures/welcome-completed.json'
@@ -63,6 +67,10 @@ on:
       - 'scripts/tmux-script.approval-ui.json'
       - 'scripts/tmux-script.issue2208-newlines.fake.json'
       - 'scripts/tmux-script.issue2016-composer.fake.json'
+      - 'scripts/tmux-script.issue3386-memory-retention.fake.json'
+      - 'scripts/tests/memory/retention-checkpoints.ts'
+      - 'scripts/memory/**'
+      - 'patches/ink+6.4.8.patch'
       - 'scripts/fixtures/welcome-completed.json'
       - 'scripts/system-settings.interactive-ui.json'
       - 'scripts/fixtures/approval-ui.responses.jsonl'

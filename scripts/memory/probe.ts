@@ -511,8 +511,9 @@ function safeTick(deps: ProbeDeps, what: string, op: () => void): void {
  * launcher via probe-preload.ts). Acquires the run directory lease first — a
  * directory owned by a live probe is never taken over — then recovers
  * orphaned requests so a restart neither drops nor doubles a requested sample
- * or snapshot, and starts the poller. Returns null when not configured or
- * when the lease is refused.
+ * or snapshot, and starts the poller. Returns null only when the preload is not
+ * configured. A refused lease is fatal because continuing would run the
+ * application without the profiling session the launcher announced.
  */
 export function installProbe(): ProbeDeps | null {
   const parsed = readProbeConfigFromEnv();
@@ -526,10 +527,9 @@ export function installProbe(): ProbeDeps | null {
   }
   const acquisition = acquireLease(config.runDir);
   if (acquisition.outcome === 'refused') {
-    deps.appendLog(
-      `REFUSED startup: run directory lease not acquired (${acquisition.check.status}); another probe may own this run`,
-    );
-    return null;
+    const message = `run directory lease not acquired (${acquisition.check.status}); another probe may own this run`;
+    deps.appendLog(`REFUSED startup: ${message}`);
+    throw new Error(`[memprobe] ${message}`);
   }
   const owner = acquisition.lease.owner;
   const validateOptions = validateOptionsFor(deps);

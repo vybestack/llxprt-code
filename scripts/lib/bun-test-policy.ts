@@ -54,6 +54,23 @@ export const DEFAULT_PER_TEST_TIMEOUT_MS = 180_000;
  */
 export const DEFAULT_PER_FILE_TIMEOUT_MS = 300_000;
 
+// This override gives behavioral runner tests a short budget; it is not a CI tuning knob.
+export function envPerFileTimeoutMs(
+  env: NodeJS.ProcessEnv,
+  varName: string,
+): number | undefined {
+  const raw = env[varName];
+  if (raw === undefined) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  if (!/^[1-9][0-9]*$/.test(raw) || !Number.isSafeInteger(parsed)) {
+    throw new Error(`${varName} must be a positive integer, got: ${raw}`);
+  }
+  return parsed;
+}
+
 /**
  * Ceiling on files run at once, regardless of core count.
  *
