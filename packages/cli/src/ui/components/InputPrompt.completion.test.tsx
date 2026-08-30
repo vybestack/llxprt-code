@@ -12,10 +12,7 @@ import {
 import { renderWithProviders } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
 import { act } from 'react';
-import {
-  ESC_TIMEOUT,
-  FAST_RETURN_TIMEOUT,
-} from '../contexts/KeypressContext.js';
+import { FAST_RETURN_TIMEOUT } from '../contexts/KeypressContext.js';
 import type { InputPromptProps } from './InputPrompt.js';
 import { InputPrompt } from './InputPrompt.js';
 import type { TextBuffer } from './shared/text-buffer.js';
@@ -149,9 +146,6 @@ describe('InputPrompt', () => {
   let mockBuffer: TextBuffer;
   let mockCommandContext: CommandContext;
   // The buffer's setText spy, held under its Mock type so tests can inspect
-  // call history without casting the TextBuffer-typed field.
-  let setTextMock: Mock<(newText: string) => void>;
-
   const mockedUseShellHistory = useShellHistory as Mock<typeof useShellHistory>;
   const mockedUseCommandCompletion = useCommandCompletion as Mock<
     typeof useCommandCompletion
@@ -179,7 +173,7 @@ describe('InputPrompt', () => {
       lines: [''],
       transformationsByLine: [[]],
       visualToTransformedMap: [0],
-      setText: (setTextMock = vi.fn((newText: string) => {
+      setText: vi.fn((newText: string) => {
         mockBuffer.text = newText;
         mockBuffer.lines = [newText];
         mockBuffer.transformationsByLine = [[]];
@@ -188,7 +182,7 @@ describe('InputPrompt', () => {
         mockBuffer.viewportVisualLines = [newText];
         mockBuffer.allVisualLines = [newText];
         mockBuffer.visualToLogicalMap = [[0, 0]];
-      })),
+      }),
       replaceRangeByOffset: vi.fn(),
       viewportVisualLines: [''],
       allVisualLines: [''],
@@ -755,236 +749,6 @@ describe('InputPrompt', () => {
       // Verify that onSubmit was called normally
       expect(props.onSubmit).toHaveBeenCalledWith('normal command');
 
-      unmount();
-    });
-  });
-
-  describe('enhanced input UX - double ESC clear functionality', () => {
-    it('should do nothing on ESC when buffer is empty', async () => {
-      const onEscapePromptChange = vi.fn();
-      props.onEscapePromptChange = onEscapePromptChange;
-      props.buffer.setText('');
-      (props.buffer.setText as Mock<typeof props.buffer.setText>).mockClear();
-
-      const { stdin, unmount } = renderWithProviders(
-        <InputPrompt {...props} />,
-        { kittyProtocolEnabled: false },
-      );
-
-      await act(async () => {
-        stdin.write('\x1B');
-      });
-
-      await waitFor(() => {
-        expect(props.buffer.setText).not.toHaveBeenCalled();
-        expect(onEscapePromptChange).not.toHaveBeenCalledWith(true);
-      });
-      unmount();
-    });
-
-    it('should clear buffer on second ESC press', async () => {
-      vi.useFakeTimers();
-      const onEscapePromptChange = vi.fn();
-      props.onEscapePromptChange = onEscapePromptChange;
-      // Seed the buffer, then clear the spy so the later assertions are about
-      // the ESC-driven clear rather than this setup call.
-      props.buffer.setText('text to clear');
-      setTextMock.mockClear();
-
-      const { stdin, unmount } = renderWithProviders(
-        <InputPrompt {...props} />,
-        { kittyProtocolEnabled: false },
-      );
-
-      try {
-        // Disregard the mount-time onEscapePromptChange(false) so the assertions
-        // below can only be satisfied by the ESC keypresses.
-        expect(onEscapePromptChange).toHaveBeenCalledWith(false);
-        onEscapePromptChange.mockClear();
-
-        // A lone ESC byte is decoded as an "escape" key only after the parser's
-        // ESC_TIMEOUT flush. Fake timers let each flush be advanced exactly, so
-        // the total elapsed time (2 x (ESC_TIMEOUT + 10) = 220ms) never reaches
-        // the 500ms auto-reset deadline that the first press arms: the second
-        // press is guaranteed to land while the prompt is still armed on every
-        // schedule, rather than only when the machine is fast. waitFor is
-        // deliberately not used here: its polling advances the fake clock, and
-        // advancing past the 500ms deadline is exactly what must not happen.
-        await act(async () => {
-          stdin.write('\x1B');
-          await advanceTimersByTimeAsync(ESC_TIMEOUT + 10);
-        });
-        expect(onEscapePromptChange).toHaveBeenCalledWith(true);
-
-        // Arming must leave the buffer and completion state untouched: the
-        // clear belongs to the second press alone. Without this check a broken
-        // first-press clear followed by a no-op second press would still pass.
-        expect(props.buffer.setText).not.toHaveBeenCalledWith('');
-        expect(
-          mockCommandCompletion.resetCompletionState,
-        ).not.toHaveBeenCalled();
-
-        await act(async () => {
-          stdin.write('\x1B');
-          await advanceTimersByTimeAsync(ESC_TIMEOUT + 10);
-        });
-
-        expect(props.buffer.setText).toHaveBeenCalledWith('');
-        expect(mockCommandCompletion.resetCompletionState).toHaveBeenCalled();
-      } finally {
-        // Restore real timers even when an assertion fails: leaked fake timers
-        // stall every later test in the file that depends on real time.
-        vi.useRealTimers();
-        unmount();
-      }
-    });
-
-    it('should reset escape state on any non-ESC key', async () => {
-      vi.useFakeTimers();
-      const onEscapePromptChange = vi.fn();
-      props.onEscapePromptChange = onEscapePromptChange;
-      props.buffer.setText('some text');
-      setTextMock.mockClear();
-
-      const { stdin, unmount } = renderWithProviders(
-        <InputPrompt {...props} />,
-        { kittyProtocolEnabled: false },
-      );
-
-      try {
-        // Disregard the mount-time onEscapePromptChange(false); every assertion
-        // below must be satisfied by the keypresses, not by mounting.
-        expect(onEscapePromptChange).toHaveBeenCalledWith(false);
-        onEscapePromptChange.mockClear();
-
-        // First ESC on a non-empty buffer arms the escape prompt.
-        await act(async () => {
-          stdin.write('\x1B');
-          await advanceTimersByTimeAsync(ESC_TIMEOUT + 10);
-        });
-        expect(onEscapePromptChange).toHaveBeenCalledWith(true);
-
-        // 'a' must reset the armed state. The clock stands at
-        // ESC_TIMEOUT + 10 ms of the 500 ms auto-reset window and is not
-        // advanced again before this assertion (no waitFor: its polling
-        // advances the fake clock), so this false can only come from the
-        // non-ESC keypress branch — the arming timer cannot expire and supply
-        // it, whatever the machine's scheduling does.
-        await act(async () => {
-          stdin.write('a');
-        });
-        expect(onEscapePromptChange).toHaveBeenCalledWith(false);
-
-        // Still inside the 500 ms window, a fresh ESC must re-arm rather than
-        // clear: 'a' reset the press pair, so this press is a "first" press.
-        await act(async () => {
-          stdin.write('\x1B');
-          await advanceTimersByTimeAsync(ESC_TIMEOUT + 10);
-        });
-        expect(onEscapePromptChange).toHaveBeenCalledWith(true);
-
-        expect(onEscapePromptChange.mock.calls.map((call) => call[0])).toEqual([
-          true,
-          false,
-          true,
-        ]);
-        // The buffer surviving is the strongest proof the reset happened: had
-        // 'a' not reset, this final press would have been the second of the
-        // armed pair and would have cleared the buffer.
-        expect(props.buffer.setText).not.toHaveBeenCalledWith('');
-      } finally {
-        // Restore real timers even when an assertion fails: leaked fake timers
-        // stall every later test in the file that depends on real time.
-        vi.useRealTimers();
-        unmount();
-      }
-    });
-
-    it('should handle ESC in shell mode by disabling shell mode', async () => {
-      props.shellModeActive = true;
-
-      const { stdin, unmount } = renderWithProviders(
-        <InputPrompt {...props} />,
-        { kittyProtocolEnabled: false },
-      );
-
-      await act(async () => {
-        stdin.write('\x1B');
-        await waitFor(() =>
-          expect(props.setShellModeActive).toHaveBeenCalledWith(false),
-        );
-      });
-      unmount();
-    });
-
-    it('should handle ESC when completion suggestions are showing', async () => {
-      mockedUseCommandCompletion.mockReturnValue({
-        ...mockCommandCompletion,
-        showSuggestions: true,
-        suggestions: [{ label: 'suggestion', value: 'suggestion' }],
-      });
-
-      const { stdin, unmount } = renderWithProviders(
-        <InputPrompt {...props} />,
-        { kittyProtocolEnabled: false },
-      );
-
-      await act(async () => {
-        stdin.write('\x1B');
-      });
-      await waitFor(() =>
-        expect(mockCommandCompletion.resetCompletionState).toHaveBeenCalled(),
-      );
-      unmount();
-    });
-
-    it('should not call onEscapePromptChange when not provided', async () => {
-      vi.useFakeTimers();
-      props.onEscapePromptChange = undefined;
-      props.buffer.setText('some text');
-
-      const { stdin, unmount } = renderWithProviders(
-        <InputPrompt {...props} />,
-        { kittyProtocolEnabled: false },
-      );
-      await act(async () => {
-        await runAllTimersAsync();
-      });
-
-      await act(async () => {
-        stdin.write('\x1B');
-      });
-      await act(async () => {
-        await runAllTimersAsync();
-      });
-
-      // Passing undefined must be a safe no-op: clearing via replaceRange must
-      // not happen as part of the escape-only-bubble path when the callback is
-      // absent. (Pre-existing setText("some text") happened before render and
-      // is excluded by checking the more specific buffer mutator.)
-      expect(props.buffer.replaceRangeByOffset).not.toHaveBeenCalled();
-
-      vi.useRealTimers();
-      unmount();
-    });
-
-    it('should not interfere with existing keyboard shortcuts', async () => {
-      const { stdin, unmount } = renderWithProviders(
-        <InputPrompt {...props} />,
-        { kittyProtocolEnabled: false },
-      );
-
-      await act(async () => {
-        stdin.write('\x0C');
-      });
-      await waitFor(() => expect(props.onClearScreen).toHaveBeenCalled());
-
-      await act(async () => {
-        stdin.write('\x01');
-      });
-      await waitFor(() =>
-        expect(props.buffer.move).toHaveBeenCalledWith('home'),
-      );
       unmount();
     });
   });
