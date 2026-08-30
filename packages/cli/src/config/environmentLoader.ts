@@ -21,6 +21,11 @@ import type { FileDiscoveryService } from '@vybestack/llxprt-code-storage';
 import type { Settings } from './settings.js';
 import type { CliArgs } from './cliArgParser.js';
 import type { ContextResolutionResult } from './interactiveContext.js';
+import {
+  isSandboxLauncherEnvVar,
+  isUserGlobalEnvFile,
+  stripRuntimeInjectedLauncherVars,
+} from './sandboxEnvGuard.js';
 
 const logger = new DebugLogger('llxprt:config:environmentLoader');
 
@@ -62,11 +67,48 @@ function findEnvFile(startDir: string): string | null {
   }
 }
 
+function parseEnvFile(envFilePath: string): Record<string, string> | null {
+  try {
+    return dotenv.parse(fs.readFileSync(envFilePath, 'utf-8'));
+  } catch {
+    return null;
+  }
+}
+
+function applyParsedEnvironment(
+  envFilePath: string,
+  parsedEnv: Record<string, string>,
+): void {
+  const userGlobal = isUserGlobalEnvFile(envFilePath);
+  for (const [key, value] of Object.entries(parsedEnv)) {
+    // Matches dotenv.config()'s default `override: false`: a value the user
+    // exported in their shell always wins over the file.
+    if (Object.hasOwn(process.env, key)) {
+      continue;
+    }
+    if (isSandboxLauncherEnvVar(key) && !userGlobal) {
+      logger.debug(
+        `Ignored sandbox launcher variable ${key} from ${envFilePath}: only a user-global env file may set it (issue #2958)`,
+      );
+    } else {
+      process.env[key] = value;
+    }
+  }
+}
+
 /** Load the nearest .env file into process.env via dotenv. */
 export function loadEnvironment(): void {
+  for (const key of stripRuntimeInjectedLauncherVars(process.cwd())) {
+    logger.debug(
+      `Dropped sandbox launcher variable ${key} injected by the runtime from a repo-controlled env file (issue #2958)`,
+    );
+  }
   const envFilePath = findEnvFile(process.cwd());
   if (envFilePath) {
-    dotenv.config({ path: envFilePath, quiet: true });
+    const parsedEnv = parseEnvFile(envFilePath);
+    if (parsedEnv) {
+      applyParsedEnvironment(envFilePath, parsedEnv);
+    }
   }
 }
 
