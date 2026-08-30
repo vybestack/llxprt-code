@@ -5,65 +5,23 @@
  */
 
 /**
- * Real-transport behavioral tests for DirectWebFetchTool cancellation.
+ * Real-transport cancellation coverage for DirectWebFetchTool.
  *
- * This file is intentionally separate from direct-web-fetch.test.ts because
- * that file mocks node-fetch globally via bun:test's vi.mock, which would
- * contaminate this file's real node-fetch usage. Here we exercise the real
- * DirectWebFetchTool against paced local HTTP servers and prove that
- * non-success and oversized responses are cancelled at the transport level
- * before delivery can complete or a retry begins.
+ * The server paces large bodies and observes whether each connection was cancelled
+ * before completion. The tool runs the real global fetch and the real bounded
+ * acquisition path; no fetch is imported and nothing is stubbed.
  */
 
-import http from 'node:http';
-import type { AddressInfo } from 'node:net';
-import { describe, it, expect, afterEach } from 'bun:test';
+import type http from 'node:http';
+import { describe, it, expect } from 'bun:test';
 import { DirectWebFetchTool } from './direct-web-fetch.js';
 import type { IToolHost } from '../index.js';
+import { createLoopbackHarness } from '../test-utils/loopback-test-helpers.js';
 
-const servers: http.Server[] = [];
-const pendingWriters = new Set<Promise<void>>();
-
-afterEach(async () => {
-  while (servers.length > 0) {
-    const server = servers.pop()!;
-    server.closeAllConnections();
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  }
-  await Promise.allSettled([...pendingWriters]);
-});
-
-function trackWriter(writer: Promise<void>): Promise<void> {
-  pendingWriters.add(writer);
-  void writer.then(
-    () => pendingWriters.delete(writer),
-    () => pendingWriters.delete(writer),
-  );
-  return writer;
-}
+const loopback = createLoopbackHarness();
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function startServer(
-  handler: (req: http.IncomingMessage, res: http.ServerResponse) => void,
-): Promise<http.Server> {
-  return new Promise((resolve, reject) => {
-    const server = http.createServer(handler);
-    const onError = (error: Error): void => reject(error);
-    server.once('error', onError);
-    server.listen(0, '127.0.0.1', () => {
-      server.removeListener('error', onError);
-      servers.push(server);
-      resolve(server);
-    });
-  });
-}
-
-function serverUrl(server: http.Server): string {
-  const { port } = server.address() as AddressInfo;
-  return `http://127.0.0.1:${port}/`;
 }
 
 function createToolHost(): IToolHost {
@@ -148,105 +106,48 @@ async function pacedWrite(
   }
 }
 
-describe('DirectWebFetchTool — real transport cancellation', () => {
-  it('cancels a terminal 4xx response instead of allowing delivery to complete', async () => {
-    const state: ConnectionState = {
-      completed: false,
-      canceled: false,
-      writerStopped: false,
-    };
-    let writerDone = Promise.resolve();
-    let connectionClosed = Promise.resolve();
-    const server = await startServer((_req, res) => {
-      connectionClosed = trackConnection(res, state);
-      res.writeHead(404, { 'content-type': 'text/plain' });
-      writerDone = trackWriter(pacedWrite(res, state, 30));
-    });
-
-    const tool = new DirectWebFetchTool(createToolHost());
-    const result = await tool
-      .build({
-        url: serverUrl(server),
-        format: 'text',
-      })
-      .execute(new AbortController().signal);
-    await Promise.all([writerDone, connectionClosed]);
-
-    expect(result.error?.message).toContain('404');
-    expect(state.completed).toBe(false);
-    expect(state.canceled).toBe(true);
-    expect(state.writerStopped).toBe(true);
-  });
-
-  it('cancels a retryable 5xx attempt before the next attempt and still reaches 2xx', async () => {
-    let requestCount = 0;
-    let secondStartedAfterCancellation = false;
-    const firstState: ConnectionState = {
-      completed: false,
-      canceled: false,
-      writerStopped: false,
-    };
-    let firstWriterDone = Promise.resolve();
-    let firstConnectionClosed = Promise.resolve();
-    const server = await startServer((_req, res) => {
-      requestCount++;
-
-      if (requestCount === 1) {
-        firstConnectionClosed = trackConnection(res, firstState);
-        res.writeHead(503, { 'content-type': 'text/plain' });
-        firstWriterDone = trackWriter(pacedWrite(res, firstState, 30));
-      } else {
-        secondStartedAfterCancellation =
-          firstState.canceled && firstState.writerStopped;
-        res.writeHead(200, { 'content-type': 'text/plain' });
-        res.end('OK after retry');
+describe('DirectWebFetchTool real transport cancellation', () => {
+  it('disposes all three retryable 503 responses when retries are exhausted', async () => {
+    let hits = 0;
+    let closedAttempts = 0;
+    const closedBeforeNextRequest: boolean[] = [];
+    const states: ConnectionState[] = [];
+    const server = await loopback.startServer((_req, res) => {
+      hits++;
+      if (hits > 1) {
+        closedBeforeNextRequest.push(closedAttempts === hits - 1);
       }
+      const state: ConnectionState = {
+        completed: false,
+        canceled: false,
+        writerStopped: false,
+      };
+      states.push(state);
+      loopback.trackWriter(
+        (async () => {
+          await trackConnection(res, state);
+          closedAttempts++;
+        })(),
+      );
+      res.writeHead(503, { 'content-type': 'text/plain' });
+      res.write('partial-error-body');
+      loopback.trackWriter(pacedWrite(res, state, 300));
     });
 
     const tool = new DirectWebFetchTool(createToolHost());
     const result = await tool
-      .build({
-        url: serverUrl(server),
-        format: 'text',
-      })
+      .build({ url: loopback.serverUrl(server), format: 'text' })
       .execute(new AbortController().signal);
-    await Promise.all([firstWriterDone, firstConnectionClosed]);
+    await loopback.settleWriters();
 
-    expect(result.error).toBeUndefined();
-    expect(result.llmContent).toBe('OK after retry');
-    expect(firstState.completed).toBe(false);
-    expect(firstState.canceled).toBe(true);
-    expect(firstState.writerStopped).toBe(true);
-    expect(secondStartedAfterCancellation).toBe(true);
-    expect(requestCount).toBe(2);
-  });
-
-  it('cancels an oversized 2xx response before delivery completes', async () => {
-    const state: ConnectionState = {
-      completed: false,
-      canceled: false,
-      writerStopped: false,
-    };
-    let writerDone = Promise.resolve();
-    let connectionClosed = Promise.resolve();
-    const server = await startServer((_req, res) => {
-      connectionClosed = trackConnection(res, state);
-      res.writeHead(200, { 'content-type': 'text/plain' });
-      writerDone = trackWriter(pacedWrite(res, state, 21, 256 * 1024));
-    });
-
-    const tool = new DirectWebFetchTool(createToolHost());
-    const result = await tool
-      .build({
-        url: serverUrl(server),
-        format: 'text',
-      })
-      .execute(new AbortController().signal);
-    await Promise.all([writerDone, connectionClosed]);
-
-    expect(result.error?.message).toMatch(/exceeds/i);
-    expect(state.completed).toBe(false);
-    expect(state.canceled).toBe(true);
-    expect(state.writerStopped).toBe(true);
+    expect(result.error?.message).toContain('503');
+    expect(result.llmContent).not.toContain('partial-error-body');
+    expect(hits).toBe(3);
+    expect(closedBeforeNextRequest).toEqual([true, true]);
+    expect(states).toEqual([
+      { completed: false, canceled: true, writerStopped: true },
+      { completed: false, canceled: true, writerStopped: true },
+      { completed: false, canceled: true, writerStopped: true },
+    ]);
   });
 });

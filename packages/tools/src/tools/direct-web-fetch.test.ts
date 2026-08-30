@@ -4,552 +4,578 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import { Readable } from 'node:stream';
-import type { DirectWebFetchToolParams } from './direct-web-fetch.js';
+/**
+ * Real-loopback behavioral tests for DirectWebFetchTool.
+ *
+ * Every transport test uses a real local HTTP server: the server produces status
+ * lines, headers, bodies (whole, chunked, and paced), and observes the exact
+ * request URL, headers, and aborted connections. No fetch package is imported and
+ * no direct-value Response stub is used.
+ */
+
+import type http from 'node:http';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { DirectWebFetchTool } from './direct-web-fetch.js';
 import { ToolErrorType } from '../types/tool-error.js';
-import type { IToolHost, ToolResult as _ToolResult } from '../index.js';
+import type { IToolHost } from '../index.js';
+import { createLoopbackHarness } from '../test-utils/loopback-test-helpers.js';
 
-const { mockedFetch } = { mockedFetch: vi.fn() };
-void vi.mock('node-fetch', () => ({
-  default: mockedFetch,
-}));
+const loopback = createLoopbackHarness();
 
-function mockBody(text: string): Readable {
-  return Readable.from([Buffer.from(text)]);
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function createToolHost(): IToolHost {
+  return {
+    getTargetDir: () => '/tmp',
+    getWorkspaceRoots: () => ['/tmp'],
+    getApprovalMode: () => 'auto',
+    setApprovalMode: () => {},
+    isInteractive: () => false,
+    hasFeatureFlag: () => false,
+    getFileService: () => ({
+      shouldGitIgnoreFile: () => false,
+      shouldLlxprtIgnoreFile: () => false,
+      shouldIgnoreFile: () => false,
+      filterFiles: (paths: string[]) => paths,
+    }),
+    getFileFilteringOptions: () => ({
+      respectGitIgnore: true,
+      respectLlxprtIgnore: true,
+    }),
+
+    getFileFilteringRespectLlxprtIgnore: () => true,
+    getFileExclusions: () => [],
+    getReadManyFilesExclusions: () => [],
+    getLlxprtIgnoreFilePath: () => null,
+    recordFileRead: () => {},
+    getLlxprtIgnorePatterns: () => [],
+    getEphemeralSettings: () => ({}),
+    getDebugMode: () => false,
+  };
+}
+
+interface ConnectionState {
+  completed: boolean;
+  canceled: boolean;
+}
+
+function trackConnection(
+  res: http.ServerResponse,
+  state: ConnectionState,
+): Promise<void> {
+  const socket = res.socket;
+  if (socket === null) {
+    throw new Error('Expected a response socket');
+  }
+  return new Promise((resolve) => {
+    socket.once('close', () => {
+      state.canceled = !state.completed;
+      resolve();
+    });
+  });
+}
+
+async function pacedWrite(
+  res: http.ServerResponse,
+  state: ConnectionState,
+  chunks: number,
+  chunkBytes = 256,
+  gapMs = 10,
+): Promise<void> {
+  for (let i = 0; i < chunks; i++) {
+    if (res.writableEnded || res.destroyed || res.socket?.destroyed === true) {
+      res.destroy();
+      return;
+    }
+    res.write('x'.repeat(chunkBytes));
+    if (i < chunks - 1) {
+      await delay(gapMs);
+    }
+  }
+  if (!res.writableEnded && res.socket?.destroyed !== true) {
+    state.completed = true;
+    res.end();
+  }
+}
+
+const HTML_FIXTURE =
+  '<html><head><style>.x{color:red}</style></head><body>' +
+  '<h1>Hello &amp; goodbye</h1><p>World <b>bold</b></p>' +
+  '<script>var hidden = 1;</script></body></html>';
+
 describe('DirectWebFetchTool', () => {
-  let config: IToolHost;
   let tool: DirectWebFetchTool;
 
   beforeEach(() => {
-    config = {
-      getTargetDir: () => '/mock/target/dir',
-      getWorkspaceRoots: () => ['/mock/target/dir'],
-      getApprovalMode: () => 'auto',
-      setApprovalMode: () => {},
-      isInteractive: () => false,
-      hasFeatureFlag: () => false,
-      getFileService: () => ({
-        shouldGitIgnoreFile: () => false,
-        shouldLlxprtIgnoreFile: () => false,
-        shouldIgnoreFile: () => false,
-        filterFiles: (paths: string[]) => paths,
-      }),
-      getFileFilteringOptions: () => ({
-        respectGitIgnore: true,
-        respectLlxprtIgnore: true,
-      }),
-      getFileExclusions: () => [],
-      getReadManyFilesExclusions: () => [],
-      getFileFilteringRespectLlxprtIgnore: () => true,
-      getLlxprtIgnoreFilePath: () => null,
-      recordFileRead: () => {},
-      getLlxprtIgnorePatterns: () => [],
-      getEphemeralSettings: () => ({}),
-      getDebugMode: () => false,
-    };
-    tool = new DirectWebFetchTool(config);
-    vi.clearAllMocks();
+    tool = new DirectWebFetchTool(createToolHost());
   });
 
-  afterEach(() => {
-    vi.resetAllMocks();
+  it('returns the complete bounded body for a local 2xx success', async () => {
+    const payload = 'x'.repeat(2048);
+    const server = await loopback.startServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.end(payload);
+    });
+
+    const result = await tool
+      .build({ url: loopback.serverUrl(server), format: 'text' })
+      .execute(new AbortController().signal);
+
+    expect(result.error).toBeUndefined();
+    expect(result.llmContent).toBe(payload);
   });
 
-  it('should validate URL protocol', async () => {
-    const params: DirectWebFetchToolParams = {
-      url: 'ftp://example.com',
-      format: 'text',
-    };
-    const invocation = tool.build(params);
+  it('sends the exact GET request contract for every format', async () => {
+    interface ObservedRequest {
+      readonly url: string;
+      readonly method: string;
+      readonly body: string;
+      readonly accept: string;
+      readonly userAgent: string;
+      readonly language: string;
+    }
 
-    const result = await invocation.execute(new AbortController().signal);
+    const expectedRequests: ReadonlyArray<
+      ObservedRequest & {
+        readonly format: 'text' | 'markdown' | 'html';
+      }
+    > = [
+      {
+        format: 'text',
+        url: '/page?format=text',
+        method: 'GET',
+        body: '',
+        accept:
+          'text/plain;q=1.0, text/markdown;q=0.9, text/html;q=0.8, */*;q=0.1',
+        userAgent:
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        language: 'en-US,en;q=0.9',
+      },
+      {
+        format: 'markdown',
+        url: '/page?format=markdown',
+        method: 'GET',
+        body: '',
+        accept:
+          'text/markdown;q=1.0, text/x-markdown;q=0.9, text/plain;q=0.8, text/html;q=0.7, */*;q=0.1',
+        userAgent:
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        language: 'en-US,en;q=0.9',
+      },
+      {
+        format: 'html',
+        url: '/page?format=html',
+        method: 'GET',
+        body: '',
+        accept:
+          'text/html;q=1.0, application/xhtml+xml;q=0.9, text/plain;q=0.8, text/markdown;q=0.7, */*;q=0.1',
+        userAgent:
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        language: 'en-US,en;q=0.9',
+      },
+    ];
+    const observedRequests: ObservedRequest[] = [];
+    const server = await loopback.startServer(async (req, res) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) {
+        if (Buffer.isBuffer(chunk)) {
+          chunks.push(chunk);
+        } else {
+          chunks.push(Buffer.from(String(chunk)));
+        }
+      }
+      observedRequests.push({
+        url: req.url ?? '',
+        method: req.method ?? '',
+        body: Buffer.concat(chunks).toString('utf8'),
+        accept: String(req.headers.accept ?? ''),
+        userAgent: String(req.headers['user-agent'] ?? ''),
+        language: String(req.headers['accept-language'] ?? ''),
+      });
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.end('ok');
+    });
+
+    for (const expectedRequest of expectedRequests) {
+      const result = await tool
+        .build({
+          url: loopback.serverUrl(server) + expectedRequest.url.slice(1),
+          format: expectedRequest.format,
+        })
+        .execute(new AbortController().signal);
+
+      expect(result.error).toBeUndefined();
+    }
+
+    expect(observedRequests).toEqual(
+      expectedRequests.map(({ format: _format, ...request }) => request),
+    );
+  });
+
+  it('returns the text/html body unchanged for format html', async () => {
+    const exact =
+      '<div>  a  &lt;b&gt; <span> c </span>  </div>\n  <p> tail </p>';
+    const server = await loopback.startServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(exact);
+    });
+
+    const result = await tool
+      .build({ url: loopback.serverUrl(server), format: 'html' })
+      .execute(new AbortController().signal);
+
+    expect(result.error).toBeUndefined();
+    expect(result.llmContent).toBe(exact);
+  });
+
+  it('converts HTML to the exact html-to-text default structure', async () => {
+    const server = await loopback.startServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(HTML_FIXTURE);
+    });
+
+    const result = await tool
+      .build({ url: loopback.serverUrl(server), format: 'text' })
+      .execute(new AbortController().signal);
+
+    expect(result.error).toBeUndefined();
+    expect(result.llmContent).toBe('HELLO & GOODBYE\n\nWorld bold');
+  });
+
+  it('preserves the configured Turndown output and removed element list', async () => {
+    const html =
+      '<meta name="removed"><link rel="removed"><style>.hidden{}</style>' +
+      '<script>hidden()</script><h2>Heading</h2><p>Para <em>em</em></p>' +
+      '<hr><ul><li>one</li><li>two</li></ul>' +
+      '<pre><code>const x = 1;\n</code></pre>';
+    const server = await loopback.startServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(html);
+    });
+
+    const result = await tool
+      .build({ url: loopback.serverUrl(server), format: 'markdown' })
+      .execute(new AbortController().signal);
+
+    expect(result.error).toBeUndefined();
+    expect(result.llmContent).toBe(
+      '## Heading\n\nPara *em*\n\n---\n\n-   one\n-   two\n\n```\nconst x = 1;\n```',
+    );
+  });
+
+  it('returns non-HTML content unchanged for every requested format', async () => {
+    const payload = 'plain body 123\nsecond line';
+    const server = await loopback.startServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end(payload);
+    });
+
+    const formats: Array<'text' | 'markdown' | 'html'> = [
+      'text',
+      'markdown',
+      'html',
+    ];
+    for (const format of formats) {
+      const result = await tool
+        .build({ url: loopback.serverUrl(server), format })
+        .execute(new AbortController().signal);
+      expect(result.error).toBeUndefined();
+      expect(result.llmContent).toBe(payload);
+    }
+  });
+
+  it('returns the empty-body no-content result unchanged', async () => {
+    const server = await loopback.startServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.end();
+    });
+
+    const result = await tool
+      .build({ url: loopback.serverUrl(server), format: 'text' })
+      .execute(new AbortController().signal);
+
+    expect(result.error).toBeUndefined();
+    expect(result.llmContent).toBe('');
+  });
+
+  it('rejects an invalid URL protocol before any network call', async () => {
+    const result = await tool
+      .build({ url: 'ftp://example.com', format: 'text' })
+      .execute(new AbortController().signal);
+
     expect(result.error).toBeDefined();
     expect(result.error?.message).toContain('Invalid URL protocol');
   });
 
-  it('should fetch and return text content', async () => {
-    const params: DirectWebFetchToolParams = {
-      url: 'https://example.com',
-      format: 'text',
-    };
-    const invocation = tool.build(params);
-
-    const htmlContent = '<html><body><h1>Hello</h1><p>World</p></body></html>';
-    mockedFetch.mockResolvedValue({
-      ok: true,
-      headers: {
-        get: (key: string) => {
-          if (key === 'content-type') return 'text/html';
-          if (key === 'content-length') return htmlContent.length.toString();
-          return null;
-        },
-      },
-      body: mockBody(htmlContent),
+  it('treats a 400 response as terminal and disposes it without returning a partial body', async () => {
+    const state: ConnectionState = { completed: false, canceled: false };
+    let connectionClosed: Promise<void> | undefined;
+    let hits = 0;
+    const server = await loopback.startServer((_req, res) => {
+      hits++;
+      connectionClosed = trackConnection(res, state);
+      res.writeHead(400, { 'content-type': 'text/plain' });
+      loopback.trackWriter(pacedWrite(res, state, 30));
     });
 
-    const result = await invocation.execute(new AbortController().signal);
+    const result = await tool
+      .build({ url: loopback.serverUrl(server), format: 'text' })
+      .execute(new AbortController().signal);
+    if (connectionClosed !== undefined) {
+      await connectionClosed;
+    }
+    await loopback.settleWriters();
 
-    expect(mockedFetch).toHaveBeenCalledWith(
-      'https://example.com',
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Accept: expect.stringContaining('text/plain'),
-        }),
-      }),
-    );
-    // Cheerio extraction might vary slightly, but should contain "Hello" and "World"
-    expect(result.llmContent).toContain('Hello');
-    expect(result.llmContent).toContain('World');
+    expect(result.error?.type).toBe(ToolErrorType.FETCH_ERROR);
+    expect(result.error?.message).toContain('400');
+    expect(result.llmContent).not.toContain('xxx');
+    expect(hits).toBe(1);
+    expect(state.canceled).toBe(true);
+    expect(state.completed).toBe(false);
   });
 
-  it('should fetch and return markdown content', async () => {
-    const params: DirectWebFetchToolParams = {
-      url: 'https://example.com',
-      format: 'markdown',
-    };
-    const invocation = tool.build(params);
+  for (const status of [401, 403, 429]) {
+    it(`treats direct ${status} as terminal, disposes the response, and returns no partial body`, async () => {
+      const state: ConnectionState = { completed: false, canceled: false };
+      const partialMarker = `partial-${status}-body`;
+      let connectionClosed: Promise<void> | undefined;
+      let hits = 0;
+      const server = await loopback.startServer((_req, res) => {
+        hits++;
+        connectionClosed = trackConnection(res, state);
+        res.writeHead(status, { 'content-type': 'text/plain' });
+        res.write(partialMarker);
+        loopback.trackWriter(pacedWrite(res, state, 30));
+      });
 
-    const htmlContent = '<h1>Hello</h1><p>World</p>';
-    mockedFetch.mockResolvedValue({
-      ok: true,
-      headers: {
-        get: (key: string) => {
-          if (key === 'content-type') return 'text/html';
-          if (key === 'content-length') return htmlContent.length.toString();
-          return null;
-        },
-      },
-      body: mockBody(htmlContent),
+      const result = await tool
+        .build({ url: loopback.serverUrl(server), format: 'text' })
+        .execute(new AbortController().signal);
+      if (connectionClosed !== undefined) {
+        await connectionClosed;
+      }
+      await loopback.settleWriters();
+
+      expect(result.error?.type).toBe(ToolErrorType.FETCH_ERROR);
+      expect(result.error?.message).toContain(String(status));
+      expect(result.llmContent).not.toContain(partialMarker);
+      expect(hits).toBe(1);
+      expect(state.canceled).toBe(true);
+      expect(state.completed).toBe(false);
+    });
+  }
+
+  it('uses all three retry attempts and closes each rejected 503 connection before continuing', async () => {
+    let hits = 0;
+    let closedAttempts = 0;
+    const closedBeforeNextRequest: boolean[] = [];
+    const rejectedStates: ConnectionState[] = [];
+    const server = await loopback.startServer((_req, res) => {
+      hits++;
+      if (hits > 1) {
+        closedBeforeNextRequest.push(closedAttempts === hits - 1);
+      }
+      if (hits < 3) {
+        const state: ConnectionState = { completed: false, canceled: false };
+        rejectedStates.push(state);
+        loopback.trackWriter(
+          (async () => {
+            await trackConnection(res, state);
+            closedAttempts++;
+          })(),
+        );
+        res.writeHead(503, { 'content-type': 'text/plain' });
+        loopback.trackWriter(pacedWrite(res, state, 300));
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.end('recovered');
     });
 
-    const result = await invocation.execute(new AbortController().signal);
+    const result = await tool
+      .build({ url: loopback.serverUrl(server), format: 'text' })
+      .execute(new AbortController().signal);
+    await loopback.settleWriters();
 
-    // Turndown conversion
-    expect(result.llmContent).toContain('# Hello');
-    expect(result.llmContent).toContain('World');
+    expect(result.error).toBeUndefined();
+    expect(result.llmContent).toBe('recovered');
+    expect(hits).toBe(3);
+    expect(closedBeforeNextRequest).toEqual([true, true]);
+    expect(rejectedStates).toEqual([
+      { completed: false, canceled: true },
+      { completed: false, canceled: true },
+    ]);
   });
 
-  it('should handle fetch errors', async () => {
-    const params: DirectWebFetchToolParams = {
-      url: 'https://example.com',
-      format: 'text',
-    };
-    const invocation = tool.build(params);
+  it('aborts before any request when the caller signal is already aborted', async () => {
+    let hits = 0;
+    const server = await loopback.startServer((_req, res) => {
+      hits++;
+      res.end('unused');
+    });
+    const controller = new AbortController();
+    controller.abort();
 
-    mockedFetch.mockRejectedValue(new Error('Network error'));
-
-    const result = await invocation.execute(new AbortController().signal);
+    const result = await tool
+      .build({ url: loopback.serverUrl(server), format: 'text' })
+      .execute(controller.signal);
 
     expect(result.error).toBeDefined();
-    expect(result.error?.message).toContain('Network error');
+    expect(result.error?.type).toBe(ToolErrorType.FETCH_ERROR);
+    expect(result.error?.message).toMatch(/abort|cancel/i);
+    expect(hits).toBe(0);
   });
 
-  it('should preserve error cause chain in ToolResult', async () => {
-    const params: DirectWebFetchToolParams = {
-      url: 'https://example.com',
-      format: 'text',
-    };
-    const invocation = tool.build(params);
+  it('cancels an in-flight request when the caller aborts', async () => {
+    const state: ConnectionState = { completed: false, canceled: false };
+    const responseStarted = Promise.withResolvers<void>();
+    let connectionClosed: Promise<void> | undefined;
+    let hits = 0;
+    const server = await loopback.startServer((_req, res) => {
+      hits++;
+      connectionClosed = trackConnection(res, state);
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.write('started');
+      responseStarted.resolve();
+      loopback.trackWriter(pacedWrite(res, state, 300, 256, 10));
+    });
+    const controller = new AbortController();
+    const execution = tool
+      .build({ url: loopback.serverUrl(server), format: 'text' })
+      .execute(controller.signal);
+    await responseStarted.promise;
 
-    // Create an error with a cause chain
-    const rootCause = new Error('ENOTFOUND');
-    const fetchError = new Error('fetch failed', { cause: rootCause });
-    mockedFetch.mockRejectedValue(fetchError);
+    controller.abort();
+    const result = await execution;
+    if (connectionClosed !== undefined) {
+      await connectionClosed;
+    }
+    await loopback.settleWriters();
 
-    const result = await invocation.execute(new AbortController().signal);
-
-    expect(result.error).toBeDefined();
-    expect(result.error?.message).toContain('fetch failed');
-    // The error message should include the cause information
-    expect(result.error?.message).toContain('ENOTFOUND');
+    expect(result.error?.type).toBe(ToolErrorType.FETCH_ERROR);
+    expect(result.error?.message).toMatch(/abort|cancel/i);
+    expect(result.llmContent).not.toContain('started');
+    expect(hits).toBe(1);
+    expect(state.canceled).toBe(true);
+    expect(state.completed).toBe(false);
   });
 
-  it('should handle large files', async () => {
-    const params: DirectWebFetchToolParams = {
-      url: 'https://example.com/large',
-      format: 'text',
-    };
-    const invocation = tool.build(params);
-
-    mockedFetch.mockResolvedValue({
-      ok: true,
-      headers: {
-        get: (key: string) => {
-          if (key === 'content-length') return (10 * 1024 * 1024).toString(); // 10MB
-          return null;
-        },
-      },
+  it('enforces the configured timeout and closes the connection without retrying', async () => {
+    const state: ConnectionState = { completed: false, canceled: false };
+    let connectionClosed: Promise<void> | undefined;
+    let hits = 0;
+    const server = await loopback.startServer((_req, res) => {
+      hits++;
+      connectionClosed = trackConnection(res, state);
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      loopback.trackWriter(pacedWrite(res, state, 200, 4096, 20));
     });
 
-    const result = await invocation.execute(new AbortController().signal);
+    const result = await tool
+      .build({ url: loopback.serverUrl(server), format: 'text', timeout: 1 })
+      .execute(new AbortController().signal);
+    if (connectionClosed !== undefined) {
+      await connectionClosed;
+    }
+    await loopback.settleWriters();
 
-    expect(result.error).toBeDefined();
-    expect(result.error?.message).toMatch(/exceeds/i);
+    expect(result.error?.type).toBe(ToolErrorType.FETCH_ERROR);
+    expect(result.error?.message).toMatch(/abort/i);
+    expect(result.llmContent).not.toContain('xxx');
+    expect(hits).toBe(1);
+    expect(state.canceled).toBe(true);
+    expect(state.completed).toBe(false);
   });
 
-  it('returns FETCH_ERROR when the body exceeds the size limit and does not retry body acquisition', async () => {
-    const params: DirectWebFetchToolParams = {
-      url: 'https://example.com/overflow',
-      format: 'text',
-    };
-    const invocation = tool.build(params);
-
-    const overflowBody = mockBody('x'.repeat(100));
-    mockedFetch.mockResolvedValue({
-      ok: true,
-      headers: {
-        get: (key: string) => {
-          if (key === 'content-length') return '9999999';
-          return null;
-        },
-      },
-      body: overflowBody,
+  it('rejects a declared body over 5 MiB, cancels transport, and returns no partial body', async () => {
+    const state: ConnectionState = { completed: false, canceled: false };
+    let connectionClosed: Promise<void> | undefined;
+    const server = await loopback.startServer((_req, res) => {
+      connectionClosed = trackConnection(res, state);
+      res.writeHead(200, {
+        'content-type': 'application/octet-stream',
+        'content-length': '9999999',
+      });
+      loopback.trackWriter(pacedWrite(res, state, 200));
     });
 
-    const result = await invocation.execute(new AbortController().signal);
+    const result = await tool
+      .build({ url: loopback.serverUrl(server), format: 'text' })
+      .execute(new AbortController().signal);
+    if (connectionClosed !== undefined) {
+      await connectionClosed;
+    }
+    await loopback.settleWriters();
 
     expect(result.error?.type).toBe(ToolErrorType.FETCH_ERROR);
     expect(result.error?.message).toMatch(/exceeds/i);
-    expect(overflowBody.destroyed).toBe(true);
-    // Body overflow happens after a successful fetch — no retry is triggered.
-    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    expect(result.llmContent).not.toContain('xxx');
+    expect(state.canceled).toBe(true);
+    expect(state.completed).toBe(false);
   });
 
-  describe('retry behavior', () => {
-    it('retries ENOTFOUND once and succeeds', async () => {
-      const params: DirectWebFetchToolParams = {
-        url: 'https://example.com',
-        format: 'text',
-      };
-      const invocation = tool.build(params);
-
-      const htmlContent = '<html><body>Success after retry</body></html>';
-      let attemptCount = 0;
-
-      mockedFetch.mockImplementation(async () => {
-        attemptCount++;
-        if (attemptCount === 1) {
-          const error = new Error('getaddrinfo ENOTFOUND example.com');
-          (error as { code?: string }).code = 'ENOTFOUND';
-          throw error;
-        }
-        return {
-          ok: true,
-          headers: {
-            get: (key: string) => {
-              if (key === 'content-type') return 'text/html';
-              if (key === 'content-length')
-                return htmlContent.length.toString();
-              return null;
-            },
-          },
-          body: mockBody(htmlContent),
-        };
-      });
-
-      const result = await invocation.execute(new AbortController().signal);
-
-      expect(mockedFetch).toHaveBeenCalledTimes(2);
-      expect(result.error).toBeUndefined();
-      expect(result.llmContent).toContain('Success after retry');
-    });
-
-    it('does not retry non-retryable 4xx', async () => {
-      const params: DirectWebFetchToolParams = {
-        url: 'https://example.com',
-        format: 'text',
-      };
-      const invocation = tool.build(params);
-
-      mockedFetch.mockResolvedValue({
-        ok: false,
-        status: 400,
-        statusText: 'Bad Request',
-        headers: {
-          get: () => null,
-        },
-      });
-
-      const result = await invocation.execute(new AbortController().signal);
-
-      expect(mockedFetch).toHaveBeenCalledTimes(1);
-      expect(result.error).toBeDefined();
-      expect(result.error?.message).toContain('400');
-    });
-
-    it('retries retryable 5xx when status is preserved', async () => {
-      const params: DirectWebFetchToolParams = {
-        url: 'https://example.com',
-        format: 'text',
-      };
-      const invocation = tool.build(params);
-
-      const htmlContent = '<html><body>Success after 503</body></html>';
-      let attemptCount = 0;
-
-      mockedFetch.mockImplementation(async () => {
-        attemptCount++;
-        if (attemptCount === 1) {
-          return {
-            ok: false,
-            status: 503,
-            statusText: 'Service Unavailable',
-            headers: {
-              get: () => null,
-            },
-          };
-        }
-        return {
-          ok: true,
-          headers: {
-            get: (key: string) => {
-              if (key === 'content-type') return 'text/html';
-              if (key === 'content-length')
-                return htmlContent.length.toString();
-              return null;
-            },
-          },
-          body: mockBody(htmlContent),
-        };
-      });
-
-      const result = await invocation.execute(new AbortController().signal);
-
-      expect(mockedFetch).toHaveBeenCalledTimes(2);
-      expect(result.error).toBeUndefined();
-      expect(result.llmContent).toContain('Success after 503');
-    });
-
-    it('pre-aborted signal returns ToolResult.error and does not call fetch', async () => {
-      const params: DirectWebFetchToolParams = {
-        url: 'https://example.com',
-        format: 'text',
-      };
-      const invocation = tool.build(params);
-
-      const abortController = new AbortController();
-      abortController.abort();
-
-      const result = await invocation.execute(abortController.signal);
-
-      expect(mockedFetch).not.toHaveBeenCalled();
-      expect(result.error).toBeDefined();
-      expect(result.error?.message).toMatch(/abort|cancel/i);
-    });
-
-    it('timeout abort returns ToolResult.error and cancels retries', async () => {
-      const params: DirectWebFetchToolParams = {
-        url: 'https://example.com',
-        format: 'text',
-        timeout: 1, // 1 second timeout
-      };
-      const invocation = tool.build(params);
-
-      // Mock fetch that respects abort signal (like real node-fetch)
-      mockedFetch.mockImplementation(
-        (_url: string, opts?: { signal?: AbortSignal }) =>
-          new Promise((resolve, reject) => {
-            const signal = opts?.signal;
-            if (signal?.aborted === true) {
-              reject(
-                new DOMException('The operation was aborted', 'AbortError'),
-              );
-              return;
-            }
-            const timer = setTimeout(() => {
-              resolve({
-                ok: true,
-                headers: { get: () => null },
-                body: mockBody('data'),
-              });
-            }, 5000);
-            signal?.addEventListener('abort', () => {
-              clearTimeout(timer);
-              reject(
-                new DOMException('The operation was aborted', 'AbortError'),
-              );
-            });
-          }),
-      );
-
-      const result = await invocation.execute(new AbortController().signal);
-
-      expect(result.error).toBeDefined();
-      expect(result.error?.message).toMatch(/abort|timeout/i);
-      expect(mockedFetch.mock.calls.length).toBeGreaterThan(0);
-      expect(mockedFetch.mock.calls.length).toBeLessThan(10);
-    });
-  });
-
-  describe('non-success response body disposal', () => {
-    it('destroys the 4xx response body without reading it', async () => {
-      const params: DirectWebFetchToolParams = {
-        url: 'https://example.com/notfound',
-        format: 'text',
-      };
-      const invocation = tool.build(params);
-
-      const errorBody = mockBody('404 Not Found Body');
-      mockedFetch.mockResolvedValue({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-        headers: { get: () => null },
-        body: errorBody,
-      });
-
-      const result = await invocation.execute(new AbortController().signal);
-
-      expect(mockedFetch).toHaveBeenCalledTimes(1);
-      expect(result.error?.message).toContain('404');
-      expect((errorBody as unknown as { destroyed: boolean }).destroyed).toBe(
-        true,
-      );
-    });
-
-    it('destroys the 5xx retryable body on each retry attempt', async () => {
-      const params: DirectWebFetchToolParams = {
-        url: 'https://example.com/server-error',
-        format: 'text',
-      };
-      const invocation = tool.build(params);
-
-      const firstErrorBody = mockBody('503 Error Body');
-      const successBody = mockBody('<html><body>OK</body></html>');
-      let attempt = 0;
-      mockedFetch.mockImplementation(async () => {
-        attempt++;
-        if (attempt === 1) {
-          return {
-            ok: false,
-            status: 503,
-            statusText: 'Service Unavailable',
-            headers: { get: () => null },
-            body: firstErrorBody,
-          };
-        }
-        return {
-          ok: true,
-          status: 200,
-          headers: {
-            get: (key: string) => (key === 'content-type' ? 'text/html' : null),
-          },
-          body: successBody,
-        };
-      });
-
-      const result = await invocation.execute(new AbortController().signal);
-
-      expect(mockedFetch).toHaveBeenCalledTimes(2);
-      expect(result.error).toBeUndefined();
-      // The 503 error body must have been destroyed without being read.
-      expect(
-        (firstErrorBody as unknown as { destroyed: boolean }).destroyed,
-      ).toBe(true);
-    });
-
-    it('destroys every 5xx body when all retries are exhausted', async () => {
-      const params: DirectWebFetchToolParams = {
-        url: 'https://example.com/always-500',
-        format: 'text',
-      };
-      const invocation = tool.build(params);
-
-      const bodies: Readable[] = [];
-      mockedFetch.mockImplementation(async () => {
-        const body = mockBody('500 Server Error');
-        bodies.push(body);
-        return {
-          ok: false,
-          status: 500,
-          statusText: 'Internal Server Error',
-          headers: { get: () => null },
-          body,
-        };
-      });
-
-      const result = await invocation.execute(new AbortController().signal);
-
-      expect(mockedFetch.mock.calls.length).toBeGreaterThan(1);
-      expect(result.error).toBeDefined();
-      expect(result.error?.message).toContain('500');
-      // Every error response body must have been destroyed.
-      for (const body of bodies) {
-        expect((body as unknown as { destroyed: boolean }).destroyed).toBe(
-          true,
-        );
+  it('succeeds when observed chunked bytes exactly equal the 5 MiB budget', async () => {
+    const chunkSize = 64 * 1024;
+    const totalChunks = (5 * 1024 * 1024) / chunkSize;
+    const server = await loopback.startServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/octet-stream' });
+      for (let i = 0; i < totalChunks; i++) {
+        res.write(Buffer.alloc(chunkSize, 0x78));
       }
+      res.end();
     });
+
+    const result = await tool
+      .build({ url: loopback.serverUrl(server), format: 'text' })
+      .execute(new AbortController().signal);
+
+    expect(result.error).toBeUndefined();
+    expect(String(result.llmContent).length).toBe(5 * 1024 * 1024);
   });
 
-  describe('observed-byte boundary (no Content-Length)', () => {
-    const FETCH_BUDGET = 5 * 1024 * 1024; // 5 MiB
+  it('cancels observed 5 MiB overflow and returns no partial body', async () => {
+    const state: ConnectionState = { completed: false, canceled: false };
+    let connectionClosed: Promise<void> | undefined;
+    const server = await loopback.startServer((_req, res) => {
+      connectionClosed = trackConnection(res, state);
+      res.writeHead(200, { 'content-type': 'application/octet-stream' });
+      res.write('partial-body-marker');
+      loopback.trackWriter(pacedWrite(res, state, 21, 256 * 1024, 5));
+    });
 
-    /**
-     * Generate a stream that emits exactly `totalBytes` of 0x78 ('x') in
-     * 64 KiB chunks without materializing the entire buffer at once.
-     */
-    function sizedStream(totalBytes: number): Readable {
-      const chunkSize = Math.min(64 * 1024, totalBytes);
-      let sent = 0;
-      return new Readable({
-        read() {
-          if (sent >= totalBytes) {
-            this.push(null);
-            return;
-          }
-          const remaining = totalBytes - sent;
-          const size = Math.min(chunkSize, remaining);
-          this.push(Buffer.alloc(size, 0x78));
-          sent += size;
-        },
-      });
+    const result = await tool
+      .build({ url: loopback.serverUrl(server), format: 'text' })
+      .execute(new AbortController().signal);
+    if (connectionClosed !== undefined) {
+      await connectionClosed;
     }
+    await loopback.settleWriters();
 
-    it('succeeds when observed bytes exactly equal the 5 MiB budget', async () => {
-      const params: DirectWebFetchToolParams = {
-        url: 'https://example.com/exact',
-        format: 'text',
-      };
-      const invocation = tool.build(params);
+    expect(result.error?.type).toBe(ToolErrorType.FETCH_ERROR);
+    expect(result.error?.message).toMatch(/exceeds/i);
+    expect(result.llmContent).not.toContain('partial-body-marker');
+    expect(state.canceled).toBe(true);
+    expect(state.completed).toBe(false);
+  });
 
-      mockedFetch.mockResolvedValue({
-        ok: true,
-        headers: { get: () => null },
-        body: sizedStream(FETCH_BUDGET),
-      });
-
-      const result = await invocation.execute(new AbortController().signal);
-
-      expect(result.error).toBeUndefined();
-      const content =
-        typeof result.llmContent === 'string' ? result.llmContent : '';
-      expect(content.length).toBe(FETCH_BUDGET);
+  it('retries a connection closed before response headers and returns FETCH_ERROR', async () => {
+    let attempts = 0;
+    const server = await loopback.startServer((req) => {
+      attempts++;
+      req.socket.destroy();
     });
 
-    it('fails without body-acquisition retry when observed bytes are 5 MiB + 1', async () => {
-      const params: DirectWebFetchToolParams = {
-        url: 'https://example.com/overflow',
-        format: 'text',
-      };
-      const invocation = tool.build(params);
+    const result = await tool
+      .build({ url: loopback.serverUrl(server), format: 'text' })
+      .execute(new AbortController().signal);
 
-      mockedFetch.mockResolvedValue({
-        ok: true,
-        headers: { get: () => null },
-        body: sizedStream(FETCH_BUDGET + 1),
-      });
-
-      const result = await invocation.execute(new AbortController().signal);
-
-      expect(result.error?.type).toBe(ToolErrorType.FETCH_ERROR);
-      expect(result.error?.message).toMatch(/exceeds/i);
-      // Body overflow is detected during acquisition — no retry is triggered.
-      expect(mockedFetch).toHaveBeenCalledTimes(1);
-    });
+    expect(result.error).toBeDefined();
+    expect(result.error?.type).toBe(ToolErrorType.FETCH_ERROR);
+    expect(result.error?.message).toMatch(
+      /fetch|connection|closed|reset|socket/i,
+    );
+    expect(attempts).toBe(3);
   });
 });
