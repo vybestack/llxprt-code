@@ -64,6 +64,4 @@ export {
 } from './core/toolGovernance.js';
 export * from './compression/index.js';
 export * from './agents/types.js';
-export * from './agents/invocation.js';
-export * from './agents/executor.js';
 export * from './core/agenticLoop/index.js';
