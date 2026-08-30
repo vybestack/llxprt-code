@@ -238,11 +238,9 @@ try {
     { stdio: 'ignore' },
   );
   console.log('packing @vybestack/llxprt-code-zed-acp ...');
-  rmSync(
-    join(zedAcpPackageDir, 'dist', 'vybestack-llxprt-code-zed-acp-*.tgz'),
-    {
-      force: true,
-    },
+  removeTarballs(
+    join(zedAcpPackageDir, 'dist'),
+    'vybestack-llxprt-code-zed-acp',
   );
   execSync(
     `npm pack -w @vybestack/llxprt-code-zed-acp --pack-destination ./packages/zed-acp/dist`,
