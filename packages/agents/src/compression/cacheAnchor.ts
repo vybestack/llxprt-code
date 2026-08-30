@@ -62,6 +62,11 @@ function extractSeq(entry: IContent): number {
 export function applyCompressionWithAnchor(
   historyService: {
     clear(): void;
+    /**
+     * Synchronous-only: an async callback would exit the scope on its first await.
+     * `() => undefined` rejects `() => Promise<void>` at compile time (#3338).
+     */
+    rebuildWith(callback: () => undefined): void;
     add(content: IContent, model?: string): void;
     resetCacheAnchorSeq(): void;
     setCacheAnchorSeq(seq: number): void;
@@ -91,15 +96,17 @@ export function applyCompressionWithAnchor(
   // explicit-cache providers can place a breakpoint at the head boundary. The
   // marker travels with the history; a wholesale replacement drops it.
 
-  historyService.clear();
-  for (const content of annotated) {
-    historyService.add(content, model);
-  }
-  if (isPrefixDestroyed) {
-    historyService.resetCacheAnchorSeq();
-  } else if (anchorSeq !== undefined) {
-    historyService.setCacheAnchorSeq(anchorSeq);
-  }
+  historyService.rebuildWith(() => {
+    historyService.clear();
+    for (const content of annotated) {
+      historyService.add(content, model);
+    }
+    if (isPrefixDestroyed) {
+      historyService.resetCacheAnchorSeq();
+    } else if (anchorSeq !== undefined) {
+      historyService.setCacheAnchorSeq(anchorSeq);
+    }
+  });
 }
 
 /**

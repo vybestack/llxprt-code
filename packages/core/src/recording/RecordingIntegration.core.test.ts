@@ -41,7 +41,10 @@ import { RecordingIntegration } from './RecordingIntegration.js';
 import { replaySession } from './ReplayEngine.js';
 import { assertReplayOk } from './replay-test-helpers.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
-import { type SessionRecordingServiceConfig } from './types.js';
+import {
+  type ContentPayload,
+  type SessionRecordingServiceConfig,
+} from './types.js';
 
 const PROJECT_HASH = 'project-hash-recording-integration';
 
@@ -135,6 +138,36 @@ async function flushAndRead(
 ): Promise<JsonlEvent[]> {
   await integration.flushAtTurnBoundary();
   return readRecordedEvents(recordingService);
+}
+
+function recordedContent(event: JsonlEvent): IContent {
+  if (event.type !== 'content' || !isRecordedContentPayload(event.payload)) {
+    throw new Error(`Recorded event has no content payload: ${event.type}`);
+  }
+  return event.payload.content;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isSpeaker(value: unknown): value is IContent['speaker'] {
+  return value === 'human' || value === 'ai' || value === 'tool';
+}
+
+function isContent(value: unknown): value is IContent {
+  return (
+    isRecord(value) && isSpeaker(value.speaker) && Array.isArray(value.blocks)
+  );
+}
+
+function isRecordedContentPayload(payload: unknown): payload is ContentPayload {
+  return isRecord(payload) && isContent(payload.content);
+}
+
+function firstText(content: IContent): string {
+  const block = content.blocks[0];
+  return block.type === 'text' ? block.text : `<${block.type}>`;
 }
 
 describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => {
@@ -450,11 +483,13 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
 
       historyService.startCompression();
       historyService.add(toolCallContent('mid'));
-      historyService.clear();
-      for (const content of retained) {
-        // The rebuild re-adds retained entries through the same queue.
-        historyService.add(content);
-      }
+      historyService.rebuildWith(() => {
+        historyService.clear();
+        for (const content of retained) {
+          // The rebuild re-adds retained entries through the same queue.
+          historyService.add(content);
+        }
+      });
       historyService.endCompression(textContent('summary', 'ai'), 1);
 
       const events = await flushAndRead(integration, recordingService);
@@ -502,6 +537,69 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
       expect(
         result.history[1].blocks.some(
           (block) => block.type === 'tool_call' && block.id === 'call_mid',
+        ),
+      ).toBe(true);
+    });
+  });
+
+  describe('Compression-aware recording of a late streaming add after an explicit rebuild (#3338)', () => {
+    it('records [content, compressed, content] and replays [summary, late entry]', async () => {
+      integration.subscribeToHistory(historyService);
+      historyService.add(textContent('original question'));
+      const retained = historyService.getCurated();
+      const lateEntry = toolCallContent('late');
+
+      historyService.startCompression();
+      historyService.rebuildWith(() => {
+        historyService.clear();
+        for (const content of retained) {
+          historyService.add(content);
+        }
+      });
+      historyService.add(lateEntry);
+      historyService.endCompression(textContent('summary', 'ai'), 1);
+
+      const events = await flushAndRead(integration, recordingService);
+      const contentOrCompressed = events
+        .filter(
+          (event) => event.type === 'content' || event.type === 'compressed',
+        )
+        .map((event) => event.type);
+      expect(contentOrCompressed).toStrictEqual([
+        'content',
+        'compressed',
+        'content',
+      ]);
+
+      const recordedContents = events
+        .filter((event) => event.type === 'content')
+        .map((event) => recordedContent(event));
+      const originalRecords = recordedContents.filter(
+        (content) => firstText(content) === 'original question',
+      );
+      expect(originalRecords).toHaveLength(1);
+      const lateRecords = recordedContents.filter((content) =>
+        content.blocks.some(
+          (block) => block.type === 'tool_call' && block.id === 'call_late',
+        ),
+      );
+      expect(lateRecords).toHaveLength(1);
+
+      const filePath = recordingService.getFilePath();
+      if (filePath === null) {
+        throw new Error('Expected a session file after recorded events');
+      }
+      const result = await replaySession(filePath, PROJECT_HASH);
+      assertReplayOk(result);
+      expect(result.history).toHaveLength(2);
+      expect(result.history[0].blocks[0]).toStrictEqual({
+        type: 'text',
+        text: 'summary',
+      });
+      expect(result.history[1].speaker).toBe('ai');
+      expect(
+        result.history[1].blocks.some(
+          (block) => block.type === 'tool_call' && block.id === 'call_late',
         ),
       ).toBe(true);
     });

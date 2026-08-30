@@ -172,26 +172,28 @@ describe('Compression locking', () => {
     // Start compression
     historyService.startCompression();
 
-    // Clear history (as compression would)
-    historyService.clear();
+    historyService.rebuildWith(() => {
+      // Clear history (as compression would)
+      historyService.clear();
 
-    // Add compressed summary
-    historyService.add({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'Compressed context' }],
-    });
+      // Add compressed summary
+      historyService.add({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Compressed context' }],
+      });
 
-    // Re-add the tool call (simulating historyToKeep)
-    historyService.add({
-      speaker: 'ai',
-      blocks: [
-        {
-          type: 'tool_call',
-          id: toolCallId,
-          name: 'glob',
-          parameters: { pattern: '*.ts' },
-        },
-      ],
+      // Re-add the tool call (simulating historyToKeep)
+      historyService.add({
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: toolCallId,
+            name: 'glob',
+            parameters: { pattern: '*.ts' },
+          },
+        ],
+      });
     });
 
     // While compression is still active, try to add tool response
@@ -380,10 +382,12 @@ describe('Compression locking', () => {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'mid-stream content' }],
       });
-      historyService.clear();
-      for (const content of retained) {
-        historyService.add(content);
-      }
+      historyService.rebuildWith(() => {
+        historyService.clear();
+        for (const content of retained) {
+          historyService.add(content);
+        }
+      });
       historyService.endCompression(
         { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
         1,
@@ -422,10 +426,12 @@ describe('Compression locking', () => {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'mid-stream content' }],
       });
-      historyService.clear();
-      for (const content of retained) {
-        historyService.add(content);
-      }
+      historyService.rebuildWith(() => {
+        historyService.clear();
+        for (const content of retained) {
+          historyService.add(content);
+        }
+      });
       historyService.endCompression(
         { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
         1,
@@ -466,10 +472,12 @@ describe('Compression locking', () => {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'follow-up stream chunk' }],
       });
-      historyService.clear();
-      for (const content of retained) {
-        historyService.add(content);
-      }
+      historyService.rebuildWith(() => {
+        historyService.clear();
+        for (const content of retained) {
+          historyService.add(content);
+        }
+      });
       historyService.endCompression(
         { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
         1,
@@ -491,6 +499,118 @@ describe('Compression locking', () => {
         type: 'text',
         text: 'follow-up stream chunk',
       });
+    });
+
+    it('flushes a late streaming add after the release events when an explicit rebuild runs first (#3338)', () => {
+      historyService.add({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'original question' }],
+      });
+      const retained = historyService.getCurated();
+
+      const observed: string[] = [];
+      historyService.on('contentAdded', (content) => {
+        const block = content.blocks[0];
+        observed.push(
+          `contentAdded:${block.type === 'text' ? block.text : block.type}`,
+        );
+      });
+      historyService.on('compressionLockReleased', () => {
+        observed.push('compressionLockReleased');
+      });
+      historyService.on('compressionEnded', () => {
+        observed.push('compressionEnded');
+      });
+
+      historyService.startCompression();
+      historyService.rebuildWith(() => {
+        historyService.clear();
+        for (const content of retained) {
+          historyService.add(content);
+        }
+      });
+      historyService.add({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'late streaming content' }],
+      });
+      historyService.endCompression(
+        { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
+        1,
+      );
+
+      expect(observed).toStrictEqual([
+        'contentAdded:original question',
+        'compressionLockReleased',
+        'compressionEnded',
+        'contentAdded:late streaming content',
+      ]);
+
+      const texts = historyService.getAll().map((entry) => {
+        const block = entry.blocks[0];
+        return block.type === 'text' ? block.text : `<${block.type}>`;
+      });
+      expect(texts).toStrictEqual([
+        'original question',
+        'late streaming content',
+      ]);
+    });
+
+    it('flushes queued rebuild work in the rebuild phase when the callback throws after queueing it', () => {
+      historyService.add({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'original question' }],
+      });
+      const retained = historyService.getCurated();
+
+      const observed: string[] = [];
+      historyService.on('contentAdded', (content) => {
+        const block = content.blocks[0];
+        observed.push(
+          `contentAdded:${block.type === 'text' ? block.text : block.type}`,
+        );
+      });
+      historyService.on('compressionLockReleased', () => {
+        observed.push('compressionLockReleased');
+      });
+      historyService.on('compressionEnded', () => {
+        observed.push('compressionEnded');
+      });
+
+      historyService.startCompression();
+      expect(() =>
+        historyService.rebuildWith(() => {
+          historyService.clear();
+          for (const content of retained) {
+            historyService.add(content);
+          }
+          throw new Error('rebuild failed');
+        }),
+      ).toThrow('rebuild failed');
+      historyService.add({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'late streaming content' }],
+      });
+      historyService.endCompression(
+        { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
+        1,
+      );
+
+      // The work queued before the throw is real rebuild work: it flushes
+      // inside the suppression window, then the events, then the late add.
+      expect(observed).toStrictEqual([
+        'contentAdded:original question',
+        'compressionLockReleased',
+        'compressionEnded',
+        'contentAdded:late streaming content',
+      ]);
+      const texts = historyService.getAll().map((entry) => {
+        const block = entry.blocks[0];
+        return block.type === 'text' ? block.text : `<${block.type}>`;
+      });
+      expect(texts).toStrictEqual([
+        'original question',
+        'late streaming content',
+      ]);
     });
   });
 
@@ -534,10 +654,12 @@ describe('Compression locking', () => {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'mid-stream content' }],
       });
-      historyService.clear();
-      for (const content of retained) {
-        historyService.add(content);
-      }
+      historyService.rebuildWith(() => {
+        historyService.clear();
+        for (const content of retained) {
+          historyService.add(content);
+        }
+      });
       historyService.endCompression(
         { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
         1,
@@ -580,10 +702,12 @@ describe('Compression locking', () => {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'mid-stream content' }],
       });
-      historyService.clear();
-      for (const content of retained) {
-        historyService.add(content);
-      }
+      historyService.rebuildWith(() => {
+        historyService.clear();
+        for (const content of retained) {
+          historyService.add(content);
+        }
+      });
 
       expect(() =>
         historyService.endCompression(
@@ -629,10 +753,12 @@ describe('Compression locking', () => {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'mid-stream content' }],
       });
-      historyService.clear();
-      for (const content of retained) {
-        historyService.add(content);
-      }
+      historyService.rebuildWith(() => {
+        historyService.clear();
+        for (const content of retained) {
+          historyService.add(content);
+        }
+      });
 
       expect(() =>
         historyService.endCompression(
@@ -670,10 +796,12 @@ describe('Compression locking', () => {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'mid-stream content' }],
       });
-      historyService.clear();
-      for (const content of retained) {
-        historyService.add(content);
-      }
+      historyService.rebuildWith(() => {
+        historyService.clear();
+        for (const content of retained) {
+          historyService.add(content);
+        }
+      });
 
       // The thrown value is `undefined`, so this is asserted via a capture
       // rather than toThrow(), which cannot match a non-Error thrown value.
@@ -707,14 +835,14 @@ describe('CompressionOperationQueue high-water latch', () => {
       2,
     );
 
-    queue.enqueue(() => {}, 'add');
-    queue.enqueue(() => {}, 'add');
+    queue.enqueue(() => {}, 'streaming');
+    queue.enqueue(() => {}, 'streaming');
     // Crossing the threshold fires the diagnostic exactly once for this cycle.
     expect(reports).toStrictEqual([2]);
 
     queue.clear();
-    queue.enqueue(() => {}, 'add');
-    queue.enqueue(() => {}, 'add');
+    queue.enqueue(() => {}, 'streaming');
+    queue.enqueue(() => {}, 'streaming');
     // clear() must restore initial state (dispose path), so a later cycle
     // crossing the threshold is diagnosable again instead of staying latched.
     expect(reports).toStrictEqual([2, 2]);

@@ -901,4 +901,102 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       expect(thrownError!.message).toContain('history persistence layer down');
     });
   });
+
+  describe('ProviderContentEnforcer restore path under an active compression lock (#3338)', () => {
+    let historyService: HistoryService;
+    let runtimeContext: AgentRuntimeContext;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      historyService = new HistoryService();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('restores fallback history inside one rebuild scope and keeps late streaming content after release', async () => {
+      runtimeContext = buildRuntimeContext(historyService, {
+        contextLimit: 2000,
+        compressionThreshold: 0.8,
+      });
+      historyService.add(makeUserMessage('established history'));
+      const pending = makeUserMessage('pending request');
+      const contents = historyService.getCuratedForProvider([pending]);
+
+      const harness = buildEnforcerHarness(historyService, runtimeContext, {
+        generationConfig: { maxOutputTokens: 100 },
+        performFallbackCompression: async (_promptId, applyResult) => {
+          // Production wiring (CompressionHandler.performFallbackCompression +
+          // executeFallbackTruncation) feeds the truncated history to
+          // restoreFallbackState, which replaces the history atomically and
+          // resets the anchor. #3264 made that path async, so the result has to
+          // be awaited before the enforcer re-projects.
+          await applyResult([
+            makeUserMessage('restored-1'),
+            makeUserMessage('restored-2'),
+          ]);
+          return true;
+        },
+      });
+
+      // Initial/post-density/post-compression stay over the hard limit so the
+      // enforcer reaches the restore path; the post-truncation projection then
+      // fits, so enforce returns the restored history.
+      const estimateSpy = vi.spyOn(historyService, 'estimateTokensForContents');
+      estimateSpy.mockResolvedValueOnce(500_000);
+      estimateSpy.mockResolvedValueOnce(500_000);
+      estimateSpy.mockResolvedValueOnce(500_000);
+      estimateSpy.mockResolvedValueOnce(100);
+
+      harness.deps.performCompression.mockResolvedValue(
+        PerformCompressionResult.FAILED,
+      );
+
+      const observed: string[] = [];
+      historyService.on('contentAdded', (content) => {
+        const block = content.blocks[0];
+        observed.push(
+          `contentAdded:${block.type === 'text' ? block.text : block.type}`,
+        );
+      });
+      historyService.on('compressionLockReleased', () => {
+        observed.push('compressionLockReleased');
+      });
+      historyService.on('compressionEnded', () => {
+        observed.push('compressionEnded');
+      });
+
+      historyService.startCompression();
+      await harness.enforcer.enforce(
+        { contents, pendingContents: [pending] },
+        'test-prompt',
+      );
+      historyService.add(makeUserMessage('late stream after restore'));
+      historyService.endCompression(makeUserMessage('truncation summary'), 2);
+
+      // #3264 replaced the clear/re-add loop with an atomic
+      // HistoryService.replaceAll, so restoring does not announce its own
+      // entries as newly added content. The entry that arrives after the lock
+      // is released -- which is what #3338 is about -- still streams.
+      expect(observed).toStrictEqual([
+        'compressionLockReleased',
+        'compressionEnded',
+        'contentAdded:late stream after restore',
+      ]);
+
+      const texts = historyService.getAll().map((entry) => {
+        const block = entry.blocks[0];
+        return block.type === 'text' ? block.text : `<${block.type}>`;
+      });
+      expect(texts).toStrictEqual([
+        'restored-1',
+        'restored-2',
+        'late stream after restore',
+      ]);
+      // The truncation restore explicitly reset the post-truncation cache anchor.
+      expect(historyService.getCacheAnchorSeq()).toBe(0);
+      estimateSpy.mockRestore();
+    });
+  });
 });
