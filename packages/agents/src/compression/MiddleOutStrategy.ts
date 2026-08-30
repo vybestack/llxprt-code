@@ -55,6 +55,7 @@ import {
   mediaBlockToCompressionPlaceholder,
 } from './utils.js';
 import { buildContinuationDirective } from '@vybestack/llxprt-code-core/core/compression/continuationDirective.js';
+import { buildTranscriptPathNotice } from '@vybestack/llxprt-code-core/core/compression/transcriptPathNotice.js';
 import { getCompressionPrompt } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { buildCompressionChatOptions } from './compressionSystemPrompt.js';
@@ -707,7 +708,7 @@ ${context.activeTodos}`,
         blocks: [
           {
             type: 'text',
-            text: `Note: The full pre-compression transcript is available at: ${context.transcriptPath}`,
+            text: buildTranscriptPathNotice(context.transcriptPath),
           },
         ],
       });

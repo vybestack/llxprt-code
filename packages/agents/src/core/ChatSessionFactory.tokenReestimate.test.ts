@@ -29,6 +29,7 @@ void vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () => ({
 void vi.mock('./chatSession.js', () => ({
   ChatSession: vi.fn().mockImplementation(() => ({
     setActiveTodosProvider: vi.fn(),
+    setTranscriptPathProvider: vi.fn(),
     getHistoryService: vi.fn().mockReturnValue(null),
   })),
 }));

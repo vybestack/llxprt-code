@@ -328,7 +328,30 @@ async function buildChatFromRuntime(
     return active.map((t) => `- [${t.status}] ${t.content}`).join('\n');
   });
 
+  chat.setTranscriptPathProvider(() => resolveTranscriptPath(config));
+
   return chat;
+}
+
+/**
+ * Where the session journal for this session is being written, or undefined
+ * when there is nothing to point at (issue #2933).
+ *
+ * Read off Config on every call rather than captured once: recording is
+ * optional, can be enabled part way through a session, and is replaced with a
+ * different service by a resume. A recorder that has stopped — disposed, or
+ * deactivated by a write failure — still remembers the path it used, so
+ * liveness is decided by `isActive()`, not by the path alone.
+ */
+export function resolveTranscriptPath(config: Config): string | undefined {
+  const recording = config.getSessionRecordingService();
+  if (!recording) {
+    return undefined;
+  }
+  if (!recording.isActive()) {
+    return undefined;
+  }
+  return recording.getFilePath() ?? undefined;
 }
 
 /**

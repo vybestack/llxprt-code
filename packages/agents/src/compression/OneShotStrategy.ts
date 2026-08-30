@@ -53,6 +53,7 @@ import {
 } from './utils.js';
 import { getCompressionPrompt } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { buildContinuationDirective } from '@vybestack/llxprt-code-core/core/compression/continuationDirective.js';
+import { buildTranscriptPathNotice } from '@vybestack/llxprt-code-core/core/compression/transcriptPathNotice.js';
 import { buildCompressionChatOptions } from './compressionSystemPrompt.js';
 function destructureProviderResult(result: CompressionProviderResult): {
   provider: IProvider;
@@ -428,7 +429,7 @@ ${context.activeTodos}`,
         blocks: [
           {
             type: 'text',
-            text: `Note: The full pre-compression transcript is available at: ${context.transcriptPath}`,
+            text: buildTranscriptPathNotice(context.transcriptPath),
           },
         ],
       });

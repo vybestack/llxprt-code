@@ -110,6 +110,7 @@ export {
   hasInteractiveSubagentScheduler,
 } from './core/subagentTypes.js';
 export { buildContinuationDirective } from './core/compression/continuationDirective.js';
+export { buildTranscriptPathNotice } from './core/compression/transcriptPathNotice.js';
 
 // Export utilities
 export * from './utils/paths.js';

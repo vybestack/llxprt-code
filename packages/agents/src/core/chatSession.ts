@@ -691,6 +691,10 @@ export class ChatSession {
     this.compressionHandler.setActiveTodosProvider(provider);
   }
 
+  setTranscriptPathProvider(provider: () => string | undefined): void {
+    this.compressionHandler.setTranscriptPathProvider(provider);
+  }
+
   async performCompression(
     prompt_id: string,
     options?: { bypassCooldown?: boolean; trigger?: 'manual' | 'auto' },
