@@ -191,4 +191,5 @@ Fields:
 - [Authentication](./authentication.md) — Detailed auth configuration
 - [Profiles](./profiles.md) — Save and manage provider/model configurations
 - [Local Models](../local-models.md) — Running models locally with LM Studio, Ollama, and llama.cpp
+- [Runtime Plugins](../runtime-plugins.md) — Contributing provider factories from a trusted npm package
 - [Configuration](./configuration.md) — Full configuration reference

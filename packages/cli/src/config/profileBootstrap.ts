@@ -22,6 +22,7 @@ import { parseProfileJson } from '@vybestack/llxprt-code-settings';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { createOAuthSettingsAdapter } from '../auth/oauth-settings-adapter.js';
 import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime.js';
+import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 
 export const DEFAULT_RUNTIME_ID = 'cli.runtime.bootstrap';
@@ -64,11 +65,32 @@ export interface RuntimeBootstrapMetadata {
   runtimeId?: string;
   messageBus?: MessageBus;
   metadata?: Record<string, unknown>;
+  /**
+   * The provider contribution registry produced by discovering and loading
+   * the installed plugin packages once at CLI startup (issue #2758).
+   * Forwarded to the providers assembly so alias construction dispatches
+   * through it.
+   */
+  providerContributions?: ProviderContributionRegistry;
 }
 
 export interface ParsedBootstrapArgs {
   bootstrapArgs: BootstrapProfileArgs;
   runtimeMetadata: RuntimeBootstrapMetadata;
+}
+
+/**
+ * Runtime seams the composition root injects into the CLI config pipeline.
+ * Both are resolved before Config exists and are threaded to the pre-Config
+ * provider assembly and the post-Config re-assembly alike.
+ */
+export interface CliRuntimeOverrides {
+  settingsService?: SettingsService;
+  /**
+   * Provider contributions from the installed plugin packages, discovered and
+   * loaded once at startup (issue #2758).
+   */
+  providerContributions?: ProviderContributionRegistry;
 }
 
 export interface BootstrapRuntimeState {
@@ -420,6 +442,9 @@ export async function prepareRuntimeForProfile(
     runtimeId,
     metadata,
     oauthSettings: createOAuthSettingsAdapter(),
+    ...(runtimeInit.providerContributions !== undefined
+      ? { providerContributions: runtimeInit.providerContributions }
+      : {}),
   });
 
   return {

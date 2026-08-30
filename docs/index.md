@@ -77,6 +77,7 @@ LLxprt Code ships with built-in tools for file editing, shell commands, web sear
 ## Reference
 
 - [Agent API](./agent-api.md) — embed the LLxprt Code agent in your own program
+- [Runtime Plugins](./runtime-plugins.md) — trusted npm packages that contribute provider factories at startup
 - [Memory Profiling](./memory-profiling.md) — record JSC heap samples and analyze heap snapshots to investigate session growth
 - [Application Directories](./reference/application-directories.md) — where config, data, cache, and logs live on Linux/macOS/Windows, and how to override them
 - [Token Usage Log](./token-usage-log.md) — per-session token-usage JSONL schema, the join to conversation turns, and privacy posture

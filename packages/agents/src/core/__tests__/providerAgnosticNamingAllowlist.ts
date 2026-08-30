@@ -166,6 +166,9 @@ export const ALLOWED_IMPORT_TUPLES: readonly string[] = [
   'core/test/models/profiles.test.ts::./__fixtures__/mock-data.js::geminiModel::geminiModel',
   'core/test/models/transformer.test.ts::./__fixtures__/mock-data.js::geminiModel::geminiModel',
   'providers/src/composition/aliasProviderFactory.ts::../gemini/GeminiProvider.js::GeminiProvider::GeminiProvider',
+  // The built-in provider contribution table enumerates every built-in
+  // provider, Gemini included, and delegates to the existing alias factory.
+  'providers/src/composition/runtimePlugins/builtinContributions.ts::../aliasProviderFactory.js::createGeminiAliasProvider::createGeminiAliasProvider',
   'providers/src/utils/providerRequestConversion.ts::../gemini/GeminiMessageConverter.js::convertHistoryToGeminiFormat::convertHistoryToGeminiFormat',
   'settings/src/profiles/__tests__/canonicalProfileRepair.test.ts::./canonicalProfileRepair.testHelpers.js::corruptCanonicalProfileNonGeminiModel::corruptCanonicalProfileNonGeminiModel',
 ];
