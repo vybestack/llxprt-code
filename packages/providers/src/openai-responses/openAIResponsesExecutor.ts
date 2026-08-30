@@ -1104,7 +1104,9 @@ async function buildWebSocketHandshakeHeaders(
       ? invocationSessionId
       : params.normalizedOptions.runtime?.runtimeId;
   if (typeof sessionId === 'string' && sessionId.trim() !== '') {
-    headers['session_id'] = sessionId;
+    headers['session-id'] = sessionId;
+    headers['thread-id'] = sessionId;
+    headers['x-client-request-id'] = sessionId;
   }
   headers['OpenAI-Beta'] = CODEX_WEBSOCKET_BETA_HEADER;
   return headers;

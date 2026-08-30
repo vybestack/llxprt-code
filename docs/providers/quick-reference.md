@@ -226,6 +226,31 @@ for models that support it; when forced to `chat`, Chat Completions is used
 unless the model requires Responses on the official OpenAI endpoint (GPT-5.6+),
 where Chat is unavailable and the override is ignored.
 
+### OpenAI Codex (ChatGPT Plus/Pro)
+
+```bash
+/auth codex enable
+/provider codex
+/model gpt-5.6-sol
+```
+
+#### WebSocket transport
+
+The Codex provider sends `Authorization`, `ChatGPT-Account-ID`,
+`originator: codex_cli_rs`, and any configured custom headers during the
+WebSocket handshake. It also sends `session-id`, `thread-id`, and
+`x-client-request-id`, each set to the session's runtime ID, plus
+`OpenAI-Beta: responses_websockets=2026-02-06`. The identity headers use the
+hyphenated forms used by the current Codex client.
+
+The WebSocket handshake times out after 15 seconds. After the connection is
+established, the stream has a five-minute idle timeout that resets on each
+valid text frame. If it expires, LLxprt closes the socket. When no output has been
+streamed, LLxprt serves that request over HTTP/SSE instead; after repeated
+consecutive pre-output WebSocket failures it stays on HTTP for the session.
+When output has already been streamed, LLxprt reports a stream interruption
+without replaying partial output.
+
 ### Qwen
 
 ```bash

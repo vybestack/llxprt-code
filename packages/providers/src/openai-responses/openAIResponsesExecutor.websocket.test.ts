@@ -17,7 +17,10 @@ import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtim
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import type { WebSocketTransport } from './openAIResponsesWebSocketTransport.js';
-import { createCodexResponsesWebSocketTransport } from './openAIResponsesWebSocketTransport.js';
+import {
+  CODEX_WEBSOCKET_BETA_HEADER,
+  createCodexResponsesWebSocketTransport,
+} from './openAIResponsesWebSocketTransport.js';
 import {
   SocketHarness,
   completingScript,
@@ -458,5 +461,66 @@ describe('executeOpenAIResponsesRequest WebSocket lifecycle-limit retry @issue:2
     expect(fetchSpy).not.toHaveBeenCalled();
 
     transport.close();
+  });
+});
+
+describe('executeOpenAIResponsesRequest WebSocket handshake identity @issue:2772', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getCoreSystemPromptAsyncSpy.mockResolvedValue('system prompt');
+  });
+
+  afterEach(() => {
+    restoreGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('sends the current Codex handshake headers with the runtime identity', async () => {
+    const harness = new SocketHarness([completingScript()]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+
+    await drainHarness(
+      executeOpenAIResponsesRequest(
+        buildNormalizedOptions(),
+        buildDeps({ getWebSocketTransport: () => transport }),
+      ),
+    );
+
+    expect(harness.headers[0]).toStrictEqual({
+      Authorization: 'Bearer codex-token',
+      'X-Provider': 'p',
+      'ChatGPT-Account-ID': 'codex-account',
+      originator: 'codex_cli_rs',
+      'session-id': 'test-runtime',
+      'thread-id': 'test-runtime',
+      'x-client-request-id': 'test-runtime',
+      'OpenAI-Beta': CODEX_WEBSOCKET_BETA_HEADER,
+    });
+  });
+
+  it('omits every identity header when no runtime identity resolves', async () => {
+    const harness = new SocketHarness([completingScript()]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+    const defaults = buildNormalizedOptions();
+    const optionsWithoutIdentity = buildNormalizedOptions({
+      invocation: { ...defaults.invocation, runtimeId: '' },
+      runtime: undefined,
+    });
+
+    await drainHarness(
+      executeOpenAIResponsesRequest(
+        optionsWithoutIdentity,
+        buildDeps({ getWebSocketTransport: () => transport }),
+      ),
+    );
+
+    const headers = harness.headers[0];
+    expect(headers['session-id']).toBeUndefined();
+    expect(headers['thread-id']).toBeUndefined();
+    expect(headers['x-client-request-id']).toBeUndefined();
   });
 });
