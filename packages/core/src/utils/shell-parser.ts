@@ -21,6 +21,7 @@ import type {
   Tree,
   Node,
   Query as QueryType,
+  QueryMatch,
 } from 'web-tree-sitter';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -45,26 +46,6 @@ const require = createRequire(import.meta.url);
 const debugLogger = new DebugLogger('llxprt:shell-parser');
 
 export const PARSE_TIMEOUT_MICROS = 1000 * 1000; // 1 second
-
-/**
- * Local view of web-tree-sitter's QueryMatch: `patternIndex` replaced the
- * deprecated `pattern` field in 0.25.0. Nothing reads the pattern index
- * today; the field is declared for shape accuracy.
- */
-interface QueryMatch {
-  patternIndex: number;
-  captures: QueryCapture[];
-}
-
-/**
- * Local view of web-tree-sitter's QueryCapture: `patternIndex` (the
- * deprecated `pattern` field was removed from the capture shape).
- */
-interface QueryCapture {
-  name: string;
-  patternIndex: number;
-  node: Node;
-}
 
 /**
  * Shape of the dynamically imported `web-tree-sitter` module. In 0.25.x the
@@ -535,7 +516,7 @@ export function extractCommandNames(tree: Tree): string[] {
     '(command name: (command_name) @cmd)',
   );
   try {
-    const matches = query.matches(tree.rootNode) as QueryMatch[];
+    const matches = query.matches(tree.rootNode);
 
     for (const match of matches) {
       collectCommandNamesFromCaptures(match.captures, commands);
@@ -762,7 +743,7 @@ export function parseCommandDetails(
               activeBashLanguage,
               '(ERROR) @error (MISSING) @missing',
             );
-            const captures = query.captures(tree.rootNode) as QueryCapture[];
+            const captures = query.captures(tree.rootNode);
             const syntaxErrors = captures.map((capture) => {
               const { node, name } = capture;
               const type = name === 'missing' ? 'Missing' : 'Error';
@@ -806,7 +787,7 @@ function hasParsedCommandSubstitution(tree: Tree): boolean {
   );
 
   try {
-    const matches = query.matches(tree.rootNode) as QueryMatch[];
+    const matches = query.matches(tree.rootNode);
     return matches.length > 0;
   } finally {
     query.delete();
