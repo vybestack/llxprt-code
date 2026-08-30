@@ -244,6 +244,87 @@ describe('Kitty Sequence Parsing', () => {
     });
   });
 
+  describe('SS3 sequence parsing', () => {
+    // key.sequence must be the exact bytes consumed for an SS3 (ESC O ...)
+    // sequence, since paste content is reassembled by concatenating key.sequence.
+    it('should keep the O in the sequence for plain arrow keys', () => {
+      const { keyHandler } = setupKeypressTest();
+
+      act(() => stdin.write('\x1bOA'));
+
+      expect(keyHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'up',
+          shift: false,
+          meta: false,
+          ctrl: false,
+          sequence: '\x1bOA',
+        }),
+      );
+    });
+
+    it('should keep the O and modifier in the sequence for modified arrow keys', () => {
+      const { keyHandler } = setupKeypressTest();
+
+      act(() => stdin.write('\x1bO2A'));
+
+      expect(keyHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'up',
+          shift: true,
+          sequence: '\x1bO2A',
+        }),
+      );
+    });
+
+    it('should preserve SS3 bytes inside bracketed paste payloads', async () => {
+      const { keyHandler } = setupKeypressTest();
+
+      act(() => stdin.write('\x1b[200~'));
+      act(() => stdin.write('before\x1bOAafter'));
+      act(() => stdin.write('\x1b[201~'));
+
+      await act(() => vi.runAllTimers());
+
+      // Paste fidelity contract: the payload is reassembled from key.sequence, so
+      // every consumed byte (including the O) must round-trip or the text corrupts.
+      expect(keyHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'paste',
+          sequence: 'before\x1bOAafter',
+        }),
+      );
+    });
+
+    it('should leave CSI bracket sequences unchanged', () => {
+      const { keyHandler } = setupKeypressTest();
+
+      act(() => stdin.write('\x1b[A'));
+
+      expect(keyHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'up',
+          sequence: '\x1b[A',
+        }),
+      );
+    });
+
+    it('should emit the consumed bytes when an SS3 sequence is flushed by timeout', () => {
+      const { keyHandler } = setupKeypressTest();
+
+      act(() => stdin.write('\x1bO'));
+
+      // Wait for the ESC timeout to flush the incomplete sequence.
+      void act(() => vi.advanceTimersByTime(ESC_TIMEOUT + 10));
+
+      expect(keyHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sequence: '\x1bO',
+        }),
+      );
+    });
+  });
+
   it('should timeout and flush incomplete kitty sequences after 100ms', async () => {
     const keyHandler = vi.fn();
     const { result } = renderHook(() => useKeypressContext(), { wrapper });
