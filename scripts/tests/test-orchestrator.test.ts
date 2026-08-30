@@ -722,6 +722,26 @@ describe('formatSummary', () => {
     expect(output).toContain('pkg-a');
   });
 
+  it('prints Result: FAILED for a failed scripts phase', () => {
+    const summary = makeSummary({
+      results: [
+        {
+          workspace: 'scripts',
+          phase: 'scripts',
+          success: false,
+          exitCode: 1,
+          durationMs: 50,
+        },
+      ],
+      totalWorkspaces: 0,
+      failed: 1,
+    });
+    const output = formatSummary(summary);
+    expect(output).toContain('FAIL');
+    expect(output).toContain('scripts');
+    expect(output).toContain('Result: FAILED');
+  });
+
   it('includes duration information', () => {
     const summary = makeSummary({ durationMs: 100 });
     const output = formatSummary(summary);

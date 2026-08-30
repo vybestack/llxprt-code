@@ -14,14 +14,9 @@ const generatorPath = fileURLToPath(
 );
 const repoRoot = resolve(generatorPath, '..', '..', '..');
 
-function resolveBunExecutable(): string {
-  const executable = Bun.which('bun');
-  if (executable === null) {
-    throw new Error('Bun executable is required for the output generator test');
-  }
-  return executable;
-}
-const bunExecutable = resolveBunExecutable();
+// Under `bun test`, process.execPath is the bun binary running the tests —
+// the portable interpreter, unlike Bun.which('bun').
+const bunExecutable = process.execPath;
 
 interface GeneratorResult {
   readonly exitCode: number;

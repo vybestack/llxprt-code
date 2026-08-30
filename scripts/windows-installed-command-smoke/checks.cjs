@@ -11,6 +11,7 @@ const { spawnSync, spawn } = require('node:child_process');
 const {
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -52,6 +53,16 @@ function buildProbeFixture(installedPackageRoot, tempBase, label, repoRoot) {
   mkdirSync(fixtureDir, { recursive: true });
   const fixturePkgRoot = join(fixtureDir, 'pkg');
   copyTree(installedPackageRoot, fixturePkgRoot);
+  // The launcher prefers bundle/llxprt.js over index.ts; the probe replaces
+  // index.ts, so drop the bundle from the fixture to force the source entry.
+  const bundledEntry = join(fixturePkgRoot, 'bundle', 'llxprt.js');
+  if (existsSync(bundledEntry)) {
+    rmSync(bundledEntry, { force: true });
+    const bundleDir = join(fixturePkgRoot, 'bundle');
+    if (existsSync(bundleDir) && readdirSync(bundleDir).length === 0) {
+      rmSync(bundleDir, { recursive: true, force: true });
+    }
+  }
   const probePath = join(
     repoRoot,
     'scripts',

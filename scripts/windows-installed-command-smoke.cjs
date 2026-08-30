@@ -211,6 +211,29 @@ function runBehavioralChecks(ctx) {
   checks.checkNpmExecEphemeral(tempDir, replicaTarball);
 }
 
+/**
+ * Local (consumer) install plus the two prerequisite checks the pre-benchmark
+ * gate names. Throws naming exactly the steps that failed, so the error is
+ * never misattributed to an earlier behavioral probe failure.
+ */
+function completePrerequisiteChecks(tempDir, replicaTarball, prefix) {
+  const consumerDir = localInstall(tempDir, replicaTarball);
+  const localCmdOk = checkLocalCmdVersion(consumerDir);
+  const packageLocalBunOk = checkPackageLocalBun(
+    prefix,
+    findInstalledPackageRoot,
+    findBundledBun,
+  );
+  if (!localCmdOk || !packageLocalBunOk) {
+    const failedSteps = [];
+    if (!localCmdOk) failedSteps.push('local-cmd-version');
+    if (!packageLocalBunOk) failedSteps.push('package-local-bun');
+    throw new Error(
+      `prerequisite checks failed (${failedSteps.join(', ')}); aborting before success`,
+    );
+  }
+}
+
 function runSmoke() {
   resetState();
   let tempDir;
@@ -254,21 +277,13 @@ function runSmoke() {
       });
       await checks.checkProcessTreeNoNode(probeFixture);
 
-      const consumerDir = localInstall(tempDir, replicaTarball);
-      checkLocalCmdVersion(consumerDir);
-      checkPackageLocalBun(prefix, findInstalledPackageRoot, findBundledBun);
-      // Gate succeeded on the assertion state so a runStep failure (which
-      // records via fail() without throwing) is not masked as success.
-      // Without this guard, a local-cmd-version or package-local-bun failure
-      // would write a success diagnostic, run the benchmark, and delete the
-      // temp fixture that the failure diagnostic says to preserve.
-      const { failed } = getState();
-      if (failed) {
-        throw new Error(
-          'prerequisite checks failed (local-cmd-version or package-local-bun); aborting before success',
-        );
+      completePrerequisiteChecks(tempDir, replicaTarball, prefix);
+      // Any recorded failure (e.g. a behavioral probe) must not reach the
+      // success path: it would write a success diagnostic, run the benchmark,
+      // and delete the temp fixture the failure path promises to preserve.
+      if (!getState().failed) {
+        succeeded = true;
       }
-      succeeded = true;
     } catch (err) {
       fail(`unexpected error: ${err.stack || err.message}`);
     } finally {

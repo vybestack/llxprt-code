@@ -23,7 +23,7 @@
 
 import { spawn } from 'node:child_process';
 import { readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { isAbsolute, join, relative, win32 } from 'node:path';
 import {
   DEFAULT_PER_FILE_TIMEOUT_MS,
   DEFAULT_PER_TEST_TIMEOUT_MS,
@@ -89,7 +89,11 @@ const INTEGRATION_FILE_PATTERN = /\.integration\.(test|spec)\.(ts|tsx)$/;
  * so passing it bare matched nothing and the file silently did not run.
  */
 export function toPathArgument(file: string): string {
-  return file.startsWith('./') || file.startsWith('/') ? file : `./${file}`;
+  // win32.isAbsolute also accepts drive-letter paths, so a Windows-style path
+  // survives as-is regardless of which OS the runner is on.
+  return isAbsolute(file) || win32.isAbsolute(file) || file.startsWith('./')
+    ? file
+    : `./${file}`;
 }
 
 export function timeoutForFile(file: string): number {

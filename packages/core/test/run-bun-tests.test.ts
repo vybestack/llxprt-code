@@ -21,6 +21,7 @@ import {
   killChildTreeAndWait,
   observeChildClose,
   runTestFile,
+  runTestFileWithTimeoutRetry,
   type TestResult,
 } from '../run-bun-tests.js';
 
@@ -315,4 +316,133 @@ describe('core Bun test runner process lifecycle', () => {
     },
     30_000,
   );
+});
+
+interface RetryOutcome {
+  readonly passed: boolean;
+  readonly timedOut: boolean;
+  readonly reapFailed: boolean;
+  readonly exitCode: number | null;
+}
+
+function createAttemptSequence<T extends RetryOutcome>(
+  outcomes: readonly T[],
+): {
+  run: () => Promise<T>;
+  count: () => number;
+} {
+  let attempts = 0;
+  return {
+    run: async () => {
+      const outcome = outcomes[attempts];
+      if (outcome === undefined) {
+        throw new Error(`unexpected attempt ${attempts + 1}`);
+      }
+      attempts++;
+      return outcome;
+    },
+    count: () => attempts,
+  };
+}
+
+describe('runTestFileWithTimeoutRetry', () => {
+  it('returns a passing retry and logs it after the first attempt times out', async () => {
+    const attempts = createAttemptSequence<RetryOutcome>([
+      { passed: false, timedOut: true, reapFailed: false, exitCode: null },
+      { passed: true, timedOut: false, reapFailed: false, exitCode: 0 },
+    ]);
+    const logs: string[] = [];
+
+    const result = await runTestFileWithTimeoutRetry(
+      'src/retry.test.ts',
+      attempts.run,
+      (message) => logs.push(message),
+    );
+
+    expect({ result, attemptCount: attempts.count(), logs }).toEqual({
+      result: {
+        passed: true,
+        timedOut: false,
+        reapFailed: false,
+        exitCode: 0,
+      },
+      attemptCount: 2,
+      logs: ['RETRY (2/2): src/retry.test.ts after per-file timeout'],
+    });
+  });
+
+  it('returns the second timeout as the final failure', async () => {
+    const attempts = createAttemptSequence<RetryOutcome>([
+      { passed: false, timedOut: true, reapFailed: false, exitCode: null },
+      { passed: false, timedOut: true, reapFailed: false, exitCode: null },
+    ]);
+
+    const result = await runTestFileWithTimeoutRetry(
+      'src/retry.test.ts',
+      attempts.run,
+      () => undefined,
+    );
+
+    expect({ result, attemptCount: attempts.count() }).toEqual({
+      result: {
+        passed: false,
+        timedOut: true,
+        reapFailed: false,
+        exitCode: null,
+      },
+      attemptCount: 2,
+    });
+  });
+
+  it('returns a non-timeout failure without a second attempt', async () => {
+    const attempts = createAttemptSequence<RetryOutcome>([
+      { passed: false, timedOut: false, reapFailed: false, exitCode: 1 },
+      { passed: true, timedOut: false, reapFailed: false, exitCode: 0 },
+    ]);
+    const logs: string[] = [];
+
+    const result = await runTestFileWithTimeoutRetry(
+      'src/assertion.test.ts',
+      attempts.run,
+      (message) => logs.push(message),
+    );
+
+    expect({ result, attemptCount: attempts.count(), logs }).toEqual({
+      result: {
+        passed: false,
+        timedOut: false,
+        reapFailed: false,
+        exitCode: 1,
+      },
+      attemptCount: 1,
+      logs: [],
+    });
+  });
+
+  it('returns a timed-out attempt that failed to reap without retrying', async () => {
+    // The old process tree may still hold the file's resources; only the
+    // FATAL reap guard in main() may decide what happens next.
+    const attempts = createAttemptSequence<RetryOutcome>([
+      { passed: false, timedOut: true, reapFailed: true, exitCode: null },
+      { passed: true, timedOut: false, reapFailed: false, exitCode: 0 },
+    ]);
+    const logs: string[] = [];
+
+    const result = await runTestFileWithTimeoutRetry(
+      'src/reap.test.ts',
+      attempts.run,
+      (message) => logs.push(message),
+    );
+
+    expect({ result, attemptCount: attempts.count(), logs }).toEqual({
+      result: {
+        passed: false,
+        timedOut: true,
+        reapFailed: true,
+        exitCode: null,
+      },
+      attemptCount: 1,
+      logs: [],
+    });
+  });
 });

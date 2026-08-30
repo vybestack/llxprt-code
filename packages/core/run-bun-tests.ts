@@ -261,6 +261,25 @@ export async function killChildTreeAndWait(
   );
 }
 
+export async function runTestFileWithTimeoutRetry<
+  T extends { readonly timedOut: boolean; readonly reapFailed: boolean },
+>(
+  file: string,
+  runAttempt: () => Promise<T>,
+  logRetry: (message: string) => void = (message) => console.log(message),
+): Promise<T> {
+  const firstAttempt = await runAttempt();
+  // A failed reap means the old process tree may still be alive; retrying
+  // could run against its leaked resources. Return so main() hits the FATAL
+  // reap guard instead.
+  if (!firstAttempt.timedOut || firstAttempt.reapFailed) {
+    return firstAttempt;
+  }
+
+  logRetry(`RETRY (2/2): ${file} after per-file timeout`);
+  return runAttempt();
+}
+
 export function runTestFile(
   file: string,
   options: RunTestFileOptions = {},
@@ -418,13 +437,18 @@ async function main(): Promise<void> {
   for (let i = 0; i < testFiles.length; i += CONCURRENCY) {
     const batch = testFiles.slice(i, i + CONCURRENCY);
     const batchResults = await Promise.all(
-      batch.map((file) => runTestFile(file)),
+      batch.map((file) =>
+        runTestFileWithTimeoutRetry(file, () => runTestFile(file)),
+      ),
     );
     results.push(...batchResults);
 
     // Fail fast: if reaping a timed-out child failed, do NOT proceed with
     // another file — the old process tree may still be alive and holding
     // resources (log handles, ports) that would corrupt subsequent results.
+    // The retry above makes the abort rare: a reap failure reaches this
+    // guard whether it happened on the first attempt (which skips the
+    // retry) or on the second.
     if (batchResults.some((r) => r.reapFailed)) {
       console.error(
         'FATAL: failed to reap a timed-out test process tree; aborting to ' +
