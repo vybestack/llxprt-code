@@ -535,7 +535,6 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
         listSkills: () => skills,
         getSkill: (name: string) =>
           skills.find((skill) => skill.name === name) ?? null,
-        getFolderStructure: async (name: string) => `${name}/SKILL.md`,
       };
       assertImplements<ISkillService>(service);
 
@@ -550,9 +549,6 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
         'Creates pull requests',
       );
       expect(service.getSkill('missing')).toBeNull();
-      expect(await service.getFolderStructure('pr-creator')).toBe(
-        'pr-creator/SKILL.md',
-      );
     });
   });
 

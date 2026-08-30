@@ -19,8 +19,6 @@ export interface SkillActivationResult {
   description?: string;
   /** Skill source location. */
   location?: string;
-  /** Folder structure for skill resources. */
-  folderStructure?: string;
   /** Directory added to workspace context for skill resources. */
   resourceDirectory?: string;
   /** Error message if activation failed. */
@@ -70,9 +68,4 @@ export interface ISkillService {
    * Get one skill by name.
    */
   getSkill(name: string): SkillInfo | null;
-
-  /**
-   * Get the folder structure for a skill's resource directory.
-   */
-  getFolderStructure(skillName: string): Promise<string>;
 }

@@ -191,7 +191,6 @@
  ✓ src/providers/openai-responses/__tests__/OpenAIResponsesProvider.reasoningSummary.test.ts (5 tests) 196ms
  ✓ src/core/coreToolScheduler.cancellation.test.ts (3 tests) 296ms
  ✓ src/tools/edit.test.ts (49 tests) 366ms
- ✓ src/utils/getFolderStructure.test.ts (15 tests) 185ms
  ✓ src/providers/openai-responses/__tests__/OpenAIResponsesProvider.codex.malformedCallId.test.ts (1 test) 208ms
  ✓ src/debug/DebugLogger.test.ts (42 tests | 1 skipped) 249ms
  ✓ src/tools/ast-edit.test.ts (9 tests) 343ms

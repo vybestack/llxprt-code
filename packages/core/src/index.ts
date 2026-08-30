@@ -125,7 +125,6 @@ export * from './utils/checkpointUtils.js';
 export * from './utils/output-format.js';
 export * from './utils/exitCodes.js';
 export * from './utils/refusalNotice.js';
-export * from './utils/getFolderStructure.js';
 export * from './utils/memoryDiscovery.js';
 export * from './utils/gitIgnoreParser.js';
 export * from './utils/gitUtils.js';
@@ -169,7 +168,6 @@ export {
 export * from './utils/browser-profile-discovery.js';
 export * from './utils/errorParsing.js';
 export * from './utils/ignorePatterns.js';
-export { INITIAL_HISTORY_LENGTH } from './utils/environmentContext.js';
 export * from './utils/partUtils.js';
 export * from './utils/ide-trust.js';
 export * from './utils/thoughtUtils.js';

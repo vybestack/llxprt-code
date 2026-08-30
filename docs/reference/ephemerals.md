@@ -219,10 +219,9 @@ Settings for multi-endpoint load balancing. Only apply when using load-balanced 
 
 ## Prompt Configuration
 
-| Setting                    | Type    | Default | Profile | Description                                                                                                                                                           |
-| -------------------------- | ------- | ------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `enable-tool-prompts`      | boolean | `false` | yes     | Load tool-specific prompt files from `<config>/prompts/tools/` (see [Application Directories](./application-directories.md)). Adds specialized instructions per tool. |
-| `include-folder-structure` | boolean | —       | yes     | Include the workspace folder tree in the system prompt. Helps the model navigate, but costs tokens.                                                                   |
+| Setting               | Type    | Default | Profile | Description                                                                                                                                                           |
+| --------------------- | ------- | ------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enable-tool-prompts` | boolean | `false` | yes     | Load tool-specific prompt files from `<config>/prompts/tools/` (see [Application Directories](./application-directories.md)). Adds specialized instructions per tool. |
 
 ## Custom Headers
 

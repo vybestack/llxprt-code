@@ -261,11 +261,10 @@ Some models will kick off commands that wait for user interaction (like an inter
 
 ### Prompt and Caching
 
-| Setting                    | Description                                             | Default |
-| -------------------------- | ------------------------------------------------------- | ------- |
-| `prompt-caching`           | Provider-side prompt caching (`off`, `5m`, `1h`, `24h`) | `off`   |
-| `enable-tool-prompts`      | Load tool-specific prompt files                         | `false` |
-| `include-folder-structure` | Include folder tree in system prompt                    | `false` |
+| Setting               | Description                                             | Default |
+| --------------------- | ------------------------------------------------------- | ------- |
+| `prompt-caching`      | Provider-side prompt caching (`off`, `5m`, `1h`, `24h`) | `off`   |
+| `enable-tool-prompts` | Load tool-specific prompt files                         | `false` |
 
 ### Other Settings
 
