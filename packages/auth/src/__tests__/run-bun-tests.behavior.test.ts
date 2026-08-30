@@ -110,12 +110,11 @@ describe('auth run-bun-tests failure reason formatting', () => {
 
 describe('auth run-bun-tests timeout retry', () => {
   it('retries once after a timed-out attempt and returns the passing retry', async () => {
-    const outcomes: Array<
-      { passed: boolean; timedOut: boolean } | undefined
-    > = [
-      { passed: false, timedOut: true },
-      { passed: true, timedOut: false },
-    ];
+    const outcomes: Array<{ passed: boolean; timedOut: boolean } | undefined> =
+      [
+        { passed: false, timedOut: true },
+        { passed: true, timedOut: false },
+      ];
     let attempts = 0;
     const logs: string[] = [];
 

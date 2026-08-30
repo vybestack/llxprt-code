@@ -392,7 +392,9 @@ describe('runBunTests', () => {
       } as const,
     });
     expect(calls).toEqual([
-      ...entries.slice(0, 2).map((entry) => expectedCall(entry.file, entry.cwd)),
+      ...entries
+        .slice(0, 2)
+        .map((entry) => expectedCall(entry.file, entry.cwd)),
       expectedCall(entries[2]!.file, entries[2]!.cwd),
       expectedCall(entries[2]!.file, entries[2]!.cwd),
     ]);
@@ -690,7 +692,9 @@ describe('runBunTests', () => {
 describe('resolveTimeoutRetryBudget', () => {
   it('defaults to 1 when the override is absent or empty', () => {
     expect(resolveTimeoutRetryBudget({})).toBe(1);
-    expect(resolveTimeoutRetryBudget({ LLXPRT_BUN_TEST_TIMEOUT_RETRIES: '' })).toBe(1);
+    expect(
+      resolveTimeoutRetryBudget({ LLXPRT_BUN_TEST_TIMEOUT_RETRIES: '' }),
+    ).toBe(1);
   });
 
   it('accepts an explicit non-negative integer', () => {
