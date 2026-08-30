@@ -104,8 +104,8 @@ describe('telemetry outfile boundary (REQ-3315.7)', () => {
           100 + i,
           `prompt-${i}`,
           {
-            promptTokenCount: 10,
-            candidatesTokenCount: 20,
+            inputTokenCount: 10,
+            outputTokenCount: 20,
             totalTokenCount: 30,
           },
           SENTINEL + '-RESP-' + 'y'.repeat(100 * 1024) + `-${i}`,

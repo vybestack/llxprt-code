@@ -60,10 +60,10 @@ a patch release. Categories:
 
 1. **Provider classes:** `GeminiProvider` (providers package index).
 2. **Provider factories:** `createGeminiAliasProvider` (providers composition).
-3. **Model-ID constants:** `DEFAULT_GEMINI_MODEL`, `DEFAULT_GEMINI_FLASH_MODEL`,
-   `DEFAULT_GEMINI_FLASH_LITE_MODEL`, `DEFAULT_GEMINI_EMBEDDING_MODEL`, and the
-   `isGemini2Model` / `isGemini3Model` predicates (genuine env-var /
-   default model IDs).
+3. **Model predicates:** `isGemini2Model` / `isGemini3Model`. The former
+   `DEFAULT_GEMINI_*` model-ID constants were deleted (issue #2627); provider
+   defaults now live in the provider implementations, so no model-ID constants
+   remain allowlisted from core.
 4. **Neutral structural types:** `GeminiContent`, `GeminiContentPart`, etc.
    in `packages/core/src/llm-types/geminiContent.ts`.
 5. **Finish-reason mappers:** `GEMINI_FINISH_MAP`, `mapGeminiFinishReason`.

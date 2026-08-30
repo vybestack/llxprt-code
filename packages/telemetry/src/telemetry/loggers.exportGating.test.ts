@@ -62,7 +62,7 @@ describe('api_request / api_response export gating (REQ-3315.1..3)', () => {
       'test-model',
       100,
       'prompt-1',
-      { promptTokenCount: 10, candidatesTokenCount: 20, totalTokenCount: 30 },
+      { inputTokenCount: 10, outputTokenCount: 20, totalTokenCount: 30 },
       'secret response body',
     );
 
@@ -152,11 +152,11 @@ describe('api_request / api_response export gating (REQ-3315.1..3)', () => {
       100,
       'prompt-1',
       {
-        promptTokenCount: 10,
-        candidatesTokenCount: 20,
-        cachedContentTokenCount: 5,
-        thoughtsTokenCount: 3,
-        toolUsePromptTokenCount: 7,
+        inputTokenCount: 10,
+        outputTokenCount: 20,
+        cachedTokenCount: 5,
+        thinkingTokenCount: 3,
+        toolUseInputTokenCount: 7,
         totalTokenCount: 45,
       },
       'body',

@@ -17,12 +17,7 @@
 import { readFileSync } from 'node:fs';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import type { IModel } from '../IModel.js';
-import type {
-  IContent,
-  UsageStats,
-} from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { GeminiContent } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 /**
  * Each line in a .responses file is a JSON object representing one model turn.
@@ -32,25 +27,6 @@ import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/
 export interface FakeResponseTurn {
   chunks: IContent[];
 }
-
-type LegacyResponseLine = {
-  method?: string;
-  response?: unknown;
-};
-
-type LegacyGenerateContentResponse = {
-  candidates?: Array<{
-    content?: GeminiContent;
-    finishReason?: unknown;
-  }>;
-  usageMetadata?: {
-    promptTokenCount?: unknown;
-    candidatesTokenCount?: unknown;
-    totalTokenCount?: unknown;
-    cache_read_input_tokens?: unknown;
-    cache_creation_input_tokens?: unknown;
-  };
-};
 
 /**
  * Recursively replace `{{CWD}}` in all string values of a parsed object.
@@ -79,151 +55,17 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function normalizeInteger(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return 0;
-  }
-  return Math.max(0, Math.floor(value));
-}
-
-function mapUsageMetadata(
-  usageMetadata: LegacyGenerateContentResponse['usageMetadata'] | undefined,
-): UsageStats | undefined {
-  if (!usageMetadata || !isObject(usageMetadata)) {
-    return undefined;
-  }
-
-  const promptTokens = normalizeInteger(usageMetadata.promptTokenCount);
-  const completionTokens = normalizeInteger(usageMetadata.candidatesTokenCount);
-  const totalTokenCount = normalizeInteger(usageMetadata.totalTokenCount);
-
-  return {
-    promptTokens,
-    completionTokens,
-    totalTokens:
-      totalTokenCount > 0 ? totalTokenCount : promptTokens + completionTokens,
-    cache_read_input_tokens: normalizeInteger(
-      usageMetadata.cache_read_input_tokens,
-    ),
-    cache_creation_input_tokens: normalizeInteger(
-      usageMetadata.cache_creation_input_tokens,
-    ),
-  };
-}
-
-function normalizeStopReason(finishReason: unknown): string | undefined {
-  if (typeof finishReason !== 'string') {
-    return undefined;
-  }
-
-  const normalized = finishReason.trim().toLowerCase();
-  return normalized.length > 0 ? normalized : undefined;
-}
-
-function appendMetadata(
-  content: IContent,
-  usage: UsageStats | undefined,
-  stopReason: string | undefined,
-): IContent {
-  if (!usage && !stopReason) {
-    return content;
-  }
-
-  return {
-    ...content,
-    metadata: {
-      ...(content.metadata ?? {}),
-      ...(usage ? { usage } : {}),
-      ...(stopReason ? { stopReason } : {}),
-    },
-  };
-}
-
-function convertLegacyResponseChunk(chunk: unknown): IContent[] {
-  if (!isObject(chunk)) {
-    return [];
-  }
-
-  const responseChunk = chunk as LegacyGenerateContentResponse;
-  const usage = mapUsageMetadata(responseChunk.usageMetadata);
-  const candidates = Array.isArray(responseChunk.candidates)
-    ? responseChunk.candidates
-    : [];
-
-  const convertedCandidates = candidates
-    .map((candidate) => {
-      if (!candidate.content) {
-        return undefined;
-      }
-
-      const iContent = ContentConverters.toIContent(candidate.content);
-      const stopReason = normalizeStopReason(candidate.finishReason);
-      return appendMetadata(iContent, usage, stopReason);
-    })
-    .filter((content): content is IContent => !!content);
-
-  const fallbackStopReason = candidates
-    .map((candidate) => normalizeStopReason(candidate.finishReason))
-    .find((reason): reason is string => !!reason);
-
-  if (convertedCandidates.length === 0 && (usage || fallbackStopReason)) {
-    return [
-      {
-        speaker: 'ai',
-        blocks: [],
-        metadata: {
-          ...(usage ? { usage } : {}),
-          ...(fallbackStopReason ? { stopReason: fallbackStopReason } : {}),
-        },
-      },
-    ];
-  }
-
-  return convertedCandidates;
-}
-
-function normalizeLegacyResponseLine(
-  line: LegacyResponseLine,
-): FakeResponseTurn {
-  if (
-    line.response == null ||
-    (!Array.isArray(line.response) && !isObject(line.response))
-  ) {
-    throw new Error(
-      `FakeProvider: invalid legacy fixture line. response must be an object or array of objects. Received: ${JSON.stringify(
-        line.response,
-      )}`,
-    );
-  }
-
-  const responseChunks = Array.isArray(line.response)
-    ? line.response
-    : [line.response];
-
-  return {
-    chunks: responseChunks.flatMap(convertLegacyResponseChunk),
-  };
-}
-
 function normalizeTurn(rawTurn: unknown): FakeResponseTurn {
   if (isObject(rawTurn) && Array.isArray(rawTurn.chunks)) {
     // Fixtures are authored in-repo; we trust chunk element shape to match IContent.
     return { chunks: rawTurn.chunks as IContent[] };
   }
 
-  if (!isObject(rawTurn)) {
-    throw new Error(
-      'FakeProvider: invalid fixture line. Expected JSON object with chunks or { method, response } shape.',
-    );
-  }
-
-  if (!('response' in rawTurn)) {
-    throw new Error(
-      'FakeProvider: invalid fixture line. Missing response field for legacy fixture format.',
-    );
-  }
-
-  return normalizeLegacyResponseLine(rawTurn as LegacyResponseLine);
+  throw new Error(
+    `FakeProvider: invalid fixture line. Expected JSON object with a chunks array. Received: ${JSON.stringify(
+      rawTurn,
+    )}`,
+  );
 }
 
 /**

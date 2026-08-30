@@ -19,7 +19,7 @@ describe('buildUsageUpdate (issue #1607: usage_update size/used semantics)', () 
   it('reports used = totalTokenCount against size = the context-window limit', () => {
     expect(
       buildUsageUpdate(
-        { totalTokenCount: 1200, candidatesTokenCount: 300 },
+        { totalTokenCount: 1200, outputTokenCount: 300 },
         128000,
       ),
     ).toStrictEqual({
@@ -29,10 +29,8 @@ describe('buildUsageUpdate (issue #1607: usage_update size/used semantics)', () 
     });
   });
 
-  it('falls back to candidatesTokenCount for used when totalTokenCount is absent', () => {
-    expect(
-      buildUsageUpdate({ candidatesTokenCount: 450 }, 64000),
-    ).toStrictEqual({
+  it('falls back to outputTokenCount for used when totalTokenCount is absent', () => {
+    expect(buildUsageUpdate({ outputTokenCount: 450 }, 64000)).toStrictEqual({
       sessionUpdate: 'usage_update',
       used: 450,
       size: 64000,
@@ -43,17 +41,14 @@ describe('buildUsageUpdate (issue #1607: usage_update size/used semantics)', () 
     // `??` intentionally distinguishes absent from zero: a provider explicitly
     // reporting total=0 wins, even if it also supplies a candidate count.
     expect(
-      buildUsageUpdate(
-        { totalTokenCount: 0, candidatesTokenCount: 450 },
-        64000,
-      ),
+      buildUsageUpdate({ totalTokenCount: 0, outputTokenCount: 450 }, 64000),
     ).toBeNull();
   });
 
   it('returns null when the event carries no usable token counts (nothing to report)', () => {
     expect(buildUsageUpdate({}, 128000)).toBeNull();
     expect(
-      buildUsageUpdate({ totalTokenCount: 0, candidatesTokenCount: 0 }, 128000),
+      buildUsageUpdate({ totalTokenCount: 0, outputTokenCount: 0 }, 128000),
     ).toBeNull();
   });
 
@@ -69,7 +64,7 @@ describe('buildUsageUpdate (issue #1607: usage_update size/used semantics)', () 
       },
     );
     expect(
-      buildUsageUpdate({ candidatesTokenCount: 200000 }, 128000),
+      buildUsageUpdate({ outputTokenCount: 200000 }, 128000),
     ).toStrictEqual({
       sessionUpdate: 'usage_update',
       used: 200000,

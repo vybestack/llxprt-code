@@ -12,7 +12,6 @@ import type {
   ContextAwareTool,
   ToolContext,
 } from '@vybestack/llxprt-code-tools';
-import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core/config/models.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import {
   createMockMessageBus,
@@ -65,7 +64,7 @@ describe('CoreToolScheduler context-aware tools', () => {
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
       getEnableHooks: () => false,
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-      getModel: () => DEFAULT_GEMINI_MODEL,
+      getModel: () => 'gemini-2.5-pro',
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({

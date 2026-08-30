@@ -16,7 +16,6 @@ import {
   FileDiscoveryService,
   loadServerHierarchicalMemory,
   LLXPRT_CONFIG_DIR,
-  DEFAULT_GEMINI_EMBEDDING_MODEL,
   PLACEHOLDER_MODEL,
   UNCONFIGURED_PROVIDER,
   ApprovalMode,
@@ -61,7 +60,6 @@ export async function createTaskAgent(
   const agentConfig: AgentConfig = {
     provider: resolveProviderFromEnv(),
     model: PLACEHOLDER_MODEL,
-    embeddingModel: DEFAULT_GEMINI_EMBEDDING_MODEL,
     sessionId: taskId,
     workingDir: workspaceDir,
     debugMode: process.env['DEBUG'] === 'true',

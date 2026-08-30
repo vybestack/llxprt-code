@@ -33,6 +33,17 @@ describe('parseAndFormatApiError', () => {
     expect(result).not.toContain('AI Studio');
   });
 
+  it('should omit the model entirely from the Pro quota message when it is an empty string', () => {
+    const errorMessage =
+      'got status: 429 Too Many Requests. {"error":{"code":429,"message":"Quota exceeded for quota metric \'Gemini 2.5 Pro Requests\' and limit \'RequestsPerDay\' of service \'generativelanguage.googleapis.com\' for consumer \'project_number:123456789\'.","status":"RESOURCE_EXHAUSTED"}}';
+    const result = parseAndFormatApiError(errorMessage, undefined, '');
+    expect(result).toContain('[API Error: ');
+    expect(result).toContain(
+      'You have reached your daily quota limit. For more information',
+    );
+    expect(result).not.toContain('gemini-2.5-pro');
+  });
+
   it('should not mention flash model fallback in 429 errors', () => {
     const errorMessage =
       'got status: 429 Too Many Requests. {"error":{"code":429,"message":"Rate limit exceeded","status":"RESOURCE_EXHAUSTED"}}';

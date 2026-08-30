@@ -62,8 +62,8 @@ function populateStats(
 ): void {
   act(() => {
     contextRef.current?.updateRemoteTokenStats({
-      promptTokenCount: prompt,
-      candidatesTokenCount: candidates,
+      inputTokenCount: prompt,
+      outputTokenCount: candidates,
       totalTokenCount: total,
     });
   });
@@ -103,8 +103,8 @@ describe('OpenAIProviderContext', () => {
 
     const stats = contextRef.current?.remoteTokenStats;
     expect(stats?.totalTokenCount).toBe(0);
-    expect(stats?.promptTokenCount).toBe(0);
-    expect(stats?.candidatesTokenCount).toBe(0);
+    expect(stats?.inputTokenCount).toBe(0);
+    expect(stats?.outputTokenCount).toBe(0);
     expect(stats?.lastUpdated).toBeNull();
   });
 

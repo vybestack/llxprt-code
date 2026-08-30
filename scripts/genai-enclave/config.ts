@@ -163,53 +163,6 @@ export const GEMINI_NAME_EXPLICIT_ALLOWLIST: readonly GeminiNameAllowlistEntry[]
     },
     // ── Model-ID constants (genuine env-var / default model IDs) ───────
     {
-      path: 'packages/core/index.ts',
-      name: 'DEFAULT_GEMINI_MODEL',
-      justification:
-        'Default Gemini model ID constant exported from core index.',
-    },
-    {
-      path: 'packages/core/index.ts',
-      name: 'DEFAULT_GEMINI_FLASH_MODEL',
-      justification:
-        'Default Gemini Flash model ID constant exported from core index.',
-    },
-    {
-      path: 'packages/core/index.ts',
-      name: 'DEFAULT_GEMINI_FLASH_LITE_MODEL',
-      justification:
-        'Default Gemini Flash-Lite model ID constant exported from core index.',
-    },
-    {
-      path: 'packages/core/index.ts',
-      name: 'DEFAULT_GEMINI_EMBEDDING_MODEL',
-      justification:
-        'Default Gemini embedding model ID constant exported from core index.',
-    },
-    {
-      path: 'packages/core/src/config/models.ts',
-      name: 'DEFAULT_GEMINI_MODEL',
-      justification: 'Default Gemini model ID constant in core config/models.',
-    },
-    {
-      path: 'packages/core/src/config/models.ts',
-      name: 'DEFAULT_GEMINI_FLASH_MODEL',
-      justification:
-        'Default Gemini Flash model ID constant in core config/models.',
-    },
-    {
-      path: 'packages/core/src/config/models.ts',
-      name: 'DEFAULT_GEMINI_FLASH_LITE_MODEL',
-      justification:
-        'Default Gemini Flash-Lite model ID constant in core config/models.',
-    },
-    {
-      path: 'packages/core/src/config/models.ts',
-      name: 'DEFAULT_GEMINI_EMBEDDING_MODEL',
-      justification:
-        'Default Gemini embedding model ID constant in core config/models.',
-    },
-    {
       path: 'packages/core/src/config/models.ts',
       name: 'isGemini2Model',
       justification: 'Model-ID predicate in core config/models.',
@@ -218,17 +171,6 @@ export const GEMINI_NAME_EXPLICIT_ALLOWLIST: readonly GeminiNameAllowlistEntry[]
       path: 'packages/core/src/config/models.ts',
       name: 'isGemini3Model',
       justification: 'Model-ID predicate in core config/models.',
-    },
-    {
-      path: 'packages/core/src/config/config.ts',
-      name: 'DEFAULT_GEMINI_FLASH_MODEL',
-      justification: 'Default Gemini Flash model ID re-exported from config.',
-    },
-    {
-      path: 'packages/core/src/config/index.ts',
-      name: 'DEFAULT_GEMINI_FLASH_MODEL',
-      justification:
-        'Default Gemini Flash model ID re-exported from config index.',
     },
     // ── Finish-reason mapping (genuine converter/boundary module) ─────
     {

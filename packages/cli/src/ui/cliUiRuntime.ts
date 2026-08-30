@@ -407,6 +407,7 @@ export interface AppStateRuntime {
   getQuestion(): string | undefined;
   getConversationLogPath(): string;
   getEnablePromptCompletion(): boolean;
+  getUtilityModel(): string | undefined;
   isJitContextEnabled(): boolean;
   getContextManager(): ContextManager | undefined;
   getEphemeralSettings(): Record<string, unknown>;
@@ -763,6 +764,7 @@ export function buildUiRuntimeFromSource(
       getQuestion: () => source.getQuestion(),
       getConversationLogPath: () => source.getConversationLogPath(),
       getEnablePromptCompletion: () => source.getEnablePromptCompletion(),
+      getUtilityModel: () => source.getUtilityModel(),
       isJitContextEnabled: () => source.isJitContextEnabled(),
       getContextManager: () => source.getContextManager(),
       getEphemeralSettings: () => source.getEphemeralSettings(),

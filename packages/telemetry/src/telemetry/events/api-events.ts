@@ -116,11 +116,11 @@ export class ApiResponseEvent {
     this.model = model;
     this.duration_ms = duration_ms;
     this.status_code = 200;
-    this.input_token_count = usage_data?.promptTokenCount ?? 0;
-    this.output_token_count = usage_data?.candidatesTokenCount ?? 0;
-    this.cached_content_token_count = usage_data?.cachedContentTokenCount ?? 0;
-    this.thoughts_token_count = usage_data?.thoughtsTokenCount ?? 0;
-    this.tool_token_count = usage_data?.toolUsePromptTokenCount ?? 0;
+    this.input_token_count = usage_data?.inputTokenCount ?? 0;
+    this.output_token_count = usage_data?.outputTokenCount ?? 0;
+    this.cached_content_token_count = usage_data?.cachedTokenCount ?? 0;
+    this.thoughts_token_count = usage_data?.thinkingTokenCount ?? 0;
+    this.tool_token_count = usage_data?.toolUseInputTokenCount ?? 0;
     this.total_token_count = usage_data?.totalTokenCount ?? 0;
     this.response_text = response_text;
     this.error = error;

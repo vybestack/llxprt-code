@@ -47,8 +47,8 @@ export interface OpenAIProviderInfo {
   isResponsesAPI: boolean;
   currentModel: string | null;
   remoteTokenInfo: {
-    promptTokenCount?: number;
-    candidatesTokenCount?: number;
+    inputTokenCount?: number;
+    outputTokenCount?: number;
     totalTokenCount?: number;
   };
 }

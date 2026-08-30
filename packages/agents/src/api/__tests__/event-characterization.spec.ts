@@ -128,11 +128,13 @@ describe('Event characterization — adapter-characterization @plan:PLAN-2026061
   });
 
   it('UsageMetadata → usage [adapter-characterization] @plan:PLAN-20260617-COREAPI.P10 @requirement:REQ-003', async () => {
+    // Internal vocabulary is neutral (#2627); the projected public wire
+    // stays Gemini-named, which is what this characterization pins.
     const usage = {
-      promptTokenCount: 100,
-      candidatesTokenCount: 50,
+      inputTokenCount: 100,
+      outputTokenCount: 50,
       totalTokenCount: 150,
-      cachedContentTokenCount: 10,
+      cachedTokenCount: 10,
     };
     const events = await runAdapterStatic([wrapStream(streamUsage(usage))]);
     const usageEvents = events.filter(isUsageEvent);
@@ -573,8 +575,8 @@ describe('Event characterization — invariant/decision-table @plan:PLAN-2026061
         streamThought({ subject: 'planning', description: 'analyzing' }),
       usage: () =>
         streamUsage({
-          promptTokenCount: 1,
-          candidatesTokenCount: 1,
+          inputTokenCount: 1,
+          outputTokenCount: 1,
           totalTokenCount: 2,
         }),
       notice: () => streamNotice('system notice'),

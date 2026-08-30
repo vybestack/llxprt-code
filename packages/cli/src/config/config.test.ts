@@ -115,6 +115,7 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
       setActiveProvider: vi.fn(),
       getActiveProvider: vi.fn(() => undefined),
       getAvailableModels: vi.fn(async () => []),
+      getProviderByName: vi.fn(() => undefined),
     } as unknown as ServerConfig.ProviderManager);
 
   return {

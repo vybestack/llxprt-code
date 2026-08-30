@@ -672,8 +672,14 @@ export class Session {
   private async sendUsageUpdate(
     usage: Extract<AgentEvent, { type: 'usage' }>['usage'],
   ): Promise<void> {
+    // The public agent wire keeps Gemini-named usage fields (carve-out from
+    // the internal neutral rename, #2627); map them to the neutral vocabulary
+    // at this boundary.
     const update = buildUsageUpdate(
-      usage,
+      {
+        totalTokenCount: usage.totalTokenCount,
+        outputTokenCount: usage.candidatesTokenCount,
+      },
       resolveZedContextWindowSize(this.config),
     );
     if (update !== null) await this.sendUpdate(update);

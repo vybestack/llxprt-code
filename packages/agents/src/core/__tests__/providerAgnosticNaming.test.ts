@@ -825,35 +825,35 @@ describe('Provider-Agnostic Naming Regression', () => {
 
   describe('exact export tuple enforcement', () => {
     it('allows only the exact re-export source and public name', () => {
-      const file = 'core/src/config/index.ts';
-      const moduleSpecifier = './models.js';
+      const file = 'providers/src/index.ts';
+      const moduleSpecifier = './gemini/GeminiProvider.js';
       expect(
         isAllowedIdentifier(
           file,
-          'DEFAULT_GEMINI_FLASH_MODEL',
+          'GeminiProvider',
           'export-source',
           moduleSpecifier,
-          'DEFAULT_GEMINI_FLASH_MODEL',
-          'DEFAULT_FLASH_MODEL',
+          'GeminiProvider',
+          'GeminiProvider',
         ),
       ).toBe(true);
       expect(
         isAllowedIdentifier(
           file,
-          'DEFAULT_GEMINI_FLASH_MODEL',
+          'GeminiProvider',
           'export-source',
           './wrong.js',
-          'DEFAULT_GEMINI_FLASH_MODEL',
-          'DEFAULT_FLASH_MODEL',
+          'GeminiProvider',
+          'GeminiProvider',
         ),
       ).toBe(false);
       expect(
         isAllowedIdentifier(
           file,
-          'DEFAULT_GEMINI_FLASH_MODEL',
+          'GeminiProvider',
           'export-source',
           moduleSpecifier,
-          'DEFAULT_GEMINI_FLASH_MODEL',
+          'GeminiProvider',
           'MISLEADING_ALIAS',
         ),
       ).toBe(false);

@@ -6,7 +6,6 @@
 
 import { describe, it, expect, beforeEach, vi, type Mock } from 'bun:test';
 import { Config } from './config.js';
-import { DEFAULT_GEMINI_MODEL, DEFAULT_GEMINI_FLASH_MODEL } from './models.js';
 import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import fs from 'node:fs';
 
@@ -37,7 +36,7 @@ describe('Flash Model Fallback Configuration', () => {
       targetDir: '/test',
       debugMode: false,
       cwd: '/test',
-      model: DEFAULT_GEMINI_MODEL,
+      model: 'gemini-2.5-pro',
       ideClient: IdeClient.getInstance(false),
     });
 
@@ -45,7 +44,7 @@ describe('Flash Model Fallback Configuration', () => {
     (
       config as unknown as { contentGeneratorConfig: unknown }
     ).contentGeneratorConfig = {
-      model: DEFAULT_GEMINI_MODEL,
+      model: 'gemini-2.5-pro',
     };
   });
 
@@ -61,12 +60,12 @@ describe('Flash Model Fallback Configuration', () => {
         targetDir: '/test',
         debugMode: false,
         cwd: '/test',
-        model: DEFAULT_GEMINI_MODEL,
+        model: 'gemini-2.5-pro',
         ideClient: IdeClient.getInstance(false),
       });
 
       // Should not crash when contentGeneratorConfig is undefined
-      newConfig.setModel(DEFAULT_GEMINI_FLASH_MODEL);
+      newConfig.setModel('gemini-2.5-flash');
       expect(newConfig.isInFallbackMode()).toBe(false);
     });
   });
@@ -74,8 +73,8 @@ describe('Flash Model Fallback Configuration', () => {
   describe('getModel', () => {
     it('should return contentGeneratorConfig model if available', () => {
       // Simulate initialized content generator config
-      config.setModel(DEFAULT_GEMINI_FLASH_MODEL);
-      expect(config.getModel()).toBe(DEFAULT_GEMINI_FLASH_MODEL);
+      config.setModel('gemini-2.5-flash');
+      expect(config.getModel()).toBe('gemini-2.5-flash');
     });
 
     it('should fall back to initial model if contentGeneratorConfig is not available', () => {
@@ -104,7 +103,7 @@ describe('Flash Model Fallback Configuration', () => {
     });
 
     it('should persist switched state throughout session', () => {
-      config.setModel(DEFAULT_GEMINI_FLASH_MODEL);
+      config.setModel('gemini-2.5-flash');
       // Setting state for fallback mode as is expected of clients
       config.setFallbackMode(true);
       expect(config.isInFallbackMode()).toBe(true);

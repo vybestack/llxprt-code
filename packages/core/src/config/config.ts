@@ -24,7 +24,6 @@ import {
   loadServerHierarchicalMemory,
   loadJitSubdirectoryMemory,
 } from '../utils/memoryDiscovery.js';
-import { DEFAULT_GEMINI_FLASH_MODEL } from './models.js';
 import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import { ideContext } from '@vybestack/llxprt-code-ide-integration';
 import {
@@ -1017,5 +1016,3 @@ function throwFailures(failures: unknown[]): void {
 
 // Re-export scheduler types for external use
 export { type SchedulerCallbacks, type SchedulerOptions };
-// Export model constants for use in CLI
-export { DEFAULT_GEMINI_FLASH_MODEL };

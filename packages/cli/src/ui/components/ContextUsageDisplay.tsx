@@ -9,16 +9,16 @@ import { SemanticColors } from '../colors.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core';
 
 export const ContextUsageDisplay = ({
-  promptTokenCount,
+  inputTokenCount,
   model,
   contextLimit,
 }: {
-  promptTokenCount: number;
+  inputTokenCount: number;
   model: string;
   contextLimit?: number;
 }) => {
   const limit = tokenLimit(model, contextLimit);
-  const percentage = promptTokenCount / limit;
+  const percentage = inputTokenCount / limit;
   const remainingPercentage = (1 - percentage) * 100;
 
   // Use semantic colors based on how much context is left

@@ -309,12 +309,12 @@ import type { ProviderRuntimeContext } from './providerRuntimeContext.js';
  * compatible objects.
  */
 export interface RuntimeUsageMetadata {
-  promptTokenCount?: number;
-  candidatesTokenCount?: number;
+  inputTokenCount?: number;
+  outputTokenCount?: number;
   totalTokenCount?: number;
-  cachedContentTokenCount?: number;
-  thoughtsTokenCount?: number;
-  toolUsePromptTokenCount?: number;
+  cachedTokenCount?: number;
+  thinkingTokenCount?: number;
+  toolUseInputTokenCount?: number;
   [key: string]: unknown;
 }
 

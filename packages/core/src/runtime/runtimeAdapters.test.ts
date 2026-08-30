@@ -281,6 +281,31 @@ describe('createTelemetryAdapterFromConfig', () => {
     );
   });
 
+  it('maps neutral UsageStats onto nonzero usage_data token counts #2627', () => {
+    const spy = captureLogCalls();
+    const adapter = createTelemetryAdapterFromConfig(baseConfig);
+    adapter.logApiResponse({
+      model: 'test-model',
+      durationMs: 100,
+      usage: { inputTokens: 42, outputTokens: 8, totalTokens: 50 },
+    });
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    // The spy's second arg is the constructed ApiResponseEvent. The adapter
+    // maps neutral UsageStats onto the renamed internal usage fields, and the
+    // event constructor flattens them into snake_case counts. Both renamed
+    // fields are optional — a stale field name would silently zero these, so
+    // assert each count explicitly.
+    const event = spy.mock.calls[0][1] as {
+      input_token_count?: number;
+      output_token_count?: number;
+      total_token_count?: number;
+    };
+    expect(event.input_token_count).toBe(42);
+    expect(event.output_token_count).toBe(8);
+    expect(event.total_token_count).toBe(50);
+  });
+
   it('passes through a caller-provided attemptId in the error adapter', () => {
     const spy = captureErrorLogCalls();
     const adapter = createTelemetryAdapterFromConfig(baseConfig);
