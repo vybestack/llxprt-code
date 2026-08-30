@@ -470,4 +470,89 @@ describe('SessionBrowserDialog', () => {
       expect(output).toContain('Esc');
     });
   });
+  /**
+   * @plan PLAN-20260214-SESSIONBROWSER.P16
+   * @requirement REQ-RW-001, REQ-RN-001
+   */
+  describe('Responsive Resize', () => {
+    /**
+     * GIVEN: A mounted dialog listing two sessions with the second selected
+     * WHEN: The terminal narrows and then widens again
+     * THEN: Each frame carries the affordances of its own breakpoint, and the
+     * selected-row marker tracks selectedIndex in both layouts
+     */
+    it('renders each breakpoint layout across a live wide-narrow-wide resize', () => {
+      mockIsNarrow.value = false;
+      const first = createMockSession({ sessionId: 'firstrow-aaa' });
+      const selected = createMockSession({ sessionId: 'selrow-bbb' });
+      mockHookState.sessions = [first, selected];
+      mockHookState.filteredSessions = [first, selected];
+      mockHookState.pageItems = [first, selected];
+      mockHookState.selectedSession = selected;
+      mockHookState.selectedIndex = 1;
+      mockHookState.isLoading = false;
+
+      const buildElement = () => (
+        <KeypressProvider>
+          <SessionBrowserDialog
+            chatsDir="/test/chats"
+            projectHash="test-project-hash"
+            currentSessionId="current-session-id"
+            hasActiveConversation={false}
+            onSelect={vi.fn().mockResolvedValue({
+              ok: true,
+              history: [],
+              metadata: {},
+              warnings: [],
+            })}
+            onClose={vi.fn()}
+          />
+        </KeypressProvider>
+      );
+
+      const instance = render(buildElement());
+      activeRender = instance;
+
+      const wideFrame = instance.lastFrame() ?? '';
+      expect(wideFrame).toMatch(testRegex('[╭╮╯╰]', ''));
+      expect(wideFrame).toContain('Session Browser');
+      expect(wideFrame).toMatch(testRegex('press s to cycle', 'i'));
+      expect(wideFrame).toContain('Selected:');
+      expect(wideFrame).toContain('#1');
+
+      mockIsNarrow.value = true;
+      act(() => {
+        instance.rerender(buildElement());
+      });
+
+      const narrowFrame = instance.lastFrame() ?? '';
+      expect(narrowFrame).not.toMatch(testRegex('[╭╮╯╰]', ''));
+      expect(narrowFrame).not.toContain('Session Browser');
+      expect(narrowFrame).toContain('Sessions');
+      expect(narrowFrame).not.toMatch(testRegex('press s to cycle', 'i'));
+      expect(narrowFrame).not.toContain('Selected:');
+      expect(narrowFrame).not.toContain('#1');
+
+      mockIsNarrow.value = false;
+      act(() => {
+        instance.rerender(buildElement());
+      });
+
+      const wideAgainFrame = instance.lastFrame() ?? '';
+      expect(wideAgainFrame).toMatch(testRegex('[╭╮╯╰]', ''));
+      expect(wideAgainFrame).toContain('Session Browser');
+      expect(wideAgainFrame).toMatch(testRegex('press s to cycle', 'i'));
+      expect(wideAgainFrame).toContain('Selected:');
+      expect(wideAgainFrame).toContain('#1');
+
+      const markerLines = [wideFrame, narrowFrame, wideAgainFrame].map(
+        (frame, index) =>
+          frame.split('\n').find((line) => line.includes('●')) ??
+          `(frame ${index} rendered no ● row)`,
+      );
+      for (const markerLine of markerLines) {
+        expect(markerLine).toContain('selrow');
+      }
+    });
+  });
 });

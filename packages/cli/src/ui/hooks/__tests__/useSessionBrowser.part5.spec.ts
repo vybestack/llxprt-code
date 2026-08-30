@@ -44,6 +44,7 @@ import { renderHook, waitFor } from '../../../test-utils/render.js';
 import {
   useSessionBrowser,
   type UseSessionBrowserProps,
+  type UseSessionBrowserResult,
 } from '../useSessionBrowser.js';
 import type { Key } from '../useKeypress.js';
 import type { PerformResumeResult } from '../../../services/performResume.js';
@@ -128,6 +129,25 @@ function makeKey(
 }
 
 /**
+ * Build a successful resume result with realistic metadata.
+ */
+function makeResumeSuccess(): PerformResumeResult {
+  return {
+    ok: true,
+    history: [],
+    metadata: {
+      sessionId: 'resumed',
+      projectHash: PROJECT_HASH,
+      startTime: new Date().toISOString(),
+      provider: 'anthropic',
+      model: 'claude-4',
+      workspaceDirs: ['/test/workspace'],
+    },
+    warnings: [],
+  };
+}
+
+/**
  * Create props for useSessionBrowser hook with sensible defaults.
  */
 function makeHookProps(
@@ -138,21 +158,10 @@ function makeHookProps(
     chatsDir,
     projectHash: PROJECT_HASH,
     currentSessionId: overrides.currentSessionId ?? 'current-session-id',
+    hasActiveConversation: overrides.hasActiveConversation,
     onSelect:
       overrides.onSelect ??
-      (async (): Promise<PerformResumeResult> => ({
-        ok: true,
-        history: [],
-        metadata: {
-          sessionId: 'resumed',
-          projectHash: PROJECT_HASH,
-          startTime: new Date().toISOString(),
-          provider: 'anthropic',
-          model: 'claude-4',
-          workspaceDirs: ['/test/workspace'],
-        },
-        warnings: [],
-      })),
+      (async (): Promise<PerformResumeResult> => makeResumeSuccess()),
     onClose: overrides.onClose ?? (() => {}),
   };
 }
@@ -621,6 +630,136 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
 
       // Verify the conversationConfirmActive property exists and is false initially
       expect(result.current.conversationConfirmActive).toBe(false);
+    });
+
+    /**
+     * Shared arrangement for the active-conversation confirmation cases:
+     * two real sessions, invocation counters for the resume/close callbacks,
+     * and a browser already sitting on an open confirmation.
+     */
+    async function openConversationConfirmation(): Promise<{
+      result: { current: UseSessionBrowserResult };
+      counts: { select: number; close: number };
+    }> {
+      await createTestSession(chatsDir, { sessionId: 'confirm-session' });
+      await createTestSession(chatsDir, { sessionId: 'second-session' });
+
+      const counts = { select: 0, close: 0 };
+      const props = makeHookProps(chatsDir, {
+        hasActiveConversation: true,
+        onSelect: async () => {
+          counts.select++;
+          return makeResumeSuccess();
+        },
+        onClose: () => {
+          counts.close++;
+        },
+      });
+      const { result } = renderHook(() => useSessionBrowser(props));
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      result.current.handleKeypress('\r', makeKey('return'));
+      await waitFor(() => {
+        expect(result.current.conversationConfirmActive).toBe(true);
+      });
+
+      return { result, counts };
+    }
+
+    /**
+     * Test 67a: Enter with an active conversation opens the confirmation
+     * without selecting (REQ-RS-006)
+     * GIVEN: hasActiveConversation is true
+     * WHEN: User presses Enter
+     * THEN: conversationConfirmActive is true and onSelect was not invoked
+     */
+    it('Enter with an active conversation opens the confirmation without selecting', async () => {
+      const { counts } = await openConversationConfirmation();
+
+      expect(counts.select).toBe(0);
+    });
+
+    /**
+     * Test 67b: y on the confirmation resumes the selection and closes
+     * (REQ-RS-006)
+     * GIVEN: The conversation confirmation is active
+     * WHEN: User presses y
+     * THEN: conversationConfirmActive clears, onSelect is invoked once, and on
+     * a successful result onClose is invoked
+     */
+    it('y on the conversation confirmation resumes and closes', async () => {
+      const { result, counts } = await openConversationConfirmation();
+
+      result.current.handleKeypress('y', makeKey('y'));
+
+      await waitFor(() => {
+        expect(result.current.conversationConfirmActive).toBe(false);
+        expect(counts.select).toBe(1);
+        expect(counts.close).toBe(1);
+      });
+    });
+
+    /**
+     * Test 67c: n on the confirmation cancels without resuming (REQ-RS-013)
+     * GIVEN: The conversation confirmation is active
+     * WHEN: User presses n
+     * THEN: conversationConfirmActive clears while onSelect and onClose stay
+     * uninvoked
+     */
+    it('n on the conversation confirmation cancels without resuming', async () => {
+      const { result, counts } = await openConversationConfirmation();
+
+      result.current.handleKeypress('n', makeKey('n'));
+
+      await waitFor(() => {
+        expect(result.current.conversationConfirmActive).toBe(false);
+      });
+      expect(counts).toStrictEqual({ select: 0, close: 0 });
+      expect(result.current.error).toBeNull();
+    });
+
+    /**
+     * Test 67d: The browser stays navigable after cancelling (REQ-RS-013)
+     * GIVEN: The conversation confirmation was cancelled with n
+     * WHEN: User navigates with the arrow keys
+     * THEN: Selection moves and returns without error
+     */
+    it('browser stays navigable after cancelling the conversation confirmation', async () => {
+      const { result } = await openConversationConfirmation();
+
+      result.current.handleKeypress('n', makeKey('n'));
+      await waitFor(() => {
+        expect(result.current.conversationConfirmActive).toBe(false);
+      });
+
+      result.current.handleKeypress('', makeKey('down'));
+      expect(result.current.selectedIndex).toBe(1);
+      result.current.handleKeypress('', makeKey('up'));
+      expect(result.current.selectedIndex).toBe(0);
+      expect(result.current.error).toBeNull();
+    });
+
+    /**
+     * Test 67e: Escape on the confirmation cancels with the same cleanup as
+     * n (REQ-RS-013)
+     * GIVEN: The conversation confirmation is active
+     * WHEN: User presses Escape
+     * THEN: conversationConfirmActive clears, onSelect and onClose stay
+     * uninvoked, and the browser stays open
+     */
+    it('escape on the conversation confirmation cancels without closing the browser', async () => {
+      const { result, counts } = await openConversationConfirmation();
+
+      result.current.handleKeypress('', makeKey('escape'));
+
+      await waitFor(() => {
+        expect(result.current.conversationConfirmActive).toBe(false);
+      });
+      expect(counts).toStrictEqual({ select: 0, close: 0 });
+      expect(result.current.error).toBeNull();
     });
   });
 });

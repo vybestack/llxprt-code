@@ -326,7 +326,6 @@
     "scripts/tests/runner-image-consistency.test.ts",
     "scripts/tests/scripts-quality-coverage.test.ts",
     "scripts/tests/scrollback-regression.test.ts",
-    "scripts/tests/session-browser-e2e.test.ts",
     "scripts/tests/smoke-cli-entry.test.ts",
     "scripts/tests/tar-command.test.ts",
     "scripts/tests/telemetry-user-settings-path.test.ts",

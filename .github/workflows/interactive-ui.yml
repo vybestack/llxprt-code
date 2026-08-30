@@ -16,7 +16,6 @@ on:
       # The interactive UI test and its Bun test preload
       - 'scripts/tests/test-setup.ts'
       - 'scripts/tests/interactive-ui.test.ts'
-      # The eight scenario JSON files executed by the test
       - 'scripts/tmux-script.slash-autocomplete.json'
       - 'scripts/tmux-script.approval-ui.json'
       - 'scripts/tmux-script.issue2208-newlines.fake.json'
@@ -43,6 +42,8 @@ on:
       - 'packages/storage/index.ts'
       - 'packages/storage/src/index.ts'
       - 'packages/storage/src/config/storage.ts'
+      - 'scripts/tmux-script.session-browser.json'
+      # The eight scenario JSON files executed by the test
       # Deterministic session seed executed by the resize scenario
       # Scenario config referenced by the executed scenarios (welcome banner,
       # plus system settings env path set in each scenario)
@@ -51,6 +52,8 @@ on:
       # Fixtures referenced by the executed scenarios
       - 'scripts/fixtures/approval-ui.responses.jsonl'
       - 'scripts/fixtures/issue2208-newlines.responses.jsonl'
+      - 'scripts/fixtures/session-browser.responses.jsonl'
+      - 'scripts/fixtures/session-browser-settings.json'
       # CLI UI layer (dialogs, autocomplete, input handling)
       - 'packages/cli/src/ui/**'
       - 'packages/cli/src/commands/**'
@@ -110,10 +113,13 @@ on:
       - 'packages/storage/index.ts'
       - 'packages/storage/src/index.ts'
       - 'packages/storage/src/config/storage.ts'
+      - 'scripts/tmux-script.session-browser.json'
       - 'scripts/fixtures/welcome-completed.json'
       - 'scripts/system-settings.interactive-ui.json'
       - 'scripts/fixtures/approval-ui.responses.jsonl'
       - 'scripts/fixtures/issue2208-newlines.responses.jsonl'
+      - 'scripts/fixtures/session-browser.responses.jsonl'
+      - 'scripts/fixtures/session-browser-settings.json'
       - 'packages/cli/src/ui/**'
       - 'packages/cli/src/commands/**'
       - 'packages/cli/src/config/welcomeConfig.ts'

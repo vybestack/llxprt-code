@@ -99,6 +99,7 @@ describe('interactive-ui.yml: direct harness inputs are included', () => {
       'scripts/tmux-script.issue2016-composer.fake.json',
       'scripts/tmux-script.provider-model.json',
       'scripts/tmux-script.welcome.json',
+      'scripts/tmux-script.session-browser.json',
       'scripts/tmux-script.session-browser-resize.json',
       'scripts/tmux-script.unicode-composer.json',
     ];
@@ -107,9 +108,8 @@ describe('interactive-ui.yml: direct harness inputs are included', () => {
       expect(prPaths).toContain(scenario);
     }
 
-    // Duplicate browser-navigation (PR #3310) and approval (PR #3308)
-    // scenarios are excluded from this lane and from the path contract.
-    expect(prPaths).not.toContain('scripts/tmux-script.session-browser.json');
+    // The duplicate approval scenarios (PR #3308) are excluded from this
+    // lane and from the path contract.
     expect(prPaths).not.toContain('scripts/tmux-script.approval-deny.json');
     expect(prPaths).not.toContain('scripts/tmux-script.approval-escape.json');
   });
@@ -153,6 +153,15 @@ describe('interactive-ui.yml: direct harness inputs are included', () => {
     expect(prPaths).toContain(
       'scripts/fixtures/issue2208-newlines.responses.jsonl',
     );
+    expect(prPaths).toContain(
+      'scripts/fixtures/session-browser.responses.jsonl',
+    );
+  });
+
+  it('includes the isolated user settings fixture the session browser scenario seeds', () => {
+    // tmux-script.session-browser.json copies this into its private
+    // LLXPRT_CONFIG_HOME so the browser lists exactly the session it seeds.
+    expect(prPaths).toContain('scripts/fixtures/session-browser-settings.json');
   });
 });
 
