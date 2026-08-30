@@ -54,8 +54,6 @@ function scriptedTransport(
     },
     getModels: async () => [],
     getDefaultModel: () => 'model',
-    getServerTools: () => [],
-    invokeServerTool: async () => null,
   };
   return { provider, calls: () => calls };
 }

@@ -337,8 +337,6 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
         },
         getModels: async () => [],
         getDefaultModel: () => 'claude-test',
-        getServerTools: () => [],
-        invokeServerTool: async () => null,
       };
       return { provider, calls: () => calls };
     }

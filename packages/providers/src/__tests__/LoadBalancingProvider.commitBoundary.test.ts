@@ -81,8 +81,6 @@ function makeScriptedProvider(
     },
     getModels: async () => [],
     getDefaultModel: () => `${name}-model`,
-    getServerTools: () => [],
-    invokeServerTool: async () => ({ content: [] }),
   };
   return { provider, calls };
 }

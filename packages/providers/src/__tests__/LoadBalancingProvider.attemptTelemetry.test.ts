@@ -74,8 +74,6 @@ function makeScriptedProvider(
     },
     getModels: async () => [],
     getDefaultModel: () => `${name}-model`,
-    getServerTools: () => [],
-    invokeServerTool: async () => null,
   };
   return { provider, calls, seenOptions };
 }

@@ -115,12 +115,6 @@ function createScriptedProvider(options: ScriptedProviderOptions): {
     getDefaultModel(): string {
       return 'test-model';
     },
-    getServerTools(): string[] {
-      return [];
-    },
-    async invokeServerTool(): Promise<unknown> {
-      return null;
-    },
   };
   return { provider, calls: () => callCount };
 }
