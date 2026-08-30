@@ -70,6 +70,11 @@ export interface AgentStreamOrchestrationDeps {
    * integration wiring.
    */
   operationLifecycle?: OperationLifecycleRegistry;
+  /**
+   * Aborts an in-flight slash-command action on Esc. Returns true iff one was
+   * aborted, so the Esc handler can report it once (issue #2976).
+   */
+  cancelActiveSlashCommand?: () => boolean;
 }
 
 export interface AgentStreamOrchestrationResult {
@@ -143,6 +148,7 @@ export function useAgentStreamOrchestration(
     args.setShellInputFocused,
     st.drainSuppressedRef,
     cancelRunningAsyncTasks,
+    args.cancelActiveSlashCommand,
   );
   // Refs to break the circular dependency between useSubmitQuery (which
   // creates useStreamEventHandlers → processAgentEvent) and useAgentEventStream

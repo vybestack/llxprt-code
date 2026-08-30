@@ -139,6 +139,64 @@ describe('ShellProcessor', () => {
     expect(result).toBe('The current status is: On branch main');
   });
 
+  it('hands the injected shell command the live invocation signal', async () => {
+    // Before issue #2976 this was a throwaway controller, so Esc could never
+    // reach the injected process. Aborting the invocation must be observable
+    // at the shell boundary through the very signal it was handed.
+    const invocation = new AbortController();
+    const cancellableContext = createMockCommandContext({
+      signal: invocation.signal,
+      invocation: { raw: '/cmd', name: 'cmd', args: '' },
+      services: { config: mockConfig as Config },
+      session: { sessionShellAllowlist: new Set() },
+    });
+    let executionSignal: AbortSignal | undefined;
+    mockShellExecute.mockImplementation(
+      (
+        _command: string,
+        _cwd: string,
+        _onOutput: () => void,
+        signal: AbortSignal,
+      ) => {
+        executionSignal = signal;
+        return { result: Promise.resolve(SUCCESS_RESULT) };
+      },
+    );
+
+    await new ShellProcessor('test-command').process(
+      'status: !{git status}',
+      cancellableContext,
+    );
+
+    // Identity, not shape: the shell boundary must receive the very signal the
+    // framework will abort, so Esc reaches the running process.
+    expect(executionSignal).toBe(invocation.signal);
+  });
+
+  it('stops spawning later injections once the invocation is cancelled', async () => {
+    // Cancelling must not keep launching processes for the abandoned prompt.
+    const invocation = new AbortController();
+    const cancellableContext = createMockCommandContext({
+      signal: invocation.signal,
+      invocation: { raw: '/cmd', name: 'cmd', args: '' },
+      services: { config: mockConfig as Config },
+      session: { sessionShellAllowlist: new Set() },
+    });
+    const spawned: string[] = [];
+    mockShellExecute.mockImplementation((command: string) => {
+      spawned.push(command);
+      invocation.abort();
+      return { result: Promise.resolve({ ...SUCCESS_RESULT, aborted: true }) };
+    });
+
+    await new ShellProcessor('test-command').process(
+      '!{git status} then !{pwd} then !{whoami}',
+      cancellableContext,
+    );
+
+    expect(spawned).toEqual(['git status']);
+  });
+
   it('should process multiple valid shell injections if all are allowed', async () => {
     const processor = new ShellProcessor('test-command');
     const prompt = '!{git status} in !{pwd}';

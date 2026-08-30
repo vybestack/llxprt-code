@@ -63,6 +63,7 @@ export const useAgentStream = (
   subagentManager?: UiSubagentManager,
   removeItems?: RemoveHistoryItems,
   operationLifecycle?: OperationLifecycleRegistry,
+  cancelActiveSlashCommand?: () => boolean,
 ) => {
   const orchestration = useAgentStreamOrchestration({
     agent,
@@ -86,6 +87,7 @@ export const useAgentStream = (
     runtimeMessageBus,
     subagentManager,
     operationLifecycle,
+    cancelActiveSlashCommand,
   } satisfies AgentStreamOrchestrationDeps);
 
   return useAgentStreamReturn(

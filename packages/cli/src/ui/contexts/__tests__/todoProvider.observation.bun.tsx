@@ -170,6 +170,7 @@ function commandContextFrom(
   errors: string[],
 ): CommandContext {
   return {
+    signal: new AbortController().signal,
     services: {
       config: null,
       agent: null,

@@ -110,6 +110,7 @@ export class ShellProcessor implements IPromptProcessor {
       resolvedInjections,
       config,
       userArgsRaw,
+      context.signal,
     );
   }
 
@@ -168,6 +169,7 @@ export class ShellProcessor implements IPromptProcessor {
     resolvedInjections: ShellInjection[],
     config: ShellProcessorRuntime,
     userArgsRaw: string,
+    signal: AbortSignal,
   ): Promise<string> {
     // Resolve the aggregate injection-output budget from the configured shell
     // acquisition setting so prompt injection is bounded by the same finite
@@ -182,6 +184,9 @@ export class ShellProcessor implements IPromptProcessor {
     let lastIndex = 0;
 
     for (const injection of resolvedInjections) {
+      // Once the invocation is cancelled, spawning the remaining injections
+      // would start processes for work the user just abandoned.
+      if (signal.aborted) break;
       // Literal text BEFORE this injection, substituting {{args}} with RAW input.
       const segment = prompt.substring(lastIndex, injection.startIndex);
       builder.appendLiteral(
@@ -196,7 +201,9 @@ export class ShellProcessor implements IPromptProcessor {
           injection.resolvedCommand,
           config.getTargetDir(),
           () => {},
-          new AbortController().signal,
+          // The invocation's cancellation signal, so Esc actually kills the
+          // injected shell command instead of orphaning it (issue #2976).
+          signal,
           config.getShouldUseNodePtyShell(),
           config.getShellExecutionConfig(),
         );

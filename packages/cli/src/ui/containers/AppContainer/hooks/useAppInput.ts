@@ -17,7 +17,12 @@ import { useVim } from '../../../hooks/vim.js';
 import { useTextBuffer } from '../../../components/shared/text-buffer.js';
 import { useInputHistoryStore } from '../../../hooks/useInputHistoryStore.js';
 import { shouldClearTodos } from '../../../hooks/useTodoPausePreserver.js';
-import { StreamingState, type HistoryItem } from '../../../types.js';
+import {
+  StreamingState,
+  ToolCallStatus,
+  type HistoryItem,
+  type HistoryItemWithoutId,
+} from '../../../types.js';
 import { submitOAuthCode } from '../../../oauth-submission.js';
 import { getPendingOAuthProvider } from '../../../oauthGlobalState.js';
 import type { EditorType } from '@vybestack/llxprt-code-core';
@@ -358,6 +363,7 @@ function useInputStreamSetup(
     p.subagentManager,
     removeItems,
     p.operationLifecycle,
+    core.cancelActiveSlashCommand,
   );
   return { ...bufferSetup, agentStreamResult };
 }
@@ -440,12 +446,57 @@ function useInputStream(
   return { ...setupRest, ...wiring };
 }
 
+export interface IsInputActiveInputs {
+  streamingState: StreamingState;
+  initError: string | null;
+  hasSlashCommands: boolean;
+  /** True while a slash command is blocked on a shell-expansion approval. */
+  isAwaitingSlashCommandConfirmation: boolean;
+}
+
+/**
+ * True when a slash command has put a confirmation on screen that owns the
+ * keyboard. `confirm_action` renders through the dialog manager, which
+ * replaces the whole inline layout; `confirm_shell_commands` instead parks a
+ * Confirming tool group in the processor's pending items, which is what this
+ * detects.
+ */
+export function computeIsAwaitingSlashCommandConfirmation(
+  pendingItems: readonly HistoryItemWithoutId[],
+): boolean {
+  return pendingItems.some(
+    (item) =>
+      item.type === 'tool_group' &&
+      item.tools.some((tool) => tool.status === ToolCallStatus.Confirming),
+  );
+}
+
+/**
+ * Decides whether the composer is rendered.
+ *
+ * This deliberately does NOT key off the slash-command pipeline being busy.
+ * Doing so hid the prompt for the entire duration of a long command
+ * (issue #2976). The composer only has to stand down when something else owns
+ * the keyboard, which is what the streaming and confirmation terms cover.
+ */
+export function computeIsInputActive(inputs: IsInputActiveInputs): boolean {
+  const isStreamingIdleOrResponding =
+    inputs.streamingState === StreamingState.Idle ||
+    inputs.streamingState === StreamingState.Responding;
+  return (
+    isStreamingIdleOrResponding &&
+    !inputs.initError &&
+    inputs.hasSlashCommands &&
+    !inputs.isAwaitingSlashCommandConfirmation
+  );
+}
+
 function useInputFinish(
   p: AppInputParams,
   core: ReturnType<typeof useInputCore>,
   stream: ReturnType<typeof useInputStream>,
 ) {
-  const { settings, setIdePromptAnswered, isProcessing } = p;
+  const { settings, setIdePromptAnswered } = p;
   const { handleSlashCommand, vimModeEnabled, vimMode, toggleVimEnabled } =
     core;
   const {
@@ -496,14 +547,13 @@ function useInputFinish(
   const handleSettingsRestart = useCallback(() => {
     void handleSlashCommand('/quit');
   }, [handleSlashCommand]);
-  const isStreamingIdleOrResponding =
-    streamingState === StreamingState.Idle ||
-    streamingState === StreamingState.Responding;
-  const isInputActive =
-    isStreamingIdleOrResponding &&
-    !initError &&
-    !isProcessing &&
-    !!slashCommands;
+  const isInputActive = computeIsInputActive({
+    streamingState,
+    initError,
+    hasSlashCommands: !!slashCommands,
+    isAwaitingSlashCommandConfirmation:
+      computeIsAwaitingSlashCommandConfirmation(core.pendingHistoryItems),
+  });
   return {
     handleIdePromptComplete,
     vimHandleInput,

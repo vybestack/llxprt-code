@@ -25,6 +25,7 @@ type DeepPartial<T> = T extends object
  * @returns A complete, mocked CommandContext object.
  */
 const buildDefaultMocks = (): CommandContext => ({
+  signal: new AbortController().signal,
   invocation: {
     raw: '',
     name: '',

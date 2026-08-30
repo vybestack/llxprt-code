@@ -78,6 +78,10 @@ export interface SlashCommandHandlerDeps {
   recordingSwapCallbacks?: RecordingSwapCallbacks;
   confirmationLogger: DebugLogger;
   slashCommandLogger: DebugLogger;
+  /** Registers the action about to be awaited and returns its controller. */
+  beginSlashCommandAction: () => AbortController;
+  /** Deregisters an action once it has settled. */
+  endSlashCommandAction: (controller: AbortController) => void;
 }
 
 interface ParsedCommandState {
@@ -161,15 +165,22 @@ async function executeParsedCommand(
 ): Promise<SlashCommandProcessorResult | false> {
   const { commandToExecute } = parsed;
   if (commandToExecute?.action) {
-    const context = buildInvocationContext(
-      deps.commandContext,
+    const outcome = await runCommandAction(
+      deps,
+      commandToExecute.action,
       parsed,
-      oneTimeShellAllowlist,
-      overwriteConfirmed,
+      (signal) =>
+        buildInvocationContext(
+          deps.commandContext,
+          parsed,
+          oneTimeShellAllowlist,
+          overwriteConfirmed,
+          signal,
+        ),
     );
-    const result = await commandToExecute.action(context, parsed.args);
-    return result
-      ? handleActionResult(deps, context, result)
+    if (outcome.cancelled) return { type: 'handled' };
+    return outcome.result
+      ? handleActionResult(deps, outcome.context, outcome.result)
       : { type: 'handled' };
   }
   if (commandToExecute?.subCommands) {
@@ -180,14 +191,81 @@ async function executeParsedCommand(
   return { type: 'handled' };
 }
 
+type CommandAction = NonNullable<SlashCommand['action']>;
+
+type CommandActionOutcome =
+  | { cancelled: true; context?: undefined; result?: undefined }
+  | {
+      cancelled: false;
+      context: CommandContext;
+      result: Awaited<ReturnType<CommandAction>>;
+    };
+
+/**
+ * Awaits the action while it is registered as cancellable.
+ *
+ * Once the invocation is aborted its outcome is discarded either way. A
+ * rejection is the expected shape of "the user pressed Esc" and must not also
+ * surface as a command error; a resolution is a command that noticed the abort
+ * and unwound cleanly, and acting on its result would carry out work the user
+ * just cancelled (for example submitting a prompt built from a shell injection
+ * that was killed mid-flight).
+ *
+ * Context construction happens inside the try so that every registration has a
+ * matching deregistration even if building it throws.
+ */
+async function runCommandAction(
+  deps: SlashCommandHandlerDeps,
+  action: CommandAction,
+  parsed: ParsedCommandState,
+  buildContext: (signal: AbortSignal) => CommandContext,
+): Promise<CommandActionOutcome> {
+  const controller = deps.beginSlashCommandAction();
+  try {
+    const context = buildContext(controller.signal);
+    const result = await action(context, parsed.args);
+    if (controller.signal.aborted) {
+      logDiscarded(deps, parsed, 'result', undefined);
+      return { cancelled: true };
+    }
+    return { cancelled: false, context, result };
+  } catch (error) {
+    if (!controller.signal.aborted) throw error;
+    // The discard is intentional, but an unrelated failure can land in the same
+    // window, so leave a trace rather than losing it entirely.
+    logDiscarded(deps, parsed, 'error', error);
+    return { cancelled: true };
+  } finally {
+    deps.endSlashCommandAction(controller);
+  }
+}
+
+function logDiscarded(
+  deps: SlashCommandHandlerDeps,
+  parsed: ParsedCommandState,
+  kind: 'result' | 'error',
+  error: unknown,
+): void {
+  deps.slashCommandLogger.debug(() => {
+    const detail = kind === 'error' ? `: ${describeError(error)}` : '';
+    return `discarded ${kind} from cancelled ${parsed.trimmed}${detail}`;
+  });
+}
+
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function buildInvocationContext(
   baseContext: CommandContext,
   parsed: ParsedCommandState,
   oneTimeShellAllowlist: Set<string> | undefined,
   overwriteConfirmed: boolean | undefined,
+  signal: AbortSignal,
 ): CommandContext {
   const fullCommandContext: CommandContext = {
     ...baseContext,
+    signal,
     invocation: {
       raw: parsed.trimmed,
       name: parsed.commandToExecute?.name ?? '',
