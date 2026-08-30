@@ -493,6 +493,80 @@ async function runBunScriptsWithBarrier(
   return Promise.all(promises);
 }
 
+interface AbandonedGuardRaceRound {
+  readonly results: readonly string[];
+  readonly originalLockContent: string;
+  readonly finalLockContent: string | null;
+}
+
+async function runAbandonedGuardRaceRound(): Promise<AbandonedGuardRaceRound> {
+  const tempDir = await makeTempDir();
+  const chatsDir = path.join(tempDir, 'chats');
+  const sessionId = 'abandoned-guard-race';
+  const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
+
+  try {
+    await fs.mkdir(chatsDir, { recursive: true });
+    const oldTime = new Date(Date.now() - 49 * 60 * 60 * 1000);
+    const originalLockContent = JSON.stringify({
+      pid: DEAD_PID,
+      timestamp: oldTime.toISOString(),
+      sessionId,
+      ownerToken: 'stale-original',
+    });
+    await fs.writeFile(lockPath, originalLockContent);
+    await fs.utimes(lockPath, oldTime, oldTime);
+    await fs.writeFile(
+      lockPath + '.tguard',
+      JSON.stringify({
+        pid: DEAD_PID,
+        timestamp: new Date().toISOString(),
+        claimToken: 'crashed-claimant-token',
+        lockDev: null,
+        lockIno: null,
+      }),
+    );
+
+    const script = `
+      const { SessionLockManager } = require(${JSON.stringify(path.resolve(__dirname, 'SessionLockManager.js'))});
+      (async () => {
+        require('fs').writeFileSync(process.env.TEST_READY_FILE, 'ready');
+        while (!require('fs').existsSync(process.env.TEST_GO_FILE)) {
+          await new Promise(r => setTimeout(r, 5));
+        }
+        try {
+          const handle = await SessionLockManager.acquire(process.env.TEST_CHATS_DIR, process.env.TEST_SESSION_ID);
+          await new Promise(r => setTimeout(r, 400));
+          const owns = await handle.ownsLock();
+          process.stdout.write(owns ? 'WON' : 'LOST');
+          await handle.release();
+        } catch (error) {
+          const detail = error instanceof Error
+            ? error.name + ': ' + error.message
+            : String(error);
+          process.stdout.write('SKIP\\n' + detail);
+        }
+      })();
+    `;
+
+    const results = await runBunScriptsWithBarrier(
+      script,
+      { TEST_CHATS_DIR: chatsDir, TEST_SESSION_ID: sessionId },
+      3,
+      tempDir,
+    );
+    return {
+      results,
+      originalLockContent,
+      finalLockContent: (await fileExists(lockPath))
+        ? await fs.readFile(lockPath, 'utf-8')
+        : null,
+    };
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
 describe('SessionLockManager — genuine transition race (subprocess, Item 3)', () => {
   let tempDir: string;
   let chatsDir: string;
@@ -568,65 +642,35 @@ describe('SessionLockManager — genuine transition race (subprocess, Item 3)', 
    * end up owning the lock, and no contender may lose a lock it acquired.
    */
   it('exactly one contender wins when the stale lock already carries an abandoned guard', async () => {
-    const sessionId = 'abandoned-guard-race';
-    const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
+    const firstRound = await runAbandonedGuardRaceRound();
+    let round = firstRound;
+    const countResults = (marker: 'WON' | 'LOST'): number =>
+      round.results.filter((result) => result.startsWith(marker)).length;
+    let winners = countResults('WON');
+    let losers = countResults('LOST');
 
-    const oldTime = new Date(Date.now() - 49 * 60 * 60 * 1000);
-    await fs.writeFile(
-      lockPath,
-      JSON.stringify({
-        pid: DEAD_PID,
-        timestamp: oldTime.toISOString(),
-        sessionId,
-        ownerToken: 'stale-original',
-      }),
-    );
-    await fs.utimes(lockPath, oldTime, oldTime);
-    // A claimant that crashed mid-transition: our own guard format, dead PID.
-    await fs.writeFile(
-      lockPath + '.tguard',
-      JSON.stringify({
-        pid: DEAD_PID,
-        timestamp: new Date().toISOString(),
-        claimToken: 'crashed-claimant-token',
-        lockDev: null,
-        lockIno: null,
-      }),
-    );
+    // Concurrent link/rename operations can make Bun on Windows report a
+    // transient filesystem error. Retry only when the unchanged stale bytes
+    // prove that no contender mutated the lock.
+    if (
+      winners === 0 &&
+      losers === 0 &&
+      round.finalLockContent === round.originalLockContent
+    ) {
+      round = await runAbandonedGuardRaceRound();
+      winners = countResults('WON');
+      losers = countResults('LOST');
+    }
 
-    const script = `
-      const { SessionLockManager } = require(${JSON.stringify(path.resolve(__dirname, 'SessionLockManager.js'))});
-      const chatsDir = process.env.TEST_CHATS_DIR;
-      const sessionId = process.env.TEST_SESSION_ID;
-      const readyFile = process.env.TEST_READY_FILE;
-      const goFile = process.env.TEST_GO_FILE;
-      (async () => {
-        require('fs').writeFileSync(readyFile, 'ready');
-        while (!require('fs').existsSync(goFile)) {
-          await new Promise(r => setTimeout(r, 5));
-        }
-        try {
-          const handle = await SessionLockManager.acquire(chatsDir, sessionId);
-          await new Promise(r => setTimeout(r, 400));
-          const owns = await handle.ownsLock();
-          process.stdout.write(owns ? 'WON' : 'LOST');
-          await handle.release();
-        } catch (e) {
-          process.stdout.write('SKIP');
-        }
-      })();
-    `;
-
-    const results = await runBunScriptsWithBarrier(
-      script,
-      { TEST_CHATS_DIR: chatsDir, TEST_SESSION_ID: sessionId },
-      3,
-      tempDir,
-    );
-
-    expect(results.filter((r) => r === 'WON').length).toBe(1);
-    expect(results.filter((r) => r === 'LOST').length).toBe(0);
-  }, 30000);
+    const contenderDiagnostics =
+      round === firstRound
+        ? round.results.join('\n---\n')
+        : `First round:\n${firstRound.results.join('\n---\n')}\n=== RETRY ===\n${round.results.join('\n---\n')}`;
+    expect({ winners, losers, contenderDiagnostics }).toMatchObject({
+      winners: 1,
+      losers: 0,
+    });
+  }, 60000);
 
   it('transition guard prevents removal of a replacement lock during release', async () => {
     // Acquire a lock, then simulate a replacement and verify release does not
