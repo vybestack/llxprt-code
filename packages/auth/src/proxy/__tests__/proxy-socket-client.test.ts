@@ -19,6 +19,7 @@ import { once } from 'node:events';
 import {
   ProxySocketClient,
   REQUEST_TIMEOUT_MS,
+  IDLE_TIMEOUT_MS,
   PROTOCOL_VERSION,
 } from '../proxy-socket-client.js';
 import { encodeFrame, FrameDecoder } from '../framing.js';
@@ -312,6 +313,7 @@ describe('ProxySocketClient', () => {
 
   afterEach(async () => {
     client?.close();
+    vi.useRealTimers();
     await new Promise<void>((resolve) => {
       if (server?.listening === true) {
         destroyServerSockets(server);
@@ -511,35 +513,135 @@ describe('ProxySocketClient', () => {
     vi.advanceTimersByTime(REQUEST_TIMEOUT_MS + 100);
 
     await expect(requestPromise).rejects.toThrow(/timed out/);
-
-    vi.useRealTimers();
   });
 
   /**
    * @requirement R24.1
-   * @scenario Idle timeout triggers graceful close after 5 minutes
+   * @scenario The idle timeout closes the first socket after 5 minutes and the
+   *           next request completes over a new connection. Fake timers are
+   *           activated BEFORE the client is constructed so the idle timer is
+   *           created on the faked clock and advancing it past the deadline
+   *           fires the real timer path.
    */
-  it('triggers gracefulClose after idle timeout', async () => {
-    server = createAutoReplyServer(socketPath);
-    trackServerSockets(server);
+  it('closes the first socket at the idle deadline and serves the next request over a new connection', async () => {
+    let handshakeCount = 0;
+    let firstSocket: net.Socket | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const firstSocketClosed = new Promise<void>((resolve) => {
+      server = net.createServer((socket) => {
+        trackServerSockets(initialized(server, 'server'));
+        firstSocket ??= socket;
+        socket.on('close', () => {
+          if (socket === firstSocket) {
+            resolve();
+          }
+        });
+        const decoder = new FrameDecoder();
+        socket.on('data', (chunk) => {
+          const frames = decoder.feed(chunk);
+          for (const frame of frames) {
+            const msg = frame;
+            if (msg.op === 'handshake') {
+              handshakeCount++;
+              socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
+            } else {
+              socket.write(
+                encodeFrame({
+                  ok: true,
+                  id: msg.id,
+                  data: { handshake: handshakeCount },
+                }),
+              );
+            }
+          }
+        });
+      });
+    });
+
     await new Promise<void>((resolve) =>
       initialized(server, 'server').listen(socketPath, resolve),
     );
 
+    vi.useFakeTimers();
     client = new ProxySocketClient(socketPath);
     await client.ensureConnected();
+    const initialResponse = await client.request('idle-probe', { test: true });
+    expect(initialResponse.data).toStrictEqual({ handshake: 1 });
 
-    // The idle timer was created with real setTimeout. Bun's fake timers
-    // only intercept timers created AFTER activation, so simulate the
-    // idle-timeout effect by calling gracefulClose directly.
-    client.gracefulClose();
-    await new Promise((resolve) => setImmediate(resolve));
+    vi.advanceTimersByTime(IDLE_TIMEOUT_MS + 1);
+    // Restore real timers before waiting on socket teardown: Bun's fake
+    // timers freeze Date.now() and stall any wall-clock deadline.
+    vi.useRealTimers();
 
-    // After idle timeout, the next request should trigger a reconnection
-    // (which means a new handshake). We verify by making another request
-    // that succeeds (requires new handshake)
-    const response = await client.request('after-idle', { test: true });
-    expect(response.ok).toBe(true);
+    try {
+      await Promise.race([
+        firstSocketClosed,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error('Idle timer did not close the socket')),
+            TEST_DEADLINE_MS,
+          );
+        }),
+      ]);
+
+      // After the idle close, the next request reconnects over a new socket
+      // and a new handshake.
+      const response = await client.request('after-idle', { test: true });
+      expect(response.data).toStrictEqual({ handshake: 2 });
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+
+  /**
+   * @requirement R24.1
+   * @scenario One millisecond short of the idle deadline the socket stays open,
+   *           distinguishing the deadline from any earlier teardown.
+   */
+  it('keeps the connection open one millisecond short of the idle deadline', async () => {
+    let handshakeCount = 0;
+    server = net.createServer((socket) => {
+      trackServerSockets(initialized(server, 'server'));
+      const decoder = new FrameDecoder();
+      socket.on('data', (chunk) => {
+        const frames = decoder.feed(chunk);
+        for (const frame of frames) {
+          const msg = frame;
+          if (msg.op === 'handshake') {
+            handshakeCount++;
+            socket.write(encodeFrame({ ok: true, v: PROTOCOL_VERSION }));
+          } else {
+            socket.write(
+              encodeFrame({
+                ok: true,
+                id: msg.id,
+                data: { handshake: handshakeCount },
+              }),
+            );
+          }
+        }
+      });
+    });
+
+    await new Promise<void>((resolve) =>
+      initialized(server, 'server').listen(socketPath, resolve),
+    );
+
+    vi.useFakeTimers();
+    client = new ProxySocketClient(socketPath);
+    await client.ensureConnected();
+    const initialResponse = await client.request('idle-probe', { test: true });
+    expect(initialResponse.data).toStrictEqual({ handshake: 1 });
+
+    vi.advanceTimersByTime(IDLE_TIMEOUT_MS - 1);
+    // Restore real timers before the next request performs real socket I/O.
+    vi.useRealTimers();
+
+    const response = await client.request('before-idle-deadline', {
+      test: true,
+    });
+    expect(response.data).toStrictEqual({ handshake: 1 });
+    expect(handshakeCount).toBe(1);
   });
 
   /**
@@ -651,13 +753,19 @@ describe('ProxySocketClient', () => {
 
   /**
    * @requirement R6.4
-   * @scenario Reconnection after idle close sends new handshake
+   * @scenario Reconnection after the idle deadline completes a new handshake.
+   *           Fake timers are activated before the client is constructed so the
+   *           idle timer is on the faked clock; advancing the timer fires the
+   *           real timer path and the server observes the second handshake.
    */
-  it('sends new handshake on reconnection after idle close', async () => {
+  it('reconnects with a second handshake after the idle deadline', async () => {
     let handshakeCount = 0;
+    let firstSocket: net.Socket | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
     server = net.createServer((socket) => {
       trackServerSockets(initialized(server, 'server'));
+      firstSocket ??= socket;
       const decoder = new FrameDecoder();
       socket.on('data', (chunk) => {
         const frames = decoder.feed(chunk);
@@ -677,21 +785,43 @@ describe('ProxySocketClient', () => {
       initialized(server, 'server').listen(socketPath, resolve),
     );
 
+    vi.useFakeTimers();
     client = new ProxySocketClient(socketPath);
     await client.ensureConnected();
     expect(handshakeCount).toBe(1);
+    const initialResponse = await client.request('idle-probe', { test: true });
+    expect(initialResponse.ok).toBe(true);
 
-    // The idle timer was created with real setTimeout before fake timers are
-    // activated. Bun's fake timers only intercept timers created AFTER
-    // activation, so advancing fake timers won't fire the existing real idle
-    // timer. Simulate the idle-timeout effect by calling gracefulClose directly.
-    client.gracefulClose();
-    // Yield to let the socket teardown complete
-    await new Promise((resolve) => setImmediate(resolve));
+    vi.advanceTimersByTime(IDLE_TIMEOUT_MS + 1);
+    // Restore real timers before waiting on socket teardown: Bun's fake
+    // timers freeze Date.now() and stall any wall-clock deadline.
+    vi.useRealTimers();
 
-    // Next request should reconnect with a new handshake
-    await client.request('after-reconnect', {});
-    expect(handshakeCount).toBe(2);
+    try {
+      // The first socket must close before the new connection is created, so the
+      // next handshake is a genuine reconnect and not an observed duplicate.
+      await Promise.race([
+        new Promise<void>((resolve) => {
+          if (firstSocket !== undefined) {
+            firstSocket.once('close', () => resolve());
+          } else {
+            resolve();
+          }
+        }),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error('Idle timer did not close the socket')),
+            TEST_DEADLINE_MS,
+          );
+        }),
+      ]);
+
+      // Next request should reconnect with a new handshake
+      await client.request('after-reconnect', {});
+      expect(handshakeCount).toBe(2);
+    } finally {
+      clearTimeout(timer);
+    }
   });
 
   /**

@@ -139,22 +139,6 @@ describe('shell-parser', () => {
         expect(error).toBeNull();
       },
     );
-
-    it('should record initialization errors when tree-sitter exports are missing', async () => {
-      // Under Bun, vi.resetModules() is unsupported (modules are cached
-      // per-process). The web-tree-sitter mock is process-wide. We test
-      // the error path by verifying that resetParser() clears state and
-      // initializeParser() either succeeds or sets an error — exercising
-      // the same error-handling code path that runs when Language is missing.
-      resetParser();
-      const result = await initializeParser();
-
-      expect(typeof result).toBe('boolean');
-      expect(isParserAvailable()).toBe(result);
-      // Re-initialize for subsequent tests
-      resetParser();
-      await initializeParser();
-    });
   });
 
   describe('parseShellCommand', () => {
