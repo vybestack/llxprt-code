@@ -41,8 +41,14 @@ class InMemoryTokenStore implements TokenStore {
     token: OAuthToken,
     bucket?: string,
   ): Promise<void> {
+    if (this.saveError !== null) {
+      throw new Error(this.saveError);
+    }
     this.tokens.set(this.key(provider, bucket), { ...token });
   }
+
+  /** When set, saveToken throws this message, simulating host store failure. */
+  saveError: string | null = null;
 
   async getToken(
     provider: string,
@@ -357,6 +363,41 @@ describe('oauth_exchange handler', () => {
         'acct_12345',
       );
     });
+
+    it('persists the parsed extension-preserving token value (not the raw boundary object)', async () => {
+      const extensionValue = 'acct-' + Math.random().toString(36).slice(2);
+      const extendedToken: OAuthToken = {
+        access_token: 'parsed_persist_token',
+        refresh_token: 'parsed_persist_rt',
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      };
+      Reflect.set(extendedToken, 'account_id', extensionValue);
+      testFlow.setExchangeResult(extendedToken);
+
+      const init = await client.request('oauth_initiate', {
+        provider: 'anthropic',
+      });
+      const exchange = await client.request('oauth_exchange', {
+        session_id: init.data?.session_id,
+        code: 'auth_code',
+      });
+      expect(exchange.ok).toBe(true);
+
+      // The parsed extension-preserving token is what reaches the store.
+      const stored = await backingStore.getToken('anthropic');
+      expect(stored).not.toBeNull();
+      expect(stored?.access_token).toBe('parsed_persist_token');
+      expect(stored?.refresh_token).toBe('parsed_persist_rt');
+      expect(Reflect.get(stored ?? {}, 'account_id')).toBe(extensionValue);
+
+      // The wire response is sanitized but still carries the extension.
+      expect(exchange.data?.refresh_token).toBeUndefined();
+      expect('refresh_token' in (exchange.data ?? {})).toBe(false);
+      expect(Reflect.get(exchange.data ?? {}, 'account_id')).toBe(
+        extensionValue,
+      );
+    });
   });
 
   // ─── Session Lifecycle Tests ─────────────────────────────────────────────
@@ -477,6 +518,85 @@ describe('oauth_exchange handler', () => {
 
       expect(exchange.ok).toBe(false);
       expect(exchange.code).toBe('INVALID_REQUEST');
+    });
+
+    it('rejects a wrong-typed session_id with the session message', async () => {
+      const wrongSession = await client.request('oauth_exchange', {
+        session_id: 42,
+        code: 'auth-code',
+      });
+      expect(wrongSession).toMatchObject({
+        code: 'INVALID_REQUEST',
+        error: 'Missing session_id',
+      });
+    });
+
+    it('rejects a wrong-typed code with the code message', async () => {
+      testFlow.setExchangeResult({
+        access_token: 'token',
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      });
+      const init = await client.request('oauth_initiate', {
+        provider: 'anthropic',
+      });
+      const wrongCode = await client.request('oauth_exchange', {
+        session_id: init.data?.session_id,
+        code: ['auth-code'],
+      });
+      expect(wrongCode).toMatchObject({
+        code: 'INVALID_REQUEST',
+        error: 'Missing code',
+      });
+    });
+
+    it('does not store a token when exchange resolves with a malformed token', async () => {
+      const malformedToken: OAuthToken = {
+        access_token: 'would-be-saved',
+        token_type: 'Bearer',
+        expiry: 0,
+      };
+      Reflect.set(malformedToken, 'expiry', 'not-a-timestamp');
+      testFlow.setExchangeResult(malformedToken);
+
+      const init = await client.request('oauth_initiate', {
+        provider: 'anthropic',
+      });
+      const exchange = await client.request('oauth_exchange', {
+        session_id: init.data?.session_id,
+        code: 'auth-code',
+      });
+
+      // A malformed exchange result is still an exchange failure with the
+      // established operation error code, and nothing is persisted.
+      expect(exchange.ok).toBe(false);
+      expect(exchange.code).toBe('EXCHANGE_FAILED');
+      const stored = await backingStore.getToken('anthropic');
+      expect(stored).toBeNull();
+    });
+
+    it('reports EXCHANGE_FAILED when persisting the parsed token throws', async () => {
+      testFlow.setExchangeResult({
+        access_token: 'never_persisted',
+        refresh_token: 'never_persisted_rt',
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      });
+
+      backingStore.saveError = 'host storage unavailable';
+
+      const init = await client.request('oauth_initiate', {
+        provider: 'anthropic',
+      });
+      const exchange = await client.request('oauth_exchange', {
+        session_id: init.data?.session_id,
+        code: 'auth-code',
+      });
+
+      expect(exchange.ok).toBe(false);
+      expect(exchange.code).toBe('EXCHANGE_FAILED');
+      const stored = await backingStore.getToken('anthropic');
+      expect(stored).toBeNull();
     });
   });
 

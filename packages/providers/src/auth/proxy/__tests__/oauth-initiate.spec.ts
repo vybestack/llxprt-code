@@ -517,6 +517,41 @@ describe('oauth_initiate handler', () => {
       expect(response.code).toBe('INVALID_REQUEST');
     });
 
+    it('rejects a wrong-typed provider with the provider message', async () => {
+      const response = await client.request('oauth_initiate', {
+        provider: 42,
+      });
+      expect(response).toMatchObject({
+        ok: false,
+        code: 'INVALID_REQUEST',
+        error: 'Missing provider',
+      });
+    });
+
+    it('rejects a wrong-typed bucket with the provider message', async () => {
+      const response = await client.request('oauth_initiate', {
+        provider: 'anthropic',
+        bucket: ['work'],
+      });
+      expect(response).toMatchObject({
+        ok: false,
+        code: 'INVALID_REQUEST',
+        error: 'Missing provider',
+      });
+    });
+
+    it('rejects a wrong-typed redirect_uri with the provider message', async () => {
+      const response = await client.request('oauth_initiate', {
+        provider: 'anthropic',
+        redirect_uri: { url: 'https://example.com' },
+      });
+      expect(response).toMatchObject({
+        ok: false,
+        code: 'INVALID_REQUEST',
+        error: 'Missing provider',
+      });
+    });
+
     /**
      * @requirement R-OAUTH-15
      * @scenario Provider without configured flow factory returns PROVIDER_NOT_CONFIGURED

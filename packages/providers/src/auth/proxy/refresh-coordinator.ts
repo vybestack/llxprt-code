@@ -15,8 +15,12 @@
 
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import type { TokenStore, OAuthToken } from '@vybestack/llxprt-code-auth';
+import { OAuthTokenDataSchema } from '@vybestack/llxprt-code-auth';
 import { mergeRefreshedToken } from '@vybestack/llxprt-code-auth/token-merge.js';
-import { sanitizeTokenForProxy } from '@vybestack/llxprt-code-auth/token-sanitization.js';
+import {
+  sanitizeTokenForProxy,
+  type SanitizedOAuthToken,
+} from '@vybestack/llxprt-code-auth/token-sanitization.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -31,12 +35,19 @@ const AUTH_ERROR_PATTERNS = [
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export interface RefreshResult {
-  status: 'ok' | 'rate_limited' | 'auth_error' | 'error';
-  token?: OAuthToken;
-  retryAfter?: number;
-  error?: string;
-}
+type RefreshResultFields = {
+  readonly token?: SanitizedOAuthToken;
+  readonly retryAfter?: number;
+  readonly error?: string;
+};
+
+export type RefreshResult = RefreshResultFields &
+  (
+    | { readonly status: 'ok'; readonly token: SanitizedOAuthToken }
+    | { readonly status: 'rate_limited' }
+    | { readonly status: 'auth_error' }
+    | { readonly status: 'error' }
+  );
 
 export interface RefreshCoordinatorOptions {
   tokenStore: TokenStore;
@@ -127,12 +138,16 @@ export class RefreshCoordinator {
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const newToken = await refreshFn(provider, currentToken);
+        const connectionToken = await refreshFn(provider, currentToken);
+        const newToken = OAuthTokenDataSchema.parse(connectionToken);
         const merged = mergeRefreshedToken(currentToken, newToken);
+        const sanitized = sanitizeTokenForProxy(merged);
         await tokenStore.saveToken(provider, merged, bucket);
         this.lastRefreshMap.set(key, Date.now());
-        const sanitized = sanitizeTokenForProxy(merged) as OAuthToken;
-        return { status: 'ok', token: sanitized };
+        return {
+          status: 'ok',
+          token: sanitized,
+        } as const satisfies RefreshResult;
       } catch (err: unknown) {
         if (isAuthError(err)) {
           return {

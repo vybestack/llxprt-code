@@ -151,6 +151,145 @@ describe('ProxyTokenStore', () => {
     expect(result).toBeNull();
   });
 
+  /** @requirement R-2197 @scenario valid OAuth token payload accepted */
+  it('returns token (with provider extensions) when server data is a valid OAuth token', async () => {
+    server = createTestServer(socketPath, () => ({
+      ok: true,
+      data: {
+        access_token: 'test-access-token',
+        expiry: 123456,
+        token_type: 'Bearer',
+        scope: null,
+        resource_url: 'https://api.example.com',
+        account_id: 'acct-1',
+        id_token: 'jwt',
+      },
+    }));
+    await listenAsync(server, socketPath);
+
+    store = new ProxyTokenStore(socketPath);
+    const result = await store.getToken('anthropic');
+
+    expect(result).toMatchObject({
+      access_token: 'test-access-token',
+      expiry: 123456,
+      token_type: 'Bearer',
+      scope: null,
+      resource_url: 'https://api.example.com',
+    });
+    expect(Reflect.get(result ?? {}, 'account_id')).toBe('acct-1');
+    expect(Reflect.get(result ?? {}, 'id_token')).toBe('jwt');
+  });
+
+  /** @requirement R-2197 @scenario malformed token data rejected */
+  it('rejects malformed token data with the stable proxy payload error', async () => {
+    server = createTestServer(socketPath, () => ({
+      ok: true,
+      data: { access_token: 42 },
+    }));
+    await listenAsync(server, socketPath);
+
+    store = new ProxyTokenStore(socketPath);
+    await expect(store.getToken('anthropic')).rejects.toThrow(
+      /PROXY_PAYLOAD_ERROR/,
+    );
+  });
+
+  it('rejects token data with a wrong-typed expiry', async () => {
+    server = createTestServer(socketPath, () => ({
+      ok: true,
+      data: {
+        access_token: 'at',
+        expiry: 'later',
+        token_type: 'Bearer',
+      },
+    }));
+    await listenAsync(server, socketPath);
+
+    store = new ProxyTokenStore(socketPath);
+    await expect(store.getToken('anthropic')).rejects.toThrow(
+      /PROXY_PAYLOAD_ERROR/,
+    );
+  });
+
+  it('rejects token data with a wrong-typed token_type', async () => {
+    server = createTestServer(socketPath, () => ({
+      ok: true,
+      data: {
+        access_token: 'at',
+        expiry: 123456,
+        token_type: 'invalid',
+      },
+    }));
+    await listenAsync(server, socketPath);
+
+    store = new ProxyTokenStore(socketPath);
+    await expect(store.getToken('anthropic')).rejects.toThrow(
+      /PROXY_PAYLOAD_ERROR/,
+    );
+  });
+
+  it('rejects bucket stats data when the requestCount member is missing', async () => {
+    server = createTestServer(socketPath, () => ({
+      ok: true,
+      data: { bucket: 'default' },
+    }));
+    await listenAsync(server, socketPath);
+
+    store = new ProxyTokenStore(socketPath);
+    await expect(store.getBucketStats('anthropic', 'default')).rejects.toThrow(
+      /PROXY_PAYLOAD_ERROR/,
+    );
+  });
+
+  it('rejects bucket stats data when only a scalar is present', async () => {
+    server = createTestServer(socketPath, () => ({
+      ok: true,
+      data: 'default',
+    }));
+    await listenAsync(server, socketPath);
+
+    store = new ProxyTokenStore(socketPath);
+    await expect(store.getBucketStats('anthropic', 'default')).rejects.toThrow(
+      /Malformed response for request/,
+    );
+  });
+
+  it('rejects a provider list wrapper that is scalar', async () => {
+    server = createTestServer(socketPath, () => ({
+      ok: true,
+      data: { providers: 'anthropic' },
+    }));
+    await listenAsync(server, socketPath);
+
+    store = new ProxyTokenStore(socketPath);
+    await expect(store.listProviders()).rejects.toThrow(/PROXY_PAYLOAD_ERROR/);
+  });
+
+  it('rejects a bucket list wrapper that is scalar', async () => {
+    server = createTestServer(socketPath, () => ({
+      ok: true,
+      data: { buckets: 'default' },
+    }));
+    await listenAsync(server, socketPath);
+
+    store = new ProxyTokenStore(socketPath);
+    await expect(store.listBuckets('anthropic')).rejects.toThrow(
+      /PROXY_PAYLOAD_ERROR/,
+    );
+  });
+
+  /** @requirement R-2197 @scenario missing token data rejected */
+  it('rejects missing token data with the stable proxy payload error', async () => {
+    server = createTestServer(socketPath, () => ({ ok: true }));
+    await listenAsync(server, socketPath);
+
+    store = new ProxyTokenStore(socketPath);
+    await expect(store.getToken('anthropic')).rejects.toThrow(
+      /PROXY_PAYLOAD_ERROR/,
+    );
+  });
+
   /**
    * @requirement R8.1
    * @scenario getToken passes undefined bucket when none specified
@@ -298,6 +437,18 @@ describe('ProxyTokenStore', () => {
     expect(providers).toStrictEqual([]);
   });
 
+  it('rejects a provider list containing non-string entries', async () => {
+    server = createTestServer(socketPath, () => ({
+      ok: true,
+      data: { providers: ['anthropic', 42] },
+    }));
+    await listenAsync(server, socketPath);
+
+    store = new ProxyTokenStore(socketPath);
+
+    await expect(store.listProviders()).rejects.toThrow(/PROXY_PAYLOAD_ERROR/);
+  });
+
   // ─── listBuckets ─────────────────────────────────────────────────────────
 
   /**
@@ -340,16 +491,35 @@ describe('ProxyTokenStore', () => {
     expect(buckets).toStrictEqual([]);
   });
 
+  it('rejects a bucket list containing non-string entries', async () => {
+    server = createTestServer(socketPath, () => ({
+      ok: true,
+      data: { buckets: ['default', false] },
+    }));
+    await listenAsync(server, socketPath);
+
+    store = new ProxyTokenStore(socketPath);
+
+    await expect(store.listBuckets('anthropic')).rejects.toThrow(
+      /PROXY_PAYLOAD_ERROR/,
+    );
+  });
+
   // ─── getBucketStats ──────────────────────────────────────────────────────
 
   /**
    * @requirement R8.7
    * @scenario getBucketStats returns BucketStats object from server response
    */
-  it('getBucketStats returns placeholder stats when token exists', async () => {
+  it('returns stats from a valid bucket-stats response', async () => {
     server = createTestServer(socketPath, () => ({
       ok: true,
-      data: makeToken(),
+      data: {
+        bucket: 'default',
+        requestCount: 42,
+        percentage: 75,
+        lastUsed: 1234567890,
+      },
     }));
     await listenAsync(server, socketPath);
 
@@ -358,10 +528,27 @@ describe('ProxyTokenStore', () => {
 
     expect(stats).toStrictEqual({
       bucket: 'default',
-      requestCount: 0,
-      percentage: 0,
-      lastUsed: undefined,
+      requestCount: 42,
+      percentage: 75,
+      lastUsed: 1234567890,
     } satisfies BucketStats);
+  });
+
+  /**
+   * @requirement R8.7, R-2197
+   * @scenario getBucketStats rejects token-shaped data (no fabricated zeros)
+   */
+  it('rejects malformed bucket-stats data instead of fabricating zeros', async () => {
+    server = createTestServer(socketPath, () => ({
+      ok: true,
+      data: makeToken(),
+    }));
+    await listenAsync(server, socketPath);
+
+    store = new ProxyTokenStore(socketPath);
+    await expect(store.getBucketStats('anthropic', 'default')).rejects.toThrow(
+      /PROXY_PAYLOAD_ERROR/,
+    );
   });
 
   /**

@@ -124,6 +124,21 @@ describe('ProxyProviderKeyStorage', () => {
     expect(result).toBe('sk-ant-abc123');
   });
 
+  /** @requirement R-2197 @scenario getKey rejects malformed key data */
+  it('rejects malformed key data with the stable proxy payload error', async () => {
+    server = createTestServer(socketPath, () => ({
+      ok: true,
+      data: { key: 42 },
+    }));
+    await listenAsync(server, socketPath);
+
+    client = new ProxySocketClient(socketPath);
+    storage = new ProxyProviderKeyStorage(client);
+    await expect(storage.getKey('anthropic')).rejects.toThrow(
+      /PROXY_PAYLOAD_ERROR/,
+    );
+  });
+
   /**
    * @requirement R9.1, R23.3
    * @scenario getKey returns null when server responds NOT_FOUND
@@ -184,6 +199,19 @@ describe('ProxyProviderKeyStorage', () => {
     expect(keys).toStrictEqual([]);
   });
 
+  it('rejects a key list containing non-string entries', async () => {
+    server = createTestServer(socketPath, () => ({
+      ok: true,
+      data: { keys: ['anthropic', 42] },
+    }));
+    await listenAsync(server, socketPath);
+
+    client = new ProxySocketClient(socketPath);
+    storage = new ProxyProviderKeyStorage(client);
+
+    await expect(storage.listKeys()).rejects.toThrow(/PROXY_PAYLOAD_ERROR/);
+  });
+
   // ─── hasKey ─────────────────────────────────────────────────────────────
 
   /**
@@ -226,6 +254,21 @@ describe('ProxyProviderKeyStorage', () => {
     const result = await storage.hasKey('nonexistent');
 
     expect(result).toBe(false);
+  });
+
+  it('rejects a non-boolean key-existence payload', async () => {
+    server = createTestServer(socketPath, () => ({
+      ok: true,
+      data: { exists: 'yes' },
+    }));
+    await listenAsync(server, socketPath);
+
+    client = new ProxySocketClient(socketPath);
+    storage = new ProxyProviderKeyStorage(client);
+
+    await expect(storage.hasKey('anthropic')).rejects.toThrow(
+      /PROXY_PAYLOAD_ERROR/,
+    );
   });
 
   // ─── Write operations (blocked) ────────────────────────────────────────

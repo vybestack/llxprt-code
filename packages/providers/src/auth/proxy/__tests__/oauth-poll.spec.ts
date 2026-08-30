@@ -617,6 +617,47 @@ describe('oauth_poll handler', () => {
       expect(poll.ok).toBe(false);
       expect(poll.code).toBe('INVALID_REQUEST');
     });
+
+    it('rejects a wrong-typed poll session_id with the session message', async () => {
+      const poll = await client.request('oauth_poll', {
+        session_id: { value: 'session-id' },
+      });
+      expect(poll).toMatchObject({
+        code: 'INVALID_REQUEST',
+        error: 'Missing session_id',
+      });
+    });
+
+    it('rejects a wrong-typed cancel session_id with the session message', async () => {
+      const cancel = await client.request('oauth_cancel', {
+        session_id: ['session-id'],
+      });
+      expect(cancel).toMatchObject({
+        code: 'INVALID_REQUEST',
+        error: 'Missing session_id',
+      });
+    });
+
+    it('does not store a token when a poll resolves with a malformed token', async () => {
+      const malformedToken: OAuthToken = {
+        access_token: 'would-be-saved',
+        token_type: 'Bearer',
+        expiry: 0,
+      };
+      Reflect.set(malformedToken, 'expiry', 'not-a-timestamp');
+      testFlow.setPollSequence([{ token: malformedToken }]);
+
+      const init = await client.request('oauth_initiate', {
+        provider: 'device-code-test',
+      });
+      const poll = await client.request('oauth_poll', {
+        session_id: init.data?.session_id,
+      });
+
+      expect(poll.ok).toBe(false);
+      const stored = await backingStore.getToken('device-code-test');
+      expect(stored).toBeNull();
+    });
   });
 
   // ─── Response Structure Tests ────────────────────────────────────────────
