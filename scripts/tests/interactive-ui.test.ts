@@ -21,11 +21,11 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterAll, describe, it } from 'bun:test';
+import { afterAll, describe, expect, it } from 'bun:test';
 import { parseSamples } from '../memory/sample.ts';
 import { assertBoundedPostClearRetention } from './memory/retention-checkpoints.ts';
 
@@ -41,7 +41,7 @@ const runTmuxE2E = isEnabled ? it : it.skip;
  */
 function getArtifactDir(testName: string): string {
   const base = process.env.LLXPRT_TMUX_ARTIFACT_DIR ?? os.tmpdir();
-  return path.join(base, testName);
+  return path.resolve(base, testName);
 }
 
 /**
@@ -60,6 +60,7 @@ interface HarnessResult {
 }
 
 const artifactDirs: string[] = [];
+type WelcomeState = 'completed' | 'clean';
 
 /**
  * Run the tmux harness with a given script and stable artifact dir.
@@ -70,10 +71,21 @@ function runHarness(
   extraArgs: string[] = [],
   extraEnv: NodeJS.ProcessEnv = {},
   timeoutMs = 300_000,
+  welcomeState: WelcomeState = 'completed',
 ): HarnessResult {
   const scriptPath = path.join(projectRoot, 'scripts', scriptName);
   const harnessPath = path.join(projectRoot, 'scripts/tmux-harness.ts');
   const artifactDir = getArtifactDir(testName);
+  const welcomeConfigPath = path.join(artifactDir, 'welcome-config.json');
+  rmSync(artifactDir, { recursive: true, force: true });
+  mkdirSync(artifactDir, { recursive: true });
+  if (welcomeState === 'completed') {
+    writeFileSync(
+      welcomeConfigPath,
+      JSON.stringify({ welcomeCompleted: true, skipped: true }, null, 2),
+      'utf8',
+    );
+  }
   artifactDirs.push(artifactDir);
 
   const result = spawnSync(
@@ -90,7 +102,13 @@ function runHarness(
       encoding: 'utf8',
       cwd: projectRoot,
       timeout: timeoutMs,
-      env: { ...process.env, FORCE_COLOR: '0', ...extraEnv },
+      env: {
+        ...process.env,
+        FORCE_COLOR: '0',
+        NO_COLOR: '1',
+        ...extraEnv,
+        LLXPRT_CODE_WELCOME_CONFIG_PATH: welcomeConfigPath,
+      },
     },
   );
 
@@ -237,5 +255,69 @@ describe('Interactive UI (tmux harness)', () => {
       assertBoundedPostClearRetention(samples);
     },
     600_000,
+  );
+
+  runTmuxE2E(
+    'provider and model dialogs work with the fake provider',
+    () => {
+      const result = runHarness(
+        'tmux-script.provider-model.json',
+        'provider-model',
+      );
+      assertHarnessSuccess(result);
+    },
+    300_000,
+  );
+
+  runTmuxE2E(
+    'welcome onboarding skips from isolated clean state',
+    () => {
+      const testName = 'welcome';
+      const result = runHarness(
+        'tmux-script.welcome.json',
+        testName,
+        [],
+        {},
+        300_000,
+        'clean',
+      );
+      assertHarnessSuccess(result);
+
+      const savedState: unknown = JSON.parse(
+        readFileSync(
+          path.join(getArtifactDir(testName), 'welcome-config.json'),
+          'utf8',
+        ),
+      );
+      expect(savedState).toMatchObject({
+        welcomeCompleted: true,
+        skipped: true,
+      });
+    },
+    300_000,
+  );
+
+  runTmuxE2E(
+    'session browser reflows across real terminal resizes',
+    () => {
+      const result = runHarness(
+        'tmux-script.session-browser-resize.json',
+        'session-browser-resize',
+      );
+      assertHarnessSuccess(result);
+    },
+    300_000,
+  );
+
+  runTmuxE2E(
+    'composer preserves Unicode and wide characters while wrapping',
+    () => {
+      const result = runHarness(
+        'tmux-script.unicode-composer.json',
+        'unicode-composer',
+      );
+      assertHarnessSuccess(result);
+    },
+    300_000,
   );
 });
