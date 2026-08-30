@@ -25,9 +25,30 @@
 import { describe, expect, it } from 'bun:test';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import ts from 'typescript';
 
 const repoRoot = resolve(import.meta.dir, '..', '..');
 const packagesRoot = join(repoRoot, 'packages');
+
+/**
+ * Reads a tsconfig with TypeScript's own JSONC reader.
+ *
+ * tsconfig files are JSONC, and this repository comments them freely (see
+ * packages/*\/tsconfig.noemit.json). `JSON.parse` rejects those comments, so
+ * the parse has to go through the same reader the compiler uses -- which is
+ * also what scripts/tests/tsconfig-project-coverage.test.ts does.
+ */
+function parseTsconfig(path: string): TsConfig {
+  const { config, error } = ts.readConfigFile(path, (file) =>
+    readFileSync(file, 'utf8'),
+  );
+  if (error !== undefined) {
+    throw new Error(
+      `${path}: ${ts.flattenDiagnosticMessageText(error.messageText, ' ')}`,
+    );
+  }
+  return config as TsConfig;
+}
 
 interface TsConfig {
   readonly extends?: string;
@@ -124,7 +145,7 @@ describe('test-bun typecheck coverage (issue #2995)', () => {
       const configPath = join(dir, 'tsconfig.test-bun.json');
       expect(existsSync(configPath)).toBe(true);
 
-      const config = JSON.parse(readFileSync(configPath, 'utf8')) as TsConfig;
+      const config = parseTsconfig(configPath);
 
       // The child project must build on the package's real compiler options;
       // a standalone config would drift from production settings.

@@ -166,15 +166,6 @@ function packReleaseLikeCli(repoRoot) {
   const workCopy = mkdtempSync(join(tmpdir(), 'llxprt-release-copy-'));
   try {
     copyRepoExcludingGenerated(repoRoot, workCopy);
-    const sourceNodeModules = join(repoRoot, 'node_modules');
-    if (!existsSync(sourceNodeModules)) {
-      throw new Error('release-like packing requires repository dependencies');
-    }
-    symlinkSync(
-      sourceNodeModules,
-      join(workCopy, 'node_modules'),
-      process.platform === 'win32' ? 'junction' : 'dir',
-    );
     runPreparePackage(workCopy);
     runBindReleaseDeps(workCopy);
     const internalPkgs = collectInternalPackages(workCopy);
