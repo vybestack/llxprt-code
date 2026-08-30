@@ -195,6 +195,28 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
       };
     },
   },
+  {
+    // @plan PLAN-20260827-ISSUE2562.P03
+    // @requirement REQ-2562-4
+    key: 'auth.interactiveTimeoutMs',
+    category: 'cli-behavior',
+    description:
+      'Timeout in milliseconds for interactive (host-owned) authentication sessions; expiry cancels the session and settles all waiters as timed out.',
+    type: 'number',
+    hint: 'positive integer in milliseconds (default: 1200000)',
+    persistToProfile: true,
+    default: 1200000,
+    validate: (value: unknown): ValidationResult => {
+      if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message:
+          'auth.interactiveTimeoutMs must be a positive integer in milliseconds (e.g., 1200000)',
+      };
+    },
+  },
 
   {
     key: 'socket-timeout',

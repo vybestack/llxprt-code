@@ -17,7 +17,11 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import type {
+  Agent,
+  AgentProviderSwitchOptions,
+  AgentProviderSwitchResult,
+} from '@vybestack/llxprt-code-agents';
 import type { Mock } from 'bun:test';
 
 /**
@@ -34,7 +38,13 @@ const realProviderAliasesModule = {
 };
 
 interface AgentDouble {
-  setProvider: Mock<(provider: string) => Promise<unknown>>;
+  setProvider: Mock<
+    (
+      provider: string,
+      model?: string,
+      options?: AgentProviderSwitchOptions,
+    ) => Promise<AgentProviderSwitchResult>
+  >;
 }
 
 const mocks = (() => {
@@ -276,6 +286,75 @@ describe('providerCommand /provider switch', () => {
       messageType: 'error',
       content: 'Failed to switch provider: provider not found',
     });
+  });
+  /**
+   * @plan PLAN-20260827-ISSUE2562.P05
+   * @requirement REQ-2562-4
+   */
+  it('formats interactive authentication state emitted during a provider switch', async () => {
+    const providerManager = {
+      getActiveProviderName: vi.fn(() => 'openai'),
+    };
+    mocks.getProviderManagerMock.mockReturnValue(providerManager);
+    mocks.agent.setProvider.mockImplementation(
+      async (_provider, _model, options) => {
+        options?.addItem?.(
+          {
+            type: 'oauth_waiting',
+            provider: 'codex',
+            bucket: 'work',
+            requesterRuntimeKind: 'subagent',
+            correlationId: 'switch-auth',
+            waiterCount: 1,
+          },
+          101,
+        );
+        options?.addItem?.(
+          {
+            type: 'oauth_settled',
+            provider: 'codex',
+            bucket: 'work',
+            requesterRuntimeKind: 'subagent',
+            correlationId: 'switch-auth',
+            waiterCount: 1,
+            kind: 'cancelled',
+          },
+          102,
+        );
+        return {
+          changed: true,
+          previousProvider: 'openai',
+          nextProvider: 'qwen',
+          defaultModel: 'qwen/qwen-plus',
+          infoMessages: [],
+        };
+      },
+    );
+    const context = createMockCommandContext({
+      services: {
+        agent: mocks.agent as unknown as Agent,
+      },
+    });
+    assertDefined(providerCommand.action);
+
+    await providerCommand.action(context, 'qwen');
+
+    expect(context.ui.addItem).toHaveBeenNthCalledWith(
+      1,
+      {
+        type: 'info',
+        text: 'Waiting for codex/work authentication (requested by subagent)…',
+      },
+      101,
+    );
+    expect(context.ui.addItem).toHaveBeenNthCalledWith(
+      2,
+      {
+        type: 'info',
+        text: 'Authentication for codex/work was cancelled',
+      },
+      102,
+    );
   });
 
   it('rejects reserved sentinel alias name "unconfigured" (#2481)', async () => {

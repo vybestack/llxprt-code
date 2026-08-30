@@ -30,7 +30,10 @@ import { useSessionStats } from '../../../contexts/SessionContext.js';
 import { useFocus } from '../../../hooks/useFocus.js';
 import type { AppState, AppAction } from '../../../reducers/appReducer.js';
 import type { UpdateObject } from '../../../utils/updateCheck.js';
-import { useRuntimeApi } from '../../../contexts/RuntimeContext.js';
+import {
+  useRuntimeApi,
+  useRuntimeBridge,
+} from '../../../contexts/RuntimeContext.js';
 import { useTodoContext } from '../../../contexts/TodoContext.js';
 import { useRecordingInfrastructure } from './useRecordingInfrastructure.js';
 import { useUpdateAndOAuthBridges } from './useUpdateAndOAuthBridges.js';
@@ -201,6 +204,7 @@ function useBootstrapEvents(
   setUpdateInfo: React.Dispatch<React.SetStateAction<UpdateObject | null>>,
   runtime: ReturnType<typeof useRuntimeApi>,
 ) {
+  const { runWithScope } = useRuntimeBridge();
   const {
     uiRuntime,
     settings,
@@ -235,6 +239,7 @@ function useBootstrapEvents(
     addItem,
     setUpdateInfo,
     getCliOAuthManager: runtime.getCliOAuthManager,
+    runInInteractiveHostScope: runWithScope,
   });
   const {
     consoleMessages,

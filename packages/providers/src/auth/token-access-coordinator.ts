@@ -45,7 +45,17 @@ import type { ProactiveRenewalManager } from './proactive-renewal-manager.js';
 import type { OAuthBucketManager } from './OAuthBucketManager.js';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import { rethrowIfStoreOutage } from './token-store-outage.js';
-import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
+import {
+  classifyInteractiveAuthReason,
+  requestInteractiveAuthentication,
+} from './interactive-auth-request.js';
+import { interactiveAuthCoordinator } from './interactive-auth-coordinator.js';
+import {
+  extractRequestMetadata,
+  readAuthBucketPromptSetting,
+  resolveImplicitBucketToCheck,
+} from './token-request-args.js';
+import { getActiveRuntimeKind } from '../runtime/active-runtime-identity.js';
 
 const logger = new DebugLogger('llxprt:oauth:token');
 
@@ -59,34 +69,6 @@ const logger = new DebugLogger('llxprt:oauth:token');
  * - TOCTOU double-check pattern around refresh
  * - Delegates auth flows to injected AuthenticatorInterface
  */
-
-function resolveImplicitBucketToCheck(
-  sessionBucket: string | undefined,
-  profileBuckets: string[],
-): string | undefined {
-  if (typeof sessionBucket === 'string' && sessionBucket.trim() !== '') {
-    return sessionBucket;
-  }
-  return profileBuckets.length === 1 ? profileBuckets[0] : undefined;
-}
-
-function extractRequestMetadata(
-  bucket: string | unknown,
-): OAuthTokenRequestMetadata | undefined {
-  if (typeof bucket === 'string' || bucket === null || bucket === undefined) {
-    return undefined;
-  }
-  if (isPlainObject(bucket)) {
-    return bucket as OAuthTokenRequestMetadata;
-  }
-  return undefined;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (value === null || typeof value !== 'object') return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
 
 export class TokenAccessCoordinator {
   private bucketResolutionLocks: Map<string, Promise<void>> = new Map();
@@ -636,6 +618,12 @@ export class TokenAccessCoordinator {
           resolvedProfileBuckets,
         );
 
+    const challengeReason = await classifyInteractiveAuthReason(
+      this.tokenStore,
+      providerName,
+      bucketToCheck,
+    );
+
     // @fix issue1262 & issue1195: Before triggering OAuth, check disk with lock
     const diskCheckResult = await this.performDiskCheck(
       providerName,
@@ -656,6 +644,7 @@ export class TokenAccessCoordinator {
       bucketToCheck,
       requestMetadata,
       explicitBucket,
+      challengeReason,
     );
   }
 
@@ -786,52 +775,61 @@ export class TokenAccessCoordinator {
     bucketToCheck: string | undefined,
     requestMetadata: OAuthTokenRequestMetadata | undefined,
     explicitBucket: boolean,
+    reason: 'authentication-required' | 'reauthentication-required',
   ): Promise<string | null> {
-    let showPrompt = false;
-    try {
-      const promptSetting = oauthRuntimeBridge.getEphemeralSetting(
-        'auth-bucket-prompt',
-      ) as boolean | null | undefined;
-      showPrompt = promptSetting ?? false;
-    } catch (runtimeError) {
-      logger.debug(
-        'Could not get ephemeral setting (runtime not initialized), using default',
-        runtimeError,
-      );
-    }
+    const showPrompt = readAuthBucketPromptSetting();
 
-    // Use requireAuthenticator to validate the authenticator is wired, but
-    // route all calls through facadeRef so that spies on manager.authenticate
-    // intercept them (preserving the pre-refactor behaviour).
-    this.requireAuthenticator();
-
-    if (showPrompt) {
-      const effectiveBuckets = bucketToCheck ? [bucketToCheck] : ['default'];
-      logger.debug(
-        `Single-bucket auth with prompt mode for ${providerName}, bucket: ${effectiveBuckets[0]}`,
-      );
-      await this.facadeRef.authenticateMultipleBuckets(
+    // @plan PLAN-20260827-ISSUE2562.P04
+    // @requirement REQ-2562-3
+    const runtimeKind = getActiveRuntimeKind();
+    const requiresHost = runtimeKind === 'agent' || runtimeKind === 'subagent';
+    if (requiresHost || interactiveAuthCoordinator.hasHost()) {
+      const authenticatedBucket = bucketToCheck ?? 'default';
+      await requestInteractiveAuthentication(
         providerName,
-        effectiveBuckets,
+        authenticatedBucket,
+        runtimeKind,
+        reason,
+      );
+      this.facadeRef.setSessionBucket(
+        providerName,
+        authenticatedBucket,
         requestMetadata,
       );
-      const authenticatedBucket = effectiveBuckets[0];
-      if (authenticatedBucket) {
-        this.facadeRef.setSessionBucket(
-          providerName,
-          authenticatedBucket,
-          requestMetadata,
-        );
-      }
     } else {
-      const authenticatedBucket = bucketToCheck ?? 'default';
-      await this.facadeRef.authenticate(providerName, authenticatedBucket);
-      if (authenticatedBucket) {
-        this.facadeRef.setSessionBucket(
+      // Use requireAuthenticator to validate the authenticator is wired, but
+      // route all calls through facadeRef so that spies on manager.authenticate
+      // intercept them (preserving the pre-refactor behaviour).
+      this.requireAuthenticator();
+
+      if (showPrompt) {
+        const effectiveBuckets = bucketToCheck ? [bucketToCheck] : ['default'];
+        logger.debug(
+          `Single-bucket auth with prompt mode for ${providerName}, bucket: ${effectiveBuckets[0]}`,
+        );
+        await this.facadeRef.authenticateMultipleBuckets(
           providerName,
-          authenticatedBucket,
+          effectiveBuckets,
           requestMetadata,
         );
+        const authenticatedBucket = effectiveBuckets[0];
+        if (authenticatedBucket) {
+          this.facadeRef.setSessionBucket(
+            providerName,
+            authenticatedBucket,
+            requestMetadata,
+          );
+        }
+      } else {
+        const authenticatedBucket = bucketToCheck ?? 'default';
+        await this.facadeRef.authenticate(providerName, authenticatedBucket);
+        if (authenticatedBucket) {
+          this.facadeRef.setSessionBucket(
+            providerName,
+            authenticatedBucket,
+            requestMetadata,
+          );
+        }
       }
     }
 

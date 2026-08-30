@@ -25,6 +25,7 @@ import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type {
+  AuthCompletionOptions,
   AuthenticatorInterface,
   BucketFailoverOAuthManagerLike,
   OAuthProvider,
@@ -37,8 +38,22 @@ import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
 
 const logger = new DebugLogger('llxprt:oauth:auth-flow');
 
-function markGlobalAuthComplete(): void {
-  (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete = true;
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted === true) {
+    throw signal.reason;
+  }
+}
+
+/** Re-enables OAuth for a provider after any path finds or stores a usable token. */
+function ensureOAuthEnabled(
+  providerRegistry: ProviderRegistry,
+  providerName: string,
+): void {
+  if (providerRegistry.isOAuthEnabled(providerName)) {
+    return;
+  }
+  logger.debug(() => `[FLOW] Enabling OAuth for ${providerName}`);
+  providerRegistry.setOAuthEnabledState(providerName, true);
 }
 
 /** Maximum time to wait for an auth lock before timing out and surfacing
@@ -55,6 +70,9 @@ type AuthLockWaitOutcome = 'acquired' | 'token-found' | 'timed-out';
 
 type AuthFlight = {
   readonly promise: Promise<void>;
+  readonly controller: AbortController;
+  participants: number;
+  settled: boolean;
   signalAuthCompletion: boolean;
   completionSignaled: boolean;
 };
@@ -138,12 +156,14 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
    * Nested refresh lock (waitMs:10000) is acquired when an
    * expired token with a refresh_token is found — to avoid replaying
    * single-use refresh tokens concurrently.
+   * @plan PLAN-20260827-ISSUE2562.P02
+   * @requirement REQ-2562-2
    */
 
   async authenticate(
     providerName: string,
     bucket?: string,
-    options?: { signalAuthCompletion?: boolean },
+    options?: AuthCompletionOptions,
   ): Promise<void> {
     const shouldSignalAuthCompletion = options?.signalAuthCompletion ?? false;
     logger.debug(
@@ -164,21 +184,131 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
         () => `[FLOW] authenticate() joining in-flight auth for ${flightKey}`,
       );
       existing.signalAuthCompletion ||= shouldSignalAuthCompletion;
-      await existing.promise;
-      this.signalAuthFlightCompletion(existing);
+      existing.participants += 1;
+      try {
+        await this.awaitFlightAsParticipant(existing, options?.signal);
+        this.signalAuthFlightCompletion(existing);
+      } finally {
+        this.releaseFlightParticipant(flightKey, existing, options?.signal);
+      }
       return;
     }
 
+    // The flight owns a dedicated AbortController so cancellation ownership
+    // is participant-counted: a departing signal-bearing participant detaches
+    // itself, and the shared attempt is aborted only when no live
+    // participant remains (signal-less participants such as the manual
+    // /auth flow keep it alive).
+    const controller = new AbortController();
     const flight: AuthFlight = {
-      promise: this.authenticateInternal(providerName, bucket),
+      promise: this.authenticateInternal(
+        providerName,
+        bucket,
+        controller.signal,
+      ),
+      controller,
+      participants: 1,
+      settled: false,
       signalAuthCompletion: shouldSignalAuthCompletion,
       completionSignaled: false,
     };
+    this.wireFlightSettlement(flightKey, flight);
     this.authInFlight.set(flightKey, flight);
     try {
-      await flight.promise;
+      await this.awaitFlightAsParticipant(flight, options?.signal);
       this.signalAuthFlightCompletion(flight);
     } finally {
+      this.releaseFlightParticipant(flightKey, flight, options?.signal);
+    }
+  }
+
+  /**
+   * Awaits a shared auth flight. Signal-less participants wait for the whole
+   * flight; signal-bearing participants detach with their own abort reason
+   * while the flight continues for any remaining participants.
+   *
+   * @plan PLAN-20260827-ISSUE2562.P02
+   * @requirement REQ-2562-2
+   */
+  private async awaitFlightAsParticipant(
+    flight: AuthFlight,
+    signal: AbortSignal | undefined,
+  ): Promise<void> {
+    if (signal === undefined) {
+      await flight.promise;
+      return;
+    }
+    if (signal.aborted) {
+      throw signal.reason;
+    }
+    let abortReject: ((_reason: unknown) => void) | undefined;
+    const abortPromise = new Promise<never>((_resolve, reject) => {
+      abortReject = reject;
+    });
+    const onAbort = () => {
+      // Sole participant: abort the shared attempt immediately so the
+      // provider preempts fallback/persistence work. With other live
+      // participants, only this caller detaches; the release path
+      // aborts the attempt if it becomes orphaned.
+      if (flight.participants <= 1) {
+        flight.controller.abort(signal.reason);
+      }
+      abortReject?.(signal.reason);
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    // Mark the abort branch handled so a late abort after the flight settles
+    // cannot surface as an unhandled rejection.
+    void abortPromise.catch(() => undefined);
+    try {
+      await Promise.race([flight.promise, abortPromise]);
+    } finally {
+      // The caller's signal can outlive this flight (session/task-level
+      // signals are reused across authenticate() calls); never retain the
+      // listener past settlement.
+      signal.removeEventListener('abort', onAbort);
+    }
+  }
+
+  private releaseFlightParticipant(
+    flightKey: string,
+    flight: AuthFlight,
+    signal: AbortSignal | undefined,
+  ): void {
+    flight.participants -= 1;
+    if (flight.participants > 0) {
+      return;
+    }
+    if (flight.settled) {
+      this.deleteFlightIfOwned(flightKey, flight);
+      return;
+    }
+    // Last live participant left while the attempt is still running:
+    // abort the orphaned attempt with the departing reason and retire it
+    // from the flight map so a retry starts a fresh attempt instead of
+    // joining an aborted one.
+    flight.controller.abort(
+      signal?.reason ??
+        new DOMException(
+          'Shared authentication attempt has no live participants',
+          'AbortError',
+        ),
+    );
+    this.deleteFlightIfOwned(flightKey, flight);
+  }
+
+  private wireFlightSettlement(flightKey: string, flight: AuthFlight): void {
+    void flight.promise
+      .catch(() => undefined)
+      .then(() => {
+        flight.settled = true;
+        if (flight.participants <= 0) {
+          this.deleteFlightIfOwned(flightKey, flight);
+        }
+      });
+  }
+
+  private deleteFlightIfOwned(flightKey: string, flight: AuthFlight): void {
+    if (this.authInFlight.get(flightKey) === flight) {
       this.authInFlight.delete(flightKey);
     }
   }
@@ -188,23 +318,33 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       return;
     }
     flight.completionSignaled = true;
-    markGlobalAuthComplete();
+    (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete =
+      true;
   }
 
+  /**
+   * @plan PLAN-20260827-ISSUE2562.P02
+   * @requirement REQ-2562-2
+   */
   private async authenticateInternal(
     providerName: string,
     bucket: string | undefined,
+    signal: AbortSignal | undefined,
   ): Promise<void> {
     const provider = this.providerRegistry.getProvider(providerName);
     if (!provider) {
       throw new Error(`Unknown provider: ${providerName}`);
     }
+    throwIfAborted(signal);
 
     const lockOutcome = await this.waitForAuthLockOrToken(
       providerName,
       bucket,
       AUTH_LOCK_WAIT_MS,
     );
+    // The auth lock wait is bounded but not signal-aware; an aborted caller
+    // must not proceed into credential work even if the lock was acquired.
+    throwIfAborted(signal);
 
     if (lockOutcome !== 'acquired') {
       if (lockOutcome === 'timed-out') {
@@ -221,18 +361,20 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       if (earlyReturn) {
         return;
       }
+      throwIfAborted(signal);
 
       const diskToken = await this.tokenStore.getToken(providerName, bucket);
       const refreshed = await this.attemptRefreshBeforeBrowser(
         providerName,
         bucket,
         diskToken ?? undefined,
+        signal,
       );
       if (refreshed) {
         return;
       }
 
-      await this.doInitiateAuth(providerName, bucket, provider);
+      await this.doInitiateAuth(providerName, bucket, provider, signal);
     } catch (error) {
       logger.debug(
         () =>
@@ -255,21 +397,19 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     bucket: string | undefined,
     waitMs: number,
   ): Promise<AuthLockWaitOutcome> {
-    const waitState: { outcome: AuthLockWaitOutcome } = {
-      outcome: 'timed-out',
-    };
+    let waitOutcome: AuthLockWaitOutcome = 'timed-out';
     const acquired = await this.tokenStore.acquireAuthLock(providerName, {
       waitMs,
       bucket,
       onWait: async () => {
         if (await this.findAndActivateValidDiskToken(providerName, bucket)) {
-          waitState.outcome = 'token-found';
+          waitOutcome = 'token-found';
           return true;
         }
         return false;
       },
     });
-    return acquired ? 'acquired' : waitState.outcome;
+    return acquired ? 'acquired' : waitOutcome;
   }
 
   private async findAndActivateValidDiskToken(
@@ -280,9 +420,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     if (token === null || token.expiry <= Math.floor(Date.now() / 1000) + 30) {
       return false;
     }
-    if (!this.providerRegistry.isOAuthEnabled(providerName)) {
-      this.providerRegistry.setOAuthEnabledState(providerName, true);
-    }
+    ensureOAuthEnabled(this.providerRegistry, providerName);
     return true;
   }
 
@@ -309,12 +447,17 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
 
   /**
    * Initiate browser auth and persist the returned token.
+   * @plan PLAN-20260827-ISSUE2562.P02
+   * @requirement REQ-2562-2
    */
   private async doInitiateAuth(
     providerName: string,
     bucket: string | undefined,
     provider: OAuthProvider,
+    signal: AbortSignal | undefined,
   ): Promise<void> {
+    const priorToken = await this.tokenStore.getToken(providerName, bucket);
+
     // Inform the provider of the current bucket so it can look up the
     // correct browser profile association before launching the browser.
     provider.setAuthContext?.({ bucket });
@@ -322,7 +465,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     logger.debug(
       () => `[FLOW] Calling provider.initiateAuth() for ${providerName}...`,
     );
-    const token = (await provider.initiateAuth()) as
+    const token = (await provider.initiateAuth(signal)) as
       | OAuthToken
       | null
       | undefined;
@@ -334,16 +477,33 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       throw new Error('Authentication completed but no token was returned');
     }
 
+    throwIfAborted(signal);
     logger.debug(
       () => `[FLOW] Saving token to tokenStore for ${providerName}...`,
     );
     await this.tokenStore.saveToken(providerName, token, bucket);
+    if (signal?.aborted === true) {
+      // Cancellation raced the commit: restore the prior credentials so a
+      // cancelled outcome never leaves replacement credentials visible. The
+      // cancellation reason is the terminal outcome and must survive even if
+      // the rollback write itself fails; the rollback failure is logged.
+      try {
+        if (priorToken === null) {
+          await this.tokenStore.removeToken(providerName, bucket);
+        } else {
+          await this.tokenStore.saveToken(providerName, priorToken, bucket);
+        }
+      } catch (rollbackError) {
+        logger.debug(
+          () =>
+            `[FLOW] Rollback of ${providerName}/${bucket ?? 'default'} credentials after cancellation failed: ${rollbackError instanceof Error ? rollbackError.message : rollbackError}`,
+        );
+      }
+      throw signal.reason;
+    }
     logger.debug(() => `[FLOW] Token saved to tokenStore for ${providerName}`);
 
-    if (!this.providerRegistry.isOAuthEnabled(providerName)) {
-      logger.debug(() => `[FLOW] Enabling OAuth for ${providerName}`);
-      this.providerRegistry.setOAuthEnabledState(providerName, true);
-    }
+    ensureOAuthEnabled(this.providerRegistry, providerName);
     logger.debug(
       () => `[FLOW] authenticate() completed successfully for ${providerName}`,
     );
@@ -467,6 +627,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     providerName: string,
     bucket: string | undefined,
     diskToken: OAuthToken | undefined,
+    signal: AbortSignal | undefined,
   ): Promise<boolean> {
     if (
       !diskToken ||
@@ -485,6 +646,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       providerName,
       { waitMs: 10000, bucket },
     );
+    throwIfAborted(signal);
 
     if (!refreshLockAcquired) {
       return this.handleRefreshLockTimeout(providerName, bucket, diskToken);
@@ -496,6 +658,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
         bucket,
         diskToken,
         provider,
+        signal,
       );
     } finally {
       await this.tokenStore.releaseRefreshLock(providerName, bucket);
@@ -515,9 +678,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       (await this.tokenStore.getToken(providerName, bucket)) ?? diskToken;
     const nowPostLock = Math.floor(Date.now() / 1000);
     if (postLockToken.expiry > nowPostLock + 30) {
-      if (!this.providerRegistry.isOAuthEnabled(providerName)) {
-        this.providerRegistry.setOAuthEnabledState(providerName, true);
-      }
+      ensureOAuthEnabled(this.providerRegistry, providerName);
       logger.debug(
         () =>
           `[FLOW] Another process refreshed token for ${providerName}/${bucket ?? 'default'} (detected after lock timeout), skipping browser auth`,
@@ -536,15 +697,15 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     bucket: string | undefined,
     diskToken: OAuthToken,
     provider: OAuthProvider,
+    signal: AbortSignal | undefined,
   ): Promise<boolean> {
     try {
+      throwIfAborted(signal);
       const latestToken =
         (await this.tokenStore.getToken(providerName, bucket)) ?? diskToken;
       const nowCheck = Math.floor(Date.now() / 1000);
       if (latestToken.expiry > nowCheck + 30) {
-        if (!this.providerRegistry.isOAuthEnabled(providerName)) {
-          this.providerRegistry.setOAuthEnabledState(providerName, true);
-        }
+        ensureOAuthEnabled(this.providerRegistry, providerName);
         logger.debug(
           () =>
             `[FLOW] Another process refreshed token for ${providerName}/${bucket ?? 'default'}, skipping browser auth`,
@@ -554,14 +715,20 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
 
       const refreshedToken = await provider.refreshToken(latestToken);
       if (refreshedToken) {
+        // Cancellation/commit boundary: an aborted caller must not commit
+        // replacement credentials. Check before the save and restore the
+        // prior token if the abort lands during the save window.
+        throwIfAborted(signal);
         const mergedToken = mergeRefreshedToken(
           latestToken as OAuthTokenWithExtras,
           refreshedToken as OAuthTokenWithExtras,
         );
         await this.tokenStore.saveToken(providerName, mergedToken, bucket);
-        if (!this.providerRegistry.isOAuthEnabled(providerName)) {
-          this.providerRegistry.setOAuthEnabledState(providerName, true);
+        if (signal?.aborted === true) {
+          await this.rollbackTokenAfterAbort(providerName, bucket, latestToken);
+          throw signal.reason;
         }
+        ensureOAuthEnabled(this.providerRegistry, providerName);
         logger.debug(
           () =>
             `[FLOW] Refreshed expired token for ${providerName}/${bucket ?? 'default'}, skipping browser auth`,
@@ -569,12 +736,35 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
         return true;
       }
     } catch (refreshError) {
+      if (signal?.aborted === true) {
+        // Cancellation must not be swallowed by the refresh fall-through.
+        throw signal.reason;
+      }
       logger.debug(
         () =>
           `[FLOW] Token refresh failed for ${providerName}/${bucket ?? 'default'}, falling through to browser auth: ${refreshError instanceof Error ? refreshError.message : refreshError}`,
       );
     }
     return false;
+  }
+
+  /**
+   * Restore the prior token after an abort landed during the save window.
+   * Best-effort: a restore failure is logged, never surfaced over the abort.
+   */
+  private async rollbackTokenAfterAbort(
+    providerName: string,
+    bucket: string | undefined,
+    latestToken: OAuthToken,
+  ): Promise<void> {
+    try {
+      await this.tokenStore.saveToken(providerName, latestToken, bucket);
+    } catch (restoreError) {
+      logger.debug(
+        () =>
+          `[FLOW] Failed to restore prior token for ${providerName}/${bucket ?? 'default'} after abort: ${restoreError instanceof Error ? restoreError.message : String(restoreError)}`,
+      );
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -660,7 +850,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     unauthenticatedBuckets: string[],
     getEphemeralSetting: <T>(key: string) => T | undefined,
   ): Promise<MultiBucketAuthResult> {
-    const onAuthBucket = this.buildOnAuthBucketCallback(providerName);
+    const onAuthBucket = this.buildOnAuthBucketCallback();
     const onPrompt = this.buildOnPromptCallback(
       providerName,
       unauthenticatedBuckets,
@@ -736,15 +926,15 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
         providerName,
         bucket,
       );
-      if (existingToken && existingToken.expiry > nowInSeconds + 30) {
+      if (existingToken !== null && existingToken.expiry > nowInSeconds + 30) {
         logger.debug(`Bucket ${bucket} already authenticated, skipping`, {
           provider: providerName,
           bucket,
           expiry: existingToken.expiry,
         });
-      } else {
-        unauthenticated.push(bucket);
+        continue;
       }
+      unauthenticated.push(bucket);
     }
 
     return unauthenticated;
@@ -754,9 +944,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
    * Build the onAuthBucket callback for MultiBucketAuthenticator.
    * Includes TOCTOU defense-in-depth re-check before auth (issue 1652).
    */
-  private buildOnAuthBucketCallback(
-    _providerName: string,
-  ): (
+  private buildOnAuthBucketCallback(): (
     provider: string,
     bucket: string,
     index: number,

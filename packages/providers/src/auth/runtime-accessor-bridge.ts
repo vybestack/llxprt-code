@@ -23,6 +23,7 @@
  *   - getProviderManager   → undefined
  *   - getRuntimeContext    → undefined
  *   - getCurrentProfileName → null
+ *   - getInteractiveAuthTimeoutMs → 1_200_000
  *
  * `getRuntimeContext` is the ONE exception: the old `getCliRuntimeContext()`
  * could throw, and callers (e.g. auth-status-service) wrapped it in their own
@@ -31,6 +32,12 @@
  */
 
 import type { BrowserProfileAssociation } from './browser-profile-association-store.js';
+
+/**
+ * @plan PLAN-20260827-ISSUE2562.P03
+ * @requirement REQ-2562-4
+ */
+export const DEFAULT_INTERACTIVE_AUTH_TIMEOUT_MS = 1_200_000;
 
 /**
  * Narrow interface describing the runtime accessors the auth cluster needs.
@@ -52,6 +59,13 @@ export interface OAuthRuntimeAccessors {
   /** Resolve the current profile name, or null when unavailable. */
   getCurrentProfileName(): string | null;
   /**
+   * Resolve the interactive authentication session timeout.
+   *
+   * @plan PLAN-20260827-ISSUE2562.P03
+   * @requirement REQ-2562-4
+   */
+  getInteractiveAuthTimeoutMs(): number;
+  /**
    * Look up the browser profile association for a provider+bucket.
    * MUST be safe to call during browser launch: returns undefined when no
    * association exists or the association store is unavailable.
@@ -63,19 +77,29 @@ export interface OAuthRuntimeAccessors {
   ): BrowserProfileAssociation | undefined;
 }
 
+type OAuthRuntimeAccessorRegistration = Omit<
+  OAuthRuntimeAccessors,
+  'getInteractiveAuthTimeoutMs'
+> & {
+  getInteractiveAuthTimeoutMs?: OAuthRuntimeAccessors['getInteractiveAuthTimeoutMs'];
+};
+
 /**
  * Settable singleton registry.  CLI startup calls `setAccessors` once;
  * all auth-cluster code reads through the delegate methods.
  */
 class OAuthRuntimeBridge {
-  private accessors: OAuthRuntimeAccessors | undefined;
+  private accessors: OAuthRuntimeAccessorRegistration | undefined;
 
-  /** Register (or clear with undefined) the concrete accessors. */
-  setAccessors(accessors: OAuthRuntimeAccessors | undefined): void {
+  /**
+   * Register (or clear with undefined) the concrete accessors.
+   * Older registrations may omit the timeout accessor and use the bridge default.
+   */
+  setAccessors(accessors: OAuthRuntimeAccessorRegistration | undefined): void {
     this.accessors = accessors;
   }
 
-  private requireAccessors(): OAuthRuntimeAccessors {
+  private requireAccessors(): OAuthRuntimeAccessorRegistration {
     const accessors = this.accessors;
     if (!accessors) {
       throw new Error(
@@ -133,6 +157,22 @@ class OAuthRuntimeBridge {
    */
   getCurrentProfileName(): string | null {
     return this.requireAccessors().getCurrentProfileName();
+  }
+
+  /**
+   * Resolve the interactive authentication session timeout.
+   *
+   * The bridge owns the fallback so callers have a finite timeout before the
+   * CLI runtime accessors are registered and with older accessor registrations.
+   *
+   * @plan PLAN-20260827-ISSUE2562.P03
+   * @requirement REQ-2562-4
+   */
+  getInteractiveAuthTimeoutMs(): number {
+    return (
+      this.accessors?.getInteractiveAuthTimeoutMs?.() ??
+      DEFAULT_INTERACTIVE_AUTH_TIMEOUT_MS
+    );
   }
 
   /**

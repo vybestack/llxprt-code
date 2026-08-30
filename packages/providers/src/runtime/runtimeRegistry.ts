@@ -48,6 +48,7 @@ import {
   MissingProviderRuntimeError,
 } from './messages.js';
 import { validateRuntimeId } from './runtimeIdValidation.js';
+import { registerActiveRuntimeIdentityResolver } from './active-runtime-identity.js';
 
 /**
  * Diagnostic classification of a runtime's provenance. Recorded on each
@@ -214,6 +215,12 @@ export function resolveActiveRuntimeIdentity(): RuntimeIdentity {
       }),
   });
 }
+
+registerActiveRuntimeIdentityResolver(() => {
+  const { runtimeId } = resolveActiveRuntimeIdentity();
+  const runtimeKind = runtimeRegistry.get(runtimeId)?.runtimeKind;
+  return runtimeKind === undefined ? undefined : { runtimeId, runtimeKind };
+});
 
 export function upsertRuntimeEntry(
   runtimeId: string,
