@@ -210,6 +210,7 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
       this.config.getAgentClient(),
       signal,
       tokenBudget,
+      this.config.getUtilityModel(),
     );
   }
 

@@ -369,6 +369,12 @@ describe('CoreShellToolHostAdapter.trySummarizeOutput (issue #2626: uniform summ
         };
       },
     });
+    // #2627 made a configured utilityModel a precondition of summarization:
+    // summarizeToolOutput returns the text untouched when none is set. These
+    // cases are about provider-independence, not about that precondition, so
+    // configure one and let the provider vary.
+    const settingsService = new SettingsService();
+    settingsService.set('utilityModel', 'utility-model-x');
     const config = new Config({
       model: 'test-model',
       question: 'test question',
@@ -378,7 +384,7 @@ describe('CoreShellToolHostAdapter.trySummarizeOutput (issue #2626: uniform summ
       sessionId: `adapter-summarize-${Date.now()}-${sessionIdCounter}`,
       debugMode: false,
       cwd: os.tmpdir(),
-      settingsService: new SettingsService(),
+      settingsService,
       agentClientFactory: () => agentClient,
     });
 
