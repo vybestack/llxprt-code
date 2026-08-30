@@ -21,6 +21,7 @@ import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import * as runtimeModule from '@vybestack/llxprt-code-providers/runtime.js';
 import * as profileApplicationModule from '@vybestack/llxprt-code-providers/runtime/profileApplication.js';
 import type { SubAgentScope } from '../subagent.js';
@@ -89,6 +90,7 @@ async function launchSubagent(
     foregroundConfig: makeConfigWithSettings(foregroundSettings),
     scopeFactory,
     runtimeLoader,
+    messageBus: new MessageBus(),
   });
 
   const result = await orchestrator.launch({ name: subagentConfig.name });
@@ -330,6 +332,7 @@ describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () 
         foregroundConfig: makeConfigWithSettings(foreground),
         scopeFactory,
         runtimeLoader,
+        messageBus: new MessageBus(),
       });
 
       const result = await orchestrator.launch({

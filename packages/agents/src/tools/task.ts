@@ -10,6 +10,7 @@ import {
   Kind,
   type ToolResult,
   type LiveOutputUpdate,
+  type IToolMessageBus,
 } from '@vybestack/llxprt-code-tools';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
@@ -102,18 +103,19 @@ export interface TaskToolParams {
 }
 
 export interface TaskToolDependencies {
-  orchestratorFactory?: (messageBus?: MessageBus) => SubagentOrchestrator;
+  /**
+   * Required session/runtime MessageBus threaded into the
+   * SubagentOrchestrator so non-interactive subagent tool execution can satisfy
+   * Config.getOrCreateScheduler's explicit MessageBus dependency
+   * (Issue #2312).
+   */
+  messageBus: MessageBus;
+  orchestratorFactory?: (messageBus: MessageBus) => SubagentOrchestrator;
   profileManager?: ProfileManager;
   subagentManager?: SubagentManager;
   schedulerFactoryProvider?: () => SubagentSchedulerFactory | undefined;
   isInteractiveEnvironment?: () => boolean;
   getAsyncTaskManager?: () => AsyncTaskManager | undefined;
-  /**
-   * Session/runtime MessageBus threaded into the SubagentOrchestrator so
-   * non-interactive subagent tool execution can satisfy
-   * Config.getOrCreateScheduler's explicit MessageBus dependency (Issue #2312).
-   */
-  messageBus?: MessageBus;
 }
 function launchRequestName(
   launchResult: Awaited<ReturnType<SubagentOrchestrator['launch']>>,
@@ -138,7 +140,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     params: TaskToolParams,
     private readonly normalized: TaskToolInvocationParams,
     private readonly deps: TaskToolInvocationDeps,
-    messageBus?: MessageBus,
+    messageBus: IToolMessageBus,
   ) {
     super(params, messageBus);
   }
@@ -736,10 +738,25 @@ class TaskToolInvocation extends BaseToolInvocation<
 export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
   static readonly Name = 'task';
 
+  private readonly config: Config;
+  private readonly dependencies: TaskToolDependencies;
+
+  constructor(config: Config, dependencies: TaskToolDependencies);
   constructor(
-    private readonly config: Config,
-    private readonly dependencies: TaskToolDependencies = {},
+    config: Config,
+    dependencies:
+      | (Omit<TaskToolDependencies, 'messageBus'> & {
+          messageBus: MessageBus | null | undefined;
+        })
+      | null
+      | undefined,
   ) {
+    const messageBus = dependencies?.messageBus;
+    if (messageBus === undefined || messageBus === null) {
+      throw new Error(
+        'TaskTool requires a concrete session/runtime MessageBus.',
+      );
+    }
     super(
       TaskTool.Name,
       'Task',
@@ -748,8 +765,10 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       taskToolSchema,
       true,
       true,
-      dependencies.messageBus,
+      messageBus,
     );
+    this.config = config;
+    this.dependencies = { ...dependencies, messageBus };
   }
 
   protected override validateToolParamValues(
@@ -782,15 +801,22 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
 
   protected createInvocation(
     params: TaskToolParams,
-    messageBus?: MessageBus,
+    toolMessageBus?: IToolMessageBus,
   ): TaskToolInvocation {
+    if (toolMessageBus === undefined) {
+      throw new Error(
+        'TaskTool requires a concrete session/runtime MessageBus to build an invocation.',
+      );
+    }
+    const coreSchedulerMessageBus = this.dependencies.messageBus;
     const normalized = this.normalizeParams(params);
     return new TaskToolInvocation(
       this.config,
       params,
       normalized,
       {
-        createOrchestrator: () => this.ensureOrchestrator(messageBus),
+        createOrchestrator: () =>
+          this.ensureOrchestrator(coreSchedulerMessageBus),
         getToolRegistry:
           typeof this.config.getToolRegistry === 'function'
             ? () => this.config.getToolRegistry()
@@ -801,7 +827,7 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
           (() => this.config.isInteractive()),
         getAsyncTaskManager: this.dependencies.getAsyncTaskManager,
       },
-      messageBus,
+      toolMessageBus,
     );
   }
 
@@ -809,7 +835,7 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
     return normalizeTaskParams(params);
   }
 
-  private ensureOrchestrator(messageBus?: MessageBus): SubagentOrchestrator {
+  private ensureOrchestrator(messageBus: MessageBus): SubagentOrchestrator {
     if (this.dependencies.orchestratorFactory) {
       return this.dependencies.orchestratorFactory(messageBus);
     }

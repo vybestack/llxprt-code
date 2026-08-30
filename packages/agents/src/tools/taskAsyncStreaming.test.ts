@@ -16,6 +16,7 @@
 import { describe, it, expect, vi } from 'bun:test';
 import { TaskTool, type TaskToolParams } from './task.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
@@ -125,6 +126,7 @@ function createAsyncStreamingHarness(
       getSessionId: () => 'session-async-stream',
     } as unknown as Config,
     {
+      messageBus: new MessageBus(),
       orchestratorFactory: () =>
         ({ launch }) as unknown as SubagentOrchestrator,
       getAsyncTaskManager: () =>

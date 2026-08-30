@@ -13,6 +13,7 @@ import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { TaskTool } from './task.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
   ContextState,
   SubagentTerminateMode,
@@ -20,11 +21,13 @@ import {
 
 describe('TaskTool', () => {
   let config: Config;
+  let messageBus: MessageBus;
 
   beforeEach(() => {
     config = {
       getSessionId: () => 'session-123',
     } as unknown as Config;
+    messageBus = new MessageBus();
   });
 
   async function streamSubagentDeltas(
@@ -61,6 +64,7 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       orchestratorFactory: () => orchestrator,
+      messageBus,
       isInteractiveEnvironment: () => true,
     });
     const updateOutput = vi.fn();
@@ -100,6 +104,7 @@ describe('TaskTool', () => {
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const tool = new TaskTool(config, {
         orchestratorFactory: () => orchestrator,
+        messageBus,
         isInteractiveEnvironment: () => true,
       });
 
@@ -151,6 +156,7 @@ describe('TaskTool', () => {
       } as unknown as Config;
       const tool = new TaskTool(configWithTimeout, {
         orchestratorFactory: () => orchestrator,
+        messageBus,
         isInteractiveEnvironment: () => true,
       });
 
@@ -196,6 +202,7 @@ describe('TaskTool', () => {
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const tool = new TaskTool(config, {
         orchestratorFactory: () => orchestrator,
+        messageBus,
         isInteractiveEnvironment: () => true,
       });
 
@@ -226,6 +233,7 @@ describe('TaskTool', () => {
         orchestratorFactory: () => {
           throw new Error('should not be called');
         },
+        messageBus,
       });
 
     it('rejects max_turns of 0', () => {
@@ -287,6 +295,7 @@ describe('TaskTool', () => {
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const tool = new TaskTool(config, {
         orchestratorFactory: () => orchestrator,
+        messageBus,
         isInteractiveEnvironment: () => true,
       });
 
@@ -331,6 +340,7 @@ describe('TaskTool', () => {
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const tool = new TaskTool(config, {
         orchestratorFactory: () => orchestrator,
+        messageBus,
         isInteractiveEnvironment: () => true,
       });
 
@@ -390,6 +400,7 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       orchestratorFactory: () => orchestrator,
+      messageBus,
       isInteractiveEnvironment: () => true,
     });
     const invocation = tool.build({

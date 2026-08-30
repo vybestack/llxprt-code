@@ -17,6 +17,7 @@
 import { describe, it, expect } from 'bun:test';
 import { TaskTool } from '../src/tools/task.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 
 function makeConfig(): Config {
   return {
@@ -26,7 +27,7 @@ function makeConfig(): Config {
 }
 
 function getTimeoutDescription(): string {
-  const tool = new TaskTool(makeConfig());
+  const tool = new TaskTool(makeConfig(), { messageBus: new MessageBus() });
   const parameters = (
     tool.schema.parametersJsonSchema as { properties?: Record<string, unknown> }
   ).properties;

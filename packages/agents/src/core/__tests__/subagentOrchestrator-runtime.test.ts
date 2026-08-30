@@ -14,6 +14,7 @@ import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagen
 import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { SubAgentScope } from '../subagent.js';
 import { type SubAgentScope as SubAgentScopeInstance } from '../subagent.js';
 import type { RunConfig } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
@@ -75,6 +76,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     const result = await orchestrator.launch({
@@ -125,6 +127,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: config,
       scopeFactory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     await orchestrator.launch({
@@ -179,6 +182,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     try {
@@ -227,6 +231,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     await orchestrator.launch({
@@ -271,6 +276,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     await orchestrator.launch({
@@ -324,6 +330,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     await orchestrator.launch({
@@ -382,6 +389,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
         foregroundConfig: makeForegroundConfig(),
         scopeFactory,
         runtimeLoader,
+        messageBus: new MessageBus(),
       });
 
       await orchestrator.launch({ name: vertexSubagent.name });
@@ -450,6 +458,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     await orchestrator.launch({
@@ -499,6 +508,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     await orchestrator.launch({
@@ -550,6 +560,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     await orchestrator.launch({
@@ -601,6 +612,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     const firstRun = await orchestrator.launch({
@@ -648,6 +660,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
         getAgentId: () => 'planner-dispose',
       } as unknown as SubAgentScopeInstance),
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     const run = await orchestrator.launch({
@@ -738,6 +751,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: config,
       scopeFactory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     const result = await orchestrator.launch({
@@ -816,6 +830,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     await expect(
@@ -873,6 +888,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: makeForegroundConfig(),
       scopeFactory,
       runtimeLoader,
+      messageBus: new MessageBus(),
     });
 
     await expect(

@@ -13,6 +13,7 @@ import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { TaskTool, type TaskToolParams } from './task.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
@@ -30,6 +31,7 @@ describe('TaskTool', () => {
   describe('async mode', () => {
     it('returns error when async=true but AsyncTaskManager not available', async () => {
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => ({}) as SubagentOrchestrator,
         // No getAsyncTaskManager provided
       });
@@ -56,6 +58,7 @@ describe('TaskTool', () => {
         tryReserveAsyncSlot: () => null,
       };
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () => ({}) as SubagentOrchestrator,
         getAsyncTaskManager: () =>
           mockAsyncTaskManager as unknown as AsyncTaskManager,
@@ -97,6 +100,7 @@ describe('TaskTool', () => {
         dispose: vi.fn().mockResolvedValue(undefined),
       });
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
         getAsyncTaskManager: () =>
@@ -145,6 +149,7 @@ describe('TaskTool', () => {
         dispose: vi.fn().mockResolvedValue(undefined),
       });
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
         getAsyncTaskManager: () =>
@@ -193,6 +198,7 @@ describe('TaskTool', () => {
         dispose: vi.fn().mockResolvedValue(undefined),
       });
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
         getAsyncTaskManager: () => realAsyncTaskManager,
@@ -242,6 +248,7 @@ describe('TaskTool', () => {
         dispose: vi.fn().mockResolvedValue(undefined),
       });
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
         getAsyncTaskManager: () => realAsyncTaskManager,
@@ -309,6 +316,7 @@ describe('TaskTool', () => {
           },
         );
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
         getAsyncTaskManager: () => realAsyncTaskManager,
@@ -371,6 +379,7 @@ describe('TaskTool', () => {
         dispose: vi.fn().mockResolvedValue(undefined),
       });
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
         getAsyncTaskManager: () =>
@@ -429,6 +438,7 @@ describe('TaskTool', () => {
         dispose: vi.fn().mockResolvedValue(undefined),
       });
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
         getAsyncTaskManager: () =>
@@ -478,6 +488,7 @@ describe('TaskTool', () => {
         dispose: vi.fn().mockResolvedValue(undefined),
       });
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
         getAsyncTaskManager: () =>
@@ -549,6 +560,7 @@ describe('TaskTool', () => {
         }),
       } as unknown as Config;
       const tool = new TaskTool(configWithSettings, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
         getAsyncTaskManager: () =>
@@ -615,6 +627,7 @@ describe('TaskTool', () => {
         dispose: vi.fn().mockResolvedValue(undefined),
       });
       const tool = new TaskTool(config, {
+        messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
         getAsyncTaskManager: () => realAsyncTaskManager,
