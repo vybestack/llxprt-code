@@ -7,6 +7,7 @@
 import type { Config } from '@vybestack/llxprt-code-core';
 import * as acp from '@agentclientprotocol/sdk';
 import { loadProfileByName } from '@vybestack/llxprt-code-providers/runtime.js';
+import { getCliVersion } from './utils/version.js';
 import { parseZedAuthMethodId } from './zed-helpers.js';
 
 export async function initializeZedAgent(
@@ -23,6 +24,10 @@ export async function initializeZedAgent(
   }
   return {
     protocolVersion: acp.PROTOCOL_VERSION,
+    agentInfo: {
+      name: 'llxprt-code',
+      version: await getCliVersion(),
+    },
     authMethods: profileNames.map((name) => ({
       id: name,
       name,

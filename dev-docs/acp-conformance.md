@@ -13,6 +13,27 @@ Full Conformance is the result of this deterministic gate, **not** full-suite
 ACP certification. The full 14-category acplint suite requires live model
 inference and is out of scope.
 
+## Agent Identification (REQ-3095-001)
+
+`initializeZedAgent` in `packages/cli/src/zed-integration/zed-initialize.ts`
+now includes `agentInfo` in the ACP `initialize` response:
+
+- `name`: `llxprt-code`
+- `version`: the value resolved by `getCliVersion()` from
+  `packages/cli/src/utils/version.ts`.
+
+No new version-resolution path was added; `agentInfo.version` uses the same
+documented `CLI_VERSION`-then-`package.json` resolution as everywhere else, and
+falls back to `unknown` when neither is available. `protocolVersion`,
+`authMethods`, and `agentCapabilities` are unchanged.
+
+Issue #3095 reproduced the earlier gap directly: the ACP SDK schema marks
+`agentInfo` as "in future versions of the protocol, this will be required", and a
+raw stdio probe of `./packages/cli/bin/llxprt --experimental-acp` returned
+only `protocolVersion`, `authMethods`, and `agentCapabilities`. The validator now
+enforces identification (see the findings gate below), so dropping `agentInfo` again
+fails CI instead of surfacing as a warning nobody reads.
+
 ## Lifecycle Triage
 
 ### Pre-fix baseline
@@ -119,7 +140,10 @@ Added to `.github/workflows/ci.yml`. The job:
    placeholder key (`acplint-ci`) initializes the provider; selected categories
    do not prompt a model or perform network inference.
 
-9. Captures the raw acplint exit status before validation.
+9. Captures the raw acplint exit status before validation. The step prints the
+   acplint log tail inside a collapsed `::group::` on every run, not only on a
+   nonzero exit, so interpreter-shutdown noise is visible in the job log and
+   attributable to acplint (issue #3095).
 10. Validates the JSON report with `scripts/validate-acplint-report.ts`.
 11. Always uploads the runner-temp diagnostics directory containing status,
     log, JSON, and LLxprt logs — even on failure. The upload uses
@@ -168,6 +192,63 @@ statuses are `PASS` and `SKIP`. The pinned v0.2.0 report schema enum is
 A status-1 (Partial) fixture is internally coherent with one selected row at
 `SKIP` and a matching category summary (15/16 passed → Partial Conformance).
 
+### Findings, summary, and agent-info gate (issue #3095)
+
+Every validator run prints a markdown summary before it decides pass or fail, so
+failing runs surface the same information a green one would. The summary shows the
+raw acplint status, the declared conformance level, agent identification (or
+"not reported"), per-category passed/failed/skipped/errored counts, every
+finding marked `known` or `UNEXPECTED`, and every result row that carries a
+message. The summary goes to stdout always and is appended to the file named by
+`GITHUB_STEP_SUMMARY` when that variable is set, never truncating it. When the
+report cannot be read or parsed, a short summary states that the report was
+unavailable and why, then the validator exits 1.
+
+The validator carries an exact allowlist of the three finding strings the
+selected categories cannot avoid producing on pinned acplint v0.2.0:
+
+- `⚠ No agent_thought_chunk notifications received at all`
+- `⚠ No available_commands_update notifications received — agent doesn't advertise commands/hooks`
+- `⚠ No usage_update notifications received — agent doesn't report usage`
+
+An allowlisted finding is recorded as known. Any finding outside the allowlist
+fails the gate and the rejection names the offending finding, so a new
+non-allowlisted finding turns the check red instead of hiding in the artifact.
+
+The allowlist buys that at a cost worth stating: the three notification findings
+are accepted unconditionally, so this gate cannot detect a regression in the
+behaviours they describe. If LLxprt stopped emitting `available_commands_update`
+on `session/new`, or stopped emitting `agent_thought_chunk` or `usage_update` on
+prompt turns, the selected categories would produce exactly the same three
+findings and the check would stay green. Detecting that needs the `streaming`
+and `plans` categories, which require live model inference. See Limitations.
+
+Findings two through four from the original issue are category artifacts, not LLxprt
+defects. acplint populates `update_types_seen` only inside its `streaming` and
+`plans` category handlers (`_assemble_findings` in the pinned `runner.py`),
+and neither category is selected by this gate, so every optional update type is
+reported as never seen. The same reproduction probed the live agent directly:
+`session/new` emitted `available_commands_update`, and LLxprt builds
+`usage_update` and emits `agent_thought_chunk` on prompt turns. The fourth
+finding, `No agentInfo in initialize response`, was real and is fixed by
+REQ-3095-001; it is deliberately not allowlisted, so the gate now enforces
+agent identification. The validator also rejects a report whose `agent_info` lacks a
+non-empty string `name` or non-empty string `version`; extra agent-provided keys
+remain allowed.
+
+### Python traceback noise (issue #3095)
+
+The original issue reported a `RuntimeError: Event loop is closed` traceback in the
+job log. It comes from acplint's own transport teardown: `AcpTransport.__aexit__`
+terminates the agent subprocess and awaits `wait()`, but never closes the asyncio
+subprocess transport. `asyncio.run()` then closes the loop, and when CPython
+garbage-collects the transport it retries `close()` on the closed loop and prints
+the message as "Exception ignored in" during interpreter shutdown. That path cannot
+change acplint's exit status. It is timing dependent and did not reproduce locally on
+Python 3.14/macOS. It is expected noise; since issue #3095 the job prints the
+acplint log tail on every run, so the traceback is visible inside the logs and
+attributable to acplint rather than to LLxprt.
+
 ## Artifacts
 
 The `acplint-diagnostics` artifact directory contains:
@@ -195,7 +276,11 @@ To update the acplint pin:
 4. Update the expected result rows in `scripts/validate-acplint-report.ts` if
    the report schema changed.
 5. Run the full acplint gate locally and confirm the report validates.
-6. Update this document with the new pin, version, and post-fix results.
+6. Re-derive the three allowlisted finding strings from `_assemble_findings` in
+   the new acplint revision and update the `ALLOWED_FINDINGS` list in
+   `scripts/validate-acplint-report.ts`, matching the strings byte for byte from a
+   fresh run. Verify the reported text with a byte dump; do not retype by eye.
+7. Update this document with the new pin, version, and post-fix results.
 
 ## Limitations
 
@@ -206,3 +291,9 @@ To update the acplint pin:
   are not fully locked. Full Python environment locking is deferred.
 - No streaming, tool-call, permissions, file-operations, terminal, plans,
   session-modes, config-options, cancel, or stress categories are exercised.
+- The gate cannot detect a regression in `agent_thought_chunk`,
+  `available_commands_update`, or `usage_update`. acplint reports all three as
+  never seen regardless of what LLxprt emits, because it only records update
+  types in the `streaming` and `plans` handlers, so those findings are
+  allowlisted and a genuine regression in them would still pass. Covering that
+  needs live model inference.
