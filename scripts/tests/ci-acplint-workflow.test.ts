@@ -71,6 +71,8 @@ interface TestAggregateResults {
   shards: string;
   nodeConsumerSmoke: string;
   acp: string;
+  windowsInfra: string;
+  windowsAffected: string;
 }
 
 function runTestAggregate(
@@ -85,6 +87,8 @@ function runTestAggregate(
     ["'${{ needs.test_shard.result }}'", '"$5"'],
     ["'${{ needs.node_consumer_smoke.result }}'", '"$6"'],
     ["'${{ needs.acp_conformance.result }}'", '"$7"'],
+    ["'${{ needs.windows_test_infra.result }}'", '"$8"'],
+    ["'${{ needs.windows_test_infra.outputs.affected }}'", '"$9"'],
   ] as const;
   let script = runText;
   for (const [expression, parameter] of substitutions) {
@@ -103,6 +107,8 @@ function runTestAggregate(
       results.shards,
       results.nodeConsumerSmoke,
       results.acp,
+      results.windowsInfra,
+      results.windowsAffected,
     ],
     { encoding: 'utf8' },
   );
@@ -453,12 +459,53 @@ describe('Issue #2877: test matrix scheduling', () => {
       'node_consumer_smoke',
       'acp_conformance',
       'doc_change_filter',
+      'windows_test_infra',
     ]);
     expect(runText).toContain("shard_result='${{ needs.test_shard.result }}'");
     expect(runText).toContain(`if [ "$shard_result" != "success" ]; then
     echo "::error::Test shards did not all succeed (result: $shard_result)"
     exit 1
   fi`);
+  });
+
+  it('fails the aggregator when the Windows test-infra gate fails (issue #3439)', () => {
+    const checkStep = stepNamed(testJob, 'Check shard results');
+    const result = runTestAggregate(checkStep.run ?? '', {
+      shouldSkip: 'false',
+      docsOnly: 'false',
+      selector: 'success',
+      hasTests: 'true',
+      shards: 'success',
+      nodeConsumerSmoke: 'success',
+      acp: 'success',
+      windowsInfra: 'failure',
+      windowsAffected: 'true',
+    });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(
+      'Windows test-infra gate did not succeed (result: failure)',
+    );
+  });
+
+  it('accepts a path-filtered skip of the Windows test-infra gate on a non-docs PR (issue #3439)', () => {
+    // affected=false means the PR's files cannot touch the Windows-sensitive
+    // suites, so a skipped gate must not red the required Test check.
+    const checkStep = stepNamed(testJob, 'Check shard results');
+    const result = runTestAggregate(checkStep.run ?? '', {
+      shouldSkip: 'false',
+      docsOnly: 'false',
+      selector: 'success',
+      hasTests: 'false',
+      shards: 'skipped',
+      nodeConsumerSmoke: 'success',
+      acp: 'success',
+      windowsInfra: 'skipped',
+      windowsAffected: 'false',
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(
+      'Windows test-infra gate intentionally skipped',
+    );
   });
 
   it('fails the no-tests path when node_consumer_smoke fails', () => {
@@ -471,6 +518,8 @@ describe('Issue #2877: test matrix scheduling', () => {
       shards: 'skipped',
       nodeConsumerSmoke: 'failure',
       acp: 'success',
+      windowsInfra: 'success',
+      windowsAffected: 'true',
     });
     expect(result.status).toBe(1);
     expect(result.stdout).toContain(
@@ -490,6 +539,8 @@ describe('Issue #2877: test matrix scheduling', () => {
       shards: 'skipped',
       nodeConsumerSmoke,
       acp: 'success',
+      windowsInfra: 'success',
+      windowsAffected: 'true',
     });
     expect(result.status).toBe(1);
     expect(result.stdout).toContain(

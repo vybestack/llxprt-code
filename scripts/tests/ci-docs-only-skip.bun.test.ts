@@ -32,6 +32,10 @@ const HEAVY_JOBS = [
   'node_consumer_smoke',
   'bun_test_orchestrator_smoke',
   'acp_conformance',
+  // windows_test_infra (issue #3439) runs the Windows-sensitive suites that
+  // the ubuntu-only shards cannot execute; it is heavy, so it is gated the
+  // same way and skipped on docs-only PRs.
+  'windows_test_infra',
 ] as const;
 
 // The exact `if:` condition every heavy job must declare (normalized). The
@@ -103,6 +107,8 @@ interface TestAggregateResults {
   shards: string;
   nodeConsumerSmoke: string;
   acp: string;
+  windowsInfra: string;
+  windowsAffected: string;
 }
 
 const TEST_AGGREGATE_EXPRESSIONS = [
@@ -113,6 +119,8 @@ const TEST_AGGREGATE_EXPRESSIONS = [
   "'${{ needs.test_shard.result }}'",
   "'${{ needs.node_consumer_smoke.result }}'",
   "'${{ needs.acp_conformance.result }}'",
+  "'${{ needs.windows_test_infra.result }}'",
+  "'${{ needs.windows_test_infra.outputs.affected }}'",
 ] as const;
 
 /** Runs the real `test` aggregator "Check shard results" script. */
@@ -128,6 +136,8 @@ function runTestAggregate(
     results.shards,
     results.nodeConsumerSmoke,
     results.acp,
+    results.windowsInfra,
+    results.windowsAffected,
   ]);
 }
 
@@ -250,12 +260,17 @@ describe('Issue #342: skip heavy CI jobs on docs-only changes', () => {
         shards: 'skipped',
         nodeConsumerSmoke: 'skipped',
         acp: 'skipped',
+        windowsInfra: 'skipped',
+        windowsAffected: 'false',
       });
       expect(result.status).toBe(0);
       expect(result.stdout).toContain(
         'node_consumer_smoke intentionally skipped',
       );
       expect(result.stdout).toContain('acp_conformance intentionally skipped');
+      expect(result.stdout).toContain(
+        'Windows test-infra gate intentionally skipped',
+      );
     });
 
     it('docs-only PR is red when the selector reports tests but test_shard is skipped (selector still gates)', () => {
@@ -269,6 +284,8 @@ describe('Issue #342: skip heavy CI jobs on docs-only changes', () => {
         shards: 'skipped',
         nodeConsumerSmoke: 'skipped',
         acp: 'skipped',
+        windowsInfra: 'skipped',
+        windowsAffected: 'false',
       });
       expect(result.status).toBe(1);
       expect(result.stdout).toContain(
@@ -302,6 +319,8 @@ describe('Issue #342: skip heavy CI jobs on docs-only changes', () => {
         shards: 'success',
         nodeConsumerSmoke: 'failure',
         acp: 'success',
+        windowsInfra: 'success',
+        windowsAffected: 'true',
       });
       expect(result.status).toBe(1);
       expect(result.stdout).toContain(
@@ -318,6 +337,8 @@ describe('Issue #342: skip heavy CI jobs on docs-only changes', () => {
         shards: 'success',
         nodeConsumerSmoke: 'success',
         acp: 'failure',
+        windowsInfra: 'success',
+        windowsAffected: 'true',
       });
       expect(result.status).toBe(1);
       expect(result.stdout).toContain(
@@ -334,6 +355,8 @@ describe('Issue #342: skip heavy CI jobs on docs-only changes', () => {
         shards: 'skipped',
         nodeConsumerSmoke: 'success',
         acp: 'success',
+        windowsInfra: 'success',
+        windowsAffected: 'true',
       });
       expect(result.status).toBe(1);
       expect(result.stdout).toContain(
@@ -352,6 +375,8 @@ describe('Issue #342: skip heavy CI jobs on docs-only changes', () => {
         shards: 'skipped',
         nodeConsumerSmoke: 'skipped',
         acp: 'skipped',
+        windowsInfra: 'skipped',
+        windowsAffected: 'false',
       });
       expect(result.status).toBe(0);
       expect(result.stdout).toContain('green by design');
@@ -368,6 +393,8 @@ describe('Issue #342: skip heavy CI jobs on docs-only changes', () => {
         shards: 'skipped',
         nodeConsumerSmoke,
         acp: 'success',
+        windowsInfra: 'success',
+        windowsAffected: 'true',
       });
       expect(result.status).toBe(1);
       expect(result.stdout).toContain(

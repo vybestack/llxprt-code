@@ -554,7 +554,12 @@ function spawnTestFileOnce(
       error instanceof Error
         ? (error.stack ?? error.toString())
         : String(error);
-    return { passed: false, timedOut: false, stdout: '', diagnostic: `\n${diagnostic}` };
+    return {
+      passed: false,
+      timedOut: false,
+      stdout: '',
+      diagnostic: `\n${diagnostic}`,
+    };
   }
 }
 

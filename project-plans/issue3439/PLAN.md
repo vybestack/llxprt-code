@@ -279,3 +279,14 @@ Unify the five bespoke per-package runners (cli/core/agents/auth +
 scripts/run_bun_tests.ts) on one policy module (timeout, retry budgets,
 reaping, JUnit) so parity fixes land once. Deliberately not attempted here to
 keep this diff within the review budget.
+
+### Post-push CI corrections (run 2)
+
+- ci.yml: fixed a truncated `actions/setup-node` SHA in the Windows gate
+  (dropped 15 hex chars) that failed job setup and the ratchet check.
+- Extended the two CI-contract meta-tests
+  (`ci-acplint-workflow.test.ts`, `ci-docs-only-skip.bun.test.ts`) to encode
+  the `windows_test_infra` aggregator contract: two new `${{ needs.* }}`
+  substitutions, `HEAVY_JOBS` membership, and behavioral tests for
+  gate-failure red and path-filtered-skip green.
+- Prettier fix in `scripts/run_bun_tests.ts` (catch-block return formatting).
