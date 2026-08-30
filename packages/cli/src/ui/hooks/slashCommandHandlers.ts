@@ -23,7 +23,12 @@ import {
 import { join } from 'node:path';
 import { parseSlashCommand } from '../../utils/commands.js';
 import { secureInputHandler } from '../utils/secureInputHandler.js';
-import { iContentToHistoryItems } from '../utils/iContentToHistoryItems.js';
+import {
+  createEmojiFilter,
+  filterHistoryItems,
+  iContentToHistoryItems,
+  resolveEmojiFilterMode,
+} from '../utils/iContentToHistoryItems.js';
 import type {
   CommandContext,
   ModelsDialogData,
@@ -54,6 +59,12 @@ export interface SlashCommandHandlerDeps {
   setIsProcessing: (isProcessing: boolean) => void;
   setLocalIsProcessing: (isProcessing: boolean) => void;
   setPendingItem: (item: HistoryItemWithoutId | null) => void;
+  /**
+   * Test seam for performSessionResume: bun's vi.mock is not scoped per
+   * test file, so tests inject a stub here instead of mocking the module
+   * (which would leak into unrelated suites).
+   */
+  performResumeFn?: typeof performResume;
   setSessionShellAllowlist: (
     updater: (prev: Set<string>) => Set<string>,
   ) => void;
@@ -375,8 +386,13 @@ function handleLoadHistoryResult(
   void context.services.config
     ?.getAgentClient()
     .setHistory(result.clientHistory);
+  // Display-only: replayed model text passes the same emoji filter as live
+  // output (issue #2888); clientHistory keeps the recorded text verbatim.
+  const emojiFilter = createEmojiFilter(
+    resolveEmojiFilterMode(context.services.config),
+  );
   context.ui.clear();
-  result.history.forEach((item, index) => {
+  filterHistoryItems(result.history, emojiFilter).forEach((item, index) => {
     context.ui.addItem(item, index);
   });
   return { type: 'handled' };
@@ -551,7 +567,7 @@ async function performSessionResume(
     return { type: 'handled' };
   }
 
-  const resumeResult = await performResume(
+  const resumeResult = await (deps.performResumeFn ?? performResume)(
     sessionRef,
     buildResumeContext(deps, deps.config),
   );
@@ -571,7 +587,10 @@ async function performSessionResume(
       timestamp: new Date(),
     });
   }
-  const uiHistory = iContentToHistoryItems(resumeResult.history);
+  const uiHistory = iContentToHistoryItems(
+    resumeResult.history,
+    resolveEmojiFilterMode(deps.config),
+  );
   context.ui.clear();
   uiHistory.forEach((item, index) => {
     context.ui.addItem(item, index);
