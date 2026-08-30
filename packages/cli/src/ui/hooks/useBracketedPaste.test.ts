@@ -4,104 +4,144 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import { renderHook } from '../../test-utils/render.js';
 import { useBracketedPaste } from './useBracketedPaste.js';
 
-Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true);
-
+// The terminal escape bytes are emitted through core's writeToStdout, which is
+// infrastructure; stub that boundary so the exact bytes can be captured while
+// bracketedPaste.ts and the hook run for real.
 const realCore = { ...(await import('@vybestack/llxprt-code-core')) };
-let terminalOutput = '';
-
 void vi.mock('@vybestack/llxprt-code-core', () => ({
   ...realCore,
-  writeToStdout: (chunk: string | Uint8Array): boolean => {
-    terminalOutput +=
-      typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8');
-    return true;
-  },
+  writeToStdout: vi.fn(),
 }));
 
-const ENABLE_BRACKETED_PASTE = '\x1b[?2004h';
-const DISABLE_BRACKETED_PASTE = '\x1b[?2004l';
+import { writeToStdout } from '@vybestack/llxprt-code-core';
 
-describe('useBracketedPaste', () => {
-  let unmount: (() => void) | undefined;
+/** Bytes routed through core's writeToStdout, in order, for the current test. */
+const writtenBytes: string[] = [];
+
+const readWrittenBytes = (): string[] => [...writtenBytes];
+
+type LifecycleSignal = 'exit' | 'SIGINT' | 'SIGTERM';
+
+/** What a clean teardown looks like: nothing new left on any signal. */
+const NO_SURVIVING_LISTENERS: Record<LifecycleSignal, unknown[]> = {
+  exit: [],
+  SIGINT: [],
+  SIGTERM: [],
+};
+
+/**
+ * Listeners present on the lifecycle signals right now, captured by identity.
+ *
+ * Counting is not enough: the ink test renderer registers its own SIGINT and
+ * SIGTERM handlers during any render, so a count that merely grew proves
+ * nothing about the hook. Diffing the identity sets isolates exactly the
+ * handlers this hook added.
+ */
+const listenerSets = (): Record<LifecycleSignal, Set<unknown>> => ({
+  exit: new Set<unknown>(process.listeners('exit')),
+  SIGINT: new Set<unknown>(process.listeners('SIGINT')),
+  SIGTERM: new Set<unknown>(process.listeners('SIGTERM')),
+});
+
+const addedSince = (
+  current: readonly unknown[],
+  before: Set<unknown>,
+): unknown[] => current.filter((listener) => !before.has(listener));
+
+/** Listeners added since the snapshot that are still registered. */
+const survivorsSince = (
+  before: Record<LifecycleSignal, Set<unknown>>,
+): Record<LifecycleSignal, unknown[]> => ({
+  exit: addedSince(process.listeners('exit'), before.exit),
+  SIGINT: addedSince(process.listeners('SIGINT'), before.SIGINT),
+  SIGTERM: addedSince(process.listeners('SIGTERM'), before.SIGTERM),
+});
+
+describe('useBracketedPaste (AC4.7)', () => {
+  const mockedWriteToStdout = writeToStdout as Mock<typeof writeToStdout>;
 
   beforeEach(() => {
-    terminalOutput = '';
-    unmount = undefined;
+    writtenBytes.length = 0;
+    mockedWriteToStdout.mockImplementation(
+      (chunk: Parameters<typeof writeToStdout>[0]) => {
+        writtenBytes.push(String(chunk));
+        return true;
+      },
+    );
   });
 
   afterEach(() => {
-    unmount?.();
+    mockedWriteToStdout.mockReset();
   });
 
-  it('enables bracketed paste on mount and disables it on unmount', () => {
-    const hook = renderHook(() => useBracketedPaste());
-    unmount = hook.unmount;
+  it('writes the enable sequence on mount and the disable sequence on unmount', () => {
+    const { unmount } = renderHook(() => useBracketedPaste());
 
-    expect(terminalOutput).toBe(ENABLE_BRACKETED_PASTE);
+    expect(readWrittenBytes()).toStrictEqual(['\x1b[?2004h']);
 
-    hook.unmount();
-    unmount = undefined;
+    unmount();
 
-    expect(terminalOutput).toBe(
-      ENABLE_BRACKETED_PASTE + DISABLE_BRACKETED_PASTE,
+    expect(readWrittenBytes()).toStrictEqual(['\x1b[?2004h', '\x1b[?2004l']);
+  });
+
+  it('registers the same cleanup handler on exit, SIGINT and SIGTERM', () => {
+    const before = listenerSets();
+
+    renderHook(() => useBracketedPaste());
+
+    // ink's renderer adds its own SIGINT and SIGTERM handlers but none on
+    // 'exit', so the single handler added there is unambiguously the hook's.
+    // The hook registers one shared cleanup callback, so that exact reference
+    // is what must also appear on the two signals ink pollutes — a count
+    // comparison there would be satisfied by ink alone.
+    const addedOnExit = addedSince(process.listeners('exit'), before.exit);
+    expect(addedOnExit).toHaveLength(1);
+
+    const [cleanup] = addedOnExit;
+    expect(addedSince(process.listeners('SIGINT'), before.SIGINT)).toContain(
+      cleanup,
     );
+    expect(addedSince(process.listeners('SIGTERM'), before.SIGTERM)).toContain(
+      cleanup,
+    );
+
+    // Registration alone is not the contract. The handler exists so that a
+    // Ctrl-C or a kill does not leave the terminal in bracketed-paste mode,
+    // so run it and require the disable sequence on the wire.
+    expect(cleanup).toBeInstanceOf(Function);
+    (cleanup as () => void)();
+    expect(readWrittenBytes()).toStrictEqual(['\x1b[?2004h', '\x1b[?2004l']);
   });
 
-  it('registers cleanup for process termination signals', () => {
-    const priorSigintListeners = new Set(process.listeners('SIGINT'));
-    const priorSigtermListeners = new Set(process.listeners('SIGTERM'));
-    const hook = renderHook(() => useBracketedPaste());
-    unmount = hook.unmount;
+  it('removes every handler it registered on unmount', () => {
+    const before = listenerSets();
 
-    const sigintCleanup = process
-      .listeners('SIGINT')
-      .find((listener) => !priorSigintListeners.has(listener));
-    const sigtermCleanup = process
-      .listeners('SIGTERM')
-      .find((listener) => !priorSigtermListeners.has(listener));
+    const { unmount } = renderHook(() => useBracketedPaste());
+    unmount();
 
-    expect(sigintCleanup).toBeDefined();
-    expect(sigtermCleanup).toBeDefined();
+    expect(survivorsSince(before)).toStrictEqual(NO_SURVIVING_LISTENERS);
   });
 
-  it('removes process listeners on unmount', () => {
-    const priorExitListeners = new Set(process.listeners('exit'));
-    const priorSigintListeners = new Set(process.listeners('SIGINT'));
-    const priorSigtermListeners = new Set(process.listeners('SIGTERM'));
-    const hook = renderHook(() => useBracketedPaste());
-    unmount = hook.unmount;
+  it('repeated mount/unmount cycles do not accumulate process listeners', () => {
+    const before = listenerSets();
 
-    const exitCleanup = process
-      .listeners('exit')
-      .find((listener) => !priorExitListeners.has(listener));
-    const sigintCleanup = process
-      .listeners('SIGINT')
-      .find((listener) => !priorSigintListeners.has(listener));
-    const sigtermCleanup = process
-      .listeners('SIGTERM')
-      .find((listener) => !priorSigtermListeners.has(listener));
-    if (
-      exitCleanup === undefined ||
-      sigintCleanup === undefined ||
-      sigtermCleanup === undefined
-    ) {
-      throw new Error(
-        'Expected useBracketedPaste to register cleanup listeners',
-      );
+    for (let cycle = 0; cycle < 3; cycle++) {
+      const { unmount } = renderHook(() => useBracketedPaste());
+      unmount();
     }
 
-    hook.unmount();
-    unmount = undefined;
-
-    expect(process.listeners('exit')).not.toContain(exitCleanup);
-    expect(process.listeners('SIGINT')).not.toContain(sigintCleanup);
-    expect(process.listeners('SIGTERM')).not.toContain(sigtermCleanup);
-    expect(terminalOutput).toBe(
-      ENABLE_BRACKETED_PASTE + DISABLE_BRACKETED_PASTE,
-    );
+    expect(survivorsSince(before)).toStrictEqual(NO_SURVIVING_LISTENERS);
   });
 });
