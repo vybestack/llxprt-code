@@ -30,6 +30,7 @@ import os from 'node:os';
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import cliPkgJson from '../packages/cli/package.json' with { type: 'json' };
+import { removeTarballs } from './utils/tarball-cleanup.ts';
 
 const argv = yargs(hideBin(process.argv))
   .option('s', {
@@ -139,18 +140,16 @@ try {
   releaseDepsBound = true;
 
   console.log('packing @vybestack/llxprt-code-tools ...');
-  rmSync(join(toolsPackageDir, 'dist', 'vybestack-llxprt-code-tools-*.tgz'), {
-    force: true,
-  });
+  removeTarballs(join(toolsPackageDir, 'dist'), 'vybestack-llxprt-code-tools');
   execSync(
     `npm pack -w @vybestack/llxprt-code-tools --pack-destination ./packages/tools/dist`,
     { stdio: 'ignore' },
   );
 
   console.log('packing @vybestack/llxprt-code-storage ...');
-  rmSync(
-    join(storagePackageDir, 'dist', 'vybestack-llxprt-code-storage-*.tgz'),
-    { force: true },
+  removeTarballs(
+    join(storagePackageDir, 'dist'),
+    'vybestack-llxprt-code-storage',
   );
   execSync(
     `npm pack -w @vybestack/llxprt-code-storage --pack-destination ./packages/storage/dist`,
@@ -158,18 +157,16 @@ try {
   );
 
   console.log('packing @vybestack/llxprt-code-auth ...');
-  rmSync(join(authPackageDir, 'dist', 'vybestack-llxprt-code-auth-*.tgz'), {
-    force: true,
-  });
+  removeTarballs(join(authPackageDir, 'dist'), 'vybestack-llxprt-code-auth');
   execSync(
     `npm pack -w @vybestack/llxprt-code-auth --pack-destination ./packages/auth/dist`,
     { stdio: 'ignore' },
   );
 
   console.log('packing @vybestack/llxprt-code-settings ...');
-  rmSync(
-    join(settingsPackageDir, 'dist', 'vybestack-llxprt-code-settings-*.tgz'),
-    { force: true },
+  removeTarballs(
+    join(settingsPackageDir, 'dist'),
+    'vybestack-llxprt-code-settings',
   );
   execSync(
     `npm pack -w @vybestack/llxprt-code-settings --pack-destination ./packages/settings/dist`,
@@ -177,9 +174,9 @@ try {
   );
 
   console.log('packing @vybestack/llxprt-code-telemetry ...');
-  rmSync(
-    join(telemetryPackageDir, 'dist', 'vybestack-llxprt-code-telemetry-*.tgz'),
-    { force: true },
+  removeTarballs(
+    join(telemetryPackageDir, 'dist'),
+    'vybestack-llxprt-code-telemetry',
   );
   execSync(
     `npm pack -w @vybestack/llxprt-code-telemetry --pack-destination ./packages/telemetry/dist`,
@@ -187,15 +184,9 @@ try {
   );
 
   console.log('packing @vybestack/llxprt-code-ide-integration ...');
-  rmSync(
-    join(
-      ideIntegrationPackageDir,
-      'dist',
-      'vybestack-llxprt-code-ide-integration-*.tgz',
-    ),
-    {
-      force: true,
-    },
+  removeTarballs(
+    join(ideIntegrationPackageDir, 'dist'),
+    'vybestack-llxprt-code-ide-integration',
   );
   execSync(
     `npm pack -w @vybestack/llxprt-code-ide-integration --pack-destination ./packages/ide-integration/dist`,
@@ -203,36 +194,33 @@ try {
   );
 
   console.log('packing @vybestack/llxprt-code-policy ...');
-  rmSync(join(policyPackageDir, 'dist', 'vybestack-llxprt-code-policy-*.tgz'), {
-    force: true,
-  });
+  removeTarballs(
+    join(policyPackageDir, 'dist'),
+    'vybestack-llxprt-code-policy',
+  );
   execSync(
     `npm pack -w @vybestack/llxprt-code-policy --pack-destination ./packages/policy/dist`,
     { stdio: 'ignore' },
   );
 
   console.log('packing @vybestack/llxprt-code-mcp ...');
-  rmSync(join(mcpPackageDir, 'dist', 'vybestack-llxprt-code-mcp-*.tgz'), {
-    force: true,
-  });
+  removeTarballs(join(mcpPackageDir, 'dist'), 'vybestack-llxprt-code-mcp');
   execSync(
     `npm pack -w @vybestack/llxprt-code-mcp --pack-destination ./packages/mcp/dist`,
     { stdio: 'ignore' },
   );
 
   console.log('packing @vybestack/llxprt-code-core ...');
-  rmSync(join(corePackageDir, 'dist', 'vybestack-llxprt-code-core-*.tgz'), {
-    force: true,
-  });
+  removeTarballs(join(corePackageDir, 'dist'), 'vybestack-llxprt-code-core');
   execSync(
     `npm pack -w @vybestack/llxprt-code-core --pack-destination ./packages/core/dist`,
     { stdio: 'ignore' },
   );
 
   console.log('packing @vybestack/llxprt-code-providers ...');
-  rmSync(
-    join(providersPackageDir, 'dist', 'vybestack-llxprt-code-providers-*.tgz'),
-    { force: true },
+  removeTarballs(
+    join(providersPackageDir, 'dist'),
+    'vybestack-llxprt-code-providers',
   );
   execSync(
     `npm pack -w @vybestack/llxprt-code-providers --pack-destination ./packages/providers/dist`,
@@ -240,17 +228,16 @@ try {
   );
 
   console.log('packing @vybestack/llxprt-code-agents ...');
-  rmSync(join(agentsPackageDir, 'dist', 'vybestack-llxprt-code-agents-*.tgz'), {
-    force: true,
-  });
+  removeTarballs(
+    join(agentsPackageDir, 'dist'),
+    'vybestack-llxprt-code-agents',
+  );
   execSync(
     `npm pack -w @vybestack/llxprt-code-agents --pack-destination ./packages/agents/dist`,
     { stdio: 'ignore' },
   );
   console.log('packing @vybestack/llxprt-code ...');
-  rmSync(join(cliPackageDir, 'dist', 'vybestack-llxprt-code-*.tgz'), {
-    force: true,
-  });
+  removeTarballs(join(cliPackageDir, 'dist'), 'vybestack-llxprt-code');
   execSync(
     `npm pack -w @vybestack/llxprt-code --pack-destination ./packages/cli/dist`,
     {
