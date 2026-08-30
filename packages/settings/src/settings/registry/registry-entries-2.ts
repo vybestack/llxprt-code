@@ -200,6 +200,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
     // @requirement REQ-2562-4
     key: 'auth.interactiveTimeoutMs',
     category: 'cli-behavior',
+    owner: 'provider-connection',
+    propagation: 'next-turn',
     description:
       'Timeout in milliseconds for interactive (host-owned) authentication sessions; expiry cancels the session and settles all waiters as timed out.',
     type: 'number',
