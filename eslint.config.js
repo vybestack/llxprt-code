@@ -986,8 +986,12 @@ export default tseslint.config(
               // seam published by #3305 (packages/mcp exports
               // "./host/hostServices.js"). It is a declared export rather than
               // an internal, and packages/cli and packages/agents import the
-              // same specifier. Kept in sync with ALLOWED_RUNTIME_SUBPATHS in
-              // scripts/a2a-boundary/a2aBoundary.ts.
+              // same specifier. This must agree with ALLOWED_RUNTIME_SUBPATHS
+              // in scripts/a2a-boundary/a2aBoundary.ts; the two are checked
+              // against each other by
+              // scripts/tests/issue-3221-a2a-import-boundary.bun.test.ts, so
+              // editing one without the other fails CI rather than silently
+              // opening a hole in a single layer.
               regex: '^(?!node:|\\.|/|bun:test|@a2a-js/sdk(?:/server(?:/express)?)?$|@vybestack/llxprt-code-(agents|core|mcp|storage)$|@vybestack/llxprt-code-mcp/host/hostServices\\.js$|@google-cloud/storage$|dotenv$|express$|fs-extra$|strip-json-comments$|supertest$|tar$|uuid$|winston$).+',
               message:
                 'a2a-server is an Agent-facade host: only node builtins, relative paths, bun:test, the A2A SDK, declared host dependencies, runtime-package ROOT entrypoints, and the MCP host-services seam may be imported (issue #3221).',

@@ -65,6 +65,63 @@ export const ALLOWED_RUNTIME_SUBPATHS: readonly string[] = [
 ];
 
 /**
+ * Splits a bare specifier into its package name and its `exports` subpath key.
+ *
+ * Returns undefined for a root specifier, which has no subpath to check.
+ */
+export function splitPackageSubpath(
+  specifier: string,
+): { packageName: string; subpath: string } | undefined {
+  const segments = specifier.split('/');
+  const take = specifier.startsWith('@') ? 2 : 1;
+  if (segments.length <= take) {
+    return undefined;
+  }
+  return {
+    packageName: segments.slice(0, take).join('/'),
+    subpath: `./${segments.slice(take).join('/')}`,
+  };
+}
+
+/**
+ * Reports which ALLOWED_RUNTIME_SUBPATHS entries are NOT declared subpath
+ * exports of the package they name.
+ *
+ * The allowlist's justification is that each entry is published API rather than
+ * an internal, which until now was a claim in a comment. This checks it against
+ * the owning package's manifest, so allowlisting a genuine internal (the thing
+ * issue #3221 exists to prevent) fails instead of passing on assertion.
+ *
+ * Note this VALIDATES the allowlist rather than replacing it. Deriving the
+ * allowlist from the exports map would admit every declared subpath, which is a
+ * wider policy than #3221 chose; entries stay opt-in and individually
+ * justified.
+ */
+export function findUndeclaredAllowedSubpaths(
+  readPackageExports: (packageName: string) => readonly string[] | undefined,
+  allowed: readonly string[] = ALLOWED_RUNTIME_SUBPATHS,
+): Array<{ specifier: string; reason: string }> {
+  const describeProblem = (specifier: string): string | undefined => {
+    const split = splitPackageSubpath(specifier);
+    if (split === undefined) {
+      return 'is a package root, not a subpath export';
+    }
+    const declared = readPackageExports(split.packageName);
+    if (declared === undefined) {
+      return `no manifest found for ${split.packageName}`;
+    }
+    return declared.includes(split.subpath)
+      ? undefined
+      : `${split.packageName} does not declare "${split.subpath}" in its exports map`;
+  };
+
+  return allowed.flatMap((specifier) => {
+    const reason = describeProblem(specifier);
+    return reason === undefined ? [] : [{ specifier, reason }];
+  });
+}
+
+/**
  * Legacy runtime-assembly symbols that must never be imported by a host, even
  * from an allowed runtime root: they are the pre-facade reach-through surface.
  */

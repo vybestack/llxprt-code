@@ -26,14 +26,18 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { resolve, join as joinForSynthetic } from 'node:path';
+import { resolve, join, join as joinForSynthetic } from 'node:path';
 import config from '../../eslint.config.js';
 import {
   evaluateSpecifier,
   scanSourceText,
   scanA2aBoundary,
+  findUndeclaredAllowedSubpaths,
+  splitPackageSubpath,
+  ALLOWED_RUNTIME_SUBPATHS,
   RUNTIME_ROOT_PACKAGES,
 } from '../a2a-boundary/a2aBoundary.ts';
+import { readFileSync } from 'node:fs';
 
 const REPO_ROOT = resolve(import.meta.dir, '..', '..');
 const PRODUCTION_DEPENDENCIES = [
@@ -495,5 +499,72 @@ describe('issue #3221: a2a-server fail-closed ESLint layer', () => {
     expect(rule).toBeDefined();
     expect(rule![0]).toBe('error');
     expect(typeof rule![1]?.patterns?.[0]?.regex).toBe('string');
+  });
+});
+
+describe('issue #3221: the runtime-subpath allowlist stays honest', () => {
+  // The allowlist's justification is that every entry is published API rather
+  // than an internal. That was a claim in a comment; these pin it.
+  const readExports = (packageName: string): readonly string[] | undefined => {
+    const dir = packageName.replace('@vybestack/llxprt-code-', '');
+    try {
+      const manifest = JSON.parse(
+        readFileSync(join(REPO_ROOT, 'packages', dir, 'package.json'), 'utf8'),
+      ) as { exports?: Record<string, unknown> };
+      return Object.keys(manifest.exports ?? {});
+    } catch {
+      return undefined;
+    }
+  };
+
+  it('every allowed subpath is a declared export of the package it names', () => {
+    expect(findUndeclaredAllowedSubpaths(readExports)).toEqual([]);
+  });
+
+  it('rejects a subpath the owning package does not export', () => {
+    const problems = findUndeclaredAllowedSubpaths(readExports, [
+      '@vybestack/llxprt-code-mcp/src/host/internal.js',
+    ]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]?.reason).toContain('does not declare');
+  });
+
+  it('rejects a root specifier, which is not a subpath at all', () => {
+    expect(splitPackageSubpath('@vybestack/llxprt-code-mcp')).toBeUndefined();
+    const problems = findUndeclaredAllowedSubpaths(readExports, [
+      '@vybestack/llxprt-code-mcp',
+    ]);
+    expect(problems[0]?.reason).toContain('package root');
+  });
+
+  it('the ESLint regex permits exactly the specifiers the checker allows', () => {
+    // The two layers are written independently and the config comment claims
+    // they are kept in sync by hand. Drift would silently open a hole in one
+    // layer while the other stayed closed, so assert it instead.
+    const blocks = config as unknown as Array<{
+      files?: string[];
+      rules?: Record<string, unknown>;
+    }>;
+    const block = blocks.find(
+      (b) =>
+        b.files?.includes('packages/a2a-server/src/**/*.ts') === true &&
+        b.files?.includes('packages/a2a-server/index.ts') === true,
+    );
+    const rule = block!.rules?.['no-restricted-imports'] as [
+      string,
+      { patterns: Array<{ regex: string }> },
+    ];
+    const banned = new RegExp(rule[1].patterns[0].regex);
+
+    for (const specifier of ALLOWED_RUNTIME_SUBPATHS) {
+      expect(evaluateSpecifier(specifier, []).allowed).toBe(true);
+      expect(banned.test(specifier)).toBe(false);
+    }
+    // A sibling subpath of the same package must stay banned by BOTH layers,
+    // which is what makes the allowance exact-match rather than a prefix.
+    const sibling = '@vybestack/llxprt-code-mcp/host/hostInterfaces.js';
+    expect(ALLOWED_RUNTIME_SUBPATHS).not.toContain(sibling);
+    expect(evaluateSpecifier(sibling, []).allowed).toBe(false);
+    expect(banned.test(sibling)).toBe(true);
   });
 });
