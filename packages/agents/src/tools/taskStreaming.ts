@@ -20,6 +20,20 @@ export interface TaskStreamingHandle {
 }
 
 /**
+ * Escapes a string for use inside a double-quoted XML attribute value. The
+ * ampersand MUST be replaced first so the entities produced for the other
+ * characters are not re-escaped.
+ */
+function escapeXmlAttributeValue(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+/**
  * Wires the public live-output stream for a synchronous Task: emits the
  * opening `<subagent>` tag, installs the `scope.onMessage` relay (which
  * forwards normalized deltas and resets the heartbeat on real progress), and
@@ -33,6 +47,13 @@ export interface TaskStreamingHandle {
  *
  * Returns a no-op-shaped handle when no `updateOutput` observer is supplied
  * (the heartbeat start helper already short-circuits in that case).
+ *
+ * The subagent name and agent id are XML-attribute-escaped once at setup and
+ * used in both wrapper tags, and the pre-existing `scope.onMessage` is
+ * restored when the closing tag is emitted (issue #3288). Restoration runs
+ * before any emission so a throwing `updateOutput` consumer cannot leave the
+ * relay installed, and it only undoes this relay's own installation, so a
+ * handler installed by anyone else survives the close.
  */
 export function setupTaskStreaming(
   subagentName: string,
@@ -41,36 +62,53 @@ export function setupTaskStreaming(
   updateOutput: ((update: LiveOutputUpdate) => void) | undefined,
   startHeartbeat: typeof startTaskHeartbeat,
 ): TaskStreamingHandle {
+  const escapedName = escapeXmlAttributeValue(subagentName);
+  const escapedAgentId = escapeXmlAttributeValue(agentId);
   let xmlOutputOpen = false;
+  let restoreScopeHandler: (() => void) | undefined;
   const normalizer = createStreamNormalizer();
   const emitAppend = (data: string): void => {
     updateOutput?.({ mode: 'append', data });
   };
   const emitClosingSubagentTag = (): void => {
-    if (!xmlOutputOpen) {
+    const wasOpen = xmlOutputOpen;
+    xmlOutputOpen = false;
+    const restore = restoreScopeHandler;
+    restoreScopeHandler = undefined;
+    restore?.();
+    if (!wasOpen) {
       return;
     }
     const flushed = normalizer.flush();
     if (flushed !== undefined) {
       emitAppend(flushed);
     }
-    emitAppend(`</subagent name="${subagentName}" id="${agentId}">\n`);
-    xmlOutputOpen = false;
+    emitAppend(`</subagent name="${escapedName}" id="${escapedAgentId}">\n`);
   };
 
   if (updateOutput) {
-    emitAppend(`<subagent name="${subagentName}" id="${agentId}">\n`);
+    emitAppend(`<subagent name="${escapedName}" id="${escapedAgentId}">\n`);
     xmlOutputOpen = true;
 
     const existingHandler = scope.onMessage;
-    scope.onMessage = (message: string) => {
-      heartbeat.reset();
-      const delta = normalizer.push(message);
-      if (delta !== undefined) {
-        emitAppend(delta);
+    const relay = (message: string): void => {
+      if (xmlOutputOpen) {
+        heartbeat.reset();
+        const delta = normalizer.push(message);
+        if (delta !== undefined) {
+          emitAppend(delta);
+        }
       }
       existingHandler?.(message);
     };
+    restoreScopeHandler = (): void => {
+      // Only this relay's own installation is undone: a handler installed by
+      // someone else while the task ran owns the slot and must survive close.
+      if (scope.onMessage === relay) {
+        scope.onMessage = existingHandler;
+      }
+    };
+    scope.onMessage = relay;
   }
 
   // Start the heartbeat AFTER stream initialization so an exception during
