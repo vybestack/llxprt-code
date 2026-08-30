@@ -135,11 +135,11 @@ function assemble(
 describe('runtime plugin startup wiring', () => {
   const assembledRuntimeIds: string[] = [];
 
-  afterEach(() => {
+  afterEach(async () => {
     while (assembledRuntimeIds.length > 0) {
       const id = assembledRuntimeIds.pop();
       if (id !== undefined) {
-        disposeCliRuntime(id);
+        await disposeCliRuntime(id);
       }
     }
   });

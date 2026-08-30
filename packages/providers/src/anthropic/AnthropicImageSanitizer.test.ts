@@ -33,7 +33,9 @@ function textOf(block: ContentBlock): string {
 
 /** Cast-free media-data extraction from a discriminated-union block. */
 function dataOf(block: ContentBlock): string {
-  return block.type === 'media' ? block.data : '';
+  return block.type === 'media' && block.encoding !== 'reference'
+    ? block.data
+    : '';
 }
 
 async function pngBase64(width: number, height: number): Promise<string> {

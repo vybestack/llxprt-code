@@ -19,7 +19,15 @@ import {
   buildKimiFileReferenceText,
   createBoundedCache,
 } from './kimiFileUpload.js';
-import type { MediaBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  InlineMediaBlock,
+  MediaBlock,
+  ProviderFileReferenceMetadata,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import {
+  ProviderFileLifecycle,
+  resolveProviderFilePolicy,
+} from '../providerFilePolicy.js';
 
 type FileCreateBody = { file: unknown; purpose: string };
 
@@ -27,6 +35,11 @@ function createMockClient(
   fileCreateImpl?: (
     body: FileCreateBody,
   ) => Promise<{ id: string; bytes: number }>,
+  fileDeleteImpl: (fileId: string) => Promise<{
+    id: string;
+    object: 'file';
+    deleted: boolean;
+  }> = async (fileId) => ({ id: fileId, object: 'file', deleted: true }),
 ) {
   const defaultImpl = async (body: FileCreateBody) => {
     expect(body.purpose).toBe('file-extract');
@@ -40,13 +53,16 @@ function createMockClient(
     client: {
       apiKey: 'test-key',
       baseURL: 'https://api.kimi.com/coding/v1',
-      files: { create: filesCreate },
+      files: {
+        create: filesCreate,
+        delete: fileDeleteImpl,
+      },
     } as unknown as Parameters<typeof uploadKimiFiles>[0],
     filesCreate,
   };
 }
 
-function makePdfBlock(data: string, filename = 'doc.pdf'): MediaBlock {
+function makePdfBlock(data: string, filename = 'doc.pdf'): InlineMediaBlock {
   return {
     type: 'media',
     mimeType: 'application/pdf',
@@ -64,6 +80,23 @@ function makeVideoBlock(data: string, filename = 'clip.mp4'): MediaBlock {
     encoding: 'base64',
     filename,
   };
+}
+
+const KIMI_TEST_IDENTITY = {
+  provider: 'kimi',
+  baseURL: 'https://api.kimi.com/coding/v1',
+  credentialHash: 'credential-a',
+};
+
+function sessionPolicy(deletion: 'retain' | 'delete' = 'delete') {
+  return resolveProviderFilePolicy({
+    configuredMode: 'session',
+    configuredRetentionMs: 60_000,
+    configuredDeletion: deletion,
+    providerFileReferences: true,
+    zeroDataRetention: 'incompatible-while-retained',
+    zeroDataRetentionRequired: false,
+  });
 }
 
 describe('uploadKimiFiles', () => {
@@ -190,22 +223,21 @@ describe('uploadKimiFiles', () => {
     expect(filesCreate).toHaveBeenCalledTimes(2);
   });
 
-  it('marks blocks as failed when upload throws', async () => {
-    const { client, filesCreate } = createMockClient(async () => {
+  it('rejects the request when an attempted upload fails', async () => {
+    const { client } = createMockClient(async () => {
       throw new Error('network error');
     });
-    const block = makePdfBlock('AAAA');
 
-    const results = await uploadKimiFiles(client, [block]);
-
-    expect(filesCreate).toHaveBeenCalledTimes(1);
-    expect(results[0].failed).toBe(true);
-    expect(results[0].fileId).toBeUndefined();
+    await expect(
+      uploadKimiFiles(client, [makePdfBlock('AAAA')]),
+    ).rejects.toThrow(
+      'Kimi file upload failed for doc.pdf (application/pdf): network error',
+    );
   });
 
-  it('continues uploading remaining blocks after a failure', async () => {
+  it('rejects a multi-file request when one upload fails', async () => {
     let callCount = 0;
-    const { client, filesCreate } = createMockClient(async () => {
+    const { client } = createMockClient(async () => {
       callCount++;
       if (callCount === 1) {
         throw new Error('transient');
@@ -213,15 +245,11 @@ describe('uploadKimiFiles', () => {
       return { id: 'file-ok', bytes: 5 };
     });
 
-    const results = await uploadKimiFiles(client, [
-      makePdfBlock('FAIL'),
-      makePdfBlock('OK'),
-    ]);
-
-    expect(filesCreate).toHaveBeenCalledTimes(2);
-    expect(results[0].failed).toBe(true);
-    expect(results[1].fileId).toBe('file-ok');
-    expect(results[1].failed).toBe(false);
+    await expect(
+      uploadKimiFiles(client, [makePdfBlock('FAIL'), makePdfBlock('OK')]),
+    ).rejects.toThrow(
+      'Kimi file upload failed for doc.pdf (application/pdf): transient',
+    );
   });
 
   it('strips data URI prefix before decoding base64', async () => {
@@ -287,6 +315,286 @@ describe('uploadKimiFiles', () => {
     const results = await uploadKimiFiles(client, []);
     expect(results).toStrictEqual([]);
     expect(filesCreate).not.toHaveBeenCalled();
+  });
+
+  it('persists stable references and holds their lease for request cleanup', async () => {
+    const { client } = createMockClient(async () => ({
+      id: 'file-lifecycle',
+      bytes: 4,
+    }));
+    const lifecycle = new ProviderFileLifecycle({
+      maxFiles: 2,
+      maxBytes: 20,
+      now: () => 1_000,
+    });
+    const policy = resolveProviderFilePolicy({
+      configuredMode: 'session',
+      configuredRetentionMs: 60_000,
+      configuredDeletion: 'delete',
+      providerFileReferences: true,
+      zeroDataRetention: 'incompatible-while-retained',
+      zeroDataRetentionRequired: false,
+    });
+    const leases: Array<{ release(): void }> = [];
+    const persisted: ProviderFileReferenceMetadata[] = [];
+    const block: MediaBlock = {
+      ...makePdfBlock('AAAA'),
+      sourceContentId:
+        'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    };
+
+    const first = await uploadKimiFiles(client, [block], undefined, {
+      allowFileUpload: true,
+      lifecycle,
+      policy,
+      identity: {
+        provider: 'kimi',
+        baseURL: 'https://api.kimi.com/coding/v1',
+        credentialHash: 'credential-a',
+      },
+      scopeId: 'session-a',
+      registerLease: (lease) => {
+        leases.push(lease);
+      },
+      persistReference: async (_contentId, reference) => {
+        persisted.push(reference);
+      },
+    });
+
+    expect(first[0].fileId).toBe('file-lifecycle');
+    expect(persisted[0]?.fileId).toBe('file-lifecycle');
+    expect(lifecycle.snapshot().activeLeases).toBe(1);
+
+    const restoredLifecycle = new ProviderFileLifecycle({
+      maxFiles: 2,
+      maxBytes: 20,
+      now: () => 2_000,
+    });
+    const restoredBlock: MediaBlock = {
+      ...block,
+      providerFiles: persisted,
+    };
+    const restoredLeases: Array<{ release(): void }> = [];
+    const restored = await uploadKimiFiles(client, [restoredBlock], undefined, {
+      allowFileUpload: true,
+      lifecycle: restoredLifecycle,
+      policy,
+      identity: {
+        provider: 'kimi',
+        baseURL: 'https://api.kimi.com/coding/v1',
+        credentialHash: 'credential-a',
+      },
+      scopeId: 'session-a',
+      registerLease: (lease) => {
+        restoredLeases.push(lease);
+      },
+    });
+
+    expect(restored[0].fileId).toBe('file-lifecycle');
+    expect(restoredLifecycle.snapshot().activeLeases).toBe(1);
+    await Promise.all(leases.map((lease) => lease.release()));
+    await Promise.all(restoredLeases.map((lease) => lease.release()));
+    expect(lifecycle.snapshot().activeLeases).toBe(0);
+    expect(restoredLifecycle.snapshot().activeLeases).toBe(0);
+  });
+
+  it('releases an acquired lease when request cleanup registration throws', async () => {
+    const { client } = createMockClient(async () => ({
+      id: 'file-registration',
+      bytes: 4,
+    }));
+    const lifecycle = new ProviderFileLifecycle({ maxFiles: 1, maxBytes: 10 });
+    const block = makePdfBlock('AAAA');
+    const options = {
+      allowFileUpload: true,
+      lifecycle,
+      policy: sessionPolicy(),
+      identity: KIMI_TEST_IDENTITY,
+      scopeId: 'session-a',
+    };
+    await uploadKimiFiles(client, [block], undefined, options);
+
+    const reuse = uploadKimiFiles(client, [block], undefined, {
+      ...options,
+      registerLease: () => {
+        throw new Error('cleanup registration unavailable');
+      },
+    });
+
+    await expect(reuse).rejects.toThrow('cleanup registration unavailable');
+    expect(lifecycle.snapshot().activeLeases).toBe(0);
+  });
+
+  it('preserves registration and deferred deletion failures while releasing an acquired lease', async () => {
+    const { client } = createMockClient(
+      async () => ({ id: 'file-registration-cleanup', bytes: 4 }),
+      async () => {
+        throw new Error('remote deletion unavailable');
+      },
+    );
+    const lifecycle = new ProviderFileLifecycle({ maxFiles: 1, maxBytes: 10 });
+    const block = makePdfBlock('AAAA');
+    const options = {
+      allowFileUpload: true,
+      lifecycle,
+      policy: sessionPolicy(),
+      identity: KIMI_TEST_IDENTITY,
+      scopeId: 'session-a',
+    };
+    await uploadKimiFiles(client, [block], undefined, options);
+    let cleanup: Promise<unknown> | undefined;
+
+    const error = await uploadKimiFiles(client, [block], undefined, {
+      ...options,
+      registerLease: () => {
+        cleanup = lifecycle.cleanupScope('session', 'session-a');
+        throw new Error('cleanup registration unavailable');
+      },
+    }).catch((reason: unknown) => reason);
+    await cleanup;
+
+    if (!(error instanceof AggregateError)) {
+      throw new Error('Expected registration and deletion AggregateError');
+    }
+    const messages = error.errors.map((failure: unknown) =>
+      failure instanceof Error ? failure.message : String(failure),
+    );
+    expect(messages).toContain('cleanup registration unavailable');
+    expect(
+      messages.some((message) =>
+        message.includes('remote deletion unavailable'),
+      ),
+    ).toBe(true);
+    expect(lifecycle.snapshot().activeLeases).toBe(0);
+    expect(lifecycle.snapshot().deletionFailures).toHaveLength(1);
+  });
+
+  it('does not reuse a persisted provider file after the media bytes change', async () => {
+    let uploadCount = 0;
+    const { client, filesCreate } = createMockClient(async () => {
+      uploadCount += 1;
+      return { id: `file-content-${uploadCount}`, bytes: 4 };
+    });
+    const persisted: ProviderFileReferenceMetadata[] = [];
+    const original: InlineMediaBlock = {
+      ...makePdfBlock('AAAA'),
+      sourceContentId:
+        'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    };
+    const policy = sessionPolicy();
+    await uploadKimiFiles(client, [original], undefined, {
+      allowFileUpload: true,
+      lifecycle: new ProviderFileLifecycle({ maxFiles: 1, maxBytes: 10 }),
+      policy,
+      identity: KIMI_TEST_IDENTITY,
+      scopeId: 'session-a',
+      persistReference: async (_contentId, reference) => {
+        persisted.push(reference);
+      },
+    });
+    const changed: InlineMediaBlock = {
+      ...makePdfBlock('BBBB'),
+      sourceContentId:
+        'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      providerFiles: persisted,
+    };
+
+    const result = await uploadKimiFiles(client, [changed], undefined, {
+      allowFileUpload: true,
+      lifecycle: new ProviderFileLifecycle({ maxFiles: 1, maxBytes: 10 }),
+      policy,
+      identity: KIMI_TEST_IDENTITY,
+      scopeId: 'session-a',
+    });
+
+    expect(result[0].fileId).toBe('file-content-2');
+    expect(filesCreate).toHaveBeenCalledTimes(2);
+  });
+
+  it('propagates binding failure after upload and rolls back retained state', async () => {
+    const deleted: string[] = [];
+    const { client } = createMockClient(
+      async () => ({ id: 'file-binding-failure', bytes: 4 }),
+      async (fileId) => {
+        deleted.push(fileId);
+        return { id: fileId, object: 'file', deleted: true };
+      },
+    );
+    const lifecycle = new ProviderFileLifecycle({ maxFiles: 1, maxBytes: 10 });
+    const block: MediaBlock = {
+      ...makePdfBlock('AAAA'),
+      sourceContentId:
+        'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    };
+
+    const upload = uploadKimiFiles(client, [block], undefined, {
+      allowFileUpload: true,
+      lifecycle,
+      policy: sessionPolicy('retain'),
+      identity: KIMI_TEST_IDENTITY,
+      scopeId: 'session-a',
+      persistReference: async () => {
+        throw new Error('binding unavailable');
+      },
+    });
+
+    await expect(upload).rejects.toThrow('binding unavailable');
+    expect(deleted).toStrictEqual(['file-binding-failure']);
+    expect(lifecycle.snapshot().retainedFiles).toBe(0);
+    expect(lifecycle.snapshot().activeLeases).toBe(0);
+  });
+
+  it('propagates lifecycle capacity failure after upload and rolls back remotely', async () => {
+    const deleted: string[] = [];
+    const { client } = createMockClient(
+      async () => ({ id: 'file-over-capacity', bytes: 4 }),
+      async (fileId) => {
+        deleted.push(fileId);
+        return { id: fileId, object: 'file', deleted: true };
+      },
+    );
+    const lifecycle = new ProviderFileLifecycle({ maxFiles: 0, maxBytes: 0 });
+
+    const upload = uploadKimiFiles(client, [makePdfBlock('AAAA')], undefined, {
+      allowFileUpload: true,
+      lifecycle,
+      policy: sessionPolicy(),
+      identity: KIMI_TEST_IDENTITY,
+      scopeId: 'session-a',
+    });
+
+    await expect(upload).rejects.toThrow('exceeds 0 files');
+    expect(deleted).toStrictEqual(['file-over-capacity']);
+    expect(lifecycle.snapshot().retainedFiles).toBe(0);
+  });
+
+  it('propagates rollback deletion failure without changing transport', async () => {
+    const { client } = createMockClient(
+      async () => ({ id: 'file-orphaned', bytes: 4 }),
+      async () => {
+        throw new Error('delete unavailable');
+      },
+    );
+    const lifecycle = new ProviderFileLifecycle({ maxFiles: 0, maxBytes: 0 });
+
+    const error = await uploadKimiFiles(
+      client,
+      [makePdfBlock('AAAA')],
+      undefined,
+      {
+        allowFileUpload: true,
+        lifecycle,
+        policy: sessionPolicy(),
+        identity: KIMI_TEST_IDENTITY,
+        scopeId: 'session-a',
+      },
+    ).catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(AggregateError);
+    expect(error).toHaveProperty(
+      'message',
+      'Kimi provider file retention and rollback deletion failed',
+    );
   });
 });
 

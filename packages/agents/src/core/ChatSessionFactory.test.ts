@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 const realHistoryServiceModule = {
   ...(await import(
@@ -23,8 +24,10 @@ void vi.mock('./clientToolGovernance.js', () => ({
   buildToolDeclarationsFromView: vi.fn().mockReturnValue([]),
 }));
 
+const environmentContextMock = vi.fn(async (): Promise<never[]> => []);
+
 void vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () => ({
-  getEnvironmentContext: vi.fn().mockResolvedValue([]),
+  getEnvironmentContext: environmentContextMock,
 }));
 
 void vi.mock('./chatSession.js', () => ({
@@ -62,6 +65,7 @@ void vi.mock(
   () => ({
     HistoryService: vi.fn().mockImplementation(() => ({
       add: vi.fn(),
+      addBatch: vi.fn().mockResolvedValue(undefined),
       generateTurnKey: vi.fn().mockReturnValue('turn-1'),
       setBaseTokenOffset: vi.fn(),
       estimateTokensForText: vi.fn().mockResolvedValue(100),
@@ -99,13 +103,13 @@ import {
   resolveModelForSystemPrompt,
 } from './ChatSessionFactory.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import { ChatSession } from './chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { withChatSessionFactoryMediaFixture } from './chatSessionFactoryMediaTestHelper.js';
 import type { TodoContinuationService } from './TodoContinuationService.js';
 
 function makeConfig(overrides: Partial<Config> = {}): Config {
@@ -153,6 +157,24 @@ function makeTodoContinuationService(): TodoContinuationService {
 
 function makeContentGenerator(): ContentGenerator {
   return {} as unknown as ContentGenerator;
+}
+
+function createTestChatSession(
+  config: Config,
+  runtimeState: AgentRuntimeState,
+  extraHistory?: IContent[],
+): ReturnType<typeof createChatSession> {
+  return createChatSession({
+    config,
+    runtimeState,
+    contentGenerator: makeContentGenerator(),
+    storedHistoryService: undefined,
+    clearStoredHistoryService: vi.fn(),
+    extraHistory,
+    generateContentConfig: {},
+    todoContinuationService: makeTodoContinuationService(),
+    toolRegistry: undefined,
+  });
 }
 
 describe('buildSettingsSnapshot', () => {
@@ -359,9 +381,7 @@ describe('createChatSession', () => {
     (
       getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
     ).mockResolvedValue('system prompt');
-    (
-      getEnvironmentContext as Mock<typeof getEnvironmentContext>
-    ).mockResolvedValue([]);
+    environmentContextMock.mockResolvedValue([]);
     (loadAgentRuntime as Mock<typeof loadAgentRuntime>).mockResolvedValue({
       runtimeContext: {},
       contentGenerator: {},
@@ -564,8 +584,12 @@ describe('createChatSession', () => {
     const config = makeConfig();
     const runtimeState = makeRuntimeState();
     const todoContinuationService = makeTodoContinuationService();
+    let recordedHistory: IContent[] = [];
     const mockHistoryInstance = {
       add: vi.fn(),
+      addBatch: async (contents: readonly IContent[]): Promise<void> => {
+        recordedHistory = [...recordedHistory, ...contents];
+      },
       generateTurnKey: vi.fn().mockReturnValue('turn-1'),
       setBaseTokenOffset: vi.fn(),
       estimateTokensForText: vi.fn().mockResolvedValue(100),
@@ -595,7 +619,12 @@ describe('createChatSession', () => {
       toolRegistry: undefined,
     });
 
-    expect(mockHistoryInstance.add).toHaveBeenCalled();
+    expect(recordedHistory).toEqual([
+      {
+        ...extraHistory[0],
+        metadata: { turnId: 'turn-1' },
+      },
+    ]);
   });
 
   it('configures thinking for supported models', async () => {
@@ -719,9 +748,7 @@ describe('createChatSessionSafe', () => {
     (
       getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
     ).mockResolvedValue('system prompt');
-    (
-      getEnvironmentContext as Mock<typeof getEnvironmentContext>
-    ).mockResolvedValue([]);
+    environmentContextMock.mockResolvedValue([]);
   });
 
   it('wraps errors and throws with descriptive message', async () => {
@@ -790,9 +817,7 @@ describe('createChatSession: model identity in system prompt (issue #3138)', () 
     (
       getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
     ).mockResolvedValue('core system prompt');
-    (
-      getEnvironmentContext as Mock<typeof getEnvironmentContext>
-    ).mockResolvedValue([]);
+    environmentContextMock.mockResolvedValue([]);
   });
 
   it('uses config.getModel() for the system prompt, not the stale runtimeState snapshot', async () => {
@@ -803,18 +828,7 @@ describe('createChatSession: model identity in system prompt (issue #3138)', () 
       model: 'gpt-5.5',
       provider: 'openai',
     });
-    const todoContinuationService = makeTodoContinuationService();
-
-    await createChatSession({
-      config,
-      runtimeState,
-      contentGenerator: makeContentGenerator(),
-      storedHistoryService: undefined,
-      clearStoredHistoryService: vi.fn(),
-      generateContentConfig: {},
-      todoContinuationService,
-      toolRegistry: undefined,
-    });
+    await createTestChatSession(config, runtimeState);
 
     expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
       expect.objectContaining({ model: 'glm-5.2' }),
@@ -829,10 +843,9 @@ describe('createChatSession: model identity in system prompt (issue #3138)', () 
       model: 'stale-default',
       provider: 'openai',
     });
-    const todoContinuationService = makeTodoContinuationService();
-
     const mockHistoryInstance = {
       add: vi.fn(),
+      addBatch: vi.fn().mockResolvedValue(undefined),
       generateTurnKey: vi.fn().mockReturnValue('turn-1'),
       setBaseTokenOffset: vi.fn(),
       estimateTokensForText: vi.fn().mockResolvedValue(42),
@@ -846,16 +859,7 @@ describe('createChatSession: model identity in system prompt (issue #3138)', () 
       HistoryService as unknown as Mock<(...args: never[]) => unknown>
     ).mockImplementation(() => mockHistoryInstance);
 
-    await createChatSession({
-      config,
-      runtimeState,
-      contentGenerator: makeContentGenerator(),
-      storedHistoryService: undefined,
-      clearStoredHistoryService: vi.fn(),
-      generateContentConfig: {},
-      todoContinuationService,
-      toolRegistry: undefined,
-    });
+    await createTestChatSession(config, runtimeState);
 
     expect(
       mockHistoryInstance.setActiveTokenizationTarget,
@@ -870,18 +874,7 @@ describe('createChatSession: model identity in system prompt (issue #3138)', () 
       model: 'gpt-5.5',
       provider: 'openai',
     });
-    const todoContinuationService = makeTodoContinuationService();
-
-    await createChatSession({
-      config,
-      runtimeState,
-      contentGenerator: makeContentGenerator(),
-      storedHistoryService: undefined,
-      clearStoredHistoryService: vi.fn(),
-      generateContentConfig: {},
-      todoContinuationService,
-      toolRegistry: undefined,
-    });
+    await createTestChatSession(config, runtimeState);
 
     expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -899,19 +892,32 @@ describe('createChatSession: model identity in system prompt (issue #3138)', () 
       model: 'gpt-5.5',
       provider: 'openai',
     });
-    const todoContinuationService = makeTodoContinuationService();
+    await expect(createTestChatSession(config, runtimeState)).rejects.toThrow(
+      /no model identity/i,
+    );
+  });
 
-    await expect(
-      createChatSession({
-        config,
-        runtimeState,
-        contentGenerator: makeContentGenerator(),
-        storedHistoryService: undefined,
-        clearStoredHistoryService: vi.fn(),
-        generateContentConfig: {},
-        todoContinuationService,
-        toolRegistry: undefined,
-      }),
-    ).rejects.toThrow(/no model identity/i);
+  it('releases chat-session-factory media admission when post-admission setup fails', async () => {
+    await withChatSessionFactoryMediaFixture(async (fixture) => {
+      const config = makeConfig({ getLocalMediaStore: () => fixture.store });
+      environmentContextMock.mockRejectedValueOnce(
+        new Error('environment setup failed'),
+      );
+
+      await expect(
+        createTestChatSession(config, makeRuntimeState(), fixture.history),
+      ).rejects.toThrow('environment setup failed');
+      expect(await fixture.hasReservationsAfterProbe()).toBe(false);
+    });
+  });
+
+  it('releases temporary initial media admission after successful setup', async () => {
+    await withChatSessionFactoryMediaFixture(async (fixture) => {
+      const config = makeConfig({ getLocalMediaStore: () => fixture.store });
+
+      await createTestChatSession(config, makeRuntimeState(), fixture.history);
+
+      expect(await fixture.hasReservationsAfterProbe()).toBe(false);
+    });
   });
 });

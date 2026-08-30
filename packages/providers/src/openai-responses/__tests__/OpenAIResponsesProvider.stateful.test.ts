@@ -35,10 +35,18 @@ import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ResponsesInputItem } from '../OpenAIResponsesTypes.js';
+import type { OAuthManager } from '@vybestack/llxprt-code-auth';
+import { createOpenAIResponsesAliasProvider } from '../../composition/aliasProviderFactory.js';
+import type { ProviderAliasEntry } from '../../composition/providerAliases.js';
+import { declaredMediaTransportCapabilities } from '../../providerMediaTransportCapabilities.js';
 
 const TEST_RUNTIME_ID = 'stateful-test-runtime';
 const originalFetch = global.fetch;
 const mockFetch = vi.fn();
+const NULL_OAUTH_MANAGER: OAuthManager = {
+  getToken: async () => null,
+  isAuthenticated: async () => false,
+};
 
 function createMockStreamingResponse() {
   const encoder = new TextEncoder();
@@ -262,6 +270,53 @@ describe('OpenAIResponsesProvider stateful conversations @issue:207', () => {
     expect(users).not.toContain('first question');
     expect(assistants).not.toContain('first answer');
     expect(users).toContain('second question');
+  });
+
+  it('replays full history for a forced Responses alias without durable continuation', async () => {
+    const entry = {
+      alias: 'kimi-forced-responses',
+      filePath: '/registered/kimi-forced-responses.config',
+      source: 'builtin',
+      config: {
+        baseProvider: 'openai-responses',
+        'base-url': 'https://api.kimi.test/v1',
+        defaultModel: 'kimi-k3',
+        mediaTransportCapabilities: declaredMediaTransportCapabilities('kimi'),
+      },
+    } satisfies ProviderAliasEntry;
+    const provider = createOpenAIResponsesAliasProvider(
+      entry,
+      'test-api-key',
+      undefined,
+      {},
+      NULL_OAUTH_MANAGER,
+    );
+    const settings = new SettingsService();
+    const contents: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'first question' }],
+      },
+      {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'first answer' }],
+        metadata: { id: 'resp_kimi', responsesStored: true },
+      },
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'second question' }],
+      },
+    ];
+
+    const body = await captureRequestBody(provider, contents, settings, {
+      'responses-stateful': true,
+    });
+
+    expect(body['previous_response_id']).toBeUndefined();
+    expect(body['store']).not.toBe(true);
+    const items = inputItems(body);
+    expect(userMessages(items)).toEqual(['first question', 'second question']);
+    expect(assistantMessages(items)).toEqual(['first answer']);
   });
 
   it('stores the first response when stateful mode has no stored parent yet', async () => {

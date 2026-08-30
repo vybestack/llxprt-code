@@ -181,6 +181,15 @@
       "bun": "./src/services/history/IContent.ts",
       "import": "./dist/src/services/history/IContent.js"
     },
+    "./services/history/semantic-media-purge.js": {
+      "bun": "./src/services/history/semantic-media-purge.ts",
+      "import": "./dist/src/services/history/semantic-media-purge.js"
+    },
+    "./services/history/historyCloneUtils.js": {
+      "types": "./dist/src/services/history/historyCloneUtils.d.ts",
+      "bun": "./src/services/history/historyCloneUtils.ts",
+      "import": "./dist/src/services/history/historyCloneUtils.js"
+    },
     "./llm-types/index.js": {
       "bun": "./src/llm-types/index.ts",
       "import": "./dist/src/llm-types/index.js"
@@ -211,6 +220,21 @@
       "types": "./dist/src/storage/sessionTypes.d.ts",
       "bun": "./src/storage/sessionTypes.ts",
       "import": "./dist/src/storage/sessionTypes.js"
+    },
+    "./storage/local-media-store.js": {
+      "types": "./dist/src/storage/local-media-store.d.ts",
+      "bun": "./src/storage/local-media-store.ts",
+      "import": "./dist/src/storage/local-media-store.js"
+    },
+    "./storage/media-admission-service.js": {
+      "types": "./dist/src/storage/media-admission-service.d.ts",
+      "bun": "./src/storage/media-admission-service.ts",
+      "import": "./dist/src/storage/media-admission-service.js"
+    },
+    "./storage/request-media-resolver.js": {
+      "types": "./dist/src/storage/request-media-resolver.d.ts",
+      "bun": "./src/storage/request-media-resolver.ts",
+      "import": "./dist/src/storage/request-media-resolver.js"
     },
     "./storage/secure-store.js": {
       "types": "./dist/src/storage/secure-store.d.ts",

@@ -59,15 +59,9 @@ function extractSeq(entry: IContent): number {
  * partially applied compression. When the prefix was destroyed
  * (`topPreserved <= 0`), the anchor is explicitly reset.
  */
-export function applyCompressionWithAnchor(
+export async function applyCompressionWithAnchor(
   historyService: {
-    clear(): void;
-    /**
-     * Synchronous-only: an async callback would exit the scope on its first await.
-     * `() => undefined` rejects `() => Promise<void>` at compile time (#3338).
-     */
-    rebuildWith(callback: () => undefined): void;
-    add(content: IContent, model?: string): void;
+    replaceAll(contents: readonly IContent[], model?: string): Promise<void>;
     resetCacheAnchorSeq(): void;
     setCacheAnchorSeq(seq: number): void;
     getRawHistory(): readonly IContent[];
@@ -79,7 +73,7 @@ export function applyCompressionWithAnchor(
     oldHistory: readonly IContent[],
     newHist: readonly IContent[],
   ) => IContent[],
-): void {
+): Promise<void> {
   const anchorSeq = resolveHeadAnchorSeq(newHistory, topPreserved);
   const isPrefixDestroyed = topPreserved <= 0;
   // #3134 Fix 3: compression rewrites history behind the head, invalidating
@@ -96,17 +90,16 @@ export function applyCompressionWithAnchor(
   // explicit-cache providers can place a breakpoint at the head boundary. The
   // marker travels with the history; a wholesale replacement drops it.
 
-  historyService.rebuildWith(() => {
-    historyService.clear();
-    for (const content of annotated) {
-      historyService.add(content, model);
-    }
-    if (isPrefixDestroyed) {
-      historyService.resetCacheAnchorSeq();
-    } else if (anchorSeq !== undefined) {
-      historyService.setCacheAnchorSeq(anchorSeq);
-    }
-  });
+  // #3199 replaces the history atomically instead of clear()+add(). The
+  // multi-step rebuild only lands when the compression queue is flushed, so a
+  // caller reading history straight after the apply saw it empty; replaceAll
+  // is awaited and leaves no interleaving window for late streaming writes.
+  await historyService.replaceAll(annotated, model);
+  if (isPrefixDestroyed) {
+    historyService.resetCacheAnchorSeq();
+  } else if (anchorSeq !== undefined) {
+    historyService.setCacheAnchorSeq(anchorSeq);
+  }
 }
 
 /**

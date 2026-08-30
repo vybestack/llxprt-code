@@ -12,6 +12,7 @@ import {
   afterEach,
   afterAll,
 } from 'bun:test';
+import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -19,6 +20,7 @@ import { Storage } from '@vybestack/llxprt-code-settings';
 import {
   dumpContext,
   dumpRequestContext,
+  dumpResponseContext,
   redactSensitiveData,
   shouldDump,
 } from './dumpContext.js';
@@ -392,6 +394,155 @@ describe('dumpContext', () => {
       expect(dump.request.body.contents).toHaveLength(1);
       // fs.access throws ENOENT if the file is missing, failing the test
       await fs.access(path.join(testDumpDir, responseFilename));
+    });
+  });
+
+  describe('media privacy', () => {
+    const mediaBytes = new Uint8Array([1, 2, 3, 4]);
+    const mediaBase64 = Buffer.from(mediaBytes).toString('base64');
+    const contentId = `sha256:${createHash('sha256').update(mediaBytes).digest('hex')}`;
+    const privatePath = '/Users/private/project/../secret/image.png';
+    const providerSecret = 'provider-secret-3199';
+    const request = {
+      url: 'https://api.anthropic.com/v1/messages',
+      method: 'POST',
+      body: {
+        model: 'claude-test',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: 'image/png',
+                  data: mediaBase64,
+                },
+                filename: privatePath,
+                providerMetadata: { credential: providerSecret },
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    it('writes only ordinary physical media diagnostics by default', async () => {
+      const result = await dumpRequestContext(request, 'anthropic');
+      createdFiles.push(result.requestFilename);
+
+      const serialized = await fs.readFile(
+        path.join(testDumpDir, result.requestFilename),
+        'utf8',
+      );
+
+      expect(serialized).toContain(contentId);
+      expect(serialized).toContain('"byteCount": 4');
+      expect(serialized).toContain('"mimeType": "image/png"');
+      expect(serialized).toContain('"transportMode": "full"');
+      expect(serialized).not.toContain(mediaBase64);
+      expect(serialized).not.toContain(privatePath);
+      expect(serialized).not.toContain(providerSecret);
+    });
+
+    it('parses and sanitizes serialized JSON request bodies in ordinary mode', () => {
+      const serializedBody = JSON.stringify(request.body);
+
+      const redacted = redactSensitiveData({
+        ...request,
+        body: serializedBody,
+      });
+
+      const serialized = JSON.stringify(redacted.body);
+      expect(serialized).toContain(contentId);
+      expect(serialized).not.toContain(mediaBase64);
+      expect(serialized).not.toContain(privatePath);
+      expect(serialized).not.toContain(providerSecret);
+    });
+
+    it('rejects opaque string bodies in ordinary mode', () => {
+      expect(() =>
+        redactSensitiveData({
+          ...request,
+          body: `opaque:${mediaBase64}:${privatePath}`,
+        }),
+      ).toThrow('ordinary diagnostic body must be valid JSON');
+    });
+
+    it('keeps opaque string bodies only when raw mode is explicit', () => {
+      const opaque = `opaque:${mediaBase64}`;
+
+      const redacted = redactSensitiveData(
+        { ...request, body: opaque },
+        { media: 'raw' },
+      );
+
+      expect(redacted.body).toBe(opaque);
+    });
+
+    it('preserves media only for the deliberately selected raw dump path', async () => {
+      const result = await dumpRequestContext(
+        request,
+        'anthropic',
+        undefined,
+        undefined,
+        { media: 'raw' },
+      );
+      createdFiles.push(result.requestFilename);
+
+      const serialized = await fs.readFile(
+        path.join(testDumpDir, result.requestFilename),
+        'utf8',
+      );
+
+      expect(serialized).toContain(mediaBase64);
+      expect(serialized).not.toContain(privatePath);
+      expect(serialized).not.toContain(providerSecret);
+    });
+
+    it('sanitizes response media and echoed credentials by default', async () => {
+      const result = await dumpResponseContext(
+        undefined,
+        {
+          status: 400,
+          headers: { Authorization: 'Bearer echoed-secret' },
+          body: request.body,
+        },
+        'anthropic',
+      );
+      createdFiles.push(result.responseFilename);
+
+      const serialized = await fs.readFile(
+        path.join(testDumpDir, result.responseFilename),
+        'utf8',
+      );
+
+      expect(serialized).toContain(contentId);
+      expect(serialized).toContain('[REDACTED]');
+      expect(serialized).not.toContain(mediaBase64);
+      expect(serialized).not.toContain(privatePath);
+      expect(serialized).not.toContain(providerSecret);
+      expect(serialized).not.toContain('echoed-secret');
+    });
+
+    it('parses and sanitizes serialized JSON response bodies in ordinary mode', async () => {
+      const result = await dumpResponseContext(
+        undefined,
+        { status: 400, body: JSON.stringify(request.body) },
+        'anthropic',
+      );
+      createdFiles.push(result.responseFilename);
+
+      const serialized = await fs.readFile(
+        path.join(testDumpDir, result.responseFilename),
+        'utf8',
+      );
+
+      expect(serialized).toContain(contentId);
+      expect(serialized).not.toContain(mediaBase64);
+      expect(serialized).not.toContain(privatePath);
+      expect(serialized).not.toContain(providerSecret);
     });
   });
 

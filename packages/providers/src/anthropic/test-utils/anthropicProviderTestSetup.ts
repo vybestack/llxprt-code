@@ -22,6 +22,7 @@ import {
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { setActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+export { createAnthropicRawPostTestAdapter } from '../../test-utils/rawPostTestAdapters.js';
 
 export type AnthropicContentBlock =
   | {

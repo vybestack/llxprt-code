@@ -11,6 +11,7 @@ import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from './configTypes.js';
 import { getSettingsService } from '@vybestack/llxprt-code-settings';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { initializeTestConfig } from '../test-utils/config.js';
+import { createRuntimeSettingsService } from '../runtime/settingsRuntimeAdapter.js';
 
 import { ShellTool, ReadFileTool } from '@vybestack/llxprt-code-tools';
 import {
@@ -540,6 +541,42 @@ describe('Server Config (config.ts)', () => {
     it('preserves an explicit zero to disable image budget enforcement', () => {
       const config = new Config({ ...baseParams, imagePayloadBudgetBytes: 0 });
       expect(config.getImagePayloadBudgetBytes()).toBe(0);
+    });
+
+    it('reads persisted media budgets from the shared settings path', () => {
+      const settingsService = createRuntimeSettingsService();
+      const config = new Config({ ...baseParams, settingsService });
+      settingsService.set('image-payload-budget-bytes', 12_000_000);
+      settingsService.set('media-store-quota-bytes', 3_000_000_000);
+      settingsService.set('session-recording-queue-max-bytes', 8_000_000);
+      settingsService.set('session-persistence-queue-max-bytes', 7_000_000);
+
+      expect(config.getImagePayloadBudgetBytes()).toBe(12_000_000);
+      expect(config.getMediaStoreQuotaByteLimit()).toBe(3_000_000_000);
+      expect(config.getSessionRecordingQueueByteLimit()).toBe(8_000_000);
+      expect(config.getSessionPersistenceQueueByteLimit()).toBe(7_000_000);
+    });
+
+    it('uses shared media defaults while preserving explicit zero settings', () => {
+      const defaults = new Config(baseParams);
+      const settingsService = createRuntimeSettingsService();
+      settingsService.set('media-store-quota-bytes', 0);
+      settingsService.set('session-recording-queue-max-bytes', 0);
+      settingsService.set('session-persistence-queue-max-bytes', 0);
+      const disabled = new Config({ ...baseParams, settingsService });
+
+      expect({
+        media: defaults.getMediaStoreQuotaByteLimit(),
+        recording: defaults.getSessionRecordingQueueByteLimit(),
+        persistence: defaults.getSessionPersistenceQueueByteLimit(),
+      }).toEqual({
+        media: 4 * 1024 * 1024 * 1024,
+        recording: 16 * 1024 * 1024,
+        persistence: 16 * 1024 * 1024,
+      });
+      expect(disabled.getMediaStoreQuotaByteLimit()).toBe(0);
+      expect(disabled.getSessionRecordingQueueByteLimit()).toBe(0);
+      expect(disabled.getSessionPersistenceQueueByteLimit()).toBe(0);
     });
 
     it.each([

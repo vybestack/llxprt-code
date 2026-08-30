@@ -697,7 +697,7 @@ export class CompressionHandler {
     topPreserved: number,
   ) => Promise<void> {
     return async (newHistory, summary, topPreserved) => {
-      applyCompressionWithAnchor(
+      await applyCompressionWithAnchor(
         this.historyService,
         newHistory,
         topPreserved,
@@ -922,13 +922,9 @@ export class CompressionHandler {
       return;
     }
     // Delegate the history mutation to the caller-supplied applyResult so each
-    // caller's rewrite runs with its own contract: createApplyCallback applies
-    // the cache anchor via applyCompressionWithAnchor on the primary path,
-    // while the enforcer wrappers (executeFallbackTruncation,
-    // PendingContextWindowEnforcer) own their clear/rebuild and rely on this
-    // callback to mark history as applied (historyRestored). Every caller also
-    // clears the stale prompt-token baseline, so applying it here directly
-    // would bypass those contracts (#3070 fallback truncation propagation).
+    // caller's rewrite runs with its own contract. The primary path applies the
+    // cache anchor, while fallback paths atomically replace history and reset the
+    // stale prompt-token baseline (#3070 fallback truncation propagation).
     const summary = CompressionHandler.selectCompressionSummary(
       result.newHistory,
     );

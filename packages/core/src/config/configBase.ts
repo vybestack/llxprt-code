@@ -223,6 +223,46 @@ export abstract class ConfigBase extends ConfigBaseCore {
     return rawValue;
   }
 
+  private resolveByteLimit(key: string, defaultValue: number): number {
+    const value = this.getEphemeralSetting(key) ?? defaultValue;
+    if (
+      typeof value !== 'number' ||
+      !Number.isSafeInteger(value) ||
+      value < 0
+    ) {
+      throw new Error(`${key} must be a non-negative safe integer`);
+    }
+    return value;
+  }
+
+  override getImagePayloadBudgetBytes(): number {
+    return this.resolveByteLimit(
+      'image-payload-budget-bytes',
+      this.imagePayloadBudgetBytes,
+    );
+  }
+
+  override getMediaStoreQuotaByteLimit(): number {
+    return this.resolveByteLimit(
+      'media-store-quota-bytes',
+      super.getMediaStoreQuotaByteLimit(),
+    );
+  }
+
+  override getSessionRecordingQueueByteLimit(): number {
+    return this.resolveByteLimit(
+      'session-recording-queue-max-bytes',
+      super.getSessionRecordingQueueByteLimit(),
+    );
+  }
+
+  override getSessionPersistenceQueueByteLimit(): number {
+    return this.resolveByteLimit(
+      'session-persistence-queue-max-bytes',
+      super.getSessionPersistenceQueueByteLimit(),
+    );
+  }
+
   setEphemeralSetting(key: string, value: unknown): void {
     let settingValue = value;
     if (key === 'streaming') {

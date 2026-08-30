@@ -60,6 +60,9 @@ export interface RuntimeProvider {
   isPaidMode?(): boolean;
   getModelParams?(): Record<string, unknown> | undefined;
   getContextLimit?(): number | undefined;
+  getMediaTransportCapabilities?(): {
+    readonly explicitCacheBreakpoints: boolean;
+  };
   clearAuthCache?(): void;
   clearAuth?(): void;
 

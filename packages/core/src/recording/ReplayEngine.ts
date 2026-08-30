@@ -28,7 +28,17 @@
 
 import * as fs from 'node:fs';
 import * as readline from 'node:readline';
+import {
+  appendCheckpointMetadataWarnings,
+  foldCheckpointMetadata,
+} from './replayCheckpointMetadata.js';
+export { foldCheckpointMetadata } from './replayCheckpointMetadata.js';
 import { readBoundedFirstLine } from './boundedHeaderReader.js';
+import { formatReplayDiagnostic } from './replayErrorFormatting.js';
+import {
+  isRecordWithNonNegativeIntegerPair,
+  isSemanticMediaPurgeFrontierWithinHistory,
+} from './semanticMediaPurgeReplayValidation.js';
 import {
   type ReplayResult,
   type SessionMetadata,
@@ -37,14 +47,18 @@ import {
   type ContentPayload,
   type RewindPayload,
   type ProviderSwitchPayload,
-  type CheckpointMetadataView,
   type SessionForkedPayload,
+  type SemanticMediaPurgePayload,
   type SessionRecordLine,
 } from './types.js';
 import {
   invalidateResponsesStatefulChain,
   type IContent,
 } from '../services/history/IContent.js';
+import type { LocalMediaStore } from '../storage/local-media-store.js';
+import { MediaAdmissionService } from '../storage/media-admission-service.js';
+import { verifyHistoryMedia } from '../storage/media-reference-lifecycle.js';
+const SUPPORTED_RECORDING_VERSIONS = new Set([1, 2]);
 
 // ---------------------------------------------------------------------------
 // Private replay accumulators
@@ -66,6 +80,7 @@ interface ReplayAccumulators {
   unparseableLineCount: number;
   /** Raw metadata event lines for post-replay folding. */
   rawMetadataEvents: SessionRecordLine[];
+  semanticMediaPurgeFrontier: SemanticMediaPurgePayload['frontier'] | undefined;
 }
 
 // @pseudocode line 11-17: Initialize accumulators
@@ -84,6 +99,7 @@ function createAccumulators(): ReplayAccumulators {
     _unknownEventCount: 0,
     unparseableLineCount: 0,
     rawMetadataEvents: [],
+    semanticMediaPurgeFrontier: undefined,
   };
 }
 
@@ -432,6 +448,32 @@ function isValidSequence(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
+function handleSemanticMediaPurge(
+  payload: Record<string, unknown>,
+  acc: ReplayAccumulators,
+  lineNumber: number,
+): void {
+  const history = payload['history'];
+  const frontier = payload['frontier'];
+  if (
+    !Array.isArray(history) ||
+    !history.every(isSpeakerContent) ||
+    !isRecordWithNonNegativeIntegerPair(frontier) ||
+    !isSemanticMediaPurgeFrontierWithinHistory(history, frontier)
+  ) {
+    acc.malformedCount++;
+    acc.warnings.push(
+      `Line ${lineNumber}: malformed semantic_media_purge event, skipping`,
+    );
+    return;
+  }
+  acc.history = [...history];
+  acc.semanticMediaPurgeFrontier = {
+    contentIndex: frontier.contentIndex,
+    blockIndex: frontier.blockIndex,
+  };
+}
+
 function applyParsedEvent(
   parsed: Record<string, unknown> | null,
   acc: ReplayAccumulators,
@@ -439,6 +481,17 @@ function applyParsedEvent(
 ): ReplayResult | undefined {
   if (parsed === null) {
     return undefined;
+  }
+  const recordingVersion = parsed.v;
+  if (
+    typeof recordingVersion !== 'number' ||
+    !SUPPORTED_RECORDING_VERSIONS.has(recordingVersion)
+  ) {
+    return {
+      ok: false,
+      error: `Unsupported recording version ${String(recordingVersion)} at line ${acc.lineNumber}`,
+      warnings: acc.warnings,
+    };
   }
   if (!isValidSequence(parsed.seq)) {
     acc.malformedCount++;
@@ -572,6 +625,9 @@ function dispatchEvent(
     case 'session_metadata':
       handleSessionMetadata(payload, acc, lineNumber);
       break;
+    case 'semantic_media_purge':
+      handleSemanticMediaPurge(payload, acc, lineNumber);
+      break;
     case 'directories_changed':
       handleDirectoriesChanged(payload, acc, lineNumber);
       break;
@@ -676,106 +732,15 @@ function finalizeReplay(acc: ReplayAccumulators): ReplayResult {
     checkpoints: folded,
     sessionName,
     ancestry,
+    ...(acc.semanticMediaPurgeFrontier === undefined
+      ? {}
+      : { semanticMediaPurgeFrontier: acc.semanticMediaPurgeFrontier }),
   };
 }
 
 // ---------------------------------------------------------------------------
 // Metadata folding helpers (checkpoint lifecycle + session name)
 // ---------------------------------------------------------------------------
-
-function appendCheckpointMetadataWarnings(
-  events: readonly SessionRecordLine[],
-  warnings: string[],
-): void {
-  const knownIds = new Set<string>();
-  const deletedIds = new Set<string>();
-  for (const line of events) {
-    const checkpointId = extractCheckpointId(line);
-    if (checkpointId === null) continue;
-    if (line.type === 'checkpoint_created') {
-      if (knownIds.has(checkpointId)) {
-        warnings.push(
-          `Sequence ${line.seq}: checkpoint_created duplicates checkpoint ${checkpointId}`,
-        );
-      } else {
-        knownIds.add(checkpointId);
-      }
-    } else if (
-      line.type === 'checkpoint_renamed' ||
-      line.type === 'checkpoint_deleted'
-    ) {
-      if (!knownIds.has(checkpointId)) {
-        warnings.push(
-          `Sequence ${line.seq}: ${line.type} references unknown checkpoint ${checkpointId}`,
-        );
-      } else if (deletedIds.has(checkpointId)) {
-        warnings.push(
-          `Sequence ${line.seq}: ${line.type} references deleted checkpoint ${checkpointId}`,
-        );
-      }
-      if (line.type === 'checkpoint_deleted') deletedIds.add(checkpointId);
-    }
-  }
-}
-
-function extractCheckpointId(line: SessionRecordLine): string | null {
-  if (typeof line.payload !== 'object' || line.payload === null) return null;
-  const checkpointId =
-    'checkpointId' in line.payload ? line.payload.checkpointId : undefined;
-  return typeof checkpointId === 'string' ? checkpointId : null;
-}
-
-/**
- * Fold checkpoint lifecycle events into a stable view ordered by sequence.
- * Each checkpoint is tracked by stable `checkpointId`. Created events set
- * the name, watermark, and createdAt; renamed events update the name;
- * deleted events set `deleted: true`.
- */
-export function foldCheckpointMetadata(
-  events: readonly SessionRecordLine[],
-): CheckpointMetadataView[] {
-  const byId = new Map<string, CheckpointMetadataView>();
-
-  for (const line of events) {
-    foldCheckpointLine(line, byId);
-  }
-
-  return Array.from(byId.values()).sort((a, b) => a.sequence - b.sequence);
-}
-
-function foldCheckpointLine(
-  line: SessionRecordLine,
-  byId: Map<string, CheckpointMetadataView>,
-): void {
-  if (typeof line.payload !== 'object' || line.payload === null) return;
-  const payload = line.payload;
-  const checkpointId =
-    'checkpointId' in payload ? payload.checkpointId : undefined;
-  if (typeof checkpointId !== 'string' || checkpointId.length === 0) return;
-  const existing = byId.get(checkpointId);
-  const name = 'name' in payload ? payload.name : undefined;
-  if (
-    line.type === 'checkpoint_created' &&
-    typeof name === 'string' &&
-    existing === undefined
-  ) {
-    byId.set(checkpointId, {
-      checkpointId,
-      name,
-      sequence: line.seq,
-      deleted: false,
-      createdAt: line.ts,
-    });
-  } else if (
-    line.type === 'checkpoint_renamed' &&
-    typeof name === 'string' &&
-    existing !== undefined
-  ) {
-    byId.set(checkpointId, { ...existing, name });
-  } else if (line.type === 'checkpoint_deleted' && existing !== undefined) {
-    byId.set(checkpointId, { ...existing, deleted: true });
-  }
-}
 
 function isSessionForkedPayload(value: unknown): value is SessionForkedPayload {
   if (typeof value !== 'object' || value === null) return false;
@@ -894,16 +859,72 @@ async function readSessionStream(
  * @param expectedProjectHash - Must match the file's projectHash
  * @returns ReplayResult discriminated union — ok: true with data, or ok: false with error
  */
+export interface ReplaySessionOptions {
+  readonly mediaStore?: LocalMediaStore;
+}
+
 export async function replaySession(
   filePath: string,
   expectedProjectHash: string,
+  options: ReplaySessionOptions = {},
 ): Promise<ReplayResult> {
-  return readSessionStream(filePath, expectedProjectHash, (rawLine, acc) => {
-    const trimmed = rawLine.trim();
-    const parsed =
-      trimmed !== '' ? parseLine(rawLine, acc.lineNumber, acc) : null;
-    return applyParsedEvent(parsed, acc, expectedProjectHash);
-  });
+  const replay = await readSessionStream(
+    filePath,
+    expectedProjectHash,
+    (rawLine, acc) => {
+      const trimmed = rawLine.trim();
+      const parsed =
+        trimmed !== '' ? parseLine(rawLine, acc.lineNumber, acc) : null;
+      return applyParsedEvent(parsed, acc, expectedProjectHash);
+    },
+  );
+  return verifyReplayMedia(replay, options);
+}
+
+async function verifyReplayMedia(
+  replay: ReplayResult,
+  options: ReplaySessionOptions,
+): Promise<ReplayResult> {
+  if (!replay.ok) {
+    return replay;
+  }
+  try {
+    const admissionContext = {
+      turnId: 'session-replay',
+      source: 'session-replay',
+      preserveLegacyMimeParameters: true,
+    };
+    const admission =
+      options.mediaStore === undefined
+        ? undefined
+        : new MediaAdmissionService(options.mediaStore);
+    const history =
+      admission === undefined
+        ? replay.history
+        : await admission.admitContents(replay.history, admissionContext);
+    try {
+      await verifyHistoryMedia(history, options.mediaStore, 'session-replay');
+    } catch (error) {
+      if (admission === undefined) throw error;
+      try {
+        await admission.releaseContents(history, admissionContext);
+      } catch (releaseError) {
+        throw new AggregateError(
+          [error, releaseError],
+          'Session replay media verification and owner release failed',
+        );
+      }
+      throw error;
+    }
+    await admission?.releaseContents(history, admissionContext);
+    return { ...replay, history };
+  } catch (error) {
+    return {
+      ok: false,
+      error: formatReplayDiagnostic(error),
+      warnings: replay.warnings,
+    };
+  }
 }
 
 function applyBoundedReplayLine(
@@ -930,10 +951,15 @@ export async function replaySessionThroughSequence(
   filePath: string,
   expectedProjectHash: string,
   maxSequence: number,
+  options: ReplaySessionOptions = {},
 ): Promise<ReplayResult> {
-  return readSessionStream(filePath, expectedProjectHash, (rawLine, acc) =>
-    applyBoundedReplayLine(rawLine, maxSequence, expectedProjectHash, acc),
+  const replay = await readSessionStream(
+    filePath,
+    expectedProjectHash,
+    (rawLine, acc) =>
+      applyBoundedReplayLine(rawLine, maxSequence, expectedProjectHash, acc),
   );
+  return verifyReplayMedia(replay, options);
 }
 
 /**

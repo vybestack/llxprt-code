@@ -138,7 +138,9 @@ function buildConversationManager(
   return { conversationManager, historyService };
 }
 
-function recordSimpleAiTurn(conversationManager: ConversationManager): void {
+async function recordSimpleAiTurn(
+  conversationManager: ConversationManager,
+): Promise<void> {
   const userInput: IContent = {
     speaker: 'human',
     blocks: [{ type: 'text', text: 'Write a haiku' }],
@@ -146,50 +148,50 @@ function recordSimpleAiTurn(conversationManager: ConversationManager): void {
   const modelOutput: IContent[] = [
     { speaker: 'ai', blocks: [{ type: 'text', text: 'Quiet morning dew' }] },
   ];
-  conversationManager.recordHistory(userInput, modelOutput);
+  await conversationManager.recordHistory(userInput, modelOutput);
 }
 
 describe('ConversationManager stamps the live provider model, not the stale snapshot (issue #2511)', () => {
-  it('AC1/AC2: stamps the live provider model when the runtime-state snapshot is stale', () => {
+  it('AC1/AC2: stamps the live provider model when the runtime-state snapshot is stale', async () => {
     const { conversationManager, historyService } = buildConversationManager(
       STALE_SNAPSHOT_MODEL,
       GENERATING_BASE_URL,
       { liveModel: LIVE_PROVIDER_MODEL },
     );
 
-    recordSimpleAiTurn(conversationManager);
+    await recordSimpleAiTurn(conversationManager);
 
     const ai = historyService.getAll().find((c) => c.speaker === 'ai');
     expect(ai?.metadata?.model).toBe(LIVE_PROVIDER_MODEL);
   });
 
-  it('AC3: falls back to the runtime-state model when the live accessor returns a blank string', () => {
+  it('AC3: falls back to the runtime-state model when the live accessor returns a blank string', async () => {
     const { conversationManager, historyService } = buildConversationManager(
       STALE_SNAPSHOT_MODEL,
       GENERATING_BASE_URL,
       { liveModel: '' },
     );
 
-    recordSimpleAiTurn(conversationManager);
+    await recordSimpleAiTurn(conversationManager);
 
     const ai = historyService.getAll().find((c) => c.speaker === 'ai');
     expect(ai?.metadata?.model).toBe(STALE_SNAPSHOT_MODEL);
   });
 
-  it('AC3: falls back to the runtime-state model when the live accessor throws', () => {
+  it('AC3: falls back to the runtime-state model when the live accessor throws', async () => {
     const { conversationManager, historyService } = buildConversationManager(
       STALE_SNAPSHOT_MODEL,
       GENERATING_BASE_URL,
       { liveModel: 'throw' },
     );
 
-    recordSimpleAiTurn(conversationManager);
+    await recordSimpleAiTurn(conversationManager);
 
     const ai = historyService.getAll().find((c) => c.speaker === 'ai');
     expect(ai?.metadata?.model).toBe(STALE_SNAPSHOT_MODEL);
   });
 
-  it('AC3: falls back to the runtime-state model when the provider omits getCurrentModel entirely', () => {
+  it('AC3: falls back to the runtime-state model when the provider omits getCurrentModel entirely', async () => {
     // `RuntimeProvider.getCurrentModel` is optional in the contract, so a
     // provider may not implement it at all. Recording must fall back rather
     // than calling a non-function.
@@ -198,7 +200,7 @@ describe('ConversationManager stamps the live provider model, not the stale snap
       GENERATING_BASE_URL,
     );
 
-    recordSimpleAiTurn(conversationManager);
+    await recordSimpleAiTurn(conversationManager);
 
     const ai = historyService.getAll().find((c) => c.speaker === 'ai');
     expect(ai?.metadata?.model).toBe(STALE_SNAPSHOT_MODEL);

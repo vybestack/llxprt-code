@@ -14,12 +14,8 @@
  * limitations under the License.
  */
 
-import type {
-  IContent,
-  ContentBlock,
-  ToolCallBlock,
-  ToolResponseBlock,
-} from './IContent.js';
+import type { IContent, ContentBlock } from './IContent.js';
+import type { DebugLogger } from '../../debug/index.js';
 
 /**
  * Sanitize provider history for serialization while cloning its top-level data.
@@ -40,24 +36,30 @@ export function sanitizeProviderHistoryForSerialization(
 /** Clone a single block, sanitizing tool_call/tool_response payloads. */
 function cloneBlock(block: ContentBlock): ContentBlock {
   if (block.type === 'tool_call') {
-    const cloned: ToolCallBlock = {
-      type: 'tool_call',
-      id: block.id,
-      name: block.name,
+    return {
+      ...block,
       parameters: sanitizeParams(block.parameters),
+      ...(block.providerMetadata === undefined
+        ? {}
+        : { providerMetadata: structuredClone(block.providerMetadata) }),
     };
-    return cloned;
   }
   if (block.type === 'tool_response') {
-    const cloned: ToolResponseBlock = {
-      type: 'tool_response',
-      callId: block.callId,
-      toolName: block.toolName,
+    return {
+      ...block,
       result: sanitizeParams(block.result),
-      error: block.error,
-      isComplete: block.isComplete,
+      ...(block.providerMetadata === undefined
+        ? {}
+        : { providerMetadata: structuredClone(block.providerMetadata) }),
     };
-    return cloned;
+  }
+  if (block.type === 'media') {
+    return {
+      ...block,
+      ...(block.providerMetadata !== undefined
+        ? { providerMetadata: structuredClone(block.providerMetadata) }
+        : {}),
+    };
   }
   return cloneGenericBlock(block);
 }
@@ -102,4 +104,19 @@ export function sanitizeParams(params: unknown): unknown {
       _note: 'Parameters contained circular references and were sanitized',
     };
   }
+}
+
+export function sanitizeParamsWithLogger(
+  params: unknown,
+  logger: DebugLogger,
+): unknown {
+  const sanitized = sanitizeParams(params);
+  if (
+    typeof sanitized === 'object' &&
+    sanitized !== null &&
+    '_note' in sanitized
+  ) {
+    logger.debug('Parameters were sanitized due to serialization issues');
+  }
+  return sanitized;
 }

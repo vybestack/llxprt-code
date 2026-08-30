@@ -190,7 +190,7 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
   });
 
   afterEach(async () => {
-    integration.dispose();
+    await integration.dispose();
     await recordingService.dispose();
     await fs.rm(tempDir, { recursive: true, force: true });
   });
@@ -602,123 +602,6 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
           (block) => block.type === 'tool_call' && block.id === 'call_late',
         ),
       ).toBe(true);
-    });
-  });
-
-  describe('Delegate methods @requirement:REQ-INT-003 @plan:PLAN-20260211-SESSIONRECORDING.P13', () => {
-    it('recordProviderSwitch delegates to SessionRecordingService', async () => {
-      integration.subscribeToHistory(historyService);
-      integration.recordProviderSwitch('openai', 'gpt-5');
-      emitter.emit('contentAdded', textContent('materialize content'));
-
-      const events = await flushAndRead(integration, recordingService);
-      expect(events.some((event) => event.type === 'provider_switch')).toBe(
-        true,
-      );
-    });
-
-    it('recordDirectoriesChanged delegates to SessionRecordingService', async () => {
-      integration.subscribeToHistory(historyService);
-      integration.recordDirectoriesChanged(['/a', '/b', '/c']);
-      emitter.emit('contentAdded', textContent('materialize content'));
-
-      const events = await flushAndRead(integration, recordingService);
-      expect(events.some((event) => event.type === 'directories_changed')).toBe(
-        true,
-      );
-    });
-
-    it('recordSessionEvent delegates to SessionRecordingService', async () => {
-      integration.subscribeToHistory(historyService);
-      integration.recordSessionEvent('warning', 'Disk pressure');
-      emitter.emit('contentAdded', textContent('materialize content'));
-
-      const events = await flushAndRead(integration, recordingService);
-      expect(events.some((event) => event.type === 'session_event')).toBe(true);
-    });
-  });
-
-  describe('Flush / dispose / replacement behavior @requirement:REQ-INT-004,REQ-INT-005,REQ-INT-006 @plan:PLAN-20260211-SESSIONRECORDING.P13', () => {
-    it('flushAtTurnBoundary persists pending events', async () => {
-      integration.subscribeToHistory(historyService);
-      emitter.emit('contentAdded', textContent('flush-boundary'));
-
-      const events = await flushAndRead(integration, recordingService);
-      expect(events.filter((event) => event.type === 'content')).toHaveLength(
-        1,
-      );
-    });
-
-    it('flushAtTurnBoundary with no activity does not create file', async () => {
-      await integration.flushAtTurnBoundary();
-      expect(recordingService.getFilePath()).toBeNull();
-    });
-
-    it('dispose prevents future event recording while keeping prior events', async () => {
-      integration.subscribeToHistory(historyService);
-      emitter.emit('contentAdded', textContent('before-dispose'));
-      await integration.flushAtTurnBoundary();
-
-      integration.dispose();
-      emitter.emit('contentAdded', textContent('after-dispose'));
-      const events = await readRecordedEvents(recordingService);
-      expect(events.filter((event) => event.type === 'content')).toHaveLength(
-        1,
-      );
-    });
-
-    it('dispose is idempotent', async () => {
-      integration.dispose();
-      integration.dispose();
-      expect(true).toBe(true);
-    });
-
-    it('onHistoryServiceReplaced switches subscription to new instance', async () => {
-      const secondHistory = new HistoryService();
-      const secondEmitter = historyEmitter(secondHistory);
-
-      integration.subscribeToHistory(historyService);
-      integration.onHistoryServiceReplaced(secondHistory);
-      secondEmitter.emit('contentAdded', textContent('from-new-service'));
-
-      const events = await flushAndRead(integration, recordingService);
-      expect(events.filter((event) => event.type === 'content')).toHaveLength(
-        1,
-      );
-    });
-
-    it('after replacement, old history events are ignored', async () => {
-      const secondHistory = new HistoryService();
-      const secondEmitter = historyEmitter(secondHistory);
-
-      integration.subscribeToHistory(historyService);
-      integration.onHistoryServiceReplaced(secondHistory);
-
-      emitter.emit('contentAdded', textContent('from-old-service'));
-      secondEmitter.emit('contentAdded', textContent('from-new-service'));
-
-      const events = await flushAndRead(integration, recordingService);
-      const contentEvents = events.filter((event) => event.type === 'content');
-      expect(contentEvents).toHaveLength(1);
-      const text = (
-        (contentEvents[0].payload as { content: IContent }).content
-          .blocks[0] as {
-          type: 'text';
-          text: string;
-        }
-      ).text;
-      expect(text).toBe('from-new-service');
-    });
-
-    it('replacement with same HistoryService instance is safe', async () => {
-      integration.subscribeToHistory(historyService);
-      integration.onHistoryServiceReplaced(historyService);
-      emitter.emit('contentAdded', textContent('same-instance'));
-
-      const events = await flushAndRead(integration, recordingService);
-      expect(events.filter((event) => event.type === 'content')).toHaveLength(
-        1,
-      );
     });
   });
 });

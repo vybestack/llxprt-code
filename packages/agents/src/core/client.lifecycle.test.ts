@@ -20,6 +20,11 @@ import {
   type Mock,
 } from 'bun:test';
 import { AgentClient } from './client.js';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
@@ -215,8 +220,10 @@ void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
 
 describe('AgentClient (client.ts)', () => {
   let client: AgentClient;
+  let directory: string;
 
   beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), 'agent-client-lifecycle-'));
     const ctx = await setupAgentClient({
       mockChatCreateFn,
       mockGenerateContentFn,
@@ -234,15 +241,25 @@ describe('AgentClient (client.ts)', () => {
     todoStoreWritePausedMock.mockResolvedValue(undefined);
   });
 
-  afterEach(() => {
-    client.dispose();
+  afterEach(async () => {
+    await client.dispose();
     vi.restoreAllMocks();
+    await rm(directory, { recursive: true, force: true });
   });
 
   describe('setHistory', () => {
     it('should strip thought signatures when stripThoughts is true', async () => {
+      let retainedHistory: readonly IContent[] = [];
       const mockChat = {
-        setHistory: vi.fn(),
+        async setHistory(history: readonly IContent[]): Promise<void> {
+          retainedHistory = history;
+        },
+        getHistory(): readonly IContent[] {
+          return retainedHistory;
+        },
+        async clearHistory(): Promise<void> {
+          retainedHistory = [];
+        },
       };
       client['chat'] = mockChat as unknown as ChatSession;
 
@@ -285,12 +302,21 @@ describe('AgentClient (client.ts)', () => {
         },
       ];
 
-      expect(mockChat.setHistory).toHaveBeenCalledWith(expectedHistory);
+      expect(retainedHistory).toEqual(expectedHistory);
     });
 
     it('should not strip thought signatures when stripThoughts is false', async () => {
+      let retainedHistory: readonly IContent[] = [];
       const mockChat = {
-        setHistory: vi.fn(),
+        async setHistory(history: readonly IContent[]): Promise<void> {
+          retainedHistory = history;
+        },
+        getHistory(): readonly IContent[] {
+          return retainedHistory;
+        },
+        async clearHistory(): Promise<void> {
+          retainedHistory = [];
+        },
       };
       client['chat'] = mockChat as unknown as ChatSession;
 
@@ -318,27 +344,7 @@ describe('AgentClient (client.ts)', () => {
 
       await client.setHistory(historyWithThoughts, { stripThoughts: false });
 
-      expect(mockChat.setHistory).toHaveBeenCalledWith(historyWithThoughts);
-    });
-
-    it('should store history for later use when chat is not initialized', async () => {
-      // Arrange
-      client['chat'] = undefined; // Chat not initialized
-      vi.spyOn(client, 'hasChatInitialized').mockReturnValue(false);
-
-      const history: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'hello' }],
-        },
-      ];
-
-      // Act
-      await client.setHistory(history);
-
-      // Assert
-      expect(client['_previousHistory']).toStrictEqual(history);
-      expect(client['ideContextTracker']['forceFullIdeContext']).toBe(true);
+      expect(retainedHistory).toEqual(historyWithThoughts);
     });
 
     it('returns history from a stored history service after profile invalidation', async () => {
@@ -373,11 +379,19 @@ describe('AgentClient (client.ts)', () => {
 
     it('should update chat immediately when chat is initialized', async () => {
       // Arrange
+      let retainedHistory: readonly IContent[] = [];
       const mockChat = {
-        setHistory: vi.fn(),
+        async setHistory(history: readonly IContent[]): Promise<void> {
+          retainedHistory = history;
+        },
+        getHistory(): readonly IContent[] {
+          return retainedHistory;
+        },
+        async clearHistory(): Promise<void> {
+          retainedHistory = [];
+        },
       };
       client['chat'] = mockChat as unknown as ChatSession;
-      vi.spyOn(client, 'hasChatInitialized').mockReturnValue(true);
 
       const history: IContent[] = [
         {
@@ -390,18 +404,26 @@ describe('AgentClient (client.ts)', () => {
       await client.setHistory(history);
 
       // Assert
-      expect(mockChat.setHistory).toHaveBeenCalledWith(history);
+      expect(retainedHistory).toEqual(history);
       expect(client['_previousHistory']).toStrictEqual(history);
       expect(client['ideContextTracker']['forceFullIdeContext']).toBe(true);
     });
 
     it('should reset IDE context tracking when history changes', async () => {
       // Arrange
+      let retainedHistory: readonly IContent[] = [];
       const mockChat = {
-        setHistory: vi.fn(),
+        async setHistory(history: readonly IContent[]): Promise<void> {
+          retainedHistory = history;
+        },
+        getHistory(): readonly IContent[] {
+          return retainedHistory;
+        },
+        async clearHistory(): Promise<void> {
+          retainedHistory = [];
+        },
       };
       client['chat'] = mockChat as unknown as ChatSession;
-      vi.spyOn(client, 'hasChatInitialized').mockReturnValue(true);
 
       const history: IContent[] = [
         {
@@ -417,10 +439,66 @@ describe('AgentClient (client.ts)', () => {
       await client.setHistory(history);
 
       // Assert
+      expect(retainedHistory).toEqual(history);
       expect(client['ideContextTracker']['forceFullIdeContext']).toBe(true);
     });
   });
 
+  describe('restoreHistory media admission lifecycle', () => {
+    it('releases restored-history media when adding admitted history fails', async () => {
+      const directory = await mkdtemp(
+        join(tmpdir(), 'client-restore-history-'),
+      );
+      try {
+        const store = new LocalMediaStore({
+          rootDirectory: join(directory, 'media'),
+          quotaBytes: 1024 * 1024,
+        });
+        client['config'].getLocalMediaStore = () => store;
+        const initializedChat = client['chat'];
+        if (initializedChat === undefined) throw new Error('Expected chat');
+        const historyService = new HistoryService();
+        historyService.replaceBatch = async () => {
+          throw new Error('history add failed');
+        };
+        initializedChat.getHistoryService = () => historyService;
+        const mediaHistory: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [
+              {
+                type: 'media',
+                mimeType: 'image/png',
+                encoding: 'base64',
+                data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=',
+              },
+            ],
+          },
+        ];
+
+        await expect(client.restoreHistory(mediaHistory)).rejects.toThrow(
+          'history add failed',
+        );
+
+        const admission = new MediaAdmissionService(store);
+        const probe = await admission.admitContents(mediaHistory, {
+          turnId: 'probe',
+          source: 'probe',
+        });
+        const block = probe[0]?.blocks[0];
+        if (block.type !== 'media' || block.encoding !== 'reference') {
+          throw new Error('Expected probe media reference');
+        }
+        await admission.releaseContents(probe, {
+          turnId: 'probe',
+          source: 'probe',
+        });
+        expect(await store.hasReservations(block.contentId)).toBe(false);
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+  });
   describe('interactionMode wiring', () => {
     it('passes interactionMode interactive when config.isInteractive() returns true', async () => {
       const setSystemInstruction = vi.fn();

@@ -38,6 +38,7 @@ import type { EventEmitter } from 'node:events';
 
 import { HistoryService } from '../services/history/HistoryService.js';
 import { type IContent } from '../services/history/IContent.js';
+import { LocalMediaStore } from '../storage/local-media-store.js';
 import { RecordingIntegration } from './RecordingIntegration.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
 import { replaySession } from './ReplayEngine.js';
@@ -147,7 +148,7 @@ async function withFreshHarness(
       emitter,
     });
   } finally {
-    integration.dispose();
+    await integration.dispose();
     await recordingService.dispose();
     await fs.rm(tempDir, { recursive: true, force: true });
   }
@@ -173,7 +174,7 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
   });
 
   afterEach(async () => {
-    integration.dispose();
+    await integration.dispose();
     await recordingService.dispose();
     await fs.rm(tempDir, { recursive: true, force: true });
   });
@@ -191,6 +192,91 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
       const replay = await replaySession(filePath!, PROJECT_HASH);
       assertReplayOk(replay);
       expect(replay.history).toHaveLength(2);
+    });
+
+    it('preserves legacy inline media while replaying with a media store', async () => {
+      const mediaStore = new LocalMediaStore({
+        rootDirectory: path.join(tempDir, 'media'),
+        quotaBytes: 1024,
+      });
+      const legacyContent: IContent = {
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'media',
+            encoding: 'base64',
+            mimeType: 'image/png; charset=utf-8',
+            data: 'AQIDBA==',
+          },
+        ],
+      };
+      integration.subscribeToHistory(historyService);
+      emitter.emit('contentAdded', legacyContent);
+      await integration.flushAtTurnBoundary();
+
+      const filePath = recordingService.getFilePath();
+      if (filePath === null) throw new Error('Expected recording path');
+      const replay = await replaySession(filePath, PROJECT_HASH, {
+        mediaStore,
+      });
+      assertReplayOk(replay);
+      const content = replay.history.find((_entry, index) => index === 0);
+      const block = content?.blocks.find((_entry, index) => index === 0);
+      if (block === undefined) throw new Error('Expected replayed media block');
+      if (block.type !== 'media') throw new Error('Expected replayed media');
+
+      expect(block.encoding).toBe('base64');
+      expect(block).toEqual({
+        type: 'media',
+        encoding: 'base64',
+        mimeType: 'image/png; charset=utf-8',
+        data: 'AQIDBA==',
+      });
+    });
+
+    it('verifies reference media during replay without retaining a replay reservation', async () => {
+      const mediaStore = new LocalMediaStore({
+        rootDirectory: path.join(tempDir, 'reference-media'),
+        quotaBytes: 1024,
+      });
+      const expectedBytes = new Uint8Array([1, 2, 3, 4]);
+      const reference = await mediaStore.admit({
+        bytes: expectedBytes,
+        mimeType: 'image/png',
+        semanticMetadata: {},
+      });
+      integration.subscribeToHistory(historyService);
+      emitter.emit('contentAdded', {
+        speaker: 'human',
+        blocks: [reference],
+      } satisfies IContent);
+      await integration.flushAtTurnBoundary();
+
+      const filePath = recordingService.getFilePath();
+      if (filePath === null) throw new Error('Expected recording path');
+      const replay = await replaySession(filePath, PROJECT_HASH, {
+        mediaStore,
+      });
+
+      assertReplayOk(replay);
+      const replayedContent = replay.history.find(
+        (_entry, index) => index === 0,
+      );
+      const replayedBlock = replayedContent?.blocks.find(
+        (_entry, index) => index === 0,
+      );
+      if (
+        replayedBlock === undefined ||
+        replayedBlock.type !== 'media' ||
+        replayedBlock.encoding !== 'reference'
+      ) {
+        throw new Error('Expected replayed media reference');
+      }
+      const replayedBytes = await mediaStore.readVerified(replayedBlock);
+
+      expect(replayedBlock.contentId).toBe(reference.contentId);
+      expect(replayedBytes).toEqual(expectedBytes);
+      expect(await mediaStore.hasReservations(reference.contentId)).toBe(false);
     });
 
     it('replay applies compression semantics (summary + post-compression)', async () => {
@@ -284,7 +370,7 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
   describe('Edge cases @requirement:REQ-INT-004,REQ-INT-007 @plan:PLAN-20260211-SESSIONRECORDING.P13', () => {
     it('empty session without content leaves no file on disk', async () => {
       await integration.flushAtTurnBoundary();
-      integration.dispose();
+      await integration.dispose();
       expect(recordingService.getFilePath()).toBeNull();
     });
 
@@ -649,7 +735,7 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
               }
               await harness.integration.flushAtTurnBoundary();
 
-              harness.integration.dispose();
+              await harness.integration.dispose();
               for (const message of afterDispose) {
                 harness.emitter.emit('contentAdded', textContent(message));
               }

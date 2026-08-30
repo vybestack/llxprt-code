@@ -48,10 +48,17 @@ function validHash64(): string {
 function createMinimalConfig(
   sessionId: string,
   debugMode = false,
-): Pick<Config, 'getSessionId' | 'getDebugMode'> {
+): {
+  getSessionId: () => string;
+  getDebugMode: () => boolean;
+  getAgentClient: () => { getHistory: () => Promise<[]> };
+} {
   return {
     getSessionId: () => sessionId,
     getDebugMode: () => debugMode,
+    getAgentClient: () => ({
+      getHistory: async () => [],
+    }),
   };
 }
 

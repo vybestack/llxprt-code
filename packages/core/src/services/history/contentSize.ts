@@ -189,12 +189,32 @@ export function estimateBlockBytesTracked(
       total += optionalStringBytes(block.streamStatus);
       break;
     case 'media':
-      // `data` is the payload: a base64 body or a URL.
-      total += requiredStringBytes(block.data);
       total += requiredStringBytes(block.mimeType);
       total += requiredStringBytes(block.encoding);
       total += optionalStringBytes(block.caption);
       total += optionalStringBytes(block.filename);
+      if (block.providerFiles !== undefined) {
+        total += estimateValueBytes(block.providerFiles, 1, seen);
+      }
+      if (block.encoding !== 'reference') {
+        total += requiredStringBytes(block.data);
+        break;
+      }
+      total += block.normalizedBase64Length;
+      total += requiredStringBytes(block.contentId);
+      total += requiredStringBytes(block.originalContentId);
+      total += requiredStringBytes(block.selectedContentId);
+      total += VALUE_OVERHEAD_BYTES;
+      total += estimateValueBytes(block.originalObject, 1, seen);
+      total += estimateValueBytes(block.selectedObject, 1, seen);
+      total += estimateValueBytes(block.transformation, 1, seen);
+      if (block.dimensions !== undefined) {
+        total += estimateValueBytes(block.dimensions, 1, seen);
+      }
+      total += estimateValueBytes(block.semanticMetadata, 1, seen);
+      if (block.providerFileIds !== undefined) {
+        total += estimateValueBytes(block.providerFileIds, 1, seen);
+      }
       break;
     case 'tool_call':
       total += requiredStringBytes(block.name);

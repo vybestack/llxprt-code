@@ -479,6 +479,10 @@ describe('processSlashCommand history replay emoji filtering (#2888)', () => {
     deps.config = {
       getEphemeralSetting: vi.fn().mockReturnValue('auto'),
       storage: { getProjectTempDir: vi.fn().mockReturnValue('/tmp/chats') },
+      getSessionRecordingQueueByteLimit: () => 0,
+      createSessionPersistenceService: () => undefined,
+      // #3199 threads the media store through buildResumeContext.
+      getLocalMediaStore: () => undefined,
       getProjectRoot: vi.fn().mockReturnValue('/tmp/project'),
       getSessionId: vi.fn().mockReturnValue('session-1'),
       getProvider: vi.fn().mockReturnValue('test-provider'),

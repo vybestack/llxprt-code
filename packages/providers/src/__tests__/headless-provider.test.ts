@@ -55,6 +55,7 @@ import { createHeadlessProviderManager } from '../composition/headlessFactory.js
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import type { IModel } from '../IModel.js';
+import { createOpenAIRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
 
 describe('headless provider-manager construction (issue #1594)', () => {
   let mockFileSystem: MockFileSystem;
@@ -245,6 +246,7 @@ describe('headless provider-manager construction (issue #1594)', () => {
         'getClient',
       )
       .mockResolvedValue({
+        ...createOpenAIRawPostTestAdapter(mockChatCreate),
         chat: { completions: { create: mockChatCreate } },
       } as unknown as OpenAI);
 

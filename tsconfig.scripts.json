@@ -2,9 +2,15 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "allowImportingTsExtensions": true,
+    "baseUrl": ".",
     "composite": false,
     "incremental": false,
+    "lib": ["DOM", "DOM.Iterable", "ES2023"],
     "noEmit": true,
+    "paths": {
+      "@vybestack/llxprt-code-core": ["packages/core/index.ts"],
+      "@vybestack/llxprt-code-core/*": ["packages/core/src/*"]
+    },
     "types": ["node", "bun"]
   },
   "include": [
@@ -123,6 +129,12 @@
     "scripts/codemod-import-type-annotations.ts",
     "scripts/issue2208-noninteractive-repro.ts",
     "scripts/issue2208-tui-repro.ts",
+    "scripts/issue-3199-media-memory-benchmark.ts",
+    "scripts/issue-3199-media-memory-lifecycle.ts",
+    "scripts/issue-3199-media-memory-runner.ts",
+    "scripts/issue-3199-media-memory-target.ts",
+    "scripts/tests/issue-3199-media-memory-benchmark.test.ts",
+    "scripts/tests/issue-3199-media-memory-lifecycle.test.ts",
     "scripts/lint.ts",
     "scripts/local_telemetry.ts",
     "scripts/ocr-benchmark.ts",

@@ -37,10 +37,9 @@ import { ConfigBase } from './configBase.js';
 import {
   buildNewContentGeneratorConfig,
   createDetachedAgentClient,
-  disposePreviousAgentClient,
   extractExistingState,
+  prepareAgentClientReplacement,
   requireAgentClientFactory,
-  transferHistoryToNewClient,
 } from './agentClientLifecycle.js';
 import { syncActivateMcpServerTool } from './mcp-lazy-tool-sync.js';
 import { syncSkillActivationTool } from './skill-tool-sync.js';
@@ -277,8 +276,8 @@ export class Config extends ConfigBase {
    * from the session's primary agent client and with its tool set cleared.
    * Used for one-shot operations such as subagent auto-prompt generation.
    */
-  createDetachedAgentClient(runtimeId?: string): AgentClientContract {
-    return createDetachedAgentClient(this, runtimeId);
+  async createDetachedAgentClient(id?: string): Promise<AgentClientContract> {
+    return createDetachedAgentClient(this, id);
   }
 
   private registerSubagents(): void {
@@ -335,20 +334,18 @@ export class Config extends ConfigBase {
     );
     const newAgentClient = clientFactory(this, this.runtimeState);
 
-    transferHistoryToNewClient(
+    await prepareAgentClientReplacement(
       logger,
       newAgentClient,
+      previousAgentClient,
       existingHistory,
       existingHistoryService,
       newContentGeneratorConfig,
       this.getContentGeneratorConfig()?.vertexai,
     );
-
-    await newAgentClient.initialize(newContentGeneratorConfig);
     logger.debug('New client initialized');
 
     this.contentGeneratorConfig = newContentGeneratorConfig;
-    disposePreviousAgentClient(logger, previousAgentClient);
     this.agentClient = newAgentClient;
 
     const newHistory = await this.agentClient.getHistory();
@@ -969,7 +966,7 @@ export class Config extends ConfigBase {
     const client = this.agentClient as AgentClientContract | undefined;
     if (client !== undefined) {
       try {
-        client.dispose();
+        await client.dispose();
       } catch (error) {
         failures.push(error);
       }

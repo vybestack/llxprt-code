@@ -230,13 +230,14 @@ export class ConversationManager {
    *   the original input shape (for example after eagerly recorded tool
    *   responses are removed before history finalization).
    */
-  recordHistory(
+  async recordHistory(
     userInput: IContent | IContent[],
     modelOutput: IContent[],
     automaticFunctionCallingHistory?: IContent[],
     usageMetadata?: UsageStats | null,
     options?: RecordHistoryOptions,
-  ): void {
+    afterPublication?: () => void | Promise<void>,
+  ): Promise<void> {
     const newHistoryEntries: IContent[] = [];
 
     const userContent: IContent | IContent[] = userInput;
@@ -283,10 +284,9 @@ export class ConversationManager {
       this.baseURL,
     );
 
-    // Add all entries to history service
-    for (const entry of newHistoryEntries) {
-      this.historyService.add(entry, generatingModel);
-    }
+    await this.historyService.addBatch(newHistoryEntries, generatingModel, {
+      ...(afterPublication === undefined ? {} : { afterPublication }),
+    });
   }
 
   /**
@@ -582,21 +582,21 @@ export class ConversationManager {
   /**
    * Sets the full chat history, replacing any existing history.
    */
-  setHistory(history: readonly IContent[]): void {
+  async setHistory(history: readonly IContent[]): Promise<void> {
     // The second argument to historyService.add is only a logging/token-
     // estimation hint, not attribution. This is a restore path that may run
     // before any provider is active, so read the runtime-state model directly
     // rather than resolving the active provider (issue #2511).
     const generatingModel = this.runtimeContext.state.model;
-    this.historyService.clear();
-    this.historyService.resetCacheAnchorSeq();
-    for (const content of history) {
+    const restored = history.map((content) => {
       const turnKey = this.historyService.generateTurnKey();
-      this.historyService.add(
-        { ...content, metadata: { ...content.metadata, turnId: turnKey } },
-        generatingModel,
-      );
-    }
+      return {
+        ...content,
+        metadata: { ...content.metadata, turnId: turnKey },
+      };
+    });
+    await this.historyService.replaceBatch(restored, generatingModel);
+    this.historyService.resetCacheAnchorSeq();
   }
 
   /**

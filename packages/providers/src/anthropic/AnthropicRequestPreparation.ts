@@ -12,7 +12,10 @@
  */
 
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  IContent,
+  SemanticMediaPurgeCacheWriteEvidence,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { IProviderConfig } from '../types/IProviderConfig.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -20,6 +23,10 @@ import type { ProviderToolset } from '../IProvider.js';
 import type { AnthropicMessage } from './AnthropicMessageNormalizer.js';
 import { convertToAnthropicMessages } from './AnthropicMessageNormalizer.js';
 import { attachAnchorCacheControl } from './AnthropicAnchorCache.js';
+import {
+  attachMediaPurgeCacheControl,
+  clearMediaPurgeBoundaryTags,
+} from './AnthropicMediaPurgeCache.js';
 import { convertToolsToAnthropic } from './schemaConverter.js';
 import {
   buildAnthropicSystemPrompt,
@@ -60,6 +67,9 @@ export interface AnthropicRequestContext {
   maxAttempts: number;
   initialDelayMs: number;
   cacheLogger: { debug: (fn: () => string) => void };
+  semanticMediaPurgeCacheWriteEvidence:
+    | SemanticMediaPurgeCacheWriteEvidence
+    | undefined;
 }
 
 /**
@@ -104,6 +114,21 @@ function readInvocationRecord(
   record: Readonly<Record<string, unknown>> | undefined,
 ): Readonly<Record<string, unknown>> {
   return record ?? {};
+}
+
+type SemanticMediaPurgeMode = 'off' | 'remove' | 'summary';
+
+function resolveSemanticMediaPurgeMode(
+  options: NormalizedGenerateChatOptions,
+): SemanticMediaPurgeMode {
+  const value = resolveCliSetting<unknown>(options, 'media.semantic-purge');
+  if (value === undefined || value === 'off') return 'off';
+  if (value === 'remove' || value === 'summary') return value;
+  const received =
+    typeof value === 'string' ? JSON.stringify(value) : typeof value;
+  throw new Error(
+    `Invalid media.semantic-purge setting: expected 'off', 'remove', or 'summary'; received ${received}`,
+  );
 }
 
 /**
@@ -590,6 +615,38 @@ function logRequestDebugInfo(params: {
   }
 }
 
+function applyRequestCacheControls(params: {
+  readonly systemContext: SystemContextResult;
+  readonly requestSettings: RequestSettings;
+  readonly cacheLogger: { debug: (fn: () => string) => void };
+  readonly wantCaching: boolean;
+  readonly wantMediaPurgeCacheAnchor: boolean;
+}): SemanticMediaPurgeCacheWriteEvidence | undefined {
+  if (!params.wantCaching) {
+    clearMediaPurgeBoundaryTags(params.systemContext.messages);
+    return undefined;
+  }
+  attachPromptCaching(
+    params.systemContext.messages,
+    params.requestSettings.ttl,
+    params.cacheLogger,
+  );
+  attachAnchorCacheControl(
+    params.systemContext.messages,
+    params.requestSettings.ttl,
+    params.cacheLogger,
+  );
+  if (!params.wantMediaPurgeCacheAnchor) {
+    clearMediaPurgeBoundaryTags(params.systemContext.messages);
+    return undefined;
+  }
+  return attachMediaPurgeCacheControl(
+    params.systemContext.messages,
+    params.requestSettings.ttl,
+    params.cacheLogger,
+  );
+}
+
 function buildRequestContext(params: {
   reasoningSettings: ReasoningSettings;
   requestSettings: RequestSettings;
@@ -603,6 +660,7 @@ function buildRequestContext(params: {
   toolsLogger: DebugLogger;
   logger: DebugLogger;
   wantCaching: boolean;
+  wantMediaPurgeCacheAnchor: boolean;
 }): AnthropicRequestContext {
   const {
     reasoningSettings,
@@ -615,28 +673,16 @@ function buildRequestContext(params: {
     toolsLogger,
     logger,
     wantCaching,
+    wantMediaPurgeCacheAnchor,
   } = params;
 
-  // Issue #2410: use the effective caching flag (already gated on whether the
-  // base URL is a native Anthropic endpoint) for both system-field and
-  // message-level cache_control injection.
-  if (wantCaching) {
-    attachPromptCaching(
-      systemContext.messages,
-      requestSettings.ttl,
-      cacheLogger,
-    );
-    // Issue #3070: spend a third breakpoint at the preserved-head boundary so
-    // the byte-stable compressed head is READ from cache instead of re-billed
-    // at cache-WRITE pricing. Runs after the rolling-tail breakpoint so the
-    // two are never placed on the same block. Gated on the same native-base-URL
-    // flag as the other breakpoints (third-party gateways stay unchanged).
-    attachAnchorCacheControl(
-      systemContext.messages,
-      requestSettings.ttl,
-      cacheLogger,
-    );
-  }
+  const semanticMediaPurgeCacheWriteEvidence = applyRequestCacheControls({
+    systemContext,
+    requestSettings,
+    cacheLogger,
+    wantCaching,
+    wantMediaPurgeCacheAnchor,
+  });
 
   const requestBody = buildThinkingAndRequestBody({
     currentModel: requestSettings.currentModel,
@@ -674,6 +720,7 @@ function buildRequestContext(params: {
     maxAttempts,
     initialDelayMs,
     cacheLogger,
+    semanticMediaPurgeCacheWriteEvidence,
   };
 }
 
@@ -683,6 +730,7 @@ function buildRequestContext(params: {
 export async function prepareAnthropicRequest(
   params: PrepareRequestParams,
 ): Promise<AnthropicRequestContext> {
+  const semanticMediaPurgeMode = resolveSemanticMediaPurgeMode(params.options);
   const reasoningSettings = resolveReasoningSettings(params.options);
 
   params.logger.debug(
@@ -768,5 +816,8 @@ export async function prepareAnthropicRequest(
     toolsLogger: params.toolsLogger,
     logger: params.logger,
     wantCaching: effectiveWantCaching,
+    wantMediaPurgeCacheAnchor:
+      semanticMediaPurgeMode === 'remove' ||
+      semanticMediaPurgeMode === 'summary',
   });
 }

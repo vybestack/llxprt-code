@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import { TokenUsageLogger } from './TokenUsageLogger.js';
+import * as nodePath from 'node:path';
+
 /**
  * Shared helpers for ChatSession token-sync test files. Extracted from the
  * original monolithic chatSession.tokenSync.test.ts so no file-level
@@ -113,3 +117,31 @@ export function createTokenSyncTestFixture(): TokenSyncTestFixture {
 }
 
 export { providerRuntime };
+
+export function createTokenUsageLogger(
+  view: AgentRuntimeContext,
+): TokenUsageLogger {
+  const settingsService = view.providerRuntime.settingsService;
+  const tokenUsageEnabled = settingsService.get('token-usage-log') !== false;
+  const config = view.providerRuntime.config;
+  const sessionId = view.state.sessionId;
+  let logFilePath: string | undefined;
+  if (tokenUsageEnabled && config) {
+    try {
+      const tempDir = config.getProjectTempDir();
+      if (tempDir) {
+        logFilePath = nodePath.join(
+          tempDir,
+          'token-usage',
+          `${sessionId}.jsonl`,
+        );
+      }
+    } catch {
+      // Storage unavailable — logging disabled
+    }
+  }
+  return new TokenUsageLogger(
+    tokenUsageEnabled && logFilePath !== undefined,
+    logFilePath,
+  );
+}

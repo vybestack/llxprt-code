@@ -210,6 +210,7 @@ describe('dumpcontextCommand', () => {
         'anthropic',
         undefined,
         [],
+        { media: 'raw' },
       );
       expect(result).toStrictEqual({
         type: 'message',
@@ -266,6 +267,7 @@ describe('dumpcontextCommand', () => {
         'anthropic',
         undefined,
         [],
+        { media: 'raw' },
       );
       expect(result).toStrictEqual({
         type: 'message',

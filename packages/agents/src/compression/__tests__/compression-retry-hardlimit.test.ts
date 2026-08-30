@@ -743,6 +743,12 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
         }
       ).compressionHandler.lastPromptTokenCount,
     ).toBeNull();
+
+    const history = chat.getHistoryService().getAll();
+    expect(history).toHaveLength(1);
+    const [content] = history;
+    expect(content.speaker).toBe('human');
+    expect(content.blocks).toEqual([{ type: 'text', text: 'truncated' }]);
   });
 
   /**

@@ -41,6 +41,7 @@ import {
   BaseProvider,
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
+import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { convertToolsToOpenAIVercel } from './schemaConverter.js';
 import { type IModel } from '../IModel.js';
@@ -48,6 +49,7 @@ import { type IProvider } from '../IProvider.js';
 import { convertToVercelMessages } from './messageConversion.js';
 import { getToolIdStrategy } from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
 import { isQwenBaseURL } from '../utils/qwenEndpoint.js';
+import { isAbortSignal } from '../utils/abortSignal.js';
 import { shouldRetryOnStatus } from '../utils/retryStrategy.js';
 import { filterThinkingForContext } from '../reasoning/reasoningUtils.js';
 import { resolveToolFormat } from '../utils/toolFormatDetection.js';
@@ -59,6 +61,12 @@ import {
 } from './vercelRequestParams.js';
 import { resolveSystemPrompt } from './vercelSystemPrompt.js';
 import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
+import {
+  finishMediaRequest,
+  type MediaRequestOutcome,
+  resolveRequestMedia,
+} from '../utils/request-media-resolution.js';
+import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import {
   createCaptureBuffer,
   type CaptureBuffer,
@@ -90,6 +98,18 @@ import {
 /**
  * Vercel OpenAI-based provider using AI SDK v5.
  */
+interface VercelMediaPreparation {
+  readonly mediaRequest: ResolvedMediaRequest;
+  readonly effectiveOptions: NormalizedGenerateChatOptions;
+}
+
+function resolveAbortSignal(
+  metadata: Record<string, unknown>,
+): AbortSignal | undefined {
+  const signal = metadata['abortSignal'];
+  return isAbortSignal(signal) ? signal : undefined;
+}
+
 export class OpenAIVercelProvider extends BaseProvider implements IProvider {
   private getLogger(): DebugLogger {
     return new DebugLogger('llxprt:provider:openaivercel');
@@ -115,6 +135,8 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         baseURL,
         envKeyNames: ['OPENAI_API_KEY'],
         isOAuthEnabled: false,
+        mediaTransportCapabilities:
+          declaredMediaTransportCapabilities('openaivercel'),
       },
       config,
     );
@@ -147,6 +169,28 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     return convertToVercelMessages(contents, toolIdMapper, options);
   }
 
+  private async resolveMediaPreparation(
+    options: NormalizedGenerateChatOptions,
+  ): Promise<VercelMediaPreparation> {
+    requireAssembledSystemInstruction(options.systemInstruction);
+    const mediaRequest = await resolveRequestMedia(
+      options.runtime,
+      options.contents,
+      options.invocation.signal,
+    );
+    try {
+      return {
+        mediaRequest,
+        effectiveOptions: {
+          ...options,
+          contents: mediaRequest.withContents((contents) => contents),
+        },
+      };
+    } catch (error) {
+      return finishMediaRequest(mediaRequest, { status: 'failed', error });
+    }
+  }
+
   private getClientConfig(
     options: NormalizedGenerateChatOptions,
   ): ProviderClientConfig {
@@ -160,6 +204,21 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     };
   }
 
+  private convertRequestContents(
+    options: NormalizedGenerateChatOptions,
+    modelId: string,
+    reasoning: ReturnType<typeof resolveReasoningSettings>,
+  ): ModelMessage[] {
+    const stripPolicy = reasoning.enabled ? reasoning.stripFromContext : 'all';
+    return this.convertToModelMessages(
+      filterThinkingForContext(options.contents, stripPolicy),
+      {
+        includeReasoningInContext: reasoning.includeInContext,
+        resolvedModel: modelId,
+      },
+    );
+  }
+
   /**
    * Core chat completion implementation using AI SDK v5.
    */
@@ -167,84 +226,84 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
     const logger = this.getLogger();
-    const { contents, tools, metadata } = options;
     const modelId = options.resolved.model || this.getDefaultModel();
-    const abortSignal = metadata['abortSignal'] as AbortSignal | undefined;
+    const materializedMessages: ModelMessage[] = [];
 
-    // Issue #3136: the agent layer owns system-prompt assembly. Fail fast
-    // before any request preparation so a missing instruction is never
-    // silently transported as an empty prompt.
-    requireAssembledSystemInstruction(options.systemInstruction);
+    const { mediaRequest, effectiveOptions } =
+      await this.resolveMediaPreparation(options);
+    let outcome: MediaRequestOutcome = { status: 'succeeded' };
+    try {
+      const { tools, metadata } = effectiveOptions;
+      const abortSignal = resolveAbortSignal(metadata);
+      logRequestContext(logger, this.name, effectiveOptions, modelId, metadata);
 
-    logRequestContext(logger, this.name, options, modelId, metadata);
+      const rs = resolveReasoningSettings(effectiveOptions);
+      const streamingEnabled = resolveStreamingEnabled(effectiveOptions);
+      const systemPrompt = resolveSystemPrompt(effectiveOptions);
+      materializedMessages.push(
+        ...this.convertRequestContents(effectiveOptions, modelId, rs),
+      );
 
-    const rs = resolveReasoningSettings(options);
-    const streamingEnabled = resolveStreamingEnabled(options);
-    const systemPrompt = resolveSystemPrompt(options);
-    const stripPolicy = rs.enabled ? rs.stripFromContext : 'all';
-    const filteredContents = filterThinkingForContext(contents, stripPolicy);
-    const messages: ModelMessage[] = this.convertToModelMessages(
-      filteredContents,
-      {
-        includeReasoningInContext: rs.includeInContext,
-        resolvedModel: modelId,
-      },
-    );
+      const formattedTools = convertToolsToOpenAIVercel(tools);
+      logChatPayload(logger, materializedMessages, formattedTools ?? undefined);
 
-    const formattedTools = convertToolsToOpenAIVercel(tools);
-    logChatPayload(logger, messages, formattedTools ?? undefined);
-
-    const aiTools = buildVercelTools(formattedTools);
-    const params = resolveModelCallParams(options, metadata, this);
-    const rawFieldName = options.settings.get('reasoning.fieldName') as
-      | string
-      | undefined;
-    const captureBuffer: CaptureBuffer = createCaptureBuffer(rawFieldName);
-    const { model } = await createConfiguredModel(
-      options,
-      this.getClientConfig(options),
-      this.getDefaultModel(),
-      rs.enabled,
-      streamingEnabled,
-      captureBuffer,
-      logger,
-    );
-
-    logSendRequest(
-      logger,
-      modelId,
-      options.resolved,
-      streamingEnabled,
-      aiTools,
-      rs,
-      params.maxOutputTokens,
-      this.getBaseURL(),
-    );
-
-    if (streamingEnabled) {
-      yield* this.executeStreamingRequest(
-        model,
-        systemPrompt,
-        messages,
-        aiTools,
-        params,
-        abortSignal,
-        rs,
+      const aiTools = buildVercelTools(formattedTools);
+      const params = resolveModelCallParams(effectiveOptions, metadata, this);
+      const rawFieldName = effectiveOptions.settings.get(
+        'reasoning.fieldName',
+      ) as string | undefined;
+      const captureBuffer: CaptureBuffer = createCaptureBuffer(rawFieldName);
+      const { model } = await createConfiguredModel(
+        effectiveOptions,
+        this.getClientConfig(effectiveOptions),
+        this.getDefaultModel(),
+        rs.enabled,
+        streamingEnabled,
         captureBuffer,
         logger,
       );
-    } else {
-      yield* this.executeNonStreamingRequest(
-        model,
-        systemPrompt,
-        messages,
-        aiTools,
-        params,
-        abortSignal,
-        rs,
-        formattedTools,
+
+      logSendRequest(
         logger,
+        modelId,
+        effectiveOptions.resolved,
+        streamingEnabled,
+        aiTools,
+        rs,
+        params.maxOutputTokens,
+        this.getBaseURL(),
       );
+
+      if (streamingEnabled) {
+        yield* this.executeStreamingRequest(
+          model,
+          systemPrompt,
+          materializedMessages,
+          aiTools,
+          params,
+          abortSignal,
+          rs,
+          captureBuffer,
+          logger,
+        );
+      } else {
+        yield* this.executeNonStreamingRequest(
+          model,
+          systemPrompt,
+          materializedMessages,
+          aiTools,
+          params,
+          abortSignal,
+          rs,
+          formattedTools,
+          logger,
+        );
+      }
+    } catch (error) {
+      outcome = { status: 'failed', error };
+    } finally {
+      materializedMessages.splice(0);
+      await finishMediaRequest(mediaRequest, outcome);
     }
   }
 

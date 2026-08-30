@@ -444,6 +444,7 @@ function useSessionLoader(props: UseSessionBrowserProps, deps: LoaderDeps) {
       const detailed = await SessionDiscovery.listContinueTargetsDetailed(
         props.chatsDir,
         props.projectHash,
+        props.mediaStore,
       );
       if (currentGen !== deps.generationRef.current) return;
       const filtered = await filterContinueTargets(
@@ -468,6 +469,7 @@ function useSessionLoader(props: UseSessionBrowserProps, deps: LoaderDeps) {
     processSession,
     props.chatsDir,
     props.currentSessionId,
+    props.mediaStore,
     props.projectHash,
   ]);
 }
@@ -685,14 +687,14 @@ async function deleteCheckpointTarget(
   props: UseSessionBrowserProps,
 ): Promise<void> {
   if (props.activeRecording?.getSessionId() === target.source.sessionId) {
-    await new CheckpointService().deleteCheckpoint(
+    await new CheckpointService(props.mediaStore).deleteCheckpoint(
       props.activeRecording,
       props.projectHash,
       target.checkpointId,
     );
     return;
   }
-  await new CheckpointService().deleteCheckpointClosed(
+  await new CheckpointService(props.mediaStore).deleteCheckpointClosed(
     target.source.filePath,
     props.projectHash,
     props.chatsDir,

@@ -108,7 +108,34 @@ export type {
   ProviderMessage,
   ProviderTool,
   ProviderToolCall,
+  ProviderCapabilities,
 } from './types.js';
+export {
+  conservativeMediaTransportCapabilities,
+  declaredMediaTransportCapabilities,
+  type ProviderMediaTransportCapabilities,
+  type RemoteFileRetention,
+  type ZeroDataRetentionImplication,
+} from './providerMediaTransportCapabilities.js';
+export {
+  createProviderFileCredentialHash,
+  createProviderFileWorkspaceScopeId,
+  ProviderFileLifecycle,
+  ProviderFileRetentionLimitError,
+  ProviderFileZeroDataRetentionError,
+  resolveProviderFilePolicy,
+  resolveProviderFilesMode,
+  type ProviderFileCleanupResult,
+  type ProviderFileDeletion,
+  type ProviderFileIdentity,
+  type ProviderFileLease,
+  type ProviderFileLifecycleSnapshot,
+  type ProviderFilePolicy,
+  type ProviderFileReference,
+  type ProviderFileScope,
+  type ProviderFilesMode,
+} from './providerFilePolicy.js';
+export { cleanupProviderFilesForSession } from './runtime/runtimeRegistry.js';
 export type { IProviderConfig } from './types/IProviderConfig.js';
 export type {
   ProviderTelemetryContext,

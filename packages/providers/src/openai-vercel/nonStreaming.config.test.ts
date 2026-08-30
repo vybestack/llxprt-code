@@ -71,16 +71,42 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
     return results;
   }
 
+  function readMessageRoles(request: unknown): string[] {
+    if (
+      typeof request !== 'object' ||
+      request === null ||
+      !('messages' in request) ||
+      !Array.isArray(request.messages)
+    ) {
+      throw new Error('Expected the physical request to contain messages');
+    }
+    return request.messages.map((message: unknown) => {
+      if (
+        typeof message !== 'object' ||
+        message === null ||
+        !('role' in message) ||
+        typeof message.role !== 'string'
+      ) {
+        throw new Error('Expected every physical message to have a role');
+      }
+      return message.role;
+    });
+  }
+
   describe('Message Conversion', () => {
     it('should convert human messages correctly', async () => {
       const { generateText } = await import('ai');
       const mockGenerateText = generateText as ReturnType<typeof vi.fn>;
 
-      mockGenerateText.mockResolvedValue({
-        text: 'Response',
-        toolCalls: [],
-        finishReason: 'stop',
-        usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+      let capturedRoles: string[] = [];
+      mockGenerateText.mockImplementation((request: unknown) => {
+        capturedRoles = readMessageRoles(request);
+        return Promise.resolve({
+          text: 'Response',
+          toolCalls: [],
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+        });
       });
 
       provider = new OpenAIVercelProvider('test-api-key', undefined, {
@@ -107,26 +133,22 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
       const iterator = provider.generateChatCompletion(options);
       await collectResults(iterator);
 
-      expect(mockGenerateText).toHaveBeenCalledWith(
-        expect.objectContaining({
-          messages: expect.arrayContaining([
-            expect.objectContaining({
-              role: 'user',
-            }),
-          ]),
-        }),
-      );
+      expect(capturedRoles).toEqual(['user']);
     });
 
     it('should convert AI messages correctly', async () => {
       const { generateText } = await import('ai');
       const mockGenerateText = generateText as ReturnType<typeof vi.fn>;
 
-      mockGenerateText.mockResolvedValue({
-        text: 'Response',
-        toolCalls: [],
-        finishReason: 'stop',
-        usage: { promptTokens: 20, completionTokens: 5, totalTokens: 25 },
+      let capturedRoles: string[] = [];
+      mockGenerateText.mockImplementation((request: unknown) => {
+        capturedRoles = readMessageRoles(request);
+        return Promise.resolve({
+          text: 'Response',
+          toolCalls: [],
+          finishReason: 'stop',
+          usage: { promptTokens: 20, completionTokens: 5, totalTokens: 25 },
+        });
       });
 
       provider = new OpenAIVercelProvider('test-api-key', undefined, {
@@ -161,26 +183,22 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
       const iterator = provider.generateChatCompletion(options);
       await collectResults(iterator);
 
-      expect(mockGenerateText).toHaveBeenCalledWith(
-        expect.objectContaining({
-          messages: expect.arrayContaining([
-            expect.objectContaining({ role: 'user' }),
-            expect.objectContaining({ role: 'assistant' }),
-            expect.objectContaining({ role: 'user' }),
-          ]),
-        }),
-      );
+      expect(capturedRoles).toEqual(['user', 'assistant', 'user']);
     });
 
     it('should handle tool response messages', async () => {
       const { generateText } = await import('ai');
       const mockGenerateText = generateText as ReturnType<typeof vi.fn>;
 
-      mockGenerateText.mockResolvedValue({
-        text: 'The weather in San Francisco is sunny.',
-        toolCalls: [],
-        finishReason: 'stop',
-        usage: { promptTokens: 50, completionTokens: 10, totalTokens: 60 },
+      let capturedRoles: string[] = [];
+      mockGenerateText.mockImplementation((request: unknown) => {
+        capturedRoles = readMessageRoles(request);
+        return Promise.resolve({
+          text: 'The weather in San Francisco is sunny.',
+          toolCalls: [],
+          finishReason: 'stop',
+          usage: { promptTokens: 50, completionTokens: 10, totalTokens: 60 },
+        });
       });
 
       provider = new OpenAIVercelProvider('test-api-key', undefined, {
@@ -229,13 +247,7 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
       const iterator = provider.generateChatCompletion(options);
       await collectResults(iterator);
 
-      expect(mockGenerateText).toHaveBeenCalledWith(
-        expect.objectContaining({
-          messages: expect.arrayContaining([
-            expect.objectContaining({ role: 'tool' }),
-          ]),
-        }),
-      );
+      expect(capturedRoles).toEqual(['user', 'assistant', 'tool']);
     });
   });
 

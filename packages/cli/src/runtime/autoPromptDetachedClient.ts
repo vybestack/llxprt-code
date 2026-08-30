@@ -13,7 +13,7 @@ import type { AgentClientContract } from '@vybestack/llxprt-code-core';
  * full Config type.
  */
 export interface DetachedAutoPromptClientSource {
-  createDetachedAgentClient?(runtimeId?: string): AgentClientContract;
+  createDetachedAgentClient?(runtimeId?: string): Promise<AgentClientContract>;
 }
 
 /**
@@ -22,9 +22,9 @@ export interface DetachedAutoPromptClientSource {
  * client) and its tool set cleared. Runtime assembly is handled inside
  * {@link Config.createDetachedAgentClient} (core), not in CLI code (#2378).
  */
-export function createDetachedAutoPromptClient(
+export async function createDetachedAutoPromptClient(
   source: DetachedAutoPromptClientSource,
-): AgentClientContract {
+): Promise<AgentClientContract> {
   if (typeof source.createDetachedAgentClient !== 'function') {
     throw new Error(
       'createDetachedAgentClient is not available on this runtime source.',

@@ -31,6 +31,7 @@ import type {
   UserMemoryInput,
 } from './types/providerRuntime.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import type { ProviderMediaTransportCapabilities } from './providerMediaTransportCapabilities.js';
 
 export type ProviderToolset = Array<{
   functionDeclarations: Array<{
@@ -104,6 +105,7 @@ export interface IProvider {
   name: string;
   isDefault?: boolean;
   transportAttemptOwnership?: 'provider';
+  getMediaTransportCapabilities?(): ProviderMediaTransportCapabilities;
   getModels(): Promise<IModel[]>;
   /**
    * @plan PLAN-20250218-STATELESSPROVIDER.P04

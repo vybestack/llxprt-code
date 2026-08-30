@@ -49,6 +49,10 @@ import {
 } from './messages.js';
 import { validateRuntimeId } from './runtimeIdValidation.js';
 import { registerActiveRuntimeIdentityResolver } from './active-runtime-identity.js';
+import {
+  ProviderFileLifecycle,
+  type ProviderFileCleanupResult,
+} from '../providerFilePolicy.js';
 
 /**
  * Diagnostic classification of a runtime's provenance. Recorded on each
@@ -75,6 +79,7 @@ export interface RuntimeRegistryEntry {
   providerManager: RuntimeProviderManager | null;
   oauthManager: OAuthManager | null;
   profileManager: ProfileManager | null;
+  providerFileLifecycle: ProviderFileLifecycle;
   metadata: Record<string, unknown>;
 }
 
@@ -252,6 +257,13 @@ export function upsertRuntimeEntry(
       'profileManager',
       current?.profileManager,
     ),
+    providerFileLifecycle:
+      update.providerFileLifecycle ??
+      current?.providerFileLifecycle ??
+      new ProviderFileLifecycle({
+        maxFiles: 100,
+        maxBytes: 512 * 1024 * 1024,
+      }),
     metadata:
       update.metadata !== undefined
         ? { ...(current?.metadata ?? {}), ...update.metadata }
@@ -309,10 +321,77 @@ export function requireRuntimeEntry(runtimeId: string): RuntimeRegistryEntry {
   });
 }
 
-export function disposeCliRuntime(
+function cleanupFailureMessage(
+  runtimeId: string,
+  result: ProviderFileCleanupResult,
+  lifecycle: ProviderFileLifecycle,
+): string | undefined {
+  if (result.failed === 0) return undefined;
+  const snapshot = lifecycle.snapshot();
+  const fileIds = [
+    ...snapshot.pendingDeletionFileIds,
+    ...snapshot.deletionFailures.map((failure) => failure.fileId),
+  ];
+  return `Provider file cleanup incomplete for runtime ${runtimeId}; files=${[...new Set(fileIds)].join(',') || 'unknown'}; failed=${result.failed}; deferred=${result.deferred}`;
+}
+
+export async function cleanupProviderFilesForSession(
+  runtimeId: string,
+): Promise<ProviderFileCleanupResult> {
+  const entry = runtimeRegistry.get(runtimeId);
+  if (entry === undefined) {
+    return { deleted: 0, retainedRemotely: 0, deferred: 0, failed: 0 };
+  }
+  const lifecycle = entry.providerFileLifecycle;
+  const result = await lifecycle.cleanupScope('session', runtimeId);
+  const failure = cleanupFailureMessage(runtimeId, result, lifecycle);
+  if (failure !== undefined) throw new Error(failure);
+  return result;
+}
+
+export async function disposeCliRuntime(
+  runtimeId: string,
+  context?: RuntimeAuthScopeFlushResult,
+): Promise<void> {
+  const entry = runtimeRegistry.get(runtimeId);
+  if (entry === undefined) {
+    disposeCliRuntimeRegistration(runtimeId, context);
+    return;
+  }
+  try {
+    const cleanup = await cleanupProviderFilesForSession(runtimeId);
+    if (cleanup.deferred > 0) {
+      await entry.providerFileLifecycle.waitForScopeCleanup(
+        'session',
+        runtimeId,
+      );
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Provider file cleanup failed while disposing runtime ${runtimeId}: ${message}`,
+      { cause: error },
+    );
+  }
+  disposeCliRuntimeRegistration(runtimeId, context);
+}
+
+export function disposeCliRuntimeRegistration(
   runtimeId: string,
   context?: RuntimeAuthScopeFlushResult,
 ): void {
+  const registeredEntry = runtimeRegistry.get(runtimeId);
+  if (
+    registeredEntry?.providerFileLifecycle.retainsScope(
+      'session',
+      runtimeId,
+    ) === true
+  ) {
+    throw new Error(
+      `Cannot deregister runtime ${runtimeId} while its provider-file lifecycle retains session files`,
+    );
+  }
+
   if (context !== undefined && context.revokedTokens.length > 0) {
     logger.debug(
       () =>

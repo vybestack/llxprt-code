@@ -334,8 +334,8 @@ describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2
     todoStoreWritePausedMock.mockResolvedValue(undefined);
   });
 
-  afterEach(() => {
-    client.dispose();
+  afterEach(async () => {
+    await client.dispose();
     vi.restoreAllMocks();
   });
 

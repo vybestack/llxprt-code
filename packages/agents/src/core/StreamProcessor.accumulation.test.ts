@@ -53,6 +53,7 @@ function createMockHistoryService() {
   return {
     add: vi.fn(),
     getAll: () => [],
+    generateTurnKey: () => `turn-${crypto.randomUUID()}`,
     waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
   };
 }

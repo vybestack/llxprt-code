@@ -101,6 +101,7 @@ async function readRequestBodyText(body: BodyInit): Promise<string> {
 async function captureRequestModel(): Promise<
   Record<string, unknown> | undefined
 > {
+  if (capturedRequest !== undefined) return capturedRequest;
   const calls = (
     globalThis as unknown as { fetch: { mock: { calls: unknown[][] } } }
   ).fetch.mock.calls;
@@ -120,31 +121,41 @@ describe('executeOpenAIResponsesRequest empty-resolved-model fallback @issue:248
     capturedRequest = undefined;
     setGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        body: new ReadableStream<Uint8Array>({
-          start(controller) {
-            const encoder = new TextEncoder();
-            controller.enqueue(
-              encoder.encode(
-                'data: ' +
-                  JSON.stringify({
-                    type: 'response.completed',
-                    response: {
-                      output: [
-                        {
-                          content: [{ type: 'output_text', text: 'response' }],
-                        },
-                      ],
-                    },
-                  }) +
-                  '\n\n',
-              ),
-            );
-            controller.close();
-          },
-        }),
-      }),
+      vi.fn(
+        async (
+          _input: string | URL | Request,
+          init?: RequestInit,
+        ): Promise<Response> => {
+          if (init?.body == null) throw new Error('Expected a request body');
+          const requestText = await readRequestBodyText(init.body);
+          capturedRequest = JSON.parse(requestText);
+          const responseBody = new ReadableStream<Uint8Array>({
+            start(controller) {
+              const encoder = new TextEncoder();
+              controller.enqueue(
+                encoder.encode(
+                  'data: ' +
+                    JSON.stringify({
+                      type: 'response.completed',
+                      response: {
+                        output: [
+                          {
+                            content: [
+                              { type: 'output_text', text: 'response' },
+                            ],
+                          },
+                        ],
+                      },
+                    }) +
+                    '\n\n',
+                ),
+              );
+              controller.close();
+            },
+          });
+          return new Response(responseBody);
+        },
+      ),
     );
   });
 

@@ -21,6 +21,7 @@ import * as cli from './cli.js';
 import { dynamicSettingsRegistry } from './utils/dynamicSettings.js';
 import type { Config, ResumeResult } from '@vybestack/llxprt-code-core';
 import { OutputFormat } from '@vybestack/llxprt-code-core';
+import { createTestSessionMediaConfig } from './test-utils/sessionMediaConfig.js';
 
 const actual = { ...(await import('./config/settings.js')) };
 void vi.mock('./config/settings.js', () => ({
@@ -197,10 +198,12 @@ function makeResumeResult(historyText = 'resumed'): ResumeResult {
 describe('cli main provider initialization', () => {
   const originalIsTTY = process.stdin.isTTY;
   let projectTempDir = '';
+  let sessionMediaConfig: ReturnType<typeof createTestSessionMediaConfig>;
 
   beforeEach(async () => {
     projectTempDir = '';
     projectTempDir = await mkdtemp(join(tmpdir(), 'cli-provider-init-'));
+    sessionMediaConfig = createTestSessionMediaConfig(projectTempDir);
     dynamicSettingsRegistry.reset();
     process.stdin.isTTY = true;
     vi.restoreAllMocks();
@@ -255,6 +258,7 @@ describe('cli main provider initialization', () => {
       getZedIntegrationEnabled: vi.fn(() => false),
       getTrustedFolder: vi.fn(() => true),
       getProjectTempDir: vi.fn(() => projectTempDir),
+      ...sessionMediaConfig,
       getContinueSessionRef: vi.fn(() => null),
       getWorkspaceContext: vi.fn(() => ({
         getDirectories: () => ['/tmp/project'],
@@ -354,6 +358,7 @@ describe('cli main provider initialization', () => {
       getZedIntegrationEnabled: vi.fn(() => false),
       getTrustedFolder: vi.fn(() => true),
       getProjectTempDir: vi.fn(() => projectTempDir),
+      ...sessionMediaConfig,
       getContinueSessionRef: vi.fn(() => '__CONTINUE_LATEST__'),
       getWorkspaceContext: vi.fn(() => ({
         getDirectories: () => ['/tmp/project'],
@@ -488,6 +493,7 @@ describe('cli main provider initialization', () => {
       getZedIntegrationEnabled: vi.fn(() => false),
       getTrustedFolder: vi.fn(() => true),
       getProjectTempDir: vi.fn(() => projectTempDir),
+      ...sessionMediaConfig,
       getContinueSessionRef: vi.fn(() => '__CONTINUE_LATEST__'),
       getWorkspaceContext: vi.fn(() => ({
         getDirectories: () => ['/tmp/project'],

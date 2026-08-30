@@ -412,7 +412,7 @@ function createEngineEnv(options: {
     },
     getHistoryService: () => null,
     storeHistoryServiceForReuse: () => {},
-    storeHistoryForLaterUse: () => {},
+    storeHistoryForLaterUse: async () => {},
     addHistory: async () => {},
     async *sendMessageStream(
       req: AgentRequestInput,

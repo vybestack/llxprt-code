@@ -61,7 +61,7 @@ class RecordingTransport implements WebSocketTransport {
     request: OpenAIResponsesRequest,
     options: StreamResponseOptions,
   ): AsyncIterableIterator<IContent> {
-    this.sentRequests.push(request);
+    this.sentRequests.push(structuredClone(request));
     this.lastOptions = options;
     yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
     yield {

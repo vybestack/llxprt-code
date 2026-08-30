@@ -77,6 +77,7 @@ export interface ReadonlySettingsSnapshot {
    * to catch omissions in the summary. Defaults to false.
    */
   compressionVerification?: boolean;
+  'media.semantic-purge'?: 'off' | 'remove' | 'summary';
 }
 
 /**
@@ -228,6 +229,7 @@ export interface AgentRuntimeContext {
      * to catch omissions in the summary. Defaults to false.
      */
     compressionVerification(): boolean;
+    semanticMediaPurge(): 'off' | 'remove' | 'summary';
     /**
      * @plan PLAN-20251202-THINKING.P03b
      * @requirement REQ-THINK-006
@@ -263,6 +265,15 @@ export interface AgentRuntimeContext {
 
   /** Provider runtime snapshot for downstream provider calls */
   readonly providerRuntime: ProviderRuntimeContext;
+
+  /** Project-owned local media store shared with session lifecycle services. */
+  readonly mediaStore?: LocalMediaStore;
+
+  /** Async boundary that replaces newly created local image bytes before use. */
+  readonly mediaAdmission?: MediaAdmissionService;
+
+  /** Provider-neutral late materialization boundary for physical requests. */
+  readonly mediaResolver?: RequestMediaResolver;
 }
 
 /**
@@ -294,11 +305,23 @@ export interface AgentRuntimeContextFactoryOptions {
 
   /** Required: provider runtime context */
   providerRuntime: ProviderRuntimeContext;
+
+  /** Optional project-owned local media store. */
+  mediaStore?: LocalMediaStore;
+
+  /** Optional async local-media admission boundary. */
+  mediaAdmission?: MediaAdmissionService;
+
+  /** Optional provider-neutral request media resolver. */
+  mediaResolver?: RequestMediaResolver;
 }
 
 // Type imports (these will be resolved from existing modules)
 import type { AgentRuntimeState } from './AgentRuntimeState.js';
 import type { HistoryService } from '../services/history/HistoryService.js';
+import type { MediaAdmissionService } from '../storage/media-admission-service.js';
+import type { LocalMediaStore } from '../storage/local-media-store.js';
+import type { RequestMediaResolver } from '../storage/request-media-resolver.js';
 import type { RuntimeProvider as IProvider } from './contracts/RuntimeProvider.js';
 import type { ProviderRuntimeContext } from './providerRuntimeContext.js';
 

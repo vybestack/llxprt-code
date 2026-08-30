@@ -275,17 +275,20 @@ describe('OpenAI Responses error-response dump @issue:3140', () => {
     expect(caught).toBeInstanceOf(Error);
 
     const written = await listDumpFiles();
-    const requestFile = written.find((f) => f.endsWith('-request.json'));
+    const requestFiles = written.filter((f) => f.endsWith('-request.json'));
     const responseFile = written.find((f) => f.endsWith('-response.json'));
-    if (requestFile === undefined) {
+    if (requestFiles.length === 0) {
       throw new Error(
         `No -request.json dump written; dump dir contents: ${JSON.stringify(written)}`,
       );
     }
     expect(responseFile).toBeDefined();
 
+    // `retries: 1` means two attempts, each dumping its own request/response
+    // pair, and the dump filenames differ only by a random suffix. Pair them by
+    // the recorded link rather than by list order, which is not attempt order.
     const responseDump = await readJsonDump(responseFile!);
-    expect(responseDump['relatedRequestFile']).toBe(requestFile);
+    expect(requestFiles).toContain(responseDump['relatedRequestFile']);
     const responseBody = responseDump['response'] as {
       body?: { status?: number; body?: string };
     };

@@ -21,6 +21,7 @@
 
 import type OpenAI from 'openai';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import { firstTruthyString } from '../utils/falsyFallback.js';
@@ -67,11 +68,20 @@ import {
 } from './OpenAIPromptEnvelopeStore.js';
 import {
   prepareOpenAIChatProjection,
+  registerOpenAIChatRequestCleanup,
   withProjectionModel,
 } from './OpenAIPromptProjectionPreparation.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
 import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
+import {
+  finishMediaRequest,
+  type MediaRequestOutcome,
+  resolveRequestMedia,
+} from '../utils/request-media-resolution.js';
+import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
+import { resolveKimiProviderFileRequestPolicy } from '../kimi/kimiProviderFilePolicy.js';
+import { requireRuntimeEntry } from '../runtime/runtimeRegistry.js';
 
 import { buildContinuationMessages } from './OpenAIRequestBuilder.js';
 import { extractSanitizedChunkText } from './OpenAIStreamChunkText.js';
@@ -134,6 +144,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         baseURL,
         envKeyNames: ['OPENAI_API_KEY'], // Support environment variable fallback
         isOAuthEnabled: false,
+        mediaTransportCapabilities:
+          declaredMediaTransportCapabilities('openai'),
       },
       config,
     );
@@ -167,6 +179,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       resolveAuthTokenForPrompt: async () => this.getAuthTokenForPrompt(),
       shouldRetryOnError: (error) => this.shouldRetryResponse(error),
       getDefaultModel: () => this.getDefaultModel(),
+      getMediaTransportCapabilities: () =>
+        this.name === 'openai'
+          ? declaredMediaTransportCapabilities('openai-responses')
+          : this.getMediaTransportCapabilities(),
       getGlobalConfig: () => undefined,
     };
   }
@@ -229,10 +245,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       );
     }
 
-    const agentSettings = resolveAgentSettings(
-      options.invocation.ephemerals,
-      this.providerConfig,
-    );
+    const agentSettings = options.invocation.ephemerals;
     const agents = createHttpAgents(agentSettings);
 
     // Apply invocation/provider header overrides at client construction time.
@@ -421,9 +434,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
     if (decision.useResponses) {
       if (prepared?.protocol === 'openai-chat') {
-        throw new Error(
-          'Prepared OpenAI Chat envelope cannot be sent through Responses transport',
-        );
+        await finishMediaRequest(prepared.mediaRequest, {
+          status: 'failed',
+          error: new Error(
+            'Prepared OpenAI Chat envelope cannot be sent through Responses transport',
+          ),
+        });
+        return;
       }
       yield* executeOpenAIResponsesRequest(
         options,
@@ -433,41 +450,68 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       return;
     }
     if (prepared?.protocol === 'openai-responses') {
-      throw new Error(
-        'Prepared OpenAI Responses envelope cannot be sent through Chat transport',
-      );
+      await finishMediaRequest(prepared.requestContext.mediaRequest, {
+        status: 'failed',
+        error: new Error(
+          'Prepared OpenAI Responses envelope cannot be sent through Chat transport',
+        ),
+      });
+      return;
     }
 
-    const callFormatter = this.createToolFormatter();
-    const client = await this.getClient(options);
-    const runtimeKey = resolveRuntimeKey(options);
+    const mediaRequest =
+      prepared?.protocol === 'openai-chat'
+        ? prepared.mediaRequest
+        : await resolveRequestMedia(
+            options.runtime,
+            options.contents,
+            options.invocation.signal,
+          );
+    let outcome: MediaRequestOutcome = { status: 'succeeded' };
+    try {
+      const effectiveOptions = {
+        ...options,
+        contents: mediaRequest.withContents((contents) => contents),
+      };
+      const callFormatter = this.createToolFormatter();
+      const client = await this.getClient(effectiveOptions);
+      const runtimeKey = resolveRuntimeKey(effectiveOptions);
+      const logger = new DebugLogger('llxprt:provider:openai');
+      this.logChatTools(effectiveOptions, runtimeKey, logger);
+
+      yield* this.generateChatCompletionImpl(
+        effectiveOptions,
+        callFormatter,
+        client,
+        logger,
+        mediaRequest,
+        prepared?.requestContext,
+      );
+    } catch (error) {
+      outcome = { status: 'failed', error };
+    } finally {
+      await finishMediaRequest(mediaRequest, outcome);
+    }
+  }
+
+  private logChatTools(
+    options: NormalizedGenerateChatOptions,
+    runtimeKey: string,
+    logger: DebugLogger,
+  ): void {
+    if (!logger.enabled) return;
     const { tools } = options;
-    const logger = new DebugLogger('llxprt:provider:openai');
-
-    // Debug log what we receive
-    if (logger.enabled) {
-      logger.debug(
-        () => `[OpenAIProvider] generateChatCompletion received tools:`,
-        {
-          hasTools: !!tools,
-          toolsLength: tools?.length,
-          toolsType: typeof tools,
-          isArray: Array.isArray(tools),
-          firstToolName: tools?.[0]?.functionDeclarations?.[0]?.name,
-          toolsStructure: tools ? 'available' : 'undefined',
-          runtimeKey,
-        },
-      );
-    }
-
-    // Delegate streaming to the pipeline implementation (yield* forwards
-    // each chunk identically to an explicit for-await loop).
-    yield* this.generateChatCompletionImpl(
-      options,
-      callFormatter,
-      client,
-      logger,
-      prepared?.requestContext,
+    logger.debug(
+      () => '[OpenAIProvider] generateChatCompletion received tools:',
+      {
+        hasTools: !!tools,
+        toolsLength: tools?.length,
+        toolsType: typeof tools,
+        isArray: Array.isArray(tools),
+        firstToolName: tools?.[0]?.functionDeclarations?.[0]?.name,
+        toolsStructure: tools ? 'available' : 'undefined',
+        runtimeKey,
+      },
     );
   }
 
@@ -588,85 +632,72 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
-   * Kimi-only media pre-pass. When the resolved provider is a Kimi alias with
-   * `mediaSupport.fileUpload` enabled, uploads PDF media blocks via the Files
-   * API and returns a cloned options object where PDF blocks are replaced with
-   * text references and the file ids are appended to the system instruction.
-   *
-   * For all other providers, or when there are no uploadable PDFs, the original
-   * options object is returned unchanged.
+   * Kimi-only media pre-pass. Declared media support and explicit user policy
+   * must both permit Files API use. Stable provider references replace media in
+   * message content so request-specific IDs never alter the system instruction.
    */
   private async maybeProcessKimiMedia(
     options: NormalizedGenerateChatOptions,
     client: OpenAI,
     logger: DebugLogger,
+    mediaRequest: ResolvedMediaRequest,
   ): Promise<NormalizedGenerateChatOptions> {
-    const mediaSupport = this.readMediaSupport();
-    const providerVideoSetting = options.settings.getProviderSettings(
+    const requestPolicy = resolveKimiProviderFileRequestPolicy(
+      options,
       this.name,
-    )['kimi.experimental-video'];
-    const globalVideoSetting = options.settings.get('kimi.experimental-video');
-    const allowVideo =
-      mediaSupport?.videoSupport === true &&
-      (providerVideoSetting === true || globalVideoSetting === true);
-    const allowFileUpload = mediaSupport?.fileUpload === true;
-    if (!allowFileUpload && !allowVideo) {
-      return options;
+      this.readMediaSupport(),
+      this.getMediaTransportCapabilities(),
+      client,
+    );
+    if (requestPolicy === undefined) return options;
+
+    const lifecycle = requireRuntimeEntry(
+      options.invocation.runtimeId,
+    ).providerFileLifecycle;
+    await lifecycle.sweepExpired();
+    await lifecycle.retryDeletions();
+    const maintenance = lifecycle.snapshot();
+    if (maintenance.deletionFailures.length > 0) {
+      throw new Error(
+        `Kimi provider file maintenance failed for runtime ${options.invocation.runtimeId}; files=${maintenance.deletionFailures.map((failure) => failure.fileId).join(',')}`,
+      );
     }
 
-    try {
-      const { processKimiMedia } = await import(
-        '../kimi/kimiMediaProcessing.js'
-      );
-      const result = await processKimiMedia(
-        client,
-        options.contents,
-        kimiFileUploadCache,
-        { allowFileUpload, allowVideo },
-      );
+    const { processKimiMedia } = await import('../kimi/kimiMediaProcessing.js');
+    const result = await processKimiMedia(
+      client,
+      options.contents,
+      kimiFileUploadCache,
+      {
+        allowFileUpload: requestPolicy.allowFileUpload,
+        allowVideo: requestPolicy.allowVideo,
+        lifecycle,
+        policy: requestPolicy.policy,
+        identity: requestPolicy.identity,
+        scopeId: requestPolicy.scopeId,
+        scopeKey: requestPolicy.scopeId,
+        registerLease: (lease) => {
+          mediaRequest.registerCleanup(() => lease.release());
+        },
+        persistReference: (contentId, reference) => {
+          const bindings = options.runtime?.providerFileBindings;
+          if (bindings === undefined) return Promise.resolve();
+          return bindings.bind(contentId, reference);
+        },
+        removePersistedReference: (contentId, reference) => {
+          const bindings = options.runtime?.providerFileBindings;
+          if (bindings === undefined) return Promise.resolve();
+          return bindings.unbind(contentId, reference);
+        },
+      },
+    );
 
-      if (
-        result.fileReferenceText === '' &&
-        result.contents === options.contents
-      ) {
-        return options;
-      }
-
-      logger.debug(
-        () =>
-          `[OpenAIProvider] Kimi file-upload pre-pass replaced PDF blocks; file reference injected into system instruction`,
-        { fileReferenceText: result.fileReferenceText },
-      );
-
-      if (result.fileReferenceText === '') {
-        return { ...options, contents: result.contents };
-      }
-
-      const existingInstruction = options.systemInstruction ?? '';
-      // Intentional additive writer under the #3136 contract: appends
-      // request-specific media references to the agent-assembled system
-      // instruction. This is NOT core-prompt assembly.
-      const combinedInstruction =
-        existingInstruction.trim().length > 0
-          ? `${existingInstruction}\n\n${result.fileReferenceText}`
-          : result.fileReferenceText;
-
-      return {
-        ...options,
-        contents: result.contents,
-        systemInstruction: combinedInstruction,
-      };
-    } catch (mediaError) {
-      logger.warn(
-        () =>
-          `[OpenAIProvider] Kimi media pre-pass failed, falling back to inline behavior: ${
-            mediaError instanceof Error
-              ? mediaError.message
-              : String(mediaError)
-          }`,
-      );
-      return options;
-    }
+    if (result.contents === options.contents) return options;
+    logger.debug(
+      () =>
+        '[OpenAIProvider] Kimi file-upload pre-pass replaced media blocks with stable message references',
+    );
+    return { ...options, contents: result.contents };
   }
 
   /**
@@ -700,6 +731,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     toolFormatter: ToolFormatter,
     client: OpenAI,
     logger: DebugLogger,
+    mediaRequest: ResolvedMediaRequest,
     preparedRequestContext?: Awaited<ReturnType<typeof prepareRequest>>,
   ): AsyncGenerator<IContent, void, unknown> {
     const { metadata } = options;
@@ -717,7 +749,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Only activates for Kimi aliases with mediaSupport.fileUpload enabled.
     const effectiveOptions =
       preparedRequestContext === undefined
-        ? await this.maybeProcessKimiMedia(options, client, logger)
+        ? await this.maybeProcessKimiMedia(
+            options,
+            client,
+            logger,
+            mediaRequest,
+          )
         : options;
 
     const requestContext =
@@ -728,7 +765,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         effectiveOptions.config,
         logger,
         this.name,
+        this.getMediaTransportCapabilities(),
       ));
+    registerOpenAIChatRequestCleanup(mediaRequest, requestContext);
 
     const {
       model,
@@ -810,11 +849,17 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           getClient: (clientOptions) => this.getClient(clientOptions),
           resolveAuthToken: (authOptions) =>
             this.resolveProjectionAuthToken(authOptions),
-          processMedia: (preparedOptions, client, logger) =>
-            this.maybeProcessKimiMedia(preparedOptions, client, logger),
+          processMedia: (preparedOptions, client, logger, mediaRequest) =>
+            this.maybeProcessKimiMedia(
+              preparedOptions,
+              client,
+              logger,
+              mediaRequest,
+            ),
           logger: this.getLogger(),
           defaultModel: this.getDefaultModel(),
           providerName: this.name,
+          mediaTransportCapabilities: this.getMediaTransportCapabilities(),
         }),
       collectUnsupported: (preparedOptions, supports) =>
         collectUnsupportedMedia(preparedOptions.contents, supports),
@@ -884,22 +929,24 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     // Make a continuation request (wrap in try-catch since tools were already yielded)
     try {
-      const continuationResponse = await client.chat.completions.create(
+      const { executeBoundedStreamingChatRequest } = await import(
+        './OpenAIApiExecution.js'
+      );
+      const continuationResponse = await executeBoundedStreamingChatRequest(
+        client,
         {
           ...requestBody,
           messages: continuationMessages,
-          stream: true, // Always stream for consistency
+          stream: true,
         },
-        {
-          ...(abortSignal ? { signal: abortSignal } : {}),
-          ...(mergedHeaders ? { headers: mergedHeaders } : {}),
-        },
+        abortSignal,
+        mergedHeaders,
       );
 
       let accumulatedText = '';
 
       // Process the continuation response
-      for await (const chunk of continuationResponse as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
+      for await (const chunk of continuationResponse) {
         if (abortSignal?.aborted === true) {
           break;
         }
@@ -940,11 +987,4 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       // Don't re-throw - tool calls were already successful
     }
   }
-}
-
-function resolveAgentSettings(
-  invocationSettings: Record<string, unknown> | undefined,
-  providerConfig?: IProviderConfig,
-): Record<string, unknown> {
-  return invocationSettings ?? providerConfig?.getEphemeralSettings?.() ?? {};
 }

@@ -21,6 +21,7 @@ export { resolveModelForSystemPrompt } from './systemPromptModel.js';
 import type { SystemPromptAssembler } from './chatSession.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ReadonlySettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { createSettingsProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
@@ -176,21 +177,19 @@ export interface CreateChatSessionDeps {
  * Appends extra history onto a HistoryService with a fresh turn key per entry.
  * No-op when there is nothing to load.
  */
-function loadExtraHistory(
+async function loadExtraHistory(
   historyService: HistoryService,
   extraHistory: readonly IContent[] | undefined,
   currentModel: string,
-): void {
+): Promise<void> {
   if (!extraHistory || extraHistory.length === 0) {
     return;
   }
-  for (const content of extraHistory) {
+  const restored = extraHistory.map((content) => {
     const turnKey = historyService.generateTurnKey();
-    historyService.add(
-      { ...content, metadata: { ...content.metadata, turnId: turnKey } },
-      currentModel,
-    );
-  }
+    return { ...content, metadata: { ...content.metadata, turnId: turnKey } };
+  });
+  await historyService.addBatch(restored, currentModel);
 }
 
 /**
@@ -204,24 +203,24 @@ function loadExtraHistory(
  * already holds content (a mid-session switch), extraHistory is skipped to
  * avoid duplicating turns.
  */
-function setupHistoryService(
+async function setupHistoryService(
   storedHistoryService: HistoryService | undefined,
   extraHistory: readonly IContent[] | undefined,
   runtimeState: AgentRuntimeState,
   createHistoryService: () => HistoryService,
-): { historyService: HistoryService; reused: boolean } {
+): Promise<{ historyService: HistoryService; reused: boolean }> {
   const logger = new DebugLogger('llxprt:client:start');
   const currentModel = runtimeState.model;
   if (storedHistoryService) {
     if (storedHistoryService.isEmpty()) {
-      loadExtraHistory(storedHistoryService, extraHistory, currentModel);
+      await loadExtraHistory(storedHistoryService, extraHistory, currentModel);
     }
     logger.debug('Reusing stored HistoryService to preserve UI conversation');
     return { historyService: storedHistoryService, reused: true };
   }
 
   const historyService = createHistoryService();
-  loadExtraHistory(historyService, extraHistory, currentModel);
+  await loadExtraHistory(historyService, extraHistory, currentModel);
   return { historyService, reused: false };
 }
 
@@ -371,14 +370,53 @@ function applyTokenizerFactory(
     }
   }
 }
+function chatSessionFactoryAdmission(runtimeId: string): {
+  readonly turnId: string;
+  readonly source: string;
+  readonly reservationOwnerScope: string;
+} {
+  return {
+    turnId: runtimeId,
+    source: 'chat-session-factory',
+    reservationOwnerScope: `chat-session-factory:${runtimeId}`,
+  };
+}
 
-/**
- * Stateful factory: creates a ChatSession session.
- * Reuses stored HistoryService when available, creates a new one otherwise.
- * Configures thinking, loads the agent runtime, builds tool declarations.
- */
-export async function createChatSession(
+interface AdmittedInitialHistory {
+  readonly history: readonly IContent[] | undefined;
+  readonly release: () => Promise<void>;
+}
+
+async function admitInitialHistory(
+  config: Config,
+  history: readonly IContent[] | undefined,
+  runtimeId: string,
+): Promise<AdmittedInitialHistory> {
+  if (history === undefined) {
+    return { history: undefined, release: () => Promise.resolve() };
+  }
+  const hasLocalMedia = history.some((content) =>
+    content.blocks.some(
+      (block) =>
+        block.type === 'media' &&
+        (block.encoding === 'base64' || block.encoding === 'reference'),
+    ),
+  );
+  if (!hasLocalMedia) {
+    return { history, release: () => Promise.resolve() };
+  }
+  const admission = new MediaAdmissionService(config.getLocalMediaStore());
+  const admissionContext = chatSessionFactoryAdmission(runtimeId);
+  const admitted = await admission.admitContents(history, admissionContext);
+  return {
+    history: admitted,
+    release: () => admission.releaseContents(admitted, admissionContext),
+  };
+}
+
+async function buildAdmittedChatSession(
   deps: CreateChatSessionDeps,
+  admittedHistory: readonly IContent[] | undefined,
 ): Promise<ChatSession> {
   const {
     config,
@@ -386,7 +424,6 @@ export async function createChatSession(
     contentGenerator,
     storedHistoryService,
     clearStoredHistoryService,
-    extraHistory,
     generateContentConfig,
     todoContinuationService,
     toolRegistry,
@@ -394,24 +431,19 @@ export async function createChatSession(
     loadRuntime = loadAgentRuntime,
     createChatSessionInstance = (...args) => new ChatSession(...args),
   } = deps;
-
   const logger = new DebugLogger('llxprt:client:start');
-
-  const { historyService, reused } = setupHistoryService(
+  const { historyService, reused } = await setupHistoryService(
     storedHistoryService,
-    extraHistory,
+    admittedHistory,
     runtimeState,
     createHistoryService,
   );
-
   applyTokenizerFactory(config, historyService);
 
   const enabledToolNames = getEnabledToolNamesForPrompt(config);
   const envParts = await getEnvironmentContext(config);
   const model = resolveModelForSystemPrompt(config);
-
   logger.debug(() => `DEBUG [client.startChat]: Model from config: ${model}`);
-
   const systemInstruction = await buildSystemInstruction(
     config,
     enabledToolNames,
@@ -419,13 +451,6 @@ export async function createChatSession(
     runtimeState.provider,
     model,
   );
-
-  // Per-turn assembler: reuses the EXISTING buildSystemInstruction with the
-  // provider and model sourced from the runtime at request time (issue #3136,
-  // #3176). This keeps coreMemory explicit (already passed inside
-  // buildSystemInstruction) so no two-file disk read happens per turn, and
-  // threads the request-scoped provider so template resolution stays coherent
-  // with the model at every boundary including load-balancer rerender.
   const systemPromptAssembler: SystemPromptAssembler = {
     assemble: (request: { provider: string | undefined; model: string }) =>
       buildSystemInstruction(
@@ -442,9 +467,7 @@ export async function createChatSession(
     historyService.resetTokenAccounting();
     await historyService.recalculateTotalTokens();
   }
-
   await applySystemPromptTokenOffset(historyService, systemInstruction, model);
-
   logger.debug(
     () =>
       `DEBUG [client.startChat]: System instruction includes Flash instructions: ${systemInstruction.includes(
@@ -465,12 +488,38 @@ export async function createChatSession(
     createChatSessionInstance,
     loadRuntime,
   );
-
-  if (reused) {
-    clearStoredHistoryService();
-  }
-
+  if (reused) clearStoredHistoryService();
   return chat;
+}
+
+/**
+ * Stateful factory: creates a ChatSession session.
+ * Reuses stored HistoryService when available, creates a new one otherwise.
+ * Configures thinking, loads the agent runtime, builds tool declarations.
+ */
+export async function createChatSession(
+  deps: CreateChatSessionDeps,
+): Promise<ChatSession> {
+  const admittedHistory = await admitInitialHistory(
+    deps.config,
+    deps.extraHistory,
+    deps.runtimeState.runtimeId,
+  );
+  try {
+    const chat = await buildAdmittedChatSession(deps, admittedHistory.history);
+    await admittedHistory.release();
+    return chat;
+  } catch (error: unknown) {
+    try {
+      await admittedHistory.release();
+    } catch (cleanupError: unknown) {
+      throw new AggregateError(
+        [error, cleanupError],
+        'Chat session setup failed and admitted history cleanup was incomplete',
+      );
+    }
+    throw error;
+  }
 }
 
 /**

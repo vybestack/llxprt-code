@@ -130,7 +130,9 @@ function createScriptedAgentClient(scripts: ServerAgentStreamEvent[][]): {
       return state.history;
     },
     storeHistoryServiceForReuse: () => {},
-    storeHistoryForLaterUse: (h: IContent[]) => state.history.push(...h),
+    storeHistoryForLaterUse: async (h: IContent[]) => {
+      state.history.push(...h);
+    },
     addHistory: async (content: IContent) => {
       state.history.push(content);
     },
@@ -389,7 +391,7 @@ function createClientBase(): AgentClientContract {
     },
     getHistoryService: () => null,
     storeHistoryServiceForReuse: () => {},
-    storeHistoryForLaterUse: () => {},
+    storeHistoryForLaterUse: async () => {},
     dispose: () => {},
     setTools: async () => {},
     clearTools: () => {},

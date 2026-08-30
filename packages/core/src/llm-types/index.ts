@@ -65,6 +65,11 @@ export type {
   ToolCallBlock,
   ToolResponseBlock,
   MediaBlock,
+  InlineMediaBlock,
+  MediaReferenceBlock,
+  MediaDimensions,
+  MediaSemanticMetadata,
+  MediaSemanticMetadataValue,
   ThinkingBlock,
   CodeBlock,
 } from '../services/history/IContent.js';

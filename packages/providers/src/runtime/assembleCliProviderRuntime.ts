@@ -39,7 +39,6 @@ import {
   type ProviderRuntimeContext,
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { createSessionMessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
@@ -53,9 +52,7 @@ import {
   registerCliProviderInfrastructure,
   setCliRuntimeContext,
 } from './runtimeLifecycle.js';
-import { disposeCliRuntime } from './runtimeRegistry.js';
-
-const logger = new DebugLogger('llxprt:runtime:assemble');
+import { disposeCliRuntimeRegistration } from './runtimeRegistry.js';
 
 /**
  * Declarative context the CLI supplies to the provider-runtime assembly. No
@@ -184,19 +181,7 @@ export function assembleCliProviderRuntime(
       oauthManager,
     };
   } catch (error) {
-    try {
-      disposeCliRuntime(runtimeId);
-    } catch (cleanupError) {
-      // Preserve the original assembly failure; cleanup errors are secondary.
-      logger.debug(
-        () =>
-          `[assembleCliProviderRuntime] disposeCliRuntime('${runtimeId}') failed during error recovery: ${
-            cleanupError instanceof Error
-              ? cleanupError.message
-              : String(cleanupError)
-          }`,
-      );
-    }
+    disposeCliRuntimeRegistration(runtimeId);
     throw error;
   }
 }

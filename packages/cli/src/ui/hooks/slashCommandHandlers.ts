@@ -14,6 +14,7 @@ import type { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import {
   getProjectHash,
+  importSessionMediaPackage,
   ToolConfirmationOutcome,
 } from '@vybestack/llxprt-code-core';
 import {
@@ -32,11 +33,13 @@ import {
 import type {
   CommandContext,
   ModelsDialogData,
+  PerformResumeActionReturn,
   SlashCommand,
   SubagentDialogData,
 } from '../commands/types.js';
 import { performResume } from '../../services/performResume.js';
 import type {
+  PerformResumeResult,
   RecordingSwapCallbacks,
   ResumeContext,
 } from '../../services/performResume.js';
@@ -321,7 +324,7 @@ async function handleActionResult(
     case 'confirm_action':
       return confirmAction(deps, result);
     case 'perform_resume':
-      return performSessionResume(deps, context, result.sessionRef);
+      return performSessionResume(deps, context, result);
     default: {
       const unhandled: never = result;
       throw new Error(`Unhandled slash command result: ${unhandled}`);
@@ -457,11 +460,11 @@ function openSubagentDialog(
   );
 }
 
-function handleLoadHistoryResult(
+async function handleLoadHistoryResult(
   context: CommandContext,
   result: Extract<ActionResult, { type: 'load_history' }>,
-): SlashCommandProcessorResult {
-  void context.services.config
+): Promise<SlashCommandProcessorResult> {
+  await context.services.config
     ?.getAgentClient()
     .setHistory(result.clientHistory);
   // Display-only: replayed model text passes the same emoji filter as live
@@ -626,7 +629,7 @@ async function confirmAction(
 async function performSessionResume(
   deps: SlashCommandHandlerDeps,
   context: CommandContext,
-  sessionRef: string,
+  action: PerformResumeActionReturn,
 ): Promise<SlashCommandProcessorResult> {
   if (!deps.config) {
     deps.addMessage({
@@ -645,10 +648,32 @@ async function performSessionResume(
     return { type: 'handled' };
   }
 
-  const resumeResult = await (deps.performResumeFn ?? performResume)(
-    sessionRef,
-    buildResumeContext(deps, deps.config),
-  );
+  const resume = deps.performResumeFn ?? performResume;
+  const resumeContext = buildResumeContext(deps, deps.config);
+  let resumeResult: PerformResumeResult;
+  try {
+    resumeResult =
+      action.sessionPackage === undefined
+        ? await resume(action.sessionRef, resumeContext)
+        : await importSessionMediaPackage(
+            action.sessionPackage,
+            resumeContext.chatsDir,
+            resumeContext.projectHash,
+            deps.config.getLocalMediaStore(),
+            async (imported) => {
+              const result = await resume(imported.sessionId, resumeContext);
+              if (!result.ok) throw new Error(result.error);
+              return result;
+            },
+          );
+  } catch (error: unknown) {
+    deps.addMessage({
+      type: MessageType.ERROR,
+      content: error instanceof Error ? error.message : String(error),
+      timestamp: new Date(),
+    });
+    return { type: 'handled' };
+  }
   if (!resumeResult.ok) {
     deps.addMessage({
       type: MessageType.ERROR,
@@ -687,6 +712,10 @@ function buildResumeContext(
     currentProvider: config.getProvider() ?? 'unknown',
     currentModel: config.getModel(),
     workspaceDirs: [...config.getWorkspaceContext().getDirectories()],
+    mediaStore: config.getLocalMediaStore(),
+    maxQueueBytes: config.getSessionRecordingQueueByteLimit(),
+    persistenceFactory: (sessionId) =>
+      config.createSessionPersistenceService(sessionId),
     recordingCallbacks: deps.recordingSwapCallbacks!,
     historyService: config.getAgentClient().getHistoryService(),
     adoptSessionId: (sessionId) => config.adoptSessionId(sessionId),

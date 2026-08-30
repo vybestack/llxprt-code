@@ -6,11 +6,6 @@
 
 import { createBoundedCache } from '../kimi/kimiFileUpload.js';
 
-/**
- * Process-level cache for Kimi file uploads, keyed by content hash.
- * Prevents re-uploading the same PDF across turns within a session.
- * Bounded via the wrapper to avoid unbounded memory growth.
- */
 const KIMI_FILE_UPLOAD_CACHE_CAPACITY = 100;
 
 export const kimiFileUploadCache = createBoundedCache<string>(

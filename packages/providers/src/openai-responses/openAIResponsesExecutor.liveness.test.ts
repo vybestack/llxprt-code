@@ -14,6 +14,7 @@
  * executor and real SSE parser run.
  */
 
+import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
 import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -414,6 +415,8 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
         isCodexBaseURL: () => true,
         getWebSocketTransport: () => wsTransport,
         isWebSocketTransportActive: () => true,
+        getMediaTransportCapabilities: () =>
+          declaredMediaTransportCapabilities('codex'),
       }),
     );
     const consumed: IContent[] = [];
@@ -479,6 +482,8 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
         isCodexBaseURL: () => true,
         getWebSocketTransport: () => wsTransport,
         isWebSocketTransportActive: () => true,
+        getMediaTransportCapabilities: () =>
+          declaredMediaTransportCapabilities('codex'),
       }),
     );
     const consumed: IContent[] = [];
@@ -563,6 +568,8 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
         isCodexBaseURL: () => true,
         getWebSocketTransport: () => wsTransport,
         isWebSocketTransportActive: () => true,
+        getMediaTransportCapabilities: () =>
+          declaredMediaTransportCapabilities('codex'),
       }),
     );
     const consumed: IContent[] = [];

@@ -268,7 +268,7 @@ describe('RecordingIntegration duplicate content guard @issue:3132', () => {
   });
 
   afterEach(async () => {
-    harness.integration.dispose();
+    await harness.integration.dispose();
     await harness.recordingService.dispose();
     harness.historyService.dispose();
     await fs.rm(harness.tempDir, { recursive: true, force: true });
@@ -446,7 +446,7 @@ describe('RecordingIntegration duplicate content guard @issue:3132', () => {
     expect(filePath).not.toBeNull();
     const sessionPath = filePath ?? '';
 
-    harness.integration.dispose();
+    await harness.integration.dispose();
     await harness.recordingService.dispose();
 
     const replayed = await replaySession(sessionPath, PROJECT_HASH);
@@ -475,7 +475,7 @@ describe('RecordingIntegration duplicate content guard @issue:3132', () => {
       expect(recordedContents(events)).toHaveLength(recordsBeforeResume + 1);
       expect(textsOf(recordedContents(events))).toContain('post-resume-user');
     } finally {
-      resumedIntegration.dispose();
+      await resumedIntegration.dispose();
       await resumedRecording.dispose();
       resumedHistory.dispose();
     }

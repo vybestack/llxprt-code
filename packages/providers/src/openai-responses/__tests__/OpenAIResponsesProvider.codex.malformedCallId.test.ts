@@ -69,10 +69,10 @@ describe('OpenAIResponsesProvider Codex Mode - malformed call ids', () => {
     const encoder = new TextEncoder();
 
     const fetchMock = vi.fn(async (_url: unknown, init?: RequestInit) => {
-      const bodyText =
-        init?.body instanceof Blob
-          ? await init.body.text()
-          : String(init?.body);
+      if (init?.body === undefined || init.body === null) {
+        throw new Error('Expected request body');
+      }
+      const bodyText = await new Response(init.body).text();
       const parsed = JSON.parse(bodyText) as { input: unknown[] };
 
       const functionCallIds = new Set(

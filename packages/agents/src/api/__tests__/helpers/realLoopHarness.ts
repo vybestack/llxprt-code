@@ -117,7 +117,7 @@ function makeScriptedChat(history: IContent[]): AgentChatContract {
     },
     generateDirectMessage: async () => emptyModelOutput(),
     getHistory: () => history,
-    setHistory: (nextHistory: IContent[]) => {
+    setHistory: async (nextHistory: readonly IContent[]) => {
       history.splice(0, history.length, ...nextHistory);
     },
     clearHistory: () => {
@@ -145,8 +145,10 @@ function makeScriptedClientContract(
     },
     getHistoryService: () => null,
     storeHistoryServiceForReuse: () => {},
-    storeHistoryForLaterUse: (h: IContent[]) => history.push(...h),
-    dispose: () => {},
+    storeHistoryForLaterUse: async (h: IContent[]) => {
+      history.push(...h);
+    },
+    dispose: async () => {},
     setTools: async () => {},
     clearTools: () => {},
     updateSystemInstruction: async () => {},

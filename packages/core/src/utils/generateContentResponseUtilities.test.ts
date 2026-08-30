@@ -401,6 +401,42 @@ describe('generateContentResponseUtilities', () => {
       ]);
     });
 
+    it('preserves original variant provenance from resized tool images', () => {
+      const blocks = legacyPartsToBlocks([
+        {
+          inlineData: {
+            data: 'CQgH',
+            mimeType: 'image/webp',
+            displayName: 'resized.webp',
+            originalData: 'AQIDBA==',
+            originalMimeType: 'image/png',
+            transformation: {
+              policyId: 'image-resize',
+              policyVersion: 1,
+              parameters: { maxLongEdge: 20 },
+            },
+          },
+        },
+      ]);
+
+      expect(blocks).toStrictEqual([
+        {
+          type: 'media',
+          mimeType: 'image/webp',
+          data: 'CQgH',
+          encoding: 'base64',
+          filename: 'resized.webp',
+          originalData: 'AQIDBA==',
+          originalMimeType: 'image/png',
+          transformation: {
+            policyId: 'image-resize',
+            policyVersion: 1,
+            parameters: { maxLongEdge: 20 },
+          },
+        },
+      ]);
+    });
+
     it('omits MediaBlock.filename when inlineData.displayName is absent @issue:2608', () => {
       const blocks = legacyPartsToBlocks([
         {

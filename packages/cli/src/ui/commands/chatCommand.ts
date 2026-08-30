@@ -91,6 +91,7 @@ async function listProjectCheckpoints(
   const targets = await SessionDiscovery.listContinueTargets(
     chatsDir,
     projectHash,
+    context.services.config?.getLocalMediaStore(),
   );
   return targets.filter(
     (target): target is Extract<ContinueTarget, { kind: 'checkpoint' }> =>
@@ -178,7 +179,9 @@ const saveCommand: SlashCommand = {
     }
 
     try {
-      await new CheckpointService().createCheckpoint(
+      await new CheckpointService(
+        context.services.config?.getLocalMediaStore(),
+      ).createCheckpoint(
         recording,
         projectHash,
         tag,
@@ -293,7 +296,9 @@ const deleteCommand: SlashCommand = {
     const target = resolved.target;
 
     try {
-      const service = new CheckpointService();
+      const service = new CheckpointService(
+        context.services.config?.getLocalMediaStore(),
+      );
       if (recording?.getSessionId() === target.source.sessionId) {
         await service.deleteCheckpoint(
           recording,
@@ -332,7 +337,9 @@ async function renameCheckpointTarget(
   projectHash: string,
 ): Promise<void> {
   const recording = getRecording(context);
-  const service = new CheckpointService();
+  const service = new CheckpointService(
+    context.services.config?.getLocalMediaStore(),
+  );
   if (recording?.getSessionId() === target.source.sessionId) {
     await service.renameCheckpoint(
       recording,
@@ -472,7 +479,7 @@ const clearCommand: SlashCommand = {
       };
     }
 
-    chat.setHistory(result.remainingHistory);
+    await chat.setHistory(result.remainingHistory);
     context.ui.updateHistoryTokenCount(0);
     context.ui.clear();
     return undefined;
@@ -619,7 +626,9 @@ const nameCommand: SlashCommand = {
     }
 
     try {
-      await new CheckpointService().setSessionName(
+      await new CheckpointService(
+        context.services.config?.getLocalMediaStore(),
+      ).setSessionName(
         recording,
         projectHash,
         name,

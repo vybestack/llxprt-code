@@ -10,6 +10,17 @@ import * as dumpContextModule from '../utils/dumpContext.js';
 import * as dumpSDKContextModule from '../utils/dumpSDKContext.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  createAnthropicRawPostTestAdapter,
+  type RawPostTestHandler,
+} from '../test-utils/rawPostTestAdapters.js';
+
+function createAnthropicDumpClient(handler: RawPostTestHandler): object {
+  return {
+    ...createAnthropicRawPostTestAdapter(handler),
+    messages: { create: handler },
+  };
+}
 
 describe('AnthropicProvider dumpContext integration', () => {
   let provider: AnthropicProvider;
@@ -74,19 +85,17 @@ describe('AnthropicProvider dumpContext integration', () => {
       provider as never,
       'buildProviderClient' as never,
     ).mockResolvedValue({
-      client: {
-        messages: {
-          create: vi.fn().mockResolvedValue({
-            id: 'msg_test',
-            type: 'message',
-            role: 'assistant',
-            content: [{ type: 'text', text: 'Hi' }],
-            model: 'claude-sonnet-4-5-20250929',
-            stop_reason: 'end_turn',
-            usage: { input_tokens: 10, output_tokens: 5 },
-          }),
-        },
-      },
+      client: createAnthropicDumpClient(
+        vi.fn().mockResolvedValue({
+          id: 'msg_test',
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Hi' }],
+          model: 'claude-sonnet-4-5-20250929',
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 10, output_tokens: 5 },
+        }),
+      ),
       authToken: 'sk-ant-test-key',
     } as never);
 
@@ -128,19 +137,17 @@ describe('AnthropicProvider dumpContext integration', () => {
       provider as never,
       'buildProviderClient' as never,
     ).mockResolvedValue({
-      client: {
-        messages: {
-          create: vi.fn().mockResolvedValue({
-            id: 'msg_test',
-            type: 'message',
-            role: 'assistant',
-            content: [{ type: 'text', text: 'Hi' }],
-            model: 'claude-sonnet-4-5-20250929',
-            stop_reason: 'end_turn',
-            usage: { input_tokens: 10, output_tokens: 5 },
-          }),
-        },
-      },
+      client: createAnthropicDumpClient(
+        vi.fn().mockResolvedValue({
+          id: 'msg_test',
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Hi' }],
+          model: 'claude-sonnet-4-5-20250929',
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 10, output_tokens: 5 },
+        }),
+      ),
       authToken: 'sk-ant-test-key',
     } as never);
 
@@ -194,19 +201,17 @@ describe('AnthropicProvider dumpContext integration', () => {
       provider as never,
       'buildProviderClient' as never,
     ).mockResolvedValue({
-      client: {
-        messages: {
-          create: vi.fn().mockResolvedValue({
-            id: 'msg_test',
-            type: 'message',
-            role: 'assistant',
-            content: [{ type: 'text', text: 'Hi' }],
-            model: 'claude-sonnet-4-5-20250929',
-            stop_reason: 'end_turn',
-            usage: { input_tokens: 10, output_tokens: 5 },
-          }),
-        },
-      },
+      client: createAnthropicDumpClient(
+        vi.fn().mockResolvedValue({
+          id: 'msg_test',
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Hi' }],
+          model: 'claude-sonnet-4-5-20250929',
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 10, output_tokens: 5 },
+        }),
+      ),
       authToken: 'sk-ant-test-key',
     } as never);
 
@@ -248,11 +253,7 @@ describe('AnthropicProvider dumpContext integration', () => {
       provider as never,
       'buildProviderClient' as never,
     ).mockResolvedValue({
-      client: {
-        messages: {
-          create: vi.fn().mockRejectedValue(apiError),
-        },
-      },
+      client: createAnthropicDumpClient(vi.fn().mockRejectedValue(apiError)),
       authToken: 'sk-ant-test-key',
     } as never);
 
@@ -347,19 +348,17 @@ describe('AnthropicProvider dumpContext integration', () => {
       provider as never,
       'buildProviderClient' as never,
     ).mockResolvedValue({
-      client: {
-        messages: {
-          create: vi.fn().mockResolvedValue({
-            id: 'msg_test',
-            type: 'message',
-            role: 'assistant',
-            content: [{ type: 'text', text: 'Hi' }],
-            model: 'claude-sonnet-4-5-20250929',
-            stop_reason: 'end_turn',
-            usage: { input_tokens: 10, output_tokens: 5 },
-          }),
-        },
-      },
+      client: createAnthropicDumpClient(
+        vi.fn().mockResolvedValue({
+          id: 'msg_test',
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Hi' }],
+          model: 'claude-sonnet-4-5-20250929',
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 10, output_tokens: 5 },
+        }),
+      ),
       authToken: 'sk-ant-test-key',
     } as never);
 

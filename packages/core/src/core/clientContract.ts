@@ -92,7 +92,7 @@ export interface AgentChatContract {
     prompt_id: string,
   ): Promise<ModelOutput>;
   getHistory(): readonly IContent[];
-  setHistory(history: readonly IContent[]): void;
+  setHistory(history: readonly IContent[]): Promise<void>;
   clearHistory(): void;
   getHistoryService(): HistoryService | null;
   wasRecentlyCompressed(): boolean;
@@ -115,8 +115,8 @@ export interface AgentClientContract {
   getHistory(): Promise<readonly IContent[]>;
   getHistoryService(): HistoryService | null;
   storeHistoryServiceForReuse(service: HistoryService): void;
-  storeHistoryForLaterUse(history: readonly IContent[]): void;
-  dispose(): void;
+  storeHistoryForLaterUse(history: readonly IContent[]): Promise<void>;
+  dispose(): Promise<void>;
   setTools(): Promise<void>;
   clearTools(): void;
   updateSystemInstruction(): Promise<void>;

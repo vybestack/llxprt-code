@@ -25,10 +25,14 @@
 
 import { describe, expect, it, vi } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  IContent,
+  MediaBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { convertToAnthropicMessages } from './AnthropicMessageNormalizer.js';
 import { attachAnchorCacheControl } from './AnthropicAnchorCache.js';
+import { attachMediaPurgeCacheControl } from './AnthropicMediaPurgeCache.js';
 import { attachPromptCaching } from './AnthropicRequestBuilder.js';
 import { prepareAnthropicRequest } from './AnthropicRequestPreparation.js';
 import { isAnthropicOAuthBaseURL } from './AnthropicEndpointUtils.js';
@@ -100,6 +104,25 @@ function cacheControlCount(messages: AnthropicMessage[]): number {
   return count;
 }
 
+function cacheControlLocations(messages: AnthropicMessage[]): string[] {
+  const locations: string[] = [];
+  for (
+    let messageIndex = 0;
+    messageIndex < messages.length;
+    messageIndex += 1
+  ) {
+    const content = messages[messageIndex]?.content;
+    if (!Array.isArray(content)) continue;
+    for (let blockIndex = 0; blockIndex < content.length; blockIndex += 1) {
+      const block = content[blockIndex];
+      if ('cache_control' in block) {
+        locations.push(`${messageIndex}:${blockIndex}`);
+      }
+    }
+  }
+  return locations;
+}
+
 describe('Anthropic anchor cache breakpoint — message-level (#3070)', () => {
   it('places cache_control on the message derived from the anchored content', () => {
     const contents: IContent[] = [
@@ -124,6 +147,133 @@ describe('Anthropic anchor cache breakpoint — message-level (#3070)', () => {
 
     // The last message also carries the rolling-tail breakpoint.
     expect(cacheControlCount(messages)).toBe(2);
+  });
+
+  it('keeps an anchor attached to its block when empty-block stripping shifts its index', () => {
+    const messages = applyCaching([
+      human('prompt'),
+      {
+        speaker: 'ai',
+        blocks: [
+          { type: 'text', text: '' },
+          { type: 'text', text: 'stable anchored reply' },
+          {
+            type: 'tool_call',
+            id: 'anchor-call',
+            name: 'lookup',
+            parameters: {},
+          },
+        ],
+        metadata: { cacheAnchor: true },
+      },
+      human('tail'),
+    ]);
+
+    expect(cacheControlLocations(messages)).toEqual(['1:1', '2:1']);
+  });
+
+  it('maps a human semantic boundary during the initial media conversion', () => {
+    const boundaryId = Object.freeze({});
+    let mediaReads = 0;
+    const pdf: MediaBlock = {
+      type: 'media',
+      encoding: 'base64',
+      mimeType: 'application/pdf',
+      data: 'JVBERi0xLjQ=',
+    };
+    Object.defineProperty(pdf, 'data', {
+      configurable: true,
+      enumerable: true,
+      get: () => {
+        mediaReads += 1;
+        return 'JVBERi0xLjQ=';
+      },
+    });
+    const messages = convertToAnthropicMessages(
+      [
+        {
+          speaker: 'human',
+          blocks: [pdf, { type: 'text', text: 'stable boundary' }],
+          metadata: {
+            semanticMediaPurgeBoundary: { blockIndex: 1, boundaryId },
+          },
+        },
+        {
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'media',
+              encoding: 'base64',
+              mimeType: 'image/png',
+              data: 'aW1hZ2U=',
+            },
+          ],
+        },
+      ],
+      convertOptions,
+    );
+
+    const evidence = attachMediaPurgeCacheControl(messages, '5m', noopLogger);
+
+    expect(evidence).toEqual({ boundaryId, preparation: 'added' });
+    expect(mediaReads).toBe(2);
+    const content = messages[0]?.content;
+    if (!Array.isArray(content) || content[0]?.type !== 'document') {
+      throw new Error('Expected the exact PDF provider part');
+    }
+    expect(content[0].source).toEqual({
+      type: 'base64',
+      media_type: 'application/pdf',
+      data: 'JVBERi0xLjQ=',
+    });
+  });
+
+  it('keeps a semantic boundary on its text through tool-result adjacency and same-role merging', () => {
+    const boundaryId = Object.freeze({});
+    const messages = convertToAnthropicMessages(
+      [
+        {
+          speaker: 'ai',
+          blocks: [
+            { type: 'tool_call', id: 'call-1', name: 'lookup', parameters: {} },
+          ],
+        },
+        {
+          ...human('stable pre-image text'),
+          metadata: {
+            semanticMediaPurgeBoundary: { blockIndex: 0, boundaryId },
+          },
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'call-1',
+              toolName: 'lookup',
+              result: 'done',
+            },
+          ],
+        },
+        {
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'media',
+              encoding: 'base64',
+              mimeType: 'image/png',
+              data: 'aW1hZ2U=',
+            },
+          ],
+        },
+      ],
+      convertOptions,
+    );
+
+    const evidence = attachMediaPurgeCacheControl(messages, '5m', noopLogger);
+
+    expect(evidence).toEqual({ boundaryId, preparation: 'added' });
+    expect(cacheControlLocations(messages)).toEqual(['2:1']);
   });
 
   it('keeps the anchor breakpoint at the same content boundary across two byte-identical heads', () => {
@@ -278,6 +428,71 @@ describe('Anthropic anchor cache breakpoint — message-level (#3070)', () => {
     expect(cacheControlCount(rebuilt)).toBe(1);
   });
 
+  it('keeps tagged tool-result boundaries after validation removes an earlier result', () => {
+    const boundaryId = Object.freeze({});
+    const messages = convertToAnthropicMessages(
+      [
+        human('head'),
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'valid-call',
+              name: 'lookup',
+              parameters: {},
+            },
+          ],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'orphan-call',
+              toolName: 'lookup',
+              result: 'orphaned',
+            },
+          ],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'valid-call',
+              toolName: 'lookup',
+              result: 'stable',
+            },
+          ],
+          metadata: {
+            cacheAnchor: true,
+            semanticMediaPurgeBoundary: { blockIndex: 0, boundaryId },
+          },
+        },
+        {
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'media',
+              encoding: 'base64',
+              mimeType: 'image/png',
+              data: 'aW1hZ2U=',
+            },
+          ],
+        },
+      ],
+      convertOptions,
+    );
+
+    attachPromptCaching(messages, '5m', noopLogger);
+    attachAnchorCacheControl(messages, '5m', noopLogger);
+    const evidence = attachMediaPurgeCacheControl(messages, '5m', noopLogger);
+
+    expect(evidence).toEqual({ boundaryId, preparation: 'reused' });
+    expect(cacheControlLocations(messages)).toEqual(['2:0', '2:1']);
+  });
+
   it('honors a curated tool-result entry as the anchor boundary', () => {
     const historyService = new HistoryService();
     const toolCallId = 'tool_anchor_1';
@@ -335,6 +550,7 @@ describe('Anthropic anchor cache breakpoint — gating & count via prepareAnthro
   function buildOptions(opts: {
     baseURL: string;
     promptCaching: 'off' | '5m' | '1h';
+    semanticMediaPurge?: unknown;
     isOAuth: boolean;
     contents: IContent[];
   }) {
@@ -342,6 +558,10 @@ describe('Anthropic anchor cache breakpoint — gating & count via prepareAnthro
       providerName: 'anthropic',
       contents: opts.contents,
       settingsOverrides: {
+        global:
+          opts.semanticMediaPurge === undefined
+            ? undefined
+            : { 'media.semantic-purge': opts.semanticMediaPurge },
         provider: { 'prompt-caching': opts.promptCaching },
       },
       resolved: {
@@ -357,6 +577,7 @@ describe('Anthropic anchor cache breakpoint — gating & count via prepareAnthro
   async function prepare(opts: {
     baseURL: string;
     promptCaching: 'off' | '5m' | '1h';
+    semanticMediaPurge?: unknown;
     isOAuth: boolean;
     placement: 'system-field' | 'context-prefix';
     contents: IContent[];
@@ -516,5 +737,128 @@ describe('Anthropic anchor cache breakpoint — gating & count via prepareAnthro
     );
     // system (1) + rolling tail (1) = 2; no anchor breakpoint.
     expect(total).toBe(2);
+  });
+
+  it('places remove and summary breakpoints on the exact cacheable block preceding the oldest image', async () => {
+    const boundaryId = Object.freeze({});
+    const imageHistory: IContent[] = [
+      {
+        ...human('stable prefix'),
+        metadata: {
+          semanticMediaPurgeBoundary: { blockIndex: 0, boundaryId },
+        },
+      },
+      {
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'media',
+            encoding: 'base64',
+            mimeType: 'image/png',
+            data: 'aW1hZ2U=',
+          },
+        ],
+      },
+      human('tail'),
+    ];
+    const missing = await prepare({
+      baseURL: 'https://api.anthropic.com',
+      promptCaching: '5m',
+      isOAuth: false,
+      placement: 'system-field',
+      contents: imageHistory,
+    });
+    const disabled = await prepare({
+      baseURL: 'https://api.anthropic.com',
+      promptCaching: '5m',
+      semanticMediaPurge: 'off',
+      isOAuth: false,
+      placement: 'system-field',
+      contents: imageHistory,
+    });
+
+    expect(missing.semanticMediaPurgeCacheWriteEvidence).toBeUndefined();
+    expect(disabled.semanticMediaPurgeCacheWriteEvidence).toBeUndefined();
+    expect(disabled.requestBody).toStrictEqual(missing.requestBody);
+    expect(cacheControlLocations(missing.anthropicMessages)).toEqual(['0:2']);
+    expect(cacheControlLocations(disabled.anthropicMessages)).toEqual(['0:2']);
+
+    for (const semanticMediaPurge of ['remove', 'summary'] as const) {
+      const enabled = await prepare({
+        baseURL: 'https://api.anthropic.com',
+        promptCaching: '5m',
+        semanticMediaPurge,
+        isOAuth: false,
+        placement: 'system-field',
+        contents: imageHistory,
+      });
+
+      expect(enabled.semanticMediaPurgeCacheWriteEvidence).toEqual({
+        boundaryId,
+        preparation: 'added',
+      });
+      expect(cacheControlLocations(enabled.anthropicMessages)).toEqual([
+        '0:0',
+        '0:2',
+      ]);
+    }
+  });
+
+  it('records reused preparation when the exact boundary already has cache control', async () => {
+    const boundaryId = Object.freeze({});
+    const prepared = await prepare({
+      baseURL: 'https://api.anthropic.com',
+      promptCaching: '5m',
+      semanticMediaPurge: 'summary',
+      isOAuth: false,
+      placement: 'system-field',
+      contents: [
+        {
+          ...human('stable prefix'),
+          metadata: {
+            cacheAnchor: true,
+            semanticMediaPurgeBoundary: { blockIndex: 0, boundaryId },
+          },
+        },
+        {
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'media',
+              encoding: 'base64',
+              mimeType: 'image/png',
+              data: 'aW1hZ2U=',
+            },
+          ],
+        },
+        human('tail'),
+      ],
+    });
+
+    expect(prepared.semanticMediaPurgeCacheWriteEvidence).toEqual({
+      boundaryId,
+      preparation: 'reused',
+    });
+    expect(cacheControlLocations(prepared.anthropicMessages)).toEqual([
+      '0:0',
+      '0:2',
+    ]);
+  });
+
+  it('fails fast on malformed semantic media purge settings', async () => {
+    for (const semanticMediaPurge of ['REMOVE', true, { mode: 'remove' }]) {
+      await expect(
+        prepare({
+          baseURL: 'https://api.anthropic.com',
+          promptCaching: '5m',
+          semanticMediaPurge,
+          isOAuth: false,
+          placement: 'system-field',
+          contents: [human('request must not be constructed')],
+        }),
+      ).rejects.toThrow(
+        "Invalid media.semantic-purge setting: expected 'off', 'remove', or 'summary'",
+      );
+    }
   });
 });

@@ -576,7 +576,7 @@ export async function recordHistoryWithUsage(
   const responsesStored =
     metadataChunk?.content.metadata?.responsesStored ?? null;
 
-  args.conversationManager.recordHistory(
+  await args.conversationManager.recordHistory(
     args.userInput,
     [modelIContent],
     undefined,

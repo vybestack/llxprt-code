@@ -24,8 +24,8 @@ export interface MediaBlock {
   mimeType: string;
   /** Base64-encoded data or URL. */
   data?: string;
-  /** Whether data is a URL or base64. */
-  encoding?: 'url' | 'base64';
+  /** Whether media is inline, a URL, or a local content reference. */
+  encoding?: 'url' | 'base64' | 'reference';
   /** Optional caption or alt text. */
   caption?: string;
   /** Original filename if applicable. */

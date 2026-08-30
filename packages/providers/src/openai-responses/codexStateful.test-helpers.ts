@@ -26,6 +26,7 @@
 
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
@@ -156,6 +157,10 @@ export function buildDeps(
     resolveAuthTokenForPrompt: async () => 'codex-token',
     shouldRetryOnError: () => false,
     getDefaultModel: () => 'gpt-5.6-sol',
+    getMediaTransportCapabilities: () => ({
+      ...declaredMediaTransportCapabilities('codex'),
+      streamingRequestBody: false,
+    }),
     getGlobalConfig: () => undefined,
     // Codex statefulness is WS-bound; these harnesses exercise the WS path.
     isWebSocketTransportActive: () => true,

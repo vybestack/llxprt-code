@@ -12,6 +12,7 @@ import { ToolErrorType } from '../types/tool-error.js';
 import { debugLogger } from './debugLogger.js';
 import { isNodeError } from './errors.js';
 import {
+  createImageResizeSourceMetadata,
   ImageResizeError,
   resizeImageIfNeeded,
   type ImageResizePolicy,
@@ -842,6 +843,14 @@ async function processMediaFile(
         data: outputBuffer.toString('base64'),
         mimeType,
         displayName,
+        ...(fileType === 'image'
+          ? createImageResizeSourceMetadata(
+              contentBuffer,
+              outputBuffer,
+              mimeType,
+              imageResizePolicy,
+            )
+          : undefined),
       },
     },
     returnDisplay: `Read ${fileType} file: ${relativePathForDisplay}`,

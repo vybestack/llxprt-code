@@ -16,6 +16,7 @@ import type { CommandArgumentSchema } from './schema/types.js';
 import { SessionDiscovery } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { basename } from 'node:path';
+import { handleContinuePackageAction } from './continuePackageActions.js';
 
 /**
  * Schema for /continue command tab completion
@@ -50,6 +51,7 @@ const continueSchema: CommandArgumentSchema = [
         targets = await SessionDiscovery.listContinueTargets(
           storage.getProjectChatsDir(),
           basename(storage.getProjectTempDir()),
+          config.getLocalMediaStore(),
         );
       } catch (error: unknown) {
         debugLogger.warn('Failed to discover /continue completions:', error);
@@ -120,6 +122,13 @@ export const continueCommand: SlashCommand = {
 
     // Parse args: trim whitespace
     const trimmedArgs = args.trim();
+
+    const packageAction = await handleContinuePackageAction(
+      ctx,
+      trimmedArgs,
+      hasActiveConversation(ctx),
+    );
+    if (packageAction !== undefined) return packageAction;
 
     // No-args path (REQ-EN-001)
     if (!trimmedArgs) {

@@ -17,6 +17,7 @@
  * and (for wiring) the real AnthropicProvider. No unit under test is mocked.
  */
 
+import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
 import { vi, describe, it, expect, afterEach } from 'bun:test';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -627,6 +628,7 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
 
     void vi.mock('@anthropic-ai/sdk', () => ({
       default: vi.fn().mockImplementation(() => ({
+        ...createAnthropicRawPostTestAdapter(mockMessagesCreate),
         messages: { create: mockMessagesCreate },
       })),
     }));

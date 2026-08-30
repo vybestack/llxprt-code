@@ -17,6 +17,8 @@ import type {
   AnthropicMessageContent,
   AnthropicToolResultContent,
 } from './AnthropicMessageNormalizer.js';
+import { materializeAnchorBoundary } from './AnthropicAnchorCache.js';
+import { materializeMediaPurgeBoundary } from './AnthropicMediaPurgeCache.js';
 
 function collectToolUseIds(
   blocks: AnthropicMessageBlock[],
@@ -229,6 +231,8 @@ function collectAndReorderToolResults(
         type: 'text',
         text: nextMsg.content,
       };
+      materializeAnchorBoundary(nextMsg, [textBlock]);
+      materializeMediaPurgeBoundary(nextMsg, [textBlock]);
       nextMsg.content = [...collectedResults, textBlock];
     }
   }
@@ -347,19 +351,22 @@ export function ensureValidMessageSequence(
 function mergeConsecutiveMessages(
   messages: AnthropicMessage[],
 ): AnthropicMessage[] {
-  const toBlocks = (
-    content: AnthropicMessageContent,
-  ): AnthropicMessageBlock[] =>
-    typeof content === 'string'
-      ? [{ type: 'text' as const, text: content }]
-      : content;
+  const toBlocks = (message: AnthropicMessage): AnthropicMessageBlock[] => {
+    if (typeof message.content !== 'string') return message.content;
+    const blocks: AnthropicMessageBlock[] = [
+      { type: 'text', text: message.content },
+    ];
+    materializeAnchorBoundary(message, blocks);
+    materializeMediaPurgeBoundary(message, blocks);
+    return blocks;
+  };
 
   const merged: AnthropicMessage[] = [];
   for (const msg of messages) {
     const prev = merged.length > 0 ? merged[merged.length - 1] : undefined;
     if (prev && prev.role === msg.role) {
-      const prevBlocks = toBlocks(prev.content);
-      const curBlocks = toBlocks(msg.content);
+      const prevBlocks = toBlocks(prev);
+      const curBlocks = toBlocks(msg);
 
       if (prev.role === 'user') {
         const toolResultBlocks = [

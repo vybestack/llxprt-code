@@ -50,7 +50,7 @@ const contentArb = fc.array(
 
 describe('clientContract.characterization — @plan:PLAN-20260707-AGENTNEUTRAL.P20 @requirement:REQ-INT-001.2', () => {
   describe('history round-trip with array isolation', () => {
-    it('returns equivalent content after addHistory → getHistory', () => {
+    it('returns equivalent content after addHistory → getHistory', async () => {
       const harness = createFullLoopHarness(
         vi.fn(async function* () {
           yield {
@@ -60,7 +60,7 @@ describe('clientContract.characterization — @plan:PLAN-20260707-AGENTNEUTRAL.P
         }),
       );
       const { chat } = harness;
-      chat.clearHistory();
+      await chat.clearHistory();
       chat.addHistory(makeUserContent('hello'));
       chat.addHistory(makeModelContent('world'));
       const raw = chat.getHistory();
@@ -76,7 +76,7 @@ describe('clientContract.characterization — @plan:PLAN-20260707-AGENTNEUTRAL.P
       });
     });
 
-    it('returns array isolation with shared entry references (no deep clone)', () => {
+    it('returns array isolation with shared entry references (no deep clone)', async () => {
       const harness = createFullLoopHarness(
         vi.fn(async function* () {
           yield {
@@ -86,7 +86,7 @@ describe('clientContract.characterization — @plan:PLAN-20260707-AGENTNEUTRAL.P
         }),
       );
       const { chat } = harness;
-      chat.clearHistory();
+      await chat.clearHistory();
       chat.addHistory(makeUserContent('original'));
 
       // Two successive calls return distinct arrays
@@ -117,7 +117,7 @@ describe('clientContract.characterization — @plan:PLAN-20260707-AGENTNEUTRAL.P
       });
     });
 
-    it('property: history round-trip preserves block count for ANY history', () => {
+    it('property: history round-trip preserves block count for ANY history', async () => {
       const harness = createFullLoopHarness(
         vi.fn(async function* () {
           yield {
@@ -127,9 +127,9 @@ describe('clientContract.characterization — @plan:PLAN-20260707-AGENTNEUTRAL.P
         }),
       );
       const { chat } = harness;
-      fc.assert(
-        fc.property(contentArb, (history) => {
-          chat.clearHistory();
+      await fc.assert(
+        fc.asyncProperty(contentArb, async (history) => {
+          await chat.clearHistory();
           for (const entry of history) {
             chat.addHistory(entry);
           }

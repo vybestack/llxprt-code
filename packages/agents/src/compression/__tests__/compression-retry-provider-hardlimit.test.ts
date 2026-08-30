@@ -353,7 +353,7 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       expect(harness.deps.performFallbackCompression).toHaveBeenCalled();
 
       expect(thrownError).toBeInstanceOf(Error);
-      expect(thrownError!.message).toContain(
+      expect(thrownError?.message).toContain(
         'Automatic compression failed before fallback',
       );
     });
@@ -397,10 +397,10 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       expect(harness.deps.performFallbackCompression).toHaveBeenCalled();
 
       expect(thrownError).toBeInstanceOf(Error);
-      expect(thrownError!.message).toContain(
+      expect(thrownError?.message).toContain(
         'Automatic compression failed before fallback',
       );
-      expect(thrownError!.message).toContain(
+      expect(thrownError?.message).toContain(
         'network error during compression',
       );
     });
@@ -453,10 +453,10 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
 
       expect(thrownError).toBeInstanceOf(Error);
       // Compression failure diagnostics surfaced
-      expect(thrownError!.message).toContain(
+      expect(thrownError?.message).toContain(
         'Automatic compression failed before fallback',
       );
-      expect(thrownError!.message).toContain(
+      expect(thrownError?.message).toContain(
         'Additional hard-limit compression attempt failed',
       );
     });
@@ -499,10 +499,10 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       }
 
       expect(thrownError).toBeInstanceOf(Error);
-      expect(thrownError!.message).toContain(
+      expect(thrownError?.message).toContain(
         'Truncation fallback failed during hard-limit enforcement',
       );
-      expect(thrownError!.message).toContain('truncation broke');
+      expect(thrownError?.message).toContain('truncation broke');
     });
   });
 
@@ -685,7 +685,7 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       expect(thrownError).toBeInstanceOf(Error);
       // The diagnostics should identify the skipped compression result so the
       // error is actionable.
-      expect(thrownError!.message).toContain('skipped_empty');
+      expect(thrownError?.message).toContain('skipped_empty');
     });
   });
 
@@ -736,7 +736,7 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       expect(compressionCallCount).toBe(2);
       expect(thrownError).toBeInstanceOf(Error);
       // The underlying cause must be preserved in actionable diagnostics.
-      expect(thrownError!.message).toContain(
+      expect(thrownError?.message).toContain(
         'underlying retry cause: network timeout',
       );
     });
@@ -843,10 +843,10 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       // it did NOT rethrow the raw compression error. The diagnostics surface
       // the compression failure as a structured field, not a raw throw.
       expect(thrownError).toBeInstanceOf(Error);
-      expect(thrownError!.message).toContain(
+      expect(thrownError?.message).toContain(
         'Automatic compression failed before fallback',
       );
-      expect(thrownError!.message).toContain('enforce compression failed');
+      expect(thrownError?.message).toContain('enforce compression failed');
     });
   });
 
@@ -895,10 +895,10 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       }
 
       expect(thrownError).toBeInstanceOf(Error);
-      expect(thrownError!.message).toContain(
+      expect(thrownError?.message).toContain(
         'Truncation fallback failed during hard-limit enforcement',
       );
-      expect(thrownError!.message).toContain('history persistence layer down');
+      expect(thrownError?.message).toContain('history persistence layer down');
     });
   });
 

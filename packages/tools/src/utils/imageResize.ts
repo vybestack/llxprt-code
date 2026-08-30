@@ -12,6 +12,39 @@ export interface ImageResizePolicy {
   readonly maxPixels?: number;
 }
 
+export interface ImageResizeSourceMetadata {
+  readonly originalData: string;
+  readonly originalMimeType: string;
+  readonly transformation: {
+    readonly policyId: 'image-resize';
+    readonly policyVersion: 1;
+    readonly parameters: Readonly<Record<string, number>>;
+  };
+}
+
+export function createImageResizeSourceMetadata(
+  original: Buffer,
+  resized: Buffer,
+  mimeType: string,
+  policy: ImageResizePolicy | undefined,
+): ImageResizeSourceMetadata | undefined {
+  if (original === resized || policy === undefined) return undefined;
+  const parameters = {
+    ...(policy.maxLongEdge === undefined
+      ? {}
+      : { maxLongEdge: policy.maxLongEdge }),
+    ...(policy.maxShortEdge === undefined
+      ? {}
+      : { maxShortEdge: policy.maxShortEdge }),
+    ...(policy.maxPixels === undefined ? {} : { maxPixels: policy.maxPixels }),
+  };
+  return {
+    originalData: original.toString('base64'),
+    originalMimeType: mimeType,
+    transformation: { policyId: 'image-resize', policyVersion: 1, parameters },
+  };
+}
+
 export class ImageResizeError extends Error {
   constructor(displayName: string, reason: string) {
     super(`Unable to resize image ${displayName}: ${reason}`);

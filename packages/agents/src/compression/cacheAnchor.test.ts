@@ -8,16 +8,15 @@
  * Behavioral tests for the cache-anchor marker stamped by
  * `applyCompressionWithAnchor` (#3070 "caching during compression").
  *
- * The marker (`metadata.cacheAnchor`) is carried ON the content so it travels
- * with the history and survives a wholesale clear/rebuild. These tests prove:
- *  - exactly ONE preserved-head entry carries the marker after a compression;
- *  - the marker survives the real `historyService.clear()` + `add()` rebuild
- *    (the chronology stamper preserves existing metadata);
+ * The marker (`metadata.cacheAnchor`) is carried on content so it travels with
+ * the history through atomic replacement. These tests prove:
+ *  - exactly one preserved-head entry carries the marker after compression;
+ *  - the marker survives the real `historyService.replaceAll()` publication;
  *  - stale markers from a previous compression are cleared;
  *  - when the prefix is destroyed (`topPreserved <= 0`) no entry is marked.
  *
- * Uses a REAL HistoryService — no mocks — so the clear/add/stamp path is
- * exercised exactly as production runs it.
+ * Uses a real HistoryService so the replacement and chronology-stamping path is
+ * exercised as production runs it.
  */
 
 import { describe, it, expect } from 'bun:test';
@@ -46,8 +45,8 @@ function apply(
   historyService: HistoryService,
   newHistory: IContent[],
   topPreserved: number,
-): void {
-  applyCompressionWithAnchor(
+): Promise<void> {
+  return applyCompressionWithAnchor(
     historyService,
     newHistory,
     topPreserved,
@@ -57,7 +56,7 @@ function apply(
 }
 
 describe('applyCompressionWithAnchor — cacheAnchor marker (#3070)', () => {
-  it('marks exactly the last preserved-head entry and the marker survives the clear/rebuild', () => {
+  it('marks exactly the last preserved-head entry and the marker survives replacement', async () => {
     const historyService = new HistoryService();
     // Seed an initial history so getRawHistory() is non-empty for annotate.
     for (const c of [human('old1'), ai('old2'), human('old3'), ai('old4')]) {
@@ -75,7 +74,7 @@ describe('applyCompressionWithAnchor — cacheAnchor marker (#3070)', () => {
     ];
     const topPreserved = 2;
 
-    apply(historyService, newHistory, topPreserved);
+    await apply(historyService, newHistory, topPreserved);
 
     const rebuilt = historyService.getAll();
     expect(rebuilt).toHaveLength(newHistory.length);
@@ -84,16 +83,14 @@ describe('applyCompressionWithAnchor — cacheAnchor marker (#3070)', () => {
     const marked = rebuilt.filter((c) => c.metadata?.cacheAnchor === true);
     expect(marked).toHaveLength(1);
 
-    // The marker is on the last preserved-head entry (index topPreserved - 1),
-    // and it survived the clear()+add() rebuild (chronology stamp preserves
-    // existing metadata).
+    // The marker is on the last preserved-head entry (index topPreserved - 1)
+    // after atomic replacement.
     expect(rebuilt[topPreserved - 1].metadata?.cacheAnchor).toBe(true);
-    // That entry also received a fresh chronology stamp, proving it was
-    // re-added through the normal add() path.
+    // Atomic replacement stamps entries through the normal chronology path.
     expect(rebuilt[topPreserved - 1].metadata?.chronology?.seq).toBeDefined();
   });
 
-  it('anchors the preserved-head tool content after a complete tool round-trip', () => {
+  it('anchors the preserved-head tool content after a complete tool round-trip', async () => {
     const historyService = new HistoryService();
     const toolCallId = 'compression-tool-call';
     const roundTrip: IContent[] = [
@@ -128,7 +125,7 @@ describe('applyCompressionWithAnchor — cacheAnchor marker (#3070)', () => {
     }
     const stamped = historyService.getAll();
 
-    apply(
+    await apply(
       historyService,
       [
         stamped[0],
@@ -149,7 +146,7 @@ describe('applyCompressionWithAnchor — cacheAnchor marker (#3070)', () => {
     expect(anchored[0].blocks[0].type).toBe('tool_response');
   });
 
-  it('clears stale markers so exactly one entry carries the marker after a second compression', () => {
+  it('clears stale markers so exactly one entry carries the marker after a second compression', async () => {
     const historyService = new HistoryService();
     for (const c of [human('seed1'), ai('seed2')]) {
       historyService.add(c, 'test-model');
@@ -157,7 +154,7 @@ describe('applyCompressionWithAnchor — cacheAnchor marker (#3070)', () => {
 
     // First compression: head of 2 entries reused from the stamped history.
     const stamped = historyService.getAll();
-    apply(
+    await apply(
       historyService,
       [stamped[0], stamped[1], summary('first summary'), human('tail-a')],
       2,
@@ -171,7 +168,7 @@ describe('applyCompressionWithAnchor — cacheAnchor marker (#3070)', () => {
     // longer tail. The marker must move to the new boundary and the old one
     // must be cleared — never two markers at once.
     const reusedHead = afterFirst.slice(0, 2);
-    apply(
+    await apply(
       historyService,
       [...reusedHead, summary('second summary'), human('tail-b'), ai('tail-c')],
       2,
@@ -183,14 +180,18 @@ describe('applyCompressionWithAnchor — cacheAnchor marker (#3070)', () => {
     expect(afterSecond[1].metadata?.cacheAnchor).toBe(true);
   });
 
-  it('marks no entry when the prefix is destroyed (topPreserved <= 0)', () => {
+  it('marks no entry when the prefix is destroyed (topPreserved <= 0)', async () => {
     const historyService = new HistoryService();
     for (const c of [human('seed1'), ai('seed2'), human('seed3')]) {
       historyService.add(c, 'test-model');
     }
 
     // A truncation strategy that preserves no head.
-    apply(historyService, [summary('full replacement'), human('only tail')], 0);
+    await apply(
+      historyService,
+      [summary('full replacement'), human('only tail')],
+      0,
+    );
 
     const rebuilt = historyService.getAll();
     expect(
@@ -200,7 +201,7 @@ describe('applyCompressionWithAnchor — cacheAnchor marker (#3070)', () => {
     expect(historyService.getCacheAnchorSeq()).toBe(0);
   });
 
-  it('advances the cache anchor seq to the last preserved-head entry', () => {
+  it('advances the cache anchor seq to the last preserved-head entry', async () => {
     const historyService = new HistoryService();
     // Seed real history so the preserved-head entries carry chronology
     // markers, exactly as production does (the head is reused verbatim from
@@ -210,7 +211,7 @@ describe('applyCompressionWithAnchor — cacheAnchor marker (#3070)', () => {
     }
     const stamped = historyService.getAll();
 
-    apply(
+    await apply(
       historyService,
       [stamped[0], stamped[1], summary('summary'), human('tail')],
       2,
@@ -223,10 +224,26 @@ describe('applyCompressionWithAnchor — cacheAnchor marker (#3070)', () => {
     expect(rebuilt[1].metadata?.chronology?.seq).toBe(expectedSeq);
     expect(historyService.getCacheAnchorSeq()).toBe(expectedSeq);
   });
+
+  it('publishes compression as one atomic history mutation', async () => {
+    const historyService = new HistoryService();
+    historyService.add(human('original'), 'test-model');
+    await historyService.waitForTokenUpdates();
+    const original = historyService.getAll();
+    let tokenUpdateCount = 0;
+    historyService.on('tokensUpdated', () => {
+      tokenUpdateCount += 1;
+    });
+
+    await apply(historyService, [original[0], summary('replacement')], 1);
+
+    expect(historyService.getAll()).toHaveLength(2);
+    expect(tokenUpdateCount).toBe(1);
+  });
 });
 
 describe('applyCompressionWithAnchor under an active compression lock (#3338)', () => {
-  it('flushes rebuild content before the lock release and keeps ordinary streaming adds on both sides streaming after it', () => {
+  it('flushes rebuild content before the lock release and keeps ordinary streaming adds on both sides streaming after it', async () => {
     const historyService = new HistoryService();
     for (const c of [
       human('original-1'),
@@ -262,24 +279,30 @@ describe('applyCompressionWithAnchor under an active compression lock (#3338)', 
     // An ordinary streaming add queued before the helper must not be treated as
     // rebuild work: it lands in the streaming phase after the release events.
     historyService.add(human('pre-helper-stream'));
-    apply(historyService, newHistory, topPreserved);
+    await apply(historyService, newHistory, topPreserved);
     // A late ordinary streaming add queued after the helper must also stay in the
     // streaming phase; it cannot be inferred from position relative to the rebuild.
     historyService.add(ai('post-helper-stream'));
     historyService.endCompression(summary('done'), stamped.length);
 
+    // The rebuild is published as one atomic replacement (#3199), so it emits
+    // no per-entry contentAdded events; the sibling #3070 case asserts that
+    // atomicity directly. What #3338 guarantees is the ordering, which is
+    // unchanged: the rebuild is committed before the lock release, and both
+    // ordinary streaming adds fire after it in FIFO order.
     expect(observed).toStrictEqual([
-      // Rebuild (clear + re-add) fires inside the recording suppression window.
-      'contentAdded:original-1',
-      'contentAdded:original-2',
-      'contentAdded:compressed',
-      'contentAdded:original-3',
       'compressionLockReleased',
       'compressionEnded',
-      // Both streaming adds survive and fire after the release, in FIFO order.
       'contentAdded:pre-helper-stream',
       'contentAdded:post-helper-stream',
     ]);
+
+    // The rebuilt content itself landed, and did so before the release.
+    const rebuiltTexts = historyService
+      .getAll()
+      .map((c) => (c.blocks[0].type === 'text' ? c.blocks[0].text : ''));
+    expect(rebuiltTexts).toContain('compressed');
+    expect(rebuiltTexts).toContain('original-1');
 
     const texts = historyService.getAll().map((entry) => {
       const block = entry.blocks[0];

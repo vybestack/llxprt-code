@@ -29,10 +29,7 @@
  * custom headers, Codex account ID) as pure functions.
  */
 
-import {
-  buildWebSocketHandshakeHeaders,
-  dumpFinalizedRequest,
-} from './openAIResponsesRequestDump.js';
+import { dumpFinalizedRequest } from './openAIResponsesRequestDump.js';
 import { SyntheticToolResponseHandler } from '../openai/syntheticToolResponses.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
@@ -43,7 +40,6 @@ import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 import { isPreviousResponseNotFoundError } from './openAIResponsesStatefulRecovery.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { OPENAI_TRANSPORT_SELECTOR_KEYS } from '../openai/openaiModelPolicy.js';
 import { buildOpenAIResponsesInput } from './OpenAIResponsesInputBuilder.js';
 import {
   applyOpenAIResponsesReasoning,
@@ -54,21 +50,24 @@ import type {
   OpenAIResponsesRequest,
   ResponsesInputItem,
 } from './OpenAIResponsesTypes.js';
+import type { computeStatefulConversation } from './openAIResponsesStateful.js';
+import { applyStatefulConversation } from './openAIResponsesStateful.js';
 import {
-  applyStatefulConversation,
-  computeStatefulConversation,
-} from './openAIResponsesStateful.js';
-import {
-  streamOverWebSocketOrFallback,
-  type StreamResponseOptions,
-  type WebSocketTransport,
-} from './openAIResponsesWebSocketTransport.js';
-import {
-  streamOverHttp,
-  type StreamResponsesParams,
-} from './openAIResponsesHttpStream.js';
-import { dumpFallbackHttpRequest } from './openAIResponsesHttpStream.js';
+  resolveResponsesBaseURL,
+  resolveResponsesRequestShape,
+  toEstimationContents,
+} from './openAIResponsesRequestState.js';
+import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import { type WebSocketTransport } from './openAIResponsesWebSocketTransport.js';
 import type { OpenAIResponsesProjectionContext } from '../runtime/promptEnvelopeProjections.js';
+import {
+  finishMediaRequest,
+  type MediaRequestOutcome,
+  resolveRequestMedia,
+} from '../utils/request-media-resolution.js';
+import type { StreamResponsesParams } from './openAIResponsesHttpStream.js';
+import { streamResponses } from './openAIResponsesStreaming.js';
+import type { resolveMediaCapabilities } from './openAIResponsesRequestState.js';
 
 /**
  * Provider-specific capabilities that the executor needs to do its work.
@@ -106,6 +105,9 @@ export interface ResponsesExecutorDeps {
   readonly shouldRetryOnError: (error: Error | unknown) => boolean;
   /** Return the provider's default model ID for fallback when resolved model is empty. */
   readonly getDefaultModel: () => string;
+  readonly getMediaTransportCapabilities?: (
+    isCodex: boolean,
+  ) => ReturnType<typeof resolveMediaCapabilities>;
   /** Return the provider instance's global config for tool-output-limiter fallback. */
   readonly getGlobalConfig: () => ToolOutputSettingsProvider | undefined;
   /**
@@ -163,6 +165,7 @@ export interface PreparedResponsesRequestContext {
   readonly responsesStored: boolean;
   readonly request: OpenAIResponsesRequest;
   readonly projectionContext: OpenAIResponsesProjectionContext;
+  readonly mediaRequest: ResolvedMediaRequest;
 }
 
 export interface RequestContext extends PreparedResponsesRequestContext {
@@ -204,15 +207,19 @@ export async function buildResponsesRequestContextForProjection(
   );
 }
 
-export async function* executeOpenAIResponsesRequest(
+interface ResponsesExecutionSetup {
+  readonly abortSignal: AbortSignal | undefined;
+  readonly invocationEphemerals: Record<string, unknown>;
+  readonly requestContext: RequestContext;
+  readonly dumpResult: Awaited<ReturnType<typeof dumpFinalizedRequest>>;
+}
+
+async function prepareResponsesExecution(
   options: NormalizedGenerateChatOptions,
   deps: ResponsesExecutorDeps,
-  preparedRequestContext?: PreparedResponsesRequestContext,
-): AsyncIterableIterator<IContent> {
-  // Issue #3136: fail fast before any request preparation. Projection paths
-  // call buildResponsesRequestContextForProjection directly and are exempt.
+  preparedRequestContext: PreparedResponsesRequestContext | undefined,
+): Promise<ResponsesExecutionSetup> {
   requireAssembledSystemInstruction(options.systemInstruction);
-
   const abortSignal = getRequestSignal(options);
   const invocationEphemerals = resolveInvocationEphemerals(options);
   const prepared =
@@ -227,14 +234,29 @@ export async function* executeOpenAIResponsesRequest(
     prepared,
     deps,
   );
+  try {
+    const dumpResult = await dumpFinalizedRequest(
+      requestContext,
+      invocationEphemerals,
+      deps,
+      options,
+    );
+    return { abortSignal, invocationEphemerals, requestContext, dumpResult };
+  } catch (error) {
+    return finishMediaRequest(requestContext.mediaRequest, {
+      status: 'failed',
+      error,
+    });
+  }
+}
 
-  const dumpResult = await dumpFinalizedRequest(
-    requestContext,
-    invocationEphemerals,
-    deps,
-    options,
-  );
-
+export async function* executeOpenAIResponsesRequest(
+  options: NormalizedGenerateChatOptions,
+  deps: ResponsesExecutorDeps,
+  preparedRequestContext?: PreparedResponsesRequestContext,
+): AsyncIterableIterator<IContent> {
+  const { abortSignal, invocationEphemerals, requestContext, dumpResult } =
+    await prepareResponsesExecution(options, deps, preparedRequestContext);
   const streamParams: StreamResponsesParams = {
     ...buildStreamParams(
       requestContext,
@@ -243,39 +265,58 @@ export async function* executeOpenAIResponsesRequest(
       options,
       dumpResult,
     ),
-    rebuildStateless: () =>
-      buildStatelessTurn(options, deps, invocationEphemerals, abortSignal),
+    rebuildStateless: async () => {
+      await requestContext.mediaRequest.release();
+      return buildStatelessTurn(
+        options,
+        deps,
+        invocationEphemerals,
+        abortSignal,
+      );
+    },
   };
 
   // #3134 Fix 1: one-shot recovery when previous_response_id is rejected.
   // The safe replay boundary is "no IContent has been yielded to the consumer"
   // — if even one chunk escaped we cannot retry without duplicating output.
   let contentYielded = false;
-  let rejectedParentId: string;
+  let rejectedParentId: string | undefined;
+  let outcome: MediaRequestOutcome = { status: 'succeeded' };
   try {
-    for await (const content of streamResponses(streamParams, deps)) {
-      contentYielded = true;
-      yield content;
+    try {
+      for await (const content of streamResponses(streamParams, deps)) {
+        contentYielded = true;
+        yield content;
+      }
+      return;
+    } catch (error) {
+      // Guard on the request the transport actually sent, not on `prepared`,
+      // so a future divergence between the two cannot skip recovery.
+      const sentParentId = requestContext.request.previous_response_id;
+      if (
+        contentYielded ||
+        sentParentId === undefined ||
+        !isPreviousResponseNotFoundError(error)
+      ) {
+        throw error;
+      }
+      rejectedParentId = sentParentId;
+      deps.logger.debug(
+        () =>
+          `responses-stateful: parent ${sentParentId} was rejected by the API; retiring it and retrying once with full history. Error: ${String(error)}`,
+      );
     }
-    return;
   } catch (error) {
-    // Guard on the request the transport actually sent, not on `prepared`,
-    // so a future divergence between the two cannot skip recovery.
-    const sentParentId = requestContext.request.previous_response_id;
-    if (
-      contentYielded ||
-      sentParentId === undefined ||
-      !isPreviousResponseNotFoundError(error)
-    ) {
-      throw error;
-    }
-    rejectedParentId = sentParentId;
-    deps.logger.debug(
-      () =>
-        `responses-stateful: parent ${sentParentId} was rejected by the API; retiring it and retrying once with full history. Error: ${String(error)}`,
-    );
+    outcome = { status: 'failed', error };
+  } finally {
+    await finishMediaRequest(requestContext.mediaRequest, outcome);
   }
 
+  if (rejectedParentId === undefined) {
+    throw new Error(
+      'Responses stateful retry was entered without a rejected parent',
+    );
+  }
   yield* retryWithoutStatefulness(
     options,
     deps,
@@ -322,26 +363,42 @@ async function* retryWithoutStatefulness(
   );
   // The recovery request is the one that actually reaches the model, so it is
   // the one worth seeing under `dumpcontext`.
-  const recoveryDump = await dumpFinalizedRequest(
-    recoveryContext,
-    invocationEphemerals,
-    deps,
-    options,
-  );
+  let recoveryDump: Awaited<ReturnType<typeof dumpFinalizedRequest>>;
+  try {
+    recoveryDump = await dumpFinalizedRequest(
+      recoveryContext,
+      invocationEphemerals,
+      deps,
+      options,
+    );
+  } catch (error) {
+    await finishMediaRequest(recoveryContext.mediaRequest, {
+      status: 'failed',
+      error,
+    });
+    throw error;
+  }
   // Note: if both the initial and the recovery attempt fall back from the
   // WebSocket, `onWebSocketFallback` fires twice for a single turn. That is
   // accepted: the counter tracks CONSECUTIVE transport failures, and two real
   // failed WebSocket attempts did occur.
-  yield* streamResponses(
-    buildStreamParams(
-      recoveryContext,
-      abortSignal,
-      invocationEphemerals,
-      options,
-      recoveryDump,
-    ),
-    deps,
-  );
+  let outcome: MediaRequestOutcome = { status: 'succeeded' };
+  try {
+    yield* streamResponses(
+      buildStreamParams(
+        recoveryContext,
+        abortSignal,
+        invocationEphemerals,
+        options,
+        recoveryDump,
+      ),
+      deps,
+    );
+  } catch (error) {
+    outcome = { status: 'failed', error };
+  } finally {
+    await finishMediaRequest(recoveryContext.mediaRequest, outcome);
+  }
 }
 
 /**
@@ -374,14 +431,22 @@ async function buildStatelessTurn(
     prepared,
     deps,
   );
-  const dumpResult = await dumpFinalizedRequest(
-    context,
-    invocationEphemerals,
-    deps,
-    options,
-    // The rebuilt turn is always carried over HTTP (#3159).
-    true,
-  );
+  let dumpResult: Awaited<ReturnType<typeof dumpFinalizedRequest>>;
+  try {
+    dumpResult = await dumpFinalizedRequest(
+      context,
+      invocationEphemerals,
+      deps,
+      options,
+      // The rebuilt turn is always carried over HTTP (#3159).
+      true,
+    );
+  } catch (error) {
+    return finishMediaRequest(context.mediaRequest, {
+      status: 'failed',
+      error,
+    });
+  }
   return buildStreamParams(
     context,
     abortSignal,
@@ -440,46 +505,13 @@ function buildResponsesProjectionContext(
       ...request,
       input: buildInput(
         options,
-        patchedContent,
+        toEstimationContents(patchedContent),
         invocationEphemerals,
         deps,
         false,
       ),
     },
   };
-}
-
-function computeRequestStatefulConversation(
-  options: NormalizedGenerateChatOptions,
-  patchedContent: IContent[],
-  invocationEphemerals: Record<string, unknown>,
-  explicitUserStore: boolean | undefined,
-  isCodex: boolean,
-  rawBaseURL: string,
-  forceStateless: boolean,
-  deps: ResponsesExecutorDeps,
-): ReturnType<typeof computeStatefulConversation> {
-  // Codex can only be stateful over the WebSocket transport because the parent
-  // lives on the socket. Non-Codex storage is transport-independent.
-  let statefulTransportSupported: boolean;
-  if (forceStateless) {
-    statefulTransportSupported = false;
-  } else if (!isCodex) {
-    statefulTransportSupported = true;
-  } else {
-    statefulTransportSupported = deps.isWebSocketTransportActive?.() ?? false;
-  }
-  return computeStatefulConversation(
-    options,
-    patchedContent,
-    invocationEphemerals,
-    explicitUserStore,
-    isCodex,
-    rawBaseURL,
-    (responseId) => deps.isRejectedStatefulParent?.(responseId) ?? false,
-    statefulTransportSupported,
-    deps.logger,
-  );
 }
 
 export async function buildRequestContext(
@@ -489,71 +521,78 @@ export async function buildRequestContext(
   deps: ResponsesExecutorDeps,
   forceStateless = false,
 ): Promise<PreparedResponsesRequestContext> {
-  const rawBaseURL = resolveResponsesBaseURL(options, deps);
-  const isCodex = deps.isCodexBaseURL(rawBaseURL);
-  // Issue #3136: the agent layer owns system-prompt assembly. The provider
-  // transports options.systemInstruction verbatim (empty for projection).
-  // options.userMemory is deliberately NOT read here: user memory is baked
-  // into the assembled instruction upstream.
-  const systemPrompt = options.systemInstruction ?? '';
-  const requestOverrides = buildRequestOverrides(options, deps);
-  const explicitUserStore =
-    typeof requestOverrides['store'] === 'boolean'
-      ? requestOverrides['store']
-      : undefined;
-  const stateful = computeRequestStatefulConversation(
+  const {
+    rawBaseURL,
+    isCodex,
+    systemPrompt,
+    requestOverrides,
+    explicitUserStore,
+    stateful,
+  } = resolveResponsesRequestShape(
     options,
     patchedContent,
     invocationEphemerals,
-    explicitUserStore,
-    isCodex,
-    rawBaseURL,
+    deps,
     forceStateless,
-    deps,
   );
-  const input = buildInput(
-    options,
+  const mediaRequest = await resolveRequestMedia(
+    options.runtime,
     stateful.content,
-    invocationEphemerals,
-    deps,
-    stateful.parentId !== undefined,
+    getRequestSignal(options),
   );
-  const request = createRequest(options, input, requestOverrides, deps);
-  applyInstructionsAndTools(request, systemPrompt, options);
-  const reasoning = applyReasoningSettings(
-    request,
-    options,
-    invocationEphemerals,
-    deps,
-  );
-  applyTextVerbosity(request, options, invocationEphemerals, deps);
-  applyCodexRequestSettings(request, isCodex, deps);
-  applyPromptCaching(request, options, invocationEphemerals, isCodex, deps);
-  applyStatefulConversation(
-    request,
-    stateful,
-    explicitUserStore,
-    isCodex,
-    deps.logger,
-  );
-  return {
-    rawBaseURL,
-    isCodex,
-    request,
-    projectionContext: buildResponsesProjectionContext(
-      request,
+  try {
+    const input = buildInput(
       options,
-      patchedContent,
+      mediaRequest.withContents((contents) => contents),
       invocationEphemerals,
       deps,
+      stateful.parentId !== undefined,
+    );
+    const request = createRequest(options, input, requestOverrides, deps);
+    applyInstructionsAndTools(request, systemPrompt, options);
+    const reasoning = applyReasoningSettings(
+      request,
+      options,
+      invocationEphemerals,
+      deps,
+    );
+    applyTextVerbosity(request, options, invocationEphemerals, deps);
+    applyCodexRequestSettings(request, isCodex, deps);
+    applyPromptCaching(request, options, invocationEphemerals, isCodex, deps);
+    applyStatefulConversation(
+      request,
       stateful,
-    ),
-    includeThinkingInResponse: reasoning.includeThinkingInResponse,
-    // Codex cannot use `store` (the backend rejects store=true), so its
-    // continuation is tracked by the connection instead. A stateful Codex turn
-    // is therefore "stored" for chaining purposes even though store=false.
-    responsesStored: request.store === true || (isCodex && stateful.enabled),
-  };
+      explicitUserStore,
+      isCodex,
+      deps.logger,
+    );
+    mediaRequest.registerCleanup(() => {
+      request.input.splice(0);
+      request.tools?.splice(0);
+      request.include?.splice(0);
+    });
+    return {
+      rawBaseURL,
+      isCodex,
+      request,
+      projectionContext: buildResponsesProjectionContext(
+        request,
+        options,
+        patchedContent,
+        invocationEphemerals,
+        deps,
+        stateful,
+      ),
+      includeThinkingInResponse: reasoning.includeThinkingInResponse,
+      // Codex cannot use `store` (the backend rejects store=true), so its
+      // continuation is tracked by the connection instead. A stateful Codex turn
+      // is therefore "stored" for chaining purposes even though store=false.
+      responsesStored: request.store === true || (isCodex && stateful.enabled),
+      mediaRequest,
+    };
+  } catch (error) {
+    return finishMediaRequest(mediaRequest, { status: 'failed', error });
+  }
 }
 
 async function resolveResponsesTransportContext(
@@ -561,17 +600,24 @@ async function resolveResponsesTransportContext(
   prepared: PreparedResponsesRequestContext,
   deps: ResponsesExecutorDeps,
 ): Promise<RequestContext> {
-  const rawBaseURL = resolveResponsesBaseURL(options, deps);
-  if (rawBaseURL !== prepared.rawBaseURL) {
-    throw new Error(
-      `Projection/transport endpoint mismatch: the OpenAI Responses prompt envelope was prepared for "${prepared.rawBaseURL}" but transport resolved "${rawBaseURL}". A prepared envelope must be sent to the same endpoint it was estimated for (issue #2817 invariant: projection == transport).`,
-    );
+  try {
+    const rawBaseURL = resolveResponsesBaseURL(options, deps);
+    if (rawBaseURL !== prepared.rawBaseURL) {
+      throw new Error(
+        `Projection/transport endpoint mismatch: the OpenAI Responses prompt envelope was prepared for "${prepared.rawBaseURL}" but transport resolved "${rawBaseURL}". A prepared envelope must be sent to the same endpoint it was estimated for (issue #2817 invariant: projection == transport).`,
+      );
+    }
+    return {
+      ...prepared,
+      apiKey: await resolveApiKey(options, prepared.rawBaseURL, deps),
+      baseURL: normalizeBaseURL(prepared.rawBaseURL),
+    };
+  } catch (error) {
+    return finishMediaRequest(prepared.mediaRequest, {
+      status: 'failed',
+      error,
+    });
   }
-  return {
-    ...prepared,
-    apiKey: await resolveApiKey(options, prepared.rawBaseURL, deps),
-    baseURL: normalizeBaseURL(prepared.rawBaseURL),
-  };
 }
 
 async function resolveApiKey(
@@ -660,90 +706,6 @@ function buildInput(
     serverSideParentActive,
     mediaPdfEnabled: isResponsesPdfEnabled(options),
   });
-}
-
-function buildRequestOverrides(
-  options: NormalizedGenerateChatOptions,
-  deps: ResponsesExecutorDeps,
-): Record<string, unknown> {
-  const mergedParams: Record<string, unknown> = {
-    ...options.invocation.modelParams,
-  };
-  const genericMaxOutput = getGenericMaxOutput(options);
-  if (
-    genericMaxOutput !== undefined &&
-    mergedParams['max_tokens'] === undefined &&
-    mergedParams['max_completion_tokens'] === undefined &&
-    mergedParams['max_output_tokens'] === undefined
-  ) {
-    mergedParams['max_output_tokens'] = genericMaxOutput;
-  }
-
-  const requestOverrides = translateRequestOverrides(mergedParams, deps);
-  deps.logger.debug(
-    () => `Request overrides: ${JSON.stringify(Object.keys(requestOverrides))}`,
-  );
-  return requestOverrides;
-}
-
-function getGenericMaxOutput(
-  options: NormalizedGenerateChatOptions,
-): number | undefined {
-  const rawMaxOutput = (
-    options as { settings?: { get: (key: string) => unknown } }
-  ).settings?.get('maxOutputTokens');
-  return typeof rawMaxOutput === 'number' &&
-    Number.isFinite(rawMaxOutput) &&
-    rawMaxOutput > 0
-    ? rawMaxOutput
-    : undefined;
-}
-
-function translateRequestOverrides(
-  mergedParams: Record<string, unknown>,
-  deps: ResponsesExecutorDeps,
-): Record<string, unknown> {
-  const requestOverrides: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(mergedParams)) {
-    if (OPENAI_TRANSPORT_SELECTOR_KEYS.has(key)) {
-      deps.logger.debug(
-        () => `Dropping transport-selector key "${key}" from request body`,
-      );
-      continue;
-    }
-    if (key === 'max_tokens' || key === 'max_completion_tokens') {
-      requestOverrides['max_output_tokens'] = value;
-      deps.logger.debug(
-        () =>
-          `Translated ${key}=${value} to max_output_tokens for Responses API`,
-      );
-    } else if (key === 'prompt_cache_key') {
-      const sanitized =
-        typeof value === 'string' ? sanitizePromptCacheKey(value) : '';
-      if (sanitized !== '') {
-        requestOverrides[key] = sanitized;
-      } else {
-        deps.logger.debug(
-          () =>
-            `Dropping invalid prompt_cache_key from modelParams (type=${typeof value})`,
-        );
-      }
-    } else {
-      requestOverrides[key] = value;
-    }
-  }
-  return requestOverrides;
-}
-
-function resolveResponsesBaseURL(
-  options: NormalizedGenerateChatOptions,
-  deps: ResponsesExecutorDeps,
-): string {
-  return (
-    options.resolved.baseURL ??
-    deps.getProviderBaseURL(options) ??
-    'https://api.openai.com/v1'
-  );
 }
 
 function normalizeBaseURL(baseURLCandidate: string): string {
@@ -910,73 +872,4 @@ function applyPromptCaching(
 
   request.prompt_cache_key = sanitizePromptCacheKey(cacheKey);
   if (!isCodex) request.prompt_cache_retention = '24h';
-}
-
-async function* streamResponses(
-  params: StreamResponsesParams,
-  deps: ResponsesExecutorDeps,
-): AsyncIterableIterator<IContent> {
-  const transport = deps.getWebSocketTransport?.();
-  if (params.isCodex && transport !== undefined) {
-    const headers = await buildWebSocketHandshakeHeaders(params, deps);
-    const streamOptions: StreamResponseOptions = {
-      responsesURL: `${params.baseURL}/responses`,
-      headers,
-      abortSignal: params.abortSignal,
-      includeThinkingInResponse: params.includeThinkingInResponse,
-      responsesStored: params.responsesStored,
-      onStreamLiveness: params.normalizedOptions.onStreamLiveness,
-    };
-    yield* streamOverWebSocketOrFallback(
-      transport,
-      params.request,
-      streamOptions,
-      () => streamOverHttpWithoutStatefulness(params, deps),
-      deps.onWebSocketFallback,
-      deps.logger,
-      deps.onWebSocketSuccess,
-    );
-    return;
-  }
-
-  yield* streamOverHttp(params, deps);
-}
-
-/**
- * HTTP fallback for a request that was built for the WebSocket.
- *
- * A WebSocket-built Codex request can carry a socket-scoped
- * `previous_response_id` and a trimmed input. The Codex HTTP endpoint cannot
- * resolve that parent (it rejects the request, since nothing is stored
- * server-side), so replaying the WebSocket request here would fail and lose
- * the trimmed-away context. Re-derive a stateless request instead (#3134).
- * The physical HTTP send is recorded via dumpFallbackHttpRequest (#3159).
- */
-async function* streamOverHttpWithoutStatefulness(
-  params: StreamResponsesParams,
-  deps: ResponsesExecutorDeps,
-): AsyncIterableIterator<IContent> {
-  if (
-    params.rebuildStateless === undefined ||
-    params.request.previous_response_id === undefined
-  ) {
-    // Link later response/error dumps to the HTTP request that was actually
-    // sent, not to the WebSocket attempt that preceded it (#3159).
-    const fallbackBaseId = await dumpFallbackHttpRequest(params, deps);
-    yield* streamOverHttp(
-      fallbackBaseId === undefined
-        ? params
-        : { ...params, dumpBaseId: fallbackBaseId },
-      deps,
-    );
-    return;
-  }
-  deps.logger.debug(
-    () =>
-      'Codex WebSocket fallback: rebuilding the request without previous_response_id for HTTP.',
-  );
-  const stateless = await params.rebuildStateless();
-  // The rebuild already dumped itself as an HTTP request at the seam
-  // (with its base id threaded through), so no second dump here.
-  yield* streamOverHttp(stateless, deps);
 }

@@ -19,6 +19,7 @@ import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-util
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type OpenAI from 'openai';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import { createOpenAIRawPostTestAdapter } from '../../test-utils/rawPostTestAdapters.js';
 
 // Mock OpenAI client at the instance level
 const mockChatCompletionsCreate = vi.fn();
@@ -30,6 +31,7 @@ void vi.mock('openai', () => ({
         create: mockChatCompletionsCreate,
       },
     };
+    post = createOpenAIRawPostTestAdapter(mockChatCompletionsCreate).post;
   },
 }));
 

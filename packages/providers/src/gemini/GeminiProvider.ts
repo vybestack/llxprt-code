@@ -12,6 +12,7 @@ import {
   type BaseProviderConfig,
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
+import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type {
@@ -45,6 +46,11 @@ import {
   type NonOAuthContentGenerator,
 } from './geminiGenerationExecution.js';
 import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
+import {
+  finishMediaRequest,
+  type MediaRequestOutcome,
+  resolveRequestMedia,
+} from '../utils/request-media-resolution.js';
 
 /**
  * Represents the default Gemini provider.
@@ -83,6 +89,7 @@ export class GeminiProvider extends BaseProvider {
       apiKey,
       baseURL,
       envKeyNames: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
+      mediaTransportCapabilities: declaredMediaTransportCapabilities('gemini'),
     };
 
     super(baseConfig, config);
@@ -338,31 +345,47 @@ export class GeminiProvider extends BaseProvider {
     // silently transported as an empty prompt.
     requireAssembledSystemInstruction(options.systemInstruction);
 
-    const streamingEnabled = this.getStreamingPreference(options);
-    const setup = await buildGenerationSetup(
-      options,
-      this.globalConfig,
-      () => this.determineBestAuth(),
-      () => this.createHttpOptions(),
-      () => this.getBaseURL(),
-      this.getLogger(),
+    const mediaRequest = await resolveRequestMedia(
+      options.runtime,
+      options.contents,
+      options.invocation.signal,
     );
-    const result = await this.executeGeneration(
-      options,
-      setup,
-      streamingEnabled,
-    );
+    const effectiveOptions = {
+      ...options,
+      contents: mediaRequest.withContents((contents) => contents),
+    };
+    let outcome: MediaRequestOutcome = { status: 'succeeded' };
+    try {
+      const streamingEnabled = this.getStreamingPreference(effectiveOptions);
+      const setup = await buildGenerationSetup(
+        effectiveOptions,
+        this.globalConfig,
+        () => this.determineBestAuth(),
+        () => this.createHttpOptions(),
+        () => this.getBaseURL(),
+        this.getLogger(),
+      );
+      const result = await this.executeGeneration(
+        effectiveOptions,
+        setup,
+        streamingEnabled,
+      );
 
-    if (result.chunks !== undefined) {
-      yield* this.yieldMappedChunks(result.chunks);
-      return;
+      if (result.chunks !== undefined) {
+        yield* this.yieldMappedChunks(result.chunks);
+        return;
+      }
+      yield* consumeGeminiStream(
+        result.stream,
+        setup.mapResponseToChunks,
+        setup.reasoningConfig.includeInResponse,
+        result.emitted,
+      );
+    } catch (error) {
+      outcome = { status: 'failed', error };
+    } finally {
+      await finishMediaRequest(mediaRequest, outcome);
     }
-    yield* consumeGeminiStream(
-      result.stream,
-      setup.mapResponseToChunks,
-      setup.reasoningConfig.includeInResponse,
-      result.emitted,
-    );
   }
 
   /** #3159: the SDK sends the Gemini API key as x-goog-api-key; record the

@@ -122,7 +122,7 @@ describe('ConversationManager stamps model origin at recording boundary (issue #
     ));
   });
 
-  it('stamps metadata.model on a freshly generated AI turn', () => {
+  it('stamps metadata.model on a freshly generated AI turn', async () => {
     const userInput: IContent = {
       speaker: 'human',
       blocks: [{ type: 'text', text: 'Hello' }],
@@ -134,7 +134,7 @@ describe('ConversationManager stamps model origin at recording boundary (issue #
       },
     ];
 
-    conversationManager.recordHistory(userInput, modelOutput);
+    await conversationManager.recordHistory(userInput, modelOutput);
 
     const all = historyService.getAll();
     const ai = all.find((c) => c.speaker === 'ai');
@@ -145,7 +145,7 @@ describe('ConversationManager stamps model origin at recording boundary (issue #
     expect(human?.metadata?.model).toBeUndefined();
   });
 
-  it('stamps metadata.model on an AI turn that carries a signed thinking block', () => {
+  it('stamps metadata.model on an AI turn that carries a signed thinking block', async () => {
     const userInput: IContent = {
       speaker: 'human',
       blocks: [{ type: 'text', text: 'Think and answer' }],
@@ -165,7 +165,7 @@ describe('ConversationManager stamps model origin at recording boundary (issue #
       },
     ];
 
-    conversationManager.recordHistory(userInput, modelOutput);
+    await conversationManager.recordHistory(userInput, modelOutput);
 
     const all = historyService.getAll();
     const ai = all.find((c) => c.speaker === 'ai');
@@ -181,7 +181,7 @@ describe('ConversationManager stamps model origin at recording boundary (issue #
     ).toBe(true);
   });
 
-  it('stamps metadata.model on AI turns mixed into automaticFunctionCallingHistory but not user turns', () => {
+  it('stamps metadata.model on AI turns mixed into automaticFunctionCallingHistory but not user turns', async () => {
     const userInput: IContent = {
       speaker: 'human',
       blocks: [{ type: 'text', text: 'Run the tool' }],
@@ -215,7 +215,7 @@ describe('ConversationManager stamps model origin at recording boundary (issue #
       },
     ];
 
-    conversationManager.recordHistory(
+    await conversationManager.recordHistory(
       userInput,
       modelOutput,
       automaticFunctionCallingHistory,
@@ -267,7 +267,7 @@ describe('ConversationManager import/restore paths do NOT stamp (issue #2335)', 
     expect(ai?.metadata?.providerBaseURL).toBeUndefined();
   });
 
-  it('setHistory does NOT stamp metadata.model on restored AI turns', () => {
+  it('setHistory does NOT stamp metadata.model on restored AI turns', async () => {
     const restoredHistory: IContent[] = [
       {
         speaker: 'human',
@@ -276,7 +276,7 @@ describe('ConversationManager import/restore paths do NOT stamp (issue #2335)', 
       { speaker: 'ai', blocks: [{ type: 'text', text: 'restored answer' }] },
     ];
 
-    conversationManager.setHistory(restoredHistory);
+    await conversationManager.setHistory(restoredHistory);
 
     const all = historyService.getAll();
     const ai = all.find((c) => c.speaker === 'ai');

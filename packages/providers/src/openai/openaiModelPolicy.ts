@@ -57,6 +57,10 @@ const OPENAI_PROVIDER_RESERVED_KEYS: ReadonlySet<string> = new Set([
   'toolFormatOverride',
   'tool-format-override',
   'defaultModel',
+  'provider-files',
+  'provider-files-retention-ms',
+  'provider-files-delete',
+  'provider-files-zdr',
   ...OPENAI_TRANSPORT_SELECTOR_KEYS,
 ]);
 

@@ -82,18 +82,18 @@ async function requestFromClient(
   }
 }
 
-function resolveClient(runtime: AutoPromptRuntime): {
+async function resolveClient(runtime: AutoPromptRuntime): Promise<{
   client: AgentClientContract;
   cleanupDetached: AgentClientContract | undefined;
   useRuntimeScope: boolean;
   providerName: string | undefined;
-} {
+}> {
   const providerName = runtime.getProvider()?.toLowerCase();
   const configuredClient = runtime.getAgentClient();
   const useDetachedClient =
     configuredClient == null || providerName === 'gemini';
   const cleanupDetached = useDetachedClient
-    ? createDetachedAutoPromptClient(runtime)
+    ? await createDetachedAutoPromptClient(runtime)
     : undefined;
   const client = cleanupDetached ?? configuredClient;
 
@@ -117,7 +117,7 @@ export async function generateAutoPrompt(
 ): Promise<string> {
   const requestPayload = createAutoPromptRequest(description);
   const { client, cleanupDetached, useRuntimeScope, providerName } =
-    resolveClient(runtime);
+    await resolveClient(runtime);
 
   logger.log(() => '[auto-prompt] generating expanded prompt', {
     provider: providerName,
@@ -129,7 +129,7 @@ export async function generateAutoPrompt(
       useRuntimeScope,
     });
   } finally {
-    cleanupDetached?.dispose();
+    await cleanupDetached?.dispose();
   }
 
   const text = response.text ?? '';

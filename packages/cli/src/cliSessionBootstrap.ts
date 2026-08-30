@@ -244,20 +244,39 @@ function registerRecordingCleanup(
   lockHandle: LockHandle | null,
 ): void {
   registerCleanup(async () => {
-    // Observation is ancillary; a failed telemetry shutdown must not skip
-    // recording disposal or lock release.
-    try {
-      await stopObservationProducer();
-    } catch {
-      // Telemetry-only failure.
+    const failures: unknown[] = [];
+    for (const operation of [
+      () => stopObservationProducer(),
+      () => recordingIntegration.dispose(),
+      () => recordingService.dispose(),
+      () => lockHandle?.release() ?? Promise.resolve(),
+    ]) {
+      try {
+        await operation();
+      } catch (error: unknown) {
+        failures.push(error);
+      }
     }
-    recordingIntegration.dispose();
-    try {
-      await recordingService.dispose();
-    } finally {
-      await lockHandle?.release();
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) {
+      throw new AggregateError(failures, 'Session recording cleanup failed');
     }
   });
+}
+
+function activateRecording(
+  config: Config,
+  recordingService: SessionRecordingService,
+  lockHandle: LockHandle | null,
+  bootstrapSelection: BootstrapSelection | null,
+): RecordingIntegration {
+  const integration = new RecordingIntegration(
+    recordingService,
+    config.createSessionPersistenceService(recordingService.getSessionId()),
+  );
+  registerRecordingCleanup(integration, recordingService, lockHandle);
+  setupObservation(config, bootstrapSelection);
+  return integration;
 }
 
 export async function setupSessionRecording(
@@ -342,16 +361,15 @@ export async function setupSessionRecording(
     config.adoptSessionId(resumedSessionId);
   }
 
-  const recordingIntegration = new RecordingIntegration(activeRecordingService);
   // Register cleanup before observation setup. An explicitly invalid bootstrap
   // is meant to fail startup, but it must not strand the recording service or
   // the already-acquired lock handle on the way out.
-  registerRecordingCleanup(
-    recordingIntegration,
+  const recordingIntegration = activateRecording(
+    config,
     activeRecordingService,
     activeLockHandle,
+    bootstrapSelection,
   );
-  setupObservation(config, bootstrapSelection);
 
   return {
     recordingService: activeRecordingService,
@@ -375,6 +393,8 @@ export function buildNewRecordingService(
     workspaceDirs: [...config.getWorkspaceContext().getDirectories()],
     provider: config.getProvider() ?? 'unknown',
     model: config.getModel(),
+    mediaStore: config.getLocalMediaStore(),
+    maxQueueBytes: config.getSessionRecordingQueueByteLimit(),
   });
 }
 
@@ -403,7 +423,10 @@ async function forkStartupCheckpoint(
   projectHash: string,
   chatsDir: string,
 ): Promise<ResolvedRecording> {
-  const result = await new SessionTransitionService().forkFromCheckpoint(
+  const result = await new SessionTransitionService({
+    mediaStore: config.getLocalMediaStore(),
+    maxQueueBytes: config.getSessionRecordingQueueByteLimit(),
+  }).forkFromCheckpoint(
     target,
     chatsDir,
     projectHash,
@@ -448,6 +471,7 @@ export async function createOrResumeRecording(
   const targets = await SessionDiscovery.listContinueTargets(
     chatsDir,
     projectHash,
+    config.getLocalMediaStore(),
   );
   const checkpointTarget = startupCheckpointTarget(continueRef, targets);
   if (checkpointTarget !== null) {
@@ -466,6 +490,8 @@ export async function createOrResumeRecording(
     currentProvider: config.getProvider() ?? 'unknown',
     currentModel: config.getModel(),
     workspaceDirs: [...config.getWorkspaceContext().getDirectories()],
+    mediaStore: config.getLocalMediaStore(),
+    maxQueueBytes: config.getSessionRecordingQueueByteLimit(),
   });
 
   if (!resumeResult.ok) {

@@ -7,6 +7,19 @@
 import type { SettingSpec, ValidationResult } from './registry-types.js';
 import { COMPRESSION_STRATEGIES } from './registry-types.js';
 
+function validateNonNegativeByteLimit(
+  key: string,
+  value: unknown,
+): ValidationResult {
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) {
+    return { success: true, value };
+  }
+  return {
+    success: false,
+    message: `${key} must be a non-negative safe integer`,
+  };
+}
+
 export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   {
     key: 'temperature',
@@ -498,6 +511,141 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
           'stream-first-response-timeout-ms must be a finite number (use 0 or negative to disable)',
       };
     },
+  },
+  {
+    key: 'image-payload-budget-bytes',
+    category: 'cli-behavior',
+    owner: 'application',
+    propagation: 'next-turn',
+    description:
+      'Maximum aggregate normalized media payload admitted to one provider request in bytes. Default: 15728640.',
+    type: 'number',
+    default: 15 * 1024 * 1024,
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult =>
+      validateNonNegativeByteLimit('image-payload-budget-bytes', value),
+  },
+  {
+    key: 'media-store-quota-bytes',
+    category: 'cli-behavior',
+    owner: 'application',
+    propagation: 'service-reconfigure',
+    description:
+      'Maximum bytes retained in the project-local content-addressed media store. Default: 4294967296.',
+    type: 'number',
+    default: 4 * 1024 * 1024 * 1024,
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult =>
+      validateNonNegativeByteLimit('media-store-quota-bytes', value),
+  },
+  {
+    key: 'session-recording-queue-max-bytes',
+    category: 'cli-behavior',
+    owner: 'application',
+    propagation: 'service-reconfigure',
+    description:
+      'Maximum bytes queued for session recording writes. Default: 16777216.',
+    type: 'number',
+    default: 16 * 1024 * 1024,
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult =>
+      validateNonNegativeByteLimit('session-recording-queue-max-bytes', value),
+  },
+  {
+    key: 'session-persistence-queue-max-bytes',
+    category: 'cli-behavior',
+    owner: 'application',
+    propagation: 'service-reconfigure',
+    description:
+      'Maximum bytes queued for persisted session-state writes. Default: 16777216.',
+    type: 'number',
+    default: 16 * 1024 * 1024,
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult =>
+      validateNonNegativeByteLimit(
+        'session-persistence-queue-max-bytes',
+        value,
+      ),
+  },
+  {
+    key: 'provider-files',
+    category: 'cli-behavior',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
+    description:
+      'Provider Files API scope. off keeps media inline; session and workspace permit supported providers to retain remote references in that scope. Default: off.',
+    type: 'enum',
+    default: 'off',
+    enumValues: ['off', 'session', 'workspace'],
+    persistToProfile: true,
+  },
+  {
+    key: 'provider-files-retention-ms',
+    category: 'cli-behavior',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
+    description:
+      'Maximum local reuse duration for explicitly enabled provider Files references in milliseconds. Default: 86400000.',
+    type: 'number',
+    default: 86_400_000,
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (
+        typeof value === 'number' &&
+        Number.isSafeInteger(value) &&
+        value > 0
+      ) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message: 'provider-files-retention-ms must be a positive safe integer',
+      };
+    },
+  },
+  {
+    key: 'provider-files-delete',
+    category: 'cli-behavior',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
+    description:
+      'Remote cleanup policy for provider Files references after local eviction, expiry, or scoped cleanup. delete requests provider deletion; retain leaves provider retention unchanged. Default: delete.',
+    type: 'enum',
+    default: 'delete',
+    enumValues: ['delete', 'retain'],
+    persistToProfile: true,
+  },
+  {
+    key: 'provider-files-zdr',
+    category: 'cli-behavior',
+    owner: 'provider-connection',
+    propagation: 'service-reconfigure',
+    description:
+      'ZDR requirement for provider Files. allow-retention acknowledges provider storage; require rejects providers whose Files API is incompatible with ZDR while retained. Default: allow-retention.',
+    type: 'enum',
+    default: 'allow-retention',
+    enumValues: ['allow-retention', 'require'],
+    persistToProfile: true,
+  },
+  {
+    key: 'media.semantic-purge',
+    category: 'cli-behavior',
+    owner: 'application',
+    propagation: 'next-turn',
+    description:
+      'Explicit lossy image-history purge policy. off preserves every image; remove deletes eligible images after a successful transaction; summary replaces them with caller-provided structured text. This is separate from lossless local media eviction. Default: off.',
+    type: 'enum',
+    default: 'off',
+    enumValues: ['off', 'remove', 'summary'],
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult =>
+      value === 'off' || value === 'remove' || value === 'summary'
+        ? { success: true, value }
+        : {
+            success: false,
+            message:
+              "media.semantic-purge must be exactly 'off', 'remove', or 'summary'",
+          },
   },
   {
     key: 'kimi.experimental-video',

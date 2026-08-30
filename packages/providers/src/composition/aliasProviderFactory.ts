@@ -33,6 +33,11 @@ import type {
   ProviderContributionRegistry,
   ProviderFactoryContext,
 } from './runtimePlugins/types.js';
+import {
+  conservativeMediaTransportCapabilities,
+  copyMediaTransportCapabilities,
+  type ProviderMediaTransportCapabilities,
+} from '../providerMediaTransportCapabilities.js';
 
 /**
  * Sanitizes API keys to remove problematic characters that cause ByteString errors.
@@ -129,6 +134,26 @@ export function bindProviderAliasIdentity(
 
   aliasAwareProvider.authResolver?.updateConfig?.({
     providerId: aliasName,
+  });
+}
+
+interface AliasMediaCapabilityProvider {
+  getMediaTransportCapabilities(): ProviderMediaTransportCapabilities;
+}
+
+function bindAliasMediaTransportCapabilities(
+  provider: AliasMediaCapabilityProvider,
+  entry: ProviderAliasEntry,
+): void {
+  const registered =
+    entry.config.mediaTransportCapabilities ??
+    conservativeMediaTransportCapabilities();
+  Object.defineProperty(provider, 'getMediaTransportCapabilities', {
+    value: (): ProviderMediaTransportCapabilities =>
+      copyMediaTransportCapabilities(registered),
+    writable: false,
+    enumerable: false,
+    configurable: true,
   });
 }
 
@@ -257,6 +282,7 @@ export function createOpenAIAliasProvider(
   overrideStaticModels(provider, entry);
 
   bindOpenAIAliasIdentity(provider, entry.alias);
+  bindAliasMediaTransportCapabilities(provider, entry);
 
   return provider;
 }
@@ -318,6 +344,7 @@ export function createOpenAIResponsesAliasProvider(
 
   overrideAliasDefaultModel(provider, entry);
   overrideStaticModels(provider, entry);
+  bindAliasMediaTransportCapabilities(provider, entry);
 
   return provider;
 }
@@ -371,6 +398,7 @@ export function createOpenAIVercelAliasProvider(
   overrideStaticModels(provider, entry);
 
   bindProviderAliasIdentity(provider, entry.alias);
+  bindAliasMediaTransportCapabilities(provider, entry);
 
   return provider;
 }
@@ -402,6 +430,7 @@ export function createGeminiAliasProvider(
   overrideAliasDefaultModel(provider, entry);
 
   bindProviderAliasIdentity(provider, entry.alias);
+  bindAliasMediaTransportCapabilities(provider, entry);
 
   return provider;
 }
@@ -438,6 +467,7 @@ export function createAnthropicAliasProvider(
   overrideStaticModels(provider, entry);
 
   bindProviderAliasIdentity(provider, entry.alias);
+  bindAliasMediaTransportCapabilities(provider, entry);
 
   return provider;
 }

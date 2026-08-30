@@ -261,10 +261,48 @@ Some models will kick off commands that wait for user interaction (like an inter
 
 ### Prompt and Caching
 
-| Setting               | Description                                             | Default |
-| --------------------- | ------------------------------------------------------- | ------- |
-| `prompt-caching`      | Provider-side prompt caching (`off`, `5m`, `1h`, `24h`) | `off`   |
-| `enable-tool-prompts` | Load tool-specific prompt files                         | `false` |
+| Setting                       | Description                                              | Default           |
+| ----------------------------- | -------------------------------------------------------- | ----------------- |
+| `prompt-caching`              | Provider-side prompt caching (`off`, `5m`, `1h`, `24h`)  | `off`             |
+| `media.semantic-purge`        | Explicit lossy image policy (`off`, `remove`, `summary`) | `off`             |
+| `provider-files`              | Provider Files scope (`off`, `session`, `workspace`)     | `off`             |
+| `provider-files-retention-ms` | Maximum local reuse duration for remote file IDs         | `86400000`        |
+| `provider-files-delete`       | Cleanup behavior (`delete`, `retain`)                    | `delete`          |
+| `provider-files-zdr`          | ZDR policy (`allow-retention`, `require`)                | `allow-retention` |
+| `enable-tool-prompts`         | Load tool-specific prompt files                          | `false`           |
+
+`provider-files` is the explicit storage opt-in. `off` disables provider Files
+uploads, including uploads that might otherwise reduce memory use. `session`
+scopes stable IDs to one runtime session and schedules policy cleanup when that
+runtime closes. `workspace` persists a credential-keyed workspace identifier
+instead of the local directory path. Moving or renaming the directory changes
+that identifier, so the prior workspace file IDs are not reused. Neither scope
+enables providers that do not declare Files support.
+
+`provider-files-retention-ms` sets the local reuse and expiry window.
+`provider-files-delete=delete` requests best-effort remote deletion after
+expiry, cache eviction, or session cleanup. Failed deletions remain visible in
+provider lifecycle state and are retried on later cleanup. `retain` removes the
+local reference without requesting remote deletion, so the provider's own
+retention policy continues to apply.
+
+Provider Files can conflict with zero-data-retention terms because the provider
+stores uploaded data. Set `provider-files-zdr=require` to reject an enabled mode
+when the adapter declares that conflict. `allow-retention` acknowledges the
+provider storage implication. Memory pressure never changes these settings.
+
+`media.semantic-purge` controls an explicit, lossy change to conversation
+history. `off` preserves every image. `remove` deletes the oldest eligible image
+after a successful provider request. `summary` replaces an eligible image only
+when the image already has a non-empty caption or configured summary. A purge
+changes the model-visible prompt and can invalidate the cached suffix beginning
+at that image. LLxprt advances the purge frontier only after the provider request
+succeeds and, for explicit-cache providers, after the intended pre-image prefix
+is written.
+
+Local media eviction is lossless and independent of this setting. Missing or
+corrupt media, storage quotas, and memory pressure never trigger a semantic
+purge.
 
 ### Other Settings
 

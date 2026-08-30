@@ -5,26 +5,28 @@
  */
 
 import type { Part } from './geminiWireTypes.js';
-import type {
-  IContent,
-  MediaBlock,
+import {
+  requireInlineMediaBlock,
+  type IContent,
+  type MediaBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { isGemini3Model } from '@vybestack/llxprt-code-core/config/models.js';
 import { buildToolResponsePayload } from '../utils/toolResponsePayload.js';
 
-export function convertMediaBlockToGeminiParts(block: {
-  type: 'media';
-  encoding: string;
-  mimeType: string;
-  data: string;
-}): Part[] {
-  if (block.encoding === 'url') {
+export function convertMediaBlockToGeminiParts(block: MediaBlock): Part[] {
+  const inlineBlock = requireInlineMediaBlock(block);
+  if (inlineBlock.encoding === 'url') {
     return [
-      { fileData: { mimeType: block.mimeType, fileUri: block.data } } as Part,
+      {
+        fileData: {
+          mimeType: inlineBlock.mimeType,
+          fileUri: inlineBlock.data,
+        },
+      },
     ];
   }
-  let imageData = block.data;
+  let imageData = inlineBlock.data;
   if (imageData.startsWith('data:')) {
     const base64Index = imageData.indexOf('base64,');
     if (base64Index !== -1) {
@@ -32,7 +34,9 @@ export function convertMediaBlockToGeminiParts(block: {
     }
   }
   return [
-    { inlineData: { mimeType: block.mimeType, data: imageData } } as Part,
+    {
+      inlineData: { mimeType: inlineBlock.mimeType, data: imageData },
+    },
   ];
 }
 

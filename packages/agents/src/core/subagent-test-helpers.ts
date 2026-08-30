@@ -284,6 +284,8 @@ function createRuntimeContext(
     },
     history,
     ephemerals: {
+      // #3199 added this ephemeral; the real chat path reads it on every turn.
+      semanticMediaPurge: () => 'off' as const,
       compressionThreshold: () => 0.8,
       contextLimit: () => 60_000,
       preserveThreshold: () => 0.2,

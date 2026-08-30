@@ -178,14 +178,14 @@ export function buildNewContentGeneratorConfig(
  * Transfers existing history to the new agent client, stripping thought
  * signatures when migrating from GenAI to Vertex.
  */
-export function transferHistoryToNewClient(
+export async function transferHistoryToNewClient(
   logger: DebugLogger,
   newAgentClient: AgentClientContract,
   existingHistory: readonly IContent[],
   existingHistoryService: ReturnType<AgentClientContract['getHistoryService']>,
   newContentGeneratorConfig: ReturnType<typeof createContentGeneratorConfig>,
   previousVertexai: boolean | undefined,
-): void {
+): Promise<void> {
   const fromGenaiToVertex =
     previousVertexai === false && newContentGeneratorConfig.vertexai === true;
   if (existingHistoryService) {
@@ -205,30 +205,58 @@ export function transferHistoryToNewClient(
   const historyToStore = fromGenaiToVertex
     ? stripThoughtSignatures(existingHistory)
     : existingHistory;
-  newAgentClient.storeHistoryForLaterUse(historyToStore);
+  await newAgentClient.storeHistoryForLaterUse(historyToStore);
   logger.debug('History stored in new client', {
     storedHistoryLength: historyToStore.length,
   });
 }
 
+export async function prepareAgentClientReplacement(
+  logger: DebugLogger,
+  newAgentClient: AgentClientContract,
+  previousAgentClient: AgentClientContract | null | undefined,
+  existingHistory: readonly IContent[],
+  existingHistoryService: ReturnType<AgentClientContract['getHistoryService']>,
+  newContentGeneratorConfig: ReturnType<typeof createContentGeneratorConfig>,
+  previousVertexai: boolean | undefined,
+): Promise<void> {
+  try {
+    await transferHistoryToNewClient(
+      logger,
+      newAgentClient,
+      existingHistory,
+      existingHistoryService,
+      newContentGeneratorConfig,
+      previousVertexai,
+    );
+    await newAgentClient.initialize(newContentGeneratorConfig);
+    await disposePreviousAgentClient(logger, previousAgentClient);
+  } catch (error: unknown) {
+    try {
+      await disposePreviousAgentClient(logger, newAgentClient);
+    } catch (cleanupError: unknown) {
+      throw new AggregateError(
+        [error, cleanupError],
+        'Agent client replacement failed and new client cleanup was incomplete',
+      );
+    }
+    throw error;
+  }
+}
+
 /**
  * Disposes the previous agent client if it exists and has a dispose method.
  */
-export function disposePreviousAgentClient(
-  logger: DebugLogger,
-  previousAgentClient: AgentClientContract | undefined,
-): void {
-  if (previousAgentClient !== undefined) {
-    try {
-      previousAgentClient.dispose();
-    } catch (error) {
-      logger.warn(
-        () =>
-          `Failed to dispose previous AgentClient: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-      );
-    }
+export async function disposePreviousAgentClient(
+  _logger: DebugLogger,
+  previousAgentClient: AgentClientContract | null | undefined,
+): Promise<void> {
+  if (
+    previousAgentClient !== null &&
+    previousAgentClient !== undefined &&
+    hasCallableProperty(previousAgentClient, 'dispose')
+  ) {
+    await previousAgentClient.dispose();
   }
 }
 
@@ -260,10 +288,10 @@ function createDetachedRuntimeId(baseRuntimeId: string | undefined): string {
  * cleared. Used for one-shot operations such as subagent auto-prompt
  * generation that need a clean, isolated runtime scope.
  */
-export function createDetachedAgentClient(
+export async function createDetachedAgentClient(
   config: Config,
   runtimeId?: string,
-): AgentClientContract {
+): Promise<AgentClientContract> {
   const factory = requireAgentClientFactory(
     config.getAgentClientFactory(),
     'createDetachedAgentClient',
@@ -278,9 +306,12 @@ export function createDetachedAgentClient(
     client.clearTools();
   } catch (error) {
     try {
-      client.dispose();
-    } catch {
-      // Disposal failure is secondary; preserve the clearTools error.
+      await client.dispose();
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [error, cleanupError],
+        'Detached agent client setup and cleanup failed',
+      );
     }
     throw error;
   }

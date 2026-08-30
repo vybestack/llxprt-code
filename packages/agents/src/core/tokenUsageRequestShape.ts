@@ -132,9 +132,14 @@ function serializeBlockForCounting(block: ContentBlock): string {
       return block.name + stableStringify(block.parameters);
     case 'tool_response':
       return stableStringify(block.result);
-    case 'media':
+    case 'media': {
       // Length proxy avoids re-tokenizing large base64 payloads.
-      return `${block.mimeType}:${block.encoding}:${block.data.length}`;
+      const encodedLength =
+        block.encoding === 'reference'
+          ? block.normalizedBase64Length
+          : block.data.length;
+      return `${block.mimeType}:${encodedLength}`;
+    }
     case 'code':
       return block.code;
     default: {
