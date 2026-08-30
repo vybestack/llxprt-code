@@ -1,0 +1,3 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_always_1","name":"run_shell_command","parameters":{"command":"for i in $(seq 1 5); do echo \"ALWAYS-$i of always-allow test\"; done"}},{"type":"tool_call","id":"call_always_2","name":"run_shell_command","parameters":{"command":"for i in $(seq 1 5); do echo \"ALWAYS-$i of always-allow test\"; done"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_always_3","name":"run_shell_command","parameters":{"command":"for i in $(seq 1 5); do echo \"ALWAYS3RD-$i of always-allow test\"; done"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"Always-allow test complete."}],"metadata":{"usage":{"promptTokens":1,"completionTokens":1,"totalTokens":2},"stopReason":"stop"}}]}

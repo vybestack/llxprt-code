@@ -91,10 +91,15 @@ describe('interactive-ui.yml: direct harness inputs are included', () => {
     expect(prPaths).toContain('scripts/tmux-script.onboarding.json');
   });
 
-  it('includes all executed scenario JSON files (target and issue #2017)', () => {
+  it('includes every executed scenario JSON file', () => {
     const executedScenarios = [
       'scripts/tmux-script.slash-autocomplete.json',
       'scripts/tmux-script.approval-ui.json',
+      'scripts/tmux-script.approval-always.json',
+      'scripts/tmux-script.approval-deny.json',
+      'scripts/tmux-script.approval-escape.json',
+      'scripts/tmux-script.approval-long-output.json',
+      'scripts/tmux-script.approval-multi.json',
       'scripts/tmux-script.issue2208-newlines.fake.json',
       'scripts/tmux-script.issue2016-composer.fake.json',
       'scripts/tmux-script.provider-model.json',
@@ -107,11 +112,6 @@ describe('interactive-ui.yml: direct harness inputs are included', () => {
     for (const scenario of executedScenarios) {
       expect(prPaths).toContain(scenario);
     }
-
-    // The duplicate approval scenarios (PR #3308) are excluded from this
-    // lane and from the path contract.
-    expect(prPaths).not.toContain('scripts/tmux-script.approval-deny.json');
-    expect(prPaths).not.toContain('scripts/tmux-script.approval-escape.json');
   });
 
   it('includes the deterministic resize-session seed input', () => {
@@ -150,6 +150,16 @@ describe('interactive-ui.yml: direct harness inputs are included', () => {
 
   it('includes the referenced response fixture files', () => {
     expect(prPaths).toContain('scripts/fixtures/approval-ui.responses.jsonl');
+    expect(prPaths).toContain(
+      'scripts/fixtures/approval-always.responses.jsonl',
+    );
+    expect(prPaths).toContain('scripts/fixtures/approval-deny.responses.jsonl');
+    expect(prPaths).toContain(
+      'scripts/fixtures/approval-long-output.responses.jsonl',
+    );
+    expect(prPaths).toContain(
+      'scripts/fixtures/approval-multi.responses.jsonl',
+    );
     expect(prPaths).toContain(
       'scripts/fixtures/issue2208-newlines.responses.jsonl',
     );
