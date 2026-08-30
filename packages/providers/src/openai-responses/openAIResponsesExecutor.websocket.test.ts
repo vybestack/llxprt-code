@@ -21,6 +21,7 @@ import { createCodexResponsesWebSocketTransport } from './openAIResponsesWebSock
 import {
   SocketHarness,
   completingScript,
+  connectionLimitScript,
   drain as drainHarness,
   userTextsOf,
 } from './openAIResponsesWebSocketTransport.test-helpers.js';
@@ -387,6 +388,74 @@ describe('executeOpenAIResponsesRequest WebSocket reconnect keeps the conversati
     // Exact equality, not toContain: an empty array would satisfy both a
     // toContain-absent and a not.toContain assertion, hiding a total failure.
     expect(userTexts).toEqual(['second question']);
+
+    transport.close();
+  });
+});
+
+describe('executeOpenAIResponsesRequest WebSocket lifecycle-limit retry @issue:2771', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getCoreSystemPromptAsyncSpy.mockResolvedValue('system prompt');
+  });
+
+  afterEach(() => {
+    restoreGlobals();
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * The lifecycle-limit verdict is scoped to the connection, so recovering on
+   * a fresh socket inside one request must NOT demote the provider to HTTP:
+   * the retry is transport health, not a transport failure.
+   */
+  it('recovers on a fresh connection without sticky HTTP fallback and keeps WebSocket for later requests', async () => {
+    const harness = new SocketHarness([
+      connectionLimitScript(),
+      completingScript('recovered'),
+    ]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+    const fetchSpy = vi.fn();
+    setGlobal('fetch', fetchSpy);
+    const onWebSocketFallback = vi.fn();
+    const onWebSocketSuccess = vi.fn();
+
+    const deps = buildDeps({
+      getWebSocketTransport: () => transport,
+      onWebSocketFallback,
+      onWebSocketSuccess,
+    });
+
+    // Request 1: socket 1 reports the lifecycle limit, socket 2 completes.
+    const first = await drainHarness(
+      executeOpenAIResponsesRequest(buildNormalizedOptions(), deps),
+    );
+
+    expect(first[0]).toStrictEqual({
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'recovered' }],
+    });
+    expect(harness.sockets).toHaveLength(2);
+    expect(harness.sockets[0].closedByClient).toBe(true);
+    // A healthy reconnect is not a fallback and must not stick to HTTP.
+    expect(onWebSocketFallback).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    // The recovered stream still reports transport success (#3034 counter).
+    expect(onWebSocketSuccess).toHaveBeenCalled();
+
+    // Request 2: the WebSocket remains the transport, reusing socket 2.
+    const second = await drainHarness(
+      executeOpenAIResponsesRequest(buildNormalizedOptions(), deps),
+    );
+
+    expect(second[0]).toStrictEqual({
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'recovered' }],
+    });
+    expect(harness.sockets).toHaveLength(2);
+    expect(fetchSpy).not.toHaveBeenCalled();
 
     transport.close();
   });
