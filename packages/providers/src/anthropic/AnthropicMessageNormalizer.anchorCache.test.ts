@@ -26,6 +26,7 @@
 import { describe, expect, it, vi } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { convertToAnthropicMessages } from './AnthropicMessageNormalizer.js';
 import { attachAnchorCacheControl } from './AnthropicAnchorCache.js';
 import { attachPromptCaching } from './AnthropicRequestBuilder.js';
@@ -277,7 +278,8 @@ describe('Anthropic anchor cache breakpoint — message-level (#3070)', () => {
     expect(cacheControlCount(rebuilt)).toBe(1);
   });
 
-  it('honors a tool-result entry as the anchor boundary', () => {
+  it('honors a curated tool-result entry as the anchor boundary', () => {
+    const historyService = new HistoryService();
     const toolCallId = 'tool_anchor_1';
     const contents: IContent[] = [
       human('do the thing'),
@@ -304,30 +306,28 @@ describe('Anthropic anchor cache breakpoint — message-level (#3070)', () => {
         ],
         metadata: { cacheAnchor: true },
       },
-      // A tool result must be followed by an assistant turn (the summary), so
-      // the anchored tool-result message is never the last message and the
-      // transform pipeline does not need to merge consecutive user messages.
       ai('summary of what happened so far'),
       human('continuation after the anchored tool result'),
     ];
+    for (const content of contents) {
+      historyService.add(content);
+    }
 
-    const messages = applyCaching(contents);
+    const curated = historyService.getCuratedForProvider();
+    const messages = applyCaching(curated);
 
-    // The anchored tool content flushes into a user message carrying the
-    // tool_result; that message must carry the anchor breakpoint, and it must
-    // NOT be the last message.
     const anchoredToolMessage = messages.find(
-      (m) =>
-        m.role === 'user' &&
-        Array.isArray(m.content) &&
-        m.content.some(
-          (b) =>
-            (b as { type?: string }).type === 'tool_result' &&
-            'cache_control' in b,
+      (message) =>
+        message.role === 'user' &&
+        Array.isArray(message.content) &&
+        message.content.some(
+          (block) => block.type === 'tool_result' && 'cache_control' in block,
         ),
     );
     expect(anchoredToolMessage).toBeDefined();
     expect(anchoredToolMessage).not.toBe(messages[messages.length - 1]);
+    expect(cacheControlCount(messages)).toBeLessThanOrEqual(4);
+    expect(JSON.stringify({ messages })).not.toContain('cacheAnchor');
   });
 });
 

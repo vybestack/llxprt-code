@@ -303,7 +303,7 @@ describe('HistoryService - Behavioral Tests', () => {
         expect(syntheticToolMessage.speaker).toBe('tool');
         expect(syntheticToolMessage.metadata?.synthetic).toBe(true);
         expect(syntheticToolMessage.metadata?.reason).toBe(
-          'reordered_tool_responses',
+          'orphaned_tool_call',
         );
       });
 
@@ -347,6 +347,8 @@ describe('HistoryService - Behavioral Tests', () => {
           ),
         );
         expect(toolResponses).toHaveLength(1);
+        expect(curated[2].metadata?.synthetic).toBeUndefined();
+        expect(curated[2].metadata?.reason).toBeUndefined();
       });
 
       it('should preserve MediaBlocks alongside tool_response in getCuratedForProvider', () => {
