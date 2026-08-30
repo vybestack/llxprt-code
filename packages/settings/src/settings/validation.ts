@@ -11,6 +11,14 @@ import type {
   StandardProfile,
 } from '../profiles/types.js';
 
+/**
+ * Minimum number of member profiles a load-balancer profile must reference.
+ * The load path accepts >= 1 so hand-authored single-member files keep loading;
+ * the interactive save path additionally requires >= 2 so an empty "load
+ * balancer" is never created by the UI.
+ */
+export const MIN_LOAD_BALANCER_MEMBERS = 1;
+
 const dangerousKeys = new Set(['__proto__', 'constructor', 'prototype']);
 const promptCachingValues = ['off', '5m', '1h', '24h'] as const;
 
@@ -82,19 +90,6 @@ const authConfigSchema = z.discriminatedUnion('type', [
     .strict(),
 ]);
 
-const loadBalancerConfigSchema = z.object({
-  strategy: z.literal('round-robin'),
-  subProfiles: z.array(
-    z.object({
-      name: z.string(),
-      provider: z.string(),
-      model: z.string().optional(),
-      baseURL: z.string().optional(),
-      apiKey: z.string().optional(),
-    }),
-  ),
-});
-
 const standardProfileSchema: z.ZodType<StandardProfile> = z
   .object({
     version: z.literal(1),
@@ -103,17 +98,22 @@ const standardProfileSchema: z.ZodType<StandardProfile> = z
     model: z.string().min(1),
     modelParams: modelParamsSchema,
     ephemeralSettings: ephemeralSettingsSchema,
-    loadBalancer: loadBalancerConfigSchema.optional(),
     auth: authConfigSchema.optional(),
   })
   .passthrough();
 
+/**
+ * Shared load-balancer profile schema. A load balancer must reference at least
+ * {@link MIN_LOAD_BALANCER_MEMBERS} member profile. The interactive save
+ * path requires >= 2; the load path accepts >= 1 so existing single-member
+ * files keep loading (the rule is explicit and tested in both places).
+ */
 const loadBalancerProfileSchema: z.ZodType<LoadBalancerProfile> = z
   .object({
     version: z.literal(1),
     type: z.literal('loadbalancer'),
     policy: z.union([z.literal('roundrobin'), z.literal('failover')]),
-    profiles: z.array(z.string().min(1)).min(1),
+    profiles: z.array(z.string().min(1)).min(MIN_LOAD_BALANCER_MEMBERS),
     contextLimit: z.number().optional(),
     provider: z.string(),
     model: z.string(),
@@ -121,6 +121,50 @@ const loadBalancerProfileSchema: z.ZodType<LoadBalancerProfile> = z
     ephemeralSettings: ephemeralSettingsSchema,
   })
   .passthrough();
+
+/**
+ * Single shared profile-JSON parse boundary. Every caller (ProfileManager loads,
+ * canonical repair, legacy normalization, inline `--profile`, fixture scans)
+ * parses profile content here so a malformed or hostile profile produces the same
+ * typed result everywhere. Rejects prototype-pollution keys (`__proto__`,
+ * `constructor`, `prototype`) anywhere in the document before any other validation,
+ * matching the historical `profileBootstrap` inline behavior.
+ */
+export function parseProfileJson(content: string):
+  | { readonly kind: 'parsed'; readonly value: unknown }
+  | { readonly kind: 'invalid-json'; readonly error: Error }
+  | {
+      readonly kind: 'unsafe';
+      readonly error: Error;
+      /**
+       * The successfully-parsed document, exposed so read-only callers that
+       * must still INSPECT a hostile file (canonical repair eligibility) do
+       * not need a second parser. Reading is safe: JSON.parse materialises
+       * `__proto__` as an own property rather than invoking the setter.
+       * Callers that WRITE must reject on `kind` and ignore this.
+       */
+      readonly value: unknown;
+    } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch (error) {
+    return {
+      kind: 'invalid-json',
+      error: error instanceof Error ? error : new Error(String(error)),
+    };
+  }
+  if (hasDangerousKey(parsed)) {
+    return {
+      kind: 'unsafe',
+      error: new Error(
+        'Profile contains dangerous fields (__proto__, constructor, or prototype)',
+      ),
+      value: parsed,
+    };
+  }
+  return { kind: 'parsed', value: parsed };
+}
 
 function isMissingVersion(version: unknown): boolean {
   if (version === null || version === undefined) {
@@ -203,6 +247,15 @@ export function parseLoadBalancerProfile(
   name: string,
   input: unknown,
 ): LoadBalancerProfile {
+  // Self-protecting: this is an exported entry point, so it does not assume
+  // the caller already routed the document through parseProfileJson. Nested
+  // records are covered by isSafeRecord in the schemas, but a top-level
+  // dangerous key would otherwise pass.
+  if (hasDangerousKey(input)) {
+    throw new Error(
+      `LoadBalancer profile '${name}' contains dangerous fields (__proto__, constructor, or prototype)`,
+    );
+  }
   if (!isPlainObject(input) || input.type !== 'loadbalancer') {
     throw new Error(
       `LoadBalancer profile '${name}' must reference at least one profile`,

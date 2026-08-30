@@ -28,6 +28,8 @@ import type {
   ProfileDetail,
   ProfileSummary,
 } from '../agent.js';
+
+import { parseProfileJson } from '@vybestack/llxprt-code-settings';
 import type { AgentProviderState } from '../agentImpl.js';
 
 /**
@@ -433,12 +435,11 @@ export class ProfilesControl implements AgentProfileControl {
     } catch {
       return undefined;
     }
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
+    const parsedJson = parseProfileJson(raw);
+    if (parsedJson.kind !== 'parsed') {
       return undefined;
     }
+    const parsed = parsedJson.value;
     if (!isPublicProfileShape(parsed)) {
       return undefined;
     }

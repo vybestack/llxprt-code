@@ -18,6 +18,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import { parseProfileJson } from '@vybestack/llxprt-code-settings';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { createOAuthSettingsAdapter } from '../auth/oauth-settings-adapter.js';
 import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime.js';
@@ -445,13 +446,18 @@ function parseInlineProfileJson(
   if (!jsonString || jsonString.trim() === '') {
     return profileValidationError('Profile JSON cannot be empty');
   }
-  try {
-    return JSON.parse(jsonString) as unknown;
-  } catch (err) {
+  // Single shared profile-JSON parse boundary. The shared boundary also
+  // rejects prototype-pollution keys (__proto__/constructor/prototype), so
+  // the inline --profile path and every on-disk profile path agree on shape.
+  const parsed = parseProfileJson(jsonString);
+  if (parsed.kind !== 'parsed') {
     return profileValidationError(
-      `Invalid JSON in --profile: ${err instanceof Error ? err.message : String(err)}`,
+      parsed.kind === 'invalid-json'
+        ? `Invalid JSON in --profile: ${parsed.error.message}`
+        : parsed.error.message,
     );
   }
+  return parsed.value;
 }
 
 function validateInlineProfileObject(
@@ -512,6 +518,10 @@ function validateProfileDepth(
 function validateDangerousProfileFields(
   parsed: unknown,
 ): ProfileApplicationResult | undefined {
+  // Defense-in-depth backstop: the shared parseProfileJson boundary already
+  // rejects these exact keys; keeping the explicit check here preserves the exact
+  // profileBootstrap error contract for --profile even if a caller bypasses
+  // the string entry point.
   if (hasDangerousField(parsed, ['__proto__', 'constructor', 'prototype'])) {
     return profileValidationError(
       'Profile contains dangerous fields (__proto__, constructor, or prototype)',

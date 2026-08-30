@@ -10,6 +10,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'tool-output-item-size-limit',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description: 'Maximum size per item/file in bytes',
     type: 'number',
     persistToProfile: true,
@@ -17,6 +19,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'max-prompt-tokens',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description: 'Maximum tokens allowed in any prompt sent to LLM',
     type: 'number',
     persistToProfile: true,
@@ -24,6 +28,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'maxTurnsPerPrompt',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description:
       'Maximum number of turns allowed per prompt before stopping (default: -1 for unlimited)',
     type: 'number',
@@ -47,6 +53,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'subagent-max-output-tokens-total',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description:
       'Aggregate output token budget for a subagent run (-1 for unlimited)',
     type: 'number',
@@ -69,6 +77,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'loopDetectionEnabled',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description: 'Enable/disable all loop detection mechanisms (true/false)',
     type: 'boolean',
     persistToProfile: true,
@@ -77,6 +87,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'toolCallLoopThreshold',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description:
       'Number of consecutive identical tool calls before triggering loop detection (default: 50, -1 = unlimited)',
     type: 'number',
@@ -100,6 +112,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'contentLoopThreshold',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description:
       'Number of content chunk repetitions before triggering loop detection (default: 50, -1 = unlimited)',
     type: 'number',
@@ -123,6 +137,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'retries',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description: 'Maximum number of retry attempts for API calls',
     type: 'number',
     hint: 'non-negative integer (e.g., 3)',
@@ -140,6 +156,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'retrywait',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description: 'Initial delay in milliseconds between retry attempts',
     type: 'number',
     hint: 'positive integer in milliseconds (e.g., 5000 for 5 seconds)',
@@ -158,6 +176,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'auth-retry-timeout',
     category: 'cli-behavior',
+    owner: 'provider-connection',
+    propagation: 'next-turn',
     description:
       'Timeout in milliseconds for mid-turn OAuth reauthentication attempts',
     type: 'number',
@@ -179,6 +199,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'socket-timeout',
     category: 'cli-behavior',
+    owner: 'provider-connection',
+    propagation: 'next-turn',
     description: 'Request timeout in milliseconds for local AI servers',
     type: 'number',
     hint: 'positive integer in milliseconds (e.g., 60000)',
@@ -187,6 +209,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'socket-keepalive',
     category: 'cli-behavior',
+    owner: 'provider-connection',
+    propagation: 'next-turn',
     description: 'Enable TCP keepalive for local AI server connections',
     type: 'boolean',
     persistToProfile: true,
@@ -194,6 +218,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'socket-nodelay',
     category: 'cli-behavior',
+    owner: 'provider-connection',
+    propagation: 'next-turn',
     description: 'Enable TCP_NODELAY for local AI servers',
     type: 'boolean',
     persistToProfile: true,
@@ -201,33 +227,41 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'emojifilter',
     category: 'cli-behavior',
+    owner: 'application',
+    propagation: 'profile-transition',
     description: 'Emoji filter mode (allowed/auto/warn/error)',
     type: 'enum',
     enumValues: ['allowed', 'auto', 'warn', 'error'],
-    persistToProfile: true,
+    persistToProfile: false,
     parse: (raw: string) => raw.toLowerCase(),
   },
   {
     key: 'dumponerror',
     category: 'cli-behavior',
+    owner: 'application',
+    propagation: 'profile-transition',
     description:
       'Dump API request body to the dumps directory in your LLxprt cache directory on errors (enabled/disabled)',
     type: 'enum',
     enumValues: ['enabled', 'disabled'],
-    persistToProfile: true,
+    persistToProfile: false,
   },
   {
     key: 'dumpcontext',
     category: 'cli-behavior',
+    owner: 'application',
+    propagation: 'profile-transition',
     description: 'Control context dumping (now/status/on/error/off)',
     type: 'enum',
     enumValues: ['now', 'status', 'on', 'error', 'off'],
-    persistToProfile: true,
+    persistToProfile: false,
     sessionScope: true,
   },
   {
     key: 'authOnly',
     category: 'cli-behavior',
+    owner: 'provider-connection',
+    propagation: 'next-turn',
     description: 'Force OAuth authentication only',
     type: 'boolean',
     persistToProfile: true,
@@ -235,6 +269,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'auth.noBrowser',
     category: 'cli-behavior',
+    owner: 'provider-connection',
+    propagation: 'next-turn',
     description:
       'Skip automatic browser OAuth flow and prompt for manual code entry',
     type: 'boolean',
@@ -248,6 +284,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'todo-continuation',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description: 'Enable todo continuation mode',
     type: 'boolean',
     persistToProfile: true,
@@ -256,6 +294,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
     key: 'tools.disabled',
     aliases: ['disabled-tools'],
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description: 'Disabled tools list',
     type: 'string-array',
     persistToProfile: true,
@@ -263,6 +303,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'tools.allowed',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description: 'Allowed tools list',
     type: 'string-array',
     persistToProfile: true,
@@ -270,6 +312,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'stream-options',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description: 'Stream options for OpenAI API',
     type: 'json',
     persistToProfile: true,
@@ -277,6 +321,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'enable-tool-prompts',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description: 'Load tool-specific prompts from <config>/prompts/tools/**',
     type: 'boolean',
     persistToProfile: true,
@@ -284,6 +330,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'model.canSaveCore',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description:
       'Allow the model to save core (system) memories via save_memory tool. ' +
       'WARNING: Unsafe — the model can override your directives when this is enabled.',
@@ -302,6 +350,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'model.allMemoriesAreCore',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description:
       'Load LLXPRT.md files as part of the system prompt instead of user context. ' +
       'Useful for models that strictly follow system directives.',
@@ -322,6 +372,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'task-default-timeout-seconds',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description: 'Default timeout in seconds for task tool executions',
     type: 'number',
     persistToProfile: true,
@@ -342,6 +394,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'task-max-timeout-seconds',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description: 'Maximum allowed timeout in seconds for task tool executions',
     type: 'number',
     persistToProfile: true,
@@ -364,6 +418,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
     // @requirement REQ-ASYNC-012
     key: 'task-max-async',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description:
       'Maximum concurrent async tasks. Default 5, use -1 for unlimited.',
     type: 'number',
@@ -374,6 +430,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
     // #1995 slice 2
     key: 'shell-max-background-jobs',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description:
       'Maximum concurrent managed background shell jobs. Default 10, use -1 for unlimited.',
     type: 'number',
@@ -385,6 +443,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
     // #1995 slice 2
     key: 'shell-background-log-max-bytes',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description:
       'Maximum log file size in bytes for managed background shell jobs. A job exceeding this cap is failed. Default 8388608 (8 MiB).',
     type: 'number',
@@ -395,6 +455,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'subagents.async.enabled',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description: 'Enable async subagents for this profile.',
     type: 'boolean',
     default: true,
@@ -407,6 +469,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'shell-default-timeout-seconds',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description: 'Default timeout in seconds for shell command executions',
     type: 'number',
     persistToProfile: true,
@@ -427,6 +491,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'shell-max-timeout-seconds',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description:
       'Maximum allowed timeout in seconds for shell command executions',
     type: 'number',
@@ -448,6 +514,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'shell-inactivity-timeout-seconds',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description:
       'Inactivity timeout in seconds for shell commands. Kills commands that produce no output for this duration. Resets on each output event.',
     type: 'number',
@@ -469,6 +537,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'shell-output-retention-max-bytes',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description:
       'Maximum bytes of shell output retained in memory during acquisition. Output beyond this is head/tail truncated with a visible notice. Also constrains PTY display scrollback when its byte-derived limit is lower than ptyScrollbackLimit. Separate from model token limits.',
     type: 'number',
@@ -490,6 +560,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'token-usage-log',
     category: 'cli-behavior',
+    owner: 'application',
+    propagation: 'next-turn',
     description:
       'Log estimate-vs-actual token usage per turn to a per-session JSONL file (counts only, no prompt text)',
     type: 'boolean',
@@ -503,6 +575,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'mcp.lazy',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description:
       'Defer MCP server tool schemas from the model until a server is activated via the activate_mcp_server tool. ' +
       'Reduces token overhead for large MCP tool sets.',
@@ -520,6 +594,8 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'mcp.eagerServers',
     category: 'cli-behavior',
+    owner: 'agent-policy',
+    propagation: 'next-turn',
     description:
       'List of MCP server names that stay eager (schemas always published) while mcp.lazy is enabled.',
     type: 'string-array',
