@@ -9,109 +9,86 @@ import * as path from 'node:path';
 import { homedir } from 'node:os';
 import * as dotenv from 'dotenv';
 
+import type { Agent, AgentConfig } from '@vybestack/llxprt-code-agents';
+import { createAgent } from '@vybestack/llxprt-code-agents';
 import { debugLogger } from '@vybestack/llxprt-code-core';
 import {
-  Config,
   FileDiscoveryService,
-  type ConfigParameters,
-  ApprovalMode,
-  MessageBus,
   loadServerHierarchicalMemory,
   LLXPRT_CONFIG_DIR,
   DEFAULT_GEMINI_EMBEDDING_MODEL,
   PLACEHOLDER_MODEL,
   UNCONFIGURED_PROVIDER,
+  ApprovalMode,
   type LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-storage';
-import {
-  createAgentClient,
-  createToolScheduler,
-  createTaskToolRegistration,
-} from '@vybestack/llxprt-code-agents';
 
-import { logger } from '../utils/logger.js';
 import type { Settings } from './settings.js';
 import { type AgentSettings, CoderAgentEvent } from '../types.js';
+import { logger } from '../utils/logger.js';
 
-export async function loadConfig(
+/**
+ * Builds the A2A task Agent through the public Agent API (#3221).
+ *
+ * Converts the A2A env/settings/extensions host input into a declarative
+ * {@link AgentConfig} and constructs the Agent via {@link createAgent}. This
+ * replaces the legacy hand-wired runtime assembly (`new Config`,
+ * `new MessageBus`, `config.initialize`/`refreshAuth` orchestration): A2A owns
+ * interface-input parsing only, and runtime transitions belong to the Agent.
+ *
+ * Auth parity: the legacy env-driven `refreshAuth(<method>)` calls were already
+ * method-agnostic at the core level (they rebuild the content generator from
+ * current env state), and `createAgent`'s bootstrap performs that same
+ * initialization, so env credentials (GEMINI_API_KEY / vertex / CCPA) are
+ * picked up without host-side auth orchestration while the provider stays
+ * neutral unless explicitly selected via LLXPRT_DEFAULT_PROVIDER.
+ *
+ * Harness flags: `forceConfirmations: false` preserves A2A's approval flow —
+ * the legacy `loadConfig` path never injected confirmation forcing, and the
+ * Task surfaces confirmations to the client instead of auto-confirming.
+ */
+export async function createTaskAgent(
   settings: Settings,
   extensions: LlxprtExtension[],
   taskId: string,
-): Promise<Config> {
+): Promise<Agent> {
   const workspaceDir = process.cwd();
-  const configParams = await createConfigParameters(
-    settings,
-    extensions,
-    taskId,
-    workspaceDir,
-  );
-  const config = new Config(configParams);
-  await initializeConfig(config);
-  await refreshConfigAuth(config);
-  return config;
-}
-
-async function createConfigParameters(
-  settings: Settings,
-  extensions: LlxprtExtension[],
-  taskId: string,
-  workspaceDir: string,
-): Promise<ConfigParameters> {
-  const configParams: ConfigParameters = {
-    ...createBaseConfigParameters(settings, extensions, taskId, workspaceDir),
-  };
   const { memoryContent, fileCount } = await loadWorkspaceMemory(
     workspaceDir,
     extensions,
   );
-  configParams.userMemory = memoryContent;
-  configParams.llxprtMdFileCount = fileCount;
-  return configParams;
-}
-
-function createBaseConfigParameters(
-  settings: Settings,
-  extensions: LlxprtExtension[],
-  taskId: string,
-  workspaceDir: string,
-): ConfigParameters {
-  return {
-    sessionId: taskId,
-    model: PLACEHOLDER_MODEL,
+  const agentConfig: AgentConfig = {
     provider: resolveProviderFromEnv(),
+    model: PLACEHOLDER_MODEL,
     embeddingModel: DEFAULT_GEMINI_EMBEDDING_MODEL,
-    sandbox: undefined, // Sandbox might not be relevant for a server-side agent
-    targetDir: workspaceDir, // Or a specific directory the agent operates on
-    debugMode: process.env['DEBUG'] === 'true' || false,
-    question: '', // Not used in server mode directly like CLI
-    coreTools: settings.coreTools ?? undefined,
-    excludeTools: settings.excludeTools ?? undefined,
-    showMemoryUsage: settings.showMemoryUsage ?? false,
+    sessionId: taskId,
+    workingDir: workspaceDir,
+    debugMode: process.env['DEBUG'] === 'true',
+    coreTools: settings.coreTools,
+    excludeTools: settings.excludeTools,
+    memory: memoryContent,
     approvalMode: getApprovalMode(),
     mcpServers: mergeMcpServers(settings, extensions),
-    cwd: workspaceDir,
     telemetry: createTelemetrySettings(settings),
     fileFiltering: {
       respectGitIgnore: settings.fileFiltering?.respectGitIgnore,
       enableRecursiveFileSearch:
         settings.fileFiltering?.enableRecursiveFileSearch,
     },
-    ideMode: false,
     folderTrust: settings.folderTrust,
     interactive: true,
     extensions,
-    // @plan PLAN-20260610-ISSUE1592.P01
-    // @requirement REQ-INV-001
-    agentClientFactory: (config, runtimeState) =>
-      createAgentClient(config, runtimeState),
-    // @plan PLAN-20260610-ISSUE1592.P01
-    // @requirement REQ-INV-002
-    toolSchedulerFactory: (options) => createToolScheduler(options),
-    // @plan PLAN-20260610-ISSUE1592.P03
-    // @requirement REQ-INV-003
-    taskToolRegistration: createTaskToolRegistration(),
+    harness: {
+      includeProcessCwd: true,
+      forceConfirmations: false,
+    },
+    settings: {
+      llxprtMdFileCount: fileCount,
+      showMemoryUsage: settings.showMemoryUsage ?? false,
+    },
   };
+  return createAgent(agentConfig);
 }
 
 function getApprovalMode(): ApprovalMode {
@@ -134,9 +111,7 @@ function resolveProviderFromEnv(): string {
   return UNCONFIGURED_PROVIDER;
 }
 
-function createTelemetrySettings(
-  settings: Settings,
-): ConfigParameters['telemetry'] {
+function createTelemetrySettings(settings: Settings): AgentConfig['telemetry'] {
   return {
     enabled: settings.telemetry?.enabled,
     logPrompts: settings.telemetry?.logPrompts,
@@ -156,104 +131,6 @@ async function loadWorkspaceMemory(
     extensions,
     // Folder trust integration pending; using permissive default for server mode.
     true,
-  );
-}
-
-async function initializeConfig(config: Config): Promise<void> {
-  const sessionMessageBus = new MessageBus(
-    config.getPolicyEngine(),
-    config.getDebugMode(),
-  );
-  await (
-    config as Config & {
-      initialize(dependencies?: { messageBus?: MessageBus }): Promise<void>;
-    }
-  ).initialize({ messageBus: sessionMessageBus });
-}
-
-async function refreshConfigAuth(config: Config): Promise<void> {
-  const authSelection = resolveAuthSelection();
-  if (authSelection === undefined) {
-    // No explicit Gemini credentials or provider selected — stay unconfigured.
-    // The A2A server must not assume Gemini as the default provider.
-    return;
-  }
-  if (authSelection === 'use-ccpa') {
-    await refreshCcpaAuth(config);
-    return;
-  }
-  if (authSelection === 'gemini-api-key') {
-    logger.info('[Config] Using Gemini API Key');
-    await config.refreshAuth('gemini-api-key');
-    return;
-  }
-  if (authSelection === 'vertex-ai') {
-    logger.info('[Config] Using Vertex AI credentials');
-    await config.refreshAuth('vertex-ai');
-    return;
-  }
-  // authSelection === 'gemini-oauth' — explicit Gemini provider via env,
-  // no API key. Fall back to Gemini OAuth.
-  logger.info(
-    '[Config] Explicit Gemini provider selected via LLXPRT_DEFAULT_PROVIDER, falling back to OAuth.',
-  );
-  await config.refreshAuth('oauth-personal');
-}
-
-type AuthSelection =
-  | 'gemini-api-key'
-  | 'use-ccpa'
-  | 'vertex-ai'
-  | 'gemini-oauth'
-  | undefined;
-
-/**
- * Resolve which auth method to use based on explicit Gemini credentials or
- * explicit Gemini provider selection. Returns undefined when no Gemini
- * signals are present (unconfigured / neutral state).
- */
-function resolveAuthSelection(): AuthSelection {
-  if (process.env['USE_CCPA']) {
-    return 'use-ccpa';
-  }
-  if (process.env['GEMINI_API_KEY']) {
-    return 'gemini-api-key';
-  }
-  if (hasVertexCredentials()) {
-    return 'vertex-ai';
-  }
-  // Only fall back to Gemini OAuth when Gemini is explicitly selected.
-  const defaultProvider = process.env['LLXPRT_DEFAULT_PROVIDER']?.trim();
-  if (defaultProvider === 'gemini') {
-    return 'gemini-oauth';
-  }
-  return undefined;
-}
-
-async function refreshCcpaAuth(config: Config): Promise<void> {
-  const adcFilePath = process.env['GOOGLE_APPLICATION_CREDENTIALS'];
-  logger.info('[Config] Using CCPA Auth:');
-  try {
-    if (adcFilePath) {
-      path.resolve(adcFilePath);
-    }
-  } catch (e) {
-    logger.error(
-      `[Config] USE_CCPA env var is true but unable to resolve GOOGLE_APPLICATION_CREDENTIALS file path ${adcFilePath}. Error ${e}`,
-    );
-  }
-  await config.refreshAuth('vertex-ai');
-  logger.info(
-    `[Config] GOOGLE_CLOUD_PROJECT: ${process.env['GOOGLE_CLOUD_PROJECT']}`,
-  );
-}
-
-function hasVertexCredentials(): boolean {
-  return (
-    process.env['GOOGLE_APPLICATION_CREDENTIALS'] !== undefined ||
-    process.env['GOOGLE_CLOUD_PROJECT'] !== undefined ||
-    process.env['GOOGLE_CLOUD_LOCATION'] !== undefined ||
-    process.env['GOOGLE_API_KEY'] !== undefined
   );
 }
 
@@ -315,7 +192,7 @@ export function loadEnvironment(options: { homeDir?: string } = {}): void {
 function findEnvFile(startDir: string, homeDir: string): string | null {
   let currentDir = path.resolve(startDir);
   let parentDir = path.resolve(startDir);
-  // Use do/while so the root directory is still probed before exiting,
+  // do/while so the root directory is still probed before exiting,
   // matching the original while(true) traversal that checked currentDir
   // before testing whether parentDir === currentDir.
   do {

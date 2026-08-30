@@ -963,6 +963,40 @@ export default tseslint.config(
   },
   // ============================================================================
   // End Issue #1569 S6B
+  // ============================================================================
+  // Issue #3221: A2A host boundary — fail-closed import allowlist
+  // ============================================================================
+  // packages/a2a-server is a HOST of the public Agent facade, not a co-owner
+  // of the runtime. Every import specifier in its tree must appear on an
+  // explicit allowlist (node builtins, relative paths, the test runner, the
+  // A2A transport SDK, the package's own declared host dependencies, and the
+  // ROOT public entrypoints of the runtime packages). Anything else — deep
+  // subpaths like @vybestack/llxprt-code-core/src/*, the CLI package, the
+  // providers package, provider SDKs, or any undeclared module — fails
+  // closed. New entries require explicit justification in this file.
+  {
+    files: ['packages/a2a-server/src/**/*.ts', 'packages/a2a-server/index.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              // The one permitted runtime subpath is the MCP host-services
+              // seam published by #3305 (packages/mcp exports
+              // "./host/hostServices.js"). It is a declared export rather than
+              // an internal, and packages/cli and packages/agents import the
+              // same specifier. Kept in sync with ALLOWED_RUNTIME_SUBPATHS in
+              // scripts/a2a-boundary/a2aBoundary.ts.
+              regex: '^(?!node:|\\.|/|bun:test|@a2a-js/sdk(?:/server(?:/express)?)?$|@vybestack/llxprt-code-(agents|core|mcp|storage)$|@vybestack/llxprt-code-mcp/host/hostServices\\.js$|@google-cloud/storage$|dotenv$|express$|fs-extra$|strip-json-comments$|supertest$|tar$|uuid$|winston$).+',
+              message:
+                'a2a-server is an Agent-facade host: only node builtins, relative paths, bun:test, the A2A SDK, declared host dependencies, runtime-package ROOT entrypoints, and the MCP host-services seam may be imported (issue #3221).',
+            },
+          ],
+        },
+      ],
+    },
+  },
   // Issue #1576: Enforce strict line-limit errors on AppContainer module files.
   // These files are being decomposed; error-level rules catch regressions during
   // and after the decomposition. Test files are excluded (they already have

@@ -126,7 +126,7 @@ Write the complete content to the \`LLXPRT.md\` file. The output must be well-fo
       final: true,
       metadata: {
         coderAgent: { kind: eventType },
-        model: context.config.getModel(),
+        model: context.model,
       },
     };
 

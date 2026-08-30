@@ -25,13 +25,21 @@ import type { AgentSettings } from '../types.js';
 import { GCSTaskStore, NoOpTaskStore } from '../persistence/gcs.js';
 import { CoderAgentExecutor } from '../agent/executor.js';
 import { requestStorage } from './requestStorage.js';
-import { loadConfig, loadEnvironment, setTargetDir } from '../config/config.js';
+import {
+  GitService,
+  debugLogger,
+  type LlxprtExtension,
+} from '@vybestack/llxprt-code-core';
+import { Storage } from '@vybestack/llxprt-code-storage';
+import {
+  createTaskAgent,
+  loadEnvironment,
+  setTargetDir,
+} from '../config/config.js';
 import { loadSettings } from '../config/settings.js';
 import { loadExtensions } from '../config/extension.js';
 import { commandRegistry } from '../commands/command-registry.js';
 import type { Command, CommandArgument } from '../commands/types.js';
-import type { GitService } from '@vybestack/llxprt-code-core';
-import { debugLogger } from '@vybestack/llxprt-code-core';
 import { wireMcpHostServices } from '../mcpHostWiring.js';
 
 type CommandResponse = {
@@ -91,7 +99,7 @@ export function updateCoderAgentCardUrl(
 export interface AppTaskWrapper {
   readonly id: string;
   readonly task: {
-    getMetadata(): Promise<unknown>;
+    getMetadata(): unknown;
   };
   toSDKTask(): SDKTask;
 }
@@ -112,7 +120,12 @@ export interface AppAgentExecutor extends AgentExecutor {
 }
 
 export type AppContext = {
-  config: Awaited<ReturnType<typeof loadConfig>>;
+  extensions: readonly LlxprtExtension[];
+  model: string;
+  checkpointing: {
+    enabled: boolean;
+    getProjectTempCheckpointsDir(): string;
+  };
   git: GitService | undefined;
   agentExecutor: AppAgentExecutor;
 };
@@ -126,16 +139,19 @@ export interface CreateAppDependencies {
   agentCard?: AgentCard;
   createAgentCard?: () => AgentCard;
   createStartupContext?: () => Promise<AppContext & TaskStores>;
-  getGitService?: (
-    config: Awaited<ReturnType<typeof loadConfig>>,
-  ) => Promise<GitService | undefined>;
 }
 
 export async function createApp(dependencies: CreateAppDependencies = {}) {
   try {
-    const { config, agentExecutor, taskStoreForExecutor, taskStoreForHandler } =
-      await (dependencies.createStartupContext ?? createStartupContext)();
-    const git = await (dependencies.getGitService ?? getGitService)(config);
+    const {
+      extensions,
+      model,
+      checkpointing,
+      git,
+      agentExecutor,
+      taskStoreForExecutor,
+      taskStoreForHandler,
+    } = await (dependencies.createStartupContext ?? createStartupContext)();
     const agentCard =
       dependencies.agentCard ??
       (dependencies.createAgentCard ?? createCoderAgentCard)();
@@ -155,7 +171,13 @@ export async function createApp(dependencies: CreateAppDependencies = {}) {
     expressApp.use(express.json());
 
     registerTaskCreationRoute(expressApp, agentExecutor, taskStoreForExecutor);
-    registerCommandRoutes(expressApp, { config, git, agentExecutor });
+    registerCommandRoutes(expressApp, {
+      extensions,
+      model,
+      checkpointing,
+      git,
+      agentExecutor,
+    });
     registerTaskMetadataRoutes(expressApp, agentExecutor, taskStoreForExecutor);
     return expressApp;
   } catch (error) {
@@ -171,12 +193,33 @@ async function createStartupContext(): Promise<AppContext & TaskStores> {
   const extensions = loadExtensions(workspaceRoot, {
     folderTrust: settings.folderTrust,
   });
-  const config = await loadConfig(settings, extensions, 'a2a-server');
+  // The startup Agent is built from the same declarative interface input as
+  // task Agents and disposed once host-owned startup state (the resolved
+  // model) has been read (#3221). Disposal must run even if the read fails:
+  // dispose() tears down MCP connections and bus listeners the host would
+  // otherwise leak for its lifetime.
+  const agent = await createTaskAgent(settings, extensions, 'a2a-server');
+  let model: string;
+  try {
+    model = agent.getModel();
+  } finally {
+    await agent.dispose();
+  }
   const { taskStoreForExecutor, taskStoreForHandler } = createTaskStores();
   const agentExecutor = new CoderAgentExecutor(taskStoreForExecutor);
+  const storage = new Storage(workspaceRoot);
   return {
-    config,
-    git: undefined,
+    extensions,
+    model,
+    // Legacy parity: the legacy host never forwarded a checkpointing flag
+    // into its Config (core defaulted it to false), so restore stays
+    // disabled here regardless of user/workspace settings.
+    checkpointing: {
+      enabled: false,
+      getProjectTempCheckpointsDir: () =>
+        storage.getProjectTempCheckpointsDir(),
+    },
+    git: await getGitService(workspaceRoot, storage),
     agentExecutor,
     taskStoreForExecutor,
     taskStoreForHandler,
@@ -203,10 +246,13 @@ function createTaskStores(): TaskStores {
 }
 
 async function getGitService(
-  config: Awaited<ReturnType<typeof loadConfig>>,
+  workspaceRoot: string,
+  storage: Storage,
 ): Promise<GitService | undefined> {
   try {
-    return await config.getGitService();
+    const gitService = new GitService(workspaceRoot, storage);
+    await gitService.initialize();
+    return gitService;
   } catch (e) {
     logger.info('[CoreAgent] Git service not available:', e);
     return undefined;

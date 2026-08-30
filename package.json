@@ -100,6 +100,7 @@
     "lint:eslint-guard": "bun scripts/check-eslint-guard.ts",
     "lint:cli-boundary": "bun scripts/check-cli-import-boundary.ts",
     "lint:runtime-deps": "bun scripts/check-runtime-dependency-declarations.ts",
+    "lint:a2a-boundary": "bun scripts/check-a2a-import-boundary.ts",
     "lint:genai-enclave": "bun scripts/check-genai-enclave.ts",
     "lint:legacy-paths": "bun scripts/check-legacy-paths.ts",
     "lint:no-vitest": "bun scripts/check-no-vitest.ts",

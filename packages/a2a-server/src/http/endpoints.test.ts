@@ -21,8 +21,6 @@ import type { Server } from 'node:http';
 import type { Task as SDKTask } from '@a2a-js/sdk';
 import type { TaskMetadata } from '../types.js';
 import type { AddressInfo } from 'node:net';
-import type { Config } from '@vybestack/llxprt-code-core';
-import { createMockConfig } from '../utils/testing_utils.js';
 
 interface EndpointTask {
   id: string;
@@ -118,20 +116,24 @@ async function createTestServer(
   const workspacePath = createTestWorkspace();
   const taskStore = new InMemoryTaskStore();
   const agentExecutor = createEndpointExecutor();
-  const config = createMockConfig() as Config;
   const agentCard = createCoderAgentCard();
   const app = await createApp({
     ...(useDefaultAgentCard
       ? { createAgentCard: () => agentCard }
       : { agentCard }),
     createStartupContext: async () => ({
-      config,
+      extensions: [],
+      model: 'test-model',
+      checkpointing: {
+        enabled: false,
+        getProjectTempCheckpointsDir: () =>
+          path.join(workspacePath, 'checkpoints'),
+      },
       git: undefined,
       agentExecutor,
       taskStoreForExecutor: taskStore,
       taskStoreForHandler: taskStore,
     }),
-    getGitService: async () => undefined,
   });
   const server = await listenAndTrackServer(app, (listeningServer) => {
     const port = (listeningServer.address() as AddressInfo).port;

@@ -1,656 +1,217 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi } from 'bun:test';
+/**
+ * Behavioral tests for the #3221 Agent-facade Task boundary.
+ *
+ * The Task is a thin facade over a public Agent. Under the LLXPRT_FAKE_RESPONSES
+ * production seam only FakeProvider is registered and set active, so every
+ * observable assertion goes through the PUBLIC Agent facade (stream events
+ * from acceptUserMessage, metadata accessors, confirmation flow) — never through
+ * Config or mock call counts.
+ *
+ * The confirmation flow resolves through agent.tools.respondToConfirmation;
+ * the scheduler handoff / _sendTextContent / cancelPendingTools /
+ * acceptAgentMessage / buildLlmPartsFromToolCalls internals no longer exist and
+ * their old pinning tests are re-expressed here as public-surface behavior.
+ */
+
+import { describe, it, expect, afterEach, afterAll } from 'bun:test';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import { createTaskAgent } from '../config/config.js';
 import { Task } from './task.js';
-import {
-  type Config,
-  type ToolCallRequestInfo,
-  type CompletedToolCall,
-  AgentEventType,
-  ApprovalMode,
-  ToolConfirmationOutcome,
-  type ToolSchedulerContract,
-  type WaitingToolCall,
-  type AnyDeclarativeTool,
-  type AnyToolInvocation,
-  REFUSAL_NOTICE_MESSAGE,
-} from '@vybestack/llxprt-code-core';
-import { createMockConfig } from '../utils/testing_utils.js';
-import { CoderAgentEvent } from '../types.js';
-import type { ExecutionEventBus, RequestContext } from '@a2a-js/sdk/server';
-import type { Mock } from 'bun:test';
+import type { ToolConfirmation } from '@vybestack/llxprt-code-agents';
 
-function createMockEventBus(): ExecutionEventBus {
-  return {
-    publish: vi.fn(),
-    on: vi.fn(),
-    off: vi.fn(),
-    once: vi.fn(),
-    removeAllListeners: vi.fn(),
-    finished: vi.fn(),
-  };
-}
+const WORKSPACE = mkdtempSync(join(tmpdir(), 'a2a-taskfacade-'));
+const FIXTURE = join(WORKSPACE, 'fake-responses.jsonl');
+writeFileSync(
+  FIXTURE,
+  JSON.stringify({
+    chunks: [
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'a plain text reply' }] },
+    ],
+  }) + '\n',
+);
 
-function createNoopToolCallRequest(): ToolCallRequestInfo {
-  return {
-    callId: 'auto-approval-request',
-    name: 'noop',
-    args: {},
-    isClientInitiated: false,
-    prompt_id: 'prompt-id',
-  };
-}
-
-function createWaitingToolCall(
-  onConfirm: Mock<() => Promise<void>>,
-): WaitingToolCall {
-  return {
-    request: {
-      callId: '1',
-      name: 'noop',
-      args: {},
-      isClientInitiated: false,
-      prompt_id: 'prompt-id',
-    },
-    status: 'awaiting_approval',
-    tool: {} as unknown as AnyDeclarativeTool,
-    invocation: {} as unknown as AnyToolInvocation,
-    confirmationDetails: {
-      type: 'info',
-      title: 'Approve noop',
-      prompt: 'Approve noop?',
-      onConfirm,
-    },
-  };
-}
-
-describe('Task', () => {
-  it('scheduleToolCalls should not modify the input requests array', async () => {
-    const mockConfig = createMockConfig();
-
-    const mockEventBus = createMockEventBus();
-
-    const task = await Task.create(
-      'task-id',
-      'context-id',
-      mockConfig as Config,
-      mockEventBus,
+afterAll(() => {
+  // The workspace is created at module scope so both fixtures share it;
+  // remove it once the file's tests are done so repeated runs do not
+  // accumulate temp directories.
+  try {
+    rmSync(WORKSPACE, { recursive: true, force: true });
+  } catch (err) {
+    process.stderr.write(
+      `task.test.ts: failed to clean up workspace: ${String(err)}
+`,
     );
+  }
+});
 
-    // Create a mock scheduler
-    task.scheduler = {
-      schedule: vi.fn().mockResolvedValue(undefined),
-      cancelAll: vi.fn(),
-      dispose: vi.fn(),
-      toolCalls: [],
-    } as unknown as ToolSchedulerContract;
+async function buildAgent(): Promise<Agent> {
+  return createTaskAgent({}, [], 'task-facade');
+}
 
-    task['setTaskStateAndPublishUpdate'] = vi.fn();
-    task['getProposedContent'] = vi.fn().mockResolvedValue('new content');
+async function disposeAgent(agent: Agent): Promise<void> {
+  await agent.dispose();
+}
 
-    const requests: ToolCallRequestInfo[] = [
-      {
-        callId: '1',
-        name: 'replace',
-        args: {
-          file_path: 'test.txt',
-          old_string: 'old',
-          new_string: 'new',
-        },
-        isClientInitiated: false,
-        prompt_id: 'prompt-id-1',
-      },
-    ];
+async function drainTypes(agent: Agent, text: string): Promise<string[]> {
+  const task = await Task.create('task-id', 'context-id', agent);
+  const types: string[] = [];
+  for await (const event of task.acceptUserMessage(
+    { userMessage: { parts: [{ kind: 'text', text }] } } as never,
+    new AbortController().signal,
+  )) {
+    types.push(event.type);
+  }
+  return types;
+}
 
-    const originalRequests = JSON.parse(JSON.stringify(requests));
-    const abortController = new AbortController();
-
-    await task.scheduleToolCalls(requests, abortController.signal);
-
-    expect(requests).toStrictEqual(originalRequests);
-  });
-
-  describe('acceptAgentMessage', () => {
-    it('should set currentTraceId when event has traceId', async () => {
-      const mockConfig = createMockConfig();
-      const mockEventBus = createMockEventBus();
-
-      const task = await Task.create(
-        'task-id',
-        'context-id',
-        mockConfig as Config,
-        mockEventBus,
-      );
-
-      const event = {
-        type: AgentEventType.Content,
-        value: 'test',
-        traceId: 'test-trace-id',
-      } as const;
-
-      await task.acceptAgentMessage(event);
-
-      expect(mockEventBus.publish).toHaveBeenCalledWith(
-        expect.objectContaining({
-          metadata: expect.objectContaining({
-            traceId: 'test-trace-id',
-          }),
-        }),
-      );
-    });
-
-    it('handles UserCancelled as explicit user cancel semantics', async () => {
-      const mockConfig = createMockConfig();
-      const mockEventBus = createMockEventBus();
-
-      const task = await Task.create(
-        'task-id',
-        'context-id',
-        mockConfig as Config,
-        mockEventBus,
-      );
-
-      const cancelPendingToolsSpy = vi.spyOn(task, 'cancelPendingTools');
-      const publishSpy = vi.spyOn(task, 'setTaskStateAndPublishUpdate');
-
-      await task.acceptAgentMessage({
-        type: AgentEventType.UserCancelled,
-      });
-
-      expect(cancelPendingToolsSpy).toHaveBeenCalledWith(
-        'User cancelled via LLM stream event',
-      );
-      expect(publishSpy).toHaveBeenCalledWith(
-        'input-required',
-        { kind: 'state-change' },
-        'Task cancelled by user',
-        undefined,
-        true,
-        undefined,
-        undefined,
-      );
-    });
-
-    it('handles StreamIdleTimeout as timeout semantics (not user-cancel)', async () => {
-      const mockConfig = createMockConfig();
-      const mockEventBus = createMockEventBus();
-
-      const task = await Task.create(
-        'task-id',
-        'context-id',
-        mockConfig as Config,
-        mockEventBus,
-      );
-
-      const cancelPendingToolsSpy = vi.spyOn(task, 'cancelPendingTools');
-      const publishSpy = vi.spyOn(task, 'setTaskStateAndPublishUpdate');
-
-      await task.acceptAgentMessage({
-        type: AgentEventType.StreamIdleTimeout,
-        value: {
-          error: {
-            message:
-              'Stream idle timeout: no response received within the allowed time.',
-            status: undefined,
-          },
-        },
-      });
-
-      expect(cancelPendingToolsSpy).toHaveBeenCalledWith(
-        'LLM stream idle timeout: Stream idle timeout: no response received within the allowed time.',
-      );
-      expect(publishSpy).toHaveBeenCalledWith(
-        'input-required',
-        { kind: 'state-change' },
-        'Task timed out waiting for model response.',
-        undefined,
-        true,
-        '[API Error: Stream idle timeout: no response received within the allowed time.]',
-        undefined,
-      );
-      expect(publishSpy).not.toHaveBeenCalledWith(
-        'input-required',
-        { kind: 'state-change' },
-        'Task cancelled by user',
-        undefined,
-        true,
-        undefined,
-        undefined,
-      );
-    });
-  });
-
-  describe('acceptAgentMessage refusal surfacing @issue:2329', () => {
-    it('publishes the refusal notice text when Finished has stopReason "refusal"', async () => {
-      const mockConfig = createMockConfig();
-      const mockEventBus = createMockEventBus();
-
-      const task = await Task.create(
-        'task-id',
-        'context-id',
-        mockConfig as Config,
-        mockEventBus,
-      );
-      // Spy on the same text-content path used for ordinary Content events.
-      const sendTextSpy = vi.spyOn(task, '_sendTextContent');
-
-      await task.acceptAgentMessage({
-        type: AgentEventType.Finished,
-        value: {
-          reason: 'stop',
-          stopReason: 'refusal',
-        },
-      });
-
-      // The exact notice (with its safety-notice prefix) must reach the client.
-      expect(sendTextSpy).toHaveBeenCalledWith(
-        `\n\n[safety notice] ${REFUSAL_NOTICE_MESSAGE}`,
-      );
-      // ...and it must be published onto the event bus as agent text content.
-      expect(mockEventBus.publish).toHaveBeenCalledWith(
-        expect.objectContaining({
-          kind: 'status-update',
-          taskId: 'task-id',
-          contextId: 'context-id',
-          status: expect.objectContaining({
-            message: expect.objectContaining({
-              role: 'agent',
-              parts: [
-                expect.objectContaining({
-                  kind: 'text',
-                  text: `\n\n[safety notice] ${REFUSAL_NOTICE_MESSAGE}`,
-                }),
-              ],
-            }),
-          }),
-        }),
-      );
-    });
-
-    it('does not publish a refusal notice when Finished has no stopReason', async () => {
-      const mockConfig = createMockConfig();
-      const mockEventBus = createMockEventBus();
-
-      const task = await Task.create(
-        'task-id',
-        'context-id',
-        mockConfig as Config,
-        mockEventBus,
-      );
-      const sendTextSpy = vi.spyOn(task, '_sendTextContent');
-
-      await task.acceptAgentMessage({
-        type: AgentEventType.Finished,
-        value: {
-          reason: 'stop',
-        },
-      });
-
-      expect(sendTextSpy).not.toHaveBeenCalled();
-    });
-
-    it('does not publish a refusal notice when stopReason is "end_turn"', async () => {
-      const mockConfig = createMockConfig();
-      const mockEventBus = createMockEventBus();
-
-      const task = await Task.create(
-        'task-id',
-        'context-id',
-        mockConfig as Config,
-        mockEventBus,
-      );
-      const sendTextSpy = vi.spyOn(task, '_sendTextContent');
-
-      await task.acceptAgentMessage({
-        type: AgentEventType.Finished,
-        value: {
-          reason: 'stop',
-          stopReason: 'end_turn',
-        },
-      });
-
-      expect(sendTextSpy).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('modelInfo propagation', () => {
-    it('should store modelInfo when ModelInfo event is received', async () => {
-      const mockConfig = createMockConfig();
-      const mockEventBus = createMockEventBus();
-
-      const task = await Task.create(
-        'task-id',
-        'context-id',
-        mockConfig as Config,
-        mockEventBus,
-      );
-
-      const event = {
-        type: AgentEventType.ModelInfo,
-        value: {
-          model: 'gemini-2.0-flash-exp',
-        },
-      } as const;
-
-      await task.acceptAgentMessage(event);
-
-      // Access private field for testing
-      expect(task['modelInfo']).toStrictEqual({
-        model: 'gemini-2.0-flash-exp',
-      });
-    });
-
-    it('should return updated model name from getMetadata when modelInfo is set', async () => {
-      const mockConfig = createMockConfig();
-      const mockEventBus = createMockEventBus();
-
-      const task = await Task.create(
-        'task-id',
-        'context-id',
-        mockConfig as Config,
-        mockEventBus,
-      );
-
-      // Set modelInfo via event
-      const event = {
-        type: AgentEventType.ModelInfo,
-        value: {
-          model: 'gemini-2.0-flash-exp',
-        },
-      } as const;
-
-      await task.acceptAgentMessage(event);
-
-      const metadata = await task.getMetadata();
-      expect(metadata.model).toBe('gemini-2.0-flash-exp');
-    });
-
-    it('should use modelInfo in setTaskStateAndPublishUpdate status updates', async () => {
-      const mockConfig = createMockConfig();
-      const mockEventBus = createMockEventBus();
-
-      const task = await Task.create(
-        'task-id',
-        'context-id',
-        mockConfig as Config,
-        mockEventBus,
-      );
-
-      // Set modelInfo
-      const event = {
-        type: AgentEventType.ModelInfo,
-        value: {
-          model: 'gemini-2.0-flash-exp',
-        },
-      } as const;
-
-      await task.acceptAgentMessage(event);
-
-      // Trigger a status update
-      task.setTaskStateAndPublishUpdate('working', {
-        kind: CoderAgentEvent.StateChangeEvent,
-      });
-
-      expect(mockEventBus.publish).toHaveBeenCalledWith(
-        expect.objectContaining({
-          metadata: expect.objectContaining({
-            model: 'gemini-2.0-flash-exp',
-          }),
-        }),
-      );
-    });
-
-    it('should use default model name when no modelInfo received', async () => {
-      const mockConfig = createMockConfig();
-      const mockEventBus = createMockEventBus();
-
-      const task = await Task.create(
-        'task-id',
-        'context-id',
-        mockConfig as Config,
-        mockEventBus,
-      );
-
-      const metadata = await task.getMetadata();
-      expect(metadata.model).toBe('gemini-pro'); // Default from mock config
-    });
-
-    it('should overwrite modelInfo when multiple ModelInfo events are received', async () => {
-      const mockConfig = createMockConfig();
-      const mockEventBus = createMockEventBus();
-
-      const task = await Task.create(
-        'task-id',
-        'context-id',
-        mockConfig as Config,
-        mockEventBus,
-      );
-
-      // First ModelInfo event
-      const event1 = {
-        type: AgentEventType.ModelInfo,
-        value: {
-          model: 'gemini-1.5-pro',
-        },
-      } as const;
-      await task.acceptAgentMessage(event1);
-
-      // Second ModelInfo event
-      const event2 = {
-        type: AgentEventType.ModelInfo,
-        value: {
-          model: 'gemini-2.0-flash-exp',
-        },
-      } as const;
-      await task.acceptAgentMessage(event2);
-
-      // Should have the latest modelInfo
-      expect(task['modelInfo']).toStrictEqual({
-        model: 'gemini-2.0-flash-exp',
-      });
-    });
-  });
-
-  describe('currentPromptId and promptCount', () => {
-    it('should correctly initialize and update promptId and promptCount', async () => {
-      const mockConfig = createMockConfig();
-      mockConfig.getSessionId = () => 'test-session-id';
-
-      const mockEventBus = createMockEventBus();
-
-      const sendMessageStreamMock = vi
-        .fn()
-        .mockReturnValue((async function* () {})());
-
-      const task = await Task.create(
-        'task-id',
-        'context-id',
-        mockConfig as Config,
-        mockEventBus,
-      );
-      vi.spyOn(task.agentClient, 'sendMessageStream').mockImplementation(
-        sendMessageStreamMock,
-      );
-
-      // Initial state
-      expect(task.currentPromptId).toBeUndefined();
-      expect(task.promptCount).toBe(0);
-
-      // First user message should set prompt_id
-      const userMessage1 = {
-        userMessage: {
-          parts: [{ kind: 'text', text: 'hello' }],
-        },
-      } as RequestContext;
-      const abortController1 = new AbortController();
-      for await (const _ of task.acceptUserMessage(
-        userMessage1,
-        abortController1.signal,
-      )) {
-        // no-op
+const SAVED_ENV: Record<string, string | undefined> = {
+  ...process.env,
+};
+describe('Task over the Agent facade (#3221)', () => {
+  afterEach(() => {
+    for (const key of Object.keys(process.env)) {
+      if (SAVED_ENV[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = SAVED_ENV[key];
       }
-
-      const expectedPromptId1 = 'test-session-id########0';
-      expect(task.promptCount).toBe(1);
-      expect(task.currentPromptId).toBe(expectedPromptId1);
-      expect(sendMessageStreamMock).toHaveBeenNthCalledWith(
-        1,
-        expect.any(Array),
-        abortController1.signal,
-        expectedPromptId1,
-      );
-
-      // A new user message should generate a new prompt_id
-      const userMessage2 = {
-        userMessage: {
-          parts: [{ kind: 'text', text: 'world' }],
-        },
-      } as RequestContext;
-      const abortController2 = new AbortController();
-      for await (const _ of task.acceptUserMessage(
-        userMessage2,
-        abortController2.signal,
-      )) {
-        // no-op
-      }
-
-      const expectedPromptId2 = 'test-session-id########1';
-      expect(task.promptCount).toBe(2);
-      expect(task.currentPromptId).toBe(expectedPromptId2);
-      expect(sendMessageStreamMock).toHaveBeenNthCalledWith(
-        2,
-        expect.any(Array),
-        abortController2.signal,
-        expectedPromptId2,
-      );
-
-      // Subsequent tool call processing should use the same prompt_id
-      const completedTool = {
-        request: { callId: 'tool-1', prompt_id: expectedPromptId2 },
-        response: { responseParts: [{ text: 'tool output' }] },
-      } as CompletedToolCall;
-      const abortController3 = new AbortController();
-      for await (const _ of task.sendCompletedToolsToLlm(
-        [completedTool],
-        abortController3.signal,
-      )) {
-        // no-op
-      }
-
-      expect(task.promptCount).toBe(2);
-      expect(task.currentPromptId).toBe(expectedPromptId2);
-      expect(sendMessageStreamMock).toHaveBeenNthCalledWith(
-        3,
-        expect.any(Array),
-        abortController3.signal,
-        expectedPromptId2,
-      );
-    });
+    }
   });
 
-  describe('auto-approval', () => {
-    let task: Task;
-    let mockConfig: Config;
-    let mockEventBus: ExecutionEventBus;
-    let schedulerToolCalls: WaitingToolCall[];
-    let scheduleMock: Mock<() => Promise<void>> = vi.fn();
+  it('streams a plain-text turn and yields text + done events', async () => {
+    process.env.LLXPRT_FAKE_RESPONSES = FIXTURE;
+    const agent = await buildAgent();
+    try {
+      const types = await drainTypes(agent, 'hello');
+      expect(types).toContain('text');
+      expect(types[types.length - 1]).toBe('done');
+      const done = types.filter((t) => t === 'done');
+      expect(done).toHaveLength(1);
+    } finally {
+      await disposeAgent(agent);
+    }
+  }, 30_000);
 
-    beforeEach(async () => {
-      schedulerToolCalls = [];
-      mockConfig = createMockConfig({
-        getOrCreateScheduler: vi.fn().mockImplementation(
-          async (
-            _sessionId: string,
-            callbacks: {
-              onToolCallsUpdate?: (toolCalls: WaitingToolCall[]) => void;
-            },
-          ) => {
-            scheduleMock = vi.fn().mockImplementation(async () => {
-              callbacks.onToolCallsUpdate?.(schedulerToolCalls);
-            });
-            return {
-              schedule: scheduleMock,
-              cancelAll: vi.fn(),
-              dispose: vi.fn(),
-              setCallbacks: vi.fn(),
-              handleConfirmationResponse: vi.fn(),
-            };
-          },
+  it('getMetadata is sync and reports id, contextId, model, availableTools', async () => {
+    process.env.LLXPRT_FAKE_RESPONSES = FIXTURE;
+    const agent = await buildAgent();
+    try {
+      const task = await Task.create('task-id', 'context-id', agent);
+      const metadata = task.getMetadata();
+      expect(metadata.id).toBe('task-id');
+      expect(metadata.contextId).toBe('context-id');
+      expect(metadata.taskState).toBe('submitted');
+      expect(typeof metadata.model).toBe('string');
+      expect(Array.isArray(metadata.mcpServers)).toBe(true);
+      expect(Array.isArray(metadata.availableTools)).toBe(true);
+    } finally {
+      await disposeAgent(agent);
+    }
+  }, 30_000);
+
+  it('agentFacade exposes the Agent and delegating calls reach it', async () => {
+    process.env.LLXPRT_FAKE_RESPONSES = FIXTURE;
+    const agent = await buildAgent();
+    try {
+      const task = await Task.create('task-id', 'context-id', agent);
+      expect(task.agentFacade).toBe(agent);
+      // Steer text delegates to the Agent facade (no-op without an active turn).
+      expect(() => task.injectSteerText('steer')).not.toThrow();
+    } finally {
+      await disposeAgent(agent);
+    }
+  }, 30_000);
+
+  it('cancelTurn while idle does not throw', async () => {
+    process.env.LLXPRT_FAKE_RESPONSES = FIXTURE;
+    const agent = await buildAgent();
+    try {
+      const task = await Task.create('task-id', 'context-id', agent);
+      expect(() => task.cancelTurn()).not.toThrow();
+    } finally {
+      await disposeAgent(agent);
+    }
+  }, 30_000);
+
+  it('pending-confirmation bookkeeping maps a2a callIds; unknown ids fail fast on the real Agent', async () => {
+    process.env.LLXPRT_FAKE_RESPONSES = FIXTURE;
+    const agent = await buildAgent();
+    try {
+      const task = await Task.create('task-id', 'context-id', agent);
+      const confirmation: ToolConfirmation = {
+        confirmationId: 'confirm-1',
+        toolCallId: 'call-1',
+        name: 'noop',
+        details: {},
+      };
+      expect(task.hasPendingConfirmation('call-1')).toBe(false);
+      task.recordPendingConfirmation(confirmation);
+      expect(task.hasPendingConfirmation('call-1')).toBe(true);
+      expect(task.shouldAutoApproveToolCalls()).toBe(false);
+      // The real Agent rejects responses for confirmations it never issued —
+      // the facade must not swallow that fail-fast contract.
+      expect(() =>
+        agent.tools.respondToConfirmation(
+          'confirm-1',
+          ToolConfirmationOutcome.ProceedOnce,
         ),
-      }) as Config;
-      mockEventBus = createMockEventBus();
+      ).toThrow(/unknown confirmationId/);
+      // The entry stays pending until the executor resolves it.
+      expect(task.hasPendingConfirmation('call-1')).toBe(true);
+    } finally {
+      await disposeAgent(agent);
+    }
+  }, 30_000);
 
-      task = await Task.create(
-        'task-id',
-        'context-id',
-        mockConfig,
-        mockEventBus,
+  it('a tool-call fixture surfaces tool-call/done events and completes under an onApproval responder', async () => {
+    const filesResponses = join(WORKSPACE, 'responses.jsonl');
+    writeFileSync(
+      filesResponses,
+      '{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call-t","name":"list_files","parameters":{"dir":"{{CWD}}"}}]}]}\n' +
+        '{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"after tool"}]}]}\n',
+    );
+    process.env.LLXPRT_FAKE_RESPONSES = filesResponses;
+    const { createTaskAgent: build } = await import('../config/config.js');
+    const agent = await build({}, [], 'facade-tool');
+    try {
+      // Subscribe to the real Agent confirmation surface: auto-answering with
+      // ProceedOnce lets the FakeProvider's list_files tool run headlessly.
+      const unsubscribe = agent.tools.onConfirmationRequest(
+        (req: ToolConfirmation) => {
+          agent.tools.respondToConfirmation(
+            req.confirmationId,
+            ToolConfirmationOutcome.ProceedOnce,
+          );
+        },
       );
-    });
-
-    it('should auto-approve tool calls when autoExecute is true', async () => {
-      task.autoExecute = true;
-      const onConfirmSpy = vi.fn(async () => {});
-      const toolCalls = [createWaitingToolCall(onConfirmSpy)];
-
-      schedulerToolCalls = toolCalls;
-      await task.scheduleToolCalls(
-        [createNoopToolCallRequest()],
-        new AbortController().signal,
-      );
-
-      expect(onConfirmSpy).toHaveBeenCalledWith(
-        ToolConfirmationOutcome.ProceedOnce,
-      );
-    });
-
-    it('should auto-approve tool calls when approval mode is YOLO', async () => {
-      (mockConfig.getApprovalMode as Mock<() => ApprovalMode>).mockReturnValue(
-        ApprovalMode.YOLO,
-      );
-      task.autoExecute = false;
-      const onConfirmSpy = vi.fn(async () => {});
-      const toolCalls = [createWaitingToolCall(onConfirmSpy)];
-
-      schedulerToolCalls = toolCalls;
-      await task.scheduleToolCalls(
-        [createNoopToolCallRequest()],
-        new AbortController().signal,
-      );
-
-      expect(onConfirmSpy).toHaveBeenCalledWith(
-        ToolConfirmationOutcome.ProceedOnce,
-      );
-    });
-
-    it('should NOT auto-approve when autoExecute is false and mode is not YOLO', async () => {
-      task.autoExecute = false;
-      (mockConfig.getApprovalMode as Mock<() => ApprovalMode>).mockReturnValue(
-        ApprovalMode.DEFAULT,
-      );
-      const onConfirmSpy = vi.fn(async () => {});
-      const toolCalls = [createWaitingToolCall(onConfirmSpy)];
-
-      schedulerToolCalls = toolCalls;
-      await task.scheduleToolCalls(
-        [createNoopToolCallRequest()],
-        new AbortController().signal,
-      );
-
-      expect(scheduleMock).toHaveBeenCalledWith(
-        expect.any(Array),
-        expect.any(AbortSignal),
-      );
-      expect(mockEventBus.publish).toHaveBeenCalledWith(
-        expect.objectContaining({
-          status: expect.objectContaining({ state: 'input-required' }),
-        }),
-      );
-      expect(onConfirmSpy).not.toHaveBeenCalled();
-    });
-  });
+      try {
+        const task = await Task.create('facade-tool', 'ctx', agent);
+        const events: string[] = [];
+        for await (const event of task.acceptUserMessage(
+          {
+            userMessage: { parts: [{ kind: 'text', text: 'run tool' }] },
+          } as never,
+          new AbortController().signal,
+        )) {
+          events.push(event.type);
+        }
+        expect(events).toContain('tool-call');
+        expect(events[events.length - 1]).toBe('done');
+      } finally {
+        unsubscribe();
+      }
+    } finally {
+      await disposeAgent(agent);
+    }
+  }, 30_000);
 });
