@@ -95,7 +95,6 @@ function buildConversationManager(
     generateChatCompletion: async function* () {},
     getServerTools: () => [],
     invokeServerTool: async () => undefined,
-    getAuthToken: async () => 'stub-auth-token',
   };
   if (liveProvider?.liveModel === 'throw') {
     provider.getCurrentModel = (): string => {
@@ -246,7 +245,6 @@ function buildChatSessionWithLiveProvider(
     },
     getServerTools: () => [],
     invokeServerTool: async () => undefined,
-    getAuthToken: async () => 'stub-auth-token',
   };
   if (liveProvider?.liveModel !== undefined) {
     if (liveProvider.liveModel === 'throw') {
@@ -287,7 +285,11 @@ function buildChatSessionWithLiveProvider(
     view,
     {
       generateContent: async () => emptyModelOutput(),
-      generateContentStream: async function* () {},
+      // Intentionally yields nothing; these tests exercise the non-streaming
+      // commit path only. The IIFE is needed because the contract expects a
+      // function returning Promise<AsyncGenerator>, not an async generator
+      // function itself.
+      generateContentStream: async () => (async function* () {})(),
       countTokens: async () => ({ totalTokens: 100 }),
       embedContent: async () => ({ embeddings: [] }),
     },
@@ -306,7 +308,7 @@ describe('TurnProcessor._commitSendResult stamps the live provider model (issue 
     );
 
     await chat.sendMessage(
-      { message: [{ text: 'Write a haiku' }] },
+      { message: [{ type: 'text', text: 'Write a haiku' }] },
       'test-prompt-id',
     );
 
@@ -321,7 +323,7 @@ describe('TurnProcessor._commitSendResult stamps the live provider model (issue 
     );
 
     await chat.sendMessage(
-      { message: [{ text: 'Write a haiku' }] },
+      { message: [{ type: 'text', text: 'Write a haiku' }] },
       'test-prompt-id',
     );
 
@@ -334,7 +336,7 @@ describe('TurnProcessor._commitSendResult stamps the live provider model (issue 
       buildChatSessionWithLiveProvider(STALE_SNAPSHOT_MODEL);
 
     await chat.sendMessage(
-      { message: [{ text: 'Write a haiku' }] },
+      { message: [{ type: 'text', text: 'Write a haiku' }] },
       'test-prompt-id',
     );
 

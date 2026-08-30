@@ -84,6 +84,7 @@
     "scripts/tests/bun-test-roots.bun.test.ts",
     "scripts/tests/bun-test-root-ownership.bun.test.ts",
     "scripts/tests/test-file-coverage.bun.test.ts",
+    "scripts/tests/test-bun-typecheck-coverage.bun.test.ts",
     "scripts/tests/issue-2342.test.ts",
     "scripts/tests/run_bun_tests.test.ts",
     "scripts/tests/stub-helpers.test.ts",

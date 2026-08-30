@@ -254,7 +254,7 @@
     "test": "bun ../../scripts/run_bun_tests.ts --workspace tools --junit junit.xml",
     "test:bun": "bun ../../scripts/run_bun_tests.ts --workspace tools",
     "test:ci": "bun ../../scripts/run_bun_tests.ts --workspace tools --junit junit.xml",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test-bun.json"
   },
   "files": [
     "index.ts",

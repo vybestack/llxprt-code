@@ -39,7 +39,7 @@
     "pretest": "bun ../../scripts/check-agents-api-surface.ts",
     "test": "bun run-bun-tests.ts && bun ../../scripts/run_bun_tests.ts --workspace agents",
     "test:ci": "bun run-bun-tests.ts && bun ../../scripts/run_bun_tests.ts --workspace agents",
-    "typecheck": "tsc --noEmit -p tsconfig.noemit.json"
+    "typecheck": "tsc --noEmit -p tsconfig.noemit.json && tsc --noEmit -p tsconfig.test-bun.json"
   },
   "files": [
     "index.ts",

@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false,
+    "composite": false
+  },
+  "include": ["../../bun-test-corrections.d.ts", "test-bun/**/*.ts"]
+}
