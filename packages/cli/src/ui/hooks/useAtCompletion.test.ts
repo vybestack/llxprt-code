@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { act } from 'react';
+import * as path from 'path';
 import type { Config, FileSearch } from '@vybestack/llxprt-code-core';
 import { FileSearchFactory } from '@vybestack/llxprt-code-core';
 import type { FileSystemStructure } from '@vybestack/llxprt-code-test-utils';
@@ -355,6 +356,67 @@ describe('useAtCompletion', () => {
       // We can't directly inspect the internal state, but we can ensure it doesn't crash
       // and the suggestions remain empty.
       expect(result.current.suggestions).toStrictEqual([]);
+    });
+
+    it('should recover from an initialization error when the cwd changes', async () => {
+      const structure: FileSystemStructure = {
+        failed: {},
+        recovered: { 'recovered.txt': '' },
+      };
+      testRootDir = await createTmpDir(structure);
+      const failedCwd = path.join(testRootDir, 'failed');
+      const recoveredCwd = path.join(testRootDir, 'recovered');
+
+      // Each fake delegates to a real searcher rooted at the projectRoot the
+      // hook actually asked for, so recovery is proven by the suggestions
+      // themselves: re-initializing against the wrong cwd yields no matches.
+      // Failure is keyed to the directory rather than to call order, so the
+      // failed root always fails however many times the hook initializes it.
+      const createRealFileSearch =
+        FileSearchFactory.create.bind(FileSearchFactory);
+      vi.spyOn(FileSearchFactory, 'create').mockImplementation(
+        (options: Parameters<typeof FileSearchFactory.create>[0]) => {
+          const realFileSearch = createRealFileSearch(options);
+          const fake: FileSearch = {
+            initialize: vi.fn(async () => {
+              if (options.projectRoot === failedCwd) {
+                throw new Error('Initialization failed');
+              }
+              return realFileSearch.initialize();
+            }),
+            search: vi.fn(async (...args) => realFileSearch.search(...args)),
+          };
+          return fake;
+        },
+      );
+
+      const { result, rerender } = renderHook(
+        ({ cwd, pattern }) =>
+          useTestHarnessForAtCompletion(true, pattern, mockConfig, cwd),
+        {
+          initialProps: {
+            cwd: failedCwd,
+            pattern: 'recovered',
+          },
+        },
+      );
+
+      expect(result.current.isLoadingSuggestions).toBe(true);
+      await waitFor(() => {
+        expect(result.current.isLoadingSuggestions).toBe(false);
+      });
+      expect(result.current.suggestions).toStrictEqual([]);
+
+      act(() => {
+        rerender({ cwd: recoveredCwd, pattern: 'recovered' });
+      });
+
+      await waitFor(() => {
+        expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
+          'recovered.txt',
+        ]);
+      });
+      expect(result.current.isLoadingSuggestions).toBe(false);
     });
 
     it('should reset when disabled during initialization', async () => {
