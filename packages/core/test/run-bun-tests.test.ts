@@ -21,6 +21,7 @@ import {
   killChildTreeAndWait,
   observeChildClose,
   runTestFile,
+  runTestFileWithTimeoutRetry,
   type TestResult,
 } from '../run-bun-tests.js';
 
@@ -315,4 +316,186 @@ describe('core Bun test runner process lifecycle', () => {
     },
     30_000,
   );
+});
+
+interface RetryOutcome {
+  readonly passed: boolean;
+  readonly timedOut: boolean;
+  readonly reapFailed: boolean;
+  readonly reapError?: string | null;
+  readonly exitCode: number | null;
+}
+
+function createAttemptSequence<T extends RetryOutcome>(
+  outcomes: readonly T[],
+): {
+  run: () => Promise<T>;
+  count: () => number;
+} {
+  let attempts = 0;
+  return {
+    run: async () => {
+      const outcome = outcomes[attempts];
+      if (outcome === undefined) {
+        throw new Error(`unexpected attempt ${attempts + 1}`);
+      }
+      attempts++;
+      return outcome;
+    },
+    count: () => attempts,
+  };
+}
+
+describe('runTestFileWithTimeoutRetry', () => {
+  it('returns a passing retry and logs it after the first attempt times out', async () => {
+    const attempts = createAttemptSequence<RetryOutcome>([
+      { passed: false, timedOut: true, reapFailed: false, exitCode: null },
+      { passed: true, timedOut: false, reapFailed: false, exitCode: 0 },
+    ]);
+    const logs: string[] = [];
+
+    const result = await runTestFileWithTimeoutRetry(
+      'src/retry.test.ts',
+      attempts.run,
+      (message) => logs.push(message),
+    );
+
+    expect({ result, attemptCount: attempts.count(), logs }).toEqual({
+      result: {
+        passed: true,
+        timedOut: false,
+        reapFailed: false,
+        exitCode: 0,
+      },
+      attemptCount: 2,
+      logs: ['RETRY (2/2): src/retry.test.ts after per-file timeout'],
+    });
+  });
+
+  it('returns the second timeout as the final failure', async () => {
+    const attempts = createAttemptSequence<RetryOutcome>([
+      { passed: false, timedOut: true, reapFailed: false, exitCode: null },
+      { passed: false, timedOut: true, reapFailed: false, exitCode: null },
+    ]);
+
+    const result = await runTestFileWithTimeoutRetry(
+      'src/retry.test.ts',
+      attempts.run,
+      () => undefined,
+    );
+
+    expect({ result, attemptCount: attempts.count() }).toEqual({
+      result: {
+        passed: false,
+        timedOut: true,
+        reapFailed: false,
+        exitCode: null,
+      },
+      attemptCount: 2,
+    });
+  });
+
+  it('returns a non-timeout failure without a second attempt', async () => {
+    const attempts = createAttemptSequence<RetryOutcome>([
+      { passed: false, timedOut: false, reapFailed: false, exitCode: 1 },
+      { passed: true, timedOut: false, reapFailed: false, exitCode: 0 },
+    ]);
+    const logs: string[] = [];
+
+    const result = await runTestFileWithTimeoutRetry(
+      'src/assertion.test.ts',
+      attempts.run,
+      (message) => logs.push(message),
+    );
+
+    expect({ result, attemptCount: attempts.count(), logs }).toEqual({
+      result: {
+        passed: false,
+        timedOut: false,
+        reapFailed: false,
+        exitCode: 1,
+      },
+      attemptCount: 1,
+      logs: [],
+    });
+  });
+
+  it('retries after a reap failure and keeps the file failed when the retry reaps cleanly', async () => {
+    // The exact issue #3439 core-shard scenario: attempt 1 times out and
+    // taskkill loses the race, attempt 2 passes with a clean reap. The file
+    // stays red (it did time out) and carries the first attempt's reap
+    // error, but the returned reapFailed=false lets main() continue the
+    // shard instead of FATAL-aborting.
+    const attempts = createAttemptSequence<RetryOutcome>([
+      {
+        passed: false,
+        timedOut: true,
+        reapFailed: true,
+        reapError: 'taskkill reported failure and tree did not close',
+        exitCode: null,
+      },
+      {
+        passed: true,
+        timedOut: false,
+        reapFailed: false,
+        reapError: null,
+        exitCode: 0,
+      },
+    ]);
+    const logs: string[] = [];
+
+    const result = await runTestFileWithTimeoutRetry(
+      'src/reap.test.ts',
+      attempts.run,
+      (message) => logs.push(message),
+    );
+
+    expect({ result, attemptCount: attempts.count(), logs }).toEqual({
+      result: {
+        passed: false,
+        timedOut: true,
+        reapFailed: false,
+        reapError: 'taskkill reported failure and tree did not close',
+        exitCode: 0,
+      },
+      attemptCount: 2,
+      logs: ['RETRY (2/2): src/reap.test.ts after per-file timeout'],
+    });
+  });
+
+  it('returns the second attempt when both attempts fail to reap, so main() aborts', async () => {
+    const attempts = createAttemptSequence<RetryOutcome>([
+      {
+        passed: false,
+        timedOut: true,
+        reapFailed: true,
+        reapError: 'first attempt reap error',
+        exitCode: null,
+      },
+      {
+        passed: false,
+        timedOut: true,
+        reapFailed: true,
+        reapError: 'second attempt reap error',
+        exitCode: null,
+      },
+    ]);
+
+    const result = await runTestFileWithTimeoutRetry(
+      'src/reap.test.ts',
+      attempts.run,
+      () => undefined,
+    );
+
+    expect({ result, attemptCount: attempts.count() }).toEqual({
+      result: {
+        passed: false,
+        timedOut: true,
+        reapFailed: true,
+        reapError: 'second attempt reap error',
+        exitCode: null,
+      },
+      attemptCount: 2,
+    });
+  });
 });

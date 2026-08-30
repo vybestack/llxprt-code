@@ -512,6 +512,9 @@ function buildSummary(
     );
   }
 
+  // Workspaces pass only when all their phases pass; the scripts phase is
+  // not a workspace, so its failures are counted separately. Both counters
+  // stay on the same unit so the summary verdict matches the exit code.
   let passed = 0;
   let failed = 0;
   for (const success of workspaceOutcomes.values()) {
@@ -521,6 +524,7 @@ function buildSummary(
       failed++;
     }
   }
+  failed += results.filter((r) => r.phase === 'scripts' && !r.success).length;
 
   return {
     results,
@@ -620,12 +624,9 @@ function main(): void {
     const summary = orchestrateTests(rootDir, options);
     console.log(formatSummary(summary));
 
-    // Fail on any failed phase, including the script harness. The summary's
-    // `failed` count only tallies workspace outcomes (pretest/test); the
-    // scripts phase is tracked separately in `results`, so a scripts-only
-    // failure (e.g. the dedicated scripts shard) must be checked here.
-    // `anyPhaseFailed` already covers `summary.failed > 0` (a failed
-    // workspace produces a failed phase result), so it is the sole check.
+    // Exit code is 0 only when every phase passed, including the script
+    // harness. A workspace failure is a failed phase result; a scripts-only
+    // failure (e.g. the dedicated scripts shard) must also fail the run.
     const anyPhaseFailed = summary.results.some((r) => !r.success);
     if (anyPhaseFailed) {
       process.exit(1);

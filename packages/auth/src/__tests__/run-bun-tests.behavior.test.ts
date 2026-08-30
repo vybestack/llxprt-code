@@ -11,6 +11,7 @@ import {
   formatFailureReason,
   generateJUnit,
   runTestFile,
+  runTestFileWithTimeoutRetry,
   type TestResult,
 } from '../../run-bun-tests.js';
 import { DEFAULT_PER_FILE_TIMEOUT_MS } from '../../../../scripts/lib/bun-test-policy.js';
@@ -104,6 +105,75 @@ describe('auth run-bun-tests failure reason formatting', () => {
       signal: null,
     });
     expect(reason).toBe('Exit code -1');
+  });
+});
+
+describe('auth run-bun-tests timeout retry', () => {
+  it('retries once after a timed-out attempt and returns the passing retry', async () => {
+    const outcomes: Array<{ passed: boolean; timedOut: boolean } | undefined> =
+      [
+        { passed: false, timedOut: true },
+        { passed: true, timedOut: false },
+      ];
+    let attempts = 0;
+    const logs: string[] = [];
+
+    const result = await runTestFileWithTimeoutRetry(
+      'src/freeze.test.ts',
+      async () => {
+        const outcome = outcomes[attempts];
+        if (outcome === undefined) {
+          throw new Error(`unexpected attempt ${attempts + 1}`);
+        }
+        attempts++;
+        return outcome;
+      },
+      (message) => logs.push(message),
+    );
+
+    expect({ result, attempts, logs }).toEqual({
+      result: { passed: true, timedOut: false },
+      attempts: 2,
+      logs: ['RETRY (2/2): src/freeze.test.ts after per-file timeout'],
+    });
+  });
+
+  it('returns a non-timeout failure after a single attempt', async () => {
+    let attempts = 0;
+    const logs: string[] = [];
+
+    const result = await runTestFileWithTimeoutRetry(
+      'src/assertion.test.ts',
+      async () => {
+        attempts++;
+        return { passed: false, timedOut: false };
+      },
+      (message) => logs.push(message),
+    );
+
+    expect({ result, attempts, logs }).toEqual({
+      result: { passed: false, timedOut: false },
+      attempts: 1,
+      logs: [],
+    });
+  });
+
+  it('returns the second timeout as the final failure', async () => {
+    let attempts = 0;
+
+    const result = await runTestFileWithTimeoutRetry(
+      'src/hang.test.ts',
+      async () => {
+        attempts++;
+        return { passed: false, timedOut: true };
+      },
+      () => undefined,
+    );
+
+    expect({ result, attempts }).toEqual({
+      result: { passed: false, timedOut: true },
+      attempts: 2,
+    });
   });
 });
 

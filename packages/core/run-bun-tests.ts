@@ -261,6 +261,47 @@ export async function killChildTreeAndWait(
   );
 }
 
+export async function runTestFileWithTimeoutRetry<
+  T extends {
+    readonly passed: boolean;
+    readonly timedOut: boolean;
+    readonly reapFailed: boolean;
+    readonly reapError?: string | null;
+  },
+>(
+  file: string,
+  runAttempt: () => Promise<T>,
+  logRetry: (message: string) => void = (message) => console.log(message),
+): Promise<T> {
+  const firstAttempt = await runAttempt();
+  if (!firstAttempt.timedOut) {
+    return firstAttempt;
+  }
+
+  // Retry on every timeout, including one whose reap failed: the second
+  // attempt's outcome decides whether the run can continue. The freeze class
+  // this guards against (issue #3439) kills the child on one attempt and
+  // behaves normally on the next; a first-attempt reap failure is frequently
+  // just taskkill losing a race with an already-dying tree.
+  logRetry(`RETRY (2/2): ${file} after per-file timeout`);
+  const secondAttempt = await runAttempt();
+
+  // First attempt failed to reap but the retry reaped cleanly: the suspect
+  // tree is gone. Keep the file red — it genuinely timed out — and carry the
+  // first attempt's reapError so the summary can explain the retry, but let
+  // the shard continue instead of aborting.
+  if (firstAttempt.reapFailed && !secondAttempt.reapFailed) {
+    return {
+      ...secondAttempt,
+      passed: false,
+      timedOut: true,
+      reapFailed: false,
+      reapError: firstAttempt.reapError ?? null,
+    };
+  }
+  return secondAttempt;
+}
+
 export function runTestFile(
   file: string,
   options: RunTestFileOptions = {},
@@ -418,13 +459,19 @@ async function main(): Promise<void> {
   for (let i = 0; i < testFiles.length; i += CONCURRENCY) {
     const batch = testFiles.slice(i, i + CONCURRENCY);
     const batchResults = await Promise.all(
-      batch.map((file) => runTestFile(file)),
+      batch.map((file) =>
+        runTestFileWithTimeoutRetry(file, () => runTestFile(file)),
+      ),
     );
     results.push(...batchResults);
 
-    // Fail fast: if reaping a timed-out child failed, do NOT proceed with
-    // another file — the old process tree may still be alive and holding
-    // resources (log handles, ports) that would corrupt subsequent results.
+    // Fail fast: only an unrecovered reap failure aborts the run. A reap
+    // failure on the first attempt that the retry outlived (reapFailed=false
+    // on the returned result) means the suspect tree is gone and the file is
+    // already marked failed; subsequent files are safe to run. A reap failure
+    // on the final attempt means the old process tree may still be alive and
+    // holding resources (log handles, ports) that would corrupt subsequent
+    // results.
     if (batchResults.some((r) => r.reapFailed)) {
       console.error(
         'FATAL: failed to reap a timed-out test process tree; aborting to ' +
@@ -442,7 +489,11 @@ async function main(): Promise<void> {
     if (result.timedOut) {
       console.error(
         `TIMEOUT: ${result.file} (exceeded ${result.timeoutMs / 1000}s)` +
-          (result.reapFailed ? ' [REAP FAILED]' : ''),
+          (result.reapFailed
+            ? ' [REAP FAILED]'
+            : result.reapError
+              ? ' [REAP FAILED (recovered on retry)]'
+              : ''),
       );
     } else {
       console.error(
