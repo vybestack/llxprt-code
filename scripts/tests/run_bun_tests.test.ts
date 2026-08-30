@@ -25,6 +25,10 @@ import {
   type BunTestSpawnOptions,
   type ChildExitInfo,
 } from '../run_bun_tests.js';
+import {
+  planNextAttempt,
+  resolveTimeoutRetryBudget,
+} from '../lib/bun-test-retry.js';
 
 describe('isChildSuccess', () => {
   it('returns true for exit code 0 with null signal', () => {
@@ -319,6 +323,7 @@ describe('runBunTests', () => {
       { exitCode: 0, signalCode: null },
       { exitCode: 7, signalCode: null },
       { exitCode: null, signalCode: 'SIGTERM' },
+      { exitCode: null, signalCode: 'SIGTERM' },
     ];
     const calls: Array<{
       command: readonly string[];
@@ -363,31 +368,37 @@ describe('runBunTests', () => {
     );
 
     expect(resolvedWorkspace).toBe('selected');
-    expect(calls).toEqual(
-      entries.map((entry) => ({
-        command: [
-          '/bin/bun',
-          'test',
-          '--tsconfig-override',
-          '/invoke/config/tsconfig.json',
-          '--max-concurrency',
-          '1',
-          '--timeout',
-          '1234',
-          entry.file,
-        ],
-        options: {
-          cwd: entry.cwd,
-          env: environment,
-          stdin: 'inherit',
-          stdout: 'pipe',
-          stderr: 'pipe',
-          timeout: 120_000,
-        },
-      })),
-    );
+    // The SIGTERM-killed third entry consumes its timeout-only retry (issue
+    // #3439) before reporting the final failure, so it spawns twice.
+    const expectedCall = (file: string, cwd: string) => ({
+      command: [
+        '/bin/bun',
+        'test',
+        '--tsconfig-override',
+        '/invoke/config/tsconfig.json',
+        '--max-concurrency',
+        '1',
+        '--timeout',
+        '1234',
+        file,
+      ] as const,
+      options: {
+        cwd,
+        env: environment,
+        stdin: 'inherit',
+        stdout: 'pipe',
+        stderr: 'pipe',
+        timeout: 120_000,
+      } as const,
+    });
+    expect(calls).toEqual([
+      ...entries.slice(0, 2).map((entry) => expectedCall(entry.file, entry.cwd)),
+      expectedCall(entries[2]!.file, entries[2]!.cwd),
+      expectedCall(entries[2]!.file, entries[2]!.cwd),
+    ]);
     expect(stderr).toEqual([
       'Native Bun test failed: /repo/packages/two/two.test.ts (exit code: 7)',
+      'Native Bun test timed out (attempt 1), retrying: /repo/packages/three/three.test.ts (signal: SIGTERM)',
       'Native Bun test failed: /repo/packages/three/three.test.ts (signal: SIGTERM)',
     ]);
     expect(stdout.at(-1)).toBe(
@@ -595,6 +606,166 @@ describe('runBunTests', () => {
     expect(stderr.at(-1)).toBe(
       'Native Bun test failed: /repo/e2e/broken.test.ts (exit code: 1)',
     );
+  });
+
+  it('retries a per-file timeout once and passes on the fresh attempt', async () => {
+    let attempts = 0;
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const dependencies: BunTestRunnerDependencies = {
+      repoRoot: '/repo',
+      invocationDirectory: '/invoke',
+      executable: '/bin/bun',
+      environment: {},
+      resolveFiles: () => [
+        {
+          cwd: '/repo/ws',
+          file: '/repo/ws/frozen.test.ts',
+          preloads: [],
+        },
+      ],
+      resolveTsconfig: resolveTsconfigOverride,
+      spawn: () => {
+        attempts++;
+        // First attempt: killed by the per-file timeout with partial output.
+        // Retry: clean pass.
+        return attempts === 1
+          ? { exitCode: null, signalCode: 'SIGTERM' }
+          : { exitCode: 0, signalCode: null };
+      },
+      loadGlobalSetup: noGlobalSetup,
+      stdout: (line) => stdout.push(line),
+      stderr: (line) => stderr.push(line),
+    };
+
+    const status = await runBunTests([], dependencies);
+
+    expect(attempts).toBe(2);
+    expect(status).toBe(0);
+    expect(stderr).toEqual([
+      'Native Bun test timed out (attempt 1), retrying: /repo/ws/frozen.test.ts (signal: SIGTERM)',
+    ]);
+    expect(stdout.at(-1)).toBe('Passed 1/1 isolated native Bun test files');
+  });
+
+  it('disables the timeout retry with LLXPRT_BUN_TEST_TIMEOUT_RETRIES=0', async () => {
+    let attempts = 0;
+    const dependencies: BunTestRunnerDependencies = {
+      repoRoot: '/repo',
+      invocationDirectory: '/invoke',
+      executable: '/bin/bun',
+      environment: {},
+      resolveFiles: () => [
+        {
+          cwd: '/repo/ws',
+          file: '/repo/ws/frozen.test.ts',
+          preloads: [],
+        },
+      ],
+      resolveTsconfig: resolveTsconfigOverride,
+      spawn: () => {
+        attempts++;
+        return { exitCode: null, signalCode: 'SIGTERM' };
+      },
+      loadGlobalSetup: noGlobalSetup,
+      stdout: () => {},
+      stderr: () => {},
+    };
+
+    const previous = process.env.LLXPRT_BUN_TEST_TIMEOUT_RETRIES;
+    process.env.LLXPRT_BUN_TEST_TIMEOUT_RETRIES = '0';
+    try {
+      const status = await runBunTests([], dependencies);
+      expect({ status, attempts }).toEqual({ status: 1, attempts: 1 });
+    } finally {
+      if (previous === undefined) {
+        delete process.env.LLXPRT_BUN_TEST_TIMEOUT_RETRIES;
+      } else {
+        process.env.LLXPRT_BUN_TEST_TIMEOUT_RETRIES = previous;
+      }
+    }
+  });
+});
+
+describe('resolveTimeoutRetryBudget', () => {
+  it('defaults to 1 when the override is absent or empty', () => {
+    expect(resolveTimeoutRetryBudget({})).toBe(1);
+    expect(resolveTimeoutRetryBudget({ LLXPRT_BUN_TEST_TIMEOUT_RETRIES: '' })).toBe(1);
+  });
+
+  it('accepts an explicit non-negative integer', () => {
+    expect(
+      resolveTimeoutRetryBudget({ LLXPRT_BUN_TEST_TIMEOUT_RETRIES: '3' }),
+    ).toBe(3);
+    expect(
+      resolveTimeoutRetryBudget({ LLXPRT_BUN_TEST_TIMEOUT_RETRIES: '0' }),
+    ).toBe(0);
+  });
+
+  it('rejects non-integer and negative values', () => {
+    expect(() =>
+      resolveTimeoutRetryBudget({ LLXPRT_BUN_TEST_TIMEOUT_RETRIES: '1.5' }),
+    ).toThrow('Invalid LLXPRT_BUN_TEST_TIMEOUT_RETRIES value: 1.5');
+    expect(() =>
+      resolveTimeoutRetryBudget({ LLXPRT_BUN_TEST_TIMEOUT_RETRIES: '-1' }),
+    ).toThrow('Invalid LLXPRT_BUN_TEST_TIMEOUT_RETRIES value: -1');
+    expect(() =>
+      resolveTimeoutRetryBudget({ LLXPRT_BUN_TEST_TIMEOUT_RETRIES: 'two' }),
+    ).toThrow('Invalid LLXPRT_BUN_TEST_TIMEOUT_RETRIES value: two');
+  });
+});
+
+describe('planNextAttempt', () => {
+  it('returns null for a passed attempt and for every budget exhausted', () => {
+    expect(
+      planNextAttempt(
+        { passed: true, timedOut: false, diagnostic: '' },
+        { attempt: 1, failureAttempts: 1, timeoutRetriesLeft: 1 },
+        '/repo/ws/a.test.ts',
+      ),
+    ).toBe(null);
+    expect(
+      planNextAttempt(
+        { passed: false, timedOut: true, diagnostic: ' (signal: SIGTERM)' },
+        { attempt: 1, failureAttempts: 1, timeoutRetriesLeft: 0 },
+        '/repo/ws/a.test.ts',
+      ),
+    ).toBe(null);
+    expect(
+      planNextAttempt(
+        { passed: false, timedOut: false, diagnostic: ' (exit code: 1)' },
+        { attempt: 2, failureAttempts: 2, timeoutRetriesLeft: 1 },
+        '/repo/ws/a.test.ts',
+      ),
+    ).toBe(null);
+  });
+
+  it('prefers the timeout budget for timeout kills and preserves messages', () => {
+    expect(
+      planNextAttempt(
+        { passed: false, timedOut: true, diagnostic: ' (signal: SIGTERM)' },
+        { attempt: 1, failureAttempts: 3, timeoutRetriesLeft: 1 },
+        '/repo/ws/frozen.test.ts',
+      ),
+    ).toEqual({
+      kind: 'timeout',
+      message:
+        'Native Bun test timed out (attempt 1), retrying: /repo/ws/frozen.test.ts (signal: SIGTERM)',
+    });
+  });
+
+  it('falls through to the failure budget for non-timeout failures', () => {
+    expect(
+      planNextAttempt(
+        { passed: false, timedOut: false, diagnostic: ' (exit code: 1)' },
+        { attempt: 1, failureAttempts: 2, timeoutRetriesLeft: 1 },
+        '/repo/ws/broken.test.ts',
+      ),
+    ).toEqual({
+      kind: 'failure',
+      message:
+        'Native Bun test failed (attempt 1/2), retrying: /repo/ws/broken.test.ts (exit code: 1)',
+    });
   });
 });
 

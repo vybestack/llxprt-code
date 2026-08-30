@@ -921,6 +921,132 @@ jobs:
           bun scripts/check-test-file-coverage.ts
 
   #
+  # Windows test-infra gate (issue #3439)
+  #
+  # The full Windows matrix lives in the nightly (issue #3153), which meant
+  # Windows-incompatible test code merged green and was first exercised by
+  # the next day's nightly — the recurring "Nightly workflow failed" issues.
+  # This gate runs the Windows-sensitive test infrastructure (the per-package
+  # bun test runners, the CLI launcher shims, and the test orchestrator) on
+  # windows-latest for every push to main, and for PRs that touch that
+  # surface, so the same class of failure is caught within minutes of the
+  # offending change instead of the next night. It deliberately does NOT run
+  # the six-shard corpus (issue #3249 keeps Windows runner cost bounded);
+  # only the suites whose subjects are process launching and path handling,
+  # which is exactly the Windows-divergent surface.
+  windows_test_infra:
+    name: 'Windows Test-Infra Gate'
+    runs-on: 'windows-latest'
+    timeout-minutes: 20
+    needs:
+      - 'doc_change_filter'
+      - 'skip_check'
+    if: ${{ needs.doc_change_filter.outputs.docs_only != 'true' && needs.skip_check.outputs.should_skip != 'true' }}
+    permissions:
+      contents: 'read'
+      pull-requests: 'read'
+    outputs:
+      affected: '${{ steps.filter.outputs.affected }}'
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: 'Set up Node.js'
+        uses: 'actions/setup-node@8207627860b0efc47a31fe5020' # ratchet:actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: 'Setup Bun'
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+
+      - name: 'Detect Windows-sensitive changes'
+        id: 'filter'
+        env:
+          GH_TOKEN: '${{ github.token }}'
+          PR_NUMBER: >-
+            ${{ github.event_name == 'pull_request' && github.event.pull_request.number || '' }}
+        run: |
+          set -euo pipefail
+          # Non-PR events (push to main, merge_group, workflow_dispatch)
+          # always run the gate: the post-merge signal is the other half of
+          # the fix — a slip past the path filter still fails within minutes.
+          if [[ -z "${PR_NUMBER:-}" ]]; then
+            echo "affected=true" >>"${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          # Path allowlist for the Windows-sensitive surface. Anything else
+          # (package internals, docs) cannot change Windows behavior of the
+          # suites this gate runs.
+          files_json="${RUNNER_TEMP}/pr-files.ndjson"
+          : >"${files_json}"
+          gh api --paginate -H 'Accept: application/vnd.github+json' \
+            "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
+            --jq '.[].filename' >"${files_json}" || true
+          # An empty list means the API call failed, not that the PR changed
+          # nothing: fail open and run the gate (mirrors doc_change_filter).
+          if [[ ! -s "${files_json}" ]] || grep -Eq \
+            '^(scripts/|packages/[^/]+/run-bun-tests\.ts$|packages/[^/]+/bun-preload\.ts$|packages/auth/src/__tests__/|packages/cli/bin/|packages/(cli|core)/test/.*run-bun-tests|packages/agents/test-bun/|\.github/workflows/(ci|nightly)\.yml$|bun\.lock$|package(-lock)?\.json$|tsconfig[^/]*)' \
+            "${files_json}"; then
+            echo "affected=true" >>"${GITHUB_OUTPUT}"
+          else
+            echo "affected=false" >>"${GITHUB_OUTPUT}"
+          fi
+
+      - name: 'Configure Windows Defender exclusions'
+        if: steps.filter.outputs.affected == 'true'
+        run: |
+          Add-MpPreference -ExclusionPath $env:GITHUB_WORKSPACE -Force
+          Add-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE\node_modules" -Force
+          Add-MpPreference -ExclusionPath $env:TEMP -Force
+        shell: 'pwsh'
+
+      - name: 'Configure npm for Windows performance'
+        if: steps.filter.outputs.affected == 'true'
+        run: |
+          npm config set progress false
+          npm config set audit false
+          npm config set fund false
+          npm config set loglevel error
+          npm config set maxsockets 32
+          npm config set registry https://registry.npmjs.org/
+        shell: 'pwsh'
+
+      - name: 'Install dependencies for testing'
+        if: steps.filter.outputs.affected == 'true'
+        run: |-
+          npm ci
+
+      - name: 'Fix rollup platform dependency'
+        if: steps.filter.outputs.affected == 'true'
+        run: |-
+          npm install @rollup/rollup-win32-x64-msvc --no-save || true
+        shell: 'bash'
+
+      - name: 'Run launcher shim and output-generator tests'
+        if: steps.filter.outputs.affected == 'true'
+        run: |-
+          bun test --preload ./scripts/tests/test-setup.ts scripts/tests/issue-2978-node-shim.bun.test.ts scripts/tests/issue-2978-oven-fallback.bun.test.ts scripts/tests/memory/output-generator.test.ts
+
+      - name: 'Run test-runner and orchestrator meta-tests'
+        if: steps.filter.outputs.affected == 'true'
+        run: |-
+          bun test --preload ./scripts/tests/test-setup.ts scripts/tests/run_bun_tests.test.ts scripts/tests/test-orchestrator.test.ts scripts/tests/test-shard-orchestrator.test.ts
+          cd packages/cli && bun test test/run-bun-tests.test.ts
+          cd ../core && bun test test/run-bun-tests.test.ts
+          cd ../agents && bun test ./test-bun/run-bun-tests.issue3253.bun.ts
+          cd ../auth && bun test src/__tests__/run-bun-tests.behavior.test.ts
+
+      - name: 'Smoke test CLI entry (launcher -> Bun, no Node in chain)'
+        if: steps.filter.outputs.affected == 'true'
+        run: './packages/cli/bin/llxprt --version'
+
+  #
   # Test: Node (Linux only — issue #2876)
   #
   # Stays on npm (not Bun) for S6 (#2243): Bun's hoisted linker non-
@@ -1270,6 +1396,7 @@ jobs:
       - 'node_consumer_smoke'
       - 'acp_conformance'
       - 'doc_change_filter'
+      - 'windows_test_infra'
     if: ${{ always() }}
     runs-on: 'ubuntu-latest'
     steps:
@@ -1282,6 +1409,8 @@ jobs:
           shard_result='${{ needs.test_shard.result }}'
           node_consumer_smoke_result='${{ needs.node_consumer_smoke.result }}'
           acp_result='${{ needs.acp_conformance.result }}'
+          windows_infra_result='${{ needs.windows_test_infra.result }}'
+          windows_infra_affected='${{ needs.windows_test_infra.outputs.affected }}'
 
           # Explicit duplicate-skip: skip_check said this run duplicates a
           # passing one, so every downstream job was intentionally skipped.
@@ -1336,6 +1465,21 @@ jobs:
               echo "docs-only PR: acp_conformance intentionally skipped (issue #342)."
             else
               echo "::error::ACP conformance job did not succeed (result: $acp_result)"
+              exit 1
+            fi
+          fi
+
+          # Windows test-infra gate (issue #3439) must succeed when it ran.
+          # It reports skipped in two intentional cases: docs-only PRs (its
+          # job-level if mirrors the other smoke jobs) and path-filtered PRs
+          # whose changes cannot affect the Windows-sensitive suites
+          # (affected=false). Anything else — including a failure — fails the
+          # required Test check.
+          if [ "$windows_infra_result" != "success" ]; then
+            if [ "$windows_infra_result" == "skipped" ] && { [ "$docs_only" == "true" ] || [ "$windows_infra_affected" == "false" ]; }; then
+              echo "Windows test-infra gate intentionally skipped (docs_only=$docs_only, affected=$windows_infra_affected)."
+            else
+              echo "::error::Windows test-infra gate did not succeed (result: $windows_infra_result)"
               exit 1
             fi
           fi

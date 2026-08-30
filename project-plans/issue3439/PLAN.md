@@ -191,3 +191,91 @@ Two corrections applied over the initial implementation pass:
 A mangled edit in scripts/tests/test-orchestrator.test.ts (missing block
 closures, one deleted unrelated test) was restored to HEAD structure; the only
 intended change in that file is the added scripts-phase summary test.
+
+## Review addendum (2026-08-30, second session): FIX-5 flaw and broader reliability work
+
+The first implementation pass (commit `f628e05db`) was reviewed against its own
+plan. FIX-1/2/3/4/6 held up. FIX-5 did not: `runTestFileWithTimeoutRetry`
+returned early without retrying whenever the first attempt `reapFailed`,
+contradicting the plan's "only trigger [FATAL] after the retry attempt also
+fails to reap". The exact Aug 30 core failure (timeout + reap failure) would
+still have FATAL-aborted the shard.
+
+### Reworked FIX-5 (packages/core/run-bun-tests.ts)
+
+- Retry now runs on every timed-out first attempt, including one that failed
+  to reap.
+- FATAL reap-abort fires only when the final attempt reports `reapFailed`.
+- When the first attempt fails to reap but the retry reaps cleanly, the file
+  returns red with a merged result: `{...secondAttempt, passed: false,
+  timedOut: true, reapFailed: false, reapError: firstAttempt.reapError}` —
+  the file stays failed (the 300s stall is real) but the shard continues.
+- TIMEOUT log line notes `[REAP FAILED (recovered on retry)]` in that case.
+- Meta-tests replaced accordingly: "retries after reap failure and keeps the
+  file failed when the retry reaps cleanly" and "returns the second reap
+  failure so main() aborts" (10 pass / 1 skip).
+
+### Retry parity for the remaining runners
+
+The freeze class is runner-agnostic; after #3435 covered cli/agents and the
+rework covered core, two runners still had no timeout retry:
+
+- **packages/auth/run-bun-tests.ts**: added exported cli-style
+  `runTestFileWithTimeoutRetry` (timeout-only, one retry) wrapping each file
+  in the worker pool; 3 new behavior tests (12 pass / 0 fail).
+- **scripts/run_bun_tests.ts** (shared by 13 workspaces, 'rest' and
+  'providers' shards): added a timeout-only retry budget, default 1,
+  overridable with `LLXPRT_BUN_TEST_TIMEOUT_RETRIES` (0 disables; invalid
+  values throw). A timeout kill is detected via `wasKilledByTimeoutSignal`
+  (SIGTERM/SIGKILL), the same signal set `isChildSuccess` already used, so
+  classification and retry cannot disagree. The pre-existing `entry.retries`
+  failure budget is untouched and keeps its exact messages. Tests extended:
+  timeout-retry-then-pass, env-disable, budget resolution, retry plan
+  messages, and the comprehensive argv test updated for the retried SIGTERM
+  entry (54 pass / 0 fail).
+- The retry policy lives in a new shared module,
+  `scripts/lib/bun-test-retry.ts` (`resolveTimeoutRetryBudget`,
+  `wasKilledByTimeoutSignal`, `planNextAttempt`), unit-tested directly. This
+  also kept `scripts/run_bun_tests.ts` under the repo's 800-line lint cap.
+
+### Structural fix: Windows signal before merge (in scope after all)
+
+The plan's "out of scope" item — PR CI is ubuntu-only, so Windows-incompatible
+test code merges green and first runs on the nightly — is the reason these
+defect classes kept recurring (#2603→#3439). This branch adds a
+`windows_test_infra` gate job to `.github/workflows/ci.yml`:
+
+- windows-latest, ~20 min cap, `needs: [doc_change_filter, skip_check]`.
+- Path-filtered: on PRs it runs only when the Windows-sensitive surface
+  changed (scripts/, `*/run-bun-tests.ts`, runner/bun test helpers,
+  `packages/cli/bin/**`, the runner meta-tests, ci/nightly workflows,
+  bun.lock, root package/tsconfig). Empty file lists fail open to running.
+- Always runs on push/merge_group so bad merges surface in minutes.
+- Runs the fast, Windows-proven subset: 2978 shim + oven-fallback suites,
+  memory/output-generator, shared-runner tests, both orchestrator tests,
+  cli/core/agents/auth runner meta-tests, and the `llxprt --version`
+  launcher smoke (mirror of nightly's Defender exclusions + rollup win32
+  fix; no build step needed).
+- Wired into the `test` aggregator as blocking; a skip is accepted only for
+  docs-only PRs or when the path filter reported not-affected.
+
+### Verification (second session, macOS)
+
+- `bunx tsc --project tsconfig.scripts.json --noEmit`: 0 errors; core and
+  auth workspaces typecheck clean.
+- eslint on all changed TS files: clean (both prior errors resolved by the
+  lib extraction and the `planNextAttempt` loop rewrite).
+- `bun test` on run_bun_tests (54), core meta (10+1 skip), auth behavior
+  (12), policy+orchestrator+2978+output-generator batch (140, 1 skip): all
+  green.
+- `node scripts/check-test-file-coverage.ts`: PASSED (no new uncovered test
+  files).
+- actionlint on ci.yml: clean (2 pre-existing shellcheck notes elsewhere);
+  yamllint strict: only pre-existing line-length warnings; prettier clean.
+
+### Follow-up (filed separately)
+
+Unify the five bespoke per-package runners (cli/core/agents/auth +
+scripts/run_bun_tests.ts) on one policy module (timeout, retry budgets,
+reaping, JUnit) so parity fixes land once. Deliberately not attempted here to
+keep this diff within the review budget.

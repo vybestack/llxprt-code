@@ -92,6 +92,29 @@ export interface TestResult {
   signal: NodeJS.Signals | null;
 }
 
+/**
+ * Retries a test file once when its first attempt was killed by the
+ * per-file timeout. Mirrors the policy of the cli/agents/core runners
+ * (issue #3439): the sporadic bun-on-Windows child freeze kills one attempt
+ * and behaves normally on the next, while a genuine assertion failure never
+ * times out and is returned after a single attempt.
+ */
+export async function runTestFileWithTimeoutRetry<
+  T extends { readonly timedOut: boolean },
+>(
+  file: string,
+  runAttempt: () => Promise<T>,
+  logRetry: (message: string) => void = (message) => console.log(message),
+): Promise<T> {
+  const firstAttempt = await runAttempt();
+  if (!firstAttempt.timedOut) {
+    return firstAttempt;
+  }
+
+  logRetry(`RETRY (2/2): ${file} after per-file timeout`);
+  return runAttempt();
+}
+
 export function runTestFile(file: string): Promise<TestResult> {
   return new Promise((resolve) => {
     let resolved = false;
@@ -226,7 +249,9 @@ async function main(): Promise<void> {
   async function worker(): Promise<void> {
     while (nextIndex < testFiles.length) {
       const file = testFiles[nextIndex++];
-      results.push(await runTestFile(file));
+      results.push(
+        await runTestFileWithTimeoutRetry(file, () => runTestFile(file)),
+      );
     }
   }
 

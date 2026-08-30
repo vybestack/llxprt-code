@@ -44,6 +44,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolveBunTestFiles, type BunTestFile } from './bun-test-roots.js';
 import { DEFAULT_PER_TEST_TIMEOUT_MS } from './lib/bun-test-policy.js';
 import {
+  planNextAttempt,
+  resolveTimeoutRetryBudget,
+  wasKilledByTimeoutSignal,
+} from './lib/bun-test-retry.js';
+import {
   buildVitestJsonReport,
   parseJUnitXml,
   type VitestJsonReport,
@@ -256,9 +261,7 @@ export function isChildSuccess(child: ChildExitInfo): boolean {
   if (child.exitCode === 0) {
     return true;
   }
-  const killedByTimeout =
-    child.signalCode === 'SIGTERM' || child.signalCode === 'SIGKILL';
-  if (!killedByTimeout) {
+  if (!wasKilledByTimeoutSignal(child)) {
     return false;
   }
   return outputShowsCompleteSummary(child.stdout, child.stderr);
@@ -509,7 +512,13 @@ function spawnTestFileOnce(
   run: RunWideOptions,
   dependencies: BunTestRunnerDependencies,
   junitOutfile?: string,
-): { passed: boolean; stdout: string; diagnostic: string; junitPath?: string } {
+): {
+  passed: boolean;
+  timedOut: boolean;
+  stdout: string;
+  diagnostic: string;
+  junitPath?: string;
+} {
   try {
     const child = dependencies.spawn(
       buildSpawnArgs(
@@ -529,8 +538,13 @@ function spawnTestFileOnce(
         timeout: processTimeoutFor(entry.timeout ?? run.timeout),
       },
     );
+    const passed = isChildSuccess(child);
     return {
-      passed: isChildSuccess(child),
+      passed,
+      // A signal kill that did NOT yield a complete passing summary (the
+      // isChildSuccess call above already accounted for that case) is the
+      // per-file timeout firing.
+      timedOut: !passed && wasKilledByTimeoutSignal(child),
       stdout: child.stdout ?? '',
       diagnostic: formatFailureDiagnostic(child),
       junitPath: junitOutfile,
@@ -540,7 +554,7 @@ function spawnTestFileOnce(
       error instanceof Error
         ? (error.stack ?? error.toString())
         : String(error);
-    return { passed: false, stdout: '', diagnostic: `\n${diagnostic}` };
+    return { passed: false, timedOut: false, stdout: '', diagnostic: `\n${diagnostic}` };
   }
 }
 
@@ -551,18 +565,31 @@ function runSingleTestFile(
   junitOutfile?: string,
 ): FileTestResult {
   const relativeName = entry.file.replace(entry.cwd + '/', '');
-  const attempts = (entry.retries ?? 0) + 1;
-  let last = { passed: false, stdout: '', diagnostic: '' };
-  for (let attempt = 1; attempt <= attempts; attempt++) {
+  // Two independent retry budgets: `entry.retries` retries any failure
+  // (pre-existing opt-in used by the e2e configs), while the timeout budget
+  // retries only per-file timeout kills (issue #3439) and defaults to 1.
+  // planNextAttempt owns the exact retry decision and messages.
+  const failureAttempts = (entry.retries ?? 0) + 1;
+  let timeoutRetriesLeft = resolveTimeoutRetryBudget();
+  let attempt = 1;
+  let last = spawnTestFileOnce(entry, run, dependencies, junitOutfile);
+  let retry = planNextAttempt(
+    last,
+    { attempt, failureAttempts, timeoutRetriesLeft },
+    entry.file,
+  );
+  while (retry !== null) {
+    if (retry.kind === 'timeout') {
+      timeoutRetriesLeft--;
+    }
+    dependencies.stderr(retry.message);
+    attempt++;
     last = spawnTestFileOnce(entry, run, dependencies, junitOutfile);
-    if (last.passed) {
-      break;
-    }
-    if (attempt < attempts) {
-      dependencies.stderr(
-        `Native Bun test failed (attempt ${attempt}/${attempts}), retrying: ${entry.file}${last.diagnostic}`,
-      );
-    }
+    retry = planNextAttempt(
+      last,
+      { attempt, failureAttempts, timeoutRetriesLeft },
+      entry.file,
+    );
   }
   if (!last.passed) {
     dependencies.stderr(
