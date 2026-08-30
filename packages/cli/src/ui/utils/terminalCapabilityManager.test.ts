@@ -478,4 +478,253 @@ describe('TerminalCapabilityManager', () => {
       expect(manager.isBracketedPasteEnabled()).toBe(true);
     });
   });
+
+  describe('AC5 kitty protocol enable and cleanup', () => {
+    it('registers an exit listener that tears the protocol down after kitty detection (AC5.2)', async () => {
+      const manager = TerminalCapabilityManager.getInstance();
+      const before = new Set<unknown>(process.listeners('exit'));
+
+      const promise = manager.detectCapabilities();
+      stdin.emit('data', Buffer.from('\x1b[?1u'));
+      stdin.emit('data', Buffer.from('\x1b[?62c'));
+      await promise;
+
+      expect(manager.isKittyProtocolEnabled()).toBe(true);
+
+      // Counting listeners would not prove anything: run each newly added
+      // handler and require that the protocol actually ends up disabled.
+      const added = process
+        .listeners('exit')
+        .filter((listener) => !before.has(listener));
+      expect(added.length).toBeGreaterThan(0);
+      for (const listener of added) {
+        listener(0);
+      }
+
+      expect(manager.isKittyProtocolEnabled()).toBe(false);
+    });
+
+    it('does not accumulate exit/SIGTERM/SIGINT listeners after resetInstanceForTesting (AC5.3)', async () => {
+      const manager = TerminalCapabilityManager.getInstance();
+      const preexisting = {
+        exit: new Set<unknown>(process.listeners('exit')),
+        SIGTERM: new Set<unknown>(process.listeners('SIGTERM')),
+        SIGINT: new Set<unknown>(process.listeners('SIGINT')),
+      };
+      const currentListeners = (
+        signal: 'exit' | 'SIGTERM' | 'SIGINT',
+      ): unknown[] => {
+        if (signal === 'exit') return process.listeners('exit');
+        if (signal === 'SIGTERM') return process.listeners('SIGTERM');
+        return process.listeners('SIGINT');
+      };
+      const survivors = (signal: 'exit' | 'SIGTERM' | 'SIGINT'): unknown[] =>
+        currentListeners(signal).filter(
+          (listener) => !preexisting[signal].has(listener),
+        );
+
+      const promise = manager.detectCapabilities();
+      stdin.emit('data', Buffer.from('\x1b[?1u'));
+      stdin.emit('data', Buffer.from('\x1b[?62c'));
+      await promise;
+      expect(survivors('exit').length).toBeGreaterThan(0);
+
+      TerminalCapabilityManager.resetInstanceForTesting();
+
+      // Nothing detection registered outlives the reset.
+      expect(survivors('exit')).toStrictEqual([]);
+      expect(survivors('SIGTERM')).toStrictEqual([]);
+      expect(survivors('SIGINT')).toStrictEqual([]);
+    });
+
+    it('disableKittyProtocol emits the disable sequence only while enabled (AC5.4)', async () => {
+      const { disableKittyKeyboardProtocol } = await import(
+        '@vybestack/llxprt-code-core'
+      );
+      const disableMock = disableKittyKeyboardProtocol as Mock<() => void>;
+      const manager = TerminalCapabilityManager.getInstance();
+
+      // Never enabled: nothing is written to the terminal.
+      manager.disableKittyProtocol();
+      expect(manager.isKittyProtocolEnabled()).toBe(false);
+      expect(disableMock.mock.calls).toHaveLength(0);
+
+      const promise = manager.detectCapabilities();
+      stdin.emit('data', Buffer.from('\x1b[?1u'));
+      stdin.emit('data', Buffer.from('\x1b[?62c'));
+      await promise;
+      expect(manager.isKittyProtocolEnabled()).toBe(true);
+
+      // Enabled: the first disable writes, the second is suppressed by the
+      // enabled guard rather than emitting a redundant sequence.
+      manager.disableKittyProtocol();
+      expect(manager.isKittyProtocolEnabled()).toBe(false);
+      expect(disableMock.mock.calls).toHaveLength(1);
+
+      manager.disableKittyProtocol();
+      expect(disableMock.mock.calls).toHaveLength(1);
+    });
+  });
+
+  describe('AC7 detection timeout and skip env', () => {
+    /**
+     * Mirrors the detection timeout in TerminalCapabilityManager, which is a
+     * module-private literal. If the production value ever grows past this,
+     * the timeout-path tests below stop reaching cleanup and hang until the
+     * per-test budget instead of failing with a useful message.
+     */
+    const DETECTION_TIMEOUT_MS = 1000;
+
+    const createRealTTYStdin = (
+      isRawValue: boolean,
+    ): EventEmitter & {
+      isTTY?: boolean;
+      isRaw?: boolean;
+      setRawMode?: (mode: boolean) => void;
+    } => {
+      const stream: EventEmitter & {
+        isTTY?: boolean;
+        isRaw?: boolean;
+        setRawMode?: (mode: boolean) => void;
+      } = new EventEmitter();
+      stream.isTTY = true;
+      stream.isRaw = isRawValue;
+      stream.setRawMode = vi.fn();
+      return stream;
+    };
+
+    it('timeout with no DA1 reply completes and still applies bracketed paste (AC7.1)', async () => {
+      const manager = TerminalCapabilityManager.getInstance();
+      const promise = manager.detectCapabilities();
+
+      // The terminal never answers any query.
+      vi.advanceTimersByTime(DETECTION_TIMEOUT_MS);
+      await promise;
+
+      // Timeout is a completion path, not a failure path: supported modes
+      // are still applied even though nothing was detected.
+      expect(manager.isBracketedPasteEnabled()).toBe(true);
+      expect(manager.isKittyProtocolEnabled()).toBe(false);
+    });
+
+    it('restores raw mode when it turned it on (AC7.2, started raw false)', async () => {
+      const rawStream = createRealTTYStdin(false);
+      Object.defineProperty(process, 'stdin', {
+        value: rawStream,
+        configurable: true,
+      });
+
+      const manager = TerminalCapabilityManager.getInstance();
+      const promise = manager.detectCapabilities();
+      rawStream.emit('data', Buffer.from('\x1b[?62c'));
+      await promise;
+
+      const setRawCalls = (
+        rawStream.setRawMode as Mock<(mode: boolean) => void>
+      ).mock.calls.map((call) => call[0]);
+      expect(setRawCalls).toStrictEqual([true, false]);
+    });
+
+    it('leaves raw mode alone when something else already set it (AC7.2, started raw true)', async () => {
+      const rawStream = createRealTTYStdin(true);
+      Object.defineProperty(process, 'stdin', {
+        value: rawStream,
+        configurable: true,
+      });
+
+      const manager = TerminalCapabilityManager.getInstance();
+      const promise = manager.detectCapabilities();
+      rawStream.emit('data', Buffer.from('\x1b[?62c'));
+      await promise;
+
+      expect(
+        rawStream.setRawMode as Mock<(mode: boolean) => void>,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('removes the stdin data listener on the DA1-sentinel path (AC7.3)', async () => {
+      const rawStream = createRealTTYStdin(false);
+      Object.defineProperty(process, 'stdin', {
+        value: rawStream,
+        configurable: true,
+      });
+
+      const manager = TerminalCapabilityManager.getInstance();
+      const promise = manager.detectCapabilities();
+      expect(rawStream.listenerCount('data')).toBe(1);
+
+      rawStream.emit('data', Buffer.from('\x1b[?62c'));
+      await promise;
+
+      expect(rawStream.listenerCount('data')).toBe(0);
+    });
+
+    it('removes the stdin data listener on the timeout path (AC7.3)', async () => {
+      const rawStream = createRealTTYStdin(false);
+      Object.defineProperty(process, 'stdin', {
+        value: rawStream,
+        configurable: true,
+      });
+
+      const manager = TerminalCapabilityManager.getInstance();
+      const promise = manager.detectCapabilities();
+      expect(rawStream.listenerCount('data')).toBe(1);
+
+      vi.advanceTimersByTime(DETECTION_TIMEOUT_MS);
+      await promise;
+
+      expect(rawStream.listenerCount('data')).toBe(0);
+    });
+
+    it('resolves, marks detection complete, and restores raw mode when the query write throws (AC7.4)', async () => {
+      const { writeSync } = await import('node:fs');
+      (writeSync as unknown as Mock<typeof writeSync>).mockImplementation(
+        () => {
+          throw new Error('write failed');
+        },
+      );
+
+      const rawStream = createRealTTYStdin(false);
+      Object.defineProperty(process, 'stdin', {
+        value: rawStream,
+        configurable: true,
+      });
+
+      const manager = TerminalCapabilityManager.getInstance();
+      await manager.detectCapabilities();
+
+      // Completion still ran: cleanup happened instead of hanging.
+      expect(manager.isBracketedPasteEnabled()).toBe(true);
+      expect(rawStream.listenerCount('data')).toBe(0);
+      const setRawCalls = (
+        rawStream.setRawMode as Mock<(mode: boolean) => void>
+      ).mock.calls.map((call) => call[0]);
+      expect(setRawCalls).toStrictEqual([true, false]);
+
+      // Detection is marked complete: a second call is a no-op and does not
+      // touch the (still throwing) writeSync again.
+      (writeSync as unknown as Mock<typeof writeSync>).mockClear();
+      await manager.detectCapabilities();
+      expect(
+        writeSync as unknown as Mock<typeof writeSync>,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('skips detection when stdout is not a TTY (AC7.5)', async () => {
+      const { writeSync } = await import('node:fs');
+      stdin.isTTY = true;
+      stdout.isTTY = false;
+
+      const manager = TerminalCapabilityManager.getInstance();
+      await manager.detectCapabilities();
+
+      expect(
+        writeSync as unknown as Mock<typeof writeSync>,
+      ).not.toHaveBeenCalled();
+      expect(manager.isKittyProtocolEnabled()).toBe(false);
+      expect(
+        stdin.setRawMode as Mock<(mode: boolean) => void>,
+      ).not.toHaveBeenCalled();
+    });
+  });
 });

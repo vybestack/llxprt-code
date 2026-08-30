@@ -113,17 +113,45 @@ describe('setupTerminalAndTheme', () => {
       expect(terminalCapabilityManager.detectCapabilities).toHaveBeenCalled();
     });
 
+    const runWithSkipEnv = (
+      value: string | undefined,
+      run: () => Promise<void>,
+    ): Promise<void> => {
+      const previous =
+        process.env.LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION;
+      if (value === undefined) {
+        delete process.env.LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION;
+      } else {
+        process.env.LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION = value;
+      }
+      return run().finally(() => {
+        if (previous === undefined) {
+          delete process.env.LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION;
+        } else {
+          process.env.LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION = previous;
+        }
+      });
+    };
+
     it('should skip detectCapabilities when explicitly disabled', async () => {
-      process.env.LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION = 'true';
-      try {
+      await runWithSkipEnv('true', async () => {
         await setupTerminalAndTheme(config, mockSettings);
         expect(
           terminalCapabilityManager.detectCapabilities,
         ).not.toHaveBeenCalled();
-      } finally {
-        delete process.env.LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION;
-      }
+      });
     });
+
+    for (const value of ['1', 'false', 'TRUE', '']) {
+      it(`should still detect capabilities when the skip env is '${value}'`, async () => {
+        await runWithSkipEnv(value, async () => {
+          await setupTerminalAndTheme(config, mockSettings);
+          expect(
+            terminalCapabilityManager.detectCapabilities,
+          ).toHaveBeenCalled();
+        });
+      });
+    }
 
     it('should load custom themes from settings', async () => {
       const customThemes = {
