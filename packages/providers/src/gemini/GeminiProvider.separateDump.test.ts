@@ -6,6 +6,9 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import * as dumpSDKContextModule from '../utils/dumpSDKContext.js';
+import * as geminiGenerationExecutionModule from './geminiGenerationExecution.js';
+import type { GeminiGenerationSetup } from './geminiGenerationSetup.js';
+import type { ReasoningConfig } from './geminiReasoningConfig.js';
 
 describe('Gemini non-OAuth non-streaming generate separate dump', () => {
   let dumpSDKRequestContextSpy: ReturnType<typeof vi.spyOn>;
@@ -85,10 +88,21 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
       undefined,
       mapResponseToChunks,
       true,
+      { 'x-goog-api-key': 'gk-secret' },
     );
 
     expect(callOrder).toStrictEqual(['requestDump', 'apiCall']);
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledWith(
+      'gemini',
+      '/v1/models/generateContent',
+      apiRequest,
+      'https://generativelanguage.googleapis.com',
+      {
+        headers: { 'x-goog-api-key': 'gk-secret' },
+        transport: { type: 'http' },
+      },
+    );
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledOnce();
     expect(dumpSDKContextSpy).not.toHaveBeenCalled();
     expect(result.chunks).toBeDefined();
@@ -204,6 +218,84 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
       true,
     );
     expect(dumpSDKContextSpy).not.toHaveBeenCalled();
+  });
+
+  it('should keep a caller-supplied x-goog-api-key header over the synthesized one (issue #3159)', async () => {
+    const { GeminiProvider } = await import('./GeminiProvider.js');
+    const provider = new GeminiProvider('test-api-key');
+
+    expect(
+      provider['withApiKeyHeader'](
+        { 'x-goog-api-key': 'caller-key' },
+        'gemini-api-key',
+        'gk-secret',
+      ),
+    ).toStrictEqual({ 'x-goog-api-key': 'caller-key' });
+    // Header names are case-insensitive: a caller-supplied variant spelling
+    // must also suppress the synthesized lowercase entry.
+    expect(
+      provider['withApiKeyHeader'](
+        { 'X-Goog-Api-Key': 'caller-key' },
+        'gemini-api-key',
+        'gk-secret',
+      ),
+    ).toStrictEqual({ 'X-Goog-Api-Key': 'caller-key' });
+    expect(
+      provider['withApiKeyHeader']({}, 'gemini-api-key', 'gk-secret'),
+    ).toStrictEqual({ 'x-goog-api-key': 'gk-secret' });
+    expect(
+      provider['withApiKeyHeader']({ other: 'header' }, 'vertex-ai', 'tok'),
+    ).toStrictEqual({ other: 'header' });
+  });
+
+  it('should thread the synthesized API-key header through executeGeneration into the generation call (issue #3159)', async () => {
+    const generationSpy = vi
+      .spyOn(geminiGenerationExecutionModule, 'executeNonOAuthGeneration')
+      .mockResolvedValue({ stream: null, emitted: false });
+    const { createProviderCallOptions } = await import(
+      '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js'
+    );
+    const { GeminiProvider } = await import('./GeminiProvider.js');
+    const provider = new GeminiProvider('test-api-key');
+
+    const reasoningConfig: ReasoningConfig = {
+      enabled: undefined,
+      includeInResponse: false,
+      stripFromContext: 'all',
+      effort: undefined,
+      maxTokens: undefined,
+      effortWireFormat: 'none',
+      enabledWireFormat: 'none',
+      effortMap: undefined,
+      enabledMap: undefined,
+    };
+    const setup: GeminiGenerationSetup = {
+      authMode: 'gemini-api-key',
+      authToken: 'gk-secret',
+      currentModel: 'gemini-2.5-pro',
+      contentsWithSignatures: [],
+      requestConfig: {},
+      baseURL: 'https://generativelanguage.googleapis.com/v1beta',
+      httpOptions: { headers: {} },
+      mapResponseToChunks: () => [],
+      reasoningConfig,
+      toolNamesForPrompt: undefined,
+      shouldDumpSuccess: true,
+      shouldDumpError: true,
+    };
+
+    await provider['executeGeneration'](
+      createProviderCallOptions({ providerName: 'gemini', contents: [] }),
+      setup,
+      false,
+    );
+
+    expect(generationSpy).toHaveBeenCalledOnce();
+    // headers is the trailing parameter of executeNonOAuthGeneration
+    const args = generationSpy.mock.calls[0];
+    expect(args.at(-1)).toStrictEqual({
+      'x-goog-api-key': 'gk-secret',
+    });
   });
 });
 
