@@ -22,8 +22,15 @@ export function assertBoundedPostClearRetention(
 ): void {
   const manual = samples.filter((sample) => sample.tag === 'manual');
   if (manual.length !== 3) {
+    // Report the whole sequence: a missing checkpoint means the tmux script
+    // moved on before the probe handled a request, and knowing WHICH of the
+    // three is absent separates that from a probe that refused the request.
+    const seen = samples.map((sample) => sample.tag).join(', ');
     throw new Error(
-      `expected exactly 3 manual forced-GC samples, found ${manual.length}`,
+      `expected exactly 3 manual forced-GC samples, found ${manual.length}. ` +
+        `Sample tags in order: [${seen}]. Each manual checkpoint is requested ` +
+        `by scripts/memory/request-cli.ts --wait; check probe.log in the same ` +
+        `directory for the matching "sample complete" lines.`,
     );
   }
 
