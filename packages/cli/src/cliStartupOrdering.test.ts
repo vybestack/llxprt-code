@@ -36,6 +36,17 @@ function makeConfig(hasActive: boolean, interactive: boolean): Config {
   } as unknown as Config;
 }
 
+/**
+ * Arguments the real `main()` passed to the ACP client's `runZedIntegration`.
+ * Captured by the module mock so the ACP test can assert the host injection
+ * contract (issue #3306) rather than merely that the function was reached.
+ */
+type ZedIntegrationCall = {
+  config: unknown;
+  options?: { onExitCleanup?: () => void | Promise<void> };
+};
+const zedIntegrationCalls: ZedIntegrationCall[] = [];
+
 function setupCommonMainMocks(callOrder: string[], config: Config): void {
   void mock.module('./cliProviderInit.js', () => ({
     activateConfiguredProvider: async () => {
@@ -94,14 +105,21 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
   }));
   void mock.module('./utils/cleanup.js', () => ({
     cleanupCheckpoints: async () => {},
-    runExitCleanup: async () => {},
+    runExitCleanup: async () => {
+      callOrder.push('exit-cleanup');
+    },
     registerSyncCleanup: () => {},
   }));
   void mock.module('./utils/sessionCleanup.js', () => ({
     cleanupExpiredSessions: async () => {},
   }));
-  void mock.module('./zed-integration/zedIntegration.js', () => ({
-    runZedIntegration: async () => {},
+  void mock.module('@vybestack/llxprt-code-zed-acp', () => ({
+    runZedIntegration: async (
+      zedConfig: unknown,
+      options?: { onExitCleanup?: () => void | Promise<void> },
+    ) => {
+      zedIntegrationCalls.push({ config: zedConfig, options });
+    },
   }));
   void mock.module('./config/pathMigration.js', () => ({
     runStartupMigration: () => ({ migrated: false }),
@@ -193,6 +211,7 @@ describe('main() orchestration: guard stops before activation (#2481)', () => {
 
   beforeEach(() => {
     callOrder.length = 0;
+    zedIntegrationCalls.length = 0;
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -258,6 +277,31 @@ describe('main() orchestration: guard stops before activation (#2481)', () => {
     expect(callOrder).not.toContain('guard');
     expect(callOrder).not.toContain('activation');
     expect(callOrder).not.toContain('agent-construction');
+  });
+
+  it('ACP/Zed: the host injects its own exit cleanup into the ACP client', async () => {
+    const config = {
+      ...makeConfig(false, false),
+      getExperimentalZedIntegration: () => true,
+    } as unknown as Config;
+    vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('unexpected process.exit');
+    });
+
+    await runMainWithConfig(config);
+
+    // The ACP client is a peer package: it cannot import the CLI's cleanup
+    // registry, so main() must hand it one. Assert the call really happened
+    // with this Config, then run the injected callback and observe that the
+    // CLI's own exit cleanup is what actually executes.
+    expect(zedIntegrationCalls).toHaveLength(1);
+    const [call] = zedIntegrationCalls;
+    expect(call.config).toBe(config);
+    expect(callOrder).not.toContain('exit-cleanup');
+
+    await call.options?.onExitCleanup?.();
+
+    expect(callOrder).toContain('exit-cleanup');
   });
 });
 
@@ -434,7 +478,7 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
     void mock.module('./utils/sessionCleanup.js', () => ({
       cleanupExpiredSessions: async () => {},
     }));
-    void mock.module('./zed-integration/zedIntegration.js', () => ({
+    void mock.module('@vybestack/llxprt-code-zed-acp', () => ({
       runZedIntegration: async () => {},
     }));
     void mock.module('./config/pathMigration.js', () => ({

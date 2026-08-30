@@ -371,7 +371,7 @@ describe('issue-2994 changed-files mode (real hermetic temporary git repos)', ()
       '--dry-run',
     ]);
     expect(result.status).toBe(0);
-    // reverseClosure('core') = {a2a-server, agents, cli, providers}
+    // reverseClosure('core') = {a2a-server, agents, cli, providers, zed-acp}
     expect(extractScopedTargets(result.stdout)).toEqual([
       'integration-tests',
       'packages/a2a-server',
@@ -379,6 +379,7 @@ describe('issue-2994 changed-files mode (real hermetic temporary git repos)', ()
       'packages/cli',
       'packages/core',
       'packages/providers',
+      'packages/zed-acp',
     ]);
   }, 120_000);
 

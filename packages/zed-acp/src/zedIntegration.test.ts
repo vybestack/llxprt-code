@@ -215,11 +215,7 @@ describe('ZedAgent.newSession', () => {
       sessionUpdate: vi.fn(async () => undefined),
     };
     const mod = await import('./zedIntegration.js');
-    const zedAgent = new mod.ZedAgent(
-      baseConfig,
-      { debug: () => {} } as never,
-      connection as never,
-    );
+    const zedAgent = new mod.ZedAgent(baseConfig, connection as never);
 
     await zedAgent.initialize({
       protocolVersion: '1',
@@ -284,11 +280,7 @@ describe('ZedAgent.authenticate credential cache', () => {
       }),
       getEphemeralSetting: () => undefined,
     };
-    return new ZedAgent(
-      mockConfig as never,
-      { debug: () => {} } as never,
-      undefined as never,
-    );
+    return new ZedAgent(mockConfig as never, undefined as never);
   }
 
   it('loads profile when switching to a different profile', async () => {

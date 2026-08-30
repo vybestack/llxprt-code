@@ -18,7 +18,8 @@
     "lsp": "rest",
     "test-utils": "rest",
     "a2a-server": "rest",
-    "vscode-ide-companion": "rest"
+    "vscode-ide-companion": "rest",
+    "zed-acp": "rest"
   },
   "shardOrder": ["cli", "agents", "providers", "core", "rest", "scripts"],
   "shardTimingsSeconds": {
@@ -54,7 +55,8 @@
       "storage",
       "telemetry",
       "test-utils",
-      "tools"
+      "tools",
+      "zed-acp"
     ],
     "core": [
       "auth",
@@ -76,14 +78,16 @@
     "telemetry": ["storage"],
     "test-utils": [],
     "tools": [],
-    "vscode-ide-companion": ["ide-integration"]
+    "vscode-ide-companion": ["ide-integration"],
+    "zed-acp": ["agents", "core", "providers", "storage", "telemetry", "tools"]
   },
   "testOnlyEdges": {
     "agents": ["storage"],
-    "core": ["providers", "test-utils"],
-    "tools": ["storage", "test-utils"],
     "auth": ["test-utils"],
-    "providers": ["test-utils"]
+    "core": ["providers", "test-utils"],
+    "providers": ["test-utils"],
+    "tools": ["storage", "test-utils"],
+    "zed-acp": ["test-utils"]
   },
   "observers": {
     "agents": [

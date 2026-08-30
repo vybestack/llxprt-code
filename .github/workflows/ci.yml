@@ -873,7 +873,7 @@ jobs:
   # Bun-backed test orchestration smoke (issue #2463)
   #
   # Verifies that `bun scripts/test.ts` (the `test:bun` entry point) can
-  # discover all 16 workspaces, parse their test/pretest scripts, and produce
+  # discover all workspaces, parse their test/pretest scripts, and produce
   # a summary — using a dry-run mode that does not actually execute the
   # workspace test suites. This catches regressions in the orchestrator itself
   # without the cost of a full test matrix. The actual workspace tests still

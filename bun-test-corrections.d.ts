@@ -38,6 +38,12 @@ declare module 'bun:test' {
   interface Matchers<T = unknown> {
     rejects: AwaitedMatchers<MatchersBuiltin<unknown>>;
     resolves: AwaitedMatchers<MatchersBuiltin<Awaited<T>>>;
+    /**
+     * Implemented by Bun's `expect` at runtime (verified against Bun 1.3.14)
+     * but not declared by `bun-types`. Declared here rather than in one
+     * package because more than one workspace asserts with it.
+     */
+    toHaveBeenCalledOnce(): T;
   }
 
   interface Expect {

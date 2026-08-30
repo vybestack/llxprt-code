@@ -11,7 +11,6 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import type * as acp from '@agentclientprotocol/sdk';
 import type { Config, IContent } from '@vybestack/llxprt-code-core';
 import type { Agent, AgentMessage } from '@vybestack/llxprt-code-agents';
-import type { LoadedSettings } from '../config/settings.js';
 import type { ChatSessionFileLister } from './zed-session-loader.js';
 
 import { RecordingConnection } from './zed-test-helpers.js';
@@ -118,10 +117,6 @@ function buildBaseConfig(root: string): Config {
   } as unknown as Config;
 }
 
-function buildStubSettings(): LoadedSettings {
-  return {} as LoadedSettings;
-}
-
 function buildInitializeRequest(): acp.InitializeRequest {
   return { protocolVersion: 1, clientCapabilities: {} };
 }
@@ -132,7 +127,6 @@ async function makeZedAgent(
   const mod = await import('./zedIntegration.js');
   const zedAgent = new mod.ZedAgent(
     buildBaseConfig(root),
-    buildStubSettings(),
     new RecordingConnection() as unknown as acp.AgentSideConnection,
     emptyChatsLister,
   );

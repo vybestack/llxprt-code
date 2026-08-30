@@ -1008,6 +1008,7 @@
     ],
     "packages/test-utils/tsconfig.json": [],
     "packages/tools/tsconfig.json": [],
-    "packages/vscode-ide-companion/tsconfig.json": []
+    "packages/vscode-ide-companion/tsconfig.json": [],
+    "packages/zed-acp/tsconfig.json": []
   }
 }

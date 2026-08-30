@@ -1,0 +1,58 @@
+{
+  "name": "@vybestack/llxprt-code-zed-acp",
+  "version": "0.11.0",
+  "description": "LLxprt Code ACP (Agent Client Protocol) client — the Zed integration, a peer client of the Agent API",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vybestack/llxprt-code.git"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "bun": "./index.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "bun ../../scripts/build_package.ts",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write .",
+    "test": "bun ../../scripts/run_bun_tests.ts --workspace zed-acp",
+    "test:ci": "bun ../../scripts/run_bun_tests.ts --workspace zed-acp",
+    "typecheck": "tsc --noEmit"
+  },
+  "files": [
+    "index.ts",
+    "src",
+    "dist",
+    "!**/*.test.ts",
+    "!**/*.test.tsx",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/__tests__/**",
+    "!**/__snapshots__/**"
+  ],
+  "dependencies": {
+    "@agentclientprotocol/sdk": "^1.2.1",
+    "@vybestack/llxprt-code-agents": "file:../agents",
+    "@vybestack/llxprt-code-core": "file:../core",
+    "@vybestack/llxprt-code-providers": "file:../providers",
+    "@vybestack/llxprt-code-storage": "file:../storage",
+    "@vybestack/llxprt-code-telemetry": "file:../telemetry",
+    "@vybestack/llxprt-code-tools": "file:../tools",
+    "glob": "^12.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.2.1",
+    "@vybestack/llxprt-code-test-utils": "file:../test-utils",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

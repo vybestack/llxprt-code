@@ -93,6 +93,7 @@ describe('release package derivation', () => {
       '@vybestack/llxprt-code-lsp',
       '@vybestack/llxprt-code-providers',
       '@vybestack/llxprt-code-agents',
+      '@vybestack/llxprt-code-zed-acp',
       '@vybestack/llxprt-code',
     ]);
   });
@@ -109,6 +110,14 @@ describe('release package derivation', () => {
     expect(toolsIndex).toBeLessThan(coreIndex);
     expect(toolsIndex).toBeLessThan(providersIndex);
     expect(toolsIndex).toBeLessThan(cliIndex);
+  });
+
+  it('publishes the ACP client before the CLI that depends on it', () => {
+    const packages = npmReleasePackages();
+    const zedAcpIndex = packages.indexOf('@vybestack/llxprt-code-zed-acp');
+    const cliIndex = packages.indexOf('@vybestack/llxprt-code');
+    expect(zedAcpIndex).toBeGreaterThan(-1);
+    expect(zedAcpIndex).toBeLessThan(cliIndex);
   });
 
   it('keeps VS Code extension versioned but outside npm package publishing', () => {

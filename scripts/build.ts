@@ -79,7 +79,7 @@ function readWorkspacePackageNames(): string[] {
       ) as { name?: string };
     } catch (error) {
       // Name the workspace: a bare SyntaxError from JSON.parse leaves the
-      // reader to guess which of sixteen manifests is malformed.
+      // reader to guess which of the workspace manifests is malformed.
       throw new Error(
         `Could not read ${relativeDir}/package.json: ${messageOf(error)}`,
       );

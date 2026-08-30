@@ -18,7 +18,6 @@ import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import type * as acp from '@agentclientprotocol/sdk';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { Config } from '@vybestack/llxprt-code-core';
-import type { LoadedSettings } from '../config/settings.js';
 
 import { RecordingConnection } from './zed-test-helpers.js';
 
@@ -105,7 +104,6 @@ describe('ZedAgent.buildSessionAgent disposal on terminal-setup failure', () => 
     const mod = await import('./zedIntegration.js');
     const zedAgent = new mod.ZedAgent(
       buildBaseConfig(),
-      {} as LoadedSettings,
       new RecordingConnection() as unknown as acp.AgentSideConnection,
     );
     await zedAgent.initialize(buildTerminalCapableInit());

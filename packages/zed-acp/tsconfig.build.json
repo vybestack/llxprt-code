@@ -1,0 +1,30 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "paths": {
+      "@vybestack/llxprt-code-agents": ["../agents/dist/index.d.ts"],
+      "@vybestack/llxprt-code-core": ["../core/dist/index.d.ts"],
+      "@vybestack/llxprt-code-core/*": ["../core/dist/src/*"],
+      "@vybestack/llxprt-code-providers": ["../providers/dist/index.d.ts"],
+      "@vybestack/llxprt-code-providers/runtime.js": [
+        "../providers/dist/src/runtime/index.d.ts"
+      ],
+      "@vybestack/llxprt-code-storage": ["../storage/dist/index.d.ts"],
+      "@vybestack/llxprt-code-storage/*": ["../storage/dist/src/*"],
+      "@vybestack/llxprt-code-telemetry": ["../telemetry/dist/index.d.ts"],
+      "@vybestack/llxprt-code-telemetry/*": ["../telemetry/dist/src/*"],
+      "@vybestack/llxprt-code-tools": ["../tools/dist/index.d.ts"],
+      "@vybestack/llxprt-code-tools/*": ["../tools/dist/src/*"]
+    }
+  },
+  "include": ["index.ts", "src/**/*.ts", "src/**/*.json"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/**/__tests__/**",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "**/*.bun.ts"
+  ]
+}
