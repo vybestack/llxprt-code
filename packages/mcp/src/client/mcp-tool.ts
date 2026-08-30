@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { safeJsonStringify } from '@vybestack/llxprt-code-core/utils/safeJsonStringify.js';
+import { safeJsonStringify } from '@vybestack/llxprt-code-telemetry/utils/safeJsonStringify.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -20,8 +20,8 @@ import {
   type ToolCallRequest as FunctionCall,
   type ContentPart as Part,
 } from '@vybestack/llxprt-code-tools';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import type { IToolMessageBus } from '@vybestack/llxprt-code-tools';
+import type { McpTrustConfig } from '../host/hostInterfaces.js';
 import { firstTruthyString } from '../utils/string-fallback.js';
 
 type ToolParams = Record<string, unknown>;
@@ -73,8 +73,8 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
     readonly displayName: string,
     readonly trust: boolean | undefined,
     params: ToolParams = {},
-    messageBus: MessageBus,
-    private readonly cliConfig?: Config,
+    messageBus: IToolMessageBus,
+    private readonly cliConfig?: McpTrustConfig,
   ) {
     // Use composite format for policy checks: serverName__toolName
     // This enables server wildcards (e.g., "google-workspace__*")
@@ -249,7 +249,7 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
     override readonly parameterSchema: unknown,
     readonly trust?: boolean,
     nameOverride?: string,
-    private readonly cliConfig?: Config,
+    private readonly cliConfig?: McpTrustConfig,
   ) {
     super(
       nameOverride ?? generateMcpToolName(serverName, serverToolName),
@@ -289,7 +289,7 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
 
   protected createInvocation(
     params: ToolParams,
-    messageBus: MessageBus,
+    messageBus: IToolMessageBus,
   ): ToolInvocation<ToolParams, ToolResult> {
     return new DiscoveredMCPToolInvocation(
       this.mcpTool,

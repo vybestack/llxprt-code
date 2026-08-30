@@ -35,6 +35,7 @@
       "auth",
       "core",
       "ide-integration",
+      "mcp",
       "policy",
       "providers",
       "settings",
@@ -67,7 +68,7 @@
     ],
     "ide-integration": ["telemetry"],
     "lsp": [],
-    "mcp": ["core", "settings", "storage", "tools"],
+    "mcp": ["auth", "settings", "storage", "telemetry", "tools"],
     "policy": [],
     "providers": ["auth", "core", "settings", "storage", "telemetry", "tools"],
     "settings": ["storage"],
@@ -78,7 +79,7 @@
     "vscode-ide-companion": ["ide-integration"]
   },
   "testOnlyEdges": {
-    "agents": ["mcp", "storage"],
+    "agents": ["storage"],
     "core": ["providers", "test-utils"],
     "tools": ["storage", "test-utils"],
     "auth": ["test-utils"],

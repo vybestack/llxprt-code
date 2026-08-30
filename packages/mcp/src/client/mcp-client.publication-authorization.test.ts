@@ -9,10 +9,10 @@ import { afterEach, describe, expect, it, vi, type Mock } from 'bun:test';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import * as ClientLib from '@modelcontextprotocol/sdk/client/index.js';
 import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
-import type { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
-import { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
+import type { Config } from './test-support/mcpClientTestSupport.js';
+import type { PromptRegistry } from './test-support/mcpClientTestSupport.js';
+import type { ResourceRegistry } from './test-support/mcpClientTestSupport.js';
+import { WorkspaceContext } from './test-support/mcpClientTestSupport.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { McpClient, MCPServerStatus } from './mcp-client.js';
 

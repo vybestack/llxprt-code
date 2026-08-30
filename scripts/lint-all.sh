@@ -33,6 +33,15 @@ else
     FAILED=1
 fi
 
+# Runtime dependency declaration guard (issue #3305)
+echo -e "\n${YELLOW}Running runtime-dependency declaration guard...${NC}"
+if npm run lint:runtime-deps; then
+    echo -e "${GREEN}✓ runtime-dependency declaration guard passed${NC}"
+else
+    echo -e "${RED}✗ runtime-dependency declaration guard failed${NC}"
+    FAILED=1
+fi
+
 # Doc links guard (issue #2654)
 echo -e "\n${YELLOW}Running doc-links guard...${NC}"
 if npm run lint:doc-links; then

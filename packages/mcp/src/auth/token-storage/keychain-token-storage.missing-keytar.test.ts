@@ -10,7 +10,7 @@ import {
   resetKeytarLoader,
   setKeytarLoader,
 } from './keychain-token-storage.js';
-import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry/utils/debugLogger.js';
 
 describe('KeychainTokenStorage when keytar is missing', () => {
   afterEach(() => {

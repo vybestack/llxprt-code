@@ -55,6 +55,7 @@ import {
   wrapRegistryWithConfirmation,
   injectConfirmationForcingPolicy,
 } from './confirmationForcing.js';
+import { wireMcpHostServices } from './mcpHostWiring.js';
 import {
   rebuildLoop,
   createLoopHolder,
@@ -83,6 +84,7 @@ import {
  * @pseudocode createAgent.md steps 10-176
  */
 export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
+  wireMcpHostServices();
   // @pseudocode createAgent.md steps 10-13: validate config, resolve auth, runtimeId
   // STRICT-SCHEMA HAZARD: destructure callbacks off the input BEFORE parsing —
   // AgentConfigSchema is .strict() and rejects function-typed fields.

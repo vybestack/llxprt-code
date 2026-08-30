@@ -140,6 +140,7 @@
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/api-logs": "^0.219.0",
+    "@opentelemetry/context-async-hooks": "^2.8.0",
     "@opentelemetry/core": "^2.8.0",
     "@opentelemetry/instrumentation-http": "^0.219.0",
     "@opentelemetry/resources": "^2.8.0",
@@ -149,7 +150,8 @@
     "@opentelemetry/sdk-trace-node": "^2.8.0",
     "@opentelemetry/semantic-conventions": "^1.29.0",
     "@vybestack/llxprt-code-storage": "file:../storage",
-    "debug": "^4.3.4"
+    "debug": "^4.3.4",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",

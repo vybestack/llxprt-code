@@ -9,13 +9,13 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import * as crypto from 'node:crypto';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import { getErrorMessage } from '@vybestack/llxprt-code-core/utils/errors.js';
+import { getErrorMessage } from '@vybestack/llxprt-code-tools/utils/errors.js';
 import {
   BaseTokenStore,
   type MCPOAuthToken,
   type MCPOAuthCredentials,
 } from './token-store.js';
-import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry/utils/debugLogger.js';
 import { firstTruthyString } from '../utils/string-fallback.js';
 
 const safeOsHostname = (): string => {

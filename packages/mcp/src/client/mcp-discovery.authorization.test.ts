@@ -6,8 +6,8 @@
 
 import { describe, expect, it, vi } from 'bun:test';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
+import type { Config } from './test-support/mcpClientTestSupport.js';
+import { PromptRegistry } from './test-support/mcpClientTestSupport.js';
 import {
   discoverPrompts,
   discoverResources,

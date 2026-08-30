@@ -9,9 +9,8 @@
     "baseUrl": ".",
     "paths": {
       "@vybestack/llxprt-code-auth": ["../auth/src/index.ts"],
+      "@vybestack/llxprt-code-auth/*": ["../auth/src/*"],
       "@vybestack/llxprt-code-mcp": ["./index.ts"],
-      "@vybestack/llxprt-code-core": ["../core/index.ts"],
-      "@vybestack/llxprt-code-core/*": ["../core/src/*"],
       "@vybestack/llxprt-code-settings": ["../settings/index.ts"],
       "@vybestack/llxprt-code-settings/*": ["../settings/src/*"],
       "@vybestack/llxprt-code-tools": ["../tools/index.ts"],
@@ -23,7 +22,6 @@
     "index.ts",
     "src/**/*.ts",
     "src/**/*.json",
-    "../core/src/types/wasm.d.ts",
     "../settings/index.ts",
     "../settings/src/**/*.ts",
     "../tools/index.ts",

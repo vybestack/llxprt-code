@@ -371,14 +371,13 @@ describe('issue-2994 changed-files mode (real hermetic temporary git repos)', ()
       '--dry-run',
     ]);
     expect(result.status).toBe(0);
-    // reverseClosure('core') = {a2a-server, agents, cli, mcp, providers}
+    // reverseClosure('core') = {a2a-server, agents, cli, providers}
     expect(extractScopedTargets(result.stdout)).toEqual([
       'integration-tests',
       'packages/a2a-server',
       'packages/agents',
       'packages/cli',
       'packages/core',
-      'packages/mcp',
       'packages/providers',
     ]);
   }, 120_000);

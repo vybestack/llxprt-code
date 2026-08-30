@@ -18,13 +18,13 @@ import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import type { Mock } from 'bun:test';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { Config } from './test-support/mcpClientTestSupport.js';
 import { MCPOAuthProvider } from '../auth/oauth-provider.js';
 import { MCPOAuthTokenStorage } from '../auth/oauth-token-storage.js';
-import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
-import type { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
+import type { PromptRegistry } from './test-support/mcpClientTestSupport.js';
+import type { ResourceRegistry } from './test-support/mcpClientTestSupport.js';
 
-import { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
+import { WorkspaceContext } from './test-support/mcpClientTestSupport.js';
 import {
   connectToMcpServer,
   getMCPServerStatus,
@@ -64,18 +64,17 @@ void vi.mock('../auth/oauth-token-storage.js', () =>
 void vi.mock('../auth/oauth-utils.js', () => automock(realOauthUtilsModule));
 void vi.mock('google-auth-library', () => ({ GoogleAuth: vi.fn() }));
 
-void vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
-  coreEvents: {
-    emitFeedback: vi.fn(),
-  },
-}));
-
 const createMockResourceRegistry = (): ResourceRegistry =>
   ({
     setResourcesForServer: vi.fn(),
     removeResourcesByServer: vi.fn(),
   }) as unknown as ResourceRegistry;
 import type { TransportWithInternals } from './mcpClientTestHelpers.js';
+import { registerMcpHostServices } from '../host/hostServices.js';
+
+// Exercises the real host seam instead of mocking a module (#3305).
+const mockEmitFeedback = vi.fn();
+registerMcpHostServices({ emitFeedback: mockEmitFeedback });
 
 async function expectPending(promise: Promise<unknown>): Promise<void> {
   expect(await Promise.race([promise, Promise.resolve('pending')])).toBe(

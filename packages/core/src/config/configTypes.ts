@@ -21,6 +21,7 @@ import type { SkillDefinition } from '../skills/skillManager.js';
  */
 import type { BucketFailureReason } from '../runtime/contracts/BucketFailureReason.js';
 import type { MCPOAuthConfig } from '@vybestack/llxprt-code-mcp';
+import type { MCPServerConfig } from '@vybestack/llxprt-code-mcp/config/mcpServerConfig.js';
 import type { OutputFormat } from '../utils/output-format.js';
 import type { FileFilteringOptions } from './constants.js';
 import type { EventEmitter } from 'node:events';
@@ -43,7 +44,12 @@ import type { ToolSchedulerFactory } from '../core/toolSchedulerContract.js';
 import type { TaskToolRegistration } from './toolRegistryFactory.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
-export type { MCPOAuthConfig, AnyToolInvocation, SkillDefinition };
+export type {
+  MCPOAuthConfig,
+  MCPServerConfig,
+  AnyToolInvocation,
+  SkillDefinition,
+};
 
 /**
  * Registration hook for post-skill-discovery tool registration.
@@ -231,58 +237,12 @@ export const DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES = 1000;
 
 export const DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES = 15 * 1024 * 1024;
 
-export class MCPServerConfig {
-  constructor(
-    // For stdio transport
-    readonly command?: string,
-    readonly args?: string[],
-    readonly env?: Record<string, string>,
-    readonly cwd?: string,
-    // For sse transport
-    readonly url?: string,
-    // For streamable http transport
-    readonly httpUrl?: string,
-    readonly headers?: Record<string, string>,
-    // For websocket transport
-    readonly tcp?: string,
-    /**
-     * Transport type for URL-based servers.
-     * When set, disables automatic HTTP→SSE fallback.
-     * - 'http' → StreamableHTTPClientTransport
-     * - 'streamable-http' → alias for 'http' (StreamableHTTPClientTransport)
-     * - 'sse'  → SSEClientTransport
-     * - omitted → defaults to HTTP with SSE fallback (deprecated; add type explicitly)
-     *
-     * Note: 'httpUrl' is deprecated; use 'url' + 'type: "http"' instead.
-     * @plan PLAN-20250219-GMERGE021.R3.P03
-     * @requirement REQ-GMERGE021-R3-001
-     */
-    readonly type?: 'sse' | 'http' | 'streamable-http',
-    // Common
-    readonly timeout?: number,
-    readonly trust?: boolean,
-    // Metadata
-    readonly description?: string,
-    readonly includeTools?: string[],
-    readonly excludeTools?: string[],
-    readonly extensionName?: string,
-    readonly extension?: LlxprtExtension,
-    // OAuth configuration
-    readonly oauth?: MCPOAuthConfig,
-    readonly authProviderType?: AuthProviderType,
-    // Service Account Configuration
-    /* targetAudience format: CLIENT_ID.apps.googleusercontent.com */
-    readonly targetAudience?: string,
-    /* targetServiceAccount format: <service-account-name>@<project-num>.iam.gserviceaccount.com */
-    readonly targetServiceAccount?: string,
-  ) {}
-}
-
-export enum AuthProviderType {
-  DYNAMIC_DISCOVERY = 'dynamic_discovery',
-  GOOGLE_CREDENTIALS = 'google_credentials',
-  SERVICE_ACCOUNT_IMPERSONATION = 'service_account_impersonation',
-}
+// Owned by @vybestack/llxprt-code-auth (a dependency-graph leaf) so that
+// @vybestack/llxprt-code-mcp can use it without depending on core, which
+// value-imports mcp (#3305). Re-exported here to keep core's public surface
+// unchanged for existing consumers.
+import { AuthProviderType } from '@vybestack/llxprt-code-auth/mcp-auth-provider-type.js';
+export { AuthProviderType };
 
 export interface SandboxConfig {
   command: 'docker' | 'podman' | 'sandbox-exec';

@@ -20,17 +20,21 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
-import type { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
-import { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
+import type { Config } from './test-support/mcpClientTestSupport.js';
+import type { PromptRegistry } from './test-support/mcpClientTestSupport.js';
+import type { ResourceRegistry } from './test-support/mcpClientTestSupport.js';
+import { WorkspaceContext } from './test-support/mcpClientTestSupport.js';
 import {
   ResourceListChangedNotificationSchema,
   ToolListChangedNotificationSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { McpClient, populateMcpServerCommand } from './mcp-client.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
+import { registerMcpHostServices } from '../host/hostServices.js';
+
+// Exercises the real host seam instead of mocking a module (#3305).
+const mockEmitFeedback = vi.fn();
+registerMcpHostServices({ emitFeedback: mockEmitFeedback });
 
 const realStdioModule = {
   ...(await import('@modelcontextprotocol/sdk/client/stdio.js')),
@@ -60,12 +64,6 @@ void vi.mock('../auth/oauth-token-storage.js', () =>
 );
 void vi.mock('../auth/oauth-utils.js', () => automock(realOauthUtilsModule));
 void vi.mock('google-auth-library', () => ({ GoogleAuth: vi.fn() }));
-
-void vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
-  coreEvents: {
-    emitFeedback: vi.fn(),
-  },
-}));
 
 const createMockResourceRegistry = (): ResourceRegistry =>
   ({
@@ -349,7 +347,7 @@ describe('mcp-client', () => {
       expect(onToolsUpdatedSpy).toHaveBeenCalled();
 
       // It should emit feedback event
-      expect(coreEvents.emitFeedback).toHaveBeenCalledWith(
+      expect(mockEmitFeedback).toHaveBeenCalledWith(
         'info',
         'Tools updated for server: test-server',
       );
@@ -405,7 +403,7 @@ describe('mcp-client', () => {
       expect(mockedToolRegistry.removeMcpToolsByServer).toHaveBeenCalled();
 
       // Should NOT emit success feedback
-      expect(coreEvents.emitFeedback).not.toHaveBeenCalledWith(
+      expect(mockEmitFeedback).not.toHaveBeenCalledWith(
         'info',
         expect.stringContaining('Tools updated'),
       );
@@ -688,7 +686,7 @@ describe('mcp-client', () => {
 
         expect(vi.getTimerCount()).toBe(0);
         expect(toolRegistry.removeMcpToolsByServer).toHaveBeenCalledTimes(2);
-        expect(coreEvents.emitFeedback).not.toHaveBeenCalled();
+        expect(mockEmitFeedback).not.toHaveBeenCalled();
       } finally {
         vi.useRealTimers();
       }
@@ -824,7 +822,7 @@ describe('mcp-client', () => {
         'test-server',
       );
       expect(toolRegistry.registerTool).not.toHaveBeenCalled();
-      expect(coreEvents.emitFeedback).not.toHaveBeenCalled();
+      expect(mockEmitFeedback).not.toHaveBeenCalled();
     });
 
     it('removes newly registered tools when authorization is revoked during the update callback', async () => {
@@ -875,7 +873,7 @@ describe('mcp-client', () => {
 
       expect(toolRegistry.registerTool).toHaveBeenCalledOnce();
       expect(toolRegistry.removeMcpToolsByServer).toHaveBeenCalledTimes(2);
-      expect(coreEvents.emitFeedback).not.toHaveBeenCalled();
+      expect(mockEmitFeedback).not.toHaveBeenCalled();
     });
   });
 

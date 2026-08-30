@@ -12,9 +12,9 @@ import type {
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { GoogleAuth } from 'google-auth-library';
 import { OAuthUtils, FIVE_MIN_BUFFER_MS } from './oauth-utils.js';
-import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import type { MCPServerConfig } from '../config/mcpServerConfig.js';
 import type { McpAuthProvider } from './auth-provider.js';
-import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry/utils/debugLogger.js';
 
 function createIamApiUrl(targetSA: string): string {
   return `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${encodeURIComponent(targetSA)}:generateIdToken`;

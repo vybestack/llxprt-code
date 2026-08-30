@@ -12,9 +12,9 @@ import type {
   OAuthTokens,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { GoogleAuth } from 'google-auth-library';
-import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import type { MCPServerConfig } from '../config/mcpServerConfig.js';
 import { FIVE_MIN_BUFFER_MS } from './oauth-utils.js';
-import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry/utils/debugLogger.js';
 
 export class GoogleCredentialProvider implements McpAuthProvider {
   private readonly auth: GoogleAuth;

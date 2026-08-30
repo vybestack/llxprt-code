@@ -13,11 +13,11 @@ import * as ClientLib from '@modelcontextprotocol/sdk/client/index.js';
 import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'bun:test';
 import type { Mock } from 'bun:test';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { PromptRegistry } from '@vybestack/llxprt-code-core/prompts/prompt-registry.js';
-import type { ResourceRegistry } from '@vybestack/llxprt-code-core/resources/resource-registry.js';
-import { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
-import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
+import type { Config } from './test-support/mcpClientTestSupport.js';
+import type { PromptRegistry } from './test-support/mcpClientTestSupport.js';
+import type { ResourceRegistry } from './test-support/mcpClientTestSupport.js';
+import { WorkspaceContext } from './test-support/mcpClientTestSupport.js';
+import { registerMcpHostServices } from '../host/hostServices.js';
 import {
   ReadResourceResultSchema,
   ResourceListChangedNotificationSchema,
@@ -26,6 +26,10 @@ import {
 import { McpClient } from './mcp-client.js';
 import { MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE } from './mcp-errors.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+
+// Exercises the real host seam instead of mocking a module (#3305).
+const mockEmitFeedback = vi.fn();
+registerMcpHostServices({ emitFeedback: mockEmitFeedback });
 
 const realStdioModule = {
   ...(await import('@modelcontextprotocol/sdk/client/stdio.js')),
@@ -69,12 +73,6 @@ void vi.mock('../auth/oauth-token-storage.js', () =>
 );
 void vi.mock('../auth/oauth-utils.js', () => automock(realOauthUtilsModule));
 void vi.mock('google-auth-library', () => ({ GoogleAuth: vi.fn() }));
-
-void vi.mock('@vybestack/llxprt-code-core/utils/events.js', () => ({
-  coreEvents: {
-    emitFeedback: vi.fn(),
-  },
-}));
 
 const createMockResourceRegistry = (): ResourceRegistry =>
   ({
@@ -307,7 +305,7 @@ describe('mcp-client', () => {
         expect.objectContaining({ uri: 'file:///tmp/two.txt' }),
       ]);
 
-      expect(coreEvents.emitFeedback).toHaveBeenCalledWith(
+      expect(mockEmitFeedback).toHaveBeenCalledWith(
         'info',
         'Resources updated for server: test-server',
       );
@@ -509,7 +507,7 @@ describe('mcp-client', () => {
       expect(toolRegistry.removeMcpToolsByServer).not.toHaveBeenCalled();
       expect(toolRegistry.registerTool).not.toHaveBeenCalled();
       expect(resourceRegistry.setResourcesForServer).not.toHaveBeenCalled();
-      expect(coreEvents.emitFeedback).not.toHaveBeenCalled();
+      expect(mockEmitFeedback).not.toHaveBeenCalled();
     });
 
     it('keeps discovered capabilities stale after synchronous invalidation even if trust returns', async () => {

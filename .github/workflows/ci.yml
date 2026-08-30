@@ -372,6 +372,15 @@ jobs:
         run: |-
           npm run lint:genai-enclave
 
+      - name: 'Run runtime-dependency declaration guard (#3305)'
+        # Fails if any published workspace package imports, at runtime, a
+        # package it does not declare in dependencies/peerDependencies/
+        # optionalDependencies. A devDependencies-only declaration is a
+        # failure: that section is never installed for a consumer, which is
+        # how the published mcp tarball shipped unable to resolve core.
+        run: |-
+          npm run lint:runtime-deps
+
       - name: 'Run legacy-global-path guard (#2606)'
         run: |-
           npm run lint:legacy-paths
