@@ -57,6 +57,9 @@ function isRequiredMissing(requiredValue: unknown): boolean {
   return MISSING_SCHEMA_VALUES.has(requiredValue);
 }
 
+/** Streaming argument buffers, keyed on the block so they survive across ToolFormatter instances. */
+const streamingArgumentBuffers = new WeakMap<ToolCallBlock, string>();
+
 /**
  * Converts tool declarations to various provider formats.
  *
@@ -530,22 +533,19 @@ export class ToolFormatter implements IToolFormatter {
     index: number,
     format: ToolFormat,
   ): void {
-    if (!('_argumentsString' in tc)) {
-      (tc as unknown as { _argumentsString: string })._argumentsString = '';
-    }
+    const previous = streamingArgumentBuffers.get(tc) ?? '';
 
     if (format === 'qwen') {
       logDoubleEscapingInChunk(chunk || '', tc.name || 'unknown', format);
     }
 
-    (tc as unknown as { _argumentsString: string })._argumentsString += chunk;
+    const accumulated = previous + chunk;
+    streamingArgumentBuffers.set(tc, accumulated);
 
     try {
-      const argsStr = (tc as unknown as { _argumentsString: string })
-        ._argumentsString;
-      if (argsStr.trim()) {
+      if (accumulated.trim()) {
         tc.parameters = doubleEscapeProcessToolParameters(
-          argsStr,
+          accumulated,
           tc.name || 'unknown',
           format,
         );
