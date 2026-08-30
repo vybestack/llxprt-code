@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type Schema } from '@google/genai';
+import type { Schema } from './geminiWireTypes.js';
 
 /** Set of values considered missing/falsy in legacy schema checks (non-nullish falsy + nullish). */
 const MISSING_SCHEMA_VALUES = new Set<unknown>([false, 0, '', undefined, null]);

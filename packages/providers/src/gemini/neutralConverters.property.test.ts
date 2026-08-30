@@ -14,7 +14,8 @@
 
 import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
-import { Outcome, Language, type Part } from '@google/genai';
+import type { Part } from './geminiWireTypes.js';
+import { Language, Outcome } from './geminiWireTypes.js';
 import {
   geminiPartToBlock,
   geminiPartsToBlocks,

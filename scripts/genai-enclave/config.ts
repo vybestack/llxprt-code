@@ -45,7 +45,9 @@ export const GENAI_IMPORT_ENCLAVES: readonly ImportEnclave[] = [
   {
     prefix: 'packages/providers/src/gemini/',
     justification:
-      'Gemini provider implementation — needs the SDK for API calls.',
+      'Gemini provider implementation — owns the Gemini wire types and the ' +
+      'Gemini-named exports. No longer imports an SDK; the dependency ' +
+      'allowlist below is empty.',
   },
 ];
 
@@ -84,22 +86,21 @@ export interface DependencyManifestAllowlistEntry {
 export const SANCTIONED_GENAI_VERSION = '1.30.0';
 
 export const GENAI_DEPENDENCY_MANIFESTS: readonly DependencyManifestAllowlistEntry[] =
-  [
-    {
-      workspaceDir: '.',
-      version: SANCTIONED_GENAI_VERSION,
-      justification:
-        'The published root artifact ships core/provider source, so npm must ' +
-        'install the SDK even though root source may not import it.',
-    },
-    {
-      workspaceDir: 'packages/providers',
-      version: SANCTIONED_GENAI_VERSION,
-      justification:
-        'Gemini provider implementation (packages/providers/src/gemini/) ' +
-        'requires the SDK at runtime for API calls.',
-    },
-  ];
+  [];
+
+/**
+ * Workspaces whose package.json must exist and be readable.
+ *
+ * This is deliberately independent of the dependency allowlist above. That
+ * list is now empty because no workspace may declare the SDK, but the guard
+ * still has to be able to READ these manifests to prove the absence. Deriving
+ * the required set from an empty allowlist would mean a deleted manifest
+ * silently passed.
+ */
+export const REQUIRED_MANIFEST_WORKSPACE_DIRS: readonly string[] = [
+  '.',
+  'packages/providers',
+];
 
 /** The exact package name the guard checks for. */
 export const GENAI_PACKAGE = '@google/genai';

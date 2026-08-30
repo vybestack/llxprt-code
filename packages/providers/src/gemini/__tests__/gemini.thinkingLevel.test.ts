@@ -30,7 +30,11 @@ const googleGenAIState = {
   streamPlans: [] as Array<Array<Record<string, unknown>>>,
 };
 
-void vi.mock('@google/genai', () => {
+import type { CreateGeminiApiClient } from '../GeminiProvider.js';
+// Injected into GeminiProvider rather than module-mocked. `vi.mock` registers
+// process-wide and bun hoists it ahead of the whole run, so this stub used to
+// leak into every suite loaded alongside this one.
+const injectedClientFactory = (() => {
   class FakeGoogleGenAI {
     readonly models: {
       generateContentStream: ReturnType<typeof vi.fn>;
@@ -58,10 +62,15 @@ void vi.mock('@google/genai', () => {
     }
   }
 
-  const Type = { OBJECT: 'object' };
+  // Mirrors the real Gemini schema-type constant, which is uppercase.
+  const Type = { OBJECT: 'OBJECT' };
 
-  return { GoogleGenAI: FakeGoogleGenAI, Type };
-});
+  return {
+    createGeminiApiClient: async (opts: Record<string, unknown>) =>
+      new FakeGoogleGenAI(opts),
+    Type,
+  };
+})().createGeminiApiClient as unknown as CreateGeminiApiClient;
 
 const queueGoogleStream = (responses: Array<Record<string, unknown>>): void => {
   googleGenAIState.streamPlans.push(responses);
@@ -80,6 +89,10 @@ function buildCallOptions(
 }
 
 class TestGeminiProvider extends GeminiProvider {
+  constructor() {
+    super(undefined, undefined, undefined, injectedClientFactory);
+  }
+
   setEphemeralSettings(settings: Record<string, unknown>): void {
     const currentConfig = (
       this as unknown as { providerConfig?: IProviderConfig }

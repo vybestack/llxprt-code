@@ -14,11 +14,15 @@ import {
 } from '../BaseProvider.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  type GenerateContentParameters,
-  type GenerateContentResponse,
-  type GoogleGenAIOptions,
-} from '@google/genai';
+import type {
+  GenerateContentParameters,
+  GenerateContentResponse,
+} from './geminiWireTypes.js';
+import type { GeminiApiClientOptions } from './geminiWireTypes.js';
+import { createGeminiApiClient } from './geminiApiClientFactory.js';
+
+/** The factory shape {@link GeminiProvider} depends on. */
+export type CreateGeminiApiClient = typeof createGeminiApiClient;
 import {
   getSettingOrEnv,
   getVertexAIAuthConfig,
@@ -52,7 +56,23 @@ import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacemen
  * package to keep the provider class thin and within lint budgets.
  */
 export class GeminiProvider extends BaseProvider {
-  constructor(apiKey?: string, baseURL?: string, config?: Config) {
+  /**
+   * How this provider obtains its API client.
+   *
+   * Injected rather than imported at the call sites so tests can supply a fake
+   * without `vi.mock`. Module mocks are registered process-wide and bun hoists
+   * them ahead of every test in the run, so a mock declared in one suite leaks
+   * into every suite loaded alongside it. That made the wire tests fail as a
+   * batch while passing per file.
+   */
+  private readonly createClient: CreateGeminiApiClient;
+
+  constructor(
+    apiKey?: string,
+    baseURL?: string,
+    config?: Config,
+    createClient: CreateGeminiApiClient = createGeminiApiClient,
+  ) {
     const baseConfig: BaseProviderConfig = {
       name: 'gemini',
       apiKey,
@@ -61,6 +81,7 @@ export class GeminiProvider extends BaseProvider {
     };
 
     super(baseConfig, config);
+    this.createClient = createClient;
   }
 
   private getLogger(): DebugLogger {
@@ -171,7 +192,7 @@ export class GeminiProvider extends BaseProvider {
   }
 
   override getDefaultModel(): string {
-    return 'gemini-2.5-pro';
+    return 'gemini-3.7-flash';
   }
 
   override getModelParams(): Record<string, unknown> | undefined {
@@ -268,7 +289,7 @@ export class GeminiProvider extends BaseProvider {
   private buildVertexAIOptions(
     isVertex: boolean,
     vertexConfig: VertexAIAuthConfig,
-  ): Pick<GoogleGenAIOptions, 'project' | 'location'> {
+  ): Pick<GeminiApiClientOptions, 'project' | 'location'> {
     if (!isVertex) {
       return {};
     }
@@ -283,7 +304,7 @@ export class GeminiProvider extends BaseProvider {
     authMode: GeminiAuthMode,
     httpOptions: ReturnType<typeof this.createHttpOptions>,
     baseURL?: string,
-  ): GoogleGenAIOptions {
+  ): GeminiApiClientOptions {
     const isVertex = authMode === 'vertex-ai';
     const settingsService = this.resolveSettingsServiceIfAvailable();
     const vertexConfig = getVertexAIAuthConfig(settingsService);
@@ -369,8 +390,7 @@ export class GeminiProvider extends BaseProvider {
       params: GenerateContentParameters,
     ) => Promise<AsyncIterable<GenerateContentResponse>>;
   }> {
-    const { GoogleGenAI } = await import('@google/genai');
-    const genAI = new GoogleGenAI(
+    const client = await this.createClient(
       this.buildGoogleGenAIOptions(
         setup.authToken,
         setup.authMode,
@@ -378,7 +398,7 @@ export class GeminiProvider extends BaseProvider {
         setup.baseURL,
       ),
     );
-    return genAI.models;
+    return client.models;
   }
 
   protected nonOAuthNonStreamingGenerate(

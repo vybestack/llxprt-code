@@ -31,10 +31,12 @@ const googleGenAIConstructor = vi.fn().mockImplementation(() => ({
   },
 }));
 
-void vi.mock('@google/genai', () => ({
-  GoogleGenAI: googleGenAIConstructor,
-  Type: { OBJECT: 'object' },
-}));
+import type { CreateGeminiApiClient } from './GeminiProvider.js';
+// The factory is injected into GeminiProvider rather than module-mocked:
+// `vi.mock` registers process-wide and bun hoists it ahead of the whole
+// run, so the stub leaked into every suite loaded alongside this one.
+const injectedClientFactory =
+  googleGenAIConstructor as unknown as CreateGeminiApiClient;
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
@@ -51,7 +53,6 @@ const mockSettingsService = {
 void vi.mock('@vybestack/llxprt-code-settings', () => ({
   ...realLlxprtCodeSettingsModule,
   getSettingsService: vi.fn(() => mockSettingsService),
-  SETTINGS_REGISTRY: [],
 }));
 
 describe('GeminiProvider - MediaBlock support', () => {
@@ -88,7 +89,12 @@ describe('GeminiProvider - MediaBlock support', () => {
     generateContentStreamMock.mockResolvedValueOnce(fakeStream);
     process.env.GEMINI_API_KEY = 'test-key';
 
-    const provider = new GeminiProvider('test-key');
+    const provider = new GeminiProvider(
+      'test-key',
+      undefined,
+      undefined,
+      injectedClientFactory,
+    );
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -150,7 +156,12 @@ describe('GeminiProvider - MediaBlock support', () => {
     generateContentStreamMock.mockResolvedValueOnce(fakeStream);
     process.env.GEMINI_API_KEY = 'test-key';
 
-    const provider = new GeminiProvider('test-key');
+    const provider = new GeminiProvider(
+      'test-key',
+      undefined,
+      undefined,
+      injectedClientFactory,
+    );
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -221,7 +232,12 @@ describe('GeminiProvider - MediaBlock support', () => {
     generateContentStreamMock.mockResolvedValueOnce(fakeStream);
     process.env.GEMINI_API_KEY = 'test-key';
 
-    const provider = new GeminiProvider('test-key');
+    const provider = new GeminiProvider(
+      'test-key',
+      undefined,
+      undefined,
+      injectedClientFactory,
+    );
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -276,7 +292,12 @@ describe('GeminiProvider - MediaBlock support', () => {
     generateContentStreamMock.mockResolvedValueOnce(fakeStream);
     process.env.GEMINI_API_KEY = 'test-key';
 
-    const provider = new GeminiProvider('test-key');
+    const provider = new GeminiProvider(
+      'test-key',
+      undefined,
+      undefined,
+      injectedClientFactory,
+    );
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -330,7 +351,12 @@ describe('GeminiProvider - MediaBlock support', () => {
     generateContentStreamMock.mockResolvedValueOnce(fakeStream);
     process.env.GEMINI_API_KEY = 'test-key';
 
-    const provider = new GeminiProvider('test-key');
+    const provider = new GeminiProvider(
+      'test-key',
+      undefined,
+      undefined,
+      injectedClientFactory,
+    );
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -385,7 +411,12 @@ describe('GeminiProvider - MediaBlock support', () => {
     generateContentStreamMock.mockResolvedValueOnce(fakeStream);
     process.env.GEMINI_API_KEY = 'test-key';
 
-    const provider = new GeminiProvider('test-key');
+    const provider = new GeminiProvider(
+      'test-key',
+      undefined,
+      undefined,
+      injectedClientFactory,
+    );
     const contents: IContent[] = [
       {
         speaker: 'human',
@@ -440,7 +471,12 @@ describe('GeminiProvider - MediaBlock support', () => {
     generateContentStreamMock.mockResolvedValueOnce(fakeStream);
     process.env.GEMINI_API_KEY = 'test-key';
 
-    const provider = new GeminiProvider('test-key');
+    const provider = new GeminiProvider(
+      'test-key',
+      undefined,
+      undefined,
+      injectedClientFactory,
+    );
     const contents: IContent[] = [
       {
         speaker: 'human',

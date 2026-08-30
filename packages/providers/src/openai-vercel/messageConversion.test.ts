@@ -16,8 +16,8 @@
 
 /**
  * @plan PLAN-20251127-OPENAIVERCEL.P05
- * @requirement REQ-OAV-MC-001 - Convert IContent to Vercel CoreMessage
- * @requirement REQ-OAV-MC-002 - Convert CoreMessage to IContent
+ * @requirement REQ-OAV-MC-001 - Convert IContent to Vercel ModelMessage
+ * @requirement REQ-OAV-MC-002 - Convert ModelMessage to IContent
  * @requirement REQ-OAV-MC-003 - Handle all message types (user, assistant, tool, system)
  * @requirement REQ-OAV-MC-004 - Handle tool calls and tool responses
  * @requirement REQ-OAV-MC-005 - Handle mixed content (text + tool calls)
@@ -738,7 +738,7 @@ describe('messageConversion', () => {
 
     describe('edge cases', () => {
       it('should handle empty messages array', () => {
-        const messages: CoreMessage[] = [];
+        const messages: ModelMessage[] = [];
         const result = convertFromVercelMessages(messages);
         expect(result).toStrictEqual([]);
       });

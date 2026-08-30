@@ -4,29 +4,15 @@
 
 Every tracked TypeScript file under `packages/**` that imports `@google/genai`, classified to the downstream issue that removes the import (or to the permanent Gemini `enclave`). This file is the baseline the #2352 enforcement ratchet compares against — the count may only ever decrease as migration issues land.
 
-**Total importers:** 18
+**Total importers:** 4
 
 **Per-owner breakdown:**
 
-- `enclave`: 18
+- `enclave`: 4
 
-| File                                                                      | Owner   |
-| ------------------------------------------------------------------------- | ------- |
-| `packages/providers/src/gemini/GeminiMessageConverter.ts`                 | enclave |
-| `packages/providers/src/gemini/GeminiProvider.mediaBlock.test.ts`         | enclave |
-| `packages/providers/src/gemini/GeminiProvider.test.ts`                    | enclave |
-| `packages/providers/src/gemini/GeminiProvider.ts`                         | enclave |
-| `packages/providers/src/gemini/__tests__/gemini.stateless.test.ts`        | enclave |
-| `packages/providers/src/gemini/__tests__/gemini.thinkingLevel.test.ts`    | enclave |
-| `packages/providers/src/gemini/__tests__/gemini.thoughtSignature.test.ts` | enclave |
-| `packages/providers/src/gemini/__tests__/gemini.userMemory.test.ts`       | enclave |
-| `packages/providers/src/gemini/geminiGenerationExecution.ts`              | enclave |
-| `packages/providers/src/gemini/geminiGenerationSetup.ts`                  | enclave |
-| `packages/providers/src/gemini/geminiRequestBuilding.ts`                  | enclave |
-| `packages/providers/src/gemini/geminiResponseMapper.test.ts`              | enclave |
-| `packages/providers/src/gemini/geminiResponseMapper.ts`                   | enclave |
-| `packages/providers/src/gemini/geminiSchemaHelpers.ts`                    | enclave |
-| `packages/providers/src/gemini/neutralConverters.property.test.ts`        | enclave |
-| `packages/providers/src/gemini/neutralConverters.test.ts`                 | enclave |
-| `packages/providers/src/gemini/neutralConverters.ts`                      | enclave |
-| `packages/providers/src/gemini/thoughtSignatures.ts`                      | enclave |
+| File                                                      | Owner   |
+| --------------------------------------------------------- | ------- |
+| `packages/providers/src/gemini/geminiAiSdkConverters.ts`  | enclave |
+| `packages/providers/src/gemini/geminiApiClientFactory.ts` | enclave |
+| `packages/providers/src/gemini/geminiWireTypes.ts`        | enclave |
+| `packages/providers/src/gemini/neutralConverters.ts`      | enclave |
