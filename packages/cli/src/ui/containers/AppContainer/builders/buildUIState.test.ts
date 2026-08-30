@@ -7,6 +7,7 @@
 import { describe, it, expect } from 'bun:test';
 import { buildUIState, type UIStateParams } from './buildUIState.js';
 import { StreamingState } from '../../../types.js';
+import type { Profile } from '@vybestack/llxprt-code-settings';
 import type { CommandContext } from '../../../commands/types.js';
 
 const makeParams = (): UIStateParams => ({
@@ -227,6 +228,27 @@ describe('buildUIState', () => {
     expect(result.renderMarkdown).toBe(false);
     expect(result.activeShellPtyId).toBeNull();
     expect(result.embeddedShellFocused).toBe(false);
+  });
+
+  it('passes selected profile data through unchanged', () => {
+    const profile: Profile = {
+      version: 1,
+      provider: 'test-provider',
+      model: 'test-model',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+    const params = makeParams();
+    params.selectedProfileData = profile;
+
+    const result = buildUIState(params);
+
+    expect(result.selectedProfileData).toBe(profile);
+
+    const paramsWithoutProfile = makeParams();
+    const resultWithoutProfile = buildUIState(paramsWithoutProfile);
+
+    expect(resultWithoutProfile.selectedProfileData).toBe(null);
   });
 
   it('maps dialog states correctly', () => {

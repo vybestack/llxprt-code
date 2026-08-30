@@ -130,6 +130,18 @@ describe('IdeClient', () => {
     delete process.env['LLXPRT_CODE_IDE_SERVER_PORT'];
   });
 
+  it('returns one singleton instance until reset', async () => {
+    const a = await IdeClient.getInstance();
+    const b = await IdeClient.getInstance();
+
+    expect(b).toBe(a);
+
+    IdeClient.resetInstance();
+    const c = await IdeClient.getInstance();
+
+    expect(c).not.toBe(a);
+  });
+
   describe('connect', () => {
     it('should connect using HTTP when port is provided in config file', async () => {
       const config = { port: '8080' };

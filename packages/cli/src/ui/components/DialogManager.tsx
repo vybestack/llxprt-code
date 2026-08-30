@@ -366,7 +366,7 @@ function renderProfileDetailDialogView(
     <Box flexDirection="column">
       <ProfileDetailDialog
         profileName={uiState.selectedProfileName ?? ''}
-        profile={uiState.selectedProfileData as Profile | null}
+        profile={uiState.selectedProfileData}
         onClose={uiActions.closeProfileDetailDialog}
         onLoad={uiActions.loadProfileFromDetail}
         onDelete={uiActions.deleteProfileFromDetail}
@@ -384,12 +384,13 @@ function renderProfileDetailDialogView(
 function renderProfileEditorDialogView(
   uiState: ReturnType<typeof useUIState>,
   uiActions: ReturnType<typeof useUIActions>,
+  profile: Profile,
 ) {
   return (
     <Box flexDirection="column">
       <ProfileInlineEditor
         profileName={uiState.selectedProfileName ?? ''}
-        profile={uiState.selectedProfileData as Profile}
+        profile={profile}
         onSave={
           uiActions.saveProfileFromEditor as (
             name: string,
@@ -423,7 +424,11 @@ function renderProfileDialogs(
     uiState.isProfileEditorDialogOpen &&
     uiState.selectedProfileData != null
   ) {
-    return renderProfileEditorDialogView(uiState, uiActions);
+    return renderProfileEditorDialogView(
+      uiState,
+      uiActions,
+      uiState.selectedProfileData,
+    );
   }
   return null;
 }
