@@ -16,6 +16,7 @@ on:
       # The interactive UI test and its Bun test preload
       - 'scripts/tests/test-setup.ts'
       - 'scripts/tests/interactive-ui.test.ts'
+      - 'scripts/tmux-script.startup-smoke.json'
       # The scenario JSON files executed by the test
       - 'scripts/tmux-script.slash-autocomplete.json'
       - 'scripts/tmux-script.approval-ui.json'
@@ -97,6 +98,7 @@ on:
       - 'scripts/tmux-harness-steps.ts'
       - 'scripts/tests/test-setup.ts'
       - 'scripts/tests/interactive-ui.test.ts'
+      - 'scripts/tmux-script.startup-smoke.json'
       - 'scripts/tmux-script.slash-autocomplete.json'
       - 'scripts/tmux-script.approval-ui.json'
       - 'scripts/tmux-script.approval-always.json'

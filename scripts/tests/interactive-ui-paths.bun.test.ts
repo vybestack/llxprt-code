@@ -93,6 +93,7 @@ describe('interactive-ui.yml: direct harness inputs are included', () => {
 
   it('includes every executed scenario JSON file', () => {
     const executedScenarios = [
+      'scripts/tmux-script.startup-smoke.json',
       'scripts/tmux-script.slash-autocomplete.json',
       'scripts/tmux-script.approval-ui.json',
       'scripts/tmux-script.approval-always.json',

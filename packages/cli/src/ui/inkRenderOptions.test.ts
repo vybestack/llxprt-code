@@ -87,4 +87,42 @@ describe('inkRenderOptions', () => {
       }),
     );
   });
+
+  it('disables incremental rendering when alternate buffer is explicitly off', () => {
+    const options = inkRenderOptions(
+      { getScreenReader: () => false },
+      {
+        merged: {
+          ui: { useAlternateBuffer: false, incrementalRendering: true },
+        },
+      },
+    );
+
+    expect(options).toStrictEqual(
+      expect.objectContaining({
+        exitOnCtrlC: false,
+        patchConsole: false,
+        isScreenReaderEnabled: false,
+        alternateBuffer: false,
+        incrementalRendering: false,
+      }),
+    );
+  });
+
+  it('disables incremental rendering when useAlternateBuffer is omitted', () => {
+    const options = inkRenderOptions(
+      { getScreenReader: () => false },
+      { merged: { ui: { incrementalRendering: true } } },
+    );
+
+    expect(options).toStrictEqual(
+      expect.objectContaining({
+        exitOnCtrlC: false,
+        patchConsole: false,
+        isScreenReaderEnabled: false,
+        alternateBuffer: false,
+        incrementalRendering: false,
+      }),
+    );
+  });
 });
