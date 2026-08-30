@@ -165,9 +165,9 @@ export async function maybeHopIntoSandbox(
     bootstrapSelection,
   } = options;
 
-  if (process.env.SANDBOX) {
-    return;
-  }
+  // Nested-launch suppression is decided entirely in loadSandboxConfig (issue #2943):
+  // a SANDBOX value LLxprt wrote makes config.getSandbox() undefined, so the check
+  // below already stops the hop; a foreign value must not block it.
   const sandboxConfig = config.getSandbox();
   if (!sandboxConfig) {
     return;

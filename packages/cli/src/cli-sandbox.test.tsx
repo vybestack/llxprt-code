@@ -157,7 +157,7 @@ void vi.mock('@vybestack/llxprt-code-core', () => ({
   patchStdio: vi.fn(() => vi.fn()),
 }));
 
-describe('cli sandbox maxHeapSizeMB integration', () => {
+describe('cli sandbox integration', () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
@@ -244,6 +244,57 @@ describe('cli sandbox maxHeapSizeMB integration', () => {
       expect.anything(),
     );
 
+    exitSpy.mockRestore();
+  });
+
+  it('hops into the sandbox when a foreign SANDBOX env var is set (issue #2943)', async () => {
+    const shouldRelaunchMock = shouldRelaunchForMemory as Mock<
+      typeof shouldRelaunchForMemory
+    >;
+    const loadCliConfigMock = loadCliConfig as Mock<typeof loadCliConfig>;
+    const startSandboxMock = start_sandbox as Mock<typeof start_sandbox>;
+
+    shouldRelaunchMock.mockReturnValue([]);
+    // A foreign SANDBOX value (CI export, leftover shell variable) must not
+    // block the hop: nested suppression is decided solely by
+    // loadSandboxConfig, so getSandbox() staying defined must start_sandbox.
+    process.env.SANDBOX = 'some-ci-value';
+    loadCliConfigMock.mockResolvedValue(buildSandboxConfig());
+    (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce(
+      buildArgv('test prompt'),
+    );
+
+    const originalIsTTY = process.stdin.isTTY;
+    const originalSetRawMode = process.stdin.setRawMode;
+    Object.defineProperty(process.stdin, 'isTTY', {
+      value: false,
+      configurable: true,
+    });
+    Object.defineProperty(process.stdin, 'setRawMode', {
+      value: vi.fn(),
+      configurable: true,
+    });
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('PROCESS_EXIT');
+    });
+
+    try {
+      await main();
+    } catch {
+      // Expected from process.exit mock
+    } finally {
+      Object.defineProperty(process.stdin, 'isTTY', {
+        value: originalIsTTY,
+        configurable: true,
+      });
+      Object.defineProperty(process.stdin, 'setRawMode', {
+        value: originalSetRawMode,
+        configurable: true,
+      });
+    }
+
+    expect(startSandboxMock).toHaveBeenCalledTimes(1);
     exitSpy.mockRestore();
   });
 });
