@@ -9,8 +9,8 @@
  *
  * These tests exercise real terminal rendering, keyboard interaction,
  * and screen capture via tmux — covering slash autocomplete, approval dialog
- * rendering, and deterministic UI behavior that cannot be validated
- * with unit tests alone.
+ * rendering, first-run welcome onboarding, and deterministic UI behavior that
+ * cannot be validated with unit tests alone.
  *
  * All tests are gated behind LLXPRT_E2E_TMUX=1 and are skipped
  * unless that env var is set. The dedicated interactive-ui.yml
@@ -159,6 +159,24 @@ describe('Interactive UI (tmux harness)', () => {
             'scripts/fixtures/approval-ui.responses.jsonl',
           ),
         },
+      );
+      assertHarnessSuccess(result);
+    },
+    300_000,
+  );
+
+  runTmuxE2E(
+    'a clean welcome config shows onboarding, and skipping dismisses it',
+    () => {
+      // The startCommand inside scripts/tmux-script.onboarding.json — not this
+      // test — sets LLXPRT_CODE_WELCOME_CONFIG_PATH to a per-run temp path and
+      // removes it before launch, so the CLI starts as a first-run/clean
+      // runner. Editing that scenario to point at a completed config instead
+      // makes it fail on the first waitFor, which is what makes this smoke
+      // meaningful rather than vacuous.
+      const result = runHarness(
+        'tmux-script.onboarding.json',
+        'onboarding-clean-runner',
       );
       assertHarnessSuccess(result);
     },

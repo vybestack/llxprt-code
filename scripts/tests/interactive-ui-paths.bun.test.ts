@@ -93,11 +93,14 @@ describe('interactive-ui.yml: direct harness inputs are included', () => {
     expect(prPaths).toContain(
       'scripts/tmux-script.issue2016-composer.fake.json',
     );
+    expect(prPaths).toContain('scripts/tmux-script.onboarding.json');
   });
 
-  it('includes the scenario config fixtures referenced by all scenarios', () => {
-    // All executed scenarios set LLXPRT_CODE_WELCOME_CONFIG_PATH and
-    // LLXPRT_SYSTEM_SETTINGS_PATH to these direct inputs.
+  it('includes the scenario config fixtures referenced by the scenarios', () => {
+    // Every executed scenario sets LLXPRT_SYSTEM_SETTINGS_PATH, and all but
+    // the onboarding scenario set LLXPRT_CODE_WELCOME_CONFIG_PATH to the
+    // welcome-completed fixture. The onboarding scenario deliberately points
+    // that variable at a per-run temp path so it starts as a clean runner.
     expect(prPaths).toContain('scripts/fixtures/welcome-completed.json');
     expect(prPaths).toContain('scripts/system-settings.interactive-ui.json');
   });
@@ -153,6 +156,14 @@ describe('interactive-ui.yml: conservative package/build/runtime inputs remain',
 
   it('includes CLI UI layer paths', () => {
     expect(prPaths).toContain('packages/cli/src/ui/**');
+  });
+
+  it('includes the welcome config module the onboarding scenario depends on', () => {
+    // tmux-script.onboarding.json drives first-run onboarding through
+    // LLXPRT_CODE_WELCOME_CONFIG_PATH, which only welcomeConfig.ts reads and
+    // writes. It sits outside packages/cli/src/ui/**, so without this entry a
+    // regression confined to that module would never reach this workflow.
+    expect(prPaths).toContain('packages/cli/src/config/welcomeConfig.ts');
   });
 
   it('does NOT include stale packages/ui/** (no such tracked package)', () => {
