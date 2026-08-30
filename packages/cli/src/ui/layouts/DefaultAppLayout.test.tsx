@@ -6,16 +6,19 @@
 
 import { render } from 'ink-testing-library';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
+import { Text } from '../../../test-utils/real-ink.js';
 
-const { Text } = await import('ink');
-const realInkModule = {
-  ...(await import('../../../test-utils/real-ink.js')),
-};
+// Unmock ink to use real Ink with ink-testing-library
+// The global mock in test-setup.ts conflicts with renderer behavior here.
+// Under Bun, ink is redirected to a stub by a resolution plugin rather than a
+// module mock, so there is nothing to unmock.
+const realInkModule = await import('../../../test-utils/real-ink.js');
 
 void vi.mock('ink', () => realInkModule);
 
 import { DefaultAppLayout } from './DefaultAppLayout.js';
-import { useUIState } from '../contexts/UIStateContext.js';
+import { hasActiveDialog } from './DefaultAppLayoutHelpers.js';
+import { useUIState, type UIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
 import { StreamingState } from '../types.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
@@ -23,6 +26,16 @@ import {
   buildSlashCommandRuntime,
   buildUiRuntimeFromSource,
 } from '../cliUiRuntime.js';
+
+const DIALOG_MANAGER_SENTINEL = 'DIALOG_MANAGER_RENDERED';
+const STANDARD_BUFFER_SENTINEL = 'STANDARD_BUFFER_HISTORY';
+const ALTERNATE_BUFFER_SENTINEL = 'ALTERNATE_BUFFER_HISTORY';
+const COMPOSER_SENTINEL = 'COMPOSER_RENDERED';
+
+const DialogManagerSentinel = () => (
+  <Text color="white">{DIALOG_MANAGER_SENTINEL}</Text>
+);
+const ComposerSentinel = () => <Text color="white">{COMPOSER_SENTINEL}</Text>;
 
 void vi.mock('../contexts/UIStateContext.js', () => ({
   useUIState: vi.fn(),
@@ -33,19 +46,21 @@ void vi.mock('../contexts/UIActionsContext.js', () => ({
 }));
 
 void vi.mock('../components/DialogManager.js', () => ({
-  DialogManager: () => <Text color="white">dialog content</Text>,
+  DialogManager: DialogManagerSentinel,
 }));
 
 void vi.mock('../components/Composer.js', () => ({
-  Composer: () => <Text color="white">composer content</Text>,
+  Composer: ComposerSentinel,
 }));
 
+// Mock all other child components as null so this test only verifies
+// dialog gating behavior in DefaultAppLayout.
 void vi.mock('../components/AppHeader.js', () => ({ AppHeader: () => null }));
 void vi.mock('../components/HistoryItemDisplay.js', () => ({
   HistoryItemDisplay: () => null,
 }));
 void vi.mock('../components/ShowMoreLines.js', () => ({
-  ShowMoreLines: () => <Text color="white">standard buffer history</Text>,
+  ShowMoreLines: () => <Text color="white">{STANDARD_BUFFER_SENTINEL}</Text>,
 }));
 void vi.mock('../components/Notifications.js', () => ({
   Notifications: () => null,
@@ -71,7 +86,7 @@ void vi.mock('../components/DetailedMessagesDisplay.js', () => ({
   DetailedMessagesDisplay: () => null,
 }));
 void vi.mock('../components/shared/ScrollableList.js', () => ({
-  ScrollableList: () => <Text color="white">alternate buffer history</Text>,
+  ScrollableList: () => <Text color="white">{ALTERNATE_BUFFER_SENTINEL}</Text>,
 }));
 void vi.mock('../components/shared/VirtualizedList.js', () => ({
   SCROLL_TO_ITEM_END: -1,
@@ -194,7 +209,6 @@ function createBaseUIState() {
     shellModeActive: false,
     thought: undefined,
     branchName: undefined,
-    branchIsDirty: false,
     debugMessage: '',
     errorCount: 0,
     historyTokenCount: 0,
@@ -244,21 +258,67 @@ function createBaseUIState() {
 
     rootUiRef: { current: null },
     pendingHistoryItemRef: { current: null },
-  };
+  } as never;
+}
+
+const ACTIVE_DIALOG_FLAGS = [
+  'showWorkspaceMigrationDialog',
+  'shouldShowIdePrompt',
+  'isFolderTrustDialogOpen',
+  'isWelcomeDialogOpen',
+  'isPermissionsDialogOpen',
+  'confirmationRequest',
+  'isThemeDialogOpen',
+  'isSettingsDialogOpen',
+  'isAuthDialogOpen',
+  'isOAuthCodeDialogOpen',
+  'isEditorDialogOpen',
+  'isProviderDialogOpen',
+  'isLoadProfileDialogOpen',
+  'isCreateProfileDialogOpen',
+  'isProfileListDialogOpen',
+  'isProfileDetailDialogOpen',
+  'isProfileEditorDialogOpen',
+  'isToolsDialogOpen',
+  'isLoggingDialogOpen',
+  'isSubagentDialogOpen',
+  'isModelsDialogOpen',
+  'isSessionBrowserDialogOpen',
+  'isModelConfigDialogOpen',
+  'isPoliciesDialogOpen',
+  'showPrivacyNotice',
+] as const satisfies ReadonlyArray<keyof UIState>;
+
+type ActiveDialogFlag = (typeof ACTIVE_DIALOG_FLAGS)[number];
+
+function createUIStateWithActiveDialog(flag: ActiveDialogFlag): UIState {
+  const baseState: UIState = createBaseUIState();
+  if (flag === 'confirmationRequest') {
+    return {
+      ...baseState,
+      confirmationRequest: {
+        prompt: null,
+        onConfirm: () => {},
+      },
+    };
+  }
+  return { ...baseState, [flag]: true };
 }
 
 function renderDefaultAppLayout(
+  uiState: UIState,
   settings = createSettingsStub(),
 ): ReturnType<typeof render> {
+  mockUseUIState.mockReturnValue(uiState);
+  const config = createConfigStub() as never;
+
   return render(
     <DefaultAppLayout
-      uiRuntime={buildUiRuntimeFromSource(createConfigStub() as never)}
-      slashCommandRuntime={buildSlashCommandRuntime(
-        createConfigStub() as never,
-      )}
+      uiRuntime={buildUiRuntimeFromSource(config)}
+      slashCommandRuntime={buildSlashCommandRuntime(config)}
       settings={settings as never}
       startupWarnings={[]}
-      version="0.0.0-test"
+      version={'0.0.0-test'}
       nightly={false}
       mainControlsRef={{ current: null }}
       availableTerminalHeight={40}
@@ -274,50 +334,86 @@ describe('DefaultAppLayout', () => {
     mockUseUIActions.mockReturnValue(createActionsStub() as never);
   });
 
-  it('renders DialogManager when session browser dialog is open', () => {
-    mockUseUIState.mockReturnValue({
-      ...createBaseUIState(),
-      isSessionBrowserDialogOpen: true,
-    } as never);
+  it('keeps the dialog test table aligned with every property read by the real predicate', () => {
+    const readKeys = new Set<string>();
+    const recordKey = (property: string | symbol): void => {
+      if (typeof property !== 'string') {
+        throw new Error(
+          `hasActiveDialog read the symbol key ${String(property)}. The drift ` +
+            'guard can only account for string keys; update the guard and ' +
+            'ACTIVE_DIALOG_FLAGS together.',
+        );
+      }
+      readKeys.add(property);
+    };
+    // Enumeration would let the predicate reach every flag at once, which
+    // would make the recorded read-set meaningless. Fail loudly instead of
+    // silently passing.
+    const rejectEnumeration = (trap: string): never => {
+      throw new Error(
+        `hasActiveDialog enumerated the UI state via ${trap}. The drift guard ` +
+          'observes discrete property accesses and cannot verify an ' +
+          'enumeration-based predicate; update the guard and ' +
+          'ACTIVE_DIALOG_FLAGS together.',
+      );
+    };
+    const uiState = new Proxy(createBaseUIState(), {
+      get(target, property, receiver) {
+        recordKey(property);
+        return Reflect.get(target, property, receiver);
+      },
+      has(target, property) {
+        recordKey(property);
+        return Reflect.has(target, property);
+      },
+      ownKeys: () => rejectEnumeration('ownKeys'),
+      getOwnPropertyDescriptor: () =>
+        rejectEnumeration('getOwnPropertyDescriptor'),
+    });
 
-    const { lastFrame } = renderDefaultAppLayout();
+    hasActiveDialog(uiState);
 
-    expect(lastFrame()).toContain('dialog content');
-    expect(lastFrame()).not.toContain('composer content');
+    expect([...readKeys].sort()).toEqual([...ACTIVE_DIALOG_FLAGS].sort());
   });
 
-  it('renders DialogManager when model config dialog is the only active dialog', () => {
-    mockUseUIState.mockReturnValue({
-      ...createBaseUIState(),
-      isModelConfigDialogOpen: true,
-    } as never);
+  it.each(ACTIVE_DIALOG_FLAGS.map((flag) => [flag] as const))(
+    'renders DialogManager instead of Composer when %s is active',
+    (flag) => {
+      const rendered = renderDefaultAppLayout(
+        createUIStateWithActiveDialog(flag),
+      );
+      const frame = rendered.lastFrame();
 
-    const { lastFrame } = renderDefaultAppLayout();
-
-    expect(lastFrame()).toContain('dialog content');
-    expect(lastFrame()).not.toContain('composer content');
-  });
+      expect(frame).toContain(DIALOG_MANAGER_SENTINEL);
+      expect(frame).not.toContain(COMPOSER_SENTINEL);
+      rendered.unmount();
+    },
+  );
 
   it('renders Composer when no dialog is open', () => {
-    mockUseUIState.mockReturnValue(createBaseUIState() as never);
+    const rendered = renderDefaultAppLayout(createBaseUIState());
+    const frame = rendered.lastFrame();
 
-    const { lastFrame } = renderDefaultAppLayout();
-
-    expect(lastFrame()).toContain('composer content');
-    expect(lastFrame()).not.toContain('dialog content');
+    expect(frame).toContain(COMPOSER_SENTINEL);
+    expect(frame).not.toContain(DIALOG_MANAGER_SENTINEL);
+    rendered.unmount();
   });
 
   it('renders standard and alternate buffer layout branches according to settings', () => {
-    mockUseUIState.mockReturnValue(createBaseUIState() as never);
+    const alternateBuffer = renderDefaultAppLayout(createBaseUIState());
+    const alternateBufferFrame = alternateBuffer.lastFrame();
+    alternateBuffer.unmount();
 
-    const alternateBufferFrame = renderDefaultAppLayout().lastFrame();
-    const standardBufferFrame = renderDefaultAppLayout(
+    const standardBuffer = renderDefaultAppLayout(
+      createBaseUIState(),
       createSettingsStub({ useAlternateBuffer: false }),
-    ).lastFrame();
+    );
+    const standardBufferFrame = standardBuffer.lastFrame();
+    standardBuffer.unmount();
 
-    expect(alternateBufferFrame).toContain('alternate buffer history');
-    expect(alternateBufferFrame).not.toContain('standard buffer history');
-    expect(standardBufferFrame).toContain('standard buffer history');
-    expect(standardBufferFrame).not.toContain('alternate buffer history');
+    expect(alternateBufferFrame).toContain(ALTERNATE_BUFFER_SENTINEL);
+    expect(alternateBufferFrame).not.toContain(STANDARD_BUFFER_SENTINEL);
+    expect(standardBufferFrame).toContain(STANDARD_BUFFER_SENTINEL);
+    expect(standardBufferFrame).not.toContain(ALTERNATE_BUFFER_SENTINEL);
   });
 });

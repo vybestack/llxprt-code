@@ -4,24 +4,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { automock } from '@vybestack/llxprt-code-test-utils';
+import {
+  advanceTimersByTimeAsync,
+  automock,
+} from '@vybestack/llxprt-code-test-utils';
 import { renderWithProviders } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
 import { act } from 'react';
-import type { InputPromptProps } from './InputPrompt.js';
-import { InputPrompt } from './InputPrompt.js';
-import type { TextBuffer } from './shared/text-buffer.js';
-import type { Config } from '@vybestack/llxprt-code-core';
-import { ApprovalMode } from '@vybestack/llxprt-code-core';
+import { FAST_RETURN_TIMEOUT } from '../contexts/KeypressContext.js';
+import { InputPrompt, type InputPromptProps } from './InputPrompt.js';
+import { useTextBuffer, type TextBuffer } from './shared/text-buffer.js';
+import { ApprovalMode, type Config } from '@vybestack/llxprt-code-core';
 import * as path from 'node:path';
 import type { CommandContext, SlashCommand } from '../commands/types.js';
 import { CommandKind } from '../commands/types.js';
-import { describe, it, expect, beforeEach, vi, type Mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import type { Mock } from 'bun:test';
 import type { UseShellHistoryReturn } from '../hooks/useShellHistory.js';
 import { useShellHistory } from '../hooks/useShellHistory.js';
 import type { UseCommandCompletionReturn } from '../hooks/useCommandCompletion.js';
 import { useCommandCompletion } from '../hooks/useCommandCompletion.js';
-import type { UseInputHistoryReturn } from '../hooks/useInputHistory.js';
 import { useInputHistory } from '../hooks/useInputHistory.js';
 import type { UseReverseSearchCompletionReturn } from '../hooks/useReverseSearchCompletion.js';
 import { useReverseSearchCompletion } from '../hooks/useReverseSearchCompletion.js';
@@ -68,6 +70,8 @@ void vi.mock('../utils/clipboardUtils.js', () =>
 void vi.mock('../hooks/useKittyKeyboardProtocol.js', () =>
   automock(realUseKittyKeyboardProtocolModule),
 );
+
+const KITTY_PROTOCOL_ENABLED = { enabled: true, checking: false };
 
 const mockSlashCommands: SlashCommand[] = [
   {
@@ -117,11 +121,28 @@ const mockSlashCommands: SlashCommand[] = [
   },
 ];
 
+function InputPromptWithRealBuffer({
+  props,
+  initialText = '',
+}: {
+  readonly props: InputPromptProps;
+  readonly initialText?: string;
+}) {
+  const buffer = useTextBuffer({
+    initialText,
+    initialCursorOffset: initialText.length,
+    viewport: { width: 80, height: 24 },
+    isValidPath: () => false,
+  });
+
+  return <InputPrompt {...props} buffer={buffer} />;
+}
+
 describe('InputPrompt', () => {
   let props: InputPromptProps;
   let mockShellHistory: UseShellHistoryReturn;
   let mockCommandCompletion: UseCommandCompletionReturn;
-  let mockInputHistory: UseInputHistoryReturn;
+  let mockInputHistory: ReturnType<typeof useInputHistory>;
   let mockReverseSearchCompletion: UseReverseSearchCompletionReturn;
   let mockBuffer: TextBuffer;
   let mockCommandContext: CommandContext;
@@ -281,6 +302,75 @@ describe('InputPrompt', () => {
       setQueueErrorMessage: vi.fn(),
       streamingState: StreamingState.Idle,
     };
+  });
+
+  describe('large paste submission', () => {
+    const alphaPaste = 'ALPHA_1\nALPHA_2\nALPHA_3\nALPHA_4';
+    const firstPaste = 'FIRST_1\nFIRST_2\nFIRST_3\nFIRST_4';
+    const secondPaste = 'SECOND_1\nSECOND_2\nSECOND_3\nSECOND_4';
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      mockedUseKittyKeyboardProtocol.mockReturnValue(KITTY_PROTOCOL_ENABLED);
+    });
+
+    afterEach(() => vi.useRealTimers());
+
+    it.each([
+      {
+        name: 'one large paste',
+        initialText: '',
+        inputs: [{ kind: 'paste', text: alphaPaste }],
+        expected: alphaPaste,
+      },
+      {
+        name: 'two distinct large pastes',
+        initialText: 'before:',
+        inputs: [
+          { kind: 'paste', text: firstPaste },
+          { kind: 'text', text: ':between:' },
+          { kind: 'paste', text: secondPaste },
+          { kind: 'text', text: ':after' },
+        ],
+        expected: `before:${firstPaste}:between:${secondPaste}:after`,
+      },
+    ] as const)(
+      'shows placeholders and expands $name through the submit path',
+      async ({ initialText, inputs, expected }) => {
+        const submittedValues: string[] = [];
+        props.onSubmit = (value) => submittedValues.push(value);
+        const rendered = renderWithProviders(
+          <InputPromptWithRealBuffer props={props} initialText={initialText} />,
+          { kittyProtocolEnabled: true },
+        );
+        let pasteCount = 0;
+
+        for (const input of inputs) {
+          const isPaste = input.kind === 'paste';
+          pasteCount += Number(isPaste);
+          const sequence = isPaste
+            ? `\x1b[200~${input.text}\x1b[201~`
+            : input.text;
+          const visibleText = isPaste
+            ? `[4 lines pasted #${pasteCount}]`
+            : input.text;
+          await act(async () => rendered.stdin.write(sequence));
+          await waitFor(() =>
+            expect(rendered.stdout.lastFrame()).toContain(visibleText),
+          );
+        }
+        const frame = rendered.stdout.lastFrame();
+        for (const paste of inputs.filter((input) => input.kind === 'paste')) {
+          expect(frame).not.toContain(paste.text.split('\n')[0]);
+        }
+        await act(() => advanceTimersByTimeAsync(FAST_RETURN_TIMEOUT + 1));
+
+        await act(async () => rendered.stdin.write('\r'));
+
+        await waitFor(() => expect(submittedValues).toEqual([expected]));
+        rendered.unmount();
+      },
+    );
   });
 
   describe('reverse search', () => {
