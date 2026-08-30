@@ -446,6 +446,7 @@ export interface FooterProps {
   currentModelLabel?: string;
   contextLimit: number | undefined;
   branchName: string | undefined;
+  branchIsDirty: boolean;
   debugMessage: string;
   errorCount: number;
   showErrorDetails: boolean;
@@ -471,6 +472,7 @@ export function FooterSection(props: FooterProps) {
     currentModelLabel,
     contextLimit,
     branchName,
+    branchIsDirty,
     debugMessage,
     errorCount,
     showErrorDetails,
@@ -488,6 +490,7 @@ export function FooterSection(props: FooterProps) {
       targetDir={config.getTargetDir()}
       debugMode={config.getDebugMode()}
       branchName={branchName}
+      branchIsDirty={branchIsDirty}
       debugMessage={debugMessage}
       errorCount={errorCount}
       showErrorDetails={showErrorDetails}
@@ -553,6 +556,7 @@ export interface MainControlsProps {
   currentModelLabel?: string;
   contextLimit: number | undefined;
   branchName: string | undefined;
+  branchIsDirty: boolean;
   debugMessage: string;
   errorCount: number;
   historyTokenCount: number;
@@ -606,6 +610,7 @@ export function MainControls(props: MainControlsProps) {
         currentModelLabel={props.currentModelLabel}
         contextLimit={props.contextLimit}
         branchName={props.branchName}
+        branchIsDirty={props.branchIsDirty}
         debugMessage={props.debugMessage}
         errorCount={props.errorCount}
         showErrorDetails={props.showErrorDetails}

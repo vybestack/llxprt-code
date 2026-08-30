@@ -72,6 +72,7 @@ describe('ContextIndicator UI', () => {
         showErrorDetails={false}
         historyTokenCount={1000}
         nightly={false}
+        branchIsDirty={false}
       />,
     );
 
@@ -90,6 +91,7 @@ describe('ContextIndicator UI', () => {
         showErrorDetails={false}
         historyTokenCount={1000}
         nightly={false}
+        branchIsDirty={false}
       />,
     );
 
@@ -108,6 +110,7 @@ describe('ContextIndicator UI', () => {
         showErrorDetails={false}
         historyTokenCount={120000}
         nightly={false}
+        branchIsDirty={false}
       />,
     );
 
@@ -126,6 +129,7 @@ describe('ContextIndicator UI', () => {
         showErrorDetails={false}
         historyTokenCount={1000}
         nightly={false}
+        branchIsDirty={false}
       />,
     );
 
@@ -153,6 +157,7 @@ describe('ContextIndicator UI', () => {
         showErrorDetails={false}
         historyTokenCount={1000}
         nightly={false}
+        branchIsDirty={false}
       />,
     );
 
@@ -174,6 +179,7 @@ describe('ContextIndicator UI', () => {
         historyTokenCount={1000}
         nightly={false}
         // No conversationId or parentId
+        branchIsDirty={false}
       />,
     );
 

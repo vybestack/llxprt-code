@@ -157,6 +157,7 @@ export interface UIStateParams {
   llxprtMdFileCount: number;
   coreMemoryFileCount: number;
   branchName: string | undefined;
+  branchIsDirty: boolean;
   errorCount: number;
   activeHooks?: ActiveHook[];
 
@@ -341,6 +342,7 @@ function buildDisplayAndContext(p: UIStateParams) {
     llxprtMdFileCount: p.llxprtMdFileCount,
     coreMemoryFileCount: p.coreMemoryFileCount,
     branchName: p.branchName,
+    branchIsDirty: p.branchIsDirty,
     errorCount: p.errorCount,
     activeHooks: p.activeHooks,
     consoleMessages: p.consoleMessages,

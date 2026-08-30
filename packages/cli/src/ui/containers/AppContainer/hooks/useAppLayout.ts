@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo } from 'react';
 import { useLogger } from '../../../hooks/useLogger.js';
-import { useGitBranchName } from '../../../hooks/useGitBranchName.js';
+import { useGitBranchInfo } from '../../../hooks/useGitBranchInfo.js';
 import { useHookDisplayState } from '../../../hooks/useHookDisplayState.js';
 import { getAllLlxprtMdFilenames } from '@vybestack/llxprt-code-core';
 import { useKeybindings } from './useKeybindings.js';
@@ -287,7 +287,10 @@ function useLayoutContext(p: AppLayoutParams) {
     if (debugMode) return consoleMessages;
     return consoleMessages.filter((msg) => msg.type !== 'debug');
   }, [consoleMessages, debugMode]);
-  const branchName = useGitBranchName(uiRuntime.session.getTargetDir());
+  const { branchName, isDirty } = useGitBranchInfo(
+    uiRuntime.session.getTargetDir(),
+  );
+  const branchIsDirty = isDirty;
   const contextFileNames = useMemo(() => {
     const fromSettings = settings.merged.ui.contextFileName;
     if (fromSettings != null && fromSettings !== '')
@@ -322,6 +325,7 @@ function useLayoutContext(p: AppLayoutParams) {
   return {
     filteredConsoleMessages,
     branchName,
+    branchIsDirty,
     contextFileNames,
     initialPrompt,
     mainAreaWidth,

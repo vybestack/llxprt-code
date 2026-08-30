@@ -77,6 +77,7 @@ describe('Footer', () => {
     model: 'gpt-4',
     targetDir: '/home/user/project',
     branchName: '20250808-gmerge',
+    branchIsDirty: true,
     debugMode: false,
     debugMessage: '',
     errorCount: 0,
@@ -119,7 +120,7 @@ describe('Footer', () => {
       expect(textContent).toContain('/home/user/project');
     });
 
-    it('should show branch with asterisk to indicate modified state', () => {
+    it('should show branch with asterisk when the working tree is dirty', () => {
       mockUseResponsive.mockReturnValue({
         width: 120,
         breakpoint: 'STANDARD',
@@ -128,11 +129,67 @@ describe('Footer', () => {
         isWide: false,
       });
 
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = render(
+        <Footer {...defaultProps} branchIsDirty={true} />,
+      );
 
       const textContent = lastFrame();
-      // Branch should have asterisk indicating modified state
-      expect(textContent).toContain('20250808-gmerge*');
+      // Branch should have asterisk inside the parens for dirty state
+      expect(textContent).toContain('(20250808-gmerge*)');
+    });
+
+    it('should not show an asterisk when the working tree is clean', () => {
+      mockUseResponsive.mockReturnValue({
+        width: 120,
+        breakpoint: 'STANDARD',
+        isNarrow: false,
+        isStandard: true,
+        isWide: false,
+      });
+
+      const { lastFrame } = render(
+        <Footer {...defaultProps} branchIsDirty={false} />,
+      );
+
+      const textContent = lastFrame() ?? '';
+      // Clean tree renders the branch without a trailing asterisk
+      expect(textContent).toContain('(20250808-gmerge)');
+      expect(textContent).not.toContain('20250808-gmerge*');
+    });
+
+    it('should show an asterisk on the nightly gradient path when dirty', () => {
+      mockUseResponsive.mockReturnValue({
+        width: 120,
+        breakpoint: 'STANDARD',
+        isNarrow: false,
+        isStandard: true,
+        isWide: false,
+      });
+
+      const { lastFrame } = render(
+        <Footer {...defaultProps} nightly={true} branchIsDirty={true} />,
+      );
+
+      const textContent = lastFrame() ?? '';
+      expect(textContent).toContain('(20250808-gmerge*)');
+    });
+
+    it('should not show an asterisk on the nightly gradient path when clean', () => {
+      mockUseResponsive.mockReturnValue({
+        width: 120,
+        breakpoint: 'STANDARD',
+        isNarrow: false,
+        isStandard: true,
+        isWide: false,
+      });
+
+      const { lastFrame } = render(
+        <Footer {...defaultProps} nightly={true} branchIsDirty={false} />,
+      );
+
+      const textContent = lastFrame() ?? '';
+      expect(textContent).toContain('(20250808-gmerge)');
+      expect(textContent).not.toContain('20250808-gmerge*');
     });
 
     it('should truncate long branch names appropriately', () => {
@@ -169,7 +226,11 @@ describe('Footer', () => {
       });
 
       const { lastFrame } = render(
-        <Footer {...defaultProps} branchName={undefined} />,
+        <Footer
+          {...defaultProps}
+          branchName={undefined}
+          branchIsDirty={false}
+        />,
       );
 
       const textContent = lastFrame();
@@ -308,7 +369,7 @@ describe('Footer', () => {
       // Branch (with modified asterisk) and path must both render, with the
       // branch indicator appearing before the path in reading order so the
       // branch is the more prominent element on the path line.
-      const branchIdx = textContent.indexOf('20250808-gmerge*');
+      const branchIdx = textContent.indexOf('(20250808-gmerge*)');
       const pathIdx = textContent.indexOf('/home/user/project');
       expect(branchIdx).toBeGreaterThanOrEqual(0);
       expect(pathIdx).toBeGreaterThanOrEqual(0);
@@ -381,12 +442,13 @@ describe('Footer', () => {
         <Footer
           {...defaultProps}
           branchName="test-branch"
+          branchIsDirty={true}
           isTrustedFolder={false}
         />,
       );
 
       const textContent = lastFrame();
-      expect(textContent).toContain('test-branch*');
+      expect(textContent).toContain('(test-branch*)');
       expect(textContent).toContain('(untrusted)');
     });
   });
