@@ -46,7 +46,6 @@ export const DISCOVERED_TOOL_PREFIX = 'discovered_tool_';
 type ToolParams = Record<string, unknown>;
 interface McpRegisteredTool {
   readonly serverName: string;
-  getFullyQualifiedName?(): string;
 }
 
 function isDiscoveredMcpTool(
@@ -909,20 +908,6 @@ export class ToolRegistry {
       const normalizedName = normalizeToolName(name);
       if (normalizedName && normalizedName !== name) {
         tool = this.tools.get(normalizedName);
-      }
-    }
-
-    // If still not found and the name includes '__', try fallback lookup by fully qualified name
-    if (!tool && name.includes('__')) {
-      for (const t of this.tools.values()) {
-        if (
-          isDiscoveredMcpTool(t) &&
-          typeof t.getFullyQualifiedName === 'function' &&
-          t.getFullyQualifiedName() === name
-        ) {
-          tool = t;
-          break;
-        }
       }
     }
 

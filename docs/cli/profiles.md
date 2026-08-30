@@ -203,15 +203,13 @@ Load balancer profile:
 
 Configure before saving a load balancer profile with `/set`:
 
-| Setting                         | Default               | Description                               |
-| ------------------------------- | --------------------- | ----------------------------------------- |
-| `failover_retry_count`          | 2                     | Retries per backend before moving to next |
-| `failover_retry_delay_ms`       | 0                     | Delay between retries (ms)                |
-| `failover_on_network_errors`    | true                  | Failover on TCP/network errors            |
-| `failover_status_codes`         | [429,500,502,503,504] | HTTP codes that trigger failover          |
-| `lb_tpm_failover_threshold`     | —                     | Min TPM before triggering failover        |
-| `lb_circuit_breaker_threshold`  | —                     | Failures before circuit opens             |
-| `lb_circuit_breaker_timeout_ms` | —                     | Time before half-open retry               |
+| Setting                      | Default               | Description                               |
+| ---------------------------- | --------------------- | ----------------------------------------- |
+| `failover_retry_count`       | 2                     | Retries per backend before moving to next |
+| `failover_retry_delay_ms`    | 0                     | Delay between retries (ms)                |
+| `failover_on_network_errors` | true                  | Failover on TCP/network errors            |
+| `failover_status_codes`      | [429,500,502,503,504] | HTTP codes that trigger failover          |
+| `tpm_threshold`              | —                     | Min TPM before triggering failover        |
 
 ## Viewing Stats
 

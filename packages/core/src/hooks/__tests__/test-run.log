@@ -361,7 +361,6 @@
  ✓ src/providers/openai-vercel/messageConversion.test.ts (28 tests) 11ms
  ✓ test/models/provider-integration.test.ts (20 tests) 14ms
  ✓ src/providers/utils/contentPreview.test.ts (8 tests) 9ms
- ✓ src/mcp/file-token-store.test.ts (27 tests) 45ms
  ✓ src/core/compression/MiddleOutStrategy.test.ts (18 tests) 26ms
  ✓ src/providers/openai/parseResponsesStream.test.ts (13 tests | 5 skipped) 21ms
  ✓ src/providers/openai/OpenAIProvider.toolNameErrors.test.ts (13 tests) 8ms

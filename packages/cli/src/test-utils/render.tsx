@@ -135,9 +135,6 @@ const mockRuntimeApi: MockRuntimeApi = {
   },
   getCliRuntimeServices: () => null,
   getSessionTokenUsage: () => ({ inputTokens: 0, outputTokens: 0 }),
-  getLoadBalancerStats: () => null,
-  getLoadBalancerLastSelected: () => null,
-  getAllLoadBalancerStats: () => [],
   getUnallowedParametersForActiveModel: () => [],
 };
 

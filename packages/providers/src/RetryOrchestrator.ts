@@ -12,9 +12,8 @@
  *
  * 1. Exponential backoff with jitter
  * 2. OAuth bucket failover
- * 3. Circuit breaker pattern (optional)
- * 4. Throttle wait time tracking
- * 5. Abort signal propagation
+ * 3. Throttle wait time tracking
+ * 4. Abort signal propagation
  *
  * Architecture:
  * - Providers throw immediately on errors (fast-fail)
@@ -115,27 +114,12 @@ export interface RetryOrchestratorConfig {
   initialDelayMs?: number;
   /** Maximum delay in ms between retries (default: 30000) */
   maxDelayMs?: number;
-  /** Enable circuit breaker pattern (default: false) */
-  circuitBreakerEnabled?: boolean;
-  /** Number of failures before opening circuit (default: 3) */
-  circuitBreakerFailureThreshold?: number;
-  /** Time window for counting failures in ms (default: 60000) */
-  circuitBreakerFailureWindowMs?: number;
-  /** Time to wait before testing recovery in ms (default: 30000) */
-  circuitBreakerRecoveryTimeoutMs?: number;
   /** Timeout for first chunk in streaming mode in ms (optional) */
   streamingTimeoutMs?: number;
   /** Timeout for blocking OAuth reauthentication during bucket failover in ms (default: 30000) */
   authRetryTimeoutMs?: number;
   /** Callback to track throttle wait time for metrics */
   trackThrottleWaitTime?: (waitTimeMs: number) => void;
-}
-
-export interface CircuitBreakerState {
-  state: 'closed' | 'open' | 'half-open';
-  failures: Array<{ timestamp: number; error: Error }>;
-  openedAt?: number;
-  lastAttempt?: number;
 }
 
 /**
@@ -148,8 +132,6 @@ export class RetryOrchestrator implements IProvider {
   readonly wrappedProvider: IProvider;
   private readonly logger = new DebugLogger('llxprt:retry:orchestrator');
   private readonly config: Required<RetryOrchestratorConfig>;
-  // Circuit breaker state - reserved for future implementation
-  // private circuitBreakerStates: Map<string, CircuitBreakerState> = new Map();
 
   constructor(provider: IProvider, config?: RetryOrchestratorConfig) {
     this.wrappedProvider = provider;
@@ -160,13 +142,6 @@ export class RetryOrchestrator implements IProvider {
       maxAttempts: config?.maxAttempts ?? 6,
       initialDelayMs: config?.initialDelayMs ?? 5000,
       maxDelayMs: config?.maxDelayMs ?? 30000,
-      circuitBreakerEnabled: config?.circuitBreakerEnabled ?? false,
-      circuitBreakerFailureThreshold:
-        config?.circuitBreakerFailureThreshold ?? 3,
-      circuitBreakerFailureWindowMs:
-        config?.circuitBreakerFailureWindowMs ?? 60000,
-      circuitBreakerRecoveryTimeoutMs:
-        config?.circuitBreakerRecoveryTimeoutMs ?? 30000,
       streamingTimeoutMs: config?.streamingTimeoutMs ?? 0,
       authRetryTimeoutMs: config?.authRetryTimeoutMs ?? 30000,
       trackThrottleWaitTime: config?.trackThrottleWaitTime ?? (() => {}),

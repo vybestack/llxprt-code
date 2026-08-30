@@ -9,8 +9,8 @@
  *
  * These tests exercise the real file system (temp directories) and inject a
  * machine-secret loader so that the v:2 envelope root of trust is exercised
- * end-to-end without mock theater. Legacy hex-colon read compatibility and
- * fail-closed behavior are also covered.
+ * end-to-end without mock theater. Legacy hex-colon content is not readable and
+ * fails closed.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
@@ -20,6 +20,7 @@ import * as os from 'node:os';
 import * as crypto from 'node:crypto';
 import { FileTokenStorage } from './file-token-storage.js';
 import { isValidEnvelope } from '@vybestack/llxprt-code-storage';
+import { encryptEnvelopeString } from '@vybestack/llxprt-code-storage/storage/envelope-codec.js';
 import type { MCPOAuthCredentials } from '../token-store.js';
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
@@ -57,23 +58,6 @@ function makeCredentials(serverName: string): MCPOAuthCredentials {
     },
     updatedAt: Date.now(),
   };
-}
-
-/**
- * Builds legacy `iv:authTag:ciphertext` (hex) file content using the same
- * derivation the old FileTokenStorage used, for backward-compatible read
- * tests. The legacy derivation uses the hard-coded password
- * 'llxprt-cli-oauth' (not the serviceName) with a hostname/username salt.
- */
-function buildLegacyHexColonCiphertext(plaintext: string): string {
-  const salt = `${os.hostname()}-${os.userInfo().username}-llxprt-cli`;
-  const key = crypto.scryptSync('llxprt-cli-oauth', salt, 32);
-  const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-  let encrypted = cipher.update(plaintext, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-  const authTag = cipher.getAuthTag();
-  return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -189,30 +173,23 @@ describe('FileTokenStorage — v:2 envelope behavior', () => {
     );
   });
 
-  it('reads legacy hex-colon files (backward compatibility)', async () => {
-    // Build a legacy file using the old derivation. The legacy salt/password
-    // must match what the old FileTokenStorage used so the legacy decrypt
-    // path can read it.
-    const legacyCreds: Record<string, MCPOAuthCredentials> = {
-      'legacy-server': makeCredentials('legacy-server'),
-    };
-    const legacyContent = buildLegacyHexColonCiphertext(
-      JSON.stringify(legacyCreds),
-    );
-    await fs.mkdir(path.dirname(tokenFilePath), {
-      recursive: true,
-      mode: 0o700,
-    });
-    await fs.writeFile(tokenFilePath, legacyContent, { mode: 0o600 });
-
-    const reader = new FileTokenStorage(SERVICE_NAME, {
+  it('a SyntaxError from the machine-secret loader is NOT mislabeled as corruption', async () => {
+    const writer = new FileTokenStorage(SERVICE_NAME, {
       tokenFilePath,
       machineSecretLoader: secretLoaderA(),
     });
-    const result = await reader.getCredentials('legacy-server');
-    expect(result).not.toBeNull();
-    expect(result!.serverName).toBe('legacy-server');
-    expect(result!.token.accessToken).toBe('access-legacy-server');
+    await writer.setCredentials(makeCredentials('syntax-loader'));
+
+    const reader = new FileTokenStorage(SERVICE_NAME, {
+      tokenFilePath,
+      machineSecretLoader: async () => {
+        throw new SyntaxError('keyring payload parse failed');
+      },
+    });
+
+    await expect(reader.getCredentials('syntax-loader')).rejects.toThrow(
+      /keyring payload parse failed/,
+    );
   });
 
   it('fail-closed-on-read prevents overwrite of existing v:2 file with unavailable secret', async () => {
@@ -227,11 +204,9 @@ describe('FileTokenStorage — v:2 envelope behavior', () => {
     expect(beforeEnvelope.v).toBe(2);
 
     // Attempt to mutate with no machine secret — must reject and leave the
-    // existing v:2 file intact. setCredentials reads-then-writes, so the read
-    // fails closed on the v:2 envelope before any downgraded write can occur.
-    // The explicit write-path anti-downgrade guard in saveTokens (passing
-    // existingEnvelopeVersion to encryptEnvelopeString) is a defense-in-depth
-    // measure and is unit-tested directly in envelope-codec.test.ts.
+    // existing v:2 file intact. Every mutation reads-then-writes: the read
+    // fails closed on the v:2 envelope (missing secret) before any write can
+    // occur, so the existing v:2 file is never overwritten.
     const degradedWriter = new FileTokenStorage(SERVICE_NAME, {
       tokenFilePath,
       machineSecretLoader: nullSecretLoader(),
@@ -249,6 +224,84 @@ describe('FileTokenStorage — v:2 envelope behavior', () => {
     expect(result?.token.accessToken).toBe('access-protected');
   });
 
+  it('a decryptable envelope whose payload is malformed JSON fails closed', async () => {
+    // Encrypt token-store-shaped JSON that is not valid JSON (here, trailing
+    // garbage). The envelope decrypts fine but the payload must be rejected as
+    // "Token file corrupted" rather than surfacing a raw parse error.
+    const invalidPayload = '{"server-a": {"not": "closed"';
+    const encrypted = await encryptEnvelopeString(
+      invalidPayload,
+      SERVICE_NAME,
+      { machineSecretLoader: secretLoaderA() },
+    );
+    await fs.mkdir(path.dirname(tokenFilePath), {
+      recursive: true,
+      mode: 0o700,
+    });
+    await fs.writeFile(tokenFilePath, encrypted, { mode: 0o600 });
+
+    const reader = new FileTokenStorage(SERVICE_NAME, {
+      tokenFilePath,
+      machineSecretLoader: secretLoaderA(),
+    });
+
+    await expect(reader.listServers()).rejects.toThrow('Token file corrupted');
+  });
+
+  it('a decryptable envelope whose payload is JSON null fails closed', async () => {
+    const encrypted = await encryptEnvelopeString('null', SERVICE_NAME, {
+      machineSecretLoader: secretLoaderA(),
+    });
+    await fs.mkdir(path.dirname(tokenFilePath), {
+      recursive: true,
+      mode: 0o700,
+    });
+    await fs.writeFile(tokenFilePath, encrypted, { mode: 0o600 });
+
+    const reader = new FileTokenStorage(SERVICE_NAME, {
+      tokenFilePath,
+      machineSecretLoader: secretLoaderA(),
+    });
+
+    await expect(reader.listServers()).rejects.toThrow('Token file corrupted');
+  });
+
+  it('refuses to downgrade an existing v:2 file when the secret fails only on write', async () => {
+    const writer = new FileTokenStorage(SERVICE_NAME, {
+      tokenFilePath,
+      machineSecretLoader: secretLoaderA(),
+    });
+    await writer.setCredentials(makeCredentials('downgrade'));
+
+    const beforeContent = await fs.readFile(tokenFilePath, 'utf-8');
+    const beforeEnvelope = JSON.parse(beforeContent) as { v: number };
+    expect(beforeEnvelope.v).toBe(2);
+
+    // The loader serves the secret for the read (decrypt) but returns null for
+    // the write (encrypt). The saveTokens anti-downgrade probe must refuse to
+    // overwrite the v:2 file with a weaker v:1 envelope.
+    let calls = 0;
+    const flakyLoader = async (): Promise<Buffer | null> => {
+      calls += 1;
+      return calls === 1 ? MACHINE_SECRET_A : null;
+    };
+    const flakyWriter = new FileTokenStorage(SERVICE_NAME, {
+      tokenFilePath,
+      machineSecretLoader: flakyLoader,
+    });
+
+    await expect(
+      flakyWriter.setCredentials(makeCredentials('downgrade')),
+    ).rejects.toThrow(/Refusing to overwrite an existing v:2 envelope/);
+    expect(calls).toBeGreaterThanOrEqual(1);
+
+    // The existing v:2 file must be byte-identical and still version 2.
+    const afterContent = await fs.readFile(tokenFilePath, 'utf-8');
+    expect(afterContent).toBe(beforeContent);
+    const afterEnvelope = JSON.parse(afterContent) as { v: number };
+    expect(afterEnvelope.v).toBe(2);
+  });
+
   it('getCredentials returns null when no token file exists (ENOENT)', async () => {
     const storage = new FileTokenStorage(SERVICE_NAME, {
       tokenFilePath,
@@ -258,13 +311,12 @@ describe('FileTokenStorage — v:2 envelope behavior', () => {
     expect(result).toBeNull();
   });
 
-  it('normalizes a malformed legacy hex-colon file to "Token file corrupted"', async () => {
-    // A legacy-shaped `iv:authTag:ciphertext` string whose components are
-    // well-formed hex but cryptographically invalid (random bytes). The legacy
-    // decrypt path raises a raw crypto error ("Unsupported state or unable to
-    // authenticate data" or similar); the store must normalize ALL such
-    // failures to a single fail-closed message rather than leaking crypto
-    // internals.
+  it('normalizes a malformed non-envelope file to "Token file corrupted"', async () => {
+    // Any content that is not a supported versioned envelope (legacy hex-colon,
+    // garbage, or malformed JSON) is rejected as "Token file corrupted".
+    // ReadEnvelopeVersion returns null for all of these, so the envelope-only
+    // read path fails closed uniformly without routing non-envelope bytes into the
+    // codec.
     const iv = crypto.randomBytes(16).toString('hex');
     const authTag = crypto.randomBytes(16).toString('hex');
     const ciphertext = crypto.randomBytes(32).toString('hex');
