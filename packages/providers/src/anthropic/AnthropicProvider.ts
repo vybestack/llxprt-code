@@ -65,6 +65,7 @@ import {
   ensureImageRecoveryState,
 } from './AnthropicImageSanitizer.js';
 import { tryConsumeTransportAttempt } from '../transportAttemptBudget.js';
+import { findRequestCommitState } from '../retryRequestContext.js';
 
 function hasHeaderName(headers: Record<string, string>, name: string): boolean {
   const target = name.toLowerCase();
@@ -996,6 +997,7 @@ export class AnthropicProvider extends BaseProvider {
           cacheLogger: requestContext.cacheLogger,
           rateLimitLogger,
           includeThinkingInResponse: requestContext.includeThinkingInResponse,
+          commitState: findRequestCommitState(options),
         },
       );
     } else {

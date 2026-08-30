@@ -30,16 +30,14 @@ import {
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { IModel } from './IModel.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type {
-  BucketFailoverHandler,
-  FailoverContext,
-} from '@vybestack/llxprt-code-core/config/config.js';
-import { AllBucketsExhaustedError, permitsBucketFailover } from './errors.js';
+import type { BucketFailoverHandler } from '@vybestack/llxprt-code-core/config/config.js';
+import { AllBucketsExhaustedError } from './errors.js';
 import type { StructuredErrorCategory } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
-  delay,
   createAbortError,
+  delay,
 } from '@vybestack/llxprt-code-core/utils/delay.js';
+import { guardStream } from './guardedStream.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import {
   claimProviderErrorObservation,
@@ -58,6 +56,7 @@ import {
 } from './utils/abortSignal.js';
 import {
   resolveRetryRequestContext,
+  getRequestCommitState,
   type RetryRequestContext,
 } from './retryRequestContext.js';
 import {
@@ -67,14 +66,19 @@ import {
   providerOwnsTransportAttempts,
 } from './retryTransportOwnership.js';
 import { safeGetDefaultModel } from './utils/safeDefaultModel.js';
-import { closeIteratorBeforeContinuing } from './utils/streamCleanup.js';
 import {
   classifyRetryError,
   isTerminalRetryError,
-  markErrorAfterStreamOutput,
   resetRetryErrorCounters,
   updateRetryErrorCounters,
 } from './retryErrorClassification.js';
+import { decodeRetryFailure } from './retryFailureTaxonomy.js';
+import type { TransportAttemptBudget } from './transportAttemptBudget.js';
+import {
+  attemptBucketFailover,
+  shouldFailoverNow,
+} from './retryFailoverLogic.js';
+import { decideCommittedFailure } from './retryCommitGate.js';
 import {
   createRetriesExhaustedError,
   throwIfEmptyStreamExhaustsBudget,
@@ -83,7 +87,6 @@ import {
   shouldRetryError,
   getDelayDuration,
   hasRetryAfterHeader,
-  resolveFailoverReason,
 } from './retryDelayPolicy.js';
 import { getAttemptLifecycleObserver } from './logging/attemptLifecycle.js';
 import type {
@@ -91,6 +94,7 @@ import type {
   AttemptStatus,
 } from './logging/attemptLifecycle.js';
 import { AttemptNotificationContext } from './retryAttemptNotifier.js';
+import type { AttemptFailureReport } from './retryLifecycleNotifier.js';
 import {
   getBucketFailoverHandlerFromOptions,
   getOnAuthErrorHandlerFromOptions,
@@ -322,6 +326,7 @@ export class RetryOrchestrator implements IProvider {
     const retryState = createInitialRetryState(initialDelayMs);
     while (budget.used < budget.limit) {
       if (isSignalAborted(signal)) throw createAbortError(signal?.reason);
+      request.recordTarget(this.name);
       const usedBefore = budget.used;
       const linked = createLinkedAbortController(signal);
       const attemptOptions = withRequestSignal(
@@ -339,6 +344,7 @@ export class RetryOrchestrator implements IProvider {
       try {
         yield* this.executeRawAttempt(
           ownsAttempts,
+          request,
           attemptOptions,
           linked,
           retryState,
@@ -350,35 +356,30 @@ export class RetryOrchestrator implements IProvider {
       } catch (error) {
         attemptError = error;
         lastError = error;
-        // Only genuine abort/cancellation is recorded as 'aborted'.
-        // Errors after partial stream output (marked by
-        // isTerminalRetryError) are transport failures and must remain
-        // 'error' so error-vs-cancellation metrics are not corrupted.
-        terminalStatus = isAbortError(error) ? 'aborted' : 'error';
+        terminalStatus = this.resolveTerminalStatus(error);
       } finally {
-        linked.controller.abort();
-        linked.dispose();
-        accountProviderAttempt(
-          this.wrappedProvider,
+        this.finalizeAttempt(
+          linked,
           attemptOptions,
           budget,
           usedBefore,
-        );
-        notification.notifyEnd(
+          notification,
           terminalStatus,
-          resolveAttemptErrorMessage(terminalStatus, attemptError),
+          attemptError,
+          request,
         );
       }
       if (attemptError === undefined) continue;
       const action = await this.handleRetryError(
         attemptError,
+        request,
         requestOptions,
+        signal,
         retryState,
         maxAttempts,
         initialDelayMs,
         1,
         bucketFailoverHandler,
-        signal,
         authRetryTimeoutMs,
         budget,
       );
@@ -390,6 +391,7 @@ export class RetryOrchestrator implements IProvider {
 
   private async *executeRawAttempt(
     ownsAttempts: boolean,
+    request: RetryRequestContext,
     attemptOptions: GenerateChatOptions,
     linked: { controller: AbortController },
     retryState: {
@@ -407,12 +409,15 @@ export class RetryOrchestrator implements IProvider {
     const stream = this.wrappedProvider.generateChatCompletion(attemptOptions);
     const producedContent =
       this.config.streamingTimeoutMs > 0
-        ? yield* this.streamWithTimeout(
-            stream,
-            this.config.streamingTimeoutMs,
-            linked.controller,
-          )
-        : yield* this.yieldStreamUnprotected(stream, linked.controller);
+        ? yield* guardStream(stream, {
+            timeoutMs: this.config.streamingTimeoutMs,
+            attemptController: linked.controller,
+            context: request,
+          })
+        : yield* guardStream(stream, {
+            attemptController: linked.controller,
+            context: request,
+          });
     throwIfEmptyStreamExhaustsBudget(
       producedContent,
       budget.used,
@@ -420,6 +425,81 @@ export class RetryOrchestrator implements IProvider {
     );
     resetRetryErrorCounters(retryState);
     bucketFailoverHandler?.resetSession?.();
+  }
+
+  /**
+   * Only genuine abort/cancellation is recorded as 'aborted'. Errors after
+   * partial stream output (marked by isTerminalRetryError) are transport
+   * failures and must remain 'error' so error-vs-cancellation metrics are
+   * not corrupted.
+   */
+  private resolveTerminalStatus(error: unknown): AttemptStatus {
+    return isAbortError(error) ? 'aborted' : 'error';
+  }
+
+  private finalizeAttempt(
+    linked: { controller: AbortController; dispose(): void },
+    attemptOptions: GenerateChatOptions,
+    budget: TransportAttemptBudget,
+    usedBefore: number,
+    notification: AttemptNotificationContext,
+    terminalStatus: AttemptStatus,
+    attemptError: unknown,
+    request: RetryRequestContext,
+  ): void {
+    linked.controller.abort();
+    linked.dispose();
+    accountProviderAttempt(
+      this.wrappedProvider,
+      attemptOptions,
+      budget,
+      usedBefore,
+    );
+    notification.notifyEnd(
+      terminalStatus,
+      resolveAttemptErrorMessage(terminalStatus, attemptError),
+      this.buildFailureReport(request, terminalStatus, attemptError),
+    );
+  }
+
+  /**
+   * Build the taxonomy/commitment/budget report for attempt telemetry
+   * (issue #2532 AC-07). Failure kind/phase decode only applies to failed
+   * attempts; commitment and budget are reported for every attempt.
+   */
+  private buildFailureReport(
+    request: RetryRequestContext,
+    status: AttemptStatus,
+    error: unknown,
+  ): AttemptFailureReport {
+    const budgetFacts = {
+      committed: request.committed,
+      exposure: request.exposure,
+      budgetUsed: request.budget.used,
+      budgetLimit: request.budget.limit,
+      totalWaitMs: request.totalWaitMs,
+      visitedTargetCount: request.visitedTargets.length,
+      visitedCredentialCount: request.visitedCredentialCount,
+      deadlineRemainingMs: request.deadlineRemainingMs,
+    };
+    if (error === undefined) {
+      return budgetFacts;
+    }
+    // Telemetry must never mask the attempt error: a decoding failure
+    // degrades the report to budget facts only.
+    try {
+      const failure = decodeRetryFailure(error);
+      return {
+        kind: failure.kind,
+        phase: failure.phase,
+        ...budgetFacts,
+      };
+    } catch (decodeError) {
+      this.logger.debug(
+        () => `Failure decode for telemetry threw: ${String(decodeError)}`,
+      );
+      return budgetFacts;
+    }
   }
 
   private createAttemptNotification(
@@ -437,44 +517,6 @@ export class RetryOrchestrator implements IProvider {
       this.name,
       this.logger,
     );
-  }
-
-  /**
-   * Yield stream chunks without timeout, marking the error if chunks were
-   * already yielded so the retry loop knows not to retry.
-   */
-  private async *yieldStreamUnprotected(
-    stream: AsyncIterableIterator<IContent>,
-    attemptController: AbortController,
-  ): AsyncGenerator<IContent, boolean> {
-    let chunksYielded = false;
-    let completed = false;
-    let failed = false;
-    let failure: unknown;
-    try {
-      for await (const chunk of stream) {
-        chunksYielded = true;
-        yield chunk;
-      }
-      completed = true;
-      return chunksYielded;
-    } catch (streamError) {
-      failed = true;
-      failure = streamError;
-      if (chunksYielded) {
-        this.logger.debug(
-          () =>
-            `Error after yielding chunks - cannot retry (would produce mixed response)`,
-        );
-        throw markErrorAfterStreamOutput(streamError);
-      }
-      throw streamError;
-    } finally {
-      if (!completed) {
-        attemptController.abort();
-        await closeIteratorBeforeContinuing(stream, failure, failed);
-      }
-    }
   }
 
   /**
@@ -499,9 +541,50 @@ export class RetryOrchestrator implements IProvider {
     );
   }
 
+  /**
+   * Post-exposure failures are terminal: the guarded stream commits before
+   * every outward yield, and its post-yield errors also carry the WeakSet
+   * terminal mark. A committed request may still repair auth for FUTURE
+   * requests (one-shot, no replay), then the error surfaces.
+   */
+  private async resolveCommittedFailureAction(
+    error: unknown,
+    request: RetryRequestContext,
+  ): Promise<
+    { type: 'throw'; error: unknown } | { type: 'continue' } | undefined
+  > {
+    const failure =
+      isTerminalRetryError(error) || getRequestCommitState(request).committed
+        ? decodeRetryFailure(error)
+        : undefined;
+    if (failure === undefined) return undefined;
+    return decideCommittedFailure(
+      error,
+      request,
+      failure,
+      (authError, authOptions, errorStatus, authSignal) =>
+        // The gate swallows repair failures by design (the committed
+        // error surfaces either way); log them so the silent catch is
+        // observable in debug output.
+        this.invokeAuthErrorHandler(
+          authError,
+          authOptions,
+          errorStatus,
+          authSignal,
+        ).catch((repairError: unknown) => {
+          this.logger.debug(
+            () => `Post-commitment auth repair failed: ${String(repairError)}`,
+          );
+          throw repairError;
+        }),
+    );
+  }
+
   private async handleRetryError(
     error: unknown,
+    request: RetryRequestContext,
     options: GenerateChatOptions,
+    signal: AbortSignal | undefined,
     state: {
       attempt: number;
       currentDelay: number;
@@ -514,12 +597,15 @@ export class RetryOrchestrator implements IProvider {
     initialDelayMs: number,
     failoverThreshold: number,
     bucketFailoverHandler: BucketFailoverHandler | undefined,
-    signal: AbortSignal | undefined,
     authRetryTimeoutMs: number,
     budget: { used: number; limit: number },
   ): Promise<{ type: 'throw'; error: unknown } | { type: 'continue' }> {
     state.attempt = budget.used;
-    if (isTerminalRetryError(error)) return { type: 'throw', error };
+    const committedFailure = await this.resolveCommittedFailureAction(
+      error,
+      request,
+    );
+    if (committedFailure !== undefined) return committedFailure;
 
     const classification = classifyRetryError(error);
     const { status: errorStatus, category, ...f } = classification;
@@ -541,19 +627,13 @@ export class RetryOrchestrator implements IProvider {
       signal,
     );
 
-    const shouldAttemptFailover =
-      state.attempt < maxAttempts &&
-      permitsBucketFailover(error) &&
-      this.shouldAttemptFailover(
-        bucketFailoverHandler,
-        f.is429,
-        f.is402,
-        f.isAuthError,
-        f.isNetworkError,
-        f.is5xxServerError,
-        state,
-        failoverThreshold,
-      );
+    const shouldAttemptFailover = shouldFailoverNow(
+      state,
+      maxAttempts,
+      error,
+      bucketFailoverHandler,
+      failoverThreshold,
+    );
 
     if (shouldAttemptFailover && bucketFailoverHandler) {
       return this.handleFailoverDecision(
@@ -567,6 +647,7 @@ export class RetryOrchestrator implements IProvider {
         error,
         authRetryTimeoutMs,
         signal,
+        request,
       );
     }
 
@@ -579,41 +660,7 @@ export class RetryOrchestrator implements IProvider {
       signal,
       category,
       errorStatus,
-    );
-  }
-
-  private shouldAttemptFailover(
-    bucketFailoverHandler: BucketFailoverHandler | undefined,
-    is429: boolean,
-    is402: boolean,
-    isAuthError: boolean,
-    isNetworkError: boolean,
-    is5xxServerError: boolean,
-    state: {
-      consecutive429s: number;
-      consecutiveAuthErrors: number;
-      consecutiveNetworkErrors: number;
-      consecutiveServerErrors: number;
-    },
-    failoverThreshold: number,
-  ): boolean {
-    if (bucketFailoverHandler === undefined) {
-      return false;
-    }
-    if (is429 && state.consecutive429s > failoverThreshold) {
-      return true;
-    }
-    if (is402) {
-      return true;
-    }
-    if (isAuthError && state.consecutiveAuthErrors > 1) {
-      return true;
-    }
-    if (isNetworkError && state.consecutiveNetworkErrors > failoverThreshold) {
-      return true;
-    }
-    return (
-      is5xxServerError && state.consecutiveServerErrors > failoverThreshold
+      request,
     );
   }
 
@@ -635,8 +682,9 @@ export class RetryOrchestrator implements IProvider {
     error: unknown,
     authRetryTimeoutMs: number,
     signal: AbortSignal | undefined,
+    request: RetryRequestContext,
   ): Promise<{ type: 'throw'; error: unknown } | { type: 'continue' }> {
-    const failoverResult = await this.attemptBucketFailover(
+    const failoverResult = await attemptBucketFailover(
       errorStatus,
       is429,
       isNetworkError,
@@ -645,10 +693,12 @@ export class RetryOrchestrator implements IProvider {
       bucketFailoverHandler,
       authRetryTimeoutMs,
       signal,
+      this.logger,
     );
     if (failoverResult === 'continue') {
       const ms = getDelayDuration(error, state.currentDelay);
       await delay(ms, signal);
+      request.recordWait(ms);
       this.config.trackThrottleWaitTime(ms);
       return { type: 'continue' };
     }
@@ -673,6 +723,7 @@ export class RetryOrchestrator implements IProvider {
     signal: AbortSignal | undefined,
     category: StructuredErrorCategory | undefined,
     status: number | undefined,
+    request: RetryRequestContext,
   ): Promise<{ type: 'throw'; error: unknown } | { type: 'continue' }> {
     const shouldRetry = shouldRetryError(error);
     if (!shouldRetry && !shouldAttemptRefreshRetry) {
@@ -697,6 +748,7 @@ export class RetryOrchestrator implements IProvider {
     );
 
     await delay(delayMs, signal);
+    request.recordWait(delayMs);
     this.config.trackThrottleWaitTime(delayMs);
 
     if (hasRetryAfterHeader(error)) {
@@ -772,123 +824,6 @@ export class RetryOrchestrator implements IProvider {
   }
 
   /**
-   * Attempt bucket failover; returns 'continue' if failover succeeded
-   * (counters reset, retry immediately), or 'exhausted' if no buckets remain.
-   * Any rejection from tryFailover is treated as 'exhausted' to honor the
-   * 'continue' | 'exhausted' return contract.
-   */
-  private async attemptBucketFailover(
-    errorStatus: number | undefined,
-    is429: boolean,
-    isNetworkError: boolean,
-    is5xxServerError: boolean,
-    state: {
-      attempt: number;
-      consecutive429s: number;
-      consecutiveNetworkErrors: number;
-      consecutiveAuthErrors: number;
-      consecutiveServerErrors: number;
-    },
-    bucketFailoverHandler: BucketFailoverHandler,
-    authRetryTimeoutMs: number,
-    signal: AbortSignal | undefined,
-  ): Promise<'continue' | 'exhausted'> {
-    const failoverReason = resolveFailoverReason(
-      is429,
-      isNetworkError,
-      is5xxServerError,
-      state.consecutive429s,
-      state.consecutiveNetworkErrors,
-      state.consecutiveServerErrors,
-      errorStatus,
-    );
-    this.logger.debug(
-      () => `Attempting bucket failover after ${failoverReason}`,
-    );
-
-    const failoverContext: FailoverContext = {
-      triggeringStatus: errorStatus,
-      authRetryTimeoutMs,
-      signal,
-    };
-
-    let failoverResult: boolean;
-    try {
-      failoverResult = await raceWithAbort(
-        bucketFailoverHandler.tryFailover(failoverContext),
-        signal,
-      );
-    } catch (failoverError) {
-      if (signal?.aborted === true) throw failoverError;
-      this.logger.debug(
-        () =>
-          `Bucket failover handler rejected, treating as exhausted: ${failoverError}`,
-      );
-      return 'exhausted';
-    }
-
-    if (failoverResult) {
-      this.logger.debug(
-        () => `Bucket failover successful, resetting retry state`,
-      );
-      resetRetryErrorCounters(state);
-      return 'continue';
-    }
-
-    this.logger.debug(
-      () => `No more buckets available for failover, stopping retry`,
-    );
-    return 'exhausted';
-  }
-
-  /**
-   * Wraps an async generator with a timeout for the first chunk
-   */
-  private async *streamWithTimeout(
-    stream: AsyncIterableIterator<IContent>,
-    timeoutMs: number,
-    attemptController: AbortController,
-  ): AsyncGenerator<IContent, boolean> {
-    const iterator = stream[Symbol.asyncIterator]();
-    let firstChunk = true;
-    let chunksYielded = false;
-    let completed = false;
-    let failed = false;
-    let failure: unknown;
-
-    try {
-      for (;;) {
-        if (attemptController.signal.aborted) {
-          throw createAbortError(attemptController.signal.reason);
-        }
-        const nextPromise = iterator.next();
-        const result = firstChunk
-          ? await raceFirstChunkWithTimeout(nextPromise, timeoutMs)
-          : await nextPromise;
-        firstChunk = false;
-        if (result.done === true) {
-          completed = true;
-          return chunksYielded;
-        }
-        chunksYielded = true;
-        yield result.value;
-      }
-    } catch (error) {
-      failed = true;
-      const propagatedFailure = chunksYielded
-        ? markErrorAfterStreamOutput(error)
-        : error;
-      failure = propagatedFailure;
-      throw propagatedFailure;
-    } finally {
-      if (!completed) {
-        attemptController.abort();
-        await closeIteratorBeforeContinuing(iterator, failure, failed);
-      }
-    }
-  }
-
-  /**
    * Creates an AllBucketsExhaustedError with failure reasons
    * @plan PLAN-20260223-ISSUE1598.P16
    * @requirement REQ-1598-IC09
@@ -905,29 +840,6 @@ export class RetryOrchestrator implements IProvider {
     return new AllBucketsExhaustedError(this.name, buckets, lastError, reasons);
   }
 }
-/**
- * Race the first stream chunk against a timeout. Resolves with the iterator
- * result (clearing the timeout), or rejects with a stream-timeout error.
- */
-async function raceFirstChunkWithTimeout<T>(
-  nextPromise: Promise<IteratorResult<T>>,
-  timeoutMs: number,
-): Promise<IteratorResult<T>> {
-  const timeoutController = new AbortController();
-  try {
-    const timeoutPromise = delay(timeoutMs, timeoutController.signal).then(
-      () => {
-        throw new Error(
-          `Stream timeout: first chunk not received after ${timeoutMs}ms`,
-        );
-      },
-    );
-    return await Promise.race([nextPromise, timeoutPromise]);
-  } finally {
-    timeoutController.abort();
-  }
-}
-
 function resolveAttemptErrorMessage(
   status: AttemptStatus,
   error: unknown,

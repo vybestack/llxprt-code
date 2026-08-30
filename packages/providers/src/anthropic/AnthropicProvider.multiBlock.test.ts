@@ -88,6 +88,8 @@ describe('AnthropicProvider multi-block human message assembly', () => {
         type: 'content_block_delta',
         delta: { type: 'text_delta', text },
       };
+
+      yield { type: 'message_stop' };
     },
   });
 

@@ -314,6 +314,8 @@ describe('AnthropicProvider', () => {
             },
           };
           yield { type: 'content_block_stop' };
+
+          yield { type: 'message_stop' };
         },
       };
 

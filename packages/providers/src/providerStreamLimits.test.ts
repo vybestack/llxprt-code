@@ -101,6 +101,7 @@ async function* anthropicToolStream(
     };
   }
   yield { type: 'content_block_stop', index: 0 };
+  yield { type: 'message_stop' };
 }
 
 function findToolCall(content: readonly IContent[]) {

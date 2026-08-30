@@ -222,6 +222,8 @@ describe('AnthropicProvider', () => {
               type: 'message_delta',
               usage: { input_tokens: 100, output_tokens: 5 },
             };
+
+            yield { type: 'message_stop' };
           },
         };
 

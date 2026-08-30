@@ -233,6 +233,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: ' world' },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -285,6 +287,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'Done' },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -389,6 +393,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'Done' },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -491,6 +497,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'Result' },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -586,6 +594,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'ok' },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -645,6 +655,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'ok' },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -696,6 +708,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: 'done' },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -830,6 +844,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: ' world' },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 
@@ -880,6 +896,8 @@ describe('AnthropicProvider', () => {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: ' world' },
           };
+
+          yield { type: 'message_stop' };
         },
       };
 

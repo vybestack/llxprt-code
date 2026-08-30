@@ -5,94 +5,27 @@
  */
 
 import {
-  getErrorStatus,
-  isNetworkTransientError,
-  isOverloadError,
-  isRetryableError,
-} from '@vybestack/llxprt-code-core/utils/retry.js';
-import { isStreamTimeoutError } from './providerErrorObservation.js';
-import { isQuotaExhaustionError } from './utils/quotaExhaustion.js';
+  decodeRetryFailure,
+  isRetryableFailure,
+} from './retryFailureTaxonomy.js';
+
+export {
+  getDelayDuration,
+  getRetryAfterDelayMs,
+  hasRetryAfterHeader,
+} from './retryAfterHeader.js';
 
 /**
  * Determines if an error should trigger a retry.
+ *
+ * Delegates to the shared failure taxonomy: one eligibility decision
+ * (isRetryableFailure over the decoded RetryFailure) governs central
+ * retry, load-balancer failover, and telemetry. The historical status
+ * exceptions (403 forbidden, terminal-quota 429, load-balancer-owned
+ * request timeouts, aggregate isRetryable markers) are encoded there.
  */
 export function shouldRetryError(error: unknown): boolean {
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    Array.isArray((error as { failures?: unknown }).failures) &&
-    typeof (error as { isRetryable?: unknown }).isRetryable === 'boolean'
-  ) {
-    return isRetryableError(error);
-  }
-  const status = getErrorStatus(error);
-
-  if (status === 400 || status === 404) {
-    return false;
-  }
-  if (status === 429 || isOverloadError(error)) {
-    if (isQuotaExhaustionError(error)) return false;
-    return true;
-  }
-  if (status !== undefined && status >= 500 && status < 600) {
-    return true;
-  }
-  if (isNetworkTransientError(error)) {
-    return true;
-  }
-  // 403 means the request is forbidden, not throttled; retrying only delays the error (issue #2917).
-  if (status === 401) {
-    return true;
-  }
-  return isStreamTimeoutError(error);
-}
-
-/** Maximum allowable Retry-After delay (5 minutes) to prevent stalling. */
-const MAX_RETRY_AFTER_MS = 300_000;
-
-/**
- * Gets the delay duration for a retry, respecting Retry-After header.
- * The Retry-After value is capped at MAX_RETRY_AFTER_MS to prevent an
- * unbounded sleep from a misbehaving server.
- */
-export function getDelayDuration(error: unknown, defaultDelay: number): number {
-  const retryAfterMs = getRetryAfterDelayMs(error);
-  if (retryAfterMs > 0) {
-    return Math.min(retryAfterMs, MAX_RETRY_AFTER_MS);
-  }
-  const jitter = defaultDelay * 0.3 * (Math.random() * 2 - 1);
-  return Math.max(0, defaultDelay + jitter);
-}
-
-/**
- * Extracts Retry-After delay from error headers.
- */
-export function getRetryAfterDelayMs(error: unknown): number {
-  if (typeof error === 'object' && error !== null) {
-    const errorObj = error as {
-      response?: { headers?: { 'retry-after'?: unknown } };
-    };
-
-    const retryAfter = errorObj.response?.headers?.['retry-after'];
-    if (typeof retryAfter === 'string' && retryAfter !== '') {
-      const seconds = parseInt(retryAfter, 10);
-      if (!isNaN(seconds)) {
-        return seconds * 1000;
-      }
-      const date = new Date(retryAfter);
-      if (!isNaN(date.getTime())) {
-        return Math.max(0, date.getTime() - Date.now());
-      }
-    }
-  }
-  return 0;
-}
-
-/**
- * Checks if error has a Retry-After header.
- */
-export function hasRetryAfterHeader(error: unknown): boolean {
-  return getRetryAfterDelayMs(error) > 0;
+  return isRetryableFailure(decodeRetryFailure(error));
 }
 
 /**

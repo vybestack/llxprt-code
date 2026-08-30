@@ -18,6 +18,14 @@ import {
   isImmediateFailoverError,
   shouldFailover,
 } from '../loadBalancing/failoverSettings.js';
+import {
+  flagsFromFailure,
+  shouldFailoverNow,
+  type FailoverState,
+} from '../retryFailoverLogic.js';
+import { shouldRetryError } from '../retryDelayPolicy.js';
+import { decodeRetryFailure } from '../retryFailureTaxonomy.js';
+import type { BucketFailoverHandler } from '@vybestack/llxprt-code-core/config/config.js';
 import { CircuitBreakerManager } from '../loadBalancing/circuitBreakerManager.js';
 import { buildExtendedStats } from '../loadBalancing/statsBuilder.js';
 import {
@@ -72,6 +80,14 @@ function statusError(status: number): Error {
   return Object.assign(new Error(`status ${status}`), { status });
 }
 
+const handlerStub: BucketFailoverHandler = {
+  getBuckets: () => ['bucket-a'],
+  getCurrentBucket: () => 'bucket-a',
+  isEnabled: () => true,
+  tryFailover: () => Promise.resolve(true),
+  resetSession: () => {},
+};
+
 async function collectChunks(
   stream: AsyncIterable<IContent>,
 ): Promise<IContent[]> {
@@ -118,6 +134,64 @@ describe('extracted provider helper behavior', () => {
     expect(custom.failoverStatusCodes).toStrictEqual([408, 409]);
     expect(shouldFailover(statusError(409), custom)).toBe(true);
     expect(shouldFailover(statusError(502), custom)).toBe(false);
+  });
+
+  it('derives load-balancer target policy from the failure taxonomy (issue #2532)', () => {
+    const defaults = extractFailoverSettings(undefined);
+
+    // Quota-bearing 429: terminal for central same-target retry, but target
+    // rotation is the correct recovery at the load-balancer level.
+    const quota429 = Object.assign(statusError(429), {
+      error: { code: 'insufficient_quota' },
+    });
+    expect(shouldRetryError(quota429)).toBe(false);
+    expect(shouldFailover(quota429, defaults)).toBe(true);
+
+    // HTTP-200 in-band Anthropic overload: same-backend eligibility mirrors
+    // the central retry policy.
+    const inBandOverload = Object.assign(new Error('Overloaded'), {
+      error: { type: 'error', error: { type: 'overloaded_error' } },
+    });
+    expect(shouldFailover(inBandOverload, defaults)).toBe(true);
+
+    // Bucket eligibility derives from the same decode: payment failures are
+    // failover-eligible without waiting for consecutive thresholds.
+    const idleState: FailoverState = {
+      consecutive429s: 0,
+      consecutiveNetworkErrors: 0,
+      consecutiveAuthErrors: 0,
+      consecutiveServerErrors: 0,
+      attempt: 0,
+      currentDelay: 0,
+    };
+    expect(
+      flagsFromFailure({
+        phase: 'headers',
+        kind: 'payment',
+        status: 402,
+        cause: undefined,
+      }).is402,
+    ).toBe(true);
+    expect(
+      shouldFailoverNow(idleState, 6, statusError(402), handlerStub, 1),
+    ).toBe(true);
+    expect(
+      shouldFailoverNow(idleState, 6, statusError(404), handlerStub, 1),
+    ).toBe(false);
+
+    // In-band provider-coded failures (status-less api_error body) ride the
+    // is429/overload counter path classifyRetryError maintains, so bucket
+    // failover fires once the consecutive threshold is exceeded.
+    const inBandApiError = Object.assign(new Error('Internal server error'), {
+      error: { type: 'error', error: { type: 'api_error' } },
+    });
+    const apiFlags = flagsFromFailure(decodeRetryFailure(inBandApiError));
+    expect(apiFlags.is429).toBe(true);
+    expect(apiFlags.is5xxServerError).toBe(false);
+    const twoConsecutive: FailoverState = { ...idleState, consecutive429s: 2 };
+    expect(
+      shouldFailoverNow(twoConsecutive, 6, inBandApiError, handlerStub, 1),
+    ).toBe(true);
   });
 
   it('gates half-open probes and returns immutable circuit-breaker snapshots', () => {
@@ -186,9 +260,8 @@ describe('extracted provider helper behavior', () => {
     expect(isTimeoutError(typedTimeout)).toBe(true);
   });
 
-  it('uses the attempt cancellation capability supplied by its owner', async () => {
+  it('uses the attempt controller supplied by its owner', async () => {
     const controller = new AbortController();
-    const cancel = vi.fn(() => controller.abort());
     async function* delayedFirstChunk(): AsyncIterableIterator<IContent> {
       await new Promise((resolve) => setTimeout(resolve, 20));
       yield { speaker: 'ai', blocks: [{ type: 'text', text: 'late' }] };
@@ -201,11 +274,11 @@ describe('extracted provider helper behavior', () => {
           1,
           'owned-attempt',
           debugLoggerStub(),
-          { signal: controller.signal, cancel },
+          controller,
         ),
       ),
     ).rejects.toThrow('Request timeout after 1ms');
-    expect(cancel).toHaveBeenCalledOnce();
+    expect(controller.signal.aborted).toBe(true);
   });
 
   it('preserves backend token extraction and request metrics accumulation', () => {

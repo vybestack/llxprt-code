@@ -8,11 +8,12 @@
  * Fence test for issue #3048 (REQ-3048-001).
  *
  * The discard-and-restart contract depends on a property that already exists:
- * `RetryOrchestrator.yieldStreamUnprotected` marks any error raised after an
- * `IContent` was yielded as terminal and refuses to retry inside the SAME
- * iterator, because doing so would splice two generations into one stream. The
- * turn-level restart happens at the fresh-attempt boundary owned by
- * `TurnProcessor` instead (specification AD-1).
+ * the shared guarded stream (`guardedStream.ts`) used by RetryOrchestrator
+ * commits the request before every outward yield and marks any error raised
+ * after an `IContent` was yielded as terminal, refusing to retry inside the
+ * SAME iterator, because doing so would splice two generations into one
+ * stream. The turn-level restart happens at the fresh-attempt boundary owned
+ * by `TurnProcessor` instead (specification AD-1).
  *
  * This test passes on unmodified source. It exists so a future "just let the
  * orchestrator retry after output" edit fails loudly — that edit would break the

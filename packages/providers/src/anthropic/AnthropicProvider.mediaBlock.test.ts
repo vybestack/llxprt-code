@@ -109,6 +109,8 @@ describe('AnthropicProvider MediaBlock support', () => {
         type: 'content_block_delta',
         delta: { type: 'text_delta', text },
       };
+
+      yield { type: 'message_stop' };
     },
   });
 

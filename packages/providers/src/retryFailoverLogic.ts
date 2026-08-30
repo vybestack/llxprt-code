@@ -11,6 +11,11 @@ import type {
 import { raceWithAbort } from './utils/abortSignal.js';
 import { resetRetryErrorCounters } from './retryErrorClassification.js';
 import { resolveFailoverReason } from './retryDelayPolicy.js';
+import { permitsBucketFailover } from './errors.js';
+import {
+  decodeRetryFailure,
+  type RetryFailure,
+} from './retryFailureTaxonomy.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 
 export type RetryAction =
@@ -26,36 +31,96 @@ export interface FailoverState {
   currentDelay: number;
 }
 
+export interface FailoverFlags {
+  is429: boolean;
+  is402: boolean;
+  isAuthError: boolean;
+  isNetworkError: boolean;
+  is5xxServerError: boolean;
+}
+
+/**
+ * Gate a bucket-failover attempt on the aggregate attempt budget, the
+ * error's eligibility, and the consecutive-failure thresholds. Committed
+ * requests never reach this: post-exposure errors are terminal upstream.
+ *
+ * Eligibility flags are derived from the shared failure taxonomy (one decode
+ * per decision) rather than re-implemented status matching here.
+ */
+export function shouldFailoverNow(
+  state: FailoverState,
+  maxAttempts: number,
+  error: unknown,
+  bucketFailoverHandler: BucketFailoverHandler | undefined,
+  failoverThreshold: number,
+): boolean {
+  if (state.attempt >= maxAttempts) return false;
+  if (!permitsBucketFailover(error)) return false;
+  return shouldAttemptFailover(
+    bucketFailoverHandler,
+    flagsFromFailure(decodeRetryFailure(error)),
+    state,
+    failoverThreshold,
+  );
+}
+
+/**
+ * Project a decoded failure onto the historical classification flags the
+ * consecutive-threshold policy consumes. quota-bearing rate limits keep the
+ * is429 flag: credential-bucket rotation is the intended recovery for an
+ * exhausted quota even though same-target retry treats it as terminal.
+ *
+ * In-band provider-coded failures (overloaded_error, rate_limit_error, and
+ * the status-less api_error body) ride the is429/overload counter path:
+ * classifyRetryError counts them as the 429 class (its is5xx excludes them
+ * by design, see retryErrorClassification.ts), so the flags must match the
+ * counters they are compared against.
+ */
+export function flagsFromFailure(failure: RetryFailure): FailoverFlags {
+  const inBandServer = failure.kind === 'server' && failure.phase === 'stream';
+  return {
+    is429:
+      failure.kind === 'rate_limit' ||
+      failure.kind === 'overload' ||
+      inBandServer,
+    is402: failure.kind === 'payment',
+    isAuthError: failure.kind === 'auth',
+    isNetworkError: failure.kind === 'network',
+    is5xxServerError: failure.kind === 'server' && !inBandServer,
+  };
+}
+
 /**
  * Determines whether a bucket failover should be attempted based on
  * consecutive error counts and the failover threshold.
  */
 export function shouldAttemptFailover(
   bucketFailoverHandler: BucketFailoverHandler | undefined,
-  is429: boolean,
-  is402: boolean,
-  isAuthError: boolean,
-  isNetworkError: boolean,
-  is5xxServerError: boolean,
+  flags: FailoverFlags,
   state: FailoverState,
   failoverThreshold: number,
 ): boolean {
   if (bucketFailoverHandler === undefined) {
     return false;
   }
-  if (is429 && state.consecutive429s > failoverThreshold) {
+  if (flags.is429 && state.consecutive429s > failoverThreshold) {
     return true;
   }
-  if (is402) {
+  if (flags.is402) {
     return true;
   }
-  if (isAuthError && state.consecutiveAuthErrors > 1) {
+  if (flags.isAuthError && state.consecutiveAuthErrors > 1) {
     return true;
   }
-  if (isNetworkError && state.consecutiveNetworkErrors > failoverThreshold) {
+  if (
+    flags.isNetworkError &&
+    state.consecutiveNetworkErrors > failoverThreshold
+  ) {
     return true;
   }
-  return is5xxServerError && state.consecutiveServerErrors > failoverThreshold;
+  return (
+    flags.is5xxServerError && state.consecutiveServerErrors > failoverThreshold
+  );
 }
 
 /**
