@@ -110,6 +110,27 @@ function computeRestoreCut(
 }
 
 /**
+ * Resolve the chronology identity of the cut point so replay can reproduce the
+ * cut without depending on live and journalled history having the same length.
+ *
+ * The cut point is the first removed item. The journal is append-only, so an
+ * item present in live history when the cut was computed is also present in the
+ * replayed history and can be found there by its marker.
+ *
+ * Returns `undefined` when the item carries no usable marker, in which case the
+ * rewind is recorded as a bare count exactly as it always has been.
+ *
+ * @issue #2934
+ */
+function resolveCutSeq(cutItem: IContent | undefined): number | undefined {
+  const seq = cutItem?.metadata?.chronology?.seq;
+  if (typeof seq !== 'number' || !Number.isSafeInteger(seq) || seq < 0) {
+    return undefined;
+  }
+  return seq;
+}
+
+/**
  * Service for durable history mutations that persist rewind semantics.
  */
 export class HistoryMutationService {
@@ -170,8 +191,9 @@ export class HistoryMutationService {
         return { ok: false, error: 'Recording is not active' };
       }
 
-      // 2. Durably append the rewind event.
-      recording.recordRewind(removed.length);
+      // 2. Durably append the rewind event, identifying the cut point by
+      //    chronology so replay does not depend on offsets (#2934).
+      recording.recordRewind(removed.length, resolveCutSeq(removed[0]));
 
       // 3. Flush the rewind.
       await recording.flush();

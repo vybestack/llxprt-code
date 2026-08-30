@@ -113,11 +113,28 @@ export interface CompressedPayload {
 }
 
 /**
- * Payload for the `rewind` event — removes the last N items from history.
+ * Payload for the `rewind` event — removes the tail of history from the cut
+ * point onwards.
  */
 export interface RewindPayload {
   /** Positive integer — number of items removed from the end of history. */
   itemsRemoved: number;
+
+  /**
+   * Chronology `seq` of the FIRST removed item, when that item carried a
+   * chronology marker (#1721). Replay cuts at the item whose marker `seq`
+   * EQUALS this value, which stays correct even when live history and the
+   * journal have diverged — density optimization removes items from live
+   * history without journalling anything, so `itemsRemoved` alone removes the
+   * wrong amount on replay.
+   *
+   * Absent on legacy events and whenever the cut item has no marker. Replay
+   * falls back to `itemsRemoved` whenever it is absent, unreadable, or names
+   * an item that is not in the replayed history.
+   *
+   * @issue #2934
+   */
+  cutSeq?: number;
 }
 
 /**

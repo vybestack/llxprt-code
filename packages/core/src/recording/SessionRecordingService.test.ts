@@ -728,6 +728,51 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
       const payload = rewind!.payload as { itemsRemoved: number };
       expect(payload.itemsRemoved).toBe(3);
     });
+
+    /**
+     * @issue #2934
+     */
+    it('rewind event carries the chronology cut marker when provided', async () => {
+      const config = makeConfig({ chatsDir });
+      service = new SessionRecordingService(config);
+
+      service.recordContent(makeContent('trigger'));
+      service.recordRewind(3, 7);
+      await service.flush();
+
+      const events = await readJsonlFile(service.getFilePath()!);
+      const rewind = events.find((e) => e.type === 'rewind');
+      expect(rewind).toBeDefined();
+
+      const payload = rewind!.payload as {
+        itemsRemoved: number;
+        cutSeq?: number;
+      };
+      expect(payload.itemsRemoved).toBe(3);
+      expect(payload.cutSeq).toBe(7);
+    });
+
+    /**
+     * A rewind recorded without a resolvable cut marker must stay
+     * byte-compatible with legacy count-only events.
+     *
+     * @issue #2934
+     */
+    it('rewind event omits the cut marker when none is provided', async () => {
+      const config = makeConfig({ chatsDir });
+      service = new SessionRecordingService(config);
+
+      service.recordContent(makeContent('trigger'));
+      service.recordRewind(3);
+      await service.flush();
+
+      const raw = await fs.readFile(service.getFilePath()!, 'utf8');
+      const rewindLines = raw
+        .split('\n')
+        .filter((line) => line.includes('"type":"rewind"'));
+      expect(rewindLines).toHaveLength(1);
+      expect(rewindLines[0]).not.toContain('cutSeq');
+    });
   });
 
   // -------------------------------------------------------------------------
