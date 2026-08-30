@@ -5,7 +5,7 @@
  */
 
 /**
- * Type-only corrections to `bun:test`.
+ * Type-only corrections for the narrow `bun-types` split.
  *
  * Bun's `.rejects` and `.resolves` accessors return the same `Matchers` object
  * as a synchronous assertion, so every matcher reached through them is declared
@@ -44,4 +44,20 @@ declare module 'bun:test' {
     /** Fails the test with the given message (always throws). */
     fail(message?: string | Error): never;
   }
+}
+
+/**
+ * `import.meta.dir` is declared by `bun-types/globals`, which these projects
+ * deliberately do not load: it also redeclares the global `fetch` with Bun's
+ * `preconnect` member, which is not assignable from the plain `fetch` shape
+ * that provider sources are written against. The projects therefore take the
+ * narrow `bun-types/test` + `bun-types/test-globals` pair and restate the one
+ * runtime member they still need here.
+ *
+ * Bun has provided this since 1.0; it is the directory containing the current
+ * module, and the `run-bun-tests.ts` runners anchor their paths on it.
+ */
+interface ImportMeta {
+  /** Absolute path of the directory containing this module. */
+  readonly dir: string;
 }

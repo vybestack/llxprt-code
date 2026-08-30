@@ -3,7 +3,11 @@
   "compilerOptions": {
     "noEmit": true,
     "incremental": false,
-    "types": ["node", "bun-types/test", "bun-types/test-globals"]
+    "types": ["node", "bun-types/test", "bun-types/test-globals"],
+    // tsconfig.json pins this package to ES2021 for the shipped runtime.
+    // test-bun/ only ever executes under Bun, where ES2022 (in particular
+    // Array.prototype.at, used by run-bun-tests.issue3253.bun.ts) is available.
+    "lib": ["DOM", "DOM.Iterable", "ES2022"]
   },
   "include": ["../../bun-test-corrections.d.ts", "test-bun/**/*.ts"]
 }
