@@ -30,10 +30,9 @@
  * Additionally, it detects new exported identifiers containing "Gemini"
  * (case-insensitive) outside the documented allowlist.
  *
- * Manifest enforcement: inspects root and all packages-level manifests to ensure
- * `@google/genai` appears ONLY in the exact sanctioned workspaces
- * (packages/core, packages/providers) at exactly the allowed version, and
- * nowhere else (root, all other packages). Scans dependencies,
+ * Manifest enforcement: inspects the root and all package manifests to ensure
+ * `@google/genai` appears only in the configured root packaging bridge and
+ * providers workspace at the allowed version, and nowhere else. Scans dependencies,
  * devDependencies, peerDependencies, AND optionalDependencies. Fails closed
  * on malformed/unreadable manifests or packages-dir discovery failure.
  *
@@ -44,7 +43,6 @@
  *
  * Enclaves:
  *   - packages/providers/src/gemini/** — Gemini provider implementation
- *   - packages/core/src/code_assist/** — code_assist (needs the SDK)
  *
  * Usage:
  *   scripts/check-genai-enclave.ts
@@ -249,7 +247,7 @@ function checkManifest(
       'code' in e &&
       (e as { code?: string }).code === 'ENOENT'
     ) {
-      // F4: a required manifest (root/core/providers) being absent is an
+      // F4: a required manifest (root/providers) being absent is an
       // operational failure — the guard cannot verify the dependency
       // invariant without it.
       if (REQUIRED_MANIFEST_DIRS.has(workspaceDir)) {
@@ -367,8 +365,7 @@ function formatViolation(v: Violation): string {
   if (v.kind === 'genai-import') {
     return (
       `  ${v.file}:${v.line}: ${v.importForm} '${v.specifier}' — ` +
-      '@google/genai imports are only allowed in packages/providers/src/gemini/** ' +
-      'and packages/core/src/code_assist/**'
+      '@google/genai imports are only allowed in packages/providers/src/gemini/**'
     );
   }
   if (v.kind === 'computed-import') {
@@ -384,7 +381,7 @@ function formatViolation(v: Violation): string {
     return (
       `  ${v.file}:${v.line}: ${v.exportForm} '${v.exportName}' — ` +
       'exported identifiers containing "Gemini" are only allowed in ' +
-      'packages/providers/src/gemini/** and packages/core/src/code_assist/** ' +
+      'packages/providers/src/gemini/** ' +
       '(or the explicit allowlist in scripts/genai-enclave/config.ts)'
     );
   }

@@ -75,7 +75,6 @@ export function handleError(
   const providerName = getActiveProviderNameForApiError(config);
   const errorMessage = parseAndFormatApiError(
     error,
-    undefined,
     getErrorFallbackModel(config, providerName),
     providerName,
   );

@@ -111,10 +111,6 @@ export {
 } from './core/subagentTypes.js';
 export { buildContinuationDirective } from './core/compression/continuationDirective.js';
 
-export * from './code_assist/codeAssist.js';
-export * from './code_assist/server.js';
-export * from './code_assist/types.js';
-
 // Export utilities
 export * from './utils/paths.js';
 export * from './utils/shellPathCompletion.js';

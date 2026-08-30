@@ -127,6 +127,7 @@ describe('Turn run - abort and idle timeout', () => {
         sendMessageStream: mockSendMessageStream,
         getHistory: mockGetHistory,
         getConfig: () => ({
+          getSettingsService: () => ({ get: () => undefined }),
           getEphemeralSetting: (key: string) => {
             if (key === 'stream-idle-timeout-ms') {
               return 30_000;
@@ -312,6 +313,7 @@ describe('Turn run - abort and idle timeout', () => {
         sendMessageStream: mockSendMessageStream,
         getHistory: mockGetHistory,
         getConfig: () => ({
+          getSettingsService: () => ({ get: () => undefined }),
           getEphemeralSetting: (key: string) => {
             if (key === 'stream-idle-timeout-ms') {
               return testTimeoutMs;
@@ -544,7 +546,12 @@ function makeTurnWithConfig(
     sendMessageStream: mockSendMessageStream,
     getHistory: mockGetHistory,
     getConfig: () =>
-      getEphemeralSetting === undefined ? undefined : { getEphemeralSetting },
+      getEphemeralSetting === undefined
+        ? undefined
+        : {
+            getEphemeralSetting,
+            getSettingsService: () => ({ get: () => undefined }),
+          },
   };
   return new Turn(
     chatInstance as unknown as ChatSession,

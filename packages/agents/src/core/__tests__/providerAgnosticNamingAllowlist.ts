@@ -17,7 +17,6 @@
 /** Genuine Gemini provider/concept directory trees (root-relative prefix predicates). */
 export const GENUINE_GEMINI_TREES: readonly string[] = [
   'providers/src/gemini/',
-  'core/src/code_assist/',
   'core/src/prompt-config/defaults/providers/gemini/',
 ];
 
@@ -204,7 +203,6 @@ export const ALLOWED_IMPORT_TUPLES: readonly string[] = [
   'core/src/services/history/ContentConverters.test.ts::../../llm-types/geminiContent.js::GeminiContent::GeminiContent',
   'core/src/services/history/ContentConverters.ts::../../llm-types/geminiContent.js::GeminiContent::GeminiContent',
   'core/src/services/history/ContentConverters.ts::../../llm-types/geminiContent.js::GeminiContentPart::GeminiContentPart',
-  'core/src/utils/errorParsing.ts::../config/models.js::DEFAULT_GEMINI_MODEL::DEFAULT_GEMINI_MODEL',
   'core/src/utils/llm-edit-fixer.ts::../config/models.js::DEFAULT_GEMINI_FLASH_MODEL::DEFAULT_GEMINI_FLASH_MODEL',
   'core/src/utils/summarizer.ts::../config/models.js::DEFAULT_GEMINI_FLASH_LITE_MODEL::DEFAULT_GEMINI_FLASH_LITE_MODEL',
   'core/test/models/profiles.test.ts::./__fixtures__/mock-data.js::geminiModel::geminiModel',

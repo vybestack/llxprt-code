@@ -119,22 +119,19 @@ describe('check-genai-enclave — allowlist consistency', () => {
     const { GENAI_DEPENDENCY_MANIFESTS, SANCTIONED_GENAI_VERSION } =
       await import('../genai-enclave/config.ts');
     const dirs = GENAI_DEPENDENCY_MANIFESTS.map((e) => e.workspaceDir).sort();
-    expect(dirs).toEqual(['.', 'packages/core', 'packages/providers']);
+    expect(dirs).toEqual(['.', 'packages/providers']);
     for (const entry of GENAI_DEPENDENCY_MANIFESTS) {
       expect(entry.version).toBe(SANCTIONED_GENAI_VERSION);
       expect(entry.justification.length).toBeGreaterThan(0);
     }
   });
 
-  it('GENAI_IMPORT_ENCLAVES has exactly gemini and code_assist with justifications', async () => {
+  it('GENAI_IMPORT_ENCLAVES has exactly the gemini enclave with justification', async () => {
     const { GENAI_IMPORT_ENCLAVES } = await import(
       '../genai-enclave/config.ts'
     );
     const prefixes = GENAI_IMPORT_ENCLAVES.map((e) => e.prefix).sort();
-    expect(prefixes).toEqual([
-      'packages/core/src/code_assist/',
-      'packages/providers/src/gemini/',
-    ]);
+    expect(prefixes).toEqual(['packages/providers/src/gemini/']);
     for (const entry of GENAI_IMPORT_ENCLAVES) {
       expect(entry.justification.length).toBeGreaterThan(0);
     }

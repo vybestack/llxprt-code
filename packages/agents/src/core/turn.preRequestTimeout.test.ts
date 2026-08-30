@@ -65,6 +65,7 @@ function buildTurn(
   mockChatInstance: MockedChatInstance;
 } {
   const mockGetConfig = vi.fn().mockReturnValue({
+    getSettingsService: () => ({ get: () => undefined }),
     getEphemeralSetting: (key: string) => {
       if (key === 'stream-first-response-timeout-ms') {
         return firstResponseMs;

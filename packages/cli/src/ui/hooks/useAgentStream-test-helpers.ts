@@ -251,7 +251,6 @@ function createBaseAgent(
     getModelParams: () => ({}),
     setModelParam: () => {},
     clearModelParam: () => {},
-    getUserTier: () => undefined,
     profiles: {} as unknown as Agent['profiles'],
     tools: createStubToolControl(),
     mcp: {} as unknown as Agent['mcp'],

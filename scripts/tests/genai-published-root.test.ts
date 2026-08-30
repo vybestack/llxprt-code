@@ -12,10 +12,10 @@
  * for the workspace packages that need it at runtime. These tests verify:
  *
  * 1. The root package.json declares @google/genai at the exact version.
- * 2. packages/core and packages/providers declare it at the exact version.
- * 3. The version in all three manifests matches the config baseline.
+ * 2. packages/providers declares it at the exact version.
+ * 3. Both versions match the config baseline.
  *
- * No mocks — these assertions read the real package manifests. The CI Node
+ * No mocks. These assertions read the real package manifests. The CI Node
  * Consumer Smoke separately packs and installs the artifact in a clean project.
  */
 
@@ -27,11 +27,7 @@ import { REPO_ROOT } from './genai-enclave-guard-helpers.ts';
 
 const GENAI_PACKAGE = '@google/genai';
 const REQUIRED_VERSION = SANCTIONED_GENAI_VERSION;
-const REQUIRED_WORKSPACES = [
-  '.',
-  'packages/core',
-  'packages/providers',
-] as const;
+const REQUIRED_WORKSPACES = ['.', 'packages/providers'] as const;
 
 interface DependencyManifest {
   readonly dependencies?: Record<string, string>;
@@ -129,7 +125,7 @@ describe('published-root packaging bridge regression (finding2)', () => {
       });
     }
 
-    it('all three workspace versions are identical (no drift)', () => {
+    it('both workspace versions are identical (no drift)', () => {
       const versions = REQUIRED_WORKSPACES.map((ws) =>
         getGenaiVersion(readManifest(ws)),
       );
@@ -149,10 +145,10 @@ describe('published-root packaging bridge regression (finding2)', () => {
   });
 
   describe('broad publish dependency invariant', () => {
-    // The package-tree invariant: @google/genai may appear only in core and
-    // providers. Root bridge coverage is handled by the focused checks above.
+    // The package-tree invariant: @google/genai may appear only in providers.
+    // Root bridge coverage is handled by the focused checks above.
     // The repository currently uses a flat packages/* workspace layout.
-    it('no workspace OTHER than root/core/providers declares @google/genai', () => {
+    it('no workspace other than providers declares @google/genai', () => {
       const rogueWorkspaces: string[] = [];
       const packagesDir = join(REPO_ROOT, 'packages');
       for (const entry of readdirSync(packagesDir, { withFileTypes: true })) {

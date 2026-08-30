@@ -400,7 +400,6 @@ import {
 // Type for the mock config
 interface MockConfig {
   getAgentClient: () => {
-    getUserTier: () => Promise<undefined>;
     hasChatInitialized?: () => boolean;
   };
   getModel: () => string;
@@ -436,7 +435,6 @@ interface MockConfig {
 function createMockConfig(overrides: Partial<MockConfig> = {}): MockConfig {
   return {
     getAgentClient: () => ({
-      getUserTier: vi.fn().mockResolvedValue(undefined),
       hasChatInitialized: () => false,
     }),
     getModel: () => 'test-model',

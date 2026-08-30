@@ -79,6 +79,7 @@ describe('Turn - stream idle timeout behavioral tests', () => {
   it('honors config setting: timeout fires after custom timeout value from getConfig()', async () => {
     const customTimeoutMs = 30_000;
     const mockGetConfig = vi.fn().mockReturnValue({
+      getSettingsService: () => ({ get: () => undefined }),
       getEphemeralSetting: (key: string) => {
         if (key === 'stream-idle-timeout-ms') {
           return customTimeoutMs;
@@ -174,6 +175,7 @@ describe('Turn - stream idle timeout behavioral tests', () => {
   it('honors config setting: no timeout when iterator yields within custom timeout', async () => {
     const customTimeoutMs = 30_000;
     const mockGetConfig = vi.fn().mockReturnValue({
+      getSettingsService: () => ({ get: () => undefined }),
       getEphemeralSetting: (key: string) => {
         if (key === 'stream-idle-timeout-ms') {
           return customTimeoutMs;
@@ -219,6 +221,7 @@ describe('Turn - stream idle timeout behavioral tests', () => {
 
   it('disabled path: no timeout when setting is 0, even after 30 minutes', async () => {
     const mockGetConfig = vi.fn().mockReturnValue({
+      getSettingsService: () => ({ get: () => undefined }),
       getEphemeralSetting: (key: string) => {
         if (key === 'stream-idle-timeout-ms') {
           return 0;
@@ -314,6 +317,7 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS = String(envTimeoutMs);
 
     const mockGetConfig = vi.fn().mockReturnValue({
+      getSettingsService: () => ({ get: () => undefined }),
       getEphemeralSetting: (key: string) => {
         if (key === 'stream-idle-timeout-ms') {
           return configTimeoutMs;
@@ -407,6 +411,7 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     delete process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS;
 
     const mockGetConfig = vi.fn().mockReturnValue({
+      getSettingsService: () => ({ get: () => undefined }),
       getEphemeralSetting: (key: string) => {
         if (key === 'stream-idle-timeout-ms') {
           return undefined;

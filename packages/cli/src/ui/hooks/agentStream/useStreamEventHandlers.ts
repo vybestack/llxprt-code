@@ -397,7 +397,6 @@ function useErrorEventHandler(deps: StreamEventHandlerDeps) {
           type: MessageType.ERROR,
           text: parseAndFormatApiError(
             eventValue.error,
-            undefined,
             fallbackModel,
             providerName,
           ),

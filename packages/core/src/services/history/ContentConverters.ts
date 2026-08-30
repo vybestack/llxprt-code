@@ -114,14 +114,18 @@ export class ContentConverters {
   }
 
   /**
-   * Canonical Gemini-shaped encoding of a failed tool response (issue #3076).
+   * Gemini-shaped encoding of a failed tool response (issue #3076).
    *
-   * The only live consumer of this outbound encoding is the Google code-assist
-   * request path (contentGeneratorAdapters). The matching inbound decoder
-   * exists so the Gemini-shaped representation stays symmetric and lossless as
-   * #3076 requires; it has no other live consumer today. The part carries the
-   * `llxprtToolFailure` flag so a successful tool whose result merely happens
-   * to be shaped like `{ status: 'error', ... }` is never misdecoded.
+   * ContentConverters is the hook-wire converter: hook responses arrive as
+   * Gemini-shaped parts and are decoded to IContent via toIContent, while
+   * history writes encode symmetrically back. This outbound encoding turns a
+   * `tool_response` into that Gemini `functionResponse` shape so an
+   * IContent → Gemini → IContent round trip restores the failure verbatim. The
+   * matching inbound decoder (decodeFailureEnvelope) exists so the Gemini-shaped
+   * representation stays symmetric and lossless as #3076 requires. The part
+   * carries the `llxprtToolFailure` flag so a successful tool whose result
+   * merely happens to be shaped like `{ status: 'error', ... }` is never
+   * misdecoded.
    *
    * The legacy representation carries `callId`, `toolName`, `result` and the
    * `error` marker and nothing else: `isComplete` and `providerMetadata` are

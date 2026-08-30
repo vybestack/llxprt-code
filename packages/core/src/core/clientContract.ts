@@ -22,7 +22,6 @@
  * - CLI consumers (14+ files: sendMessageStream, setTools, updateSystemInstruction, etc.)
  */
 
-import type { UserTierId } from '../code_assist/types.js';
 import type { ContentGeneratorConfig } from './contentGenerator.js';
 import type { HistoryService } from '../services/history/HistoryService.js';
 import type { IContent } from '../services/history/IContent.js';
@@ -158,7 +157,6 @@ export interface AgentClientContract {
     isInvalidStreamRetry?: boolean,
     isPayloadRecoveryRetry?: boolean,
   ): AsyncGenerator<ServerAgentStreamEvent, unknown>;
-  getUserTier(): UserTierId | undefined;
   getCurrentSequenceModel(): string | null;
 }
 

@@ -7,15 +7,15 @@
 
 ## Enclaves (permanent `@google/genai` import zones)
 
-Only these two subtrees may import `@google/genai`:
+Only this subtree may import `@google/genai`:
 
-| Enclave         | Path                               | Rationale                                              |
-| --------------- | ---------------------------------- | ------------------------------------------------------ |
-| Gemini provider | `packages/providers/src/gemini/**` | Provider implementation; needs the SDK for API calls.  |
-| Code Assist     | `packages/core/src/code_assist/**` | Code-Assist back-end; needs the SDK for OAuth + calls. |
+| Enclave         | Path                               | Rationale                                             |
+| --------------- | ---------------------------------- | ----------------------------------------------------- |
+| Gemini provider | `packages/providers/src/gemini/**` | Provider implementation; needs the SDK for API calls. |
 
-Everything else in `packages/**` — core (non-code_assist), agents, cli, tools,
-mcp, telemetry, a2a-server, test-utils — is **forbidden** from importing
+The former Code Assist enclave was deleted in #2623. Everything else in
+`packages/**`, including core, agents, cli, tools, mcp, telemetry, a2a-server,
+and test-utils, is **forbidden** from importing
 `@google/genai` in any form.
 
 ### Import forms covered
@@ -58,25 +58,19 @@ provider-specific name (e.g. `useGeminiFoo` in the CLI).
 The allowlist contains pre-existing public API names that cannot be renamed in
 a patch release. Categories:
 
-1. **Model-ID constants** — `DEFAULT_GEMINI_MODEL`, `DEFAULT_GEMINI_FLASH_MODEL`,
-   etc. (genuine env-var / default model IDs).
-2. **Neutral structural types** — `GeminiContent`, `GeminiContentPart`, etc.
+1. **Provider classes:** `GeminiProvider` (providers package index).
+2. **Provider factories:** `createGeminiAliasProvider` (providers composition).
+3. **Model-ID constants:** `DEFAULT_GEMINI_MODEL`, `DEFAULT_GEMINI_FLASH_MODEL`,
+   `DEFAULT_GEMINI_FLASH_LITE_MODEL`, `DEFAULT_GEMINI_EMBEDDING_MODEL`, and the
+   `isGemini2Model` / `isGemini3Model` predicates (genuine env-var /
+   default model IDs).
+4. **Neutral structural types:** `GeminiContent`, `GeminiContentPart`, etc.
    in `packages/core/src/llm-types/geminiContent.ts`.
-3. **Finish-reason mappers** — `GEMINI_FINISH_MAP`, `mapGeminiFinishReason`.
-4. **Deprecated public legacy aliases** — `GeminiEventType`,
-   `ServerGemini*Event` types, `GeminiCLIExtension`, etc. These are in
-   `packages/core/src/core/geminiLegacyAliases.ts` and are deprecated.
-5. **Provider classes/factories** — `GeminiProvider`, `GeminiMessageConverter`,
-   `createGeminiAliasProvider`.
-6. **UI components** — `GeminiPrivacyNotice`.
-7. **Provider dump utility** — `buildGeminiDumpContents`.
-
-### Follow-up: legacy alias rename (next major release)
-
-The deprecated public legacy aliases (category4 above) should be renamed to
-provider-neutral names in the next major release. They are allowlisted now to
-avoid breaking consumers in a patch release. This is a **documented follow-up
-need** — do NOT remove them without a major version bump.
+5. **Finish-reason mappers:** `GEMINI_FINISH_MAP`, `mapGeminiFinishReason`.
+6. **UI components:** `GeminiPrivacyNotice`.
+7. **Provider dump utility:** `buildGeminiDumpContents`.
+8. **Test fixture data:** `geminiModel` in
+   `packages/core/test/models/__fixtures__/mock-data.ts`.
 
 ## CI integration
 
@@ -106,8 +100,8 @@ temp directory instead of the real repo.
 ## Inventory ratchet
 
 `dev-docs/genai-import-baseline.md` is the generated inventory of every
-tracked `@google/genai` importer. As of #2352, all importers are classified
-as `enclave` (27 files). The count may only ever **decrease** — never
+tracked `@google/genai` importer. As of #2623, all importers are classified
+as `enclave` (20 files). The count may only ever **decrease**, never
 increase. Check with:
 
 ```bash

@@ -54,7 +54,6 @@ function makeMockClient(history: IContent[]): AgentClientContract {
     generateContent: vi.fn(),
     generateEmbedding: vi.fn(),
     sendMessageStream: vi.fn(),
-    getUserTier: vi.fn(),
     getCurrentSequenceModel: vi.fn(),
   } as unknown as AgentClientContract;
 }

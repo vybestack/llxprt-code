@@ -195,7 +195,6 @@ export function writeRequiredManifests(write: FixtureHelpers['write']): void {
     dependencies: { '@google/genai': SANCTIONED_VERSION },
   };
   write('package.json', JSON.stringify(manifest, null, 2) + '\n');
-  write('packages/core/package.json', JSON.stringify(manifest, null, 2) + '\n');
   write(
     'packages/providers/package.json',
     JSON.stringify(manifest, null, 2) + '\n',

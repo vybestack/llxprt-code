@@ -18,7 +18,7 @@
  *
  * This suite proves the delegation behavior through the blessed dependency-
  * injection seam `AgentDeps.resolveClient` (agentImpl.ts:132) — the SAME seam
- * the sibling methods getUserTier (agentImpl.ts:755) and getHistory
+ * the sibling method getHistory
  * (agentImpl.ts:759) delegate through. Using this seam is DEPENDENCY
  * INJECTION, not mock theater: the suite assembles a real AgentDeps (built
  * from a real Config via buildCliStyleConfig) and injects a controllable

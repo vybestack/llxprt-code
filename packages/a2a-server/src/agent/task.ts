@@ -22,7 +22,6 @@ import type {
   ContentBlock,
   ModelInfo,
   TextBlock,
-  UserTierId,
 } from '@vybestack/llxprt-code-core';
 import type { RequestContext } from '@a2a-js/sdk/server';
 import { type ExecutionEventBus } from '@a2a-js/sdk/server';
@@ -206,13 +205,11 @@ export class Task {
     const metadata: {
       coderAgent: CoderAgentMessage;
       model: string;
-      userTier?: UserTierId;
       error?: string;
       traceId?: string;
     } = {
       coderAgent: coderAgentMessage,
       model: this.modelInfo?.model ?? this.agent.getModel(),
-      userTier: this.agent.getUserTier(),
     };
 
     if (metadataError) {
@@ -692,7 +689,6 @@ export class Task {
       true,
       parseAndFormatApiError(
         error,
-        undefined,
         this.getErrorFallbackModel(),
         this.getProviderName(),
       ),
@@ -736,7 +732,6 @@ export class Task {
     logger.error('[Task] Received error event from LLM stream:', errorMessage);
     const errMessage = parseAndFormatApiError(
       error,
-      undefined,
       this.getErrorFallbackModel(),
       this.getProviderName(),
     );

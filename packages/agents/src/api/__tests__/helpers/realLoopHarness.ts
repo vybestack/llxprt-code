@@ -194,7 +194,6 @@ function makeScriptedClientContract(
         yield event;
       }
     },
-    getUserTier: () => undefined,
     getCurrentSequenceModel: () => null,
   };
 }

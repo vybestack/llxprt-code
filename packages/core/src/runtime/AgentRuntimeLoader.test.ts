@@ -346,25 +346,25 @@ describe('AgentRuntimeLoader', () => {
     expect(factory.createContentGenerator).toHaveBeenCalledWith(fakeManager);
   });
 
-  it('succeeds without hydration when providerManager is absent', async () => {
-    const simpleConfig = createContentGeneratorConfig();
-    const bundle = await loadAgentRuntime({
-      profile: {
-        config,
-        state: runtimeState,
-        settings: settingsSnapshot,
-        providerRuntime,
-        contentGeneratorConfig: simpleConfig,
-      },
-      overrides: {
-        providerAdapter,
-        telemetryAdapter,
-        toolsView,
-      },
-    });
-
-    expect(bundle.contentGenerator).toBeDefined();
-    expect(bundle.contentGenerator.generateContent).toBeDefined();
+  it('throws when providerManager is absent', async () => {
+    await expect(
+      loadAgentRuntime({
+        profile: {
+          config,
+          state: runtimeState,
+          settings: settingsSnapshot,
+          providerRuntime,
+          contentGeneratorConfig: createContentGeneratorConfig(),
+        },
+        overrides: {
+          providerAdapter,
+          telemetryAdapter,
+          toolsView,
+        },
+      }),
+    ).rejects.toThrow(
+      'No provider runtime is composed for this Config. Compose the providers package (see packages/providers/src/composition) before creating a content generator.',
+    );
   });
 
   it('throws when providerManager is present but contentGeneratorFactory is missing and Config has no factory', async () => {

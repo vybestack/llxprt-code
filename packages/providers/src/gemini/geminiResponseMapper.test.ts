@@ -62,8 +62,7 @@ function toolResponseCallIdOf(block: ContentBlock): string {
 }
 
 /**
- * Build a REAL `GenerateContentResponse` instance (the genuine SDK class,
- * mirroring `fromGenerateContentResponse` in core/code_assist/converter.ts).
+ * Build a REAL `GenerateContentResponse` instance (the genuine SDK class).
  */
 function makeResponse(options: {
   candidates?: Candidate[];

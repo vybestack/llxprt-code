@@ -61,15 +61,14 @@ interface PrefixRule {
  * script exits 1 listing the offending path so every importer is consciously
  * classified.
  *
- * Rule order matters: more specific enclaves (gemini, code_assist) must come
- * before the broader package rules they nest inside (providers, core).
+ * Rule order matters: the more specific gemini enclave must come before the
+ * broader package rules it nests inside (providers).
  */
 const PREFIX_RULES: readonly PrefixRule[] = [
-  // ── Permanent Gemini enclaves ──────────────────────────────────────────
-  // These two subtrees are the ONLY locations permitted to import
-  // @google/genai once #2352 completes. They are the end-state enclaves.
+  // ── Permanent Gemini enclave ───────────────────────────────────────────
+  // This subtree is the ONLY location permitted to import @google/genai.
+  // It is the end-state enclave.
   { prefix: 'packages/providers/src/gemini/', owner: 'enclave' },
-  { prefix: 'packages/core/src/code_assist/', owner: 'enclave' },
 
   // ── Migration-issue-owned packages ─────────────────────────────────────
   { prefix: 'packages/core/', owner: '#2348' },
