@@ -343,7 +343,11 @@ describe('CLI --profile-load Integration Tests', () => {
       );
 
       const fullOutput = result.stdout + result.stderr;
-      expect(fullOutput).toContain('Error when talking to gemini API');
+      // Issue #2231: the error names the resolved endpoint, which also
+      // proves the CLI --baseurl won over the profile base-url.
+      expect(fullOutput).toContain(
+        'Error when talking to gemini (endpoint: https://cli-base-url.example.com)',
+      );
       expect(fullOutput).not.toContain('profile-auth');
       expect(fullOutput).not.toContain('profile-base-url.example.com');
     });

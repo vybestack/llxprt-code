@@ -69,6 +69,7 @@ describe('Turn run - abort and idle timeout', () => {
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
       getConfig: () => undefined,
+      getResolvedBaseUrl: () => undefined,
     };
     turn = new Turn(
       mockChatInstance as unknown as ChatSession,
@@ -135,6 +136,7 @@ describe('Turn run - abort and idle timeout', () => {
             return undefined;
           },
         }),
+        getResolvedBaseUrl: () => undefined,
       };
       turn = new Turn(
         mockChatInstance as unknown as ChatSession,
@@ -321,6 +323,7 @@ describe('Turn run - abort and idle timeout', () => {
             return undefined;
           },
         }),
+        getResolvedBaseUrl: () => undefined,
       };
       turn = new Turn(
         mockChatInstance as unknown as ChatSession,
@@ -552,6 +555,7 @@ function makeTurnWithConfig(
             getEphemeralSetting,
             getSettingsService: () => ({ get: () => undefined }),
           },
+    getResolvedBaseUrl: () => undefined,
   };
   return new Turn(
     chatInstance as unknown as ChatSession,

@@ -118,6 +118,7 @@ function buildFallbackCompression(
           runtime: {} as never,
         }),
       undefined,
+      undefined,
       logger,
       { targetTokenCount },
     );

@@ -59,6 +59,7 @@ describe('Turn - stream idle timeout behavioral tests', () => {
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
       getConfig: () => undefined,
+      getResolvedBaseUrl: () => undefined,
     };
     turn = new Turn(
       mockChatInstance as unknown as ChatSession,
@@ -98,6 +99,7 @@ describe('Turn - stream idle timeout behavioral tests', () => {
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
       getConfig: mockGetConfig,
+      getResolvedBaseUrl: () => undefined,
     } as unknown as MockedChatInstance;
 
     turn = new Turn(
@@ -188,6 +190,7 @@ describe('Turn - stream idle timeout behavioral tests', () => {
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
       getConfig: mockGetConfig,
+      getResolvedBaseUrl: () => undefined,
     } as unknown as MockedChatInstance;
 
     turn = new Turn(
@@ -240,6 +243,7 @@ describe('Turn - stream idle timeout behavioral tests', () => {
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
       getConfig: mockGetConfig,
+      getResolvedBaseUrl: () => undefined,
     } as unknown as MockedChatInstance;
 
     turn = new Turn(
@@ -336,6 +340,7 @@ describe('Turn - stream idle timeout behavioral tests', () => {
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
       getConfig: mockGetConfig,
+      getResolvedBaseUrl: () => undefined,
     } as unknown as MockedChatInstance;
 
     turn = new Turn(
@@ -431,6 +436,7 @@ describe('Turn - stream idle timeout behavioral tests', () => {
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
       getConfig: mockGetConfig,
+      getResolvedBaseUrl: () => undefined,
     } as unknown as MockedChatInstance;
 
     turn = new Turn(

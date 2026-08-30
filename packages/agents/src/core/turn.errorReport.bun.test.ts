@@ -27,6 +27,7 @@ interface ReportContext {
   request: ContentBlock[];
   recentHistory: IContent[];
   omittedHistoryCount: number;
+  baseUrl?: string;
 }
 
 interface ParsedReport {
@@ -47,6 +48,7 @@ interface ParsedReport {
 interface FixtureChat {
   getHistory: (curated?: boolean) => IContent[];
   getConfig: () => undefined;
+  getResolvedBaseUrl: () => string | undefined;
   sendMessageStream: () => Promise<never>;
 }
 
@@ -57,10 +59,15 @@ function makeEntry(speaker: IContent['speaker'], text: string): IContent {
   };
 }
 
-function createTurn(history: IContent[], errorMessage: string): Turn {
+function createTurn(
+  history: IContent[],
+  errorMessage: string,
+  baseUrl?: string,
+): Turn {
   const chat: FixtureChat = {
     getHistory: () => history,
     getConfig: () => undefined,
+    getResolvedBaseUrl: () => baseUrl,
     sendMessageStream: () => Promise.reject(new Error(errorMessage)),
   };
   return new Turn(
@@ -276,5 +283,97 @@ describe('Turn error report payload (issue 3113)', () => {
     expect(files[0]).toMatch(
       /^llxprt-client-error-Turn\.run-sendMessageStream-/,
     );
+  });
+
+  /**
+   * @plan:PLAN-20260824-ISSUE2231.P01
+   * @requirement:REQ-2231-1
+   */
+  it('E1: includes the resolved endpoint in the stderr base message', async () => {
+    const turn = createTurn(
+      [],
+      'E1 endpoint message error',
+      'https://ollama.example/v1/',
+    );
+    const req: ContentBlock[] = [{ text: 'E1 failing request' }];
+
+    await collectEvents(turn, req);
+
+    const stderr = stderrSpy.mock.calls
+      .map(([chunk]) => String(chunk))
+      .join('');
+    expect(stderr).toContain(
+      'Error when talking to fixture (endpoint: https://ollama.example/v1/)',
+    );
+  });
+
+  /**
+   * @plan:PLAN-20260824-ISSUE2231.P01
+   * @requirement:REQ-2231-3
+   */
+  it('E2: records the resolved endpoint in the report context', async () => {
+    const turn = createTurn(
+      [],
+      'E2 endpoint context error',
+      'https://ollama.example/v1/',
+    );
+    const req: ContentBlock[] = [{ text: 'E2 failing request' }];
+
+    await collectEvents(turn, req);
+
+    const files = await listReportFiles();
+    expect(files.length).toBe(1);
+    const report = await readReport(files[0]);
+    if (report.context === undefined) {
+      throw new Error('Expected report context');
+    }
+    expect(report.context.baseUrl).toEqual('https://ollama.example/v1/');
+  });
+
+  /**
+   * @plan:PLAN-20260824-ISSUE2231.P01
+   * @requirement:REQ-2231-2
+   * @requirement:REQ-2231-3
+   */
+  it('E3: preserves the API fallback and omits baseUrl when unresolved', async () => {
+    const turn = createTurn([], 'E3 unresolved endpoint error');
+    const req: ContentBlock[] = [{ text: 'E3 failing request' }];
+
+    await collectEvents(turn, req);
+
+    const stderr = stderrSpy.mock.calls
+      .map(([chunk]) => String(chunk))
+      .join('');
+    expect(stderr).toContain('Error when talking to fixture API');
+    expect(stderr).not.toContain('(endpoint:');
+    const files = await listReportFiles();
+    expect(files.length).toBe(1);
+    const report = await readReport(files[0]);
+    if (report.context === undefined) {
+      throw new Error('Expected report context');
+    }
+    expect('baseUrl' in report.context).toBe(false);
+  });
+
+  /**
+   * @plan:PLAN-20260824-ISSUE2231.P01
+   * @requirement:REQ-2231-5
+   */
+  it('E4: leaves the structured error event unchanged when an endpoint resolves', async () => {
+    const turn = createTurn(
+      [],
+      'E4 unchanged event error',
+      'https://ollama.example/v1/',
+    );
+    const req: ContentBlock[] = [{ text: 'E4 failing request' }];
+
+    const events = await collectEvents(turn, req);
+
+    expect(events).toEqual([
+      {
+        type: AgentEventType.Error,
+        value: { error: { message: 'E4 unchanged event error' } },
+      },
+    ]);
   });
 });
