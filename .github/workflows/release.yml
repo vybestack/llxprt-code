@@ -370,7 +370,7 @@ jobs:
             echo "VSIX package not found at ${VSIX_PATH}." >&2
             exit 1
           fi
-          npx @vscode/vsce publish --packagePath "${VSIX_PATH}" --azure-credential --skip-duplicate
+          bun scripts/run_vsce.ts publish --packagePath "${VSIX_PATH}" --azure-credential --skip-duplicate
 
       - name: Publish @vybestack/llxprt-code-tools
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}

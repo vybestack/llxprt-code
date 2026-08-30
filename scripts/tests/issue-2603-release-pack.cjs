@@ -272,6 +272,39 @@ function copyRepoExcludingGenerated(repoRoot, workCopy) {
     recursive: true,
     filter: (src) => shouldCopyRepoEntry(src, repoRoot),
   });
+  linkRepoNodeModules(repoRoot, workCopy);
+}
+
+/**
+ * Points the work copy at the real repository's node_modules.
+ *
+ * The copy deliberately omits node_modules (it is large and machine-specific),
+ * but packing the CLI runs its `prepack` hook — `bun
+ * scripts/bun-build.config.ts --cli-only` — which imports third-party modules,
+ * notably `glob` by way of scripts/copy_bundle_assets.ts. With no node_modules
+ * anywhere above it, that import falls through to Bun's auto-install, whose
+ * success depends on ambient cache and network state rather than on anything
+ * this test controls. When that fallback does not resolve, the pack dies with
+ * "ENOENT while resolving package 'glob'" and the failure looks like a
+ * dependency regression rather than the environmental artifact it is.
+ *
+ * Linking the real tree makes the hook resolve the same dependencies a release
+ * build would, deterministically and without network access. It cannot leak
+ * into the artifact: npm packs from each manifest's `files` allowlist, and no
+ * published package lists node_modules.
+ */
+function linkRepoNodeModules(repoRoot, workCopy) {
+  const realNodeModules = join(repoRoot, 'node_modules');
+  if (!existsSync(realNodeModules)) {
+    return;
+  }
+  const linkPath = join(workCopy, 'node_modules');
+  if (existsSync(linkPath)) {
+    return;
+  }
+  // 'junction' is honoured on Windows and ignored elsewhere, so the same call
+  // works on every platform the harness runs on.
+  symlinkSync(realNodeModules, linkPath, 'junction');
 }
 
 function runPreparePackage(workCopy) {
