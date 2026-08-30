@@ -138,6 +138,9 @@ describe('InputPrompt', () => {
   let mockReverseSearchCompletion: UseReverseSearchCompletionReturn;
   let mockBuffer: TextBuffer;
   let mockCommandContext: CommandContext;
+  // The buffer's setText spy, held under its Mock type so tests can inspect
+  // call history without casting the TextBuffer-typed field.
+  let setTextMock: Mock<(newText: string) => void>;
 
   const mockedUseShellHistory = useShellHistory as Mock<typeof useShellHistory>;
   const mockedUseCommandCompletion = useCommandCompletion as Mock<
@@ -166,7 +169,7 @@ describe('InputPrompt', () => {
       lines: [''],
       transformationsByLine: [[]],
       visualToTransformedMap: [0],
-      setText: vi.fn((newText: string) => {
+      setText: (setTextMock = vi.fn((newText: string) => {
         mockBuffer.text = newText;
         mockBuffer.lines = [newText];
         mockBuffer.transformationsByLine = [[]];
@@ -175,7 +178,7 @@ describe('InputPrompt', () => {
         mockBuffer.viewportVisualLines = [newText];
         mockBuffer.allVisualLines = [newText];
         mockBuffer.visualToLogicalMap = [[0, 0]];
-      }),
+      })),
       replaceRangeByOffset: vi.fn(),
       viewportVisualLines: [''],
       allVisualLines: [''],
@@ -718,66 +721,121 @@ describe('InputPrompt', () => {
     });
 
     it('should clear buffer on second ESC press', async () => {
+      vi.useFakeTimers();
       const onEscapePromptChange = vi.fn();
       props.onEscapePromptChange = onEscapePromptChange;
-      // Seed the buffer, then clear the spy so the later assertion is about
+      // Seed the buffer, then clear the spy so the later assertions are about
       // the ESC-driven clear rather than this setup call.
       props.buffer.setText('text to clear');
-      (
-        props.buffer.setText as unknown as Mock<(...args: never[]) => unknown>
-      ).mockClear();
+      setTextMock.mockClear();
 
       const { stdin, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
         { kittyProtocolEnabled: false },
       );
 
-      await act(async () => {
-        stdin.write('\x1B');
-        await waitFor(() => {
-          expect(onEscapePromptChange).toHaveBeenCalledWith(false);
-        });
-      });
+      try {
+        // Disregard the mount-time onEscapePromptChange(false) so the assertions
+        // below can only be satisfied by the ESC keypresses.
+        expect(onEscapePromptChange).toHaveBeenCalledWith(false);
+        onEscapePromptChange.mockClear();
 
-      // A second escape arriving inside ESC_TIMEOUT is coalesced with the
-      // first into a single escape sequence, so the component would see one
-      // press rather than two. Wait past that window to press ESC again.
-      await new Promise((resolve) => setTimeout(resolve, ESC_TIMEOUT + 10));
-
-      await act(async () => {
-        stdin.write('\x1B');
-        await waitFor(() => {
-          expect(props.buffer.setText).toHaveBeenCalledWith('');
-          expect(mockCommandCompletion.resetCompletionState).toHaveBeenCalled();
+        // A lone ESC byte is decoded as an "escape" key only after the parser's
+        // ESC_TIMEOUT flush. Fake timers let each flush be advanced exactly, so
+        // the total elapsed time (2 x (ESC_TIMEOUT + 10) = 220ms) never reaches
+        // the 500ms auto-reset deadline that the first press arms: the second
+        // press is guaranteed to land while the prompt is still armed on every
+        // schedule, rather than only when the machine is fast. waitFor is
+        // deliberately not used here: its polling advances the fake clock, and
+        // advancing past the 500ms deadline is exactly what must not happen.
+        await act(async () => {
+          stdin.write('\x1B');
+          await advanceTimersByTimeAsync(ESC_TIMEOUT + 10);
         });
-      });
-      unmount();
+        expect(onEscapePromptChange).toHaveBeenCalledWith(true);
+
+        // Arming must leave the buffer and completion state untouched: the
+        // clear belongs to the second press alone. Without this check a broken
+        // first-press clear followed by a no-op second press would still pass.
+        expect(props.buffer.setText).not.toHaveBeenCalledWith('');
+        expect(
+          mockCommandCompletion.resetCompletionState,
+        ).not.toHaveBeenCalled();
+
+        await act(async () => {
+          stdin.write('\x1B');
+          await advanceTimersByTimeAsync(ESC_TIMEOUT + 10);
+        });
+
+        expect(props.buffer.setText).toHaveBeenCalledWith('');
+        expect(mockCommandCompletion.resetCompletionState).toHaveBeenCalled();
+      } finally {
+        // Restore real timers even when an assertion fails: leaked fake timers
+        // stall every later test in the file that depends on real time.
+        vi.useRealTimers();
+        unmount();
+      }
     });
 
     it('should reset escape state on any non-ESC key', async () => {
+      vi.useFakeTimers();
       const onEscapePromptChange = vi.fn();
       props.onEscapePromptChange = onEscapePromptChange;
       props.buffer.setText('some text');
+      setTextMock.mockClear();
 
       const { stdin, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
         { kittyProtocolEnabled: false },
       );
 
-      await act(async () => {
-        stdin.write('\x1B');
-        await waitFor(() => {
-          expect(onEscapePromptChange).toHaveBeenCalledWith(false);
-        });
-      });
+      try {
+        // Disregard the mount-time onEscapePromptChange(false); every assertion
+        // below must be satisfied by the keypresses, not by mounting.
+        expect(onEscapePromptChange).toHaveBeenCalledWith(false);
+        onEscapePromptChange.mockClear();
 
-      await act(async () => {
-        stdin.write('a');
-        await waitFor(() => {
-          expect(onEscapePromptChange).toHaveBeenCalledWith(false);
+        // First ESC on a non-empty buffer arms the escape prompt.
+        await act(async () => {
+          stdin.write('\x1B');
+          await advanceTimersByTimeAsync(ESC_TIMEOUT + 10);
         });
-      });
-      unmount();
+        expect(onEscapePromptChange).toHaveBeenCalledWith(true);
+
+        // 'a' must reset the armed state. The clock stands at
+        // ESC_TIMEOUT + 10 ms of the 500 ms auto-reset window and is not
+        // advanced again before this assertion (no waitFor: its polling
+        // advances the fake clock), so this false can only come from the
+        // non-ESC keypress branch — the arming timer cannot expire and supply
+        // it, whatever the machine's scheduling does.
+        await act(async () => {
+          stdin.write('a');
+        });
+        expect(onEscapePromptChange).toHaveBeenCalledWith(false);
+
+        // Still inside the 500 ms window, a fresh ESC must re-arm rather than
+        // clear: 'a' reset the press pair, so this press is a "first" press.
+        await act(async () => {
+          stdin.write('\x1B');
+          await advanceTimersByTimeAsync(ESC_TIMEOUT + 10);
+        });
+        expect(onEscapePromptChange).toHaveBeenCalledWith(true);
+
+        expect(onEscapePromptChange.mock.calls.map((call) => call[0])).toEqual([
+          true,
+          false,
+          true,
+        ]);
+        // The buffer surviving is the strongest proof the reset happened: had
+        // 'a' not reset, this final press would have been the second of the
+        // armed pair and would have cleared the buffer.
+        expect(props.buffer.setText).not.toHaveBeenCalledWith('');
+      } finally {
+        // Restore real timers even when an assertion fails: leaked fake timers
+        // stall every later test in the file that depends on real time.
+        vi.useRealTimers();
+        unmount();
+      }
     });
 
     it('should handle ESC in shell mode by disabling shell mode', async () => {
