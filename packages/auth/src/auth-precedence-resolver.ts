@@ -14,6 +14,13 @@ import type {
 } from './interfaces/runtime-context.js';
 import type { IDebugLogger } from './interfaces/index.js';
 import type { IProviderKeyStorage } from './interfaces/provider-key-storage.js';
+import { ProxyProviderKeyStorage } from './proxy/proxy-provider-key-storage.js';
+import {
+  CredentialResolutionError,
+  type CredentialMechanism,
+  type CredentialResolutionErrorKind,
+  type CredentialResolutionResult,
+} from './credential-resolution-error.js';
 import { type OAuthToken } from './types.js';
 import type {
   AuthPrecedenceConfig,
@@ -35,9 +42,16 @@ import {
   storeRuntimeScopedToken,
 } from './precedence.js';
 
-interface ResolveAuthOptions {
+export interface ResolveAuthOptions {
   settingsService?: ISettingsService | null;
   includeOAuth?: boolean;
+}
+
+interface ResolutionTrace {
+  readonly attemptedMechanisms: CredentialMechanism[];
+  configuredSource: boolean;
+  credentialMissing: boolean;
+  proxyContacted: boolean;
 }
 
 interface OAuthResolutionContext {
@@ -63,6 +77,9 @@ function isAuthOnlyEnabled(value: unknown): boolean {
   }
   return false;
 }
+
+const PROXY_TRANSPORT_ERROR_PATTERN =
+  /Credential proxy (?:connection lost|partial frame timeout)|Handshake (?:failed|timed out)|Request timed out|Malformed handshake response|connect (?:ECONNREFUSED|ENOENT|EACCES)|ECONNRESET|EPIPE|socket hang up|Connection closing/i;
 
 export class AuthPrecedenceResolver {
   private static readonly NO_OP_LOGGER: IDebugLogger = {
@@ -157,94 +174,175 @@ export class AuthPrecedenceResolver {
   async resolveAuthentication(
     options?: ResolveAuthOptions,
   ): Promise<string | null> {
+    const result = await this.resolveAuthenticationResult(options);
+    return result.token;
+  }
+
+  async resolveAuthenticationResult(
+    options?: ResolveAuthOptions,
+  ): Promise<CredentialResolutionResult> {
     const includeOAuth = options?.includeOAuth ?? false;
     const settingsService = this.resolveSettingsService(
       options?.settingsService ?? undefined,
     );
     const providerKey = this.normalizeProviderId(this.config.providerId);
-    if (!isAuthOnlyEnabled(settingsService.get('authOnly'))) {
-      const nonOAuthAuth = await this.resolveNonOAuthAuthentication(
-        settingsService,
-        providerKey,
-      );
-      if (nonOAuthAuth !== null) return nonOAuthAuth;
+    const provider = this.resolveProviderIdentifier(providerKey);
+    const runtimeContext = this.getActiveRuntimeContext();
+    const trace: ResolutionTrace = {
+      attemptedMechanisms: [],
+      configuredSource: false,
+      credentialMissing: false,
+      proxyContacted: false,
+    };
+    try {
+      if (!isAuthOnlyEnabled(settingsService.get('authOnly'))) {
+        const nonOAuthAuth = await this.resolveNonOAuthAuthentication(
+          settingsService,
+          providerKey,
+          trace,
+        );
+        if (nonOAuthAuth !== null) return { token: nonOAuthAuth };
+      }
+      if (includeOAuth) {
+        trace.attemptedMechanisms.push('oauth');
+      }
+      if (this.canResolveOAuth(includeOAuth)) {
+        const oauthAuth = await this.resolveOAuthAuthentication(
+          settingsService,
+          providerKey,
+          trace,
+        );
+        if (oauthAuth !== null) return { token: oauthAuth };
+      }
+      return {
+        token: null,
+        failure: this.createResolutionError(
+          trace.credentialMissing || trace.configuredSource
+            ? 'credential-not-found'
+            : 'no-credential-configured',
+          provider,
+          settingsService,
+          runtimeContext,
+          trace,
+        ),
+      };
+    } catch (cause) {
+      if (!trace.configuredSource) throw cause;
+      const kind = this.classifySourceFailure(cause);
+      if (kind === 'proxy-unavailable' || kind === 'proxy-unauthorized') {
+        trace.proxyContacted = true;
+      }
+      return {
+        token: null,
+        failure: this.createResolutionError(
+          kind,
+          provider,
+          settingsService,
+          runtimeContext,
+          trace,
+          cause,
+        ),
+      };
     }
-    if (!this.canResolveOAuth(includeOAuth)) return null;
-    return this.resolveOAuthAuthentication(settingsService, providerKey);
   }
 
   private async resolveNonOAuthAuthentication(
     settingsService: ISettingsService,
     providerKey: string | undefined,
+    trace: ResolutionTrace,
   ): Promise<string | null> {
     const directAuth = await this.resolveDirectAuthentication(
       settingsService,
       providerKey,
+      trace,
     );
     if (directAuth !== null) return directAuth;
-    const envAuth = this.resolveEnvironmentAuthentication();
+    const envAuth = this.resolveEnvironmentAuthentication(trace);
     return envAuth ?? null;
   }
 
   private async resolveDirectAuthentication(
     settingsService: ISettingsService,
     providerKey: string | undefined,
+    trace: ResolutionTrace,
   ): Promise<string | null> {
     const providerAuth = await this.resolveProviderAuthentication(
       settingsService,
       providerKey,
+      trace,
     );
     if (providerAuth !== null) return providerAuth;
+    trace.attemptedMechanisms.push('constructor-api-key');
     const configAuth = this.normalizeAuthValue(this.config.apiKey ?? null);
     if (configAuth !== undefined) return configAuth;
-    return this.resolveGlobalAuthentication(settingsService, providerKey);
+    return this.resolveGlobalAuthentication(
+      settingsService,
+      providerKey,
+      trace,
+    );
   }
 
   private async resolveProviderAuthentication(
     settingsService: ISettingsService,
     providerKey: string | undefined,
+    trace: ResolutionTrace,
   ): Promise<string | null> {
     const providerSettings =
       providerKey !== undefined &&
       typeof settingsService.getProviderSettings === 'function'
         ? settingsService.getProviderSettings(providerKey)
         : undefined;
+    trace.attemptedMechanisms.push('provider-auth-key');
     const providerAuthKey = this.normalizeAuthValue(
       providerSettings?.['auth-key'],
     );
     if (providerAuthKey !== undefined) return providerAuthKey;
+    trace.attemptedMechanisms.push('provider-auth-keyfile');
     const providerAuthKeyfile = this.normalizeAuthValue(
       providerSettings?.['auth-keyfile'],
     );
-    return this.resolveKeyFileAuth(providerAuthKeyfile);
+    return this.resolveKeyFileAuth(providerAuthKeyfile, trace);
   }
 
   private async resolveGlobalAuthentication(
     settingsService: ISettingsService,
     providerKey: string | undefined,
+    trace: ResolutionTrace,
   ): Promise<string | null> {
     if (!this.shouldUseGlobalAuth(settingsService, providerKey)) return null;
+    trace.attemptedMechanisms.push('global-auth-key');
     const authKey = this.normalizeAuthValue(settingsService.get('auth-key'));
     if (authKey !== undefined) return authKey;
+    trace.attemptedMechanisms.push('global-auth-key-name');
     const authKeyName = this.normalizeAuthValue(
       settingsService.get('auth-key-name'),
     );
-    if (authKeyName !== undefined) return this.resolveNamedKey(authKeyName);
+    if (authKeyName !== undefined) {
+      return this.resolveNamedKey(authKeyName, trace);
+    }
+    trace.attemptedMechanisms.push('global-auth-keyfile');
     const authKeyfile = this.normalizeAuthValue(
       settingsService.get('auth-keyfile'),
     );
-    return this.resolveKeyFileAuth(authKeyfile);
+    return this.resolveKeyFileAuth(authKeyfile, trace);
   }
 
   private async resolveKeyFileAuth(
     keyFile: string | undefined,
+    trace: ResolutionTrace,
   ): Promise<string | null> {
     if (keyFile === undefined) return null;
+    trace.configuredSource = true;
     const keyFromFile = await this.readKeyFile(keyFile);
-    return keyFromFile ?? null;
+    if (keyFromFile === null) {
+      trace.credentialMissing = true;
+    }
+    return keyFromFile;
   }
 
-  private resolveEnvironmentAuthentication(): string | undefined {
+  private resolveEnvironmentAuthentication(
+    trace: ResolutionTrace,
+  ): string | undefined {
     if (
       this.config.envKeyNames == null ||
       this.config.envKeyNames.length === 0
@@ -252,6 +350,7 @@ export class AuthPrecedenceResolver {
       return undefined;
     }
     for (const envVarName of this.config.envKeyNames) {
+      trace.attemptedMechanisms.push(`env:${envVarName}`);
       const envValue = this.normalizeAuthValue(process.env[envVarName]);
       if (envValue !== undefined) return envValue;
     }
@@ -268,6 +367,7 @@ export class AuthPrecedenceResolver {
   private async resolveOAuthAuthentication(
     settingsService: ISettingsService,
     providerKey: string | undefined,
+    trace: ResolutionTrace,
   ): Promise<string | null> {
     const context = this.buildOAuthContext(settingsService, providerKey);
     if ((await this.isOAuthDisabledByManager()) === true) {
@@ -276,7 +376,12 @@ export class AuthPrecedenceResolver {
     }
     const cachedToken = this.getCachedOAuthToken(context);
     if (cachedToken !== null) return cachedToken;
-    return this.fetchAndCacheOAuthToken(context);
+    trace.configuredSource = true;
+    const token = await this.fetchAndCacheOAuthToken(context);
+    if (token === null) {
+      trace.credentialMissing = true;
+    }
+    return token;
   }
 
   private buildOAuthContext(
@@ -375,20 +480,15 @@ export class AuthPrecedenceResolver {
   private async fetchAndCacheOAuthToken(
     context: OAuthResolutionContext,
   ): Promise<string | null> {
-    try {
-      const requestMetadata = this.buildOAuthRequestMetadata(context);
-      const token = await this.oauthManager!.getToken(
-        this.config.oauthProvider!,
-        requestMetadata,
-      );
-      if (token == null || token === '') return null;
-      const oauthToken = await this.tryGetOAuthTokenMetadata(requestMetadata);
-      this.storeOAuthTokenMetadata(context, token, oauthToken);
-      return token;
-    } catch (error) {
-      this.debugOAuthTokenError(error);
-      return null;
-    }
+    const requestMetadata = this.buildOAuthRequestMetadata(context);
+    const token = await this.oauthManager!.getToken(
+      this.config.oauthProvider!,
+      requestMetadata,
+    );
+    if (token == null || token === '') return null;
+    const oauthToken = await this.tryGetOAuthTokenMetadata(requestMetadata);
+    this.storeOAuthTokenMetadata(context, token, oauthToken);
+    return token;
   }
 
   private buildOAuthRequestMetadata(
@@ -447,15 +547,6 @@ export class AuthPrecedenceResolver {
         );
       }
       return null;
-    }
-  }
-
-  private debugOAuthTokenError(error: unknown): void {
-    if (process.env.DEBUG) {
-      this.logger.warn(
-        `Failed to get OAuth token for ${this.config.oauthProvider}:`,
-        error,
-      );
     }
   }
 
@@ -596,6 +687,44 @@ export class AuthPrecedenceResolver {
     return this.config.envKeyNames?.[0] ?? 'unknown-provider';
   }
 
+  private createResolutionError(
+    kind: CredentialResolutionErrorKind,
+    provider: string,
+    settingsService: ISettingsService,
+    runtimeContext: IProviderRuntimeContext | null,
+    trace: ResolutionTrace,
+    cause?: unknown,
+  ): CredentialResolutionError {
+    const diagnostics = {
+      provider,
+      profile: resolveProfileId(settingsService) ?? 'no-profile',
+      runtimeId: runtimeContext?.runtimeId ?? 'no-runtime',
+      attemptedMechanisms: trace.attemptedMechanisms,
+      proxyMode: this.isCredentialProxyMode(),
+      proxyContacted: trace.proxyContacted,
+    };
+    return cause === undefined
+      ? new CredentialResolutionError(kind, diagnostics)
+      : new CredentialResolutionError(kind, diagnostics, { cause });
+  }
+
+  private classifySourceFailure(cause: unknown): CredentialResolutionErrorKind {
+    if (!this.isCredentialProxyMode()) return 'credential-source-failed';
+    const message = cause instanceof Error ? cause.message : String(cause);
+    if (message.startsWith('Credential proxy authentication failed:')) {
+      return 'proxy-unauthorized';
+    }
+    if (PROXY_TRANSPORT_ERROR_PATTERN.test(message)) {
+      return 'proxy-unavailable';
+    }
+    return 'credential-source-failed';
+  }
+
+  private isCredentialProxyMode(): boolean {
+    const socketPath = process.env.LLXPRT_CREDENTIAL_SOCKET;
+    return typeof socketPath === 'string' && socketPath.trim() !== '';
+  }
+
   private shouldUseGlobalAuth(
     settingsService: ISettingsService,
     providerId?: string,
@@ -607,11 +736,15 @@ export class AuthPrecedenceResolver {
     return trimmed === '' || trimmed === providerId;
   }
 
-  private async resolveNamedKey(name: string): Promise<string> {
+  private async resolveNamedKey(
+    name: string,
+    trace: ResolutionTrace,
+  ): Promise<string | null> {
     const trimmedName = this.normalizeAuthValue(name);
     if (trimmedName === undefined) {
       throw new Error('Named key reference is empty');
     }
+    trace.configuredSource = true;
     const storage = this.providerKeyStorage;
     if (!storage) {
       throw new Error(
@@ -619,11 +752,16 @@ export class AuthPrecedenceResolver {
           'Pass providerKeyStorage to AuthPrecedenceResolver or use createAuthPrecedenceResolver() from core.',
       );
     }
+    if (
+      this.isCredentialProxyMode() &&
+      storage instanceof ProxyProviderKeyStorage
+    ) {
+      trace.proxyContacted = true;
+    }
     const key = this.normalizeAuthValue(await storage.getKey(trimmedName));
     if (key === undefined) {
-      throw new Error(
-        `Named key '${trimmedName}' not found. Save it with /key save ${trimmedName} <api-key> before retrying.`,
-      );
+      trace.credentialMissing = true;
+      return null;
     }
     return key;
   }
@@ -632,28 +770,21 @@ export class AuthPrecedenceResolver {
    * Reads API key from a file path, handling tilde expansion, absolute and relative paths
    */
   private async readKeyFile(filePath: string): Promise<string | null> {
-    try {
-      const expandedPath = filePath.startsWith('~')
-        ? path.join(os.homedir(), filePath.slice(1))
-        : filePath;
-      const resolvedPath = path.isAbsolute(expandedPath)
-        ? expandedPath
-        : path.resolve(process.cwd(), expandedPath);
-      const content = await fs.readFile(resolvedPath, 'utf-8');
-      const key = content.trim();
-      if (key === '') {
-        if (process.env.DEBUG) {
-          this.logger.warn(`Key file ${filePath} is empty`);
-        }
-        return null;
-      }
-      return key;
-    } catch (error) {
+    const expandedPath = filePath.startsWith('~')
+      ? path.join(os.homedir(), filePath.slice(1))
+      : filePath;
+    const resolvedPath = path.isAbsolute(expandedPath)
+      ? expandedPath
+      : path.resolve(process.cwd(), expandedPath);
+    const content = await fs.readFile(resolvedPath, 'utf-8');
+    const key = content.trim();
+    if (key === '') {
       if (process.env.DEBUG) {
-        this.logger.warn(`Failed to read key file ${filePath}:`, error);
+        this.logger.warn(`Key file ${filePath} is empty`);
       }
       return null;
     }
+    return key;
   }
 
   /**
