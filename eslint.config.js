@@ -971,19 +971,17 @@ export default tseslint.config(
         {
           patterns: [
             {
-              // The one permitted runtime subpath is the MCP host-services
-              // seam published by #3305 (packages/mcp exports
-              // "./host/hostServices.js"). It is a declared export rather than
-              // an internal, and packages/cli and packages/agents import the
-              // same specifier. This must agree with ALLOWED_RUNTIME_SUBPATHS
-              // in scripts/a2a-boundary/a2aBoundary.ts; the two are checked
-              // against each other by
+              // No runtime subpath is permitted. a2a-server reaches MCP host
+              // services through the Agent facade, which wires them itself, so
+              // it needs no deep import. This must agree with
+              // ALLOWED_RUNTIME_SUBPATHS in scripts/a2a-boundary/a2aBoundary.ts
+              // (currently empty); the two are checked against each other by
               // scripts/tests/issue-3221-a2a-import-boundary.bun.test.ts, so
               // editing one without the other fails CI rather than silently
               // opening a hole in a single layer.
-              regex: '^(?!node:|\\.|/|bun:test|@a2a-js/sdk(?:/server(?:/express)?)?$|@vybestack/llxprt-code-(agents|core|mcp|storage)$|@vybestack/llxprt-code-mcp/host/hostServices\\.js$|@google-cloud/storage$|dotenv$|express$|fs-extra$|strip-json-comments$|supertest$|tar$|uuid$|winston$).+',
+              regex: '^(?!node:|\\.|/|bun:test|@a2a-js/sdk(?:/server(?:/express)?)?$|@vybestack/llxprt-code-(agents|core|mcp|storage)$|@google-cloud/storage$|dotenv$|express$|fs-extra$|strip-json-comments$|supertest$|tar$|uuid$|winston$).+',
               message:
-                'a2a-server is an Agent-facade host: only node builtins, relative paths, bun:test, the A2A SDK, declared host dependencies, runtime-package ROOT entrypoints, and the MCP host-services seam may be imported (issue #3221).',
+                'a2a-server is an Agent-facade host: only node builtins, relative paths, bun:test, the A2A SDK, declared host dependencies, and runtime-package ROOT entrypoints may be imported (issue #3221).',
             },
           ],
         },

@@ -61,7 +61,11 @@ export const RUNTIME_ROOT_PACKAGES: readonly string[] = [
  * other MCP subpath becomes reachable through it.
  */
 export const ALLOWED_RUNTIME_SUBPATHS: readonly string[] = [
-  '@vybestack/llxprt-code-mcp/host/hostServices.js',
+  // Intentionally empty. a2a-server is a host of the Agent facade: createAgent
+  // wires MCP host services before its first await, and a2a reaches it via
+  // createTaskAgent, so a process-start call here was redundant rather than a
+  // required composition seam. The machinery is kept because the next such
+  // request should have to justify itself, not because anything needs it.
 ];
 
 /**

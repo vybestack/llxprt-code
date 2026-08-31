@@ -17,7 +17,6 @@ import {
   resetMcpHostServices,
 } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
 import { wireMcpHostServices as wireCli } from '../../packages/cli/src/mcpHostWiring.js';
-import { wireMcpHostServices as wireA2a } from '../../packages/a2a-server/src/mcpHostWiring.js';
 import { wireMcpHostServices as wireAgentApi } from '../../packages/agents/src/api/mcpHostWiring.js';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -26,7 +25,6 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = resolve(fileURLToPath(import.meta.url), '..', '..', '..');
 const compositionRoots = [
   ['CLI', wireCli],
-  ['A2A server', wireA2a],
   ['Agent API', wireAgentApi],
 ] as const;
 const originalNodeEnv = process.env.NODE_ENV;
@@ -103,7 +101,6 @@ describe('application MCP host wiring', () => {
   it('registers host services in each application startup function', () => {
     const startupSources = [
       ['packages/cli/src/cli.tsx', 'export async function main()'],
-      ['packages/a2a-server/src/http/app.ts', 'export async function main()'],
       [
         'packages/agents/src/api/createAgent.ts',
         'export async function createAgent',

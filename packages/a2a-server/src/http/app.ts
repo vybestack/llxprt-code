@@ -40,7 +40,6 @@ import { loadSettings } from '../config/settings.js';
 import { loadExtensions } from '../config/extension.js';
 import { commandRegistry } from '../commands/command-registry.js';
 import type { Command, CommandArgument } from '../commands/types.js';
-import { wireMcpHostServices } from '../mcpHostWiring.js';
 
 type CommandResponse = {
   name: string;
@@ -509,7 +508,6 @@ async function handleTaskMetadata(
 }
 
 export async function main() {
-  wireMcpHostServices();
   try {
     const agentCard = createCoderAgentCard();
     const expressApp = await createApp({ agentCard });
