@@ -329,6 +329,19 @@ describe('Bun native-module smoke timeout retry', () => {
     expect(error.attempts).toBe(1);
     expect(error.message).toContain('1 attempt');
   }, 10_000);
+
+  it.each([-1, 0.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    'rejects the invalid programmatic retries %s before running any attempt',
+    async (retries) => {
+      await expect(
+        runSmokeHarnessWithTimeoutRetry(fixtureCommand('pass'), {
+          cwd: ROOT,
+          timeoutMs: FIXTURE_TIMEOUT_MS,
+          retries,
+        }),
+      ).rejects.toThrow('retries must be a non-negative safe integer');
+    },
+  );
 });
 
 describe('smokeTestFileTimeoutMs', () => {
@@ -396,6 +409,12 @@ describe('resolveHarnessTimeoutMs', () => {
   it('floors a positive fractional timeout', () => {
     expect(
       resolveHarnessTimeoutMs({ LLXPRT_BUN_SMOKE_TIMEOUT_MS: '1.5' }),
+    ).toBe(1);
+  });
+
+  it('clamps a sub-millisecond positive timeout to 1ms so the attempt cannot abort instantly', () => {
+    expect(
+      resolveHarnessTimeoutMs({ LLXPRT_BUN_SMOKE_TIMEOUT_MS: '0.5' }),
     ).toBe(1);
   });
 });

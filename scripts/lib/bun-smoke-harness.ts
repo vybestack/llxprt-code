@@ -84,7 +84,9 @@ export function resolveHarnessTimeoutMs(
   if (raw === undefined || raw === '') return DEFAULT;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT;
-  return Math.floor(parsed);
+  // AbortSignal.timeout(0) aborts instantly; any accepted positive value must
+  // resolve to a usable timeout of at least 1ms.
+  return Math.max(1, Math.floor(parsed));
 }
 
 /** Resolves the timeout-only retry budget; 0 restores one attempt. */
@@ -234,6 +236,13 @@ export async function runSmokeHarnessWithTimeoutRetry(
   command: SmokeHarnessCommand,
   options: SmokeHarnessRunOptions,
 ): Promise<SmokeHarnessRunResult> {
+  // Fail fast: the loop below exits only when a non-negative integer retry
+  // budget reaches zero, so any other value would retry forever.
+  if (!Number.isSafeInteger(options.retries) || options.retries < 0) {
+    throw new RangeError(
+      `retries must be a non-negative safe integer, got ${options.retries}`,
+    );
+  }
   let attempts = 0;
   let retriesLeft = options.retries;
   let timeoutDiagnostics: readonly string[] = [];
