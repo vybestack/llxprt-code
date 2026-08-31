@@ -151,10 +151,7 @@ class InMemoryTokenStore implements TokenStore {
     return true;
   }
 
-  async releaseAuthLock(
-    _provider: string,
-    _bucket?: string,
-  ): Promise<void> {}
+  async releaseAuthLock(_provider: string, _bucket?: string): Promise<void> {}
 }
 
 class EmptyProviderKeyStorage implements ProviderKeyStorage {
@@ -349,11 +346,12 @@ describe('Provider credential resolution through a sandbox proxy', () => {
     expect(failure.diagnostics.proxyContacted).toBe(true);
     expect(failure.message).not.toContain(CREDENTIAL_SECRET);
 
-    const parentAfterFailure =
-      await parentResolver.resolveAuthenticationResult({
+    const parentAfterFailure = await parentResolver.resolveAuthenticationResult(
+      {
         settingsService: settings,
         includeOAuth: true,
-      });
+      },
+    );
     expect(parentAfterFailure.token).toBe(CREDENTIAL_SECRET);
   });
 

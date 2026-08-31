@@ -63,7 +63,9 @@ function wireProviderWithAuth(provider: InvocationSafetyProvider): void {
     provider as unknown as {
       authResolver: {
         resolveAuthentication: (input: unknown) => Promise<string>;
-        resolveAuthenticationResult: (input: unknown) => Promise<{ token: string }>;
+        resolveAuthenticationResult: (
+          input: unknown,
+        ) => Promise<{ token: string }>;
         setSettingsService: (settings: SettingsService | undefined) => void;
       };
     }
