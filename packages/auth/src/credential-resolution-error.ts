@@ -21,13 +21,18 @@ export type CredentialMechanism =
   | `env:${string}`
   | 'oauth';
 
+export type CredentialMechanismAttempts =
+  | readonly CredentialMechanism[]
+  | 'unknown';
+export type ProxyContactState = boolean | 'unknown';
+
 export interface CredentialResolutionDiagnostics {
   readonly provider: string;
   readonly profile: string;
   readonly runtimeId: string;
-  readonly attemptedMechanisms: readonly CredentialMechanism[];
+  readonly attemptedMechanisms: CredentialMechanismAttempts;
   readonly proxyMode: boolean;
-  readonly proxyContacted: boolean;
+  readonly proxyContacted: ProxyContactState;
 }
 
 export interface CredentialResolutionErrorOptions {
@@ -42,6 +47,14 @@ export type CredentialResolutionResult =
       readonly failure: CredentialResolutionError;
     };
 
+function formatAttemptedMechanisms(
+  attemptedMechanisms: CredentialMechanismAttempts,
+): string {
+  return attemptedMechanisms === 'unknown'
+    ? 'unknown'
+    : `[${attemptedMechanisms.join(', ')}]`;
+}
+
 function buildMessage(
   kind: CredentialResolutionErrorKind,
   diagnostics: CredentialResolutionDiagnostics,
@@ -51,7 +64,7 @@ function buildMessage(
     `Credential resolution failed: kind=${kind}; ` +
     `provider=${diagnostics.provider}; profile=${diagnostics.profile}; ` +
     `runtimeId=${diagnostics.runtimeId}; ` +
-    `attemptedMechanisms=[${diagnostics.attemptedMechanisms.join(', ')}]; ` +
+    `attemptedMechanisms=${formatAttemptedMechanisms(diagnostics.attemptedMechanisms)}; ` +
     `proxyMode=${diagnostics.proxyMode}; ` +
     `proxyContacted=${diagnostics.proxyContacted}`;
   return remediation === undefined
@@ -76,9 +89,13 @@ export class CredentialResolutionError extends Error {
     this.name = 'CredentialResolutionError';
     this.kind = kind;
     this.remediation = options.remediation;
+    const attemptedMechanisms: CredentialMechanismAttempts =
+      diagnostics.attemptedMechanisms === 'unknown'
+        ? 'unknown'
+        : Object.freeze([...diagnostics.attemptedMechanisms]);
     this.diagnostics = Object.freeze({
       ...diagnostics,
-      attemptedMechanisms: Object.freeze([...diagnostics.attemptedMechanisms]),
+      attemptedMechanisms,
     });
   }
 }

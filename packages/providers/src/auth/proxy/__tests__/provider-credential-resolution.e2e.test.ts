@@ -241,10 +241,11 @@ async function captureCredentialFailure(
 
 describe('Provider credential resolution through a sandbox proxy', () => {
   const proxies: RunningProxy[] = [];
-  let temporaryDirectory: string;
+  let temporaryDirectory: string | undefined;
   let originalSocket: string | undefined;
 
   beforeEach(async () => {
+    temporaryDirectory = undefined;
     temporaryDirectory = await fs.mkdtemp(
       path.join(os.tmpdir(), 'llxprt-provider-credential-e2e-'),
     );
@@ -261,7 +262,9 @@ describe('Provider credential resolution through a sandbox proxy', () => {
     for (const proxy of proxies.splice(0)) {
       await proxy.server.stop();
     }
-    await fs.rm(temporaryDirectory, { recursive: true, force: true });
+    if (temporaryDirectory !== undefined) {
+      await fs.rm(temporaryDirectory, { recursive: true, force: true });
+    }
     if (originalSocket === undefined) {
       delete process.env.LLXPRT_CREDENTIAL_SOCKET;
     } else {
@@ -277,6 +280,9 @@ describe('Provider credential resolution through a sandbox proxy', () => {
           expiry: Math.floor(Date.now() / 1000) + 3600,
         }
       : undefined;
+    if (temporaryDirectory === undefined) {
+      throw new Error('Temporary proxy directory is not initialized');
+    }
     const server = new CredentialProxyServer({
       tokenStore: new InMemoryTokenStore(token),
       providerKeyStorage: new EmptyProviderKeyStorage(),
@@ -349,7 +355,7 @@ describe('Provider credential resolution through a sandbox proxy', () => {
     expect(failure.kind).toBe('proxy-unavailable');
     expect(failure.diagnostics.provider).toBe(PROVIDER);
     expect(failure.diagnostics.profile).toBe(PROFILE);
-    expect(failure.diagnostics.proxyContacted).toBe(true);
+    expect(failure.diagnostics.proxyContacted).toBe(false);
     expect(failure.message).not.toContain(CREDENTIAL_SECRET);
 
     const parentAfterFailure = await parentResolver.resolveAuthenticationResult(

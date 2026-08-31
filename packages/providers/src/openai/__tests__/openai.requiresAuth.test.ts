@@ -2,6 +2,9 @@ import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIProvider } from '../OpenAIProvider.js';
+import type { NormalizedGenerateChatOptions } from '../../BaseProvider.js';
+import type { ResolvedAuthToken } from '../../types/providerRuntime.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import OpenAI from 'openai';
 import {
   clearActiveProviderRuntimeContext,
@@ -67,9 +70,38 @@ const FakeOpenAIClass = OpenAI as unknown as {
   reset(): void;
 };
 
+class RecordingDebugLogger extends DebugLogger {
+  readonly messages: string[] = [];
+
+  override debug(
+    messageOrFactory: string | (() => string),
+    ..._args: unknown[]
+  ): void {
+    this.messages.push(
+      typeof messageOrFactory === 'function'
+        ? messageOrFactory()
+        : messageOrFactory,
+    );
+  }
+}
+
 class RequiresAuthTestProvider extends OpenAIProvider {
+  readonly recordingLogger = new RecordingDebugLogger(
+    'llxprt:test:openai-auth-exemption',
+  );
+
   protected override async getAuthToken(): Promise<string> {
     return '';
+  }
+
+  protected override getLogger(): DebugLogger {
+    return this.recordingLogger;
+  }
+
+  async createClientForTest(
+    options: NormalizedGenerateChatOptions,
+  ): Promise<OpenAI> {
+    return this.getClient(options);
   }
 }
 
@@ -97,6 +129,27 @@ function buildCallOptions(
     contents,
     ...rest,
   });
+}
+
+function buildNormalizedOptions(
+  provider: OpenAIProvider,
+  settings: SettingsService,
+  authToken: ResolvedAuthToken,
+): NormalizedGenerateChatOptions {
+  const options = buildCallOptions(provider, {
+    settings,
+    runtimeId: 'auth-exemption-resolution-failure',
+  });
+  return {
+    ...options,
+    metadata: options.metadata ?? {},
+    resolved: {
+      model: 'auth-exemption-test-model',
+      baseURL: 'http://host.docker.internal:1234/v1/',
+      authToken,
+      streaming: false,
+    },
+  };
 }
 
 describe('requires-auth setting', () => {
@@ -136,6 +189,32 @@ describe('requires-auth setting', () => {
     const generator = provider.generateChatCompletion(callOptions);
     await expect(generator.next()).resolves.toBeDefined();
     expect(FakeOpenAIClass.created).toHaveLength(1);
+  });
+
+  it('logs a safe diagnostic when auth resolution fails for an exempt endpoint', async () => {
+    const forbiddenDetail = 'issue3451-sensitive-failure-detail';
+    const provider = new RequiresAuthTestProvider(
+      undefined,
+      'http://host.docker.internal:1234/v1/',
+    );
+    const settings = createSettingsWithRequiresAuth(
+      'http://host.docker.internal:1234/v1/',
+      false,
+    );
+    const authToken: ResolvedAuthToken = {
+      provide: async () => {
+        throw new Error(forbiddenDetail);
+      },
+    };
+
+    await provider.createClientForTest(
+      buildNormalizedOptions(provider, settings, authToken),
+    );
+
+    const output = provider.recordingLogger.messages.join('\n');
+    expect(output).toContain('kind=credential-source-failed');
+    expect(output).toContain('auth-exempt endpoint');
+    expect(output).not.toContain(forbiddenDetail);
   });
 
   it('throws auth error for remote endpoint without auth when requires-auth is not set', async () => {

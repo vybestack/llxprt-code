@@ -23,6 +23,12 @@ function resolveProfile(options: NormalizedGenerateChatOptions): string {
     : 'no-profile';
 }
 
+/**
+ * Builds a provider-facing credential failure. A fallback with an explicit
+ * `cause` represents a failure that happened after resolution, so its kind and
+ * cause take precedence while the resolver diagnostics remain authoritative.
+ * Without a live cause, the resolver's original classification is preserved.
+ */
 export function createCredentialResolutionError(
   options: NormalizedGenerateChatOptions,
   provider: string,
@@ -32,12 +38,21 @@ export function createCredentialResolutionError(
 ): CredentialResolutionError {
   if (options.resolved.authFailure !== undefined) {
     const failure = options.resolved.authFailure;
-    return fallback.remediation === undefined
-      ? failure
-      : new CredentialResolutionError(failure.kind, failure.diagnostics, {
-          ...(failure.cause === undefined ? {} : { cause: failure.cause }),
-          remediation: fallback.remediation,
-        });
+    const hasLiveCause = Object.prototype.hasOwnProperty.call(
+      fallback,
+      'cause',
+    );
+    if (!hasLiveCause && fallback.remediation === undefined) return failure;
+    const remediation = fallback.remediation ?? failure.remediation;
+    const cause = hasLiveCause ? fallback.cause : failure.cause;
+    return new CredentialResolutionError(
+      hasLiveCause ? fallback.kind : failure.kind,
+      failure.diagnostics,
+      {
+        ...(cause === undefined ? {} : { cause }),
+        ...(remediation === undefined ? {} : { remediation }),
+      },
+    );
   }
 
   return new CredentialResolutionError(
@@ -46,9 +61,9 @@ export function createCredentialResolutionError(
       provider,
       profile: resolveProfile(options),
       runtimeId: options.runtime?.runtimeId ?? 'no-runtime',
-      attemptedMechanisms: [],
+      attemptedMechanisms: 'unknown',
       proxyMode: Boolean(process.env.LLXPRT_CREDENTIAL_SOCKET),
-      proxyContacted: false,
+      proxyContacted: 'unknown',
     },
     {
       ...(fallback.cause === undefined ? {} : { cause: fallback.cause }),

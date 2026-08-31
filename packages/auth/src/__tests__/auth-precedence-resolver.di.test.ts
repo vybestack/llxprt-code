@@ -143,6 +143,35 @@ describe('AuthPrecedenceResolver DI behavioral tests', () => {
       expect(result).toBe('constructor-api-key');
     });
 
+    it('falls through an unreadable provider keyfile to a working environment credential', async () => {
+      process.env.TEST_AUTH_API_KEY = 'env-key-after-keyfile-failure';
+      try {
+        const settings = createInMemorySettingsService(
+          {},
+          {
+            anthropic: {
+              'auth-keyfile': '/path/that/does/not/exist/issue3451-keyfile',
+            },
+          },
+        );
+        const resolver = new AuthPrecedenceResolver(
+          {
+            providerId: 'anthropic',
+            envKeyNames: ['TEST_AUTH_API_KEY'],
+          },
+          { settingsService: settings },
+        );
+
+        const result = await resolver.resolveAuthenticationResult();
+
+        expect(result).toEqual({
+          token: 'env-key-after-keyfile-failure',
+        });
+      } finally {
+        delete process.env.TEST_AUTH_API_KEY;
+      }
+    });
+
     it('falls back to environment variable when no auth-key or API key', async () => {
       process.env.TEST_AUTH_API_KEY = 'env-key-value';
       try {

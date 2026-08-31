@@ -19,7 +19,7 @@ import type { JSONSchema7, LanguageModel, Tool } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { isLocalEndpoint } from '../utils/localEndpoint.js';
 import { isQwenBaseURL } from '../utils/qwenEndpoint.js';
@@ -172,6 +172,9 @@ export async function createOpenAIClient(
   options: NormalizedGenerateChatOptions,
   clientConfig: ProviderClientConfig,
   customFetch?: typeof fetch,
+  logger: Pick<DebugLogger, 'debug'> = new DebugLogger(
+    'llxprt:provider:openaivercel',
+  ),
 ): Promise<ReturnType<typeof createOpenAI>> {
   const baseURL = options.resolved.baseURL ?? clientConfig.baseURL;
   const shouldForceSystemRole = isQwenBaseURL(baseURL);
@@ -182,13 +185,18 @@ export async function createOpenAIClient(
     authToken =
       (await resolveRuntimeAuthToken(options.resolved.authToken)) ?? '';
   } catch (cause) {
+    const failure = createCredentialResolutionError(
+      options,
+      clientConfig.providerName,
+      { kind: 'credential-source-failed', cause },
+    );
     if (!authExempt) {
-      throw createCredentialResolutionError(
-        options,
-        clientConfig.providerName,
-        { kind: 'credential-source-failed', cause },
-      );
+      throw failure;
     }
+    logger.debug(
+      () =>
+        `Continuing without credentials for auth-exempt endpoint after authentication resolution failed: ${failure.message}`,
+    );
   }
   if (!authToken && !authExempt) {
     throw createCredentialResolutionError(options, clientConfig.providerName);
@@ -236,6 +244,7 @@ export async function createConfiguredModel(
     options,
     clientConfig,
     customFetch,
+    logger,
   );
   const modelId = options.resolved.model || defaultModel;
   const baseModel: LanguageModel =

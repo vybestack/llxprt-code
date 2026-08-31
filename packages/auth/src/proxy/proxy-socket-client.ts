@@ -14,6 +14,7 @@
 
 import * as net from 'node:net';
 import * as crypto from 'node:crypto';
+import { MessageChannel } from 'node:worker_threads';
 import { encodeFrame, FrameDecoder } from './framing.js';
 
 export const REQUEST_TIMEOUT_MS = 30000;
@@ -64,6 +65,19 @@ function isProxyResponseFrame(
   return true;
 }
 
+const PROXY_CONNECT_FAILURE_PATTERN = /connect (?:ECONNREFUSED|ENOENT|EACCES)/i;
+
+export class ProxyRequestError extends Error {
+  readonly proxyContacted: boolean;
+
+  constructor(cause: unknown, proxyContacted: boolean) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    super(message, { cause });
+    this.name = 'ProxyRequestError';
+    this.proxyContacted = proxyContacted;
+  }
+}
+
 interface PendingRequest {
   resolve: (value: ProxyResponse) => void;
   reject: (reason: Error) => void;
@@ -74,6 +88,7 @@ export class ProxySocketClient {
   private readonly socketPath: string;
   private readonly capabilityToken: string | undefined;
   private socket: net.Socket | null = null;
+  private connectionEpoch = 0;
   private decoder: FrameDecoder = new FrameDecoder({
     onPartialFrameTimeout: () => this.handlePartialFrameTimeout(),
   });
@@ -140,7 +155,7 @@ export class ProxySocketClient {
   }
 
   async ensureConnected(): Promise<void> {
-    if (this.socket !== null && this.handshakeComplete) {
+    if (this.isConnected()) {
       this.resetIdleTimer();
       return;
     }
@@ -157,7 +172,26 @@ export class ProxySocketClient {
   }
 
   private isConnected(): boolean {
-    return this.socket !== null && this.handshakeComplete;
+    const socket = this.socket;
+    if (socket === null) return false;
+
+    const connectionWasEstablished =
+      this.handshakeComplete && !socket.destroyed;
+    return connectionWasEstablished && !socket.readableEnded && socket.writable;
+  }
+
+  private async hasUsableConnection(): Promise<boolean> {
+    if (!this.isConnected()) return false;
+    await new Promise<void>((resolve) => {
+      const { port1, port2 } = new MessageChannel();
+      port1.once('message', () => {
+        port1.close();
+        port2.close();
+        resolve();
+      });
+      port2.postMessage(undefined);
+    });
+    return this.isConnected();
   }
 
   /**
@@ -174,12 +208,36 @@ export class ProxySocketClient {
     payload: Record<string, unknown>,
     options?: RequestOptions,
   ): Promise<ProxyResponse> {
-    if (!this.isConnected()) {
-      await this.ensureConnected();
-    } else {
-      this.resetIdleTimer();
+    const connectionEpoch = this.connectionEpoch;
+    let connectionWasEstablished = false;
+    let proxyContacted = false;
+    try {
+      connectionWasEstablished = await this.hasUsableConnection();
+      if (connectionEpoch !== this.connectionEpoch) {
+        throw new ProxyRequestError(
+          new Error('Credential proxy connection lost. Restart the session.'),
+          false,
+        );
+      }
+      proxyContacted = connectionWasEstablished;
+      if (!connectionWasEstablished) {
+        await this.ensureConnected();
+        proxyContacted = true;
+      } else {
+        this.resetIdleTimer();
+      }
+      return await this.sendRequest(op, payload, options);
+    } catch (cause) {
+      if (cause instanceof ProxyRequestError) throw cause;
+      const message = cause instanceof Error ? cause.message : String(cause);
+      const connectionAttemptReachedProxy =
+        !connectionWasEstablished &&
+        !PROXY_CONNECT_FAILURE_PATTERN.test(message);
+      throw new ProxyRequestError(
+        cause,
+        proxyContacted || connectionAttemptReachedProxy,
+      );
     }
-    return this.sendRequest(op, payload, options);
   }
 
   /**
@@ -290,6 +348,7 @@ export class ProxySocketClient {
   }
 
   gracefulClose(): void {
+    this.connectionEpoch += 1;
     this.handshakeComplete = false;
     // Reject any pending requests
     for (const [, pending] of this.pendingRequests) {
@@ -493,6 +552,7 @@ export class ProxySocketClient {
   }
 
   private destroy(message: string): void {
+    this.connectionEpoch += 1;
     this.cancelIdleTimer();
 
     for (const [, pending] of this.pendingRequests) {

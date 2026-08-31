@@ -34,10 +34,23 @@ import { CredentialResolutionError } from '@vybestack/llxprt-code-auth';
 import { createOpenAIClient } from './vercelModelClient.js';
 import type { ProviderClientConfig } from './vercelModelClient.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import type { ResolvedAuthToken } from '../types/providerRuntime.js';
+
+class RecordingLogger {
+  readonly messages: string[] = [];
+
+  debug(messageOrFactory: string | (() => string), ..._args: unknown[]): void {
+    this.messages.push(
+      typeof messageOrFactory === 'function'
+        ? messageOrFactory()
+        : messageOrFactory,
+    );
+  }
+}
 
 function buildOptions(
   baseURL: string | undefined,
-  authToken: string | undefined,
+  authToken: ResolvedAuthToken | undefined,
 ): NormalizedGenerateChatOptions {
   return {
     settings: {
@@ -145,6 +158,30 @@ describe('createOpenAIClient local-endpoint auth exemption (issue #2506)', () =>
       { requiresAuth: false },
     );
     expect(apiKey).toBe('');
+  });
+
+  it('logs a safe diagnostic when auth resolution fails for an exempt endpoint', async () => {
+    const forbiddenDetail = 'issue3451-sensitive-failure-detail';
+    const logger = new RecordingLogger();
+    const authToken: ResolvedAuthToken = {
+      provide: async () => {
+        throw new Error(forbiddenDetail);
+      },
+    };
+
+    await createOpenAIClient(
+      buildOptions('https://api.openai.com/v1', authToken),
+      buildClientConfig('https://api.openai.com/v1', {
+        requiresAuth: false,
+      }),
+      undefined,
+      logger,
+    );
+
+    const output = logger.messages.join('\n');
+    expect(output).toContain('kind=credential-source-failed');
+    expect(output).toContain('auth-exempt endpoint');
+    expect(output).not.toContain(forbiddenDetail);
   });
 
   it('throws CredentialResolutionError for a non-local endpoint with no key', async () => {

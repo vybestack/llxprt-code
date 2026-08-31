@@ -173,8 +173,12 @@ function expectSafeFailure(
   expect(result.failure.message).toContain(
     `runtimeId=${result.failure.diagnostics.runtimeId}`,
   );
+  const attemptedMechanisms = result.failure.diagnostics.attemptedMechanisms;
+  if (attemptedMechanisms === 'unknown') {
+    throw new Error('Resolver failures must include attempted mechanisms');
+  }
   expect(result.failure.message).toContain(
-    `attemptedMechanisms=[${result.failure.diagnostics.attemptedMechanisms.join(', ')}]`,
+    `attemptedMechanisms=[${attemptedMechanisms.join(', ')}]`,
   );
   expect(result.failure.message).toContain(
     `proxyMode=${result.failure.diagnostics.proxyMode}`,
@@ -223,7 +227,7 @@ describe('Credential resolution diagnostics', () => {
     }
   });
 
-  it('classifies an unconfigured provider with complete safe diagnostics', async () => {
+  it('does not report OAuth as attempted when the resolver cannot use OAuth', async () => {
     process.env[CREDENTIAL_SOCKET_ENV] = path.join(
       os.tmpdir(),
       'issue3451-unused-proxy.sock',
@@ -262,7 +266,6 @@ describe('Credential resolution diagnostics', () => {
         'global-auth-key-name',
         'global-auth-keyfile',
         'env:ISSUE3451_MISSING_KEY',
-        'oauth',
       ],
       proxyMode: true,
       proxyContacted: false,
@@ -291,7 +294,6 @@ describe('Credential resolution diagnostics', () => {
       CREDENTIAL_SECRET,
       CAPABILITY_SECRET,
       KEY_MATERIAL_SECRET,
-      'configured-key-reference',
     ]);
     expect(failure.diagnostics.attemptedMechanisms).toEqual([
       'provider-auth-key',
@@ -299,8 +301,13 @@ describe('Credential resolution diagnostics', () => {
       'constructor-api-key',
       'global-auth-key',
       'global-auth-key-name',
+      'global-auth-keyfile',
     ]);
     expect(failure.diagnostics.proxyContacted).toBe(false);
+    expect(failure.remediation).toBe(
+      "Named key 'configured-key-reference' not found. Save it with /key save configured-key-reference <api-key> before retrying.",
+    );
+    expect(failure.message).toContain('/key save configured-key-reference');
   });
 
   it('classifies a real proxy NOT_FOUND response as credential-not-found and records proxy contact', async () => {
@@ -329,11 +336,44 @@ describe('Credential resolution diagnostics', () => {
       CREDENTIAL_SECRET,
       CAPABILITY_SECRET,
       KEY_MATERIAL_SECRET,
-      'proxy-key-reference',
     ]);
     expect(harness.requestCount()).toBe(1);
     expect(failure.diagnostics.proxyMode).toBe(true);
     expect(failure.diagnostics.proxyContacted).toBe(true);
+  });
+
+  it('reports proxy-unavailable without proxy contact when the socket cannot be reached', async () => {
+    const socketPath = path.join(
+      os.tmpdir(),
+      `issue3451-unreachable-${process.pid}.sock`,
+    );
+    process.env[CREDENTIAL_SOCKET_ENV] = socketPath;
+    const client = new ProxySocketClient(socketPath, CAPABILITY_SECRET);
+    clients.push(client);
+    const settings = createSettingsService({
+      'auth-key-name': 'proxy-key-reference',
+      currentProfile: 'sandbox-profile',
+    });
+    const resolver = new AuthPrecedenceResolver(
+      { providerId: 'test-provider' },
+      {
+        settingsService: settings,
+        providerKeyStorage: new ProxyProviderKeyStorage(client),
+        getActiveRuntimeContext: () =>
+          createRuntimeContext('runtime-proxy-unreachable', settings),
+      },
+    );
+
+    const result = await resolver.resolveAuthenticationResult();
+
+    const failure = expectSafeFailure(result, 'proxy-unavailable', [
+      CREDENTIAL_SECRET,
+      CAPABILITY_SECRET,
+      KEY_MATERIAL_SECRET,
+    ]);
+    expect(failure.diagnostics.proxyMode).toBe(true);
+    expect(failure.diagnostics.proxyContacted).toBe(false);
+    expect(failure.cause).toBeInstanceOf(Error);
   });
 
   it('classifies a non-transport named-key exception as credential-source-failed and preserves its cause', async () => {
@@ -367,7 +407,6 @@ describe('Credential resolution diagnostics', () => {
       CREDENTIAL_SECRET,
       CAPABILITY_SECRET,
       KEY_MATERIAL_SECRET,
-      'configured-key-reference',
     ]);
     expect(failure.diagnostics.proxyContacted).toBe(false);
     expect(failure.cause).toBe(sourceError);
@@ -413,7 +452,6 @@ describe('Credential resolution diagnostics', () => {
       CREDENTIAL_SECRET,
       CAPABILITY_SECRET,
       KEY_MATERIAL_SECRET,
-      'proxy-key-reference',
     ]);
     expect(harness.requestCount()).toBe(1);
     expect(failure.diagnostics.proxyMode).toBe(true);
@@ -447,7 +485,6 @@ describe('Credential resolution diagnostics', () => {
       CREDENTIAL_SECRET,
       CAPABILITY_SECRET,
       KEY_MATERIAL_SECRET,
-      'proxy-key-reference',
     ]);
     expect(failure.diagnostics.proxyMode).toBe(true);
     expect(failure.diagnostics.proxyContacted).toBe(true);
@@ -525,6 +562,56 @@ describe('Credential resolution diagnostics', () => {
     ]);
     expect(failure.diagnostics.attemptedMechanisms.at(-1)).toBe('oauth');
     expect(failure.cause).toBe(sourceError);
+  });
+
+  it('reports the most significant failure after every configured mechanism fails', async () => {
+    process.env[CREDENTIAL_SOCKET_ENV] = path.join(
+      os.tmpdir(),
+      `issue3451-significance-${process.pid}.sock`,
+    );
+    const namedKeyError = new Error('local key storage failed');
+    const proxyError = new Error('connect ENOENT issue3451-proxy.sock');
+    const settings = createSettingsService({
+      'auth-key-name': 'configured-key-reference',
+      currentProfile: 'sandbox-profile',
+    });
+    const keyStorage: IProviderKeyStorage = {
+      getKey: async () => {
+        throw namedKeyError;
+      },
+      listKeys: async () => [],
+      hasKey: async () => false,
+    };
+    const oauthManager: OAuthManager = {
+      getToken: async () => {
+        throw proxyError;
+      },
+      isAuthenticated: async () => false,
+    };
+    const resolver = new AuthPrecedenceResolver(
+      {
+        providerId: 'test-provider',
+        oauthProvider: 'test-oauth',
+        isOAuthEnabled: true,
+        supportsOAuth: true,
+      },
+      {
+        settingsService: settings,
+        providerKeyStorage: keyStorage,
+        oauthManager,
+        getActiveRuntimeContext: () =>
+          createRuntimeContext('runtime-significant-failure', settings),
+      },
+    );
+
+    const result = await resolver.resolveAuthenticationResult({
+      includeOAuth: true,
+    });
+
+    const failure = expectSafeFailure(result, 'proxy-unavailable', []);
+    expect(failure.cause).toBe(proxyError);
+    expect(failure.cause).not.toBe(namedKeyError);
+    expect(failure.diagnostics.proxyContacted).toBe(false);
   });
 
   it('retains null-returning behavior for legacy authentication helpers after a source failure', async () => {

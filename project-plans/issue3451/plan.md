@@ -14,30 +14,43 @@ sessions on the same host.
 
 ## Root-cause analysis
 
-### Why the parent survives and a new subagent runtime does not
+### On the parent/subagent asymmetry (acceptance criterion 3)
 
-The resolved-credential cache is keyed by `runtimeId`:
+An earlier draft of this plan asserted that the parent survives because it is
+served from a `runtimeId`-scoped credential cache while each freshly minted
+subagent runtime starts cold and must make a live credential-proxy call. **That
+explanation is wrong for the production path and is retracted here.**
 
-- `packages/auth/src/precedence.ts:119` — `runtimeScopedStates = new Map<string, RuntimeScopedState>()`
-- `packages/auth/src/precedence.ts:217` — `runtimeScopedStates.get(runtimeId)`
-- `packages/auth/src/precedence.ts:255-279` — `getValidCachedEntry` keyed by
-  `${runtimeAuthScopeId}::${providerId}::${profileId}`
+The runtime-scoped cache does exist and is keyed by `runtimeId`
+(`packages/auth/src/precedence.ts:119,217,255-279`), and every subagent launch
+does mint a new runtime id
+(`packages/agents/src/core/subagentOrchestrator.ts:598-601`). But
+`AuthPrecedenceResolver` only consults that cache when it is constructed with a
+`getActiveRuntimeContext` callback (`auth-precedence-resolver.ts:154-155`,
+`:429`), and `BaseProvider` does not pass one
+(`packages/providers/src/BaseProvider.ts:164-168`). So for every provider built
+through `BaseProvider`, `tryGetRuntimeState()` returns null and the cache is
+inert. It is also populated only by the OAuth path, so named-key and API-key
+lookups would not be cached there in any case.
 
-Every subagent launch mints a brand-new runtime id:
+Two consequences, stated plainly:
 
-- `packages/agents/src/core/subagentOrchestrator.ts:598-601` —
-  `` `${this.baseSessionId()}#${subagentName}#${suffix}` ``
+1. The asymmetry reported in the issue is **not explained** by this change. What
+   is proven is the second defect below: the cause of a credential-resolution
+   failure was discarded, which is why the symptom was undiagnosable and looked
+   arbitrary.
+2. Acceptance criterion 3 is therefore **not met**. It is conditional ("if the
+   failure is specific to subagent runtimes"), and the evidence available does
+   not establish that it is: subagents launch successfully in concurrent
+   sessions on the same host, and the failure has never been reduced to a
+   deterministic sequence.
 
-So the parent resolves its credential once and is served from its runtime-scoped
-entry on every subsequent call, whereas each new subagent runtime starts with an
-empty cache and must perform a live credential resolution. Inside a sandbox that
-live resolution is the credential-proxy hop
-(`LLXPRT_CREDENTIAL_SOCKET`, `packages/providers/src/auth/proxy/credential-store-factory.ts:283,364`).
-
-This is the asymmetry named in acceptance criterion 3. The cache scoping itself
-is correct: a subagent runtime must not inherit the parent's credential cache.
-What is defective is that the first-call failure in that new scope is flattened
-into an empty string, which is why the symptom is intermittent and undiagnosable.
+Rewiring subagent credential plumbing on this evidence would be a speculative
+fix for a mechanism nobody has demonstrated. The diagnostics delivered here are
+what make the next occurrence diagnosable: the operator will see which mechanism
+was attempted, whether the credential proxy was reached, and whether it refused
+the request or was never contacted at all. That is the prerequisite for
+identifying the real asymmetry rather than guessing at it.
 
 ### Why the message carries no information
 
@@ -123,13 +136,39 @@ diagnostics. Follows the existing redaction convention (`maskToken` in
 ## Explicitly out of scope
 
 - Rewiring subagent credential plumbing. Evidence does not support a categorical
-  subagent auth defect; subagents launch successfully in concurrent sessions.
-  Acceptance criterion 3 is satisfied by identifying the cache-scope mechanism
-  above and fixing the swallowing that made it undiagnosable, not by changing
-  how subagent runtimes obtain credentials.
+  subagent auth defect; subagents launch successfully in concurrent sessions, and
+  the reported failure has never been reduced to a deterministic sequence. See
+  the retraction above: acceptance criterion 3 is **not met**, and closing it
+  would require first reproducing the asymmetry with the diagnostics this change
+  adds.
 - Changing cache scoping, TTLs, or proxy connection lifetime.
 - Retry or reconnect policy for the credential proxy.
+- Cache hit/miss/evicted state in the diagnostics payload. Reporting it would
+  require new instrumentation in `precedence.ts`, and the cache is inert on the
+  `BaseProvider` path anyway.
+- A redaction or serialization boundary for `error.cause`. The public message and
+  diagnostics are free of credential material and tests enforce that; the raw
+  cause is retained deliberately so the originating error survives for debugging.
 - Issues #3449, #3450, #3440.
+
+## Review findings and triage
+
+Two independent reviews were run against the implementation. Accepted and fixed:
+
+| Ref | Severity | Finding                                                                     |
+| --- | -------- | --------------------------------------------------------------------------- |
+| B1  | HIGH     | One broken mechanism aborted the whole precedence chain, so a bad keyfile defeated a working env var or OAuth token. Now recorded per mechanism and the chain continues. |
+| B2  | HIGH     | Anthropic-compatible third-party endpoints threw an untyped `Error`, discarding kind and diagnostics. Now typed, with the actionable text kept as `remediation`. |
+| B3  | HIGH     | A caller's explicit `kind`/`cause` was silently dropped when a resolver failure was already bound, misclassifying live failures. |
+| B4  | HIGH     | `proxyContacted` reported true for connect-level failures where the proxy was never reached, contradicting acceptance criterion 1. |
+| B5  | MEDIUM   | The named-key `/key save` guidance was lost when the throw became a result.  |
+| I1  | MEDIUM   | Provider fallback path hardcoded `proxyContacted: false` and an empty mechanism list, producing contradictory diagnostics. |
+| I2  | LOW      | `oauth` was recorded as attempted even when OAuth was never eligible.        |
+| I3  | LOW      | `afterEach` cleanup could throw and mask a real test failure.                |
+| I4  | LOW      | An auth-exempt endpoint swallowed a genuine proxy failure with no trace.     |
+
+Deferred, with reasons given in the out-of-scope list above: cache-state
+diagnostics, and a redaction boundary for `error.cause`.
 
 ## Test plan (written first, behavioral, `bun:test`)
 

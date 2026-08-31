@@ -111,7 +111,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   private readonly toolCallPipeline = new ToolCallPipeline();
   private readonly preparedPromptEnvelopes = new OpenAIPromptEnvelopeStore();
 
-  private getLogger(): DebugLogger {
+  protected getLogger(): DebugLogger {
     return new DebugLogger('llxprt:provider:openai');
   }
 
@@ -226,12 +226,17 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       authToken =
         (await resolveRuntimeAuthToken(options.resolved.authToken)) ?? '';
     } catch (cause) {
+      const failure = createCredentialResolutionError(options, this.name, {
+        kind: 'credential-source-failed',
+        cause,
+      });
       if (!authExempt) {
-        throw createCredentialResolutionError(options, this.name, {
-          kind: 'credential-source-failed',
-          cause,
-        });
+        throw failure;
       }
+      this.getLogger().debug(
+        () =>
+          `Continuing without credentials for auth-exempt endpoint after authentication resolution failed: ${failure.message}`,
+      );
     }
     if (!authToken && !authExempt) {
       throw createCredentialResolutionError(options, this.name);

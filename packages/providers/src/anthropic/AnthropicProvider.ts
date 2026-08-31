@@ -261,9 +261,10 @@ export class AnthropicProvider extends BaseProvider {
       // Third-party hosts must never be misdirected to Anthropic OAuth; they
       // require an explicit credential regardless of bound identity.
       if (!isAnthropicOAuthBaseURL(baseURL)) {
-        throw new Error(
-          `No API key resolved for Anthropic-compatible endpoint "${baseURL}". Configure an explicit credential (auth-key, auth-keyfile, or auth-key-name) for this profile; OAuth against api.anthropic.com is not used for third-party base URLs.`,
-        );
+        throw createCredentialResolutionError(options, this.name, {
+          kind: 'no-credential-configured',
+          remediation: `No API key resolved for Anthropic-compatible endpoint "${baseURL}". Configure an explicit credential (auth-key, auth-keyfile, or auth-key-name) for this profile; OAuth against api.anthropic.com is not used for third-party base URLs.`,
+        });
       }
       // On the canonical Anthropic host, distinguish by bound identity: only
       // the `claudecode` subscription identity surfaces OAuth recovery; the
