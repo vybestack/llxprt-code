@@ -65,15 +65,43 @@ function setNetworkEnvironment(
   if (legacy !== undefined) process.env.SANDBOX_NETWORK = legacy;
 }
 
+const realOsTmpdir: () => string = os.tmpdir;
+
+/**
+ * Overrides os.tmpdir for the code under test. Bun exposes os.tmpdir as an
+ * accessor property, which vi.spyOn cannot wrap, and once TMPDIR is deleted
+ * after being set, os.tmpdir keeps returning the stale value for the rest of
+ * the process. Redefining the property avoids both pitfalls.
+ */
+function overrideOsTmpdir(value: string): void {
+  Object.defineProperty(os, 'tmpdir', {
+    value: () => value,
+    configurable: true,
+  });
+}
+
+function restoreOsTmpdir(): void {
+  Object.defineProperty(os, 'tmpdir', {
+    value: realOsTmpdir,
+    configurable: true,
+  });
+}
+
 function capabilityArtifacts(home: string): string[] {
   return fs
     .readdirSync(home)
     .filter((entry) => entry.startsWith('.llxprt-code-cap-'));
 }
 
+function runtimeCapabilityArtifacts(runtimeRoot: string): string[] {
+  return fs
+    .readdirSync(runtimeRoot)
+    .filter((entry) => entry.startsWith('llxprt-code-cap-'));
+}
+
 function invokeCredentialSetup(
   command: ContainerCommand,
-  tmpDir: string,
+  sessionTmpdir: string,
 ): CredentialInvocation {
   const args: string[] = [];
   const prefixes: string[] = [];
@@ -85,7 +113,7 @@ function invokeCredentialSetup(
     promise: setupCredentialProxy(
       args,
       { command, image: 'test' },
-      tmpDir,
+      sessionTmpdir,
       reservedPorts,
       prefixes,
     ),
@@ -96,16 +124,23 @@ describe('#1456 credential proxy network policy', () => {
   let environmentSnapshot: NodeJS.ProcessEnv;
   let tmpDir = '';
   let isolatedHome: string;
+  let sessionTmpdir = '';
 
   beforeEach(() => {
     environmentSnapshot = { ...process.env };
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'credential-1456-'));
     isolatedHome = path.join(tmpDir, 'home');
+    sessionTmpdir = path.join(tmpDir, 'session');
     fs.mkdirSync(isolatedHome);
+    fs.mkdirSync(sessionTmpdir);
     process.env.HOME = isolatedHome;
     process.env.USERPROFILE = isolatedHome;
+    delete process.env.XDG_RUNTIME_DIR;
     setNetworkEnvironment(undefined, undefined);
     vi.resetAllMocks();
+    // os.tmpdir is an accessor property in Bun (vi.spyOn cannot wrap it) and
+    // a set-then-deleted TMPDIR leaves os.tmpdir() stale; redefine instead.
+    overrideOsTmpdir(tmpDir);
     vi.spyOn(os, 'homedir').mockReturnValue(isolatedHome);
     authMocks.createAndStartProxy.mockResolvedValue({ stop: vi.fn() });
     authMocks.getProxySocketPath.mockReturnValue(
@@ -127,6 +162,7 @@ describe('#1456 credential proxy network policy', () => {
 
   afterEach(() => {
     process.env = environmentSnapshot;
+    restoreOsTmpdir();
     vi.restoreAllMocks();
     if (tmpDir !== '') {
       fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -159,7 +195,7 @@ describe('#1456 credential proxy network policy', () => {
     async ({ command, setNetwork }) => {
       setNetwork();
       vi.spyOn(os, 'platform').mockReturnValue('darwin');
-      const invocation = invokeCredentialSetup(command, tmpDir);
+      const invocation = invokeCredentialSetup(command, sessionTmpdir);
       let unexpectedCleanup: (() => void) | undefined;
       const result = invocation.promise.then((value) => {
         unexpectedCleanup = value.credentialProxyBridgeCleanup;
@@ -187,6 +223,8 @@ describe('#1456 credential proxy network policy', () => {
         unexpectedCleanup?.();
         await authMocks.stopProxy();
         expect(capabilityArtifacts(isolatedHome)).toStrictEqual([]);
+        expect(runtimeCapabilityArtifacts(tmpDir)).toStrictEqual([]);
+        expect(fs.existsSync(sessionTmpdir)).toBe(false);
       }
     },
   );
@@ -262,7 +300,7 @@ describe('#1456 credential proxy network policy', () => {
     }) => {
       setNetworkEnvironment(primary, legacy);
       vi.spyOn(os, 'platform').mockReturnValue(platform);
-      const invocation = invokeCredentialSetup(command, tmpDir);
+      const invocation = invokeCredentialSetup(command, sessionTmpdir);
       let cleanup: (() => void) | undefined;
 
       try {
@@ -294,6 +332,8 @@ describe('#1456 credential proxy network policy', () => {
         cleanup?.();
         await authMocks.stopProxy();
         expect(capabilityArtifacts(isolatedHome)).toStrictEqual([]);
+        expect(runtimeCapabilityArtifacts(tmpDir)).toStrictEqual([]);
+        expect(fs.existsSync(sessionTmpdir)).toBe(false);
       }
     },
   );

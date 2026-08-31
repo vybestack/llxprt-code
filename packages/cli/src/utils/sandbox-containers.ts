@@ -89,16 +89,18 @@ const BASE_CONTAINER_HARDENING_FLAGS = [
   'no-new-privileges',
 ] as const;
 
-/** Composes cleanup callbacks and surfaces failures after attempting both. */
+/** Composes cleanup callbacks and surfaces failures after attempting each one. */
 function composeCleanups(
   a: (() => void) | undefined,
   b: (() => void) | undefined,
+  c: (() => void) | undefined,
 ): (() => void) | undefined {
-  if (a === undefined && b === undefined) return undefined;
+  if (a === undefined && b === undefined && c === undefined) return undefined;
   return () => {
     const errors: unknown[] = [];
     runCapabilityCleanupStep(() => a?.(), errors);
     runCapabilityCleanupStep(() => b?.(), errors);
+    runCapabilityCleanupStep(() => c?.(), errors);
     if (errors.length > 0) {
       throw new AggregateError(errors, 'Credential proxy cleanup failed');
     }
@@ -147,7 +149,7 @@ export function buildContainerRunArgs(
   image: string,
   workdir: string,
   containerWorkdir: string,
-  resolvedTmpdir: string,
+  sessionTmpdir: string,
 ): string[] {
   const args = ['run', '-i', '--rm', '--init', '--workdir', containerWorkdir];
   // Privilege hardening defaults: applied before SANDBOX_FLAGS so a user can
@@ -213,10 +215,10 @@ export function buildContainerRunArgs(
   args.push('--env', `LLXPRT_CONFIG_HOME=${containerConfigDir}`);
   const containerHome = resolveSandboxContainerHome();
   mountGitConfigFiles(args, os.homedir(), containerHome);
-  args.push(
-    '--volume',
-    `${resolvedTmpdir}:${getContainerPath(resolvedTmpdir)}`,
-  );
+  // Issue #3440: mount only the per-session subdirectory so host-only
+  // capability directories under the runtime root remain unreadable in the
+  // container, preserving issue #1954 AC1.
+  args.push('--volume', `${sessionTmpdir}:${getContainerPath(sessionTmpdir)}`);
   return args;
 }
 
@@ -573,7 +575,9 @@ async function setupMacOSCredProxyBridge(
 }
 
 /** Starts credential proxy and sets up bridge for Podman/Docker macOS. */
-async function failOnMissingSocketPath(): Promise<Error> {
+async function failOnMissingSocketPath(
+  sessionTmpdirCleanup: () => void,
+): Promise<Error> {
   const invariantError = new FatalSandboxError(
     'Credential proxy started but did not produce a socket path',
   );
@@ -583,8 +587,20 @@ async function failOnMissingSocketPath(): Promise<Error> {
   } catch (stopErr) {
     errors.push(stopErr);
   }
+  runCapabilityCleanupStep(sessionTmpdirCleanup, errors);
   return errors.length === 1
     ? invariantError
+    : new AggregateError(errors, 'Credential proxy setup failed');
+}
+
+function throwCredentialProxySetupError(
+  error: unknown,
+  sessionTmpdirCleanup: () => void,
+  errors: unknown[] = [error],
+): never {
+  runCapabilityCleanupStep(sessionTmpdirCleanup, errors);
+  throw errors.length === 1
+    ? error
     : new AggregateError(errors, 'Credential proxy setup failed');
 }
 
@@ -602,34 +618,80 @@ function assertSupportedCredentialNetwork(config: SandboxConfig): void {
   }
 }
 
+function volumeSource(spec: string): string {
+  const sourceStart = /^[A-Za-z]:[\\/]/.test(spec) ? 2 : 0;
+  const sourceEnd = spec.indexOf(':', sourceStart);
+  return sourceEnd === -1 ? spec : spec.slice(0, sourceEnd);
+}
+
+function containerMountSources(args: readonly string[]): string[] {
+  const sources: string[] = [];
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index];
+    if (arg === '--volume' || arg === '-v') {
+      sources.push(volumeSource(args[index + 1]));
+      index++;
+    } else if (arg.startsWith('--volume=')) {
+      sources.push(volumeSource(arg.slice('--volume='.length)));
+    }
+  }
+  return sources;
+}
+
+async function startCredentialProxyForSandbox(
+  config: SandboxConfig,
+  sessionTmpdir: string,
+  sessionTmpdirCleanup: () => void,
+): Promise<string> {
+  try {
+    assertSupportedCredentialNetwork(config);
+  } catch (error) {
+    throwCredentialProxySetupError(error, sessionTmpdirCleanup);
+  }
+  try {
+    await createAndStartProxy({ socketPath: sessionTmpdir });
+  } catch (error) {
+    throwCredentialProxySetupError(
+      new FatalSandboxError(
+        `Failed to start credential proxy: ${error instanceof Error ? error.message : String(error)}`,
+      ),
+      sessionTmpdirCleanup,
+    );
+  }
+  const socketPath = getProxySocketPath();
+  if (socketPath === undefined) {
+    throw await failOnMissingSocketPath(sessionTmpdirCleanup);
+  }
+  return socketPath;
+}
+
 export async function setupCredentialProxy(
   args: string[],
   config: SandboxConfig,
-  resolvedTmpdir: string,
+  sessionTmpdir: string,
   reservedTunnelPorts: Set<number>,
   entrypointPrefixes: string[],
 ): Promise<{
   credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
   credentialProxyBridgeCleanup: (() => void) | undefined;
 }> {
-  assertSupportedCredentialNetwork(config);
-
+  const sessionTmpdirCleanup = (): void => {
+    fs.rmSync(sessionTmpdir, { recursive: true, force: true });
+  };
+  // @plan:PLAN-20250214-CREDPROXY.P34 R25.1: Start credential proxy BEFORE spawning container
+  let socketPath: string;
+  try {
+    socketPath = await startCredentialProxyForSandbox(
+      config,
+      sessionTmpdir,
+      sessionTmpdirCleanup,
+    );
+  } catch (error) {
+    throwCredentialProxySetupError(error, sessionTmpdirCleanup);
+  }
   let credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
   let credentialProxyBridgeCleanup: (() => void) | undefined;
   let envFileCleanup: (() => void) | undefined;
-
-  // @plan:PLAN-20250214-CREDPROXY.P34 R25.1: Start credential proxy BEFORE spawning container
-  try {
-    await createAndStartProxy({ socketPath: resolvedTmpdir });
-  } catch (err) {
-    throw new FatalSandboxError(
-      `Failed to start credential proxy: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
-  const socketPath = getProxySocketPath();
-  if (socketPath === undefined) {
-    throw await failOnMissingSocketPath();
-  }
 
   // @plan:PLAN-20250214-CREDPROXY.P34 R3.6: Pass socket path to container via env var
   const isDarwin = os.platform() === 'darwin';
@@ -654,6 +716,7 @@ export async function setupCredentialProxy(
     // @plan project-plans/issue-1954-sandbox-hardening.md (AC1): host-only env file.
     const envFileResult = createHostOnlyCapabilityEnvFile(
       getProxyCapabilityToken(),
+      containerMountSources(args),
     );
     if (envFileResult !== undefined) {
       args.push(...envFileResult.args);
@@ -668,17 +731,15 @@ export async function setupCredentialProxy(
     } catch (stopErr) {
       errors.push(stopErr);
     }
-    throw errors.length === 1
-      ? err
-      : new AggregateError(errors, 'Credential proxy setup failed');
+    throwCredentialProxySetupError(err, sessionTmpdirCleanup, errors);
   }
 
-  // Compose env-file cleanup with bridge cleanup.
   return {
     credentialProxyBridgeResult,
     credentialProxyBridgeCleanup: composeCleanups(
       credentialProxyBridgeCleanup,
       envFileCleanup,
+      sessionTmpdirCleanup,
     ),
   };
 }

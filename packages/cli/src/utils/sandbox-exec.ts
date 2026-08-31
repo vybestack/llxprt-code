@@ -60,7 +60,7 @@ async function prepareContainerImageAndArgs(config: SandboxConfig): Promise<{
   image: string;
   workdir: string;
   containerWorkdir: string;
-  resolvedTmpdir: string;
+  sessionTmpdir: string;
   args: string[];
 }> {
   // @plan:PLAN-20250214-CREDPROXY.P34 R3.4: Use realpath to resolve symlinks
@@ -96,15 +96,23 @@ async function prepareContainerImageAndArgs(config: SandboxConfig): Promise<{
   }
 
   const resolvedTmpdir = fs.realpathSync(os.tmpdir());
-  const args = buildContainerRunArgs(
-    config,
-    image,
-    workdir,
-    containerWorkdir,
-    resolvedTmpdir,
+  const sessionTmpdir = fs.mkdtempSync(
+    path.join(resolvedTmpdir, 'llxprt-sandbox-'),
   );
-  addContainerVolumeMounts(args);
-  return { image, workdir, containerWorkdir, resolvedTmpdir, args };
+  try {
+    const args = buildContainerRunArgs(
+      config,
+      image,
+      workdir,
+      containerWorkdir,
+      sessionTmpdir,
+    );
+    addContainerVolumeMounts(args);
+    return { image, workdir, containerWorkdir, sessionTmpdir, args };
+  } catch (error) {
+    fs.rmSync(sessionTmpdir, { recursive: true, force: true });
+    throw error;
+  }
 }
 
 /** Sets up SSH forwarding, port forwarding, networking, and env vars. */
@@ -145,6 +153,27 @@ async function prepareContainerNetworkAndEnv(
   };
 }
 
+type ContainerNetworkAndEnv = Awaited<
+  ReturnType<typeof prepareContainerNetworkAndEnv>
+>;
+
+async function rethrowCredentialProxySetupError(
+  error: unknown,
+  credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined,
+): Promise<never> {
+  runBestEffortSyncCleanup(credentialProxyBridgeResult?.cleanup);
+  try {
+    await stopProxy();
+  } catch {
+    // best-effort cleanup; the original error is the one we want to throw
+  }
+  if (error instanceof FatalSandboxError) throw error;
+  // @plan:PLAN-20250214-CREDPROXY.P34 R25.1a: Proxy creation failure aborts before spawning container
+  throw new FatalSandboxError(
+    `Failed to start credential proxy: ${error instanceof Error ? error.message : String(error)}`,
+  );
+}
+
 /** Runs the Docker/Podman sandbox path — image build, arg assembly, and proxy setup. */
 async function prepareContainerSandbox(
   config: SandboxConfig,
@@ -155,61 +184,57 @@ async function prepareContainerSandbox(
   validateContainerSandboxEnv();
   let credentialProxyBridgeCleanup: (() => void) | undefined;
 
-  const { image, workdir, resolvedTmpdir, args } =
+  const { image, workdir, sessionTmpdir, args } =
     await prepareContainerImageAndArgs(config);
 
   const reservedTunnelPorts = new Set<number>();
-  const isPodmanMacOS =
-    config.command === 'podman' && os.platform() === 'darwin';
+  let networkAndEnv: ContainerNetworkAndEnv;
+  try {
+    const isPodmanMacOS =
+      config.command === 'podman' && os.platform() === 'darwin';
+    networkAndEnv = await prepareContainerNetworkAndEnv(
+      config,
+      args,
+      workdir,
+      isPodmanMacOS,
+      reservedTunnelPorts,
+    );
+    const containerName = assignContainerName(args, config, image);
+    addContainerEnvVars(args, config, containerName, nodeArgs, workdir);
+  } catch (error) {
+    fs.rmSync(sessionTmpdir, { recursive: true, force: true });
+    throw error;
+  }
   const {
     sshResult,
     podmanMacOSPortsForwarded,
     proxyCommand,
     portForwardingResult,
-  } = await prepareContainerNetworkAndEnv(
-    config,
-    args,
-    workdir,
-    isPodmanMacOS,
-    reservedTunnelPorts,
-  );
+  } = networkAndEnv;
 
-  const containerName = assignContainerName(args, config, image);
-  addContainerEnvVars(args, config, containerName, nodeArgs, workdir);
-
-  // Gather entrypoint prefixes (ssh-agent bridge, credential proxy bridge)
-  // before building the entrypoint so they compose INTO the trusted script
-  // AFTER the capability capture stanza (F1).
+  // Compose bridge prefixes after the trusted capability capture stanza (F1).
   const entrypointPrefixes: string[] = [];
-  if (sshResult.entrypointPrefix !== undefined) {
-    entrypointPrefixes.push(sshResult.entrypointPrefix);
-  }
-
   let credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
   try {
-    const cpResult = await setupCredentialProxy(
-      args,
-      config,
-      resolvedTmpdir,
-      reservedTunnelPorts,
-      entrypointPrefixes,
-    );
-    credentialProxyBridgeResult = cpResult.credentialProxyBridgeResult;
-    credentialProxyBridgeCleanup = cpResult.credentialProxyBridgeCleanup;
-  } catch (err) {
-    runBestEffortSyncCleanup(credentialProxyBridgeResult?.cleanup);
+    if (sshResult.entrypointPrefix !== undefined) {
+      entrypointPrefixes.push(sshResult.entrypointPrefix);
+    }
     try {
-      await stopProxy();
-    } catch {
-      // best-effort cleanup; the original error is the one we want to throw
+      const cpResult = await setupCredentialProxy(
+        args,
+        config,
+        sessionTmpdir,
+        reservedTunnelPorts,
+        entrypointPrefixes,
+      );
+      credentialProxyBridgeResult = cpResult.credentialProxyBridgeResult;
+      credentialProxyBridgeCleanup = cpResult.credentialProxyBridgeCleanup;
+    } catch (error) {
+      await rethrowCredentialProxySetupError(error, credentialProxyBridgeResult);
     }
-    if (err instanceof FatalSandboxError) {
-      throw err;
-    }
-    // @plan:PLAN-20250214-CREDPROXY.P34 R25.1a: Proxy creation failure aborts before spawning container
-    throw new FatalSandboxError(
-      `Failed to start credential proxy: ${err instanceof Error ? err.message : String(err)}`,
-    );
+  } catch (error) {
+    fs.rmSync(sessionTmpdir, { recursive: true, force: true });
+    throw error;
   }
 
   // Build the entrypoint with all prefixes composed into the trusted script
