@@ -183,7 +183,11 @@ export function loadEnvironment(options: { homeDir?: string } = {}): void {
   const homeDir = options.homeDir ?? homedir();
   const envFilePath = findEnvFile(process.cwd(), homeDir);
   if (envFilePath) {
-    dotenv.config({ path: envFilePath, override: true });
+    // quiet: true because dotenv 17 otherwise writes an injection banner to
+    // stdout, bypassing the server logger. a2a-server moved from a dotenv 16
+    // devDependency to a 17 runtime dependency, which is where this appeared;
+    // scripts/sandbox_command.ts already passes the flag.
+    dotenv.config({ path: envFilePath, override: true, quiet: true });
   }
 }
 
