@@ -182,7 +182,6 @@ async function prepareContainerSandbox(
   cliArgs: string[],
 ): Promise<ContainerSandboxPrepared> {
   validateContainerSandboxEnv();
-  let credentialProxyBridgeCleanup: (() => void) | undefined;
 
   const { image, workdir, sessionTmpdir, args } =
     await prepareContainerImageAndArgs(config);
@@ -214,24 +213,18 @@ async function prepareContainerSandbox(
 
   // Compose bridge prefixes after the trusted capability capture stanza (F1).
   const entrypointPrefixes: string[] = [];
-  let credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
+  let credentialProxySetup: Awaited<ReturnType<typeof setupCredentialProxy>>;
   try {
     if (sshResult.entrypointPrefix !== undefined) {
       entrypointPrefixes.push(sshResult.entrypointPrefix);
     }
-    try {
-      const cpResult = await setupCredentialProxy(
-        args,
-        config,
-        sessionTmpdir,
-        reservedTunnelPorts,
-        entrypointPrefixes,
-      );
-      credentialProxyBridgeResult = cpResult.credentialProxyBridgeResult;
-      credentialProxyBridgeCleanup = cpResult.credentialProxyBridgeCleanup;
-    } catch (error) {
-      await rethrowCredentialProxySetupError(error, credentialProxyBridgeResult);
-    }
+    credentialProxySetup = await startCredentialProxyGuarded(
+      args,
+      config,
+      sessionTmpdir,
+      reservedTunnelPorts,
+      entrypointPrefixes,
+    );
   } catch (error) {
     fs.rmSync(sessionTmpdir, { recursive: true, force: true });
     throw error;
@@ -257,11 +250,34 @@ async function prepareContainerSandbox(
     image,
     workdir,
     portForwardingResult,
-    credentialProxyBridgeResult,
-    credentialProxyBridgeCleanup,
+    ...credentialProxySetup,
     reservedTunnelPorts,
     sshResult,
   };
+}
+
+async function startCredentialProxyGuarded(
+  args: string[],
+  config: SandboxConfig,
+  sessionTmpdir: string,
+  reservedTunnelPorts: Set<number>,
+  entrypointPrefixes: string[],
+): Promise<Awaited<ReturnType<typeof setupCredentialProxy>>> {
+  let credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
+  try {
+    const cpResult = await setupCredentialProxy(
+      args,
+      config,
+      sessionTmpdir,
+      reservedTunnelPorts,
+      entrypointPrefixes,
+    );
+    credentialProxyBridgeResult = cpResult.credentialProxyBridgeResult;
+    const credentialProxyBridgeCleanup = cpResult.credentialProxyBridgeCleanup;
+    return { credentialProxyBridgeResult, credentialProxyBridgeCleanup };
+  } catch (error) {
+    return rethrowCredentialProxySetupError(error, credentialProxyBridgeResult);
+  }
 }
 
 /** Spawns container and proxy, wires cleanup, and waits for exit. */

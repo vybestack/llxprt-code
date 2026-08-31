@@ -285,9 +285,9 @@ describe('host-only capability env-file (AC1, F4)', () => {
     try {
       expect(path.dirname(path.dirname(result.envFilePath))).toBe(runtimeRoot);
       expect(
-        path.dirname(result.envFilePath).startsWith(
-          `${siblingMount}${path.sep}`,
-        ),
+        path
+          .dirname(result.envFilePath)
+          .startsWith(`${siblingMount}${path.sep}`),
       ).toBe(false);
     } finally {
       result.cleanup();

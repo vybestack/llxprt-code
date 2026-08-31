@@ -149,10 +149,7 @@ function assertCapabilityOutsideMounts(
 ): void {
   if (mountSources.length === 0) return;
   const canonicalRuntimeRoot = fs.realpathSync(runtimeRoot);
-  const candidatePath = path.join(
-    canonicalRuntimeRoot,
-    CAPABILITY_DIR_PREFIX,
-  );
+  const candidatePath = path.join(canonicalRuntimeRoot, CAPABILITY_DIR_PREFIX);
   for (const mountSource of mountSources) {
     let canonicalMountSource: string;
     try {
