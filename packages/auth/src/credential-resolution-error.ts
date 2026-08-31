@@ -32,6 +32,7 @@ export interface CredentialResolutionDiagnostics {
 
 export interface CredentialResolutionErrorOptions {
   readonly cause?: unknown;
+  readonly remediation?: string;
 }
 
 export type CredentialResolutionResult =
@@ -44,20 +45,24 @@ export type CredentialResolutionResult =
 function buildMessage(
   kind: CredentialResolutionErrorKind,
   diagnostics: CredentialResolutionDiagnostics,
+  remediation?: string,
 ): string {
-  return (
+  const diagnosticMessage =
     `Credential resolution failed: kind=${kind}; ` +
     `provider=${diagnostics.provider}; profile=${diagnostics.profile}; ` +
     `runtimeId=${diagnostics.runtimeId}; ` +
     `attemptedMechanisms=[${diagnostics.attemptedMechanisms.join(', ')}]; ` +
     `proxyMode=${diagnostics.proxyMode}; ` +
-    `proxyContacted=${diagnostics.proxyContacted}`
-  );
+    `proxyContacted=${diagnostics.proxyContacted}`;
+  return remediation === undefined
+    ? diagnosticMessage
+    : `${remediation} ${diagnosticMessage}`;
 }
 
 export class CredentialResolutionError extends Error {
   readonly kind: CredentialResolutionErrorKind;
   readonly diagnostics: CredentialResolutionDiagnostics;
+  readonly remediation: string | undefined;
 
   constructor(
     kind: CredentialResolutionErrorKind,
@@ -65,11 +70,12 @@ export class CredentialResolutionError extends Error {
     options: CredentialResolutionErrorOptions = {},
   ) {
     super(
-      buildMessage(kind, diagnostics),
+      buildMessage(kind, diagnostics, options.remediation),
       options.cause === undefined ? undefined : { cause: options.cause },
     );
     this.name = 'CredentialResolutionError';
     this.kind = kind;
+    this.remediation = options.remediation;
     this.diagnostics = Object.freeze({
       ...diagnostics,
       attemptedMechanisms: Object.freeze([...diagnostics.attemptedMechanisms]),

@@ -23,7 +23,7 @@ import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { isLocalEndpoint } from '../utils/localEndpoint.js';
 import { isQwenBaseURL } from '../utils/qwenEndpoint.js';
-import { AuthenticationError } from './errors.js';
+import { createCredentialResolutionError } from '../utils/credentialResolutionError.js';
 import { createDeveloperRoleToSystemFetch } from './vercelDeveloperRoleFetch.js';
 import { createReasoningCaptureFetch } from './vercelReasoningCapture.js';
 import type { CaptureBuffer } from './vercelReasoningCapture.js';
@@ -173,18 +173,25 @@ export async function createOpenAIClient(
   clientConfig: ProviderClientConfig,
   customFetch?: typeof fetch,
 ): Promise<ReturnType<typeof createOpenAI>> {
-  const authToken =
-    (await resolveRuntimeAuthToken(options.resolved.authToken)) ?? '';
   const baseURL = options.resolved.baseURL ?? clientConfig.baseURL;
   const shouldForceSystemRole = isQwenBaseURL(baseURL);
-
   const authExempt =
     clientConfig.requiresAuth === false || isLocalEndpoint(baseURL);
+  let authToken = '';
+  try {
+    authToken =
+      (await resolveRuntimeAuthToken(options.resolved.authToken)) ?? '';
+  } catch (cause) {
+    if (!authExempt) {
+      throw createCredentialResolutionError(
+        options,
+        clientConfig.providerName,
+        { kind: 'credential-source-failed', cause },
+      );
+    }
+  }
   if (!authToken && !authExempt) {
-    throw new AuthenticationError(
-      `Auth token unavailable for runtimeId=${options.runtime?.runtimeId} (REQ-SP4-003).`,
-      clientConfig.providerName,
-    );
+    throw createCredentialResolutionError(options, clientConfig.providerName);
   }
 
   const headers = clientConfig.customHeaders;

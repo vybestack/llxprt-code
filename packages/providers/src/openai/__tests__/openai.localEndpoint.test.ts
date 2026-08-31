@@ -21,6 +21,7 @@ import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { CredentialResolutionError } from '@vybestack/llxprt-code-auth';
 import { isLocalEndpoint } from '../../utils/localEndpoint.js';
 
 void vi.mock('openai', () => {
@@ -292,7 +293,7 @@ describe('OpenAI local endpoint tests', () => {
     });
 
     describe('remote endpoints require authentication', () => {
-      it('throws REQ-SP4-003 error for api.openai.com without auth', async () => {
+      it('throws a typed credential error for api.openai.com without auth', async () => {
         const provider = new LocalTestOpenAIProvider(
           undefined,
           'https://api.openai.com/v1',
@@ -308,7 +309,16 @@ describe('OpenAI local endpoint tests', () => {
         });
 
         const generator = provider.generateChatCompletion(callOptions);
-        await expect(generator.next()).rejects.toThrow('REQ-SP4-003');
+        const rejection = generator.next();
+        await expect(rejection).rejects.toBeInstanceOf(
+          CredentialResolutionError,
+        );
+        await expect(rejection).rejects.toMatchObject({
+          kind: 'no-credential-configured',
+          message: expect.stringContaining(
+            'provider=openai; profile=no-profile; runtimeId=remote-no-auth',
+          ),
+        });
       });
 
       it('allows remote endpoints with auth token', async () => {

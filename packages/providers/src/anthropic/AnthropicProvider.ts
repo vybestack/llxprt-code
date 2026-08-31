@@ -25,7 +25,10 @@ import {
 } from '../utils/systemPromptPlacement.js';
 import { isRuntimeAuthTokenProvider } from '../utils/authToken.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
-import { type OAuthManager } from '@vybestack/llxprt-code-auth';
+import {
+  CredentialResolutionError,
+  type OAuthManager,
+} from '@vybestack/llxprt-code-auth';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderTelemetryContext } from '../types/providerRuntime.js';
 import type { DumpMode } from '../utils/dumpContext.js';
@@ -55,6 +58,7 @@ import {
   executeAnthropicApiCall,
 } from './AnthropicApiExecution.js';
 import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
+import { createCredentialResolutionError } from '../utils/credentialResolutionError.js';
 import {
   isAnthropicImageDimensionLimitError,
   parseAnthropicImageDimensionLimit,
@@ -216,16 +220,20 @@ export class AnthropicProvider extends BaseProvider {
     try {
       const freshToken = await runtimeAuthToken.provide();
       if (!freshToken) {
-        throw new Error(
-          `ProviderCacheError("Auth token unavailable for runtimeId=${options.runtime?.runtimeId} (REQ-SP4-003).")`,
-        );
+        throw createCredentialResolutionError(options, this.name, {
+          kind: 'credential-not-found',
+        });
       }
       this.getAuthLogger().debug(() => 'Refreshed OAuth token for call');
       return freshToken;
-    } catch (error) {
-      throw new Error(
-        `ProviderCacheError("Auth token unavailable for runtimeId=${options.runtime?.runtimeId} (REQ-SP4-003)."): ${error}`,
-      );
+    } catch (cause) {
+      if (cause instanceof CredentialResolutionError) {
+        throw cause;
+      }
+      throw createCredentialResolutionError(options, this.name, {
+        kind: 'credential-source-failed',
+        cause,
+      });
     }
   }
 
@@ -261,13 +269,17 @@ export class AnthropicProvider extends BaseProvider {
       // the `claudecode` subscription identity surfaces OAuth recovery; the
       // API-key-only `anthropic` identity is directed to /key or /keyfile.
       if (this.baseProviderConfig.oauthProvider === 'claudecode') {
-        throw new Error(
-          'No authentication available for Anthropic API calls. Run /auth claudecode login to authenticate (or /auth claudecode logout to clear any expired session).',
-        );
+        throw createCredentialResolutionError(options, this.name, {
+          kind: 'no-credential-configured',
+          remediation:
+            'No authentication available for Anthropic API calls. Run /auth claudecode login to authenticate (or /auth claudecode logout to clear any expired session).',
+        });
       }
-      throw new Error(
-        'No Anthropic API key resolved. Set an API key with /key or /keyfile (or ANTHROPIC_API_KEY) to use the Anthropic API.',
-      );
+      throw createCredentialResolutionError(options, this.name, {
+        kind: 'no-credential-configured',
+        remediation:
+          'No Anthropic API key resolved. Set an API key with /key or /keyfile (or ANTHROPIC_API_KEY) to use the Anthropic API.',
+      });
     }
 
     authLogger.debug(() => 'Creating fresh client instance (stateless)');

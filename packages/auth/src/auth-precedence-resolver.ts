@@ -45,6 +45,7 @@ import {
 export interface ResolveAuthOptions {
   settingsService?: ISettingsService | null;
   includeOAuth?: boolean;
+  runtimeId?: string;
 }
 
 interface ResolutionTrace {
@@ -187,7 +188,10 @@ export class AuthPrecedenceResolver {
     );
     const providerKey = this.normalizeProviderId(this.config.providerId);
     const provider = this.resolveProviderIdentifier(providerKey);
-    const runtimeContext = this.getActiveRuntimeContext();
+    const runtimeId =
+      options?.runtimeId ??
+      this.getActiveRuntimeContext()?.runtimeId ??
+      'no-runtime';
     const trace: ResolutionTrace = {
       attemptedMechanisms: [],
       configuredSource: false,
@@ -222,7 +226,7 @@ export class AuthPrecedenceResolver {
             : 'no-credential-configured',
           provider,
           settingsService,
-          runtimeContext,
+          runtimeId,
           trace,
         ),
       };
@@ -238,7 +242,7 @@ export class AuthPrecedenceResolver {
           kind,
           provider,
           settingsService,
-          runtimeContext,
+          runtimeId,
           trace,
           cause,
         ),
@@ -691,14 +695,14 @@ export class AuthPrecedenceResolver {
     kind: CredentialResolutionErrorKind,
     provider: string,
     settingsService: ISettingsService,
-    runtimeContext: IProviderRuntimeContext | null,
+    runtimeId: string,
     trace: ResolutionTrace,
     cause?: unknown,
   ): CredentialResolutionError {
     const diagnostics = {
       provider,
       profile: resolveProfileId(settingsService) ?? 'no-profile',
-      runtimeId: runtimeContext?.runtimeId ?? 'no-runtime',
+      runtimeId,
       attemptedMechanisms: trace.attemptedMechanisms,
       proxyMode: this.isCredentialProxyMode(),
       proxyContacted: trace.proxyContacted,

@@ -30,8 +30,8 @@ void vi.mock('@ai-sdk/openai', () => ({
 }));
 
 import { createOpenAI } from '@ai-sdk/openai';
+import { CredentialResolutionError } from '@vybestack/llxprt-code-auth';
 import { createOpenAIClient } from './vercelModelClient.js';
-import { AuthenticationError } from './errors.js';
 import type { ProviderClientConfig } from './vercelModelClient.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 
@@ -147,7 +147,7 @@ describe('createOpenAIClient local-endpoint auth exemption (issue #2506)', () =>
     expect(apiKey).toBe('');
   });
 
-  it('throws AuthenticationError for a non-local endpoint with no key (no regression)', async () => {
+  it('throws CredentialResolutionError for a non-local endpoint with no key', async () => {
     const mockCreateOpenAI = createOpenAI as ReturnType<typeof vi.fn>;
 
     await expect(
@@ -155,7 +155,7 @@ describe('createOpenAIClient local-endpoint auth exemption (issue #2506)', () =>
         buildOptions('https://api.openai.com/v1', undefined),
         buildClientConfig('https://api.openai.com/v1'),
       ),
-    ).rejects.toThrow(AuthenticationError);
+    ).rejects.toThrow(CredentialResolutionError);
 
     expect(mockCreateOpenAI).not.toHaveBeenCalled();
   });

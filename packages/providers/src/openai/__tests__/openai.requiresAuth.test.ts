@@ -12,6 +12,7 @@ import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { CredentialResolutionError } from '@vybestack/llxprt-code-auth';
 
 void vi.mock('openai', () => {
   class FakeOpenAI {
@@ -152,7 +153,14 @@ describe('requires-auth setting', () => {
     });
 
     const generator = provider.generateChatCompletion(callOptions);
-    await expect(generator.next()).rejects.toThrow('REQ-SP4-003');
+    const rejection = generator.next();
+    await expect(rejection).rejects.toBeInstanceOf(CredentialResolutionError);
+    await expect(rejection).rejects.toMatchObject({
+      kind: 'no-credential-configured',
+      message: expect.stringContaining(
+        'provider=openai; profile=no-profile; runtimeId=auth-required-default',
+      ),
+    });
   });
 
   it('throws auth error for remote endpoint without auth when requires-auth is true', async () => {
@@ -171,6 +179,13 @@ describe('requires-auth setting', () => {
     });
 
     const generator = provider.generateChatCompletion(callOptions);
-    await expect(generator.next()).rejects.toThrow('REQ-SP4-003');
+    const rejection = generator.next();
+    await expect(rejection).rejects.toBeInstanceOf(CredentialResolutionError);
+    await expect(rejection).rejects.toMatchObject({
+      kind: 'no-credential-configured',
+      message: expect.stringContaining(
+        'provider=openai; profile=no-profile; runtimeId=auth-required-explicit',
+      ),
+    });
   });
 });
