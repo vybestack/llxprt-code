@@ -41,6 +41,13 @@ function summary(text: string): IContent {
   };
 }
 
+function entryTexts(historyService: HistoryService): string[] {
+  return historyService.getAll().map((entry) => {
+    const block = entry.blocks[0];
+    return block.type === 'text' ? block.text : `<${block.type}>`;
+  });
+}
+
 function apply(
   historyService: HistoryService,
   newHistory: IContent[],
@@ -268,8 +275,12 @@ describe('applyCompressionWithAnchor under an active compression lock (#3338)', 
         `contentAdded:${block.type === 'text' ? block.text : block.type}`,
       );
     });
+    let textsAtRelease: string[] | undefined;
     historyService.on('compressionLockReleased', () => {
       observed.push('compressionLockReleased');
+      // Snapshot AT the release, not after endCompression: this is what
+      // actually witnesses that the rebuild was committed first.
+      textsAtRelease = entryTexts(historyService);
     });
     historyService.on('compressionEnded', () => {
       observed.push('compressionEnded');
@@ -297,18 +308,18 @@ describe('applyCompressionWithAnchor under an active compression lock (#3338)', 
       'contentAdded:post-helper-stream',
     ]);
 
-    // The rebuilt content itself landed, and did so before the release.
-    const rebuiltTexts = historyService
-      .getAll()
-      .map((c) => (c.blocks[0].type === 'text' ? c.blocks[0].text : ''));
-    expect(rebuiltTexts).toContain('compressed');
-    expect(rebuiltTexts).toContain('original-1');
+    // Observed at the moment of release rather than inferred from the order of
+    // the awaits above: the rebuild is already published, and neither queued
+    // streaming add has landed yet. Without this the ordering guarantee was
+    // only established by the test's own choreography.
+    expect(textsAtRelease).toStrictEqual([
+      'original-1',
+      'original-2',
+      'compressed',
+      'original-3',
+    ]);
 
-    const texts = historyService.getAll().map((entry) => {
-      const block = entry.blocks[0];
-      return block.type === 'text' ? block.text : `<${block.type}>`;
-    });
-    expect(texts).toStrictEqual([
+    expect(entryTexts(historyService)).toStrictEqual([
       'original-1',
       'original-2',
       'compressed',

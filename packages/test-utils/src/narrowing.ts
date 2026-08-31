@@ -82,6 +82,11 @@ export function errorMessage(error: unknown): string {
  *
  * `block.type === 'text' ? block.text : ''` inline in a test counts as a
  * conditional in the test (#3129) and is repeated across many suites.
+ *
+ * Not byte-identical to that expression: the input type admits an absent
+ * `text`, and for the malformed `{ type: 'text', text: undefined }` this
+ * returns '' where the inline form returns undefined. Valid IContent text
+ * blocks always carry a string, so no call site observes the difference.
  */
 export function blockTextOrEmpty(block: {
   readonly type: string;
