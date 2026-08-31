@@ -87,9 +87,10 @@ async function readRequestBody(
   init?: RequestInit,
 ): Promise<string | undefined> {
   const body = init?.body;
-  return body === undefined || body === null
-    ? undefined
-    : await new Response(body).text();
+  if (body === undefined || body === null) {
+    return undefined;
+  }
+  return new Response(body).text();
 }
 
 describe('OpenAIProvider transport routing @issue:2483', () => {

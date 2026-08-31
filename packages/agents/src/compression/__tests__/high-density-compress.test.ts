@@ -545,10 +545,10 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
           : [],
       );
       const unnamedToolCalls = toolCallBlocks.filter(
-        (block) => !Object.hasOwn(block, 'name'),
+        (block) => Object.hasOwn(block, 'name') === false,
       );
       const unidentifiedToolCalls = toolCallBlocks.filter(
-        (block) => !Object.hasOwn(block, 'id'),
+        (block) => Object.hasOwn(block, 'id') === false,
       );
       const parameterlessToolCalls = toolCallBlocks.filter(
         (block) => block.parameters === undefined,

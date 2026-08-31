@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -706,8 +707,15 @@ describe('ChatSession media history boundaries', () => {
     releaseFirst();
     await Promise.all([first, second]);
 
-    expect(mediaEncodings(fixture.requests[0] ?? [])).toStrictEqual(['url']);
-    expect(mediaEncodings(fixture.requests[1] ?? [])).toStrictEqual([]);
+    // Both sends must have reached the transport before their contents mean
+    // anything. The `?? []` these replace made the second assertion pass when
+    // there was no second request at all: mediaEncodings([]) is [], which is
+    // what it asserted (#3129).
+    const [firstRequest, secondRequest] = fixture.requests;
+    assertDefined(firstRequest, 'first message never reached the transport');
+    assertDefined(secondRequest, 'second message never reached the transport');
+    expect(mediaEncodings(firstRequest)).toStrictEqual(['url']);
+    expect(mediaEncodings(secondRequest)).toStrictEqual([]);
     expect(mediaEncodings(fixture.chat.getHistory())).toStrictEqual([]);
     await fixture.recording.dispose();
   });

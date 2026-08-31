@@ -20,9 +20,14 @@
  */
 
 export function assertCondition(
-  condition: unknown,
+  condition: boolean,
   message: string,
 ): asserts condition {
+  // `boolean` rather than `unknown`: callers pass a comparison, and an
+  // `unknown` parameter would force either a truthiness test that trips
+  // strict-boolean-expressions or a Boolean() cast that trips
+  // no-extra-boolean-cast. Requiring the caller to be explicit is better than
+  // either.
   if (!condition) {
     throw new Error(message);
   }
