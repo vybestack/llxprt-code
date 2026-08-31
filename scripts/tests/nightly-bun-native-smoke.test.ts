@@ -13,9 +13,22 @@ import { describe, expect, it } from 'bun:test';
 import { asRecord, parseWorkflowYaml, jobSteps } from './typed-test-helpers.ts';
 import type { WorkflowJob, WorkflowStep } from './typed-test-helpers.ts';
 import { beforeAll } from 'bun:test';
+import {
+  resolveHarnessTimeoutMs,
+  resolveSmokeTimeoutRetries,
+  smokeTestFileTimeoutMs,
+  runSmokeHarnessWithTimeoutRetry,
+  SmokeHarnessRunError,
+  type SmokeHarnessCommand,
+} from '../lib/bun-smoke-harness.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const execFileAsync = promisify(execFile);
+const FIXTURE_PATH = path.join(
+  ROOT,
+  'scripts/tests/fixtures/bun-smoke-harness-fixture.ts',
+);
+const FIXTURE_TIMEOUT_MS = 1_500;
 
 /**
  * The Bun native-module smoke harness spawns a real `bun` subprocess. In
@@ -30,30 +43,9 @@ const execFileAsync = promisify(execFile);
  * fail-closed without flapping under load.
  */
 
-function resolveHarnessTimeoutMs(
-  env: Record<string, string | undefined> = process.env,
-): number {
-  const DEFAULT = 300_000;
-  const raw = env.LLXPRT_BUN_SMOKE_TIMEOUT_MS;
-  if (raw === undefined || raw === '') return DEFAULT;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT;
-  return Math.floor(parsed);
-}
-
 const HARNESS_TIMEOUT_MS = resolveHarnessTimeoutMs();
-const TEST_TIMEOUT_MS = HARNESS_TIMEOUT_MS + 10_000;
-
-function collectProcessDiagnostics(error: object): string {
-  const errRecord = asRecord(error);
-  return [errRecord['stdout'], errRecord['stderr']]
-    .filter(
-      (output): output is string =>
-        typeof output === 'string' && output.trim().length > 0,
-    )
-    .join('\n')
-    .trim();
-}
+const SMOKE_TIMEOUT_RETRIES = resolveSmokeTimeoutRetries();
+const TEST_TIMEOUT_MS = smokeTestFileTimeoutMs();
 
 function stepNamed(job: WorkflowJob | undefined, name: string): WorkflowStep {
   expect(
@@ -65,6 +57,41 @@ function stepNamed(job: WorkflowJob | undefined, name: string): WorkflowStep {
   expect(step, `job should contain step: ${name}`).toBeTruthy();
   if (!step) throw new Error(`job should contain step: ${name}`);
   return step;
+}
+
+function fixtureCommand(
+  mode: 'pass' | 'fail' | 'hang' | 'hang-once',
+  marker?: string,
+): SmokeHarnessCommand {
+  const env =
+    marker === undefined
+      ? { ...process.env, SMOKE_FIXTURE_MODE: mode }
+      : {
+          ...process.env,
+          SMOKE_FIXTURE_MODE: mode,
+          SMOKE_FIXTURE_MARKER: marker,
+        };
+  return {
+    executable: 'bun',
+    args: [FIXTURE_PATH],
+    env,
+  };
+}
+
+async function captureHarnessError(
+  operation: Promise<unknown>,
+): Promise<SmokeHarnessRunError> {
+  let captured: unknown;
+  try {
+    await operation;
+  } catch (error: unknown) {
+    captured = error;
+  }
+  expect(captured).toBeInstanceOf(SmokeHarnessRunError);
+  if (!(captured instanceof SmokeHarnessRunError)) {
+    throw new Error('Expected the smoke harness operation to fail');
+  }
+  return captured;
 }
 
 describe('nightly Windows Bun native-module smoke', () => {
@@ -195,58 +222,211 @@ describe('Bun native-module smoke harness', () => {
   it(
     'passes its real checks for the current platform',
     async () => {
-      let stdout: string | undefined;
-      try {
-        ({ stdout } = await execFileAsync(
-          'bun',
-          ['scripts/bun-native-modules-smoke.ts'],
-          {
-            cwd: ROOT,
-            encoding: 'utf8',
-            signal: AbortSignal.timeout(HARNESS_TIMEOUT_MS),
-          },
-        ));
-      } catch (error: unknown) {
-        if (error && typeof error === 'object') {
-          const errRecord = asRecord(error);
-          if (errRecord['code'] === 'ENOENT') {
-            throw new Error(
-              'Bun is required to run the native-module smoke harness; install the version pinned in .bun-version and ensure bun is on PATH.',
-              { cause: error },
-            );
-          }
-          const diagnostics = collectProcessDiagnostics(error);
-          if (
-            errRecord['code'] === 'ABORT_ERR' &&
-            errRecord['name'] === 'AbortError'
-          ) {
-            throw new Error(
-              `Bun native-module smoke harness exceeded its ${HARNESS_TIMEOUT_MS}ms subprocess timeout${diagnostics ? `:\n${diagnostics}` : '.'}`,
-              { cause: error },
-            );
-          }
-          if (typeof errRecord['code'] === 'number') {
-            throw new Error(
-              `Bun native-module smoke harness failed with exit code ${errRecord['code']}${diagnostics ? `:\n${diagnostics}` : '.'}`,
-              { cause: error },
-            );
-          }
-          const rawMessage =
-            error instanceof Error ? error.message : String(error);
-          const detail =
-            rawMessage.trim() || `system error ${String(errRecord['code'])}`;
-          throw new Error(
-            `Bun native-module smoke harness could not execute: ${detail}${diagnostics ? `\n${diagnostics}` : ''}`,
-            { cause: error },
-          );
-        }
-        throw error;
-      }
+      const { stdout } = await runSmokeHarnessWithTimeoutRetry(
+        {
+          executable: 'bun',
+          args: ['scripts/bun-native-modules-smoke.ts'],
+        },
+        {
+          cwd: ROOT,
+          timeoutMs: HARNESS_TIMEOUT_MS,
+          retries: SMOKE_TIMEOUT_RETRIES,
+        },
+      );
 
       expect(stdout).toContain(
         'All native-module smoke checks passed under Bun',
       );
     },
     TEST_TIMEOUT_MS,
+  );
+});
+
+describe('Bun native-module smoke timeout retry', () => {
+  it('retries a timed-out attempt once and passes when the next attempt succeeds', async () => {
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'llxprt-smoke-retry-'),
+    );
+    const marker = path.join(tempDir, 'attempt.marker');
+
+    try {
+      const result = await runSmokeHarnessWithTimeoutRetry(
+        fixtureCommand('hang-once', marker),
+        {
+          cwd: ROOT,
+          timeoutMs: FIXTURE_TIMEOUT_MS,
+          retries: 1,
+        },
+      );
+
+      expect(result.attempts).toBe(2);
+      expect(result.stdout).toContain(
+        'All native-module smoke checks passed under Bun.',
+      );
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  }, 10_000);
+
+  it('fails closed when every attempt times out', async () => {
+    const error = await captureHarnessError(
+      runSmokeHarnessWithTimeoutRetry(fixtureCommand('hang'), {
+        cwd: ROOT,
+        timeoutMs: FIXTURE_TIMEOUT_MS,
+        retries: 1,
+      }),
+    );
+
+    expect(error.attempts).toBe(2);
+    expect(error.message).toContain(`${FIXTURE_TIMEOUT_MS}ms`);
+    expect(error.message).toContain('2 attempts');
+    expect(error.message).toContain('Attempt 1:');
+    expect(error.message).toContain('Attempt 2:');
+    expect(error.message.split('[HANG] fixture remains alive')).toHaveLength(3);
+  }, 10_000);
+
+  it('never retries a non-timeout failure', async () => {
+    const error = await captureHarnessError(
+      runSmokeHarnessWithTimeoutRetry(fixtureCommand('fail'), {
+        cwd: ROOT,
+        timeoutMs: FIXTURE_TIMEOUT_MS,
+        retries: 3,
+      }),
+    );
+
+    expect(error.attempts).toBe(1);
+    expect(error.message).toContain('failed with exit code 1');
+    expect(error.message).toContain('[FAIL] fixture check failed');
+  });
+
+  it('never retries ENOENT', async () => {
+    const error = await captureHarnessError(
+      runSmokeHarnessWithTimeoutRetry(
+        { executable: 'llxprt-definitely-missing-bun', args: [] },
+        {
+          cwd: ROOT,
+          timeoutMs: FIXTURE_TIMEOUT_MS,
+          retries: 3,
+        },
+      ),
+    );
+
+    expect(error.attempts).toBe(1);
+    expect(error.message).toBe(
+      'Bun is required to run the native-module smoke harness; install the version pinned in .bun-version and ensure bun is on PATH.',
+    );
+  });
+
+  it('preserves single-attempt behavior when retries is zero', async () => {
+    const error = await captureHarnessError(
+      runSmokeHarnessWithTimeoutRetry(fixtureCommand('hang'), {
+        cwd: ROOT,
+        timeoutMs: FIXTURE_TIMEOUT_MS,
+        retries: 0,
+      }),
+    );
+
+    expect(error.attempts).toBe(1);
+    expect(error.message).toContain('1 attempt');
+  }, 10_000);
+});
+
+describe('smokeTestFileTimeoutMs', () => {
+  it('uses the default retry and harness timeout knobs', () => {
+    expect(smokeTestFileTimeoutMs({})).toBe(620_000);
+  });
+
+  it('scales with non-default retry and harness timeout knobs', () => {
+    expect(
+      smokeTestFileTimeoutMs({
+        LLXPRT_BUN_SMOKE_TIMEOUT_RETRIES: '3',
+        LLXPRT_BUN_SMOKE_TIMEOUT_MS: '400000',
+      }),
+    ).toBe(1_640_000);
+  });
+
+  it('rejects a harness timeout that pushes the file budget past the Bun maximum', () => {
+    expect(() =>
+      smokeTestFileTimeoutMs({
+        LLXPRT_BUN_SMOKE_TIMEOUT_MS: '2147473648',
+      }),
+    ).toThrow(/LLXPRT_BUN_SMOKE_TIMEOUT_MS.*LLXPRT_BUN_SMOKE_TIMEOUT_RETRIES/);
+  });
+
+  it('rejects a retry count that pushes the file budget past the Bun maximum', () => {
+    expect(() =>
+      smokeTestFileTimeoutMs({
+        LLXPRT_BUN_SMOKE_TIMEOUT_RETRIES: '13854',
+      }),
+    ).toThrow(/LLXPRT_BUN_SMOKE_TIMEOUT_MS.*LLXPRT_BUN_SMOKE_TIMEOUT_RETRIES/);
+  });
+
+  it('accepts a file budget below the Bun maximum', () => {
+    expect(
+      smokeTestFileTimeoutMs({
+        LLXPRT_BUN_SMOKE_TIMEOUT_MS: '2147463647',
+      }),
+    ).toBe(4_294_947_294);
+  });
+});
+
+describe('resolveHarnessTimeoutMs', () => {
+  it('defaults when the setting is absent or empty', () => {
+    expect(resolveHarnessTimeoutMs({})).toBe(300_000);
+    expect(resolveHarnessTimeoutMs({ LLXPRT_BUN_SMOKE_TIMEOUT_MS: '' })).toBe(
+      300_000,
+    );
+  });
+
+  it('accepts a positive finite timeout', () => {
+    expect(
+      resolveHarnessTimeoutMs({ LLXPRT_BUN_SMOKE_TIMEOUT_MS: '450000' }),
+    ).toBe(450_000);
+  });
+
+  it.each(['abc', '-1', '0'])(
+    'defaults for the invalid timeout setting %s',
+    (raw) => {
+      expect(
+        resolveHarnessTimeoutMs({ LLXPRT_BUN_SMOKE_TIMEOUT_MS: raw }),
+      ).toBe(300_000);
+    },
+  );
+
+  it('floors a positive fractional timeout', () => {
+    expect(
+      resolveHarnessTimeoutMs({ LLXPRT_BUN_SMOKE_TIMEOUT_MS: '1.5' }),
+    ).toBe(1);
+  });
+});
+
+describe('resolveSmokeTimeoutRetries', () => {
+  it('defaults to one retry when the setting is absent or empty', () => {
+    expect(resolveSmokeTimeoutRetries({})).toBe(1);
+    expect(
+      resolveSmokeTimeoutRetries({ LLXPRT_BUN_SMOKE_TIMEOUT_RETRIES: '' }),
+    ).toBe(1);
+  });
+
+  it.each([
+    ['0', 0],
+    ['3', 3],
+  ])('accepts the non-negative integer %s', (raw, expected) => {
+    expect(
+      resolveSmokeTimeoutRetries({
+        LLXPRT_BUN_SMOKE_TIMEOUT_RETRIES: raw,
+      }),
+    ).toBe(expected);
+  });
+
+  it.each(['abc', '-1', '1.5'])(
+    'rejects the invalid retry setting %s',
+    (raw) => {
+      expect(() =>
+        resolveSmokeTimeoutRetries({
+          LLXPRT_BUN_SMOKE_TIMEOUT_RETRIES: raw,
+        }),
+      ).toThrow('expected a non-negative integer');
+    },
   );
 });
