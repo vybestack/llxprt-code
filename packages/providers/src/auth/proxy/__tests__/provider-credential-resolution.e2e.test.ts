@@ -12,6 +12,7 @@ import {
   AuthPrecedenceResolver,
   CredentialResolutionError,
   runtimeScopedStates,
+  type IProviderRuntimeContext,
   type OAuthManager,
 } from '@vybestack/llxprt-code-auth';
 import type {
@@ -26,7 +27,7 @@ import {
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ProviderKeyStorage } from '@vybestack/llxprt-code-storage';
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import {
   BaseProvider,
   type NormalizedGenerateChatOptions,
@@ -154,7 +155,7 @@ class InMemoryTokenStore implements TokenStore {
   async releaseAuthLock(_provider: string, _bucket?: string): Promise<void> {}
 }
 
-class EmptyProviderKeyStorage implements ProviderKeyStorage {
+class EmptyProviderKeyStorage implements ProviderKeyStorageLike {
   async saveKey(_name: string, _apiKey: string): Promise<void> {}
 
   async getKey(_name: string): Promise<string | null> {
@@ -269,7 +270,7 @@ describe('Provider credential resolution through a sandbox proxy', () => {
   });
 
   async function startProxy(withCredential: boolean): Promise<RunningProxy> {
-    const token = withCredential
+    const token: OAuthToken | undefined = withCredential
       ? {
           access_token: CREDENTIAL_SECRET,
           token_type: 'Bearer',
@@ -312,6 +313,11 @@ describe('Provider credential resolution through a sandbox proxy', () => {
     const provider = createProvider();
     const parentRuntimeId = 'session-parent-runtime';
     const parentRuntime = createCallOptions(settings, parentRuntimeId).runtime;
+    const getActiveRuntimeContext = (): IProviderRuntimeContext => ({
+      ...parentRuntime,
+      settingsService: settings,
+      runtimeId: parentRuntimeId,
+    });
     const parentResolver = new AuthPrecedenceResolver(
       {
         isOAuthEnabled: true,
@@ -322,7 +328,7 @@ describe('Provider credential resolution through a sandbox proxy', () => {
       {
         oauthManager: createProxyOAuthManager(),
         settingsService: settings,
-        getActiveRuntimeContext: () => parentRuntime,
+        getActiveRuntimeContext,
       },
     );
 
